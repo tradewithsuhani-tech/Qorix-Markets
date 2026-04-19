@@ -760,6 +760,88 @@ export const RejectWithdrawalResponse = zod.object({
 });
 
 /**
+ * @summary Run double-entry ledger reconciliation check
+ */
+export const GetLedgerReconciliationResponse = zod.object({
+  passed: zod.boolean(),
+  summary: zod.object({
+    totalEntries: zod.number(),
+    totalJournals: zod.number(),
+    globalDebits: zod.number(),
+    globalCredits: zod.number(),
+    globalBalanced: zod.boolean(),
+  }),
+  unbalancedJournals: zod.array(
+    zod.object({
+      journalId: zod.string(),
+      debits: zod.number(),
+      credits: zod.number(),
+      diff: zod.number(),
+    }),
+  ),
+  walletDiscrepancies: zod.array(
+    zod.object({
+      userId: zod.number(),
+      wallet: zod.string(),
+      walletBalance: zod.number(),
+      ledgerBalance: zod.number(),
+      diff: zod.number(),
+    }),
+  ),
+  accountBalances: zod.array(
+    zod.object({
+      code: zod.string(),
+      name: zod.string(),
+      accountType: zod.string(),
+      normalBalance: zod.string(),
+      balance: zod.number(),
+    }),
+  ),
+});
+
+/**
+ * @summary List all GL accounts in the chart of accounts
+ */
+export const GetLedgerAccountsResponseItem = zod.object({
+  id: zod.number(),
+  code: zod.string(),
+  name: zod.string(),
+  accountType: zod
+    .string()
+    .describe("asset | liability | equity | revenue | expense"),
+  normalBalance: zod.string().describe("debit | credit"),
+  userId: zod.number().nullish(),
+  isSystem: zod.boolean(),
+});
+export const GetLedgerAccountsResponse = zod.array(
+  GetLedgerAccountsResponseItem,
+);
+
+/**
+ * @summary Paginated ledger journal entries
+ */
+export const getLedgerJournalQueryLimitDefault = 50;
+export const getLedgerJournalQueryOffsetDefault = 0;
+
+export const GetLedgerJournalQueryParams = zod.object({
+  limit: zod.coerce.number().default(getLedgerJournalQueryLimitDefault),
+  offset: zod.coerce.number().default(getLedgerJournalQueryOffsetDefault),
+});
+
+export const GetLedgerJournalResponseItem = zod.object({
+  id: zod.number(),
+  journalId: zod.string(),
+  transactionId: zod.number().nullish(),
+  accountCode: zod.string(),
+  entryType: zod.string().describe("debit | credit"),
+  amount: zod.number(),
+  currency: zod.string(),
+  description: zod.string(),
+  createdAt: zod.coerce.date(),
+});
+export const GetLedgerJournalResponse = zod.array(GetLedgerJournalResponseItem);
+
+/**
  * @summary Get trading desk statistics
  */
 export const GetTradingDeskStatsResponse = zod.object({

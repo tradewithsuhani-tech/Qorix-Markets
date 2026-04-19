@@ -31,14 +31,17 @@ import type {
   GenerateReportResponse,
   GetAdminUsersParams,
   GetEquityChartParams,
+  GetLedgerJournalParams,
   GetMonthlyPerformanceParams,
   GetNotificationsParams,
   GetProfitHistoryParams,
   GetTradesParams,
   GetTransactionsParams,
+  GlAccount,
   HealthStatus,
   Investment,
   InvestorSlots,
+  LedgerEntry,
   LoginBody,
   MarketIndicators,
   MonthlyPerformanceList,
@@ -46,6 +49,7 @@ import type {
   NotificationList,
   PerformanceMetrics,
   ProtectionBody,
+  ReconciliationResult,
   Referral,
   ReferredUser,
   RegisterBody,
@@ -3160,6 +3164,254 @@ export const useRejectWithdrawal = <
 > => {
   return useMutation(getRejectWithdrawalMutationOptions(options));
 };
+
+/**
+ * @summary Run double-entry ledger reconciliation check
+ */
+export const getGetLedgerReconciliationUrl = () => {
+  return `/api/admin/ledger/reconcile`;
+};
+
+export const getLedgerReconciliation = async (
+  options?: RequestInit,
+): Promise<ReconciliationResult> => {
+  return customFetch<ReconciliationResult>(getGetLedgerReconciliationUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetLedgerReconciliationQueryKey = () => {
+  return [`/api/admin/ledger/reconcile`] as const;
+};
+
+export const getGetLedgerReconciliationQueryOptions = <
+  TData = Awaited<ReturnType<typeof getLedgerReconciliation>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getLedgerReconciliation>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetLedgerReconciliationQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getLedgerReconciliation>>
+  > = ({ signal }) => getLedgerReconciliation({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getLedgerReconciliation>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetLedgerReconciliationQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getLedgerReconciliation>>
+>;
+export type GetLedgerReconciliationQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Run double-entry ledger reconciliation check
+ */
+
+export function useGetLedgerReconciliation<
+  TData = Awaited<ReturnType<typeof getLedgerReconciliation>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getLedgerReconciliation>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetLedgerReconciliationQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary List all GL accounts in the chart of accounts
+ */
+export const getGetLedgerAccountsUrl = () => {
+  return `/api/admin/ledger/accounts`;
+};
+
+export const getLedgerAccounts = async (
+  options?: RequestInit,
+): Promise<GlAccount[]> => {
+  return customFetch<GlAccount[]>(getGetLedgerAccountsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetLedgerAccountsQueryKey = () => {
+  return [`/api/admin/ledger/accounts`] as const;
+};
+
+export const getGetLedgerAccountsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getLedgerAccounts>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getLedgerAccounts>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetLedgerAccountsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getLedgerAccounts>>
+  > = ({ signal }) => getLedgerAccounts({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getLedgerAccounts>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetLedgerAccountsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getLedgerAccounts>>
+>;
+export type GetLedgerAccountsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List all GL accounts in the chart of accounts
+ */
+
+export function useGetLedgerAccounts<
+  TData = Awaited<ReturnType<typeof getLedgerAccounts>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getLedgerAccounts>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetLedgerAccountsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Paginated ledger journal entries
+ */
+export const getGetLedgerJournalUrl = (params?: GetLedgerJournalParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/admin/ledger/journal?${stringifiedParams}`
+    : `/api/admin/ledger/journal`;
+};
+
+export const getLedgerJournal = async (
+  params?: GetLedgerJournalParams,
+  options?: RequestInit,
+): Promise<LedgerEntry[]> => {
+  return customFetch<LedgerEntry[]>(getGetLedgerJournalUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetLedgerJournalQueryKey = (
+  params?: GetLedgerJournalParams,
+) => {
+  return [`/api/admin/ledger/journal`, ...(params ? [params] : [])] as const;
+};
+
+export const getGetLedgerJournalQueryOptions = <
+  TData = Awaited<ReturnType<typeof getLedgerJournal>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetLedgerJournalParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getLedgerJournal>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetLedgerJournalQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getLedgerJournal>>
+  > = ({ signal }) => getLedgerJournal(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getLedgerJournal>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetLedgerJournalQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getLedgerJournal>>
+>;
+export type GetLedgerJournalQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Paginated ledger journal entries
+ */
+
+export function useGetLedgerJournal<
+  TData = Awaited<ReturnType<typeof getLedgerJournal>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetLedgerJournalParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getLedgerJournal>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetLedgerJournalQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * @summary Get trading desk statistics

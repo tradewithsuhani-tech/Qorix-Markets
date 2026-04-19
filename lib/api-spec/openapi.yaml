@@ -745,6 +745,67 @@ paths:
               schema:
                 $ref: "#/components/schemas/WithdrawalRequest"
 
+  # LEDGER
+  /admin/ledger/reconcile:
+    get:
+      operationId: getLedgerReconciliation
+      tags: [admin]
+      summary: Run double-entry ledger reconciliation check
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Reconciliation result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReconciliationResult"
+
+  /admin/ledger/accounts:
+    get:
+      operationId: getLedgerAccounts
+      tags: [admin]
+      summary: List all GL accounts in the chart of accounts
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: GL account list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/GlAccount"
+
+  /admin/ledger/journal:
+    get:
+      operationId: getLedgerJournal
+      tags: [admin]
+      summary: Paginated ledger journal entries
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: Journal entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LedgerEntry"
+
   # TRADING DESK
   /trading-desk/stats:
     get:
@@ -1718,3 +1779,156 @@ components:
             $ref: "#/components/schemas/TraderItem"
       required:
         - data
+
+    GlAccount:
+      type: object
+      properties:
+        id:
+          type: integer
+        code:
+          type: string
+        name:
+          type: string
+        accountType:
+          type: string
+          description: "asset | liability | equity | revenue | expense"
+        normalBalance:
+          type: string
+          description: "debit | credit"
+        userId:
+          type: integer
+          nullable: true
+        isSystem:
+          type: boolean
+      required:
+        - id
+        - code
+        - name
+        - accountType
+        - normalBalance
+        - isSystem
+
+    LedgerEntry:
+      type: object
+      properties:
+        id:
+          type: integer
+        journalId:
+          type: string
+        transactionId:
+          type: integer
+          nullable: true
+        accountCode:
+          type: string
+        entryType:
+          type: string
+          description: "debit | credit"
+        amount:
+          type: number
+        currency:
+          type: string
+        description:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - journalId
+        - accountCode
+        - entryType
+        - amount
+        - currency
+        - description
+        - createdAt
+
+    ReconciliationResult:
+      type: object
+      properties:
+        passed:
+          type: boolean
+        summary:
+          type: object
+          properties:
+            totalEntries:
+              type: integer
+            totalJournals:
+              type: integer
+            globalDebits:
+              type: number
+            globalCredits:
+              type: number
+            globalBalanced:
+              type: boolean
+          required:
+            - totalEntries
+            - totalJournals
+            - globalDebits
+            - globalCredits
+            - globalBalanced
+        unbalancedJournals:
+          type: array
+          items:
+            type: object
+            properties:
+              journalId:
+                type: string
+              debits:
+                type: number
+              credits:
+                type: number
+              diff:
+                type: number
+            required:
+              - journalId
+              - debits
+              - credits
+              - diff
+        walletDiscrepancies:
+          type: array
+          items:
+            type: object
+            properties:
+              userId:
+                type: integer
+              wallet:
+                type: string
+              walletBalance:
+                type: number
+              ledgerBalance:
+                type: number
+              diff:
+                type: number
+            required:
+              - userId
+              - wallet
+              - walletBalance
+              - ledgerBalance
+              - diff
+        accountBalances:
+          type: array
+          items:
+            type: object
+            properties:
+              code:
+                type: string
+              name:
+                type: string
+              accountType:
+                type: string
+              normalBalance:
+                type: string
+              balance:
+                type: number
+            required:
+              - code
+              - name
+              - accountType
+              - normalBalance
+              - balance
+      required:
+        - passed
+        - summary
+        - unbalancedJournals
+        - walletDiscrepancies
+        - accountBalances

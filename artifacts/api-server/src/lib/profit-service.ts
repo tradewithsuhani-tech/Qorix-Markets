@@ -14,6 +14,12 @@ import { eq, gt, and } from "drizzle-orm";
 import { logger } from "./logger";
 import { createNotification } from "./notifications";
 import { getVipInfo } from "./vip";
+import {
+  ensureUserAccounts,
+  postJournalEntry,
+  journalForTransaction,
+  journalForSystem,
+} from "./ledger-service";
 
 export const DRAWDOWN_LIMITS: Record<string, number> = {
   low: 0.03,
@@ -113,6 +119,7 @@ export async function distributeDailyProfit(
     );
 
     for (const inv of activeInvestments) {
+      await ensureUserAccounts(inv.userId, tx);
       const amount = parseFloat(inv.amount as string);
       const totalProfit = parseFloat(inv.totalProfit as string);
       const currentDrawdown = parseFloat(inv.drawdown as string);
@@ -215,13 +222,26 @@ export async function distributeDailyProfit(
       }
 
       const vipDesc = vipInfo.tier !== "none" ? ` · ${vipInfo.label} VIP +${(vipInfo.profitBonus * 100).toFixed(0)}% bonus` : "";
-      await tx.insert(transactionsTable).values({
+      const [profitTxn] = await tx.insert(transactionsTable).values({
         userId: inv.userId,
         type: "profit",
         amount: dailyProfitAmount.toString(),
         status: "completed",
         description: `Daily profit (${inv.riskLevel} risk, ${adjustedProfitPercent.toFixed(2)}% effective rate${vipDesc})`,
-      });
+      }).returning({ id: transactionsTable.id });
+
+      const profitAmt = Math.abs(dailyProfitAmount);
+      const profitAccount = inv.autoCompound ? `user:${inv.userId}:trading` : `user:${inv.userId}:profit`;
+      const profitLines = dailyProfitAmount >= 0
+        ? [
+            { accountCode: "platform:profit_expense", entryType: "debit" as const, amount: profitAmt, description: "Daily profit expense" },
+            { accountCode: profitAccount, entryType: "credit" as const, amount: profitAmt, description: `Daily profit credited to user ${inv.userId}` },
+          ]
+        : [
+            { accountCode: profitAccount, entryType: "debit" as const, amount: profitAmt, description: `Daily loss debited from user ${inv.userId}` },
+            { accountCode: "platform:profit_expense", entryType: "credit" as const, amount: profitAmt, description: "Daily loss reversal" },
+          ];
+      await postJournalEntry(journalForTransaction(profitTxn!.id), profitLines, profitTxn!.id, tx);
 
       await createNotification(
         inv.userId,
@@ -375,13 +395,24 @@ export async function distributeDailyProfit(
               })
               .where(eq(walletsTable.userId, sponsorId));
 
-            await tx.insert(transactionsTable).values({
+            const [refTxn] = await tx.insert(transactionsTable).values({
               userId: sponsorId,
               type: "referral_bonus",
               amount: referralBonus.toString(),
               status: "completed",
               description: `Referral bonus from active investor (daily ${(REFERRAL_DAILY_RATE * 100).toFixed(4)}%)`,
-            });
+            }).returning({ id: transactionsTable.id });
+
+            await ensureUserAccounts(sponsorId, tx);
+            await postJournalEntry(
+              journalForTransaction(refTxn!.id),
+              [
+                { accountCode: "platform:referral_expense", entryType: "debit", amount: referralBonus, description: `Referral bonus to sponsor ${sponsorId}` },
+                { accountCode: `user:${sponsorId}:profit`, entryType: "credit", amount: referralBonus, description: `Referral bonus credited to sponsor ${sponsorId}` },
+              ],
+              refTxn!.id,
+              tx,
+            );
 
             totalReferralBonusPaid += referralBonus;
           }
@@ -435,13 +466,24 @@ export async function transferProfitToMain(): Promise<{
         })
         .where(eq(walletsTable.userId, wallet.userId));
 
-      await tx.insert(transactionsTable).values({
+      const [payoutTxn] = await tx.insert(transactionsTable).values({
         userId: wallet.userId,
         type: "transfer",
         amount: profitBalance.toString(),
         status: "completed",
         description: `Monthly profit payout: $${profitBalance.toFixed(2)} moved to main wallet`,
-      });
+      }).returning({ id: transactionsTable.id });
+
+      await ensureUserAccounts(wallet.userId, tx);
+      await postJournalEntry(
+        journalForTransaction(payoutTxn!.id),
+        [
+          { accountCode: `user:${wallet.userId}:profit`, entryType: "debit", amount: profitBalance, description: "Monthly payout — profit cleared" },
+          { accountCode: `user:${wallet.userId}:main`, entryType: "credit", amount: profitBalance, description: "Monthly payout — credited to main" },
+        ],
+        payoutTxn!.id,
+        tx,
+      );
 
       await createNotification(
         wallet.userId,
