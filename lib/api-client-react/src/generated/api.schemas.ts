@@ -402,6 +402,70 @@ export interface TraderList {
   data: TraderItem[];
 }
 
+export interface GlAccount {
+  id: number;
+  code: string;
+  name: string;
+  /** asset | liability | equity | revenue | expense */
+  accountType: string;
+  /** debit | credit */
+  normalBalance: string;
+  userId?: number | null;
+  isSystem: boolean;
+}
+
+export interface LedgerEntry {
+  id: number;
+  journalId: string;
+  transactionId?: number | null;
+  accountCode: string;
+  /** debit | credit */
+  entryType: string;
+  amount: number;
+  currency: string;
+  description: string;
+  createdAt: string;
+}
+
+export type ReconciliationResultSummary = {
+  totalEntries: number;
+  totalJournals: number;
+  globalDebits: number;
+  globalCredits: number;
+  globalBalanced: boolean;
+};
+
+export type ReconciliationResultUnbalancedJournalsItem = {
+  journalId: string;
+  debits: number;
+  credits: number;
+  diff: number;
+};
+
+export type ReconciliationResultWalletDiscrepanciesItem = {
+  userId: number;
+  wallet: string;
+  walletBalance: number;
+  ledgerBalance: number;
+  diff: number;
+};
+
+export type ReconciliationResultAccountBalancesItem = {
+  code: string;
+  name: string;
+  accountType: string;
+  normalBalance: string;
+  balance: number;
+};
+
+export interface ReconciliationResult {
+  passed: boolean;
+  summary: ReconciliationResultSummary;
+  unbalancedJournals: ReconciliationResultUnbalancedJournalsItem[];
+  walletDiscrepancies: ReconciliationResultWalletDiscrepanciesItem[];
+  accountBalances: ReconciliationResultAccountBalancesItem[];
+}
+
 export type GetTransactionsParams = {
   page?: number;
   limit?: number;
@@ -441,4 +505,9 @@ export type GetProfitHistoryParams = {
 export type GetAdminUsersParams = {
   page?: number;
   limit?: number;
+};
+
+export type GetLedgerJournalParams = {
+  limit?: number;
+  offset?: number;
 };

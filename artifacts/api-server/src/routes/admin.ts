@@ -7,13 +7,21 @@ import {
   transactionsTable,
   systemSettingsTable,
   dailyProfitRunsTable,
+  glAccountsTable,
+  ledgerEntriesTable,
 } from "@workspace/db";
-import { eq, sum, count, and, desc } from "drizzle-orm";
+import { eq, sum, count, and, desc, sql } from "drizzle-orm";
 import { authMiddleware, adminMiddleware, type AuthRequest } from "../middlewares/auth";
 import { SetDailyProfitBody } from "@workspace/api-zod";
 import { transferProfitToMain } from "../lib/profit-service";
 import { emitProfitDistribution } from "../lib/event-bus";
 import { transactionLogger, profitLogger, errorLogger } from "../lib/logger";
+import {
+  ensureUserAccounts,
+  postJournalEntry,
+  journalForSystem,
+  runReconciliation,
+} from "../lib/ledger-service";
 
 const router = Router();
 router.use(authMiddleware);
@@ -291,6 +299,16 @@ router.post("/admin/withdrawals/:id/reject", async (req: AuthRequest, res) => {
         .update(walletsTable)
         .set({ profitBalance: (profitBalance + refundAmount).toString(), updatedAt: new Date() })
         .where(eq(walletsTable.userId, updated.userId));
+
+      await ensureUserAccounts(updated.userId);
+      await postJournalEntry(
+        journalForSystem(`refund:${id}`),
+        [
+          { accountCode: "platform:usdt_pool", entryType: "debit", amount: refundAmount, description: `Withdrawal reversal (rejected txn #${id})` },
+          { accountCode: `user:${updated.userId}:profit`, entryType: "credit", amount: refundAmount, description: `Refund credited on withdrawal rejection` },
+        ],
+        null,
+      );
     }
   }
 
@@ -318,6 +336,59 @@ router.post("/admin/withdrawals/:id/reject", async (req: AuthRequest, res) => {
     requestedAt: updated.createdAt.toISOString(),
     processedAt: new Date().toISOString(),
   });
+});
+
+router.get("/admin/ledger/reconcile", async (_req: AuthRequest, res) => {
+  try {
+    const result = await runReconciliation();
+    res.json(result);
+  } catch (err) {
+    errorLogger.error({ err }, "Reconciliation failed");
+    res.status(500).json({ error: "Reconciliation error" });
+  }
+});
+
+router.get("/admin/ledger/accounts", async (_req: AuthRequest, res) => {
+  const accounts = await db
+    .select({
+      id: glAccountsTable.id,
+      code: glAccountsTable.code,
+      name: glAccountsTable.name,
+      accountType: glAccountsTable.accountType,
+      normalBalance: glAccountsTable.normalBalance,
+      userId: glAccountsTable.userId,
+      isSystem: glAccountsTable.isSystem,
+    })
+    .from(glAccountsTable)
+    .orderBy(glAccountsTable.id);
+
+  res.json(accounts);
+});
+
+router.get("/admin/ledger/journal", async (req: AuthRequest, res) => {
+  const limit = Math.min(parseInt(req.query["limit"] as string) || 50, 200);
+  const offset = parseInt(req.query["offset"] as string) || 0;
+
+  const entries = await db
+    .select()
+    .from(ledgerEntriesTable)
+    .orderBy(desc(ledgerEntriesTable.id))
+    .limit(limit)
+    .offset(offset);
+
+  res.json(
+    entries.map((e) => ({
+      id: e.id,
+      journalId: e.journalId,
+      transactionId: e.transactionId ?? null,
+      accountCode: e.accountCode,
+      entryType: e.entryType,
+      amount: parseFloat(e.amount as string),
+      currency: e.currency,
+      description: e.description ?? "",
+      createdAt: e.createdAt.toISOString(),
+    })),
+  );
 });
 
 router.post("/admin/slots", async (req: AuthRequest, res) => {

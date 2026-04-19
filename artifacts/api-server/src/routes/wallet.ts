@@ -7,6 +7,11 @@ import { createNotification } from "../lib/notifications";
 import { transactionLogger, errorLogger } from "../lib/logger";
 import { emitDepositEvent } from "../lib/event-bus";
 import { getVipInfo } from "../lib/vip";
+import {
+  ensureUserAccounts,
+  postJournalEntry,
+  journalForTransaction,
+} from "../lib/ledger-service";
 
 const router = Router();
 router.use(authMiddleware);
@@ -53,26 +58,42 @@ router.post("/wallet/deposit", async (req: AuthRequest, res) => {
   }
 
   const newMain = parseFloat(wallet.mainBalance as string) + amount;
-  const [updated] = await db.update(walletsTable)
-    .set({ mainBalance: newMain.toString(), updatedAt: new Date() })
-    .where(eq(walletsTable.userId, req.userId!))
-    .returning();
 
-  await db.insert(transactionsTable).values({
-    userId: req.userId!,
-    type: "deposit",
-    amount: amount.toString(),
-    status: "completed",
-    description: `USDT deposit of $${amount.toFixed(2)}`,
+  const [updated, txnRecord] = await db.transaction(async (tx) => {
+    await ensureUserAccounts(req.userId!, tx);
+
+    const [w] = await tx
+      .update(walletsTable)
+      .set({ mainBalance: newMain.toString(), updatedAt: new Date() })
+      .where(eq(walletsTable.userId, req.userId!))
+      .returning();
+
+    const [txn] = await tx
+      .insert(transactionsTable)
+      .values({
+        userId: req.userId!,
+        type: "deposit",
+        amount: amount.toString(),
+        status: "completed",
+        description: `USDT deposit of $${amount.toFixed(2)}`,
+      })
+      .returning();
+
+    await postJournalEntry(
+      journalForTransaction(txn!.id),
+      [
+        { accountCode: "platform:usdt_pool", entryType: "debit", amount, description: `Deposit received from user ${req.userId!}` },
+        { accountCode: `user:${req.userId!}:main`, entryType: "credit", amount, description: `Deposit credited to main wallet` },
+      ],
+      txn!.id,
+      tx,
+    );
+
+    return [w, txn] as const;
   });
 
   transactionLogger.info(
-    {
-      event: "deposit",
-      userId: req.userId!,
-      amount,
-      newMainBalance: newMain,
-    },
+    { event: "deposit", userId: req.userId!, amount, newMainBalance: newMain },
     "Deposit completed",
   );
 
@@ -83,11 +104,7 @@ router.post("/wallet/deposit", async (req: AuthRequest, res) => {
     `$${amount.toFixed(2)} USDT has been credited to your main balance.`,
   );
 
-  emitDepositEvent({
-    userId: req.userId!,
-    amount,
-    newMainBalance: newMain,
-  }).catch((err) => {
+  emitDepositEvent({ userId: req.userId!, amount, newMainBalance: newMain }).catch((err) => {
     errorLogger.error({ err, userId: req.userId!, amount }, "Failed to emit deposit event");
   });
 
@@ -115,7 +132,8 @@ router.post("/wallet/withdraw", async (req: AuthRequest, res) => {
     return;
   }
 
-  const invRows = await db.select({ amount: investmentsTable.amount })
+  const invRows = await db
+    .select({ amount: investmentsTable.amount })
     .from(investmentsTable)
     .where(eq(investmentsTable.userId, req.userId!))
     .limit(1);
@@ -124,28 +142,61 @@ router.post("/wallet/withdraw", async (req: AuthRequest, res) => {
   const feeAmount = parseFloat((amount * vipInfo.withdrawalFee).toFixed(8));
   const netAmount = parseFloat((amount - feeAmount).toFixed(8));
 
-  await db.update(walletsTable)
-    .set({ profitBalance: (profitBalance - amount).toString(), updatedAt: new Date() })
-    .where(eq(walletsTable.userId, req.userId!));
+  const [txnRecord] = await db.transaction(async (tx) => {
+    await ensureUserAccounts(req.userId!, tx);
 
-  if (feeAmount > 0) {
-    await db.insert(transactionsTable).values({
-      userId: req.userId!,
-      type: "fee",
-      amount: feeAmount.toString(),
-      status: "completed",
-      description: `Withdrawal fee (${(vipInfo.withdrawalFee * 100).toFixed(1)}% · ${vipInfo.label} tier)`,
-    });
-  }
+    await tx
+      .update(walletsTable)
+      .set({ profitBalance: (profitBalance - amount).toString(), updatedAt: new Date() })
+      .where(eq(walletsTable.userId, req.userId!));
 
-  const [tx] = await db.insert(transactionsTable).values({
-    userId: req.userId!,
-    type: "withdrawal",
-    amount: netAmount.toString(),
-    status: "pending",
-    description: `Withdrawal to ${walletAddress}${feeAmount > 0 ? ` (fee: $${feeAmount.toFixed(2)})` : ""}`,
-    walletAddress,
-  }).returning();
+    if (feeAmount > 0) {
+      const [feeTxn] = await tx
+        .insert(transactionsTable)
+        .values({
+          userId: req.userId!,
+          type: "fee",
+          amount: feeAmount.toString(),
+          status: "completed",
+          description: `Withdrawal fee (${(vipInfo.withdrawalFee * 100).toFixed(1)}% · ${vipInfo.label} tier)`,
+        })
+        .returning();
+
+      await postJournalEntry(
+        journalForTransaction(feeTxn!.id),
+        [
+          { accountCode: `user:${req.userId!}:profit`, entryType: "debit", amount: feeAmount, description: `Withdrawal fee charged` },
+          { accountCode: "platform:fee_revenue", entryType: "credit", amount: feeAmount, description: `Fee revenue — ${vipInfo.label} tier` },
+        ],
+        feeTxn!.id,
+        tx,
+      );
+    }
+
+    const [withdrawalTxn] = await tx
+      .insert(transactionsTable)
+      .values({
+        userId: req.userId!,
+        type: "withdrawal",
+        amount: netAmount.toString(),
+        status: "pending",
+        description: `Withdrawal to ${walletAddress}${feeAmount > 0 ? ` (fee: $${feeAmount.toFixed(2)})` : ""}`,
+        walletAddress,
+      })
+      .returning();
+
+    await postJournalEntry(
+      journalForTransaction(withdrawalTxn!.id),
+      [
+        { accountCode: `user:${req.userId!}:profit`, entryType: "debit", amount: netAmount, description: `Withdrawal requested to ${walletAddress}` },
+        { accountCode: "platform:usdt_pool", entryType: "credit", amount: netAmount, description: `Withdrawal outflow` },
+      ],
+      withdrawalTxn!.id,
+      tx,
+    );
+
+    return [withdrawalTxn] as const;
+  });
 
   transactionLogger.info(
     {
@@ -156,7 +207,7 @@ router.post("/wallet/withdraw", async (req: AuthRequest, res) => {
       feeAmount,
       vipTier: vipInfo.tier,
       walletAddress: `${walletAddress.slice(0, 8)}...${walletAddress.slice(-4)}`,
-      transactionId: tx!.id,
+      transactionId: txnRecord!.id,
     },
     "Withdrawal request created",
   );
@@ -169,13 +220,13 @@ router.post("/wallet/withdraw", async (req: AuthRequest, res) => {
   );
 
   res.json({
-    id: tx!.id,
-    userId: tx!.userId,
-    type: tx!.type,
-    amount: parseFloat(tx!.amount as string),
-    status: tx!.status,
-    description: tx!.description,
-    createdAt: tx!.createdAt.toISOString(),
+    id: txnRecord!.id,
+    userId: txnRecord!.userId,
+    type: txnRecord!.type,
+    amount: parseFloat(txnRecord!.amount as string),
+    status: txnRecord!.status,
+    description: txnRecord!.description,
+    createdAt: txnRecord!.createdAt.toISOString(),
   });
 });
 
@@ -201,21 +252,42 @@ router.post("/wallet/transfer", async (req: AuthRequest, res) => {
   }
 
   const tradingBalance = parseFloat(wallet.tradingBalance as string);
-  const [updated] = await db.update(walletsTable)
-    .set({
-      mainBalance: (mainBalance - amount).toString(),
-      tradingBalance: (tradingBalance + amount).toString(),
-      updatedAt: new Date(),
-    })
-    .where(eq(walletsTable.userId, req.userId!))
-    .returning();
 
-  await db.insert(transactionsTable).values({
-    userId: req.userId!,
-    type: "transfer",
-    amount: amount.toString(),
-    status: "completed",
-    description: `Transfer $${amount.toFixed(2)} to trading balance`,
+  const [updated] = await db.transaction(async (tx) => {
+    await ensureUserAccounts(req.userId!, tx);
+
+    const [w] = await tx
+      .update(walletsTable)
+      .set({
+        mainBalance: (mainBalance - amount).toString(),
+        tradingBalance: (tradingBalance + amount).toString(),
+        updatedAt: new Date(),
+      })
+      .where(eq(walletsTable.userId, req.userId!))
+      .returning();
+
+    const [txn] = await tx
+      .insert(transactionsTable)
+      .values({
+        userId: req.userId!,
+        type: "transfer",
+        amount: amount.toString(),
+        status: "completed",
+        description: `Transfer $${amount.toFixed(2)} to trading balance`,
+      })
+      .returning();
+
+    await postJournalEntry(
+      journalForTransaction(txn!.id),
+      [
+        { accountCode: `user:${req.userId!}:main`, entryType: "debit", amount, description: `Transfer out of main wallet` },
+        { accountCode: `user:${req.userId!}:trading`, entryType: "credit", amount, description: `Transfer into trading wallet` },
+      ],
+      txn!.id,
+      tx,
+    );
+
+    return [w] as const;
   });
 
   transactionLogger.info(
