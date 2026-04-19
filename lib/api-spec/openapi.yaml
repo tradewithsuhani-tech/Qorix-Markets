@@ -1048,6 +1048,15 @@ components:
         drawdownLimit:
           type: number
           description: Max drawdown percentage (e.g. 5 = 5%)
+        peakBalance:
+          type: number
+          description: Highest equity ever reached during this investment
+        drawdownFromPeak:
+          type: number
+          description: Current decline from peak equity as a percentage
+        recoveryPct:
+          type: number
+          description: Percentage gain needed to return to peak balance
         isPaused:
           type: boolean
           description: True when capital protection was triggered
@@ -1069,6 +1078,9 @@ components:
         - dailyProfit
         - drawdown
         - drawdownLimit
+        - peakBalance
+        - drawdownFromPeak
+        - recoveryPct
 
     StartInvestmentBody:
       type: object

@@ -195,6 +195,9 @@ type InvestmentData = {
   riskLevel: string;
   pausedAt?: string | null;
   totalProfit: number;
+  peakBalance?: number;
+  drawdownFromPeak?: number;
+  recoveryPct?: number;
 };
 
 function CapitalProtectionPanel({
@@ -346,6 +349,10 @@ function ProtectionTriggeredView({
   const drawdownPct = investment.amount > 0
     ? (investment.drawdown / investment.amount) * 100
     : 0;
+  const peakBalance = investment.peakBalance ?? investment.amount;
+  const drawdownFromPeak = investment.drawdownFromPeak ?? drawdownPct;
+  const recoveryPct = investment.recoveryPct ?? 0;
+  const capitalPreserved = Math.max(0, investment.amount - investment.drawdown);
 
   return (
     <motion.div
@@ -375,12 +382,12 @@ function ProtectionTriggeredView({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
             {[
               { label: "Capital Invested", value: `$${investment.amount.toFixed(2)}`, color: "text-white" },
               { label: "Total Drawdown", value: `$${investment.drawdown.toFixed(2)}`, color: "text-red-400" },
               { label: "Drawdown %", value: `${drawdownPct.toFixed(2)}%`, color: "text-orange-400" },
-              { label: "Capital Preserved", value: `$${Math.max(0, investment.amount - investment.drawdown).toFixed(2)}`, color: "text-green-400" },
+              { label: "Capital Preserved", value: `$${capitalPreserved.toFixed(2)}`, color: "text-green-400" },
             ].map((s) => (
               <div key={s.label} className="stat-card p-4 rounded-xl">
                 <div className="text-xs text-muted-foreground mb-1">{s.label}</div>
@@ -389,8 +396,33 @@ function ProtectionTriggeredView({
             ))}
           </div>
 
+          {/* Peak balance & recovery row */}
+          <div className="grid grid-cols-2 gap-3 mb-5">
+            <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+              <div className="text-[10px] text-muted-foreground mb-1 uppercase tracking-wider">Peak Balance</div>
+              <div className="text-base font-bold text-white tabular-nums">${peakBalance.toFixed(2)}</div>
+              <div className="text-[11px] text-muted-foreground mt-0.5">
+                -{drawdownFromPeak.toFixed(2)}% from peak
+              </div>
+            </div>
+            <div className={`p-3 rounded-xl border ${recoveryPct > 0 ? "bg-blue-500/8 border-blue-500/20" : "bg-emerald-500/8 border-emerald-500/20"}`}>
+              <div className="text-[10px] text-muted-foreground mb-1 uppercase tracking-wider">Recovery Target</div>
+              {recoveryPct > 0 ? (
+                <>
+                  <div className="text-base font-bold text-blue-400 tabular-nums">+{recoveryPct.toFixed(2)}%</div>
+                  <div className="text-[11px] text-muted-foreground mt-0.5">gain needed to reach peak</div>
+                </>
+              ) : (
+                <>
+                  <div className="text-base font-bold text-emerald-400">At Peak</div>
+                  <div className="text-[11px] text-muted-foreground mt-0.5">no recovery needed</div>
+                </>
+              )}
+            </div>
+          </div>
+
           {investment.pausedAt && (
-            <div className="flex items-center gap-2 text-xs text-muted-foreground mb-6">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground mb-5">
               <AlertTriangle style={{ width: 13, height: 13 }} className="text-orange-400" />
               Protection triggered at {new Date(investment.pausedAt).toLocaleString()}
             </div>
@@ -417,10 +449,10 @@ function ProtectionTriggeredView({
         <h3 className="font-semibold text-sm mb-4 text-muted-foreground">What happened?</h3>
         <div className="space-y-3 text-sm">
           {[
-            { icon: TrendingUp, text: `You started trading with $${investment.amount.toFixed(2)} USDT at ${activeProfile.label} risk.`, color: "text-blue-400" },
-            { icon: AlertTriangle, text: `Market conditions caused a $${investment.drawdown.toFixed(2)} drawdown (${drawdownPct.toFixed(2)}% of your capital).`, color: "text-orange-400" },
+            { icon: TrendingUp, text: `You started trading with $${investment.amount.toFixed(2)} USDT at ${activeProfile.label} risk. Peak balance reached: $${peakBalance.toFixed(2)}.`, color: "text-blue-400" },
+            { icon: AlertTriangle, text: `Market conditions caused a $${investment.drawdown.toFixed(2)} drawdown (${drawdownPct.toFixed(2)}% of your capital, -${drawdownFromPeak.toFixed(2)}% from peak).`, color: "text-orange-400" },
             { icon: Shield, text: `Your ${investment.drawdownLimit}% protection limit was reached, triggering an automatic stop.`, color: "text-red-400" },
-            { icon: CheckCircle, text: `$${Math.max(0, investment.amount - investment.drawdown).toFixed(2)} USDT has been secured in your wallet.`, color: "text-green-400" },
+            { icon: CheckCircle, text: `$${capitalPreserved.toFixed(2)} USDT secured. ${recoveryPct > 0 ? `Restart and earn +${recoveryPct.toFixed(2)}% to return to your peak.` : "Your balance is at peak."}`, color: "text-green-400" },
           ].map(({ icon: Icon, text, color }, i) => (
             <div key={i} className="flex items-start gap-3 p-3 rounded-xl bg-white/[0.02] border border-white/[0.04]">
               <Icon style={{ width: 14, height: 14 }} className={`${color} mt-0.5 shrink-0`} />

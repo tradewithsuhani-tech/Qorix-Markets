@@ -116,6 +116,7 @@ export async function distributeDailyProfit(
       const amount = parseFloat(inv.amount as string);
       const totalProfit = parseFloat(inv.totalProfit as string);
       const currentDrawdown = parseFloat(inv.drawdown as string);
+      const currentPeakBalance = parseFloat(inv.peakBalance as string) || amount;
       const drawdownLimitPct = parseFloat(inv.drawdownLimit as string) || (DRAWDOWN_LIMITS[inv.riskLevel] ?? 0.05) * 100;
       const drawdownLimitAmt = (drawdownLimitPct / 100) * amount;
 
@@ -158,6 +159,11 @@ export async function distributeDailyProfit(
         newDrawdown = currentDrawdown + Math.abs(dailyProfitAmount);
       }
 
+      const equityAfterToday = inv.autoCompound
+        ? amount + dailyProfitAmount
+        : amount + (totalProfit + dailyProfitAmount);
+      const newPeakBalance = Math.max(currentPeakBalance, equityAfterToday);
+
       const walletRows = await tx
         .select()
         .from(walletsTable)
@@ -185,6 +191,7 @@ export async function distributeDailyProfit(
             totalProfit: newTotalProfit.toString(),
             dailyProfit: dailyProfitAmount.toString(),
             drawdown: newDrawdown.toString(),
+            peakBalance: newPeakBalance.toString(),
           })
           .where(eq(investmentsTable.userId, inv.userId));
       } else {
@@ -202,6 +209,7 @@ export async function distributeDailyProfit(
             totalProfit: newTotalProfit.toString(),
             dailyProfit: dailyProfitAmount.toString(),
             drawdown: newDrawdown.toString(),
+            peakBalance: newPeakBalance.toString(),
           })
           .where(eq(investmentsTable.userId, inv.userId));
       }
