@@ -7,8 +7,10 @@ import {
   useGetInvestment,
   useUpdateProtection,
   getGetInvestmentQueryKey,
+  type VipInfo,
 } from "@workspace/api-client-react";
 import { Layout } from "@/components/layout";
+import { VipBadge, VipCard } from "@/components/vip-badge";
 import { AnimatedCounter, BigBalanceCounter } from "@/components/animated-counter";
 import { motion, AnimatePresence } from "framer-motion";
 import { format } from "date-fns";
@@ -483,6 +485,9 @@ export default function Dashboard() {
           </div>
           <div className="flex items-center gap-3">
             {summary?.riskLevel && <RiskBadge score={perf?.riskScore ?? "Low"} />}
+            {summary?.vip && (summary.vip.tier as string) !== "none" && (
+              <VipBadge tier={summary.vip.tier as "silver" | "gold" | "platinum"} size="sm" />
+            )}
             <div className="flex items-center gap-2 text-sm bg-green-500/5 border border-green-500/15 rounded-full px-3 py-1.5">
               <span className="live-dot" />
               <span className="text-green-400 font-medium text-xs">Live · 5s</span>
@@ -861,6 +866,21 @@ export default function Dashboard() {
             isSaving={protectionMutation.isPending}
           />
         </motion.div>
+
+        {/* VIP Membership */}
+        {summary?.vip && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.52, duration: 0.4 }}
+          >
+            <div className="flex items-center gap-2 mb-3">
+              <h2 className="text-base font-semibold">VIP Membership</h2>
+              <div className="h-px flex-1 bg-gradient-to-r from-white/10 to-transparent" />
+            </div>
+            <VipCard vip={summary.vip as VipInfo} investmentAmount={summary.activeInvestment ?? 0} />
+          </motion.div>
+        )}
 
         {/* Fund Transparency */}
         <motion.div
