@@ -8,7 +8,6 @@ import {
   BarChart2,
   CheckCircle2,
   ChevronDown,
-  DollarSign,
   Lock,
   Shield,
   Star,
@@ -853,54 +852,6 @@ export default function Landing() {
             desc="Monitor the events that move markets. High-impact releases create volatility windows that our trading desks actively position around."
           />
           <FadeIn><EconomicNewsLandingWidget /></FadeIn>
-        </div>
-      </section>
-
-      <section className="py-24 relative">
-        <div className="absolute inset-0 pointer-events-none" style={{ background: "radial-gradient(ellipse at center, rgba(59,130,246,0.07) 0%, transparent 65%)" }} />
-        <div className="max-w-3xl mx-auto px-5 md:px-8 text-center">
-          <FadeIn>
-            <div className="rounded-3xl p-10 md:p-16 relative overflow-hidden" style={{
-              background: "linear-gradient(135deg, rgba(14,20,40,0.98) 0%, rgba(8,12,28,0.98) 100%)",
-              border: "1px solid rgba(99,102,241,0.25)",
-              boxShadow: "0 40px 100px rgba(0,0,0,0.4), 0 0 80px rgba(59,130,246,0.1)",
-            }}>
-              <div className="absolute top-0 inset-x-0 h-px" style={{ background: "linear-gradient(90deg, transparent, rgba(129,140,248,0.6), transparent)" }} />
-              <div className="absolute bottom-0 inset-x-0 h-px" style={{ background: "linear-gradient(90deg, transparent, rgba(167,139,250,0.2), transparent)" }} />
-              <div className="absolute -top-32 left-1/2 -translate-x-1/2 w-96 h-96 rounded-full pointer-events-none" style={{ background: "radial-gradient(circle, rgba(99,102,241,0.1) 0%, transparent 70%)" }} />
-
-              <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-8" style={{ background: "linear-gradient(135deg,#2563eb,#7c3aed)", boxShadow: "0 0 40px rgba(99,102,241,0.4)" }}>
-                <DollarSign size={28} className="text-white" />
-              </div>
-
-              <h2 className="text-3xl md:text-4xl font-black tracking-tight mb-4 text-white">Ready to request private investor access?</h2>
-              <p className="text-slate-400 text-lg leading-relaxed mb-10 max-w-xl mx-auto">
-                Join this onboarding round before capacity closes. Reserve a slot, select your risk band, and track every USDT from your dashboard.
-              </p>
-
-              <div className="flex flex-col sm:flex-row gap-3 justify-center mb-8">
-                <button onClick={() => setLocation("/login")} className="btn btn-primary text-base px-8 py-3.5 gap-2">
-                  Apply for Access <ArrowRight size={16} />
-                </button>
-                <button onClick={() => perfRef.current?.scrollIntoView({ behavior: "smooth" })} className="btn btn-ghost text-base px-8 py-3.5 gap-2">
-                  <BarChart2 size={16} /> View Performance
-                </button>
-              </div>
-
-              <div className="flex items-center justify-center gap-6 flex-wrap">
-                {[
-                  { icon: Shield, text: "Drawdown Protection" },
-                  { icon: Lock, text: "Segmented Balances" },
-                  { icon: CheckCircle2, text: `${slotsRemaining} Slots Left` },
-                ].map(({ icon: Icon, text }) => (
-                  <div key={text} className="flex items-center gap-1.5 text-xs text-slate-500">
-                    <Icon size={12} style={{ color: "#818cf8" }} />
-                    {text}
-                  </div>
-                ))}
-              </div>
-            </div>
-          </FadeIn>
         </div>
       </section>
 
