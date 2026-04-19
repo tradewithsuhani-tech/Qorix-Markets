@@ -7,3 +7,4 @@ export * from "./equity";
 export * from "./settings";
 export * from "./daily-profit-runs";
 export * from "./notifications";
+export * from "./trading-desk";

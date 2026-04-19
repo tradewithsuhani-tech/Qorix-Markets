@@ -25,6 +25,7 @@ import {
   Info,
   CheckCheck,
   MoreHorizontal,
+  Briefcase,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -367,6 +368,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/wallet", label: "Wallet", icon: Wallet },
     { href: "/invest", label: "Invest", icon: TrendingUp },
     { href: "/analytics", label: "Analytics", icon: BarChart2 },
+    { href: "/trading-desk", label: "Trading Desk", icon: Briefcase },
     { href: "/transactions", label: "History", icon: History },
     { href: "/referral", label: "Referrals", icon: Users },
     ...(user?.isAdmin ? [{ href: "/admin", label: "Admin", icon: ShieldAlert }] : []),

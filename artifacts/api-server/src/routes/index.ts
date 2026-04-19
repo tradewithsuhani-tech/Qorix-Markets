@@ -8,6 +8,7 @@ import referralRouter from "./referral";
 import dashboardRouter from "./dashboard";
 import adminRouter from "./admin";
 import notificationsRouter from "./notifications";
+import tradingDeskRouter from "./trading-desk";
 
 const router: IRouter = Router();
 
@@ -20,5 +21,6 @@ router.use(referralRouter);
 router.use(dashboardRouter);
 router.use(adminRouter);
 router.use(notificationsRouter);
+router.use(tradingDeskRouter);
 
 export default router;

@@ -297,6 +297,35 @@ export interface WithdrawalRequest {
   processedAt?: string | null;
 }
 
+export interface StrategyStats {
+  type: string;
+  label: string;
+  count: number;
+  avgWinRate: number;
+  percentage: number;
+}
+
+export interface TradingDeskStats {
+  totalTraders: number;
+  combinedExperience: number;
+  avgExperience: number;
+  overallAvgWinRate: number;
+  strategies: StrategyStats[];
+}
+
+export interface TraderItem {
+  id: number;
+  name: string;
+  strategyType: string;
+  strategyLabel: string;
+  experienceYears: number;
+  winRatePercent: number;
+}
+
+export interface TraderList {
+  data: TraderItem[];
+}
+
 export type GetTransactionsParams = {
   page?: number;
   limit?: number;
