@@ -1,4 +1,5 @@
 import { useRef } from "react";
+import { EconomicNewsLandingWidget } from "@/components/economic-news-widget";
 import { useLocation } from "wouter";
 import { motion, useInView } from "framer-motion";
 import {
@@ -347,6 +348,7 @@ export default function Landing() {
               ["Performance", "performance"],
               ["Trading Desk", "trading-desk"],
               ["Risk", "risk"],
+              ["Market Insights", "market-insights"],
               ["How it works", "how-it-works"],
             ].map(([label, id]) => (
               <button key={id} className="hover:text-white transition-colors" onClick={() => document.getElementById(id)?.scrollIntoView({ behavior: "smooth" })}>
@@ -787,6 +789,20 @@ export default function Landing() {
               </FadeIn>
             ))}
           </div>
+        </div>
+      </section>
+
+      <section id="market-insights" className="py-20 md:py-24 relative">
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(239,68,68,0.03),transparent_65%)] pointer-events-none" />
+        <div className="max-w-7xl mx-auto px-5 md:px-8">
+          <SectionHeader
+            eyebrow="Market Insights"
+            title="Today's high-impact economic events"
+            desc="Monitor the events that move markets. High-impact releases can create volatility windows that our trading desks actively position around."
+          />
+          <FadeIn>
+            <EconomicNewsLandingWidget />
+          </FadeIn>
         </div>
       </section>
 
