@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { db, walletsTable, investmentsTable, equityHistoryTable } from "@workspace/db";
-import { eq, and, gte, desc } from "drizzle-orm";
+import { db, walletsTable, investmentsTable, equityHistoryTable, tradesTable } from "@workspace/db";
+import { eq, and, gte, desc, sum, count } from "drizzle-orm";
 import { authMiddleware, type AuthRequest } from "../middlewares/auth";
 
 const router = Router();
@@ -85,6 +85,102 @@ router.get("/dashboard/equity-chart", async (req: AuthRequest, res) => {
     equity: parseFloat(r.equity as string),
     profit: parseFloat(r.profit as string),
   })));
+});
+
+router.get("/dashboard/performance", async (req: AuthRequest, res) => {
+  const allTrades = await db.select().from(tradesTable)
+    .where(eq(tradesTable.userId, req.userId!))
+    .orderBy(desc(tradesTable.executedAt));
+
+  const totalTrades = allTrades.length;
+  const winningTrades = allTrades.filter(t => parseFloat(t.profit as string) > 0).length;
+  const winRate = totalTrades > 0 ? (winningTrades / totalTrades) * 100 : 0;
+
+  const avgReturn = totalTrades > 0
+    ? allTrades.reduce((acc, t) => acc + parseFloat(t.profitPercent as string), 0) / totalTrades
+    : 0;
+
+  const inv = await db.select().from(investmentsTable)
+    .where(eq(investmentsTable.userId, req.userId!)).limit(1);
+  const investment = inv[0];
+
+  const drawdown = investment ? parseFloat(investment.drawdown as string) : 0;
+  const riskLevel = investment?.riskLevel ?? "low";
+  const riskScore = riskLevel === "high" ? "High" : riskLevel === "medium" ? "Medium" : "Low";
+
+  const equityRecords = await db.select().from(equityHistoryTable)
+    .where(eq(equityHistoryTable.userId, req.userId!))
+    .orderBy(desc(equityHistoryTable.date))
+    .limit(30);
+
+  let maxDrawdownPct = 0;
+  if (equityRecords.length > 1) {
+    const equities = equityRecords.map(r => parseFloat(r.equity as string)).reverse();
+    let peak = equities[0]!;
+    for (const e of equities) {
+      if (e > peak) peak = e;
+      const dd = peak > 0 ? ((peak - e) / peak) * 100 : 0;
+      if (dd > maxDrawdownPct) maxDrawdownPct = dd;
+    }
+  }
+
+  const rollingReturns: { period: string; return: number }[] = [];
+  const periods = [{ label: "7D", days: 7 }, { label: "30D", days: 30 }, { label: "90D", days: 90 }];
+  for (const { label, days } of periods) {
+    const slice = equityRecords.slice(0, days);
+    if (slice.length >= 2) {
+      const first = parseFloat(slice[slice.length - 1]!.equity as string);
+      const last = parseFloat(slice[0]!.equity as string);
+      rollingReturns.push({ period: label, return: first > 0 ? ((last - first) / first) * 100 : 0 });
+    } else {
+      rollingReturns.push({ period: label, return: 0 });
+    }
+  }
+
+  res.json({
+    winRate: parseFloat(winRate.toFixed(1)),
+    totalTrades,
+    avgReturn: parseFloat(avgReturn.toFixed(2)),
+    maxDrawdown: parseFloat(maxDrawdownPct.toFixed(2)),
+    drawdown: parseFloat(drawdown.toFixed(2)),
+    riskScore,
+    rollingReturns,
+  });
+});
+
+router.get("/dashboard/fund-stats", async (req: AuthRequest, res) => {
+  const [aumResult] = await db
+    .select({ total: sum(investmentsTable.amount) })
+    .from(investmentsTable)
+    .where(eq(investmentsTable.isActive, true));
+
+  const [allMainResult] = await db
+    .select({ total: sum(walletsTable.mainBalance) })
+    .from(walletsTable);
+
+  const [allProfitResult] = await db
+    .select({ total: sum(walletsTable.profitBalance) })
+    .from(walletsTable);
+
+  const [activeCountResult] = await db
+    .select({ count: count() })
+    .from(investmentsTable)
+    .where(eq(investmentsTable.isActive, true));
+
+  const totalAUM = parseFloat(String(aumResult?.total ?? "0")) || 0;
+  const reserveFund = (parseFloat(String(allMainResult?.total ?? "0")) || 0) +
+    (parseFloat(String(allProfitResult?.total ?? "0")) || 0);
+  const activeInvestors = Number(activeCountResult?.count ?? 0);
+
+  res.json({
+    totalAUM,
+    activeCapital: totalAUM,
+    reserveFund,
+    activeInvestors,
+    utilizationRate: (totalAUM + reserveFund) > 0
+      ? parseFloat(((totalAUM / (totalAUM + reserveFund)) * 100).toFixed(1))
+      : 0,
+  });
 });
 
 export default router;

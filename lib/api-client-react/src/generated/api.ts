@@ -26,6 +26,7 @@ import type {
   DepositBody,
   EquityPoint,
   ErrorResponse,
+  FundStats,
   GetAdminUsersParams,
   GetEquityChartParams,
   GetProfitHistoryParams,
@@ -34,6 +35,7 @@ import type {
   HealthStatus,
   Investment,
   LoginBody,
+  PerformanceMetrics,
   Referral,
   ReferredUser,
   RegisterBody,
@@ -1517,6 +1519,157 @@ export function useGetEquityChart<
   },
 ): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetEquityChartQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Get performance metrics for the user
+ */
+export const getGetDashboardPerformanceUrl = () => {
+  return `/api/dashboard/performance`;
+};
+
+export const getDashboardPerformance = async (
+  options?: RequestInit,
+): Promise<PerformanceMetrics> => {
+  return customFetch<PerformanceMetrics>(getGetDashboardPerformanceUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetDashboardPerformanceQueryKey = () => {
+  return [`/api/dashboard/performance`] as const;
+};
+
+export const getGetDashboardPerformanceQueryOptions = <
+  TData = Awaited<ReturnType<typeof getDashboardPerformance>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getDashboardPerformance>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetDashboardPerformanceQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getDashboardPerformance>>
+  > = ({ signal }) => getDashboardPerformance({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getDashboardPerformance>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetDashboardPerformanceQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getDashboardPerformance>>
+>;
+export type GetDashboardPerformanceQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get performance metrics for the user
+ */
+
+export function useGetDashboardPerformance<
+  TData = Awaited<ReturnType<typeof getDashboardPerformance>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getDashboardPerformance>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetDashboardPerformanceQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Get platform fund transparency stats
+ */
+export const getGetDashboardFundStatsUrl = () => {
+  return `/api/dashboard/fund-stats`;
+};
+
+export const getDashboardFundStats = async (
+  options?: RequestInit,
+): Promise<FundStats> => {
+  return customFetch<FundStats>(getGetDashboardFundStatsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetDashboardFundStatsQueryKey = () => {
+  return [`/api/dashboard/fund-stats`] as const;
+};
+
+export const getGetDashboardFundStatsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getDashboardFundStats>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getDashboardFundStats>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetDashboardFundStatsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getDashboardFundStats>>
+  > = ({ signal }) => getDashboardFundStats({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getDashboardFundStats>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetDashboardFundStatsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getDashboardFundStats>>
+>;
+export type GetDashboardFundStatsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get platform fund transparency stats
+ */
+
+export function useGetDashboardFundStats<
+  TData = Awaited<ReturnType<typeof getDashboardFundStats>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getDashboardFundStats>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetDashboardFundStatsQueryOptions(options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

@@ -156,6 +156,29 @@ export interface EquityPoint {
   profit: number;
 }
 
+export interface RollingReturn {
+  period: string;
+  return: number;
+}
+
+export interface PerformanceMetrics {
+  winRate: number;
+  totalTrades: number;
+  avgReturn: number;
+  maxDrawdown: number;
+  drawdown: number;
+  riskScore: string;
+  rollingReturns: RollingReturn[];
+}
+
+export interface FundStats {
+  totalAUM: number;
+  activeCapital: number;
+  reserveFund: number;
+  activeInvestors: number;
+  utilizationRate: number;
+}
+
 export interface AdminStats {
   totalUsers: number;
   activeInvestors: number;

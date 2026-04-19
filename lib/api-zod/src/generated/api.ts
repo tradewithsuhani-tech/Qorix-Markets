@@ -305,6 +305,35 @@ export const GetEquityChartResponseItem = zod.object({
 export const GetEquityChartResponse = zod.array(GetEquityChartResponseItem);
 
 /**
+ * @summary Get performance metrics for the user
+ */
+export const GetDashboardPerformanceResponse = zod.object({
+  winRate: zod.number(),
+  totalTrades: zod.number(),
+  avgReturn: zod.number(),
+  maxDrawdown: zod.number(),
+  drawdown: zod.number(),
+  riskScore: zod.string(),
+  rollingReturns: zod.array(
+    zod.object({
+      period: zod.string(),
+      return: zod.number(),
+    }),
+  ),
+});
+
+/**
+ * @summary Get platform fund transparency stats
+ */
+export const GetDashboardFundStatsResponse = zod.object({
+  totalAUM: zod.number(),
+  activeCapital: zod.number(),
+  reserveFund: zod.number(),
+  activeInvestors: zod.number(),
+  utilizationRate: zod.number(),
+});
+
+/**
  * @summary Get admin overview stats
  */
 export const GetAdminStatsResponse = zod.object({

@@ -379,6 +379,32 @@ paths:
                 items:
                   $ref: "#/components/schemas/EquityPoint"
 
+  /dashboard/performance:
+    get:
+      operationId: getDashboardPerformance
+      tags: [dashboard]
+      summary: Get performance metrics for the user
+      responses:
+        "200":
+          description: Performance metrics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PerformanceMetrics"
+
+  /dashboard/fund-stats:
+    get:
+      operationId: getDashboardFundStats
+      tags: [dashboard]
+      summary: Get platform fund transparency stats
+      responses:
+        "200":
+          description: Fund stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FundStats"
+
   # ADMIN
   /admin/stats:
     get:
@@ -868,6 +894,65 @@ components:
         - date
         - equity
         - profit
+
+    RollingReturn:
+      type: object
+      properties:
+        period:
+          type: string
+        return:
+          type: number
+      required:
+        - period
+        - return
+
+    PerformanceMetrics:
+      type: object
+      properties:
+        winRate:
+          type: number
+        totalTrades:
+          type: integer
+        avgReturn:
+          type: number
+        maxDrawdown:
+          type: number
+        drawdown:
+          type: number
+        riskScore:
+          type: string
+        rollingReturns:
+          type: array
+          items:
+            $ref: "#/components/schemas/RollingReturn"
+      required:
+        - winRate
+        - totalTrades
+        - avgReturn
+        - maxDrawdown
+        - drawdown
+        - riskScore
+        - rollingReturns
+
+    FundStats:
+      type: object
+      properties:
+        totalAUM:
+          type: number
+        activeCapital:
+          type: number
+        reserveFund:
+          type: number
+        activeInvestors:
+          type: integer
+        utilizationRate:
+          type: number
+      required:
+        - totalAUM
+        - activeCapital
+        - reserveFund
+        - activeInvestors
+        - utilizationRate
 
     # ADMIN
     AdminStats:
