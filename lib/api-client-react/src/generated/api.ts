@@ -47,6 +47,8 @@ import type {
   StartInvestmentBody,
   SuccessResponse,
   Trade,
+  TraderList,
+  TradingDeskStats,
   Transaction,
   TransactionList,
   TransferBody,
@@ -2709,3 +2711,153 @@ export const useRejectWithdrawal = <
 > => {
   return useMutation(getRejectWithdrawalMutationOptions(options));
 };
+
+/**
+ * @summary Get trading desk statistics
+ */
+export const getGetTradingDeskStatsUrl = () => {
+  return `/api/trading-desk/stats`;
+};
+
+export const getTradingDeskStats = async (
+  options?: RequestInit,
+): Promise<TradingDeskStats> => {
+  return customFetch<TradingDeskStats>(getGetTradingDeskStatsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetTradingDeskStatsQueryKey = () => {
+  return [`/api/trading-desk/stats`] as const;
+};
+
+export const getGetTradingDeskStatsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getTradingDeskStats>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getTradingDeskStats>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetTradingDeskStatsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getTradingDeskStats>>
+  > = ({ signal }) => getTradingDeskStats({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getTradingDeskStats>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetTradingDeskStatsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getTradingDeskStats>>
+>;
+export type GetTradingDeskStatsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get trading desk statistics
+ */
+
+export function useGetTradingDeskStats<
+  TData = Awaited<ReturnType<typeof getTradingDeskStats>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getTradingDeskStats>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetTradingDeskStatsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Get full trader roster
+ */
+export const getGetTradingDeskTradersUrl = () => {
+  return `/api/trading-desk/traders`;
+};
+
+export const getTradingDeskTraders = async (
+  options?: RequestInit,
+): Promise<TraderList> => {
+  return customFetch<TraderList>(getGetTradingDeskTradersUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetTradingDeskTradersQueryKey = () => {
+  return [`/api/trading-desk/traders`] as const;
+};
+
+export const getGetTradingDeskTradersQueryOptions = <
+  TData = Awaited<ReturnType<typeof getTradingDeskTraders>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getTradingDeskTraders>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetTradingDeskTradersQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getTradingDeskTraders>>
+  > = ({ signal }) => getTradingDeskTraders({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getTradingDeskTraders>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetTradingDeskTradersQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getTradingDeskTraders>>
+>;
+export type GetTradingDeskTradersQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get full trader roster
+ */
+
+export function useGetTradingDeskTraders<
+  TData = Awaited<ReturnType<typeof getTradingDeskTraders>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getTradingDeskTraders>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetTradingDeskTradersQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}

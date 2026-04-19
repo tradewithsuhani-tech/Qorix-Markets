@@ -605,3 +605,38 @@ export const RejectWithdrawalResponse = zod.object({
   requestedAt: zod.string(),
   processedAt: zod.string().nullish(),
 });
+
+/**
+ * @summary Get trading desk statistics
+ */
+export const GetTradingDeskStatsResponse = zod.object({
+  totalTraders: zod.number(),
+  combinedExperience: zod.number(),
+  avgExperience: zod.number(),
+  overallAvgWinRate: zod.number(),
+  strategies: zod.array(
+    zod.object({
+      type: zod.string(),
+      label: zod.string(),
+      count: zod.number(),
+      avgWinRate: zod.number(),
+      percentage: zod.number(),
+    }),
+  ),
+});
+
+/**
+ * @summary Get full trader roster
+ */
+export const GetTradingDeskTradersResponse = zod.object({
+  data: zod.array(
+    zod.object({
+      id: zod.number(),
+      name: zod.string(),
+      strategyType: zod.string(),
+      strategyLabel: zod.string(),
+      experienceYears: zod.number(),
+      winRatePercent: zod.number(),
+    }),
+  ),
+});

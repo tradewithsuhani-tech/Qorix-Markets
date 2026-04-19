@@ -26,6 +26,8 @@ tags:
     description: Admin panel operations
   - name: dashboard
     description: Dashboard summary and analytics
+  - name: trading-desk
+    description: Trading desk statistics and trader roster
 
 paths:
   /healthz:
@@ -643,6 +645,37 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/WithdrawalRequest"
+
+  # TRADING DESK
+  /trading-desk/stats:
+    get:
+      operationId: getTradingDeskStats
+      tags: [trading-desk]
+      summary: Get trading desk statistics
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Trading desk stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TradingDeskStats"
+
+  /trading-desk/traders:
+    get:
+      operationId: getTradingDeskTraders
+      tags: [trading-desk]
+      summary: Get full trader roster
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: List of traders
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TraderList"
 
 components:
   schemas:
@@ -1329,3 +1362,78 @@ components:
         - walletAddress
         - status
         - requestedAt
+
+    StrategyStats:
+      type: object
+      properties:
+        type:
+          type: string
+        label:
+          type: string
+        count:
+          type: integer
+        avgWinRate:
+          type: number
+        percentage:
+          type: number
+      required:
+        - type
+        - label
+        - count
+        - avgWinRate
+        - percentage
+
+    TradingDeskStats:
+      type: object
+      properties:
+        totalTraders:
+          type: integer
+        combinedExperience:
+          type: integer
+        avgExperience:
+          type: number
+        overallAvgWinRate:
+          type: number
+        strategies:
+          type: array
+          items:
+            $ref: "#/components/schemas/StrategyStats"
+      required:
+        - totalTraders
+        - combinedExperience
+        - avgExperience
+        - overallAvgWinRate
+        - strategies
+
+    TraderItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        strategyType:
+          type: string
+        strategyLabel:
+          type: string
+        experienceYears:
+          type: integer
+        winRatePercent:
+          type: number
+      required:
+        - id
+        - name
+        - strategyType
+        - strategyLabel
+        - experienceYears
+        - winRatePercent
+
+    TraderList:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/TraderItem"
+      required:
+        - data
