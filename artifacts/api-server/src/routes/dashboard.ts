@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { db, walletsTable, investmentsTable, equityHistoryTable, tradesTable, monthlyPerformanceTable } from "@workspace/db";
 import { eq, and, gte, desc, sum, count } from "drizzle-orm";
+import { getSlotData } from "./admin";
 import { authMiddleware, type AuthRequest } from "../middlewares/auth";
 import { getVipInfo } from "../lib/vip";
 
@@ -182,6 +183,7 @@ router.get("/dashboard/fund-stats", async (req: AuthRequest, res) => {
   const reserveFund = (parseFloat(String(allMainResult?.total ?? "0")) || 0) +
     (parseFloat(String(allProfitResult?.total ?? "0")) || 0);
   const activeInvestors = Number(activeCountResult?.count ?? 0);
+  const slotData = await getSlotData();
 
   res.json({
     totalAUM,
@@ -191,6 +193,9 @@ router.get("/dashboard/fund-stats", async (req: AuthRequest, res) => {
     utilizationRate: (totalAUM + reserveFund) > 0
       ? parseFloat(((totalAUM / (totalAUM + reserveFund)) * 100).toFixed(1))
       : 0,
+    maxSlots: slotData.maxSlots,
+    availableSlots: slotData.availableSlots,
+    isFull: slotData.isFull,
   });
 });
 

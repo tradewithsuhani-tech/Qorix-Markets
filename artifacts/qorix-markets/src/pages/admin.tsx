@@ -1,8 +1,8 @@
-import { useGetAdminStats, useGetPendingWithdrawals, useApproveWithdrawal, useRejectWithdrawal, useSetDailyProfit } from "@workspace/api-client-react";
+import { useGetAdminStats, useGetPendingWithdrawals, useApproveWithdrawal, useRejectWithdrawal, useSetDailyProfit, useSetInvestorSlots } from "@workspace/api-client-react";
 import { Layout } from "@/components/layout";
 import { AnimatedCounter } from "@/components/animated-counter";
 import { motion } from "framer-motion";
-import { Users, Activity, Wallet, CheckCircle, XCircle, ArrowUpFromLine } from "lucide-react";
+import { Users, Activity, Wallet, CheckCircle, XCircle, ArrowUpFromLine, Layers } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { getGetPendingWithdrawalsQueryKey, getGetAdminStatsQueryKey } from "@workspace/api-client-react";
@@ -15,6 +15,20 @@ export default function AdminPage() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [profitInput, setProfitInput] = useState("");
+  const [slotsInput, setSlotsInput] = useState("");
+
+  const slotsMutation = useSetInvestorSlots({
+    mutation: {
+      onSuccess: () => {
+        toast({ title: "Investor slots updated" });
+        queryClient.invalidateQueries({ queryKey: getGetAdminStatsQueryKey() });
+        setSlotsInput("");
+      },
+      onError: (err: any) => {
+        toast({ title: "Failed", description: err.message, variant: "destructive" });
+      }
+    }
+  });
 
   const approveMutation = useApproveWithdrawal({
     mutation: {
@@ -88,11 +102,10 @@ export default function AdminPage() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="glass-card p-6 rounded-xl">
-            <h2 className="text-xl font-bold mb-4">Distribute Daily Profit</h2>
-            <p className="text-sm text-muted-foreground mb-4">Set the base profit percentage for today. Risk multipliers will be applied automatically (Conservative 1x, Balanced 1.5x, Aggressive 2.5x).</p>
-            
-            <div className="space-y-4">
+          <div className="space-y-4">
+            <div className="glass-card p-6 rounded-xl">
+              <h2 className="text-xl font-bold mb-1">Distribute Daily Profit</h2>
+              <p className="text-sm text-muted-foreground mb-4">Set the base profit percentage for today.</p>
               <div>
                 <label className="text-sm text-muted-foreground">Base %</label>
                 <div className="flex gap-2 mt-1">
@@ -110,6 +123,72 @@ export default function AdminPage() {
                     className="bg-primary hover:bg-primary/90 text-white px-6 rounded-lg font-medium transition-colors disabled:opacity-50"
                   >
                     Execute
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="glass-card p-6 rounded-xl border border-amber-500/15">
+              <div className="flex items-center gap-2 mb-1">
+                <Layers className="w-4 h-4 text-amber-400" />
+                <h2 className="text-xl font-bold">Investor Slots</h2>
+              </div>
+              <p className="text-sm text-muted-foreground mb-4">Limit the number of active investors. Set to 0 to disable the limit.</p>
+
+              <div className="flex items-center justify-between mb-4 p-3 rounded-lg bg-white/[0.03] border border-white/8">
+                <div>
+                  <div className="text-xs text-muted-foreground">Current status</div>
+                  <div className="font-semibold text-sm mt-0.5">
+                    {stats?.maxSlots === 0
+                      ? <span className="text-green-400">Unlimited</span>
+                      : stats?.isFull
+                      ? <span className="text-red-400">Full — {stats.activeInvestors}/{stats.maxSlots}</span>
+                      : <span className="text-amber-400">{stats?.availableSlots ?? "—"} of {stats?.maxSlots} remaining</span>
+                    }
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-xs text-muted-foreground">Active</div>
+                  <div className="text-xl font-bold">{stats?.activeInvestors ?? "—"}</div>
+                </div>
+              </div>
+
+              {stats?.maxSlots !== undefined && stats.maxSlots > 0 && (
+                <div className="mb-4">
+                  <div className="flex justify-between text-xs text-muted-foreground mb-1.5">
+                    <span>Capacity</span>
+                    <span>{stats.activeInvestors}/{stats.maxSlots} filled</span>
+                  </div>
+                  <div className="h-2 bg-white/10 rounded-full overflow-hidden">
+                    <div
+                      className="h-full rounded-full transition-all duration-500"
+                      style={{
+                        width: `${Math.min(100, (stats.activeInvestors / stats.maxSlots) * 100)}%`,
+                        background: stats.isFull ? "#ef4444" : "linear-gradient(90deg, #f59e0b, #f97316)"
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label className="text-sm text-muted-foreground">New Max Slots</label>
+                <div className="flex gap-2 mt-1">
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={slotsInput}
+                    onChange={(e) => setSlotsInput(e.target.value)}
+                    className="flex-1 bg-black/50 border border-white/10 rounded-lg p-3 text-white focus:ring-1 focus:ring-amber-500"
+                    placeholder="e.g. 50 (0 = unlimited)"
+                  />
+                  <button
+                    onClick={() => slotsMutation.mutate({ data: { maxSlots: parseInt(slotsInput) } })}
+                    disabled={slotsMutation.isPending || slotsInput === ""}
+                    className="bg-amber-500 hover:bg-amber-500/90 text-black px-4 rounded-lg font-medium transition-colors disabled:opacity-50 text-sm"
+                  >
+                    {slotsMutation.isPending ? "Saving…" : "Save"}
                   </button>
                 </div>
               </div>

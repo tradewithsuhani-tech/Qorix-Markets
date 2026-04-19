@@ -236,6 +236,9 @@ export interface FundStats {
   reserveFund: number;
   activeInvestors: number;
   utilizationRate: number;
+  maxSlots: number;
+  availableSlots?: number | null;
+  isFull: boolean;
 }
 
 export interface MonthlyPerformanceEntry {
@@ -260,6 +263,21 @@ export interface AdminStats {
   pendingWithdrawals: number;
   pendingWithdrawalAmount: number;
   dailyProfitPercent: number;
+  maxSlots: number;
+  availableSlots?: number | null;
+  isFull: boolean;
+}
+
+export interface SetInvestorSlotsBody {
+  /** @minimum 0 */
+  maxSlots: number;
+}
+
+export interface InvestorSlots {
+  maxSlots: number;
+  activeInvestors: number;
+  availableSlots?: number | null;
+  isFull: boolean;
 }
 
 export interface SetDailyProfitBody {

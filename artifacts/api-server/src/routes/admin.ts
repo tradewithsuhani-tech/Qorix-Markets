@@ -19,6 +19,24 @@ const router = Router();
 router.use(authMiddleware);
 router.use(adminMiddleware);
 
+export async function getSlotData() {
+  const slotRows = await db
+    .select()
+    .from(systemSettingsTable)
+    .where(eq(systemSettingsTable.key, "max_investor_slots"))
+    .limit(1);
+  const maxSlots = slotRows.length > 0 ? parseInt(slotRows[0]!.value) : 0;
+
+  const [activeInvResult] = await db
+    .select({ count: count() })
+    .from(investmentsTable)
+    .where(eq(investmentsTable.isActive, true));
+  const activeInvestors = Number(activeInvResult?.count ?? 0);
+  const availableSlots = maxSlots > 0 ? Math.max(0, maxSlots - activeInvestors) : null;
+
+  return { maxSlots, activeInvestors, availableSlots, isFull: maxSlots > 0 && activeInvestors >= maxSlots };
+}
+
 async function getAdminStatsData() {
   const [totalUsersResult] = await db.select({ count: count() }).from(usersTable);
   const [activeInvResult] = await db
@@ -50,6 +68,8 @@ async function getAdminStatsData() {
     ? parseFloat(settingRows[0]!.value)
     : 0;
 
+  const slotData = await getSlotData();
+
   return {
     totalUsers: Number(totalUsersResult?.count ?? 0),
     activeInvestors: Number(activeInvResult?.count ?? 0),
@@ -58,6 +78,9 @@ async function getAdminStatsData() {
     pendingWithdrawals: Number(pendingResult?.count ?? 0),
     pendingWithdrawalAmount: parseFloat(String(pendingAmountResult?.total ?? "0")) || 0,
     dailyProfitPercent: dailyProfitSetting,
+    maxSlots: slotData.maxSlots,
+    availableSlots: slotData.availableSlots,
+    isFull: slotData.isFull,
   };
 }
 
@@ -295,6 +318,26 @@ router.post("/admin/withdrawals/:id/reject", async (req: AuthRequest, res) => {
     requestedAt: updated.createdAt.toISOString(),
     processedAt: new Date().toISOString(),
   });
+});
+
+router.post("/admin/slots", async (req: AuthRequest, res) => {
+  const { maxSlots } = req.body as { maxSlots: unknown };
+  const parsed = parseInt(String(maxSlots));
+  if (isNaN(parsed) || parsed < 0) {
+    res.status(400).json({ error: "maxSlots must be a non-negative integer" });
+    return;
+  }
+
+  await db
+    .insert(systemSettingsTable)
+    .values({ key: "max_investor_slots", value: parsed.toString() })
+    .onConflictDoUpdate({
+      target: systemSettingsTable.key,
+      set: { value: parsed.toString(), updatedAt: new Date() },
+    });
+
+  const slotData = await getSlotData();
+  res.json(slotData);
 });
 
 export default router;

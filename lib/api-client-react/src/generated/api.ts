@@ -36,6 +36,7 @@ import type {
   GetTransactionsParams,
   HealthStatus,
   Investment,
+  InvestorSlots,
   LoginBody,
   MonthlyPerformanceList,
   NotificationItem,
@@ -46,6 +47,7 @@ import type {
   ReferredUser,
   RegisterBody,
   SetDailyProfitBody,
+  SetInvestorSlotsBody,
   StartInvestmentBody,
   SuccessResponse,
   Trade,
@@ -2384,6 +2386,92 @@ export const useSetDailyProfit = <
   TContext
 > => {
   return useMutation(getSetDailyProfitMutationOptions(options));
+};
+
+/**
+ * @summary Set the maximum number of active investor slots
+ */
+export const getSetInvestorSlotsUrl = () => {
+  return `/api/admin/slots`;
+};
+
+export const setInvestorSlots = async (
+  setInvestorSlotsBody: SetInvestorSlotsBody,
+  options?: RequestInit,
+): Promise<InvestorSlots> => {
+  return customFetch<InvestorSlots>(getSetInvestorSlotsUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(setInvestorSlotsBody),
+  });
+};
+
+export const getSetInvestorSlotsMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof setInvestorSlots>>,
+    TError,
+    { data: BodyType<SetInvestorSlotsBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof setInvestorSlots>>,
+  TError,
+  { data: BodyType<SetInvestorSlotsBody> },
+  TContext
+> => {
+  const mutationKey = ["setInvestorSlots"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof setInvestorSlots>>,
+    { data: BodyType<SetInvestorSlotsBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return setInvestorSlots(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SetInvestorSlotsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof setInvestorSlots>>
+>;
+export type SetInvestorSlotsMutationBody = BodyType<SetInvestorSlotsBody>;
+export type SetInvestorSlotsMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Set the maximum number of active investor slots
+ */
+export const useSetInvestorSlots = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof setInvestorSlots>>,
+    TError,
+    { data: BodyType<SetInvestorSlotsBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof setInvestorSlots>>,
+  TError,
+  { data: BodyType<SetInvestorSlotsBody> },
+  TContext
+> => {
+  return useMutation(getSetInvestorSlotsMutationOptions(options));
 };
 
 /**
