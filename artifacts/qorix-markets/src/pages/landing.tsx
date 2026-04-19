@@ -170,6 +170,146 @@ function SectionHeader({ eyebrow, title, desc }: { eyebrow: string; title: strin
   );
 }
 
+function PremiumHeroVisual({
+  activeInvestors,
+  earningNow,
+  withdrawals24h,
+  slotsRemaining,
+  slotsFilled,
+  slotsTotal,
+}: {
+  activeInvestors: number;
+  earningNow: number;
+  withdrawals24h: number;
+  slotsRemaining: number;
+  slotsFilled: number;
+  slotsTotal: number;
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.94, rotateX: 8, y: 24 }}
+      animate={{ opacity: 1, scale: 1, rotateX: 0, y: 0 }}
+      transition={{ duration: 0.8, delay: 0.18, ease: "easeOut" }}
+      className="premium-3d-stage"
+    >
+      <div className="premium-3d-card relative overflow-hidden rounded-[2rem] p-5 md:p-6">
+        <div className="absolute inset-0 premium-grid-mask" />
+        <div className="absolute -top-24 -right-20 w-72 h-72 rounded-full bg-blue-500/20 blur-3xl" />
+        <div className="absolute -bottom-28 -left-20 w-72 h-72 rounded-full bg-emerald-500/12 blur-3xl" />
+
+        <div className="relative flex items-center justify-between mb-5">
+          <div>
+            <div className="text-xs uppercase tracking-widest text-primary font-semibold">Qorix Capital OS</div>
+            <div className="text-sm text-muted-foreground mt-1">Allocation · Risk · Reporting</div>
+          </div>
+          <div className="flex items-center gap-2 text-xs text-emerald-400 font-semibold">
+            <div className="live-dot" /> Desk live
+          </div>
+        </div>
+
+        <div className="relative h-[330px] md:h-[380px]">
+          <div className="absolute inset-x-4 top-8 h-64 premium-orbit-wrap">
+            <div className="premium-orbit premium-orbit-a" />
+            <div className="premium-orbit premium-orbit-b" />
+            <div className="premium-orbit premium-orbit-c" />
+            <div className="premium-core">
+              <div className="premium-core-inner">
+                <div className="text-[10px] uppercase tracking-[0.22em] text-blue-200/70">AUM Engine</div>
+                <div className="text-3xl font-bold text-white mt-1">$4.2M</div>
+                <div className="text-[11px] text-emerald-300 mt-1">capital active</div>
+              </div>
+            </div>
+            <div className="premium-node premium-node-1">
+              <BarChart2 style={{ width: 15, height: 15 }} />
+              <span>Returns</span>
+            </div>
+            <div className="premium-node premium-node-2">
+              <Shield style={{ width: 15, height: 15 }} />
+              <span>Risk</span>
+            </div>
+            <div className="premium-node premium-node-3">
+              <Users style={{ width: 15, height: 15 }} />
+              <span>Desk</span>
+            </div>
+          </div>
+
+          <motion.div
+            className="absolute left-0 top-6 w-40 rounded-2xl border border-white/10 bg-white/[0.06] p-4 backdrop-blur-xl shadow-2xl"
+            animate={{ y: [0, -10, 0], rotate: [-1, 1, -1] }}
+            transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[10px] uppercase tracking-widest text-muted-foreground">Mandate</span>
+              <Shield style={{ width: 14, height: 14 }} className="text-blue-400" />
+            </div>
+            <div className="text-lg font-bold text-white">3–10%</div>
+            <div className="text-[11px] text-muted-foreground">drawdown bands</div>
+          </motion.div>
+
+          <motion.div
+            className="absolute right-0 top-20 w-44 rounded-2xl border border-emerald-400/20 bg-emerald-500/[0.08] p-4 backdrop-blur-xl shadow-2xl"
+            animate={{ y: [0, 12, 0], rotate: [1, -1, 1] }}
+            transition={{ duration: 7, repeat: Infinity, ease: "easeInOut" }}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[10px] uppercase tracking-widest text-emerald-200/70">Earning now</span>
+              <UserCheck style={{ width: 14, height: 14 }} className="text-emerald-400" />
+            </div>
+            <div className="text-lg font-bold text-emerald-300">{earningNow.toLocaleString()}</div>
+            <div className="text-[11px] text-emerald-100/60">investors active</div>
+          </motion.div>
+
+          <motion.div
+            className="absolute left-7 bottom-14 w-44 rounded-2xl border border-amber-400/20 bg-amber-500/[0.08] p-4 backdrop-blur-xl shadow-2xl"
+            animate={{ y: [0, 10, 0], rotate: [1, -0.5, 1] }}
+            transition={{ duration: 6.5, repeat: Infinity, ease: "easeInOut" }}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[10px] uppercase tracking-widest text-amber-200/70">Payout queue</span>
+              <Banknote style={{ width: 14, height: 14 }} className="text-amber-400" />
+            </div>
+            <div className="text-lg font-bold text-amber-300">{withdrawals24h}</div>
+            <div className="text-[11px] text-amber-100/60">processed today</div>
+          </motion.div>
+
+          <motion.div
+            className="absolute right-6 bottom-8 w-44 rounded-2xl border border-violet-400/20 bg-violet-500/[0.08] p-4 backdrop-blur-xl shadow-2xl"
+            animate={{ y: [0, -8, 0], rotate: [-1, 0.8, -1] }}
+            transition={{ duration: 5.8, repeat: Infinity, ease: "easeInOut" }}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[10px] uppercase tracking-widest text-violet-200/70">Investors</span>
+              <Users style={{ width: 14, height: 14 }} className="text-violet-400" />
+            </div>
+            <div className="text-lg font-bold text-violet-200">{activeInvestors.toLocaleString()}</div>
+            <div className="text-[11px] text-violet-100/60">currently onboarded</div>
+          </motion.div>
+        </div>
+
+        <div className="relative rounded-2xl bg-black/25 border border-white/[0.08] p-4">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <div className="text-sm font-semibold">Private allocation capacity</div>
+              <div className="text-xs text-muted-foreground">New deposits are capped to protect execution quality.</div>
+            </div>
+            <div className="text-right">
+              <div className="text-xl font-bold text-amber-400">{slotsRemaining}</div>
+              <div className="text-[10px] text-muted-foreground">seats left</div>
+            </div>
+          </div>
+          <div className="h-2 rounded-full bg-white/8 overflow-hidden">
+            <motion.div className="h-full rounded-full premium-capacity-bar" initial={{ width: 0 }} animate={{ width: `${slotsFilled}%` }} transition={{ duration: 1, delay: 0.35 }} />
+          </div>
+          <div className="flex justify-between text-[10px] text-muted-foreground mt-2">
+            <span>{slotsFilled}% allocated</span>
+            <span>{slotsTotal} total capacity</span>
+          </div>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
 export default function Landing() {
   const [, setLocation] = useLocation();
   const perfRef = useRef<HTMLElement>(null);
@@ -265,53 +405,14 @@ export default function Landing() {
             </motion.div>
           </motion.div>
 
-          <motion.div initial={{ opacity: 0, scale: 0.96, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} transition={{ duration: 0.65, delay: 0.18, ease: "easeOut" }} className="glass-card-glow rounded-3xl p-5 md:p-6 relative overflow-hidden">
-            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(34,197,94,0.12),transparent_45%)] pointer-events-none" />
-            <div className="relative flex items-center justify-between mb-5">
-              <div>
-                <div className="text-xs uppercase tracking-widest text-primary font-semibold">Qorix Capital OS</div>
-                <div className="text-sm text-muted-foreground mt-1">Allocation · Risk · Reporting</div>
-              </div>
-              <div className="flex items-center gap-2 text-xs text-emerald-400 font-semibold">
-                <div className="live-dot" /> Desk live
-              </div>
-            </div>
-
-            <div className="relative grid grid-cols-2 gap-3 mb-5">
-              {[
-                { icon: Users, label: "Active investors", value: activeInvestors.toLocaleString(), color: "text-blue-400" },
-                { icon: UserCheck, label: "Earning now", value: earningNow.toLocaleString(), color: "text-emerald-400" },
-                { icon: Banknote, label: "Payout queue", value: withdrawals24h.toString(), color: "text-amber-400" },
-                { icon: Activity, label: "Active mandates", value: "3", color: "text-violet-400" },
-              ].map(({ icon: Icon, label, value, color }) => (
-                <div key={label} className="rounded-2xl bg-white/[0.04] border border-white/[0.08] p-4">
-                  <Icon style={{ width: 18, height: 18 }} className={`${color} mb-3`} />
-                  <div className={`text-2xl font-bold tabular-nums ${color}`}>{value}</div>
-                  <div className="text-[11px] text-muted-foreground mt-1">{label}</div>
-                </div>
-              ))}
-            </div>
-
-            <div className="relative rounded-2xl bg-black/20 border border-white/[0.08] p-4">
-              <div className="flex items-center justify-between mb-3">
-                <div>
-                  <div className="text-sm font-semibold">Fund capacity control</div>
-                  <div className="text-xs text-muted-foreground">New deposits are capped to protect strategy execution quality.</div>
-                </div>
-                <div className="text-right">
-                  <div className="text-xl font-bold text-amber-400">{slotsRemaining}</div>
-                  <div className="text-[10px] text-muted-foreground">slots left</div>
-                </div>
-              </div>
-              <div className="h-2 rounded-full bg-white/8 overflow-hidden">
-                <motion.div className="h-full rounded-full bg-gradient-to-r from-amber-400 to-blue-500" initial={{ width: 0 }} animate={{ width: `${slotsFilled}%` }} transition={{ duration: 1, delay: 0.35 }} />
-              </div>
-              <div className="flex justify-between text-[10px] text-muted-foreground mt-2">
-                <span>{slotsFilled}% allocated</span>
-                <span>{slotsTotal} total capacity</span>
-              </div>
-            </div>
-          </motion.div>
+          <PremiumHeroVisual
+            activeInvestors={activeInvestors}
+            earningNow={earningNow}
+            withdrawals24h={withdrawals24h}
+            slotsRemaining={slotsRemaining}
+            slotsFilled={slotsFilled}
+            slotsTotal={slotsTotal}
+          />
         </div>
       </section>
 
@@ -338,6 +439,7 @@ export default function Landing() {
             <FadeIn>
               <div className="glass-card-glow rounded-3xl p-6 md:p-8 h-full relative overflow-hidden">
                 <div className="absolute -right-16 -top-16 w-48 h-48 rounded-full bg-blue-500/10 blur-3xl" />
+                <div className="absolute -left-12 bottom-10 w-40 h-40 rounded-full bg-emerald-500/10 blur-3xl" />
                 <div className="relative">
                   <div className="flex items-center justify-between mb-8">
                     <div>
@@ -369,6 +471,24 @@ export default function Landing() {
                       </p>
                     </div>
                   </div>
+
+                  <div className="mt-7 premium-mini-terminal rounded-2xl border border-white/10 bg-black/30 p-4">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Capital route</div>
+                      <div className="text-[10px] text-emerald-400">Live simulation</div>
+                    </div>
+                    <div className="grid grid-cols-3 gap-3">
+                      {["Treasury", "Risk Layer", "Trading Desk"].map((label, index) => (
+                        <div key={label} className="relative rounded-xl bg-white/[0.04] border border-white/[0.07] p-3 text-center">
+                          <div className="mx-auto mb-2 w-8 h-8 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center">
+                            {[DollarSign, Shield, Activity].map((Icon, i) => i === index ? <Icon key={label} style={{ width: 15, height: 15 }} className="text-blue-300" /> : null)}
+                          </div>
+                          <div className="text-[11px] font-semibold">{label}</div>
+                          {index < 2 && <div className="hidden sm:block absolute top-1/2 -right-4 h-px w-5 bg-gradient-to-r from-blue-400 to-transparent" />}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               </div>
             </FadeIn>
@@ -376,7 +496,7 @@ export default function Landing() {
             <div className="grid sm:grid-cols-2 gap-4">
               {INVESTOR_SYSTEM.map(({ icon: Icon, title, desc }, i) => (
                 <FadeIn key={title} delay={i * 0.08}>
-                  <div className="glass-card rounded-3xl p-6 h-full">
+                  <div className="premium-lift-card glass-card rounded-3xl p-6 h-full">
                     <div className="w-11 h-11 rounded-2xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center mb-5">
                       <Icon style={{ width: 19, height: 19 }} className="text-blue-400" />
                     </div>
