@@ -10,6 +10,8 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: public
+    description: Public endpoints (no auth required)
   - name: auth
     description: Authentication operations
   - name: wallet
@@ -43,6 +45,21 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  # PUBLIC
+  /public/market-indicators:
+    get:
+      operationId: getMarketIndicators
+      tags: [public]
+      summary: Get live platform investor psychology indicators
+      description: Public endpoint returning real-time platform activity stats. No auth required.
+      responses:
+        "200":
+          description: Market indicators
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarketIndicators"
 
   # AUTH
   /auth/register:
@@ -816,6 +833,27 @@ components:
           type: string
       required:
         - status
+
+    MarketIndicators:
+      type: object
+      properties:
+        activeInvestors:
+          type: integer
+          description: Number of users with an active investment
+        usersEarningNow:
+          type: integer
+          description: Number of users currently receiving returns
+        withdrawals24h:
+          type: integer
+          description: Number of withdrawals processed in the last 24 hours
+        avgMonthlyReturn:
+          type: number
+          description: Estimated average monthly return based on last 30 days of profit runs
+      required:
+        - activeInvestors
+        - usersEarningNow
+        - withdrawals24h
+        - avgMonthlyReturn
 
     ErrorResponse:
       type: object

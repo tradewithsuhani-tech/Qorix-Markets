@@ -4,8 +4,9 @@ import { motion, useInView } from "framer-motion";
 import {
   TrendingUp, Shield, BarChart2, Zap, Users, Award, CheckCircle2,
   ArrowRight, ChevronDown, Lock, Eye, Clock, Globe, Star,
-  Target, Activity, DollarSign
+  Target, Activity, DollarSign, UserCheck, Banknote
 } from "lucide-react";
+import { useGetMarketIndicators } from "@workspace/api-client-react";
 import {
   AreaChart, Area, BarChart, Bar, LineChart, Line,
   ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid
@@ -161,6 +162,10 @@ export default function Landing() {
   const [, setLocation] = useLocation();
   const perfRef = useRef<HTMLElement>(null);
 
+  const { data: indicators } = useGetMarketIndicators({
+    query: { refetchInterval: 30_000 },
+  });
+
   const scrollToPerf = () => perfRef.current?.scrollIntoView({ behavior: "smooth" });
 
   const avgReturn = (MONTHLY_RETURNS.reduce((s, d) => s + d.return, 0) / MONTHLY_RETURNS.length).toFixed(1);
@@ -274,6 +279,68 @@ export default function Landing() {
                 <div className="text-[11px] text-muted-foreground mt-0.5">{s.sub}</div>
               </div>
             ))}
+          </motion.div>
+
+          {/* Live Platform Activity */}
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.55, delay: 0.42, ease: "easeOut" }}
+            className="mt-4"
+          >
+            <div className="glass-card rounded-2xl px-5 py-4 border border-white/[0.06] relative overflow-hidden">
+              <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,rgba(59,130,246,0.06),transparent_60%)] pointer-events-none" />
+              <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                <div className="flex items-center gap-2 shrink-0">
+                  <div className="live-dot w-2 h-2" />
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-primary">Live Platform Activity</span>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 flex-1">
+                  {(
+                    [
+                      {
+                        icon: Users,
+                        label: "Active Investors",
+                        display: indicators != null ? String(indicators.activeInvestors) : "—",
+                        color: "text-blue-400",
+                      },
+                      {
+                        icon: UserCheck,
+                        label: "Earning Now",
+                        display: indicators != null ? `${indicators.usersEarningNow} users` : "—",
+                        color: "text-emerald-400",
+                      },
+                      {
+                        icon: Banknote,
+                        label: "Withdrawals (24h)",
+                        display: indicators != null ? `${indicators.withdrawals24h} processed` : "—",
+                        color: "text-amber-400",
+                      },
+                      {
+                        icon: TrendingUp,
+                        label: "Avg Monthly Return",
+                        display:
+                          indicators != null
+                            ? indicators.avgMonthlyReturn > 0
+                              ? `${indicators.avgMonthlyReturn.toFixed(1)}%`
+                              : "7–12%"
+                            : "—",
+                        color: "text-violet-400",
+                      },
+                    ] as const
+                  ).map(({ icon: Icon, label, display, color }) => (
+                    <div key={label} className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+                      <Icon style={{ width: 16, height: 16 }} className={`${color} shrink-0`} />
+                      <div className="min-w-0">
+                        <div className={`text-sm font-bold ${color} tabular-nums`}>{display}</div>
+                        <div className="text-[11px] text-muted-foreground truncate">{label}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="text-[10px] text-muted-foreground/50 shrink-0 hidden lg:block">Updates every 30s</div>
+              </div>
+            </div>
           </motion.div>
         </div>
       </section>
