@@ -7,8 +7,10 @@ import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import { PWAInstallPrompt } from "@/components/pwa-install-prompt";
 import { SplashScreen, useSplash } from "@/components/splash-screen";
 import { useLocation } from "wouter";
+import { useEffect } from "react";
 
 import Landing from "@/pages/landing";
+import LoginPage from "@/pages/login";
 import Dashboard from "@/pages/dashboard";
 import WalletPage from "@/pages/wallet";
 import InvestPage from "@/pages/invest";
@@ -45,10 +47,34 @@ const ProtectedRoute = ({ component: Component, adminOnly = false }: { component
   return <Component />;
 };
 
+const PublicOnlyRoute = ({ component: Component }: { component: any }) => {
+  const { user, token, isLoading } = useAuth();
+  const [, setLocation] = useLocation();
+
+  useEffect(() => {
+    if (!isLoading && token && user) {
+      setLocation("/dashboard");
+    }
+  }, [isLoading, token, user]);
+
+  if (isLoading) {
+    return (
+      <div className="h-screen w-full bg-background flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (token && user) return null;
+
+  return <Component />;
+};
+
 function Router() {
   return (
     <Switch>
       <Route path="/" component={Landing} />
+      <Route path="/login"><PublicOnlyRoute component={LoginPage} /></Route>
       <Route path="/dashboard"><ProtectedRoute component={Dashboard} /></Route>
       <Route path="/wallet"><ProtectedRoute component={WalletPage} /></Route>
       <Route path="/invest"><ProtectedRoute component={InvestPage} /></Route>
