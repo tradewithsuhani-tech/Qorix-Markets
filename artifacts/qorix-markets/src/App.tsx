@@ -25,6 +25,8 @@ import SettingsPage from "@/pages/settings";
 import AnalyticsPage from "@/pages/analytics";
 import TradingDeskPage from "@/pages/trading-desk";
 import VerifyPage from "@/pages/verify";
+import MarketInsightsPage from "@/pages/market-insights";
+import { HighImpactNotificationBanner } from "@/components/economic-news-widget";
 
 const queryClient = new QueryClient();
 
@@ -95,6 +97,7 @@ function Router() {
       <Route path="/settings"><ProtectedRoute component={SettingsPage} /></Route>
       <Route path="/verify/:hashId" component={VerifyPage} />
       <Route path="/verify" component={VerifyPage} />
+      <Route path="/market-insights"><ProtectedRoute component={MarketInsightsPage} /></Route>
       <Route component={NotFound} />
     </Switch>
   );
@@ -107,6 +110,7 @@ function AppContent() {
     <>
       {showSplash && <SplashScreen onDone={onSplashDone} />}
       <Router />
+      <HighImpactNotificationBanner />
       <QorixAssistant />
       <PWAInstallPrompt />
     </>
