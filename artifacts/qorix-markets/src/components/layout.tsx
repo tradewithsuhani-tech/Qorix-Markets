@@ -1,7 +1,7 @@
-import React from "react";
+import React, { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { 
   LayoutDashboard, 
   Wallet, 
@@ -11,9 +11,71 @@ import {
   ShieldAlert, 
   Settings,
   LogOut,
-  ChevronRight
+  ChevronRight,
+  Shield,
+  X,
+  AlertTriangle
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useGetInvestment } from "@workspace/api-client-react";
+
+function ProtectionBanner() {
+  const [dismissed, setDismissed] = useState(false);
+  const { data: investment } = useGetInvestment({ query: { refetchInterval: 10000 } });
+
+  const isTriggered = investment?.isPaused && !investment?.isActive;
+  if (!isTriggered || dismissed) return null;
+
+  const drawdownPct = investment.amount > 0
+    ? ((investment.drawdown / investment.amount) * 100).toFixed(2)
+    : "0.00";
+
+  return (
+    <AnimatePresence>
+      <motion.div
+        initial={{ height: 0, opacity: 0 }}
+        animate={{ height: "auto", opacity: 1 }}
+        exit={{ height: 0, opacity: 0 }}
+        transition={{ duration: 0.3 }}
+        className="overflow-hidden shrink-0"
+      >
+        <div className="bg-red-500/10 border-b border-red-500/25 px-4 md:px-8 py-3 flex items-center gap-3">
+          <div className="w-7 h-7 rounded-lg bg-red-500/20 border border-red-500/30 flex items-center justify-center shrink-0">
+            <Shield style={{ width: 13, height: 13 }} className="text-red-400" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-sm font-semibold text-red-400 flex items-center gap-1.5">
+                <AlertTriangle style={{ width: 13, height: 13 }} />
+                Capital Protection Triggered
+              </span>
+              <span className="text-xs text-muted-foreground">
+                Trading paused — drawdown reached{" "}
+                <span className="text-white font-medium">{drawdownPct}%</span>{" "}
+                of your{" "}
+                <span className="text-white font-medium">{investment.drawdownLimit}% limit</span>.
+              </span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <Link
+              href="/invest"
+              className="text-xs px-3 py-1.5 bg-red-500/15 hover:bg-red-500/25 text-red-400 border border-red-500/30 rounded-lg font-medium transition-all"
+            >
+              Review
+            </Link>
+            <button
+              onClick={() => setDismissed(true)}
+              className="text-muted-foreground hover:text-white transition-colors p-1 rounded"
+            >
+              <X style={{ width: 13, height: 13 }} />
+            </button>
+          </div>
+        </div>
+      </motion.div>
+    </AnimatePresence>
+  );
+}
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
@@ -112,6 +174,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col h-full overflow-hidden relative">
+        <ProtectionBanner />
         <div className="flex-1 overflow-y-auto p-4 md:p-8 pb-24 md:pb-8">
           <div className="max-w-6xl mx-auto">
             {children}
