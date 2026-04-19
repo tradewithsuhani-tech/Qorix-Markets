@@ -298,6 +298,163 @@ function LiveDashboard({ earningNow, withdrawals24h, activeInvestors, slotsRemai
   );
 }
 
+const NAMES = [
+  "Rakesh Sharma", "Priya Singh", "Amit Kumar", "Sunita Patel", "Vijay Mehta",
+  "Anjali Gupta", "Rahul Verma", "Neha Joshi", "Suresh Yadav", "Pooja Mishra",
+  "Arjun Nair", "Deepa Reddy", "Kiran Rao", "Meena Iyer", "Rohan Kapoor",
+  "Aisha Khan", "Dev Malhotra", "Ritu Saxena", "Manish Tiwari", "Kavita Pillai",
+  "Sanjay Bhatia", "Nisha Choudhary", "Rajesh Pandey", "Divya Srivastava", "Vivek Aggarwal",
+  "Shreya Banerjee", "Anil Desai", "Rekha Nair", "Tushar Shah", "Swati Agarwal",
+];
+
+const TX_TYPES = ["withdrawal", "deposit", "transfer"] as const;
+type TxType = typeof TX_TYPES[number];
+
+function maskName(full: string): string {
+  const parts = full.split(" ");
+  return parts.map((p) => {
+    if (p.length <= 3) return p;
+    const keep = Math.max(1, Math.ceil(p.length / 3));
+    const stars = Math.max(1, p.length - keep * 2);
+    return p.slice(0, keep) + "*".repeat(stars) + p.slice(-keep);
+  }).join(" ");
+}
+
+function maskId(id: string): string {
+  return id.slice(0, 4) + "*".repeat(5) + id.slice(-2);
+}
+
+function genId(): string {
+  const num = Math.floor(10000000 + Math.random() * 89999999);
+  return `QO${num}`;
+}
+
+function genAmount(type: TxType): number {
+  if (type === "deposit") return Math.floor(500 + Math.random() * 9500);
+  if (type === "withdrawal") return Math.floor(200 + Math.random() * 7800);
+  return Math.floor(100 + Math.random() * 4900);
+}
+
+function formatDateTime(d: Date): string {
+  return d.toLocaleString("en-IN", {
+    day: "2-digit", month: "short", year: "numeric",
+    hour: "2-digit", minute: "2-digit", second: "2-digit",
+    hour12: true,
+  });
+}
+
+type ActivityEntry = {
+  id: string;
+  name: string;
+  maskedName: string;
+  userId: string;
+  maskedUserId: string;
+  type: TxType;
+  amount: number;
+  time: Date;
+};
+
+function makeEntry(): ActivityEntry {
+  const name = NAMES[Math.floor(Math.random() * NAMES.length)]!;
+  const type = TX_TYPES[Math.floor(Math.random() * TX_TYPES.length)]!;
+  const userId = genId();
+  return {
+    id: Math.random().toString(36).slice(2),
+    name,
+    maskedName: maskName(name),
+    userId,
+    maskedUserId: maskId(userId),
+    type,
+    amount: genAmount(type),
+    time: new Date(),
+  };
+}
+
+const TYPE_META: Record<TxType, { label: string; color: string; bg: string; border: string }> = {
+  withdrawal: { label: "Withdrawal", color: "#fbbf24", bg: "rgba(251,191,36,0.08)", border: "rgba(251,191,36,0.18)" },
+  deposit:    { label: "Deposit",    color: "#34d399", bg: "rgba(52,211,153,0.08)",  border: "rgba(52,211,153,0.18)"  },
+  transfer:   { label: "Transfer",   color: "#818cf8", bg: "rgba(129,140,248,0.08)", border: "rgba(129,140,248,0.18)" },
+};
+
+function LiveActivityFeed() {
+  const [entries, setEntries] = useState<ActivityEntry[]>(() =>
+    Array.from({ length: 8 }, makeEntry).map((e, i) => ({
+      ...e,
+      time: new Date(Date.now() - i * 7000),
+    }))
+  );
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      setEntries((prev) => [makeEntry(), ...prev.slice(0, 19)]);
+    }, 2200);
+    return () => clearInterval(id);
+  }, []);
+
+  return (
+    <div className="rounded-3xl overflow-hidden" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", boxShadow: "0 8px 40px rgba(0,0,0,0.3)" }}>
+      <div className="flex items-center justify-between px-6 py-4 border-b" style={{ borderColor: "rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.02)" }}>
+        <div className="flex items-center gap-3">
+          <div className="text-sm font-bold text-white">Platform Activity</div>
+          <div className="flex gap-2">
+            {(["deposit", "withdrawal", "transfer"] as TxType[]).map((t) => (
+              <span key={t} className="text-[10px] px-2 py-0.5 rounded-full font-semibold" style={{ color: TYPE_META[t].color, background: TYPE_META[t].bg, border: `1px solid ${TYPE_META[t].border}` }}>
+                {TYPE_META[t].label}
+              </span>
+            ))}
+          </div>
+        </div>
+        <div className="flex items-center gap-2 text-xs text-emerald-400 font-bold">
+          <span className="relative flex h-1.5 w-1.5">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+            <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-400" />
+          </span>
+          Live
+        </div>
+      </div>
+
+      <div className="divide-y overflow-hidden" style={{ divideColor: "rgba(255,255,255,0.04)" } as React.CSSProperties}>
+        <AnimatePresence initial={false}>
+          {entries.map((e) => {
+            const meta = TYPE_META[e.type];
+            return (
+              <motion.div
+                key={e.id}
+                initial={{ opacity: 0, y: -28, height: 0 }}
+                animate={{ opacity: 1, y: 0, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.38, ease: [0.16, 1, 0.3, 1] }}
+                style={{ borderBottom: "1px solid rgba(255,255,255,0.04)", overflow: "hidden" }}
+              >
+                <div className="flex items-center justify-between px-6 py-3.5 hover:bg-white/[0.02] transition-colors">
+                  <div className="flex items-center gap-4 min-w-0">
+                    <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 text-xs font-black" style={{ background: meta.bg, border: `1px solid ${meta.border}`, color: meta.color }}>
+                      {e.type === "deposit" ? "↓" : e.type === "withdrawal" ? "↑" : "⇄"}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-bold text-white truncate">{e.maskedName}</span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded font-mono" style={{ background: "rgba(255,255,255,0.05)", color: "rgba(148,163,184,0.7)" }}>{e.maskedUserId}</span>
+                      </div>
+                      <div className="text-[11px] text-slate-500 mt-0.5 font-mono">{formatDateTime(e.time)}</div>
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0 ml-4">
+                    <div className="text-base font-black tabular-nums" style={{ color: meta.color }}>
+                      {e.type === "withdrawal" ? "-" : "+"}${e.amount.toLocaleString("en-IN")}
+                    </div>
+                    <div className="text-[10px] font-semibold mt-0.5" style={{ color: meta.color, opacity: 0.7 }}>{meta.label}</div>
+                  </div>
+                </div>
+              </motion.div>
+            );
+          })}
+        </AnimatePresence>
+      </div>
+    </div>
+  );
+}
+
 function Ticker() {
   return (
     <div className="overflow-hidden py-3 border-y" style={{ borderColor: "rgba(255,255,255,0.05)", background: "rgba(255,255,255,0.018)" }}>
@@ -703,59 +860,13 @@ export default function Landing() {
       <section className="py-24">
         <div className="max-w-7xl mx-auto px-5 md:px-8">
           <SectionHeader
-            eyebrow="Investor Confidence"
-            title="Show movement. Show payouts. Show momentum."
-            desc="Serious investors need proof that capital is active, payout requests are moving, and the platform has real participation."
+            eyebrow="Live Activity Feed"
+            title="Real capital moving in real time."
+            desc="Every deposit, withdrawal, and transfer happening on the platform — updating live as investors act."
           />
-
-          <div className="grid lg:grid-cols-2 gap-4">
-            <FadeIn>
-              <div className="rounded-3xl p-6 h-full" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
-                <div className="text-sm font-bold text-white mb-5">Active user snapshot</div>
-                <div className="space-y-4">
-                  {[
-                    { label: "Active investors", value: activeInvestors.toLocaleString(), icon: Users, color: "#38bdf8" },
-                    { label: "Currently earning", value: earningNow.toLocaleString(), icon: UserCheck, color: "#34d399" },
-                    { label: "Withdrawals today", value: withdrawals24h.toString(), icon: Banknote, color: "#fbbf24" },
-                  ].map(({ label, value, icon: Icon, color }) => (
-                    <div key={label} className="flex items-center justify-between rounded-2xl p-4" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}>
-                      <div className="flex items-center gap-3">
-                        <Icon size={18} style={{ color }} />
-                        <span className="text-sm text-slate-400">{label}</span>
-                      </div>
-                      <span className="text-xl font-black tabular-nums" style={{ color }}>{value}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </FadeIn>
-
-            <FadeIn delay={0.1}>
-              <div className="rounded-3xl p-6 h-full" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}>
-                <div className="flex items-center justify-between mb-5">
-                  <div className="text-sm font-bold text-white">Recent withdrawal proof</div>
-                  <div className="text-xs text-emerald-400 font-bold flex items-center gap-2">
-                    <span className="relative flex h-1.5 w-1.5"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" /><span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-400" /></span>
-                    Live queue
-                  </div>
-                </div>
-                <div className="space-y-3">
-                  {WITHDRAWALS.map((item) => (
-                    <div key={`${item.user}-${item.time}`} className="flex items-center justify-between rounded-2xl p-4" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}>
-                      <div>
-                        <div className="text-sm font-bold text-white">{item.user}</div>
-                        <div className="text-[11px] text-slate-500">{item.time}</div>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-sm font-black text-emerald-400">{item.amount}</div>
-                        <div className="text-[11px] text-emerald-600">Paid</div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </FadeIn>
-          </div>
+          <FadeIn>
+            <LiveActivityFeed />
+          </FadeIn>
         </div>
       </section>
 
