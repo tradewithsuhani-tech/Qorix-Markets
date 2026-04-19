@@ -287,7 +287,7 @@
     animation: premiumPulse 4s ease-in-out infinite;
   }
 
-  @media (min-width: 1024px) {
+  @media (min-width: 1280px) {
     .premium-3d-card {
       transform: rotateX(1.5deg) rotateY(-3deg);
     }

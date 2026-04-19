@@ -190,7 +190,7 @@ function PremiumHeroVisual({
       initial={{ opacity: 0, scale: 0.94, rotateX: 8, y: 24 }}
       animate={{ opacity: 1, scale: 1, rotateX: 0, y: 0 }}
       transition={{ duration: 0.8, delay: 0.18, ease: "easeOut" }}
-      className="premium-3d-stage w-full max-w-[580px] mx-auto lg:max-w-none"
+      className="premium-3d-stage w-full max-w-[580px] mx-auto xl:max-w-none"
     >
       <div className="premium-3d-card relative overflow-hidden rounded-[2rem] p-5 md:p-6">
         <div className="absolute inset-0 premium-grid-mask" />
@@ -234,7 +234,7 @@ function PremiumHeroVisual({
           </div>
 
           <motion.div
-            className="hidden sm:block absolute left-0 top-6 w-40 rounded-2xl border border-white/10 bg-white/[0.06] p-4 backdrop-blur-xl shadow-2xl"
+            className="hidden xl:block absolute left-0 top-6 w-40 rounded-2xl border border-white/10 bg-white/[0.06] p-4 backdrop-blur-xl shadow-2xl"
             animate={{ y: [0, -10, 0], rotate: [-1, 1, -1] }}
             transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
           >
@@ -247,7 +247,7 @@ function PremiumHeroVisual({
           </motion.div>
 
           <motion.div
-            className="hidden sm:block absolute right-0 top-20 w-44 rounded-2xl border border-emerald-400/20 bg-emerald-500/[0.08] p-4 backdrop-blur-xl shadow-2xl"
+            className="hidden xl:block absolute right-0 top-20 w-44 rounded-2xl border border-emerald-400/20 bg-emerald-500/[0.08] p-4 backdrop-blur-xl shadow-2xl"
             animate={{ y: [0, 12, 0], rotate: [1, -1, 1] }}
             transition={{ duration: 7, repeat: Infinity, ease: "easeInOut" }}
           >
@@ -260,7 +260,7 @@ function PremiumHeroVisual({
           </motion.div>
 
           <motion.div
-            className="hidden sm:block absolute left-7 bottom-14 w-44 rounded-2xl border border-amber-400/20 bg-amber-500/[0.08] p-4 backdrop-blur-xl shadow-2xl"
+            className="hidden xl:block absolute left-7 bottom-14 w-44 rounded-2xl border border-amber-400/20 bg-amber-500/[0.08] p-4 backdrop-blur-xl shadow-2xl"
             animate={{ y: [0, 10, 0], rotate: [1, -0.5, 1] }}
             transition={{ duration: 6.5, repeat: Infinity, ease: "easeInOut" }}
           >
@@ -273,7 +273,7 @@ function PremiumHeroVisual({
           </motion.div>
 
           <motion.div
-            className="hidden sm:block absolute right-6 bottom-8 w-44 rounded-2xl border border-violet-400/20 bg-violet-500/[0.08] p-4 backdrop-blur-xl shadow-2xl"
+            className="hidden xl:block absolute right-6 bottom-8 w-44 rounded-2xl border border-violet-400/20 bg-violet-500/[0.08] p-4 backdrop-blur-xl shadow-2xl"
             animate={{ y: [0, -8, 0], rotate: [-1, 0.8, -1] }}
             transition={{ duration: 5.8, repeat: Infinity, ease: "easeInOut" }}
           >
@@ -366,23 +366,23 @@ export default function Landing() {
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[920px] h-[620px] bg-primary/8 rounded-full blur-[140px] pointer-events-none" />
         <div className="absolute top-1/3 right-0 w-[520px] h-[520px] bg-indigo-600/6 rounded-full blur-[120px] pointer-events-none" />
 
-        <div className="relative max-w-7xl mx-auto px-5 md:px-8 grid lg:grid-cols-[1.05fr_0.95fr] gap-10 lg:gap-14 items-center">
-          <motion.div initial="hidden" animate="show" variants={fadeUp} className="max-w-4xl">
+        <div className="relative max-w-7xl mx-auto px-5 md:px-8 grid xl:grid-cols-[1.05fr_0.95fr] gap-10 xl:gap-14 items-center">
+          <motion.div initial="hidden" animate="show" variants={fadeUp} className="max-w-4xl mx-auto xl:mx-0 text-center xl:text-left">
             <motion.div variants={fadeUp} className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-primary/30 bg-primary/8 text-xs font-semibold text-primary mb-7">
               <div className="live-dot w-1.5 h-1.5 shrink-0" />
               Private allocation window open · {slotsRemaining} investor seats left
             </motion.div>
 
-            <motion.h1 variants={fadeUp} className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight leading-[1.05] mb-6">
+            <motion.h1 variants={fadeUp} className="text-4xl sm:text-5xl xl:text-6xl font-bold tracking-tight leading-[1.05] mb-6">
               A hedge-fund style USDT trading system
               <span className="gradient-text"> built for disciplined investors.</span>
             </motion.h1>
 
-            <motion.p variants={fadeUp} className="text-lg md:text-xl text-muted-foreground max-w-2xl leading-relaxed mb-8">
+            <motion.p variants={fadeUp} className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto xl:mx-0 leading-relaxed mb-8">
               Qorix Markets combines professional traders, automated execution, capital allocation logic, and drawdown protection into one investor operating system.
             </motion.p>
 
-            <motion.div variants={fadeUp} className="flex flex-col sm:flex-row gap-3 mb-7">
+            <motion.div variants={fadeUp} className="flex flex-col sm:flex-row justify-center xl:justify-start gap-3 mb-7">
               <button onClick={() => setLocation("/login")} className="btn btn-primary text-base px-7 py-3.5 gap-2">
                 Apply for Access <ArrowRight style={{ width: 16, height: 16 }} />
               </button>
@@ -391,7 +391,7 @@ export default function Landing() {
               </button>
             </motion.div>
 
-            <motion.div variants={fadeUp} className="grid grid-cols-3 gap-3 max-w-2xl">
+            <motion.div variants={fadeUp} className="grid grid-cols-3 gap-3 max-w-2xl mx-auto xl:mx-0">
               {[
                 { label: "Managed AUM", value: "$4.2M+" },
                 { label: "Desk traders", value: "43" },
@@ -405,14 +405,16 @@ export default function Landing() {
             </motion.div>
           </motion.div>
 
-          <PremiumHeroVisual
-            activeInvestors={activeInvestors}
-            earningNow={earningNow}
-            withdrawals24h={withdrawals24h}
-            slotsRemaining={slotsRemaining}
-            slotsFilled={slotsFilled}
-            slotsTotal={slotsTotal}
-          />
+          <div className="w-full min-w-0">
+            <PremiumHeroVisual
+              activeInvestors={activeInvestors}
+              earningNow={earningNow}
+              withdrawals24h={withdrawals24h}
+              slotsRemaining={slotsRemaining}
+              slotsFilled={slotsFilled}
+              slotsTotal={slotsTotal}
+            />
+          </div>
         </div>
       </section>
 
