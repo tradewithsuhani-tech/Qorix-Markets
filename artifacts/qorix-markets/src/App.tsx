@@ -4,6 +4,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
+import { PWAInstallPrompt } from "@/components/pwa-install-prompt";
 
 import Landing from "@/pages/landing";
 import Dashboard from "@/pages/dashboard";
@@ -59,6 +60,7 @@ function App() {
         <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
           <AuthProvider>
             <Router />
+            <PWAInstallPrompt />
           </AuthProvider>
         </WouterRouter>
         <Toaster />

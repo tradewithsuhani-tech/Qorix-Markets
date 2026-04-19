@@ -120,7 +120,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </main>
 
       {/* Mobile Bottom Nav */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 glass-nav z-50 px-4 pt-2 pb-4">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 glass-nav z-50 px-4 pt-2 bottom-nav-safe">
         <div className="flex justify-around items-center">
           {mobileLinks.map((link) => {
             const isActive = location === link.href;
