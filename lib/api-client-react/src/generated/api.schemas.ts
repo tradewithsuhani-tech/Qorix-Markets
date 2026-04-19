@@ -354,6 +354,33 @@ export interface TraderItem {
   winRatePercent: number;
 }
 
+export interface GenerateReportBody {
+  /** Year-month in YYYY-MM format */
+  yearMonth: string;
+}
+
+export interface GenerateReportResponse {
+  hashId: string;
+  yearMonth: string;
+  alreadyExisted: boolean;
+}
+
+export interface VerifyReportResponse {
+  hashId: string;
+  yearMonth: string;
+  monthlyReturn: number;
+  maxDrawdown: number;
+  winRate: number;
+  totalProfit: number;
+  tradingDays: number;
+  winningDays: number;
+  startEquity: number;
+  peakEquity: number;
+  contentHash: string;
+  generatedAt: string;
+  isAuthentic: boolean;
+}
+
 export interface TraderList {
   data: TraderItem[];
 }

@@ -20,6 +20,7 @@ import AdminPage from "@/pages/admin";
 import SettingsPage from "@/pages/settings";
 import AnalyticsPage from "@/pages/analytics";
 import TradingDeskPage from "@/pages/trading-desk";
+import VerifyPage from "@/pages/verify";
 
 const queryClient = new QueryClient();
 
@@ -85,6 +86,8 @@ function Router() {
       <Route path="/trading-desk"><ProtectedRoute component={TradingDeskPage} /></Route>
       <Route path="/admin"><ProtectedRoute component={AdminPage} adminOnly={true} /></Route>
       <Route path="/settings"><ProtectedRoute component={SettingsPage} /></Route>
+      <Route path="/verify/:hashId" component={VerifyPage} />
+      <Route path="/verify" component={VerifyPage} />
       <Route component={NotFound} />
     </Switch>
   );

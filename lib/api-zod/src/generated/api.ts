@@ -429,6 +429,42 @@ export const GetMonthlyPerformanceResponse = zod.array(
 );
 
 /**
+ * @summary Generate a tamper-proof verification report for a monthly performance record
+ */
+export const GenerateReportBody = zod.object({
+  yearMonth: zod.string().describe("Year-month in YYYY-MM format"),
+});
+
+export const GenerateReportResponse = zod.object({
+  hashId: zod.string(),
+  yearMonth: zod.string(),
+  alreadyExisted: zod.boolean(),
+});
+
+/**
+ * @summary Publicly verify a monthly performance report by hash ID
+ */
+export const VerifyReportParams = zod.object({
+  hashId: zod.coerce.string(),
+});
+
+export const VerifyReportResponse = zod.object({
+  hashId: zod.string(),
+  yearMonth: zod.string(),
+  monthlyReturn: zod.number(),
+  maxDrawdown: zod.number(),
+  winRate: zod.number(),
+  totalProfit: zod.number(),
+  tradingDays: zod.number(),
+  winningDays: zod.number(),
+  startEquity: zod.number(),
+  peakEquity: zod.number(),
+  contentHash: zod.string(),
+  generatedAt: zod.coerce.date(),
+  isAuthentic: zod.boolean(),
+});
+
+/**
  * @summary Get user notifications
  */
 export const getNotificationsQueryLimitDefault = 20;

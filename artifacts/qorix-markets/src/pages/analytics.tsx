@@ -4,11 +4,14 @@ import {
   useGetDashboardPerformance,
   useGetInvestment,
   useGetMonthlyPerformance,
+  useGenerateReport,
 } from "@workspace/api-client-react";
 import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import { format, parseISO } from "date-fns";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useToast } from "@/hooks/use-toast";
+import { Link } from "wouter";
 import {
   BarChart2,
   TrendingUp,
@@ -18,6 +21,11 @@ import {
   CalendarDays,
   Trophy,
   ShieldAlert,
+  FileCheck,
+  Copy,
+  CheckCheck,
+  Loader2,
+  ExternalLink,
 } from "lucide-react";
 import {
   Chart as ChartJS,
@@ -220,6 +228,42 @@ function ChartCard({
 export default function AnalyticsPage() {
   const [days, setDays] = useState(30);
   const [perfFilter, setPerfFilter] = useState<"3m" | "6m" | "all">("6m");
+  const [generatedMap, setGeneratedMap] = useState<Record<string, string>>({});
+  const [generatingMonth, setGeneratingMonth] = useState<string | null>(null);
+  const [copiedMonth, setCopiedMonth] = useState<string | null>(null);
+  const { toast } = useToast();
+
+  const generateMutation = useGenerateReport({
+    mutation: {
+      onSuccess: (data, variables) => {
+        const yearMonth = variables.data.yearMonth;
+        setGeneratedMap((prev) => ({ ...prev, [yearMonth]: data.hashId }));
+        setGeneratingMonth(null);
+        toast({
+          title: data.alreadyExisted ? "Report Already Exists" : "Report Generated",
+          description: `Report ID: ${data.hashId.slice(0, 12)}… — share the verification link.`,
+        });
+      },
+      onError: () => {
+        setGeneratingMonth(null);
+        toast({ title: "Generation Failed", description: "Could not generate report. Try again.", variant: "destructive" });
+      },
+    },
+  });
+
+  function handleGenerateReport(yearMonth: string) {
+    setGeneratingMonth(yearMonth);
+    generateMutation.mutate({ data: { yearMonth } });
+  }
+
+  function handleCopyLink(yearMonth: string, hashId: string) {
+    const base = window.location.origin + (import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "");
+    const link = `${base}/verify/${hashId}`;
+    navigator.clipboard.writeText(link).then(() => {
+      setCopiedMonth(yearMonth);
+      setTimeout(() => setCopiedMonth(null), 2000);
+    });
+  }
 
   const { data: equityRaw, isLoading: equityLoading } = useGetEquityChart(
     { days },
@@ -1008,11 +1052,15 @@ export default function AnalyticsPage() {
                         <th className="pb-2 text-right font-medium">Max DD</th>
                         <th className="pb-2 text-right font-medium">Win Rate</th>
                         <th className="pb-2 text-right font-medium">P&L</th>
+                        <th className="pb-2 text-right font-medium">Verify</th>
                       </tr>
                     </thead>
                     <tbody>
                       {[...monthlyData].reverse().map((m) => {
                         const label = (() => { try { return format(parseISO(`${m.yearMonth}-01`), "MMM yyyy"); } catch { return m.yearMonth; } })();
+                        const existingHash = generatedMap[m.yearMonth];
+                        const isGenerating = generatingMonth === m.yearMonth;
+                        const isCopied = copiedMonth === m.yearMonth;
                         return (
                           <tr key={m.yearMonth} className="border-b border-white/[0.04] hover:bg-white/[0.03] transition-colors">
                             <td className="py-2 font-medium">{label}</td>
@@ -1025,6 +1073,40 @@ export default function AnalyticsPage() {
                             </td>
                             <td className={`py-2 text-right tabular-nums font-semibold ${m.totalProfit >= 0 ? "text-green-400" : "text-red-400"}`}>
                               {m.totalProfit >= 0 ? "+" : ""}${Math.abs(m.totalProfit).toFixed(2)}
+                            </td>
+                            <td className="py-2 text-right">
+                              {existingHash ? (
+                                <div className="flex items-center justify-end gap-1">
+                                  <Link
+                                    href={`/verify/${existingHash}`}
+                                    className="inline-flex items-center gap-0.5 text-blue-400 hover:text-blue-300 transition-colors"
+                                    title="Open verification page"
+                                  >
+                                    <ExternalLink style={{ width: 11, height: 11 }} />
+                                  </Link>
+                                  <button
+                                    onClick={() => handleCopyLink(m.yearMonth, existingHash)}
+                                    className="inline-flex items-center gap-0.5 text-muted-foreground hover:text-foreground transition-colors"
+                                    title={isCopied ? "Copied!" : "Copy verification link"}
+                                  >
+                                    {isCopied
+                                      ? <CheckCheck style={{ width: 11, height: 11, color: "#4ade80" }} />
+                                      : <Copy style={{ width: 11, height: 11 }} />}
+                                  </button>
+                                </div>
+                              ) : (
+                                <button
+                                  onClick={() => handleGenerateReport(m.yearMonth)}
+                                  disabled={isGenerating || !!generatingMonth}
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 text-blue-400 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                                  title="Generate verification report"
+                                >
+                                  {isGenerating
+                                    ? <Loader2 style={{ width: 10, height: 10, animation: "spin 1s linear infinite" }} />
+                                    : <FileCheck style={{ width: 10, height: 10 }} />}
+                                  {isGenerating ? "…" : "Generate"}
+                                </button>
+                              )}
                             </td>
                           </tr>
                         );
