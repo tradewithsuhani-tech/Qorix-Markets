@@ -14,6 +14,7 @@ import TransactionsPage from "@/pages/transactions";
 import ReferralPage from "@/pages/referral";
 import AdminPage from "@/pages/admin";
 import SettingsPage from "@/pages/settings";
+import AnalyticsPage from "@/pages/analytics";
 
 const queryClient = new QueryClient();
 
@@ -46,6 +47,7 @@ function Router() {
       <Route path="/invest"><ProtectedRoute component={InvestPage} /></Route>
       <Route path="/transactions"><ProtectedRoute component={TransactionsPage} /></Route>
       <Route path="/referral"><ProtectedRoute component={ReferralPage} /></Route>
+      <Route path="/analytics"><ProtectedRoute component={AnalyticsPage} /></Route>
       <Route path="/admin"><ProtectedRoute component={AdminPage} adminOnly={true} /></Route>
       <Route path="/settings"><ProtectedRoute component={SettingsPage} /></Route>
       <Route component={NotFound} />
