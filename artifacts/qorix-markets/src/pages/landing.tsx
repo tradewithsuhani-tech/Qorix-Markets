@@ -386,7 +386,7 @@ function LiveActivityFeed() {
 
   useEffect(() => {
     const id = setInterval(() => {
-      setEntries((prev) => [makeEntry(), ...prev.slice(0, 19)]);
+      setEntries((prev) => [makeEntry(), ...prev.slice(0, 9)]);
     }, 2200);
     return () => clearInterval(id);
   }, []);
@@ -413,7 +413,7 @@ function LiveActivityFeed() {
         </div>
       </div>
 
-      <div className="divide-y overflow-hidden" style={{ divideColor: "rgba(255,255,255,0.04)" } as React.CSSProperties}>
+      <div style={{ height: "480px", overflow: "hidden" }}>
         <AnimatePresence initial={false}>
           {entries.map((e) => {
             const meta = TYPE_META[e.type];
