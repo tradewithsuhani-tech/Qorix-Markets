@@ -14,18 +14,33 @@ const RISK_DEFAULT_DRAWDOWN: Record<string, number> = {
 };
 
 function formatInvestment(inv: typeof investmentsTable.$inferSelect) {
+  const amount = parseFloat(inv.amount as string);
+  const totalProfit = parseFloat(inv.totalProfit as string);
+  const rawPeak = parseFloat(inv.peakBalance as string);
+  const peakBalance = rawPeak > 0 ? rawPeak : amount;
+  const currentEquity = amount + totalProfit;
+  const drawdownFromPeak = peakBalance > 0
+    ? Math.max(0, (peakBalance - currentEquity) / peakBalance * 100)
+    : 0;
+  const recoveryPct = currentEquity > 0 && peakBalance > currentEquity
+    ? (peakBalance / currentEquity - 1) * 100
+    : 0;
+
   return {
     id: inv.id,
     userId: inv.userId,
-    amount: parseFloat(inv.amount as string),
+    amount,
     riskLevel: inv.riskLevel,
     isActive: inv.isActive,
     isPaused: inv.isPaused,
     autoCompound: inv.autoCompound,
-    totalProfit: parseFloat(inv.totalProfit as string),
+    totalProfit,
     dailyProfit: parseFloat(inv.dailyProfit as string),
     drawdown: parseFloat(inv.drawdown as string),
     drawdownLimit: parseFloat(inv.drawdownLimit as string),
+    peakBalance,
+    drawdownFromPeak: parseFloat(drawdownFromPeak.toFixed(4)),
+    recoveryPct: parseFloat(recoveryPct.toFixed(4)),
     startedAt: inv.startedAt?.toISOString() ?? null,
     stoppedAt: inv.stoppedAt?.toISOString() ?? null,
     pausedAt: inv.pausedAt?.toISOString() ?? null,
@@ -88,6 +103,7 @@ router.post("/investment/start", async (req: AuthRequest, res) => {
       isPaused: false,
       dailyProfit: "0",
       drawdown: "0",
+      peakBalance: amount.toString(),
       drawdownLimit: drawdownLimit.toString(),
       startedAt: new Date(),
       stoppedAt: null,

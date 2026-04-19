@@ -125,6 +125,12 @@ export interface Investment {
   drawdown: number;
   /** Max drawdown percentage (e.g. 5 = 5%) */
   drawdownLimit: number;
+  /** Highest equity ever reached during this investment */
+  peakBalance: number;
+  /** Current decline from peak equity as a percentage */
+  drawdownFromPeak: number;
+  /** Percentage gain needed to return to peak balance */
+  recoveryPct: number;
   /** True when capital protection was triggered */
   isPaused: boolean;
   /** @nullable */

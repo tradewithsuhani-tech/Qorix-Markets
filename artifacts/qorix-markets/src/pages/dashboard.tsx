@@ -103,6 +103,9 @@ type InvestmentInfo = {
   drawdownLimit: number;
   riskLevel: string;
   pausedAt?: string | null;
+  peakBalance?: number;
+  drawdownFromPeak?: number;
+  recoveryPct?: number;
 };
 
 function CapitalProtectionWidget({
@@ -133,6 +136,9 @@ function CapitalProtectionWidget({
   const drawdownLimit = investment?.drawdownLimit ?? 5;
   const isActive = investment?.isActive ?? false;
   const isPaused = investment?.isPaused ?? false;
+  const drawdownFromPeak = investment?.drawdownFromPeak ?? 0;
+  const recoveryPct = investment?.recoveryPct ?? 0;
+  const atPeak = drawdownFromPeak === 0;
 
   const drawdownPct = amount > 0 ? (drawdown / amount) * 100 : 0;
   const usagePct = drawdownLimit > 0 ? Math.min((drawdownPct / drawdownLimit) * 100, 100) : 0;
@@ -225,6 +231,31 @@ function CapitalProtectionWidget({
             <div className="flex items-center gap-2 p-3 rounded-xl bg-red-500/8 border border-red-500/20 text-xs text-muted-foreground">
               <AlertTriangle style={{ width: 12, height: 12 }} className="text-red-400 shrink-0" />
               Triggered at {new Date(investment.pausedAt).toLocaleString()}
+            </div>
+          )}
+
+          {/* Peak balance / recovery row */}
+          {amount > 0 && (
+            <div className={`flex items-center justify-between p-3 rounded-xl border text-xs ${
+              atPeak
+                ? "bg-emerald-500/8 border-emerald-500/20"
+                : "bg-orange-500/8 border-orange-500/20"
+            }`}>
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <TrendingUp style={{ width: 12, height: 12 }} className={atPeak ? "text-emerald-400" : "text-orange-400"} />
+                <span>From peak:</span>
+                <span className={`font-semibold tabular-nums ${atPeak ? "text-emerald-400" : "text-orange-400"}`}>
+                  {atPeak ? "At Peak" : `-${drawdownFromPeak.toFixed(2)}%`}
+                </span>
+              </div>
+              {!atPeak && (
+                <div className="flex items-center gap-1.5 text-muted-foreground">
+                  <ArrowUpRight style={{ width: 11, height: 11 }} className="text-blue-400" />
+                  <span>Need</span>
+                  <span className="font-semibold text-blue-400 tabular-nums">+{recoveryPct.toFixed(2)}%</span>
+                  <span>to recover</span>
+                </div>
+              )}
             </div>
           )}
         </div>

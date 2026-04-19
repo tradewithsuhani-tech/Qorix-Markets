@@ -184,6 +184,15 @@ export const GetInvestmentResponse = zod.object({
   dailyProfit: zod.number(),
   drawdown: zod.number(),
   drawdownLimit: zod.number().describe("Max drawdown percentage (e.g. 5 = 5%)"),
+  peakBalance: zod
+    .number()
+    .describe("Highest equity ever reached during this investment"),
+  drawdownFromPeak: zod
+    .number()
+    .describe("Current decline from peak equity as a percentage"),
+  recoveryPct: zod
+    .number()
+    .describe("Percentage gain needed to return to peak balance"),
   isPaused: zod
     .boolean()
     .describe("True when capital protection was triggered"),
@@ -211,6 +220,15 @@ export const StartInvestmentResponse = zod.object({
   dailyProfit: zod.number(),
   drawdown: zod.number(),
   drawdownLimit: zod.number().describe("Max drawdown percentage (e.g. 5 = 5%)"),
+  peakBalance: zod
+    .number()
+    .describe("Highest equity ever reached during this investment"),
+  drawdownFromPeak: zod
+    .number()
+    .describe("Current decline from peak equity as a percentage"),
+  recoveryPct: zod
+    .number()
+    .describe("Percentage gain needed to return to peak balance"),
   isPaused: zod
     .boolean()
     .describe("True when capital protection was triggered"),
@@ -233,6 +251,15 @@ export const StopInvestmentResponse = zod.object({
   dailyProfit: zod.number(),
   drawdown: zod.number(),
   drawdownLimit: zod.number().describe("Max drawdown percentage (e.g. 5 = 5%)"),
+  peakBalance: zod
+    .number()
+    .describe("Highest equity ever reached during this investment"),
+  drawdownFromPeak: zod
+    .number()
+    .describe("Current decline from peak equity as a percentage"),
+  recoveryPct: zod
+    .number()
+    .describe("Percentage gain needed to return to peak balance"),
   isPaused: zod
     .boolean()
     .describe("True when capital protection was triggered"),
@@ -259,6 +286,15 @@ export const UpdateProtectionResponse = zod.object({
   dailyProfit: zod.number(),
   drawdown: zod.number(),
   drawdownLimit: zod.number().describe("Max drawdown percentage (e.g. 5 = 5%)"),
+  peakBalance: zod
+    .number()
+    .describe("Highest equity ever reached during this investment"),
+  drawdownFromPeak: zod
+    .number()
+    .describe("Current decline from peak equity as a percentage"),
+  recoveryPct: zod
+    .number()
+    .describe("Percentage gain needed to return to peak balance"),
   isPaused: zod
     .boolean()
     .describe("True when capital protection was triggered"),
@@ -285,6 +321,15 @@ export const ToggleCompoundingResponse = zod.object({
   dailyProfit: zod.number(),
   drawdown: zod.number(),
   drawdownLimit: zod.number().describe("Max drawdown percentage (e.g. 5 = 5%)"),
+  peakBalance: zod
+    .number()
+    .describe("Highest equity ever reached during this investment"),
+  drawdownFromPeak: zod
+    .number()
+    .describe("Current decline from peak equity as a percentage"),
+  recoveryPct: zod
+    .number()
+    .describe("Percentage gain needed to return to peak balance"),
   isPaused: zod
     .boolean()
     .describe("True when capital protection was triggered"),
