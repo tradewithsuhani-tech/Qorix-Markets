@@ -7,6 +7,7 @@ import investmentRouter from "./investment";
 import referralRouter from "./referral";
 import dashboardRouter from "./dashboard";
 import adminRouter from "./admin";
+import notificationsRouter from "./notifications";
 
 const router: IRouter = Router();
 
@@ -18,5 +19,6 @@ router.use(investmentRouter);
 router.use(referralRouter);
 router.use(dashboardRouter);
 router.use(adminRouter);
+router.use(notificationsRouter);
 
 export default router;

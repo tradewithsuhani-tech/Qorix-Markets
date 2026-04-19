@@ -11,6 +11,7 @@ import {
 } from "@workspace/db";
 import { eq, gt } from "drizzle-orm";
 import { logger } from "./logger";
+import { createNotification } from "./notifications";
 
 export const DRAWDOWN_LIMITS: Record<string, number> = {
   low: 0.03,
@@ -130,6 +131,13 @@ export async function distributeDailyProfit(
           description: `Capital Protection triggered: drawdown limit of ${drawdownLimitPct}% reached. Trading paused automatically.`,
         });
 
+        await createNotification(
+          inv.userId,
+          "drawdown_alert",
+          "⚠️ Capital Protection Triggered",
+          `Your drawdown reached the ${drawdownLimitPct}% limit. Trading has been automatically paused. $${Math.max(0, amount - currentDrawdown).toFixed(2)} USDT is secured in your wallet.`,
+        );
+
         logger.info({ userId: inv.userId, drawdownLimitPct }, "Investment paused: capital protection triggered");
         continue;
       }
@@ -200,6 +208,15 @@ export async function distributeDailyProfit(
         status: "completed",
         description: `Daily profit (${inv.riskLevel} risk, ${adjustedProfitPercent.toFixed(2)}% effective rate)`,
       });
+
+      await createNotification(
+        inv.userId,
+        "daily_profit",
+        dailyProfitAmount >= 0 ? "Daily Profit Credited" : "Daily Loss Recorded",
+        dailyProfitAmount >= 0
+          ? `+$${dailyProfitAmount.toFixed(2)} USDT earned today (${adjustedProfitPercent.toFixed(2)}% · ${inv.riskLevel} risk).`
+          : `$${Math.abs(dailyProfitAmount).toFixed(2)} USDT drawdown recorded today (${adjustedProfitPercent.toFixed(2)}%).`,
+      );
 
       const currentEquity = inv.autoCompound ? amount + dailyProfitAmount : amount;
       await tx
@@ -339,6 +356,13 @@ export async function transferProfitToMain(): Promise<{
         status: "completed",
         description: `Monthly profit payout: $${profitBalance.toFixed(2)} moved to main wallet`,
       });
+
+      await createNotification(
+        wallet.userId,
+        "monthly_payout",
+        "Monthly Payout Processed",
+        `$${profitBalance.toFixed(2)} USDT has been transferred from your profit balance to your main wallet.`,
+      );
 
       usersProcessed++;
       totalTransferred += profitBalance;

@@ -5,6 +5,26 @@
  * Qorix Markets API specification
  * OpenAPI spec version: 0.1.0
  */
+export interface SuccessResponse {
+  success: boolean;
+}
+
+export interface NotificationItem {
+  id: number;
+  userId: number;
+  /** daily_profit | monthly_payout | drawdown_alert | deposit | withdrawal | system */
+  type: string;
+  title: string;
+  message: string;
+  isRead: boolean;
+  createdAt: string;
+}
+
+export interface NotificationList {
+  notifications: NotificationItem[];
+  unreadCount: number;
+}
+
 export interface HealthStatus {
   status: string;
 }
@@ -261,6 +281,11 @@ export type GetTradesParams = {
 
 export type GetEquityChartParams = {
   days?: number;
+};
+
+export type GetNotificationsParams = {
+  limit?: number;
+  unread?: string;
 };
 
 export type GetProfitHistoryParams = {

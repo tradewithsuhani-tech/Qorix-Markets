@@ -380,6 +380,74 @@ export const GetDashboardFundStatsResponse = zod.object({
 });
 
 /**
+ * @summary Get user notifications
+ */
+export const getNotificationsQueryLimitDefault = 20;
+
+export const GetNotificationsQueryParams = zod.object({
+  limit: zod.coerce.number().default(getNotificationsQueryLimitDefault),
+  unread: zod.coerce.string().optional(),
+});
+
+export const GetNotificationsResponse = zod.object({
+  notifications: zod.array(
+    zod.object({
+      id: zod.number(),
+      userId: zod.number(),
+      type: zod
+        .string()
+        .describe(
+          "daily_profit | monthly_payout | drawdown_alert | deposit | withdrawal | system",
+        ),
+      title: zod.string(),
+      message: zod.string(),
+      isRead: zod.boolean(),
+      createdAt: zod.string(),
+    }),
+  ),
+  unreadCount: zod.number(),
+});
+
+/**
+ * @summary Mark all notifications as read
+ */
+export const MarkAllNotificationsReadResponse = zod.object({
+  success: zod.boolean(),
+});
+
+/**
+ * @summary Mark a notification as read
+ */
+export const MarkNotificationReadParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const MarkNotificationReadResponse = zod.object({
+  id: zod.number(),
+  userId: zod.number(),
+  type: zod
+    .string()
+    .describe(
+      "daily_profit | monthly_payout | drawdown_alert | deposit | withdrawal | system",
+    ),
+  title: zod.string(),
+  message: zod.string(),
+  isRead: zod.boolean(),
+  createdAt: zod.string(),
+});
+
+/**
+ * @summary Delete a notification
+ */
+export const DeleteNotificationParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const DeleteNotificationResponse = zod.object({
+  success: zod.boolean(),
+});
+
+/**
  * @summary Get admin overview stats
  */
 export const GetAdminStatsResponse = zod.object({

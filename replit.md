@@ -33,7 +33,7 @@ A premium fintech PWA for automated USDT investment and trading. Users deposit U
 artifacts/
   api-server/          # Express backend API
     src/
-      routes/          # auth, wallet, investment, referral, dashboard, admin, transactions
+      routes/          # auth, wallet, investment, referral, dashboard, admin, transactions, notifications
       middlewares/     # JWT auth middleware
   qorix-markets/       # React + Vite frontend
     src/
@@ -45,7 +45,7 @@ lib/
   api-client-react/    # Generated React Query hooks
   api-zod/             # Generated Zod validation schemas
   db/                  # Drizzle ORM schema and db connection
-    src/schema/        # users, wallets, transactions, investments, trades, equity, settings
+    src/schema/        # users, wallets, transactions, investments, trades, equity, settings, notifications
 ```
 
 ## Features
@@ -57,8 +57,11 @@ lib/
 5. **Auto Compounding**: Optional — compounds profit back into trading balance
 6. **Referral System**: Unique referral codes, sponsor earns 0.5% monthly on active investment
 7. **Dashboard**: Animated balances, equity area chart, recent trades, P&L display
-8. **Admin Panel**: Set daily profit %, view AUM, approve/reject withdrawals, user management
-9. **PWA**: manifest.json, service worker, mobile bottom navigation
+8. **Capital Protection**: Configurable drawdown limits (3/5/10%), auto-pause trading, sticky banner
+9. **Advanced Analytics**: Equity curve, drawdown chart, profit distribution, risk/return scatter, rolling returns (Chart.js)
+10. **Notification System**: Real-time bell icon with badge, dropdown panel, per-event types (deposit, withdrawal, daily_profit, monthly_payout, drawdown_alert, system), mark-read/delete
+11. **Admin Panel**: Set daily profit %, view AUM, approve/reject withdrawals, user management
+12. **PWA**: manifest.json, service worker, mobile bottom navigation
 
 ## Demo Accounts
 
@@ -77,6 +80,7 @@ All routes prefixed with `/api`:
 - GET `/dashboard/summary`, GET `/dashboard/equity-chart`
 - GET `/admin/stats`, POST `/admin/profit`, GET `/admin/profit/history`, GET `/admin/users`
 - GET `/admin/withdrawals`, POST `/admin/withdrawals/:id/approve`, POST `/admin/withdrawals/:id/reject`
+- GET `/notifications`, PATCH `/notifications/read-all`, PATCH `/notifications/:id/read`, DELETE `/notifications/:id`
 
 ## Cron Jobs (node-cron)
 

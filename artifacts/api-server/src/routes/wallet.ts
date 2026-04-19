@@ -3,6 +3,7 @@ import { db, walletsTable, transactionsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { authMiddleware, type AuthRequest } from "../middlewares/auth";
 import { DepositBody, WithdrawBody, TransferToTradingBody } from "@workspace/api-zod";
+import { createNotification } from "../lib/notifications";
 
 const router = Router();
 router.use(authMiddleware);
@@ -62,6 +63,13 @@ router.post("/wallet/deposit", async (req: AuthRequest, res) => {
     description: `USDT deposit of $${amount.toFixed(2)}`,
   });
 
+  await createNotification(
+    req.userId!,
+    "deposit",
+    "Deposit Confirmed",
+    `$${amount.toFixed(2)} USDT has been credited to your main balance.`,
+  );
+
   res.json(formatWallet(updated!));
 });
 
@@ -98,6 +106,13 @@ router.post("/wallet/withdraw", async (req: AuthRequest, res) => {
     description: `Withdrawal to ${walletAddress}`,
     walletAddress,
   }).returning();
+
+  await createNotification(
+    req.userId!,
+    "withdrawal",
+    "Withdrawal Requested",
+    `Your withdrawal of $${amount.toFixed(2)} USDT to ${walletAddress.slice(0, 8)}...${walletAddress.slice(-4)} is pending review.`,
+  );
 
   res.json({
     id: tx!.id,
