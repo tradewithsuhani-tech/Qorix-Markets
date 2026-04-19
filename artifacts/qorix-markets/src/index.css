@@ -289,6 +289,114 @@
     height: 100%;
   }
 
+  /* ── Shimmer skeleton ──────────────────────────────────────────────────── */
+  @keyframes shimmer {
+    0%   { background-position: -400px 0; }
+    100% { background-position: 400px 0; }
+  }
+
+  .skeleton-shimmer {
+    background: linear-gradient(
+      90deg,
+      rgba(255,255,255,0.04) 25%,
+      rgba(255,255,255,0.09) 50%,
+      rgba(255,255,255,0.04) 75%
+    );
+    background-size: 800px 100%;
+    animation: shimmer 1.6s ease-in-out infinite;
+    border-radius: 6px;
+  }
+
+  /* ── Input / Form polish ───────────────────────────────────────────────── */
+  .field-input {
+    width: 100%;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.10);
+    border-radius: 10px;
+    padding: 11px 14px;
+    color: #fff;
+    font-size: 14px;
+    transition: border-color 0.18s, box-shadow 0.18s, background 0.18s;
+    outline: none;
+  }
+  .field-input::placeholder { color: rgba(148,163,184,0.6); }
+  .field-input:focus {
+    border-color: rgba(59,130,246,0.55);
+    box-shadow: 0 0 0 3px rgba(59,130,246,0.12);
+    background: rgba(255,255,255,0.06);
+  }
+  .field-input:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  /* ── Premium button base ───────────────────────────────────────────────── */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    font-weight: 600;
+    font-size: 14px;
+    padding: 10px 18px;
+    border-radius: 10px;
+    border: none;
+    cursor: pointer;
+    transition: opacity 0.15s, transform 0.12s, box-shadow 0.18s;
+    user-select: none;
+  }
+  .btn:active { transform: scale(0.97); }
+  .btn:disabled { opacity: 0.45; cursor: not-allowed; pointer-events: none; }
+
+  .btn-primary {
+    background: linear-gradient(135deg, #3b82f6, #6366f1);
+    color: #fff;
+    box-shadow: 0 4px 18px rgba(59,130,246,0.35);
+  }
+  .btn-primary:hover { box-shadow: 0 6px 24px rgba(59,130,246,0.5); }
+
+  .btn-success {
+    background: linear-gradient(135deg, #16a34a, #22c55e);
+    color: #fff;
+    box-shadow: 0 4px 18px rgba(34,197,94,0.28);
+  }
+  .btn-success:hover { box-shadow: 0 6px 24px rgba(34,197,94,0.42); }
+
+  .btn-danger {
+    background: linear-gradient(135deg, #dc2626, #ef4444);
+    color: #fff;
+    box-shadow: 0 4px 18px rgba(239,68,68,0.28);
+  }
+  .btn-danger:hover { box-shadow: 0 6px 24px rgba(239,68,68,0.42); }
+
+  .btn-ghost {
+    background: rgba(255,255,255,0.06);
+    color: rgba(255,255,255,0.75);
+    border: 1px solid rgba(255,255,255,0.10);
+  }
+  .btn-ghost:hover { background: rgba(255,255,255,0.10); color: #fff; }
+
+  /* ── Balance card glow variants ────────────────────────────────────────── */
+  .balance-card-blue  { border-color: rgba(59,130,246,0.3);  box-shadow: 0 4px 28px rgba(59,130,246,0.12),  0 4px 16px rgba(0,0,0,0.3); }
+  .balance-card-indigo { border-color: rgba(99,102,241,0.3);  box-shadow: 0 4px 28px rgba(99,102,241,0.12),  0 4px 16px rgba(0,0,0,0.3); }
+  .balance-card-emerald { border-color: rgba(34,197,94,0.3);  box-shadow: 0 4px 28px rgba(34,197,94,0.12),   0 4px 16px rgba(0,0,0,0.3); }
+
+  /* ── Fade-slide page enter ─────────────────────────────────────────────── */
+  @keyframes fadeSlideUp {
+    from { opacity: 0; transform: translateY(14px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .page-fade-in { animation: fadeSlideUp 0.35s ease-out both; }
+
+  /* ── Stagger children helper ───────────────────────────────────────────── */
+  .stagger > * { animation: fadeSlideUp 0.3s ease-out both; }
+  .stagger > *:nth-child(1) { animation-delay: 0ms; }
+  .stagger > *:nth-child(2) { animation-delay: 60ms; }
+  .stagger > *:nth-child(3) { animation-delay: 120ms; }
+  .stagger > *:nth-child(4) { animation-delay: 180ms; }
+  .stagger > *:nth-child(5) { animation-delay: 240ms; }
+  .stagger > *:nth-child(6) { animation-delay: 300ms; }
+
   /* ── PWA / Mobile App Feel ─────────────────────────────────────────────── */
 
   /* Prevent elastic scroll on iOS when in standalone mode */
@@ -364,5 +472,14 @@
   }
   .press-scale:active {
     transform: scale(0.95);
+  }
+
+  /* Hide scrollbar but keep scrollability */
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
   }
 }
