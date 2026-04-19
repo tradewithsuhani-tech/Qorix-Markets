@@ -1,13 +1,20 @@
 import { Layout } from "@/components/layout";
 import { useAuth } from "@/hooks/use-auth";
 import { motion } from "framer-motion";
-import { User as UserIcon, Mail, Calendar, Shield } from "lucide-react";
+import { User as UserIcon, Mail, Calendar, Shield, Crown } from "lucide-react";
 import { format } from "date-fns";
+import { useGetDashboardSummary } from "@workspace/api-client-react";
+import { VipBadge, VipCard } from "@/components/vip-badge";
+import type { VipInfo } from "@workspace/api-client-react";
 
 export default function SettingsPage() {
   const { user } = useAuth();
+  const { data: summary } = useGetDashboardSummary();
 
   if (!user) return null;
+
+  const vip = summary?.vip;
+  const vipTier = (vip?.tier ?? "none") as "none" | "silver" | "gold" | "platinum";
 
   return (
     <Layout>
@@ -23,7 +30,10 @@ export default function SettingsPage() {
               {user.fullName.charAt(0).toUpperCase()}
             </div>
             <div>
-              <h2 className="text-2xl font-bold">{user.fullName}</h2>
+              <div className="flex items-center gap-2 mb-0.5">
+                <h2 className="text-2xl font-bold">{user.fullName}</h2>
+                <VipBadge tier={vipTier} size="sm" />
+              </div>
               <div className="flex items-center gap-2 text-muted-foreground">
                 <Mail className="w-4 h-4" /> {user.email}
               </div>
@@ -65,6 +75,16 @@ export default function SettingsPage() {
             </div>
           </div>
         </div>
+
+        {vip && (
+          <div className="space-y-3">
+            <h2 className="text-xl font-bold flex items-center gap-2">
+              <Crown className="w-5 h-5 text-amber-400" />
+              VIP Membership
+            </h2>
+            <VipCard vip={vip as VipInfo} investmentAmount={summary?.activeInvestment ?? 0} />
+          </div>
+        )}
       </motion.div>
     </Layout>
   );

@@ -2,6 +2,7 @@ import { Router } from "express";
 import { db, walletsTable, investmentsTable, equityHistoryTable, tradesTable } from "@workspace/db";
 import { eq, and, gte, desc, sum, count } from "drizzle-orm";
 import { authMiddleware, type AuthRequest } from "../middlewares/auth";
+import { getVipInfo } from "../lib/vip";
 
 const router = Router();
 router.use(authMiddleware);
@@ -30,6 +31,8 @@ router.get("/dashboard/summary", async (req: AuthRequest, res) => {
   }
   const daysUntilPayout = Math.ceil((nextPayout.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 
+  const vipInfo = getVipInfo(investmentAmount);
+
   res.json({
     totalBalance,
     dailyProfitLoss: dailyProfit,
@@ -42,6 +45,14 @@ router.get("/dashboard/summary", async (req: AuthRequest, res) => {
     daysUntilPayout,
     riskLevel: inv?.riskLevel ?? null,
     isTrading: inv?.isActive ?? false,
+    vip: {
+      tier: vipInfo.tier,
+      label: vipInfo.label,
+      profitBonus: vipInfo.profitBonus,
+      withdrawalFee: vipInfo.withdrawalFee,
+      minAmount: vipInfo.minAmount,
+      nextTier: vipInfo.nextTier ?? null,
+    },
   });
 });
 

@@ -2,7 +2,7 @@
 
 ## Overview
 
-A premium fintech PWA for automated USDT investment and trading. Users deposit USDT, select a risk level, and the platform simulates daily trading with profit distribution. Includes wallet management, referral system, and an admin panel.
+A premium fintech PWA for automated USDT investment and trading. Users deposit USDT, select a risk level, and the platform simulates daily trading with profit distribution. Includes wallet management, referral system, VIP membership tiers, and an admin panel.
 
 ## Stack
 
@@ -87,6 +87,23 @@ All routes prefixed with `/api`:
 Defined in `artifacts/api-server/src/lib/cron.ts`, initialized on server start:
 - **Daily at midnight (00:00)**: Runs profit distribution using the last saved `daily_profit_percent` from `system_settings`. Skips if no rate is configured.
 - **Monthly on the 25th at midnight (00:00 25 * *)**: Sweeps all user `profit_balance` → `main_balance` and creates transfer transaction records.
+
+## VIP Membership System
+
+`artifacts/api-server/src/lib/vip.ts` — pure computed tiers based on investment amount:
+
+| Tier     | Min Investment | Profit Bonus | Withdrawal Fee |
+|----------|---------------|--------------|----------------|
+| Standard | $0            | —            | 2.0%           |
+| Silver   | $500          | +5%          | 1.5%           |
+| Gold     | $2,000        | +10%         | 1.0%           |
+| Platinum | $10,000       | +15%         | 0.5%           |
+
+- Tier is computed dynamically from `investmentAmount`, no DB column needed
+- Profit bonus applied in `profit-service.ts` as an additive multiplier on top of risk multiplier (only on positive days)
+- Withdrawal fee applied in `wallet.ts` withdraw route (deducted from gross amount, fee logged as separate `fee` transaction)
+- `dashboard/summary` exposes `vip` object: `{ tier, label, profitBonus, withdrawalFee, minAmount, nextTier }`
+- Frontend: `VipBadge` and `VipCard` components in `vip-badge.tsx`; badge shown in desktop sidebar user card, mobile top bar, and wallet withdraw panel; full VIP card on Settings page
 
 ## Shared Profit Service
 

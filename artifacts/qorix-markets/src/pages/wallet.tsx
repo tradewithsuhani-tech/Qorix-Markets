@@ -1,17 +1,24 @@
-import { useGetWallet, useDeposit, useWithdraw, useTransferToTrading } from "@workspace/api-client-react";
+import { useGetWallet, useDeposit, useWithdraw, useTransferToTrading, useGetDashboardSummary } from "@workspace/api-client-react";
 import { Layout } from "@/components/layout";
 import { AnimatedCounter } from "@/components/animated-counter";
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Wallet as WalletIcon, ArrowDownToLine, ArrowUpFromLine, ArrowRightLeft } from "lucide-react";
+import { Wallet as WalletIcon, ArrowDownToLine, ArrowUpFromLine, ArrowRightLeft, Info } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { getGetWalletQueryKey } from "@workspace/api-client-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { VipBadge } from "@/components/vip-badge";
 
 export default function WalletPage() {
   const { data: wallet, isLoading } = useGetWallet();
+  const { data: summary } = useGetDashboardSummary();
   const queryClient = useQueryClient();
+
+  const vip = summary?.vip;
+  const vipTier = (vip?.tier ?? "none") as "none" | "silver" | "gold" | "platinum";
+  const withdrawalFee = vip?.withdrawalFee ?? 0.02;
+  const withdrawalFeePercent = (withdrawalFee * 100).toFixed(1);
   const { toast } = useToast();
 
   const [depositAmount, setDepositAmount] = useState("");
@@ -164,9 +171,12 @@ export default function WalletPage() {
 
           {/* Withdraw */}
           <div className="glass-card p-6 rounded-xl">
-            <div className="flex items-center gap-2 mb-4 text-lg font-semibold">
-              <div className="p-2 rounded bg-red-500/20 text-red-500"><ArrowUpFromLine className="w-5 h-5" /></div>
-              Withdraw Profits
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2 text-lg font-semibold">
+                <div className="p-2 rounded bg-red-500/20 text-red-500"><ArrowUpFromLine className="w-5 h-5" /></div>
+                Withdraw Profits
+              </div>
+              <VipBadge tier={vipTier} size="xs" />
             </div>
             <div className="space-y-4">
               <div>
@@ -187,6 +197,18 @@ export default function WalletPage() {
                   </button>
                 </div>
               </div>
+              {Number(withdrawAmount) > 0 && (
+                <div className="bg-white/5 border border-white/8 rounded-lg px-3 py-2.5 space-y-1.5 text-xs">
+                  <div className="flex items-center justify-between text-muted-foreground">
+                    <span className="flex items-center gap-1.5"><Info className="w-3 h-3" /> Withdrawal fee ({withdrawalFeePercent}%)</span>
+                    <span className="text-red-400">−${(Number(withdrawAmount) * withdrawalFee).toFixed(2)}</span>
+                  </div>
+                  <div className="flex items-center justify-between font-medium text-white border-t border-white/5 pt-1.5">
+                    <span>You receive</span>
+                    <span className="text-emerald-400">${(Number(withdrawAmount) * (1 - withdrawalFee)).toFixed(2)} USDT</span>
+                  </div>
+                </div>
+              )}
               <div>
                 <label className="text-sm text-muted-foreground">USDT Address (TRC20)</label>
                 <input 

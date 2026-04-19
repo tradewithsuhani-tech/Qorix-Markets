@@ -33,9 +33,11 @@ import {
   useMarkNotificationRead,
   useMarkAllNotificationsRead,
   useDeleteNotification,
+  useGetDashboardSummary,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { getGetNotificationsQueryKey } from "@workspace/api-client-react";
+import { VipBadge } from "@/components/vip-badge";
 
 const NOTIF_ICONS: Record<string, React.ElementType> = {
   daily_profit: TrendingUp,
@@ -357,6 +359,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const [location, navigate] = useLocation();
   const { logout, user } = useAuth();
   const [moreOpen, setMoreOpen] = useState(false);
+  const { data: summary } = useGetDashboardSummary({ query: { refetchInterval: 60000 } });
+  const vipTier = (summary?.vip?.tier ?? "none") as "none" | "silver" | "gold" | "platinum";
 
   const allLinks = [
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -432,7 +436,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
               {user?.fullName?.[0]?.toUpperCase() || "U"}
             </div>
             <div className="flex-1 min-w-0">
-              <div className="text-sm font-medium text-white truncate">{user?.fullName}</div>
+              <div className="flex items-center gap-1.5">
+                <div className="text-sm font-medium text-white truncate">{user?.fullName}</div>
+                <VipBadge tier={vipTier} size="xs" />
+              </div>
               <div className="text-xs text-muted-foreground truncate">{user?.email}</div>
             </div>
             <NotificationBell />
@@ -460,6 +467,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
               <TrendingUp className="w-4 h-4 text-white" />
             </div>
             <span className="text-sm font-bold text-white">Qorix<span className="text-blue-400">Markets</span></span>
+            <VipBadge tier={vipTier} size="xs" />
           </div>
           <NotificationBell />
         </div>

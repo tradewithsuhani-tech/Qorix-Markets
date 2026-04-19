@@ -1018,6 +1018,52 @@ components:
         - isActive
         - joinedAt
 
+    # VIP
+    VipNextTier:
+      type: object
+      properties:
+        tier:
+          type: string
+        label:
+          type: string
+        minAmount:
+          type: number
+        amountNeeded:
+          type: number
+      required:
+        - tier
+        - label
+        - minAmount
+        - amountNeeded
+
+    VipInfo:
+      type: object
+      properties:
+        tier:
+          type: string
+          enum: [none, silver, gold, platinum]
+        label:
+          type: string
+        profitBonus:
+          type: number
+          description: Additional profit multiplier e.g. 0.05 = 5% bonus
+        withdrawalFee:
+          type: number
+          description: Fee deducted from withdrawals e.g. 0.015 = 1.5%
+        minAmount:
+          type: number
+        nextTier:
+          oneOf:
+            - $ref: "#/components/schemas/VipNextTier"
+            - type: "null"
+      required:
+        - tier
+        - label
+        - profitBonus
+        - withdrawalFee
+        - minAmount
+        - nextTier
+
     # DASHBOARD
     DashboardSummary:
       type: object
@@ -1044,6 +1090,8 @@ components:
           type: ["string", "null"]
         isTrading:
           type: boolean
+        vip:
+          $ref: "#/components/schemas/VipInfo"
       required:
         - totalBalance
         - dailyProfitLoss
@@ -1055,6 +1103,7 @@ components:
         - nextPayoutDate
         - daysUntilPayout
         - isTrading
+        - vip
 
     EquityPoint:
       type: object

@@ -1,11 +1,12 @@
 import { Router } from "express";
-import { db, walletsTable, transactionsTable } from "@workspace/db";
+import { db, walletsTable, transactionsTable, investmentsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { authMiddleware, type AuthRequest } from "../middlewares/auth";
 import { DepositBody, WithdrawBody, TransferToTradingBody } from "@workspace/api-zod";
 import { createNotification } from "../lib/notifications";
 import { transactionLogger, errorLogger } from "../lib/logger";
 import { emitDepositEvent } from "../lib/event-bus";
+import { getVipInfo } from "../lib/vip";
 
 const router = Router();
 router.use(authMiddleware);
@@ -114,16 +115,35 @@ router.post("/wallet/withdraw", async (req: AuthRequest, res) => {
     return;
   }
 
+  const invRows = await db.select({ amount: investmentsTable.amount })
+    .from(investmentsTable)
+    .where(eq(investmentsTable.userId, req.userId!))
+    .limit(1);
+  const investmentAmount = invRows[0] ? parseFloat(invRows[0].amount as string) : 0;
+  const vipInfo = getVipInfo(investmentAmount);
+  const feeAmount = parseFloat((amount * vipInfo.withdrawalFee).toFixed(8));
+  const netAmount = parseFloat((amount - feeAmount).toFixed(8));
+
   await db.update(walletsTable)
     .set({ profitBalance: (profitBalance - amount).toString(), updatedAt: new Date() })
     .where(eq(walletsTable.userId, req.userId!));
 
+  if (feeAmount > 0) {
+    await db.insert(transactionsTable).values({
+      userId: req.userId!,
+      type: "fee",
+      amount: feeAmount.toString(),
+      status: "completed",
+      description: `Withdrawal fee (${(vipInfo.withdrawalFee * 100).toFixed(1)}% · ${vipInfo.label} tier)`,
+    });
+  }
+
   const [tx] = await db.insert(transactionsTable).values({
     userId: req.userId!,
     type: "withdrawal",
-    amount: amount.toString(),
+    amount: netAmount.toString(),
     status: "pending",
-    description: `Withdrawal to ${walletAddress}`,
+    description: `Withdrawal to ${walletAddress}${feeAmount > 0 ? ` (fee: $${feeAmount.toFixed(2)})` : ""}`,
     walletAddress,
   }).returning();
 
@@ -132,6 +152,9 @@ router.post("/wallet/withdraw", async (req: AuthRequest, res) => {
       event: "withdrawal_requested",
       userId: req.userId!,
       amount,
+      netAmount,
+      feeAmount,
+      vipTier: vipInfo.tier,
       walletAddress: `${walletAddress.slice(0, 8)}...${walletAddress.slice(-4)}`,
       transactionId: tx!.id,
     },
@@ -142,7 +165,7 @@ router.post("/wallet/withdraw", async (req: AuthRequest, res) => {
     req.userId!,
     "withdrawal",
     "Withdrawal Requested",
-    `Your withdrawal of $${amount.toFixed(2)} USDT to ${walletAddress.slice(0, 8)}...${walletAddress.slice(-4)} is pending review.`,
+    `Your withdrawal of $${netAmount.toFixed(2)} USDT (after $${feeAmount.toFixed(2)} fee) to ${walletAddress.slice(0, 8)}...${walletAddress.slice(-4)} is pending review.`,
   );
 
   res.json({

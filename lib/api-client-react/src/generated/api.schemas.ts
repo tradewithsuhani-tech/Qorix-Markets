@@ -166,6 +166,33 @@ export interface ReferredUser {
   joinedAt: string;
 }
 
+export interface VipNextTier {
+  tier: string;
+  label: string;
+  minAmount: number;
+  amountNeeded: number;
+}
+
+export type VipInfoTier = (typeof VipInfoTier)[keyof typeof VipInfoTier];
+
+export const VipInfoTier = {
+  none: "none",
+  silver: "silver",
+  gold: "gold",
+  platinum: "platinum",
+} as const;
+
+export interface VipInfo {
+  tier: VipInfoTier;
+  label: string;
+  /** Additional profit multiplier e.g. 0.05 = 5% bonus */
+  profitBonus: number;
+  /** Fee deducted from withdrawals e.g. 0.015 = 1.5% */
+  withdrawalFee: number;
+  minAmount: number;
+  nextTier: VipNextTier | null;
+}
+
 export interface DashboardSummary {
   totalBalance: number;
   dailyProfitLoss: number;
@@ -179,6 +206,7 @@ export interface DashboardSummary {
   /** @nullable */
   riskLevel?: string | null;
   isTrading: boolean;
+  vip: VipInfo;
 }
 
 export interface EquityPoint {

@@ -12,6 +12,7 @@ import {
 import { eq, gt } from "drizzle-orm";
 import { logger } from "./logger";
 import { createNotification } from "./notifications";
+import { getVipInfo } from "./vip";
 
 export const DRAWDOWN_LIMITS: Record<string, number> = {
   low: 0.03,
@@ -145,7 +146,10 @@ export async function distributeDailyProfit(
       const riskKey = (inv.riskLevel ?? "medium").toLowerCase();
       const riskMultiplier = RISK_MULTIPLIERS[riskKey] ?? 1.0;
       const adjustedProfitPercent = profitPercent * riskMultiplier;
-      const dailyProfitAmount = amount * (adjustedProfitPercent / 100);
+      const baseDailyProfit = amount * (adjustedProfitPercent / 100);
+      const vipInfo = getVipInfo(amount);
+      const vipBonus = baseDailyProfit > 0 ? baseDailyProfit * vipInfo.profitBonus : 0;
+      const dailyProfitAmount = baseDailyProfit + vipBonus;
       const newTotalProfit = totalProfit + dailyProfitAmount;
 
       let newDrawdown = currentDrawdown;
@@ -201,12 +205,13 @@ export async function distributeDailyProfit(
           .where(eq(investmentsTable.userId, inv.userId));
       }
 
+      const vipDesc = vipInfo.tier !== "none" ? ` · ${vipInfo.label} VIP +${(vipInfo.profitBonus * 100).toFixed(0)}% bonus` : "";
       await tx.insert(transactionsTable).values({
         userId: inv.userId,
         type: "profit",
         amount: dailyProfitAmount.toString(),
         status: "completed",
-        description: `Daily profit (${inv.riskLevel} risk, ${adjustedProfitPercent.toFixed(2)}% effective rate)`,
+        description: `Daily profit (${inv.riskLevel} risk, ${adjustedProfitPercent.toFixed(2)}% effective rate${vipDesc})`,
       });
 
       await createNotification(
@@ -214,7 +219,7 @@ export async function distributeDailyProfit(
         "daily_profit",
         dailyProfitAmount >= 0 ? "Daily Profit Credited" : "Daily Loss Recorded",
         dailyProfitAmount >= 0
-          ? `+$${dailyProfitAmount.toFixed(2)} USDT earned today (${adjustedProfitPercent.toFixed(2)}% · ${inv.riskLevel} risk).`
+          ? `+$${dailyProfitAmount.toFixed(2)} USDT earned today (${adjustedProfitPercent.toFixed(2)}% · ${inv.riskLevel} risk${vipInfo.tier !== "none" ? ` · ${vipInfo.label} VIP` : ""}).`
           : `$${Math.abs(dailyProfitAmount).toFixed(2)} USDT drawdown recorded today (${adjustedProfitPercent.toFixed(2)}%).`,
       );
 

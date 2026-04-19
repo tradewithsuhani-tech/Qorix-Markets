@@ -332,6 +332,26 @@ export const GetDashboardSummaryResponse = zod.object({
   daysUntilPayout: zod.number(),
   riskLevel: zod.string().nullish(),
   isTrading: zod.boolean(),
+  vip: zod.object({
+    tier: zod.enum(["none", "silver", "gold", "platinum"]),
+    label: zod.string(),
+    profitBonus: zod
+      .number()
+      .describe("Additional profit multiplier e.g. 0.05 = 5% bonus"),
+    withdrawalFee: zod
+      .number()
+      .describe("Fee deducted from withdrawals e.g. 0.015 = 1.5%"),
+    minAmount: zod.number(),
+    nextTier: zod.union([
+      zod.object({
+        tier: zod.string(),
+        label: zod.string(),
+        minAmount: zod.number(),
+        amountNeeded: zod.number(),
+      }),
+      zod.null(),
+    ]),
+  }),
 });
 
 /**
