@@ -338,6 +338,182 @@ router.post("/admin/withdrawals/:id/reject", async (req: AuthRequest, res) => {
   });
 });
 
+router.get("/admin/intelligence", async (_req: AuthRequest, res) => {
+  // --- Summary stats ---
+  const [depositResult] = await db
+    .select({ total: sum(transactionsTable.amount) })
+    .from(transactionsTable)
+    .where(and(eq(transactionsTable.type, "deposit"), eq(transactionsTable.status, "completed")));
+
+  const [withdrawalResult] = await db
+    .select({ total: sum(transactionsTable.amount) })
+    .from(transactionsTable)
+    .where(and(eq(transactionsTable.type, "withdrawal"), eq(transactionsTable.status, "completed")));
+
+  const [feeResult] = await db
+    .select({ total: sum(transactionsTable.amount) })
+    .from(transactionsTable)
+    .where(eq(transactionsTable.type, "fee"));
+
+  const [pendingCountResult] = await db
+    .select({ count: count() })
+    .from(transactionsTable)
+    .where(and(eq(transactionsTable.type, "withdrawal"), eq(transactionsTable.status, "pending")));
+
+  const [pendingAmtResult] = await db
+    .select({ total: sum(transactionsTable.amount) })
+    .from(transactionsTable)
+    .where(and(eq(transactionsTable.type, "withdrawal"), eq(transactionsTable.status, "pending")));
+
+  // Risk exposure by level
+  const riskRows = await db
+    .select({
+      riskLevel: investmentsTable.riskLevel,
+      total: sum(investmentsTable.amount),
+      investors: count(),
+    })
+    .from(investmentsTable)
+    .where(eq(investmentsTable.isActive, true))
+    .groupBy(investmentsTable.riskLevel);
+
+  const riskExposure: Record<string, { amount: number; investors: number }> = {
+    low: { amount: 0, investors: 0 },
+    medium: { amount: 0, investors: 0 },
+    high: { amount: 0, investors: 0 },
+  };
+  for (const row of riskRows) {
+    const key = row.riskLevel ?? "low";
+    riskExposure[key] = {
+      amount: parseFloat(String(row.total ?? "0")) || 0,
+      investors: Number(row.investors ?? 0),
+    };
+  }
+
+  // --- 30-day deposit/withdrawal trend ---
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 29);
+  thirtyDaysAgo.setHours(0, 0, 0, 0);
+
+  const depositTrend = await db
+    .select({
+      date: sql<string>`DATE(created_at)`,
+      amount: sum(transactionsTable.amount),
+    })
+    .from(transactionsTable)
+    .where(
+      and(
+        eq(transactionsTable.type, "deposit"),
+        eq(transactionsTable.status, "completed"),
+        sql`created_at >= ${thirtyDaysAgo.toISOString()}`,
+      ),
+    )
+    .groupBy(sql`DATE(created_at)`)
+    .orderBy(sql`DATE(created_at)`);
+
+  const withdrawalTrend = await db
+    .select({
+      date: sql<string>`DATE(created_at)`,
+      amount: sum(transactionsTable.amount),
+    })
+    .from(transactionsTable)
+    .where(
+      and(
+        eq(transactionsTable.type, "withdrawal"),
+        eq(transactionsTable.status, "completed"),
+        sql`created_at >= ${thirtyDaysAgo.toISOString()}`,
+      ),
+    )
+    .groupBy(sql`DATE(created_at)`)
+    .orderBy(sql`DATE(created_at)`);
+
+  // Merge into unified daily series
+  const dateMap = new Map<string, { deposits: number; withdrawals: number }>();
+  // Fill all 30 days with zeros first
+  for (let i = 0; i < 30; i++) {
+    const d = new Date(thirtyDaysAgo);
+    d.setDate(d.getDate() + i);
+    const key = d.toISOString().slice(0, 10);
+    dateMap.set(key, { deposits: 0, withdrawals: 0 });
+  }
+  for (const row of depositTrend) {
+    const entry = dateMap.get(row.date);
+    if (entry) entry.deposits = parseFloat(String(row.amount ?? "0")) || 0;
+  }
+  for (const row of withdrawalTrend) {
+    const entry = dateMap.get(row.date);
+    if (entry) entry.withdrawals = parseFloat(String(row.amount ?? "0")) || 0;
+  }
+
+  const flowSeries = Array.from(dateMap.entries()).map(([date, v]) => ({
+    date,
+    deposits: v.deposits,
+    withdrawals: v.withdrawals,
+    net: v.deposits - v.withdrawals,
+  }));
+
+  // --- Profit history (last 30 runs) ---
+  const profitRuns = await db
+    .select()
+    .from(dailyProfitRunsTable)
+    .orderBy(desc(dailyProfitRunsTable.createdAt))
+    .limit(30);
+
+  const profitSeries = profitRuns
+    .reverse()
+    .map((r) => ({
+      date: r.runDate,
+      profitPercent: parseFloat(String(r.profitPercent ?? "0")),
+      distributed: parseFloat(String(r.totalProfitDistributed ?? "0")),
+      aum: parseFloat(String(r.totalAUM ?? "0")),
+    }));
+
+  // --- Top users by investment ---
+  const topInvestors = await db
+    .select({
+      userId: investmentsTable.userId,
+      amount: investmentsTable.amount,
+      riskLevel: investmentsTable.riskLevel,
+      totalProfit: investmentsTable.totalProfit,
+    })
+    .from(investmentsTable)
+    .where(eq(investmentsTable.isActive, true))
+    .orderBy(desc(investmentsTable.amount))
+    .limit(5);
+
+  const topInvestorsWithEmail = await Promise.all(
+    topInvestors.map(async (inv) => {
+      const users = await db
+        .select({ email: usersTable.email, fullName: usersTable.fullName })
+        .from(usersTable)
+        .where(eq(usersTable.id, inv.userId))
+        .limit(1);
+      return {
+        email: users[0]?.email ?? "",
+        fullName: users[0]?.fullName ?? "",
+        amount: parseFloat(String(inv.amount ?? "0")),
+        riskLevel: inv.riskLevel,
+        totalProfit: parseFloat(String(inv.totalProfit ?? "0")),
+      };
+    }),
+  );
+
+  res.json({
+    summary: {
+      totalDeposits: parseFloat(String(depositResult?.total ?? "0")) || 0,
+      totalWithdrawals: parseFloat(String(withdrawalResult?.total ?? "0")) || 0,
+      netPlatformProfit: parseFloat(String(feeResult?.total ?? "0")) || 0,
+      riskExposure,
+      pendingPayouts: {
+        count: Number(pendingCountResult?.count ?? 0),
+        amount: parseFloat(String(pendingAmtResult?.total ?? "0")) || 0,
+      },
+    },
+    flowSeries,
+    profitSeries,
+    topInvestors: topInvestorsWithEmail,
+  });
+});
+
 router.get("/admin/ledger/reconcile", async (_req: AuthRequest, res) => {
   try {
     const result = await runReconciliation();
