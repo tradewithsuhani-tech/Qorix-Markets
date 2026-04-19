@@ -3,13 +3,28 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Qorix Markets API specification
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: auth
+    description: Authentication operations
+  - name: wallet
+    description: Wallet and balance operations
+  - name: investment
+    description: Investment and trading operations
+  - name: transactions
+    description: Transaction history
+  - name: referral
+    description: Referral system
+  - name: admin
+    description: Admin panel operations
+  - name: dashboard
+    description: Dashboard summary and analytics
+
 paths:
   /healthz:
     get:
@@ -24,6 +39,456 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  # AUTH
+  /auth/register:
+    post:
+      operationId: register
+      tags: [auth]
+      summary: Register a new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterBody"
+      responses:
+        "201":
+          description: User registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Email already registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: Login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginBody"
+      responses:
+        "200":
+          description: Login success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/me:
+    get:
+      operationId: getMe
+      tags: [auth]
+      summary: Get current user
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # WALLET
+  /wallet:
+    get:
+      operationId: getWallet
+      tags: [wallet]
+      summary: Get wallet balances
+      responses:
+        "200":
+          description: Wallet info
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Wallet"
+
+  /wallet/deposit:
+    post:
+      operationId: deposit
+      tags: [wallet]
+      summary: Deposit USDT to main balance
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DepositBody"
+      responses:
+        "200":
+          description: Deposit processed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Wallet"
+
+  /wallet/withdraw:
+    post:
+      operationId: withdraw
+      tags: [wallet]
+      summary: Request withdrawal from profit balance
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WithdrawBody"
+      responses:
+        "200":
+          description: Withdrawal requested
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Transaction"
+        "400":
+          description: Insufficient balance
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /wallet/transfer:
+    post:
+      operationId: transferToTrading
+      tags: [wallet]
+      summary: Transfer from main to trading balance
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TransferBody"
+      responses:
+        "200":
+          description: Transfer done
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Wallet"
+
+  # TRANSACTIONS
+  /transactions:
+    get:
+      operationId: getTransactions
+      tags: [transactions]
+      summary: Get transaction history
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: type
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Transaction list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransactionList"
+
+  # INVESTMENT
+  /investment:
+    get:
+      operationId: getInvestment
+      tags: [investment]
+      summary: Get active investment
+      responses:
+        "200":
+          description: Investment data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Investment"
+
+  /investment/start:
+    post:
+      operationId: startInvestment
+      tags: [investment]
+      summary: Start auto trading investment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StartInvestmentBody"
+      responses:
+        "200":
+          description: Investment started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Investment"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /investment/stop:
+    post:
+      operationId: stopInvestment
+      tags: [investment]
+      summary: Stop auto trading
+      responses:
+        "200":
+          description: Investment stopped
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Investment"
+
+  /investment/compounding:
+    patch:
+      operationId: toggleCompounding
+      tags: [investment]
+      summary: Toggle auto compounding
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CompoundingBody"
+      responses:
+        "200":
+          description: Compounding toggled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Investment"
+
+  # TRADES (simulated)
+  /trades:
+    get:
+      operationId: getTrades
+      tags: [investment]
+      summary: Get recent simulated trades
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+      responses:
+        "200":
+          description: Recent trades
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Trade"
+
+  # REFERRAL
+  /referral:
+    get:
+      operationId: getReferral
+      tags: [referral]
+      summary: Get referral info
+      responses:
+        "200":
+          description: Referral info
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Referral"
+
+  /referral/referred-users:
+    get:
+      operationId: getReferredUsers
+      tags: [referral]
+      summary: Get list of referred users
+      responses:
+        "200":
+          description: Referred users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ReferredUser"
+
+  # DASHBOARD
+  /dashboard/summary:
+    get:
+      operationId: getDashboardSummary
+      tags: [dashboard]
+      summary: Get dashboard summary stats
+      responses:
+        "200":
+          description: Dashboard summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardSummary"
+
+  /dashboard/equity-chart:
+    get:
+      operationId: getEquityChart
+      tags: [dashboard]
+      summary: Get equity history for chart
+      parameters:
+        - name: days
+          in: query
+          schema:
+            type: integer
+            default: 30
+      responses:
+        "200":
+          description: Equity chart data
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/EquityPoint"
+
+  # ADMIN
+  /admin/stats:
+    get:
+      operationId: getAdminStats
+      tags: [admin]
+      summary: Get admin overview stats
+      responses:
+        "200":
+          description: Admin stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminStats"
+
+  /admin/profit:
+    post:
+      operationId: setDailyProfit
+      tags: [admin]
+      summary: Set daily profit percentage for all users
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetDailyProfitBody"
+      responses:
+        "200":
+          description: Profit set and distributed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminStats"
+
+  /admin/users:
+    get:
+      operationId: getAdminUsers
+      tags: [admin]
+      summary: Get all users
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: Users list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminUserList"
+
+  /admin/withdrawals:
+    get:
+      operationId: getPendingWithdrawals
+      tags: [admin]
+      summary: Get pending withdrawal requests
+      responses:
+        "200":
+          description: Withdrawal requests
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WithdrawalRequest"
+
+  /admin/withdrawals/{id}/approve:
+    post:
+      operationId: approveWithdrawal
+      tags: [admin]
+      summary: Approve a withdrawal request
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Withdrawal approved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WithdrawalRequest"
+
+  /admin/withdrawals/{id}/reject:
+    post:
+      operationId: rejectWithdrawal
+      tags: [admin]
+      summary: Reject a withdrawal request
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Withdrawal rejected
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WithdrawalRequest"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +499,474 @@ components:
       required:
         - status
 
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+
+    # AUTH
+    RegisterBody:
+      type: object
+      properties:
+        email:
+          type: string
+        password:
+          type: string
+        fullName:
+          type: string
+        referralCode:
+          type: ["string", "null"]
+      required:
+        - email
+        - password
+        - fullName
+
+    LoginBody:
+      type: object
+      properties:
+        email:
+          type: string
+        password:
+          type: string
+      required:
+        - email
+        - password
+
+    AuthResponse:
+      type: object
+      properties:
+        token:
+          type: string
+        user:
+          $ref: "#/components/schemas/User"
+      required:
+        - token
+        - user
+
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+        email:
+          type: string
+        fullName:
+          type: string
+        isAdmin:
+          type: boolean
+        referralCode:
+          type: string
+        createdAt:
+          type: string
+      required:
+        - id
+        - email
+        - fullName
+        - isAdmin
+        - referralCode
+        - createdAt
+
+    # WALLET
+    Wallet:
+      type: object
+      properties:
+        id:
+          type: integer
+        userId:
+          type: integer
+        mainBalance:
+          type: number
+        tradingBalance:
+          type: number
+        profitBalance:
+          type: number
+        updatedAt:
+          type: string
+      required:
+        - id
+        - userId
+        - mainBalance
+        - tradingBalance
+        - profitBalance
+        - updatedAt
+
+    DepositBody:
+      type: object
+      properties:
+        amount:
+          type: number
+        txHash:
+          type: ["string", "null"]
+      required:
+        - amount
+
+    WithdrawBody:
+      type: object
+      properties:
+        amount:
+          type: number
+        walletAddress:
+          type: string
+      required:
+        - amount
+        - walletAddress
+
+    TransferBody:
+      type: object
+      properties:
+        amount:
+          type: number
+      required:
+        - amount
+
+    # TRANSACTIONS
+    Transaction:
+      type: object
+      properties:
+        id:
+          type: integer
+        userId:
+          type: integer
+        type:
+          type: string
+        amount:
+          type: number
+        status:
+          type: string
+        description:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+      required:
+        - id
+        - userId
+        - type
+        - amount
+        - status
+        - createdAt
+
+    TransactionList:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Transaction"
+        total:
+          type: integer
+        page:
+          type: integer
+        totalPages:
+          type: integer
+      required:
+        - data
+        - total
+        - page
+        - totalPages
+
+    # INVESTMENT
+    Investment:
+      type: object
+      properties:
+        id:
+          type: integer
+        userId:
+          type: integer
+        amount:
+          type: number
+        riskLevel:
+          type: string
+        isActive:
+          type: boolean
+        autoCompound:
+          type: boolean
+        totalProfit:
+          type: number
+        dailyProfit:
+          type: number
+        drawdown:
+          type: number
+        startedAt:
+          type: ["string", "null"]
+        stoppedAt:
+          type: ["string", "null"]
+      required:
+        - id
+        - userId
+        - amount
+        - riskLevel
+        - isActive
+        - autoCompound
+        - totalProfit
+        - dailyProfit
+        - drawdown
+
+    StartInvestmentBody:
+      type: object
+      properties:
+        amount:
+          type: number
+        riskLevel:
+          type: string
+      required:
+        - amount
+        - riskLevel
+
+    CompoundingBody:
+      type: object
+      properties:
+        autoCompound:
+          type: boolean
+      required:
+        - autoCompound
+
+    Trade:
+      type: object
+      properties:
+        id:
+          type: integer
+        symbol:
+          type: string
+        direction:
+          type: string
+        entryPrice:
+          type: number
+        exitPrice:
+          type: number
+        profit:
+          type: number
+        profitPercent:
+          type: number
+        executedAt:
+          type: string
+      required:
+        - id
+        - symbol
+        - direction
+        - entryPrice
+        - exitPrice
+        - profit
+        - profitPercent
+        - executedAt
+
+    # REFERRAL
+    Referral:
+      type: object
+      properties:
+        referralCode:
+          type: string
+        totalReferred:
+          type: integer
+        activeReferrals:
+          type: integer
+        totalEarned:
+          type: number
+        monthlyEarnings:
+          type: number
+      required:
+        - referralCode
+        - totalReferred
+        - activeReferrals
+        - totalEarned
+        - monthlyEarnings
+
+    ReferredUser:
+      type: object
+      properties:
+        id:
+          type: integer
+        fullName:
+          type: string
+        email:
+          type: string
+        investmentAmount:
+          type: number
+        isActive:
+          type: boolean
+        joinedAt:
+          type: string
+      required:
+        - id
+        - fullName
+        - email
+        - investmentAmount
+        - isActive
+        - joinedAt
+
+    # DASHBOARD
+    DashboardSummary:
+      type: object
+      properties:
+        totalBalance:
+          type: number
+        dailyProfitLoss:
+          type: number
+        dailyProfitPercent:
+          type: number
+        activeInvestment:
+          type: number
+        totalProfit:
+          type: number
+        profitBalance:
+          type: number
+        tradingBalance:
+          type: number
+        nextPayoutDate:
+          type: string
+        daysUntilPayout:
+          type: integer
+        riskLevel:
+          type: ["string", "null"]
+        isTrading:
+          type: boolean
+      required:
+        - totalBalance
+        - dailyProfitLoss
+        - dailyProfitPercent
+        - activeInvestment
+        - totalProfit
+        - profitBalance
+        - tradingBalance
+        - nextPayoutDate
+        - daysUntilPayout
+        - isTrading
+
+    EquityPoint:
+      type: object
+      properties:
+        date:
+          type: string
+        equity:
+          type: number
+        profit:
+          type: number
+      required:
+        - date
+        - equity
+        - profit
+
+    # ADMIN
+    AdminStats:
+      type: object
+      properties:
+        totalUsers:
+          type: integer
+        activeInvestors:
+          type: integer
+        totalAUM:
+          type: number
+        totalProfitPaid:
+          type: number
+        pendingWithdrawals:
+          type: integer
+        pendingWithdrawalAmount:
+          type: number
+        dailyProfitPercent:
+          type: number
+      required:
+        - totalUsers
+        - activeInvestors
+        - totalAUM
+        - totalProfitPaid
+        - pendingWithdrawals
+        - pendingWithdrawalAmount
+        - dailyProfitPercent
+
+    SetDailyProfitBody:
+      type: object
+      properties:
+        profitPercent:
+          type: number
+      required:
+        - profitPercent
+
+    AdminUser:
+      type: object
+      properties:
+        id:
+          type: integer
+        email:
+          type: string
+        fullName:
+          type: string
+        isAdmin:
+          type: boolean
+        mainBalance:
+          type: number
+        tradingBalance:
+          type: number
+        profitBalance:
+          type: number
+        investmentAmount:
+          type: number
+        isTrading:
+          type: boolean
+        referralCode:
+          type: string
+        createdAt:
+          type: string
+      required:
+        - id
+        - email
+        - fullName
+        - isAdmin
+        - mainBalance
+        - tradingBalance
+        - profitBalance
+        - investmentAmount
+        - isTrading
+        - referralCode
+        - createdAt
+
+    AdminUserList:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdminUser"
+        total:
+          type: integer
+        page:
+          type: integer
+        totalPages:
+          type: integer
+      required:
+        - data
+        - total
+        - page
+        - totalPages
+
+    WithdrawalRequest:
+      type: object
+      properties:
+        id:
+          type: integer
+        userId:
+          type: integer
+        userEmail:
+          type: string
+        userFullName:
+          type: string
+        amount:
+          type: number
+        walletAddress:
+          type: string
+        status:
+          type: string
+        requestedAt:
+          type: string
+        processedAt:
+          type: ["string", "null"]
+      required:
+        - id
+        - userId
+        - userEmail
+        - userFullName
+        - amount
+        - walletAddress
+        - status
+        - requestedAt

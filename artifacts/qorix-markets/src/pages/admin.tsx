@@ -1,0 +1,183 @@
+import { useGetAdminStats, useGetPendingWithdrawals, useApproveWithdrawal, useRejectWithdrawal, useSetDailyProfit } from "@workspace/api-client-react";
+import { Layout } from "@/components/layout";
+import { AnimatedCounter } from "@/components/animated-counter";
+import { motion } from "framer-motion";
+import { Users, Activity, Wallet, CheckCircle, XCircle, ArrowUpFromLine } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { useQueryClient } from "@tanstack/react-query";
+import { getGetPendingWithdrawalsQueryKey, getGetAdminStatsQueryKey } from "@workspace/api-client-react";
+import { useState } from "react";
+import { format } from "date-fns";
+
+export default function AdminPage() {
+  const { data: stats, isLoading: statsLoading } = useGetAdminStats();
+  const { data: withdrawals, isLoading: wLoading } = useGetPendingWithdrawals();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const [profitInput, setProfitInput] = useState("");
+
+  const approveMutation = useApproveWithdrawal({
+    mutation: {
+      onSuccess: () => {
+        toast({ title: "Withdrawal approved" });
+        queryClient.invalidateQueries({ queryKey: getGetPendingWithdrawalsQueryKey() });
+      }
+    }
+  });
+
+  const rejectMutation = useRejectWithdrawal({
+    mutation: {
+      onSuccess: () => {
+        toast({ title: "Withdrawal rejected" });
+        queryClient.invalidateQueries({ queryKey: getGetPendingWithdrawalsQueryKey() });
+      }
+    }
+  });
+
+  const profitMutation = useSetDailyProfit({
+    mutation: {
+      onSuccess: () => {
+        toast({ title: "Daily profit distributed", description: "All active users have been credited." });
+        queryClient.invalidateQueries({ queryKey: getGetAdminStatsQueryKey() });
+        setProfitInput("");
+      },
+      onError: (err: any) => {
+        toast({ title: "Failed", description: err.message, variant: "destructive" });
+      }
+    }
+  });
+
+  return (
+    <Layout>
+      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight text-primary">Admin Control Panel</h1>
+          <p className="text-muted-foreground">System overview and operations.</p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="glass-card p-5 rounded-xl border-primary/20">
+            <h3 className="text-sm font-medium text-muted-foreground mb-2 flex items-center gap-2">
+              <Users className="w-4 h-4" /> Total Users
+            </h3>
+            <div className="text-2xl font-bold">{stats?.totalUsers || 0}</div>
+            <p className="text-xs text-muted-foreground mt-1">{stats?.activeInvestors || 0} active investors</p>
+          </div>
+          
+          <div className="glass-card p-5 rounded-xl border-primary/20">
+            <h3 className="text-sm font-medium text-muted-foreground mb-2 flex items-center gap-2">
+              <Wallet className="w-4 h-4" /> Total AUM
+            </h3>
+            <div className="text-2xl font-bold"><AnimatedCounter value={stats?.totalAUM || 0} prefix="$" /></div>
+          </div>
+          
+          <div className="glass-card p-5 rounded-xl border-primary/20">
+            <h3 className="text-sm font-medium text-muted-foreground mb-2 flex items-center gap-2">
+              <Activity className="w-4 h-4" /> Profit Paid Out
+            </h3>
+            <div className="text-2xl font-bold profit-text"><AnimatedCounter value={stats?.totalProfitPaid || 0} prefix="$" /></div>
+          </div>
+
+          <div className="glass-card p-5 rounded-xl border-amber-500/20 bg-amber-500/5">
+            <h3 className="text-sm font-medium text-muted-foreground mb-2 flex items-center gap-2">
+              <ArrowUpFromLine className="w-4 h-4" /> Pending W/D
+            </h3>
+            <div className="text-2xl font-bold text-amber-500"><AnimatedCounter value={stats?.pendingWithdrawalAmount || 0} prefix="$" /></div>
+            <p className="text-xs text-muted-foreground mt-1">{stats?.pendingWithdrawals || 0} requests</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="glass-card p-6 rounded-xl">
+            <h2 className="text-xl font-bold mb-4">Distribute Daily Profit</h2>
+            <p className="text-sm text-muted-foreground mb-4">Set the base profit percentage for today. Risk multipliers will be applied automatically (Conservative 1x, Balanced 1.5x, Aggressive 2.5x).</p>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="text-sm text-muted-foreground">Base %</label>
+                <div className="flex gap-2 mt-1">
+                  <input 
+                    type="number" 
+                    step="0.1"
+                    value={profitInput} 
+                    onChange={(e) => setProfitInput(e.target.value)}
+                    className="flex-1 bg-black/50 border border-white/10 rounded-lg p-3 text-white focus:ring-1 focus:ring-primary"
+                    placeholder="e.g. 2.5"
+                  />
+                  <button 
+                    onClick={() => profitMutation.mutate({ data: { profitPercent: Number(profitInput) } })}
+                    disabled={profitMutation.isPending || !profitInput}
+                    className="bg-primary hover:bg-primary/90 text-white px-6 rounded-lg font-medium transition-colors disabled:opacity-50"
+                  >
+                    Execute
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="lg:col-span-2 glass-card rounded-xl overflow-hidden flex flex-col h-[400px]">
+            <div className="p-6 border-b border-white/10 shrink-0">
+              <h2 className="text-xl font-bold">Pending Withdrawals</h2>
+            </div>
+            <div className="flex-1 overflow-y-auto">
+              <table className="w-full text-sm text-left">
+                <thead className="bg-white/5 border-b border-white/10 sticky top-0 backdrop-blur-md">
+                  <tr>
+                    <th className="px-4 py-3 font-medium text-muted-foreground">User</th>
+                    <th className="px-4 py-3 font-medium text-muted-foreground">Amount</th>
+                    <th className="px-4 py-3 font-medium text-muted-foreground">Address</th>
+                    <th className="px-4 py-3 font-medium text-muted-foreground">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5">
+                  {wLoading ? (
+                    <tr><td colSpan={4} className="px-6 py-8 text-center text-muted-foreground">Loading...</td></tr>
+                  ) : (!withdrawals || withdrawals.length === 0) ? (
+                    <tr><td colSpan={4} className="px-6 py-8 text-center text-muted-foreground">No pending requests.</td></tr>
+                  ) : (
+                    withdrawals.map((req) => (
+                      <tr key={req.id} className="hover:bg-white/5 transition-colors">
+                        <td className="px-4 py-3">
+                          <div className="font-medium">{req.userFullName}</div>
+                          <div className="text-xs text-muted-foreground">{format(new Date(req.requestedAt), "MMM dd, HH:mm")}</div>
+                        </td>
+                        <td className="px-4 py-3 font-bold font-mono text-amber-500">
+                          ${req.amount.toFixed(2)}
+                        </td>
+                        <td className="px-4 py-3 font-mono text-xs text-muted-foreground truncate max-w-[150px]" title={req.walletAddress}>
+                          {req.walletAddress}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <button 
+                              onClick={() => approveMutation.mutate({ id: req.id, data: {} })}
+                              disabled={approveMutation.isPending || rejectMutation.isPending}
+                              className="p-1.5 bg-green-500/10 text-green-500 hover:bg-green-500/20 rounded disabled:opacity-50"
+                              title="Approve"
+                            >
+                              <CheckCircle className="w-4 h-4" />
+                            </button>
+                            <button 
+                              onClick={() => rejectMutation.mutate({ id: req.id, data: {} })}
+                              disabled={approveMutation.isPending || rejectMutation.isPending}
+                              className="p-1.5 bg-red-500/10 text-red-500 hover:bg-red-500/20 rounded disabled:opacity-50"
+                              title="Reject"
+                            >
+                              <XCircle className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+      </motion.div>
+    </Layout>
+  );
+}

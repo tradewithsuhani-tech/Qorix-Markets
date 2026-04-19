@@ -358,6 +358,18 @@ export async function customFetch<T = unknown>(
     }
   }
 
+  // QORIX APP: Automatically append token from localStorage
+  if (!headers.has("authorization")) {
+    try {
+      const token = localStorage.getItem("qorix_token");
+      if (token) {
+        headers.set("authorization", `Bearer ${token}`);
+      }
+    } catch (e) {
+      // ignore
+    }
+  }
+
   const requestInfo = { method, url: resolveUrl(input) };
 
   const response = await fetch(input, { ...init, method, headers });
