@@ -190,7 +190,7 @@ function PremiumHeroVisual({
       initial={{ opacity: 0, scale: 0.94, rotateX: 8, y: 24 }}
       animate={{ opacity: 1, scale: 1, rotateX: 0, y: 0 }}
       transition={{ duration: 0.8, delay: 0.18, ease: "easeOut" }}
-      className="premium-3d-stage"
+      className="premium-3d-stage w-full max-w-[580px] mx-auto lg:max-w-none"
     >
       <div className="premium-3d-card relative overflow-hidden rounded-[2rem] p-5 md:p-6">
         <div className="absolute inset-0 premium-grid-mask" />
@@ -207,7 +207,7 @@ function PremiumHeroVisual({
           </div>
         </div>
 
-        <div className="relative h-[330px] md:h-[380px]">
+        <div className="relative h-[300px] sm:h-[340px] md:h-[380px]">
           <div className="absolute inset-x-4 top-8 h-64 premium-orbit-wrap">
             <div className="premium-orbit premium-orbit-a" />
             <div className="premium-orbit premium-orbit-b" />
@@ -234,7 +234,7 @@ function PremiumHeroVisual({
           </div>
 
           <motion.div
-            className="absolute left-0 top-6 w-40 rounded-2xl border border-white/10 bg-white/[0.06] p-4 backdrop-blur-xl shadow-2xl"
+            className="hidden sm:block absolute left-0 top-6 w-40 rounded-2xl border border-white/10 bg-white/[0.06] p-4 backdrop-blur-xl shadow-2xl"
             animate={{ y: [0, -10, 0], rotate: [-1, 1, -1] }}
             transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
           >
@@ -247,7 +247,7 @@ function PremiumHeroVisual({
           </motion.div>
 
           <motion.div
-            className="absolute right-0 top-20 w-44 rounded-2xl border border-emerald-400/20 bg-emerald-500/[0.08] p-4 backdrop-blur-xl shadow-2xl"
+            className="hidden sm:block absolute right-0 top-20 w-44 rounded-2xl border border-emerald-400/20 bg-emerald-500/[0.08] p-4 backdrop-blur-xl shadow-2xl"
             animate={{ y: [0, 12, 0], rotate: [1, -1, 1] }}
             transition={{ duration: 7, repeat: Infinity, ease: "easeInOut" }}
           >
@@ -260,7 +260,7 @@ function PremiumHeroVisual({
           </motion.div>
 
           <motion.div
-            className="absolute left-7 bottom-14 w-44 rounded-2xl border border-amber-400/20 bg-amber-500/[0.08] p-4 backdrop-blur-xl shadow-2xl"
+            className="hidden sm:block absolute left-7 bottom-14 w-44 rounded-2xl border border-amber-400/20 bg-amber-500/[0.08] p-4 backdrop-blur-xl shadow-2xl"
             animate={{ y: [0, 10, 0], rotate: [1, -0.5, 1] }}
             transition={{ duration: 6.5, repeat: Infinity, ease: "easeInOut" }}
           >
@@ -273,7 +273,7 @@ function PremiumHeroVisual({
           </motion.div>
 
           <motion.div
-            className="absolute right-6 bottom-8 w-44 rounded-2xl border border-violet-400/20 bg-violet-500/[0.08] p-4 backdrop-blur-xl shadow-2xl"
+            className="hidden sm:block absolute right-6 bottom-8 w-44 rounded-2xl border border-violet-400/20 bg-violet-500/[0.08] p-4 backdrop-blur-xl shadow-2xl"
             animate={{ y: [0, -8, 0], rotate: [-1, 0.8, -1] }}
             transition={{ duration: 5.8, repeat: Infinity, ease: "easeInOut" }}
           >
