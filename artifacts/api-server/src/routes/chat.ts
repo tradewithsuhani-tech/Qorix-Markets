@@ -97,6 +97,23 @@ router.post("/chat/bot-message", authMiddleware, async (req: AuthRequest, res: R
   }
 });
 
+// End chat (user-initiated)
+router.post("/chat/session/:id/end", authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const sessionId = parseInt(req.params.id);
+    const session = await db.select().from(chatSessionsTable).where(eq(chatSessionsTable.id, sessionId)).limit(1);
+
+    if (!session.length || session[0].userId !== req.userId!) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+
+    await db.update(chatSessionsTable).set({ status: "resolved" }).where(eq(chatSessionsTable.id, sessionId));
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to end session" });
+  }
+});
+
 // Request expert
 router.post("/chat/expert", authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
