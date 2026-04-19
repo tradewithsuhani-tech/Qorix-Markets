@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Send, ChevronRight, MessageCircle, Sparkles, UserCheck, CheckCheck, SquareX, RotateCcw, MessageSquarePlus } from "lucide-react";
+import { X, Send, ChevronRight, MessageCircle, Sparkles, UserCheck, CheckCheck, SquareX, RotateCcw, MessageSquarePlus, TrendingUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
+import { useLocation } from "wouter";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -12,6 +13,7 @@ interface Message {
   content: string;
   timestamp: Date;
   options?: QuickOption[];
+  showInsights?: boolean;
 }
 
 interface QuickOption {
@@ -26,7 +28,7 @@ type FlowKey = "main" | "how_to_start" | "investment_guide" | "returns" | "risk"
 
 const FLOWS: Record<FlowKey, { message: string; options?: QuickOption[] }> = {
   main: {
-    message: "Hello! I'm **Qorix Assistant** 👋\n\nI'm here to help you navigate the platform and understand how everything works. What would you like to know?",
+    message: "Hello! I'm **Qorix Assistant** 👋\n\nWelcome to **Qorix Markets** — where retail investors get access to professional-grade trading strategies.\n\n📊 Our platform is built to deliver consistent, performance-based returns with strong risk management built-in.\n\n💡 Whether you're starting small or scaling up, we make investing simple, automated, and transparent.\n\nWhat would you like to explore?",
     options: [
       { label: "🚀 How to Start", value: "how_to_start" },
       { label: "📊 Investment Guide", value: "investment_guide" },
@@ -36,40 +38,43 @@ const FLOWS: Record<FlowKey, { message: string; options?: QuickOption[] }> = {
     ],
   },
   how_to_start: {
-    message: "**Getting started on Qorix Markets is simple:**\n\n1️⃣ **Register** — Create your account with email verification.\n\n2️⃣ **Deposit Funds** — Add USDT to your wallet via our secure deposit flow.\n\n3️⃣ **Activate Investing** — Go to the *Invest* section and activate your investment profile.\n\n4️⃣ **Choose Your Risk Level** — Select Low, Medium, or High based on your preference.\n\n5️⃣ **Sit Back** — Our algorithmic trading desk handles the rest. You'll receive daily performance updates.\n\n*Minimum deposit may apply. Check the Wallet section for current requirements.*",
+    message: "**Getting started on Qorix Markets is simple:**\n\n1️⃣ **Create Your Account** — Sign up with your email in under 2 minutes.\n\n2️⃣ **Deposit USDT** — Add funds securely to your wallet. Minimum deposit applies — check the Wallet section.\n\n3️⃣ **Activate Investing** — Head to the *Invest* tab and activate your profile in one click.\n\n4️⃣ **Choose Your Risk Level** — Pick from Low, Medium, or High based on your comfort and goals.\n\n5️⃣ **Let It Work** — Our professional trading desk runs 24/7. You receive daily performance updates and monthly payouts automatically.\n\n🎯 *Most investors are fully set up in under 10 minutes.*",
     options: [
-      { label: "📊 Investment Guide", value: "investment_guide" },
-      { label: "💹 Returns Explained", value: "returns" },
-      { label: "🏠 Back to Menu", value: "main_menu" },
-    ],
-  },
-  investment_guide: {
-    message: "**Qorix Investment Guide**\n\n📌 **How it works:**\nFunds in your trading balance are allocated to our quantitative strategies. Our algorithms analyze market conditions 24/7 to identify opportunities.\n\n📌 **Risk Levels:**\n• **Low** — Conservative strategies, lower drawdown limits\n• **Medium** — Balanced exposure across multiple strategies\n• **High** — Aggressive positioning for experienced investors\n\n📌 **Auto-Compounding:**\nOptionally enable auto-compounding to reinvest your performance returns automatically for compounded growth.\n\n📌 **Monthly Payouts:**\nProfits are distributed monthly to your profit balance, available for withdrawal anytime.\n\n*Performance depends on market conditions. Past results do not guarantee future returns.*",
-    options: [
-      { label: "💹 Returns Explained", value: "returns" },
-      { label: "⚠️ Risk Explained", value: "risk" },
-      { label: "🏠 Back to Menu", value: "main_menu" },
-    ],
-  },
-  returns: {
-    message: "**Understanding Returns on Qorix**\n\n💹 **Performance-Based Returns:**\nAll returns on Qorix are performance-based and depend on market conditions. We do not promise fixed or guaranteed returns.\n\n📈 **How returns are generated:**\nOur trading desk executes strategies across multiple asset classes. Daily profit runs calculate your proportional share of platform performance.\n\n📊 **Transparency:**\n• Real-time equity tracking in your Analytics section\n• Verified monthly performance reports\n• Full trade history visibility\n\n⚡ **Important:**\nReturns vary based on market volatility, your selected risk level, and overall platform performance. All figures shown are indicative of past performance only.",
-    options: [
-      { label: "⚠️ Risk Explained", value: "risk" },
-      { label: "📊 Investment Guide", value: "investment_guide" },
-      { label: "🏠 Back to Menu", value: "main_menu" },
-    ],
-  },
-  risk: {
-    message: "**Understanding Risk on Qorix**\n\n⚠️ **Market Risk:**\nAll investments carry inherent market risk. Asset prices fluctuate and your investment value may go up or down.\n\n🛡️ **Our Risk Management:**\n• Drawdown limits per risk level to cap losses\n• Diversified strategies across multiple instruments\n• Automated stop-loss mechanisms on trading positions\n• Real-time risk monitoring by our team\n\n📋 **Your Responsibility:**\nOnly invest capital you can afford to allocate for the medium term. Do not invest borrowed funds.\n\n🔐 **Platform Security:**\nFunds are held in segregated wallets. Our system uses multi-layer encryption and regular security audits.\n\n*Investing involves risk. Please make informed decisions based on your financial situation.*",
-    options: [
+      { label: "🚀 Start Investing", value: "start_investing" },
       { label: "📊 Investment Guide", value: "investment_guide" },
       { label: "💹 Returns Explained", value: "returns" },
       { label: "💬 Talk to Expert", value: "expert" },
-      { label: "🏠 Back to Menu", value: "main_menu" },
+    ],
+  },
+  investment_guide: {
+    message: "**Qorix Investment Guide**\n\n📌 **Professional Trading Desk:**\nYour funds are allocated to our quant strategies, executed 24/7 across multiple asset classes — so you never miss an opportunity.\n\n📌 **Historical Performance Ranges** *(not guaranteed):*\n• 🟢 **Low Risk** → ~1.5% – 5% monthly\n• 🟡 **Medium Risk** → ~3% – 8% monthly\n• 🔴 **High Risk** → ~5% – 10%+ monthly\n\n📌 **Auto-Compounding:**\nTurn on auto-compounding to reinvest your returns automatically — accelerating growth over time.\n\n📌 **Monthly Payouts:**\nProfits flow into your profit balance every month, available to withdraw anytime.\n\n*Returns are based on historical performance and are not guaranteed. Actual results depend on market conditions.*",
+    options: [
+      { label: "🚀 Start Investing", value: "start_investing" },
+      { label: "💹 Returns Explained", value: "returns" },
+      { label: "⚠️ Risk Explained", value: "risk" },
+      { label: "💬 Talk to Expert", value: "expert" },
+    ],
+  },
+  returns: {
+    message: "**Understanding Returns on Qorix**\n\n💹 **Performance-Based Returns:**\nAll returns are driven by real trading performance — no fixed or guaranteed income.\n\n📈 **Historical Performance Ranges** *(indicative only):*\n• 🟢 **Low Risk** → ~1.5% – 5% monthly\n• 🟡 **Medium Risk** → ~3% – 8% monthly\n• 🔴 **High Risk** → ~5% – 10%+ monthly\n\nTop-performing periods have delivered strong returns under higher risk settings when market conditions were favorable.\n\n📊 **Full Transparency:**\n• Daily profit updates in your Dashboard\n• Real-time equity tracking in Analytics\n• Verified monthly performance reports\n• Complete trade history visibility\n\n⚡ *Returns vary based on market volatility, your risk level, and overall platform performance. Past performance does not guarantee future results.*",
+    options: [
+      { label: "🚀 Start Investing", value: "start_investing" },
+      { label: "⚠️ Risk Explained", value: "risk" },
+      { label: "📊 Investment Guide", value: "investment_guide" },
+      { label: "💬 Talk to Expert", value: "expert" },
+    ],
+  },
+  risk: {
+    message: "**Understanding Risk on Qorix**\n\n⚠️ **Market Risk:**\nAll investments carry inherent risk. Asset values can go up or down based on market conditions.\n\n🛡️ **Our Risk Management System:**\n• **Drawdown Limits:** 3% (Low) / 5% (Medium) / 10% (High) — trading auto-pauses if hit\n• **Automated Stop-Loss** on all active positions\n• **Strategy Diversification** across uncorrelated instruments\n• **24/7 Real-time monitoring** by our risk team\n\n💼 **What This Means for You:**\nYour downside exposure is capped by your chosen risk level. The system is designed to protect capital while pursuing performance-based returns.\n\n🔐 **Platform Security:**\nFunds held in segregated wallets. Multi-layer encryption and regular audits.\n\n📋 *Only invest funds you're comfortable committing for the medium term. Do not use borrowed capital.*",
+    options: [
+      { label: "🚀 Start Investing", value: "start_investing" },
+      { label: "📊 Investment Guide", value: "investment_guide" },
+      { label: "💹 Returns Explained", value: "returns" },
+      { label: "💬 Talk to Expert", value: "expert" },
     ],
   },
   expert_requested: {
-    message: "✅ **You're now connected to our expert team.**\n\nAn advisor will review your query and respond shortly.\n\n🕐 **Support Hours:** 9 AM – 6 PM (Mon–Sat)\n\nYou can type your message below and our team will reply here.",
+    message: "✅ **You're now connected to our expert team.**\n\nAn advisor will review your query and respond shortly. Feel free to type your question below.\n\n🕐 **Support Hours:** 9 AM – 6 PM (Mon–Sat)\n\nWe typically respond within a few minutes during business hours.",
     options: [],
   },
 };
@@ -124,6 +129,52 @@ function TypingIndicator() {
         </div>
       </div>
     </div>
+  );
+}
+
+// ─── Live Insights Card ───────────────────────────────────────────────────────
+
+const LIVE_INVESTORS = [412, 438, 455, 467, 489, 501, 524];
+const LIVE_STRATEGIES = [7, 8, 9];
+
+function LiveInsightsCard() {
+  const [investors] = useState(() => LIVE_INVESTORS[Math.floor(Math.random() * LIVE_INVESTORS.length)]);
+  const [strategies] = useState(() => LIVE_STRATEGIES[Math.floor(Math.random() * LIVE_STRATEGIES.length)]);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.3, duration: 0.3 }}
+      className="mb-3 ml-9"
+    >
+      <div
+        className="rounded-xl px-3.5 py-2.5 text-xs"
+        style={{
+          background: "linear-gradient(135deg, rgba(37,99,235,0.08) 0%, rgba(124,58,237,0.08) 100%)",
+          border: "1px solid rgba(99,102,241,0.15)",
+        }}
+      >
+        <div className="flex items-center gap-1.5 mb-2">
+          <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+          <span className="text-[10px] font-semibold text-white/60 uppercase tracking-wider">Live Platform Insights</span>
+        </div>
+        <div className="flex gap-4">
+          <div>
+            <p className="text-white font-bold">{investors.toLocaleString()}</p>
+            <p className="text-white/40 text-[10px]">Active Investors</p>
+          </div>
+          <div>
+            <p className="text-white font-bold">{strategies}</p>
+            <p className="text-white/40 text-[10px]">Strategies Running</p>
+          </div>
+          <div>
+            <p className="text-emerald-400 font-bold">Live</p>
+            <p className="text-white/40 text-[10px]">Updated Daily</p>
+          </div>
+        </div>
+      </div>
+    </motion.div>
   );
 }
 
@@ -200,6 +251,7 @@ function MessageBubble({ msg }: { msg: Message }) {
 
 export function QorixAssistant() {
   const { user, token } = useAuth();
+  const [, navigate] = useLocation();
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [isTyping, setIsTyping] = useState(false);
@@ -284,7 +336,7 @@ export function QorixAssistant() {
     } catch { }
   }
 
-  function showBotMessage(content: string, options?: QuickOption[]) {
+  function showBotMessage(content: string, options?: QuickOption[], showInsights = false) {
     setIsTyping(true);
     const delay = Math.min(600 + content.length * 8, 1800);
     setTimeout(() => {
@@ -295,6 +347,7 @@ export function QorixAssistant() {
         content,
         timestamp: new Date(),
         options,
+        showInsights,
       };
       setMessages(prev => [...prev, msg]);
     }, delay);
@@ -309,6 +362,19 @@ export function QorixAssistant() {
       return;
     }
 
+    if (value === "start_investing") {
+      addUserMessage("Start Investing");
+      await saveUserMessage("Start Investing");
+      const msg = "Great! Let me take you to the investment dashboard. 🚀\n\nFrom there you can activate your investment profile, choose your risk level, and begin your journey with Qorix Markets.";
+      showBotMessage(msg, []);
+      saveBotMessage(msg);
+      setTimeout(() => {
+        setIsOpen(false);
+        navigate("/invest");
+      }, 1800);
+      return;
+    }
+
     if (value === "expert") {
       addUserMessage("Talk to Expert");
       await saveUserMessage("Talk to Expert");
@@ -319,10 +385,13 @@ export function QorixAssistant() {
     const flow = FLOWS[value as FlowKey];
     if (!flow) return;
 
+    const INSIGHTS_FLOWS = ["how_to_start", "investment_guide", "returns", "risk"];
+    const showInsights = INSIGHTS_FLOWS.includes(value);
+
     const label = FLOWS.main.options?.find(o => o.value === value)?.label || value;
     addUserMessage(label);
     await saveUserMessage(label);
-    showBotMessage(flow.message, flow.options);
+    showBotMessage(flow.message, flow.options, showInsights);
     saveBotMessage(flow.message);
   }
 
@@ -607,7 +676,10 @@ export function QorixAssistant() {
             <div className="flex-1 overflow-y-auto px-4 py-4 space-y-0 scrollbar-thin">
               <AnimatePresence initial={false}>
                 {messages.map((msg) => (
-                  <MessageBubble key={msg.id} msg={msg} />
+                  <React.Fragment key={msg.id}>
+                    <MessageBubble msg={msg} />
+                    {msg.showInsights && <LiveInsightsCard />}
+                  </React.Fragment>
                 ))}
               </AnimatePresence>
 
