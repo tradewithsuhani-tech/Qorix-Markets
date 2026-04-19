@@ -162,8 +162,13 @@ export const GetInvestmentResponse = zod.object({
   totalProfit: zod.number(),
   dailyProfit: zod.number(),
   drawdown: zod.number(),
+  drawdownLimit: zod.number().describe("Max drawdown percentage (e.g. 5 = 5%)"),
+  isPaused: zod
+    .boolean()
+    .describe("True when capital protection was triggered"),
   startedAt: zod.string().nullish(),
   stoppedAt: zod.string().nullish(),
+  pausedAt: zod.string().nullish(),
 });
 
 /**
@@ -184,8 +189,13 @@ export const StartInvestmentResponse = zod.object({
   totalProfit: zod.number(),
   dailyProfit: zod.number(),
   drawdown: zod.number(),
+  drawdownLimit: zod.number().describe("Max drawdown percentage (e.g. 5 = 5%)"),
+  isPaused: zod
+    .boolean()
+    .describe("True when capital protection was triggered"),
   startedAt: zod.string().nullish(),
   stoppedAt: zod.string().nullish(),
+  pausedAt: zod.string().nullish(),
 });
 
 /**
@@ -201,8 +211,39 @@ export const StopInvestmentResponse = zod.object({
   totalProfit: zod.number(),
   dailyProfit: zod.number(),
   drawdown: zod.number(),
+  drawdownLimit: zod.number().describe("Max drawdown percentage (e.g. 5 = 5%)"),
+  isPaused: zod
+    .boolean()
+    .describe("True when capital protection was triggered"),
   startedAt: zod.string().nullish(),
   stoppedAt: zod.string().nullish(),
+  pausedAt: zod.string().nullish(),
+});
+
+/**
+ * @summary Update capital protection drawdown limit
+ */
+export const UpdateProtectionBody = zod.object({
+  drawdownLimit: zod.number().describe("Max drawdown percentage (3, 5, or 10)"),
+});
+
+export const UpdateProtectionResponse = zod.object({
+  id: zod.number(),
+  userId: zod.number(),
+  amount: zod.number(),
+  riskLevel: zod.string(),
+  isActive: zod.boolean(),
+  autoCompound: zod.boolean(),
+  totalProfit: zod.number(),
+  dailyProfit: zod.number(),
+  drawdown: zod.number(),
+  drawdownLimit: zod.number().describe("Max drawdown percentage (e.g. 5 = 5%)"),
+  isPaused: zod
+    .boolean()
+    .describe("True when capital protection was triggered"),
+  startedAt: zod.string().nullish(),
+  stoppedAt: zod.string().nullish(),
+  pausedAt: zod.string().nullish(),
 });
 
 /**
@@ -222,8 +263,13 @@ export const ToggleCompoundingResponse = zod.object({
   totalProfit: zod.number(),
   dailyProfit: zod.number(),
   drawdown: zod.number(),
+  drawdownLimit: zod.number().describe("Max drawdown percentage (e.g. 5 = 5%)"),
+  isPaused: zod
+    .boolean()
+    .describe("True when capital protection was triggered"),
   startedAt: zod.string().nullish(),
   stoppedAt: zod.string().nullish(),
+  pausedAt: zod.string().nullish(),
 });
 
 /**

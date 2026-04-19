@@ -113,14 +113,24 @@ export async function distributeDailyProfit(
       const amount = parseFloat(inv.amount as string);
       const totalProfit = parseFloat(inv.totalProfit as string);
       const currentDrawdown = parseFloat(inv.drawdown as string);
-      const drawdownLimit = (DRAWDOWN_LIMITS[inv.riskLevel] ?? 0.05) * amount;
+      const drawdownLimitPct = parseFloat(inv.drawdownLimit as string) || (DRAWDOWN_LIMITS[inv.riskLevel] ?? 0.05) * 100;
+      const drawdownLimitAmt = (drawdownLimitPct / 100) * amount;
 
-      if (currentDrawdown >= drawdownLimit) {
+      if (currentDrawdown >= drawdownLimitAmt) {
         await tx
           .update(investmentsTable)
-          .set({ isActive: false, stoppedAt: new Date() })
+          .set({ isActive: false, isPaused: true, stoppedAt: new Date(), pausedAt: new Date() })
           .where(eq(investmentsTable.userId, inv.userId));
-        logger.info({ userId: inv.userId }, "Investment stopped: drawdown limit reached");
+
+        await tx.insert(transactionsTable).values({
+          userId: inv.userId,
+          type: "system",
+          amount: "0",
+          status: "completed",
+          description: `Capital Protection triggered: drawdown limit of ${drawdownLimitPct}% reached. Trading paused automatically.`,
+        });
+
+        logger.info({ userId: inv.userId, drawdownLimitPct }, "Investment paused: capital protection triggered");
         continue;
       }
 

@@ -26,6 +26,7 @@ export * from "./healthStatus";
 export * from "./investment";
 export * from "./loginBody";
 export * from "./performanceMetrics";
+export * from "./protectionBody";
 export * from "./referral";
 export * from "./referredUser";
 export * from "./registerBody";

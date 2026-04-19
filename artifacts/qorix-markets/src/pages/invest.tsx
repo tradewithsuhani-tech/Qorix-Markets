@@ -3,6 +3,7 @@ import {
   useStartInvestment,
   useStopInvestment,
   useToggleCompounding,
+  useUpdateProtection,
   useGetWallet,
   getGetWalletQueryKey,
   getGetInvestmentQueryKey,
@@ -108,6 +109,12 @@ const RISK_PROFILES = [
   },
 ];
 
+const RISK_DEFAULT_DRAWDOWN: Record<string, number> = {
+  low: 3,
+  medium: 5,
+  high: 10,
+};
+
 function RiskMeter({ score }: { score: number }) {
   return (
     <div className="flex items-center gap-1.5">
@@ -178,6 +185,253 @@ function ExpectedReturns({ profile, amount }: { profile: typeof RISK_PROFILES[0]
   );
 }
 
+type InvestmentData = {
+  isActive: boolean;
+  isPaused: boolean;
+  amount: number;
+  drawdown: number;
+  drawdownLimit: number;
+  riskLevel: string;
+  pausedAt?: string | null;
+  totalProfit: number;
+};
+
+function CapitalProtectionPanel({
+  investment,
+  pendingLimit,
+  setPendingLimit,
+  onSave,
+  isSaving,
+}: {
+  investment: InvestmentData;
+  pendingLimit: number | null;
+  setPendingLimit: (v: number) => void;
+  onSave: (limit: number) => void;
+  isSaving: boolean;
+}) {
+  const drawdownPct = investment.amount > 0
+    ? (investment.drawdown / investment.amount) * 100
+    : 0;
+  const limitPct = investment.drawdownLimit;
+  const usagePct = limitPct > 0 ? Math.min((drawdownPct / limitPct) * 100, 100) : 0;
+  const isTriggered = drawdownPct >= limitPct;
+  const selectedLimit = pendingLimit ?? limitPct;
+  const hasChanges = pendingLimit !== null && pendingLimit !== limitPct;
+
+  const statusColor = isTriggered
+    ? "text-red-400"
+    : usagePct > 70
+    ? "text-orange-400"
+    : "text-green-400";
+  const statusLabel = isTriggered ? "Triggered" : "Active";
+  const statusBg = isTriggered
+    ? "bg-red-500/15 text-red-400 border-red-500/25"
+    : usagePct > 70
+    ? "bg-orange-500/15 text-orange-400 border-orange-500/25"
+    : "bg-green-500/15 text-green-400 border-green-500/25";
+
+  const barColor = isTriggered
+    ? "#ef4444"
+    : usagePct > 70
+    ? "#f97316"
+    : "#22c55e";
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.15 }}
+      className="glass-card p-5 rounded-2xl"
+    >
+      <div className="flex items-center justify-between mb-5">
+        <div className="flex items-center gap-2">
+          <Shield style={{ width: 16, height: 16 }} className="text-blue-400" />
+          <h3 className="font-semibold">Capital Protection</h3>
+        </div>
+        <span className={`text-xs px-2.5 py-1 rounded-full border font-semibold flex items-center gap-1.5 ${statusBg}`}>
+          {!isTriggered && <span className="live-dot" style={{ width: 5, height: 5 }} />}
+          {statusLabel}
+        </span>
+      </div>
+
+      {/* Drawdown gauge */}
+      <div className="mb-5">
+        <div className="flex justify-between text-xs mb-2">
+          <span className="text-muted-foreground">Current Drawdown</span>
+          <span className={`font-bold ${statusColor}`}>
+            ${investment.drawdown.toFixed(2)} ({drawdownPct.toFixed(2)}%)
+          </span>
+        </div>
+        <div className="relative h-3 bg-white/5 rounded-full overflow-hidden">
+          <motion.div
+            initial={{ width: 0 }}
+            animate={{ width: `${usagePct}%` }}
+            transition={{ duration: 1, ease: "easeOut" }}
+            className="h-full rounded-full"
+            style={{ background: `linear-gradient(90deg, ${barColor}99, ${barColor})` }}
+          />
+        </div>
+        <div className="flex justify-between text-[10px] text-muted-foreground mt-1.5">
+          <span>$0</span>
+          <span>Limit: ${((investment.amount * limitPct) / 100).toFixed(2)} ({limitPct}%)</span>
+        </div>
+      </div>
+
+      {/* Stats row */}
+      <div className="grid grid-cols-3 gap-3 mb-5">
+        {[
+          { label: "Protection Limit", value: `${limitPct}%`, sub: `$${((investment.amount * limitPct) / 100).toFixed(2)}` },
+          { label: "Used", value: `${drawdownPct.toFixed(2)}%`, sub: `of ${limitPct}% limit` },
+          { label: "Remaining", value: `$${Math.max(0, (investment.amount * limitPct / 100) - investment.drawdown).toFixed(2)}`, sub: "buffer left" },
+        ].map((s) => (
+          <div key={s.label} className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.06] text-center">
+            <div className="text-[10px] text-muted-foreground mb-1">{s.label}</div>
+            <div className="font-bold text-sm">{s.value}</div>
+            <div className="text-[10px] text-muted-foreground mt-0.5">{s.sub}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Limit selector */}
+      <div className="pt-4 border-t border-white/8">
+        <div className="text-xs text-muted-foreground mb-2.5">Adjust protection limit</div>
+        <div className="flex gap-2 mb-3">
+          {[3, 5, 10].map((pct) => (
+            <button
+              key={pct}
+              onClick={() => setPendingLimit(pct)}
+              className={`flex-1 py-2.5 rounded-xl text-sm font-semibold border transition-all ${
+                selectedLimit === pct
+                  ? "bg-blue-500/20 text-blue-400 border-blue-500/40 shadow-[0_0_12px_rgba(59,130,246,0.15)]"
+                  : "bg-white/3 text-muted-foreground border-white/8 hover:border-white/15 hover:text-white"
+              }`}
+            >
+              {pct}%
+            </button>
+          ))}
+        </div>
+        <AnimatePresence>
+          {hasChanges && (
+            <motion.button
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              onClick={() => onSave(pendingLimit!)}
+              disabled={isSaving}
+              className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold transition-all disabled:opacity-60 flex items-center justify-center gap-2"
+            >
+              {isSaving ? (
+                <><RefreshCw style={{ width: 13, height: 13 }} className="animate-spin" /> Saving...</>
+              ) : (
+                <><CheckCircle style={{ width: 13, height: 13 }} /> Save Limit</>
+              )}
+            </motion.button>
+          )}
+        </AnimatePresence>
+      </div>
+    </motion.div>
+  );
+}
+
+function ProtectionTriggeredView({
+  investment,
+  activeProfile,
+  onRestart,
+}: {
+  investment: InvestmentData;
+  activeProfile: typeof RISK_PROFILES[0];
+  onRestart: () => void;
+}) {
+  const drawdownPct = investment.amount > 0
+    ? (investment.drawdown / investment.amount) * 100
+    : 0;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="space-y-5"
+    >
+      {/* Alert banner */}
+      <div className="glass-card p-6 md:p-8 rounded-2xl border border-red-500/30 relative overflow-hidden"
+        style={{ boxShadow: "0 0 30px rgba(239,68,68,0.12), 0 4px 24px rgba(0,0,0,0.4)" }}
+      >
+        <div className="absolute inset-0 bg-gradient-to-br from-red-500/10 to-transparent pointer-events-none" />
+        <div className="relative">
+          <div className="flex items-start gap-4 mb-6">
+            <div className="w-12 h-12 rounded-2xl bg-red-500/20 border border-red-500/30 flex items-center justify-center shrink-0">
+              <Shield style={{ width: 22, height: 22 }} className="text-red-400" />
+            </div>
+            <div>
+              <div className="flex items-center gap-3 mb-1">
+                <h2 className="text-xl font-bold text-red-400">Capital Protection Triggered</h2>
+              </div>
+              <p className="text-muted-foreground text-sm">
+                Your trading was automatically stopped because your drawdown reached the{" "}
+                <span className="text-white font-semibold">{investment.drawdownLimit}% protection limit</span>.
+                Your remaining capital is secured.
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            {[
+              { label: "Capital Invested", value: `$${investment.amount.toFixed(2)}`, color: "text-white" },
+              { label: "Total Drawdown", value: `$${investment.drawdown.toFixed(2)}`, color: "text-red-400" },
+              { label: "Drawdown %", value: `${drawdownPct.toFixed(2)}%`, color: "text-orange-400" },
+              { label: "Capital Preserved", value: `$${Math.max(0, investment.amount - investment.drawdown).toFixed(2)}`, color: "text-green-400" },
+            ].map((s) => (
+              <div key={s.label} className="stat-card p-4 rounded-xl">
+                <div className="text-xs text-muted-foreground mb-1">{s.label}</div>
+                <div className={`text-xl font-bold ${s.color}`}>{s.value}</div>
+              </div>
+            ))}
+          </div>
+
+          {investment.pausedAt && (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground mb-6">
+              <AlertTriangle style={{ width: 13, height: 13 }} className="text-orange-400" />
+              Protection triggered at {new Date(investment.pausedAt).toLocaleString()}
+            </div>
+          )}
+
+          <div className="flex flex-col sm:flex-row gap-3 pt-4 border-t border-white/8">
+            <button
+              onClick={onRestart}
+              className="flex-1 flex items-center justify-center gap-2 py-3 px-5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-semibold text-sm transition-all shadow-[0_0_20px_rgba(59,130,246,0.3)]"
+            >
+              <Play style={{ width: 14, height: 14 }} className="fill-current" />
+              Restart Trading
+            </button>
+            <div className="flex items-center gap-2 text-xs text-muted-foreground px-3 py-3 bg-white/3 border border-white/8 rounded-xl">
+              <Info style={{ width: 13, height: 13 }} />
+              Funds are safe in your wallet. Review your strategy before restarting.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Breakdown */}
+      <div className="glass-card p-5 rounded-2xl">
+        <h3 className="font-semibold text-sm mb-4 text-muted-foreground">What happened?</h3>
+        <div className="space-y-3 text-sm">
+          {[
+            { icon: TrendingUp, text: `You started trading with $${investment.amount.toFixed(2)} USDT at ${activeProfile.label} risk.`, color: "text-blue-400" },
+            { icon: AlertTriangle, text: `Market conditions caused a $${investment.drawdown.toFixed(2)} drawdown (${drawdownPct.toFixed(2)}% of your capital).`, color: "text-orange-400" },
+            { icon: Shield, text: `Your ${investment.drawdownLimit}% protection limit was reached, triggering an automatic stop.`, color: "text-red-400" },
+            { icon: CheckCircle, text: `$${Math.max(0, investment.amount - investment.drawdown).toFixed(2)} USDT has been secured in your wallet.`, color: "text-green-400" },
+          ].map(({ icon: Icon, text, color }, i) => (
+            <div key={i} className="flex items-start gap-3 p-3 rounded-xl bg-white/[0.02] border border-white/[0.04]">
+              <Icon style={{ width: 14, height: 14 }} className={`${color} mt-0.5 shrink-0`} />
+              <span className="text-muted-foreground">{text}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
 export default function InvestPage() {
   const { data: investment, isLoading } = useGetInvestment();
   const { data: wallet } = useGetWallet();
@@ -186,6 +440,7 @@ export default function InvestPage() {
 
   const [amount, setAmount] = useState("");
   const [riskLevel, setRiskLevel] = useState("MEDIUM");
+  const [pendingLimit, setPendingLimit] = useState<number | null>(null);
 
   const selectedProfile = useMemo(
     () => RISK_PROFILES.find(p => p.id === riskLevel) ?? RISK_PROFILES[1]!,
@@ -203,6 +458,9 @@ export default function InvestPage() {
         queryClient.invalidateQueries({ queryKey: getGetInvestmentQueryKey() });
         queryClient.invalidateQueries({ queryKey: getGetWalletQueryKey() });
         setAmount("");
+        if (pendingLimit !== null) {
+          protectionMutation.mutate({ data: { drawdownLimit: pendingLimit } });
+        }
       },
       onError: (err: any) => {
         toast({ title: "Failed to start", description: err.message, variant: "destructive" });
@@ -232,6 +490,19 @@ export default function InvestPage() {
     },
   });
 
+  const protectionMutation = useUpdateProtection({
+    mutation: {
+      onSuccess: () => {
+        toast({ title: "Protection updated", description: "Capital protection limit has been saved." });
+        queryClient.invalidateQueries({ queryKey: getGetInvestmentQueryKey() });
+        setPendingLimit(null);
+      },
+      onError: (err: any) => {
+        toast({ title: "Update failed", description: err.message, variant: "destructive" });
+      },
+    },
+  });
+
   const activeProfile = RISK_PROFILES.find(
     p => p.id === investment?.riskLevel?.toUpperCase()
   ) ?? RISK_PROFILES[1]!;
@@ -256,6 +527,16 @@ export default function InvestPage() {
           <div className="flex items-center justify-center py-20">
             <div className="animate-spin w-8 h-8 border-2 border-blue-500/30 border-t-blue-500 rounded-full" />
           </div>
+        ) : (investment?.isPaused && !investment?.isActive) ? (
+          /* ── PROTECTION TRIGGERED / PAUSED STATE ────────────────── */
+          <ProtectionTriggeredView
+            investment={investment}
+            activeProfile={RISK_PROFILES.find(p => p.id === investment.riskLevel?.toUpperCase()) ?? RISK_PROFILES[1]!}
+            onRestart={() => {
+              setAmount("");
+              queryClient.invalidateQueries({ queryKey: getGetInvestmentQueryKey() });
+            }}
+          />
         ) : investment?.isActive ? (
           /* ── ACTIVE INVESTMENT VIEW ──────────────────────────────── */
           <div className="space-y-5">
@@ -380,6 +661,15 @@ export default function InvestPage() {
                 ))}
               </div>
             </div>
+
+            {/* Capital Protection Panel */}
+            <CapitalProtectionPanel
+              investment={investment}
+              pendingLimit={pendingLimit}
+              setPendingLimit={setPendingLimit}
+              onSave={(limit) => protectionMutation.mutate({ data: { drawdownLimit: limit } })}
+              isSaving={protectionMutation.isPending}
+            />
           </div>
         ) : (
           /* ── SETUP VIEW ──────────────────────────────────────────── */
@@ -537,6 +827,42 @@ export default function InvestPage() {
 
             {/* Right: Summary + Deploy */}
             <div className="lg:col-span-2 space-y-4">
+              {/* Capital Protection Setup */}
+              <div className="glass-card p-5 rounded-2xl">
+                <div className="flex items-center gap-2 mb-4">
+                  <Shield style={{ width: 15, height: 15 }} className="text-blue-400" />
+                  <h3 className="font-semibold text-sm">Capital Protection</h3>
+                  <span className="ml-auto text-xs bg-green-500/15 text-green-400 border border-green-500/25 px-2 py-0.5 rounded-full">Always Active</span>
+                </div>
+                <p className="text-xs text-muted-foreground mb-3">
+                  Trading stops automatically if losses reach your set limit, protecting your capital.
+                </p>
+                <div className="grid grid-cols-3 gap-2">
+                  {[3, 5, 10].map((pct) => {
+                    const isSelected = (pendingLimit ?? (RISK_DEFAULT_DRAWDOWN[riskLevel.toLowerCase()] ?? 5)) === pct;
+                    return (
+                      <button
+                        key={pct}
+                        onClick={() => setPendingLimit(pct)}
+                        className={`py-2.5 rounded-xl text-sm font-semibold border transition-all ${
+                          isSelected
+                            ? "bg-blue-500/20 text-blue-400 border-blue-500/40 shadow-[0_0_12px_rgba(59,130,246,0.15)]"
+                            : "bg-white/3 text-muted-foreground border-white/8 hover:border-white/15 hover:text-white"
+                        }`}
+                      >
+                        {pct}%
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="mt-3 text-xs text-center text-muted-foreground">
+                  {pendingLimit !== null
+                    ? `Trading will stop if losses exceed ${pendingLimit}% of invested capital`
+                    : `Default: ${RISK_DEFAULT_DRAWDOWN[riskLevel.toLowerCase()] ?? 5}% for ${selectedProfile.label} strategy`
+                  }
+                </div>
+              </div>
+
               {/* Expected Returns Panel */}
               <div className="glass-card p-5 rounded-2xl">
                 <div className="flex items-center gap-2 mb-4">

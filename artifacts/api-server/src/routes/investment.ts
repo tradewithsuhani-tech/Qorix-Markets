@@ -7,6 +7,12 @@ import { StartInvestmentBody, ToggleCompoundingBody } from "@workspace/api-zod";
 const router = Router();
 router.use(authMiddleware);
 
+const RISK_DEFAULT_DRAWDOWN: Record<string, number> = {
+  low: 3,
+  medium: 5,
+  high: 10,
+};
+
 function formatInvestment(inv: typeof investmentsTable.$inferSelect) {
   return {
     id: inv.id,
@@ -14,12 +20,15 @@ function formatInvestment(inv: typeof investmentsTable.$inferSelect) {
     amount: parseFloat(inv.amount as string),
     riskLevel: inv.riskLevel,
     isActive: inv.isActive,
+    isPaused: inv.isPaused,
     autoCompound: inv.autoCompound,
     totalProfit: parseFloat(inv.totalProfit as string),
     dailyProfit: parseFloat(inv.dailyProfit as string),
     drawdown: parseFloat(inv.drawdown as string),
+    drawdownLimit: parseFloat(inv.drawdownLimit as string),
     startedAt: inv.startedAt?.toISOString() ?? null,
     stoppedAt: inv.stoppedAt?.toISOString() ?? null,
+    pausedAt: inv.pausedAt?.toISOString() ?? null,
   };
 }
 
@@ -41,7 +50,8 @@ router.post("/investment/start", async (req: AuthRequest, res) => {
   }
 
   const { amount, riskLevel } = result.data;
-  if (!["low", "medium", "high"].includes(riskLevel)) {
+  const riskKey = riskLevel.toLowerCase();
+  if (!["low", "medium", "high"].includes(riskKey)) {
     res.status(400).json({ error: "Invalid risk level. Use low, medium, or high" });
     return;
   }
@@ -63,15 +73,25 @@ router.post("/investment/start", async (req: AuthRequest, res) => {
     return;
   }
 
+  const existingInvs = await db.select().from(investmentsTable).where(eq(investmentsTable.userId, req.userId!)).limit(1);
+  const existingDrawdownLimit = existingInvs[0]
+    ? parseFloat(existingInvs[0].drawdownLimit as string)
+    : RISK_DEFAULT_DRAWDOWN[riskKey] ?? 5;
+
+  const drawdownLimit = existingDrawdownLimit > 0 ? existingDrawdownLimit : (RISK_DEFAULT_DRAWDOWN[riskKey] ?? 5);
+
   const [updated] = await db.update(investmentsTable)
     .set({
       amount: amount.toString(),
-      riskLevel,
+      riskLevel: riskKey,
       isActive: true,
+      isPaused: false,
       dailyProfit: "0",
       drawdown: "0",
+      drawdownLimit: drawdownLimit.toString(),
       startedAt: new Date(),
       stoppedAt: null,
+      pausedAt: null,
     })
     .where(eq(investmentsTable.userId, req.userId!))
     .returning();
@@ -81,7 +101,7 @@ router.post("/investment/start", async (req: AuthRequest, res) => {
     type: "investment",
     amount: amount.toString(),
     status: "completed",
-    description: `Started auto trading with $${amount.toFixed(2)} at ${riskLevel} risk`,
+    description: `Started auto trading with $${amount.toFixed(2)} at ${riskKey} risk (${drawdownLimit}% protection)`,
   });
 
   res.json(formatInvestment(updated!));
@@ -101,6 +121,25 @@ router.post("/investment/stop", async (req: AuthRequest, res) => {
     .returning();
 
   res.json(formatInvestment(updated!));
+});
+
+router.patch("/investment/protection", async (req: AuthRequest, res) => {
+  const { drawdownLimit } = req.body ?? {};
+  if (typeof drawdownLimit !== "number" || drawdownLimit < 1 || drawdownLimit > 50) {
+    res.status(400).json({ error: "drawdownLimit must be a number between 1 and 50" });
+    return;
+  }
+  const [updated] = await db.update(investmentsTable)
+    .set({ drawdownLimit: drawdownLimit.toString() })
+    .where(eq(investmentsTable.userId, req.userId!))
+    .returning();
+
+  if (!updated) {
+    res.status(404).json({ error: "Investment not found" });
+    return;
+  }
+
+  res.json(formatInvestment(updated));
 });
 
 router.patch("/investment/compounding", async (req: AuthRequest, res) => {

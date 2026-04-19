@@ -274,6 +274,31 @@ paths:
               schema:
                 $ref: "#/components/schemas/Investment"
 
+  /investment/protection:
+    patch:
+      operationId: updateProtection
+      tags: [investment]
+      summary: Update capital protection drawdown limit
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProtectionBody"
+      responses:
+        "200":
+          description: Protection settings updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Investment"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /investment/compounding:
     patch:
       operationId: toggleCompounding
@@ -736,9 +761,17 @@ components:
           type: number
         drawdown:
           type: number
+        drawdownLimit:
+          type: number
+          description: Max drawdown percentage (e.g. 5 = 5%)
+        isPaused:
+          type: boolean
+          description: True when capital protection was triggered
         startedAt:
           type: ["string", "null"]
         stoppedAt:
+          type: ["string", "null"]
+        pausedAt:
           type: ["string", "null"]
       required:
         - id
@@ -746,10 +779,12 @@ components:
         - amount
         - riskLevel
         - isActive
+        - isPaused
         - autoCompound
         - totalProfit
         - dailyProfit
         - drawdown
+        - drawdownLimit
 
     StartInvestmentBody:
       type: object
@@ -769,6 +804,15 @@ components:
           type: boolean
       required:
         - autoCompound
+
+    ProtectionBody:
+      type: object
+      properties:
+        drawdownLimit:
+          type: number
+          description: Max drawdown percentage (3, 5, or 10)
+      required:
+        - drawdownLimit
 
     Trade:
       type: object

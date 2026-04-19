@@ -36,6 +36,7 @@ import type {
   Investment,
   LoginBody,
   PerformanceMetrics,
+  ProtectionBody,
   Referral,
   ReferredUser,
   RegisterBody,
@@ -1028,6 +1029,92 @@ export const useStopInvestment = <
   TContext
 > => {
   return useMutation(getStopInvestmentMutationOptions(options));
+};
+
+/**
+ * @summary Update capital protection drawdown limit
+ */
+export const getUpdateProtectionUrl = () => {
+  return `/api/investment/protection`;
+};
+
+export const updateProtection = async (
+  protectionBody: ProtectionBody,
+  options?: RequestInit,
+): Promise<Investment> => {
+  return customFetch<Investment>(getUpdateProtectionUrl(), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(protectionBody),
+  });
+};
+
+export const getUpdateProtectionMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateProtection>>,
+    TError,
+    { data: BodyType<ProtectionBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateProtection>>,
+  TError,
+  { data: BodyType<ProtectionBody> },
+  TContext
+> => {
+  const mutationKey = ["updateProtection"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateProtection>>,
+    { data: BodyType<ProtectionBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return updateProtection(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateProtectionMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateProtection>>
+>;
+export type UpdateProtectionMutationBody = BodyType<ProtectionBody>;
+export type UpdateProtectionMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Update capital protection drawdown limit
+ */
+export const useUpdateProtection = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateProtection>>,
+    TError,
+    { data: BodyType<ProtectionBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateProtection>>,
+  TError,
+  { data: BodyType<ProtectionBody> },
+  TContext
+> => {
+  return useMutation(getUpdateProtectionMutationOptions(options));
 };
 
 /**
