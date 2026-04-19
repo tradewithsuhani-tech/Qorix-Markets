@@ -164,8 +164,10 @@ function ChartTooltip({ active, payload, label, suffix = "%" }: any) {
 function SectionHeader({ eyebrow, title, desc }: { eyebrow: string; title: string; desc: string }) {
   return (
     <FadeIn className="text-center max-w-2xl mx-auto mb-12">
-      <div className="text-xs font-semibold uppercase tracking-widest text-primary mb-3">{eyebrow}</div>
-      <h2 className="text-3xl md:text-4xl font-bold tracking-tight mb-4">{title}</h2>
+      <div className="flex justify-center mb-3">
+        <div className="section-eyebrow-row text-xs font-bold uppercase tracking-[0.18em] text-primary/90">{eyebrow}</div>
+      </div>
+      <h2 className="text-3xl md:text-4xl font-bold tracking-tight mb-4 leading-tight">{title}</h2>
       <p className="text-muted-foreground text-lg leading-relaxed">{desc}</p>
     </FadeIn>
   );
@@ -337,10 +339,10 @@ export default function Landing() {
       <header className="sticky top-0 z-50 glass-nav border-b border-white/[0.06]">
         <div className="max-w-7xl mx-auto px-5 md:px-8 h-14 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-[0_0_16px_rgba(59,130,246,0.35)]">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 via-indigo-500 to-violet-600 flex items-center justify-center shadow-[0_0_22px_rgba(99,102,241,0.5),0_0_8px_rgba(59,130,246,0.3)]">
               <TrendingUp style={{ width: 14, height: 14 }} className="text-white" />
             </div>
-            <span className="font-bold tracking-tight">Qorix<span className="text-primary font-light">Markets</span></span>
+            <span className="font-bold tracking-tight text-[15px]">Qorix<span className="gradient-text-vivid font-semibold">Markets</span></span>
           </div>
 
           <nav className="hidden md:flex items-center gap-6 text-sm text-muted-foreground">
@@ -351,7 +353,7 @@ export default function Landing() {
               ["Market Insights", "market-insights"],
               ["How it works", "how-it-works"],
             ].map(([label, id]) => (
-              <button key={id} className="hover:text-white transition-colors" onClick={() => document.getElementById(id)?.scrollIntoView({ behavior: "smooth" })}>
+              <button key={id} className="nav-link-premium hover:text-white/90 transition-colors font-medium" onClick={() => document.getElementById(id)?.scrollIntoView({ behavior: "smooth" })}>
                 {label}
               </button>
             ))}
@@ -365,22 +367,24 @@ export default function Landing() {
       </header>
 
       <section className="relative overflow-hidden pt-16 pb-16 md:pt-24 md:pb-24">
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[920px] h-[620px] bg-primary/8 rounded-full blur-[140px] pointer-events-none" />
-        <div className="absolute top-1/3 right-0 w-[520px] h-[520px] bg-indigo-600/6 rounded-full blur-[120px] pointer-events-none" />
+        <div className="absolute inset-0 hero-dot-grid opacity-60" />
+        <div className="aurora-blob aurora-blob-1 top-[-10%] left-[10%] w-[700px] h-[600px] bg-blue-500/[0.09] blur-[130px]" />
+        <div className="aurora-blob aurora-blob-2 top-[20%] right-[-5%] w-[500px] h-[500px] bg-indigo-600/[0.08] blur-[110px]" />
+        <div className="aurora-blob aurora-blob-3 bottom-[-5%] left-[30%] w-[600px] h-[400px] bg-violet-500/[0.06] blur-[120px]" />
 
         <div className="relative max-w-7xl mx-auto px-5 md:px-8 grid xl:grid-cols-[1.05fr_0.95fr] gap-10 xl:gap-14 items-center">
           <motion.div initial="hidden" animate="show" variants={fadeUp} className="max-w-4xl mx-auto xl:mx-0 text-center xl:text-left">
-            <motion.div variants={fadeUp} className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-primary/30 bg-primary/8 text-xs font-semibold text-primary mb-7">
+            <motion.div variants={fadeUp} className="badge-shimmer inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-indigo-400/30 bg-indigo-500/[0.09] text-xs font-semibold text-indigo-300 mb-7 shadow-[0_0_18px_rgba(99,102,241,0.15)]">
               <div className="live-dot w-1.5 h-1.5 shrink-0" />
               Private allocation window open · {slotsRemaining} investor seats left
             </motion.div>
 
-            <motion.h1 variants={fadeUp} className="text-4xl sm:text-5xl xl:text-6xl font-bold tracking-tight leading-[1.05] mb-6">
+            <motion.h1 variants={fadeUp} className="text-4xl sm:text-5xl xl:text-[3.75rem] font-bold tracking-[-0.02em] leading-[1.04] mb-6">
               A hedge-fund style USDT trading system
-              <span className="gradient-text"> built for disciplined investors.</span>
+              <span className="gradient-text-vivid"> built for disciplined investors.</span>
             </motion.h1>
 
-            <motion.p variants={fadeUp} className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto xl:mx-0 leading-relaxed mb-8">
+            <motion.p variants={fadeUp} className="text-lg md:text-xl text-muted-foreground/90 max-w-2xl mx-auto xl:mx-0 leading-relaxed mb-8">
               Qorix Markets combines professional traders, automated execution, capital allocation logic, and drawdown protection into one investor operating system.
             </motion.p>
 
@@ -399,9 +403,9 @@ export default function Landing() {
                 { label: "Desk traders", value: "43" },
                 { label: "Avg monthly", value: `${avgReturn}%` },
               ].map((s) => (
-                <div key={s.label} className="glass-card rounded-2xl p-4">
-                  <div className="text-xl md:text-2xl font-bold gradient-text tabular-nums">{s.value}</div>
-                  <div className="text-[11px] text-muted-foreground mt-1">{s.label}</div>
+                <div key={s.label} className="hero-stat-card rounded-2xl p-4">
+                  <div className="text-xl md:text-2xl font-bold gradient-text-vivid tabular-nums number-glow">{s.value}</div>
+                  <div className="text-[11px] text-muted-foreground mt-1.5 font-medium">{s.label}</div>
                 </div>
               ))}
             </motion.div>
@@ -420,17 +424,28 @@ export default function Landing() {
         </div>
       </section>
 
-      <section className="border-y border-white/[0.06] bg-white/[0.02] py-5">
-        <div className="max-w-7xl mx-auto px-5 md:px-8 grid grid-cols-2 md:grid-cols-4 gap-3">
-          {TRUST_POINTS.map(({ icon: Icon, title, desc }) => (
-            <div key={title} className="flex items-start gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.03] p-4">
-              <Icon style={{ width: 17, height: 17 }} className="text-primary shrink-0 mt-0.5" />
-              <div>
-                <div className="text-sm font-semibold">{title}</div>
-                <div className="text-[11px] text-muted-foreground leading-relaxed mt-1">{desc}</div>
+      <section className="relative border-y border-white/[0.05] py-5 overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-r from-blue-600/[0.025] via-indigo-600/[0.03] to-violet-600/[0.025] pointer-events-none" />
+        <div className="relative max-w-7xl mx-auto px-5 md:px-8 grid grid-cols-2 md:grid-cols-4 gap-3">
+          {TRUST_POINTS.map(({ icon: Icon, title, desc }, i) => {
+            const colors = [
+              { icon: "text-blue-400", bg: "bg-blue-500/10 border-blue-500/20" },
+              { icon: "text-emerald-400", bg: "bg-emerald-500/10 border-emerald-500/20" },
+              { icon: "text-indigo-400", bg: "bg-indigo-500/10 border-indigo-500/20" },
+              { icon: "text-amber-400", bg: "bg-amber-500/10 border-amber-500/20" },
+            ][i]!;
+            return (
+              <div key={title} className="trust-card-premium flex items-start gap-3 rounded-2xl p-4">
+                <div className={`w-8 h-8 rounded-xl border flex items-center justify-center shrink-0 mt-0.5 ${colors.bg}`}>
+                  <Icon style={{ width: 15, height: 15 }} className={colors.icon} />
+                </div>
+                <div>
+                  <div className="text-sm font-semibold">{title}</div>
+                  <div className="text-[11px] text-muted-foreground leading-relaxed mt-1">{desc}</div>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </section>
 
@@ -521,16 +536,16 @@ export default function Landing() {
           <FadeIn>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
               {[
-                { label: "Avg Monthly Return", value: `${avgReturn}%`, icon: TrendingUp, color: "text-emerald-400" },
-                { label: "Best Month", value: `${bestMonth}%`, icon: Zap, color: "text-amber-400" },
-                { label: "Avg Drawdown", value: `${avgDrawdown}%`, icon: Shield, color: "text-blue-400" },
-                { label: "Positive Months", value: `${winRate}%`, icon: BarChart2, color: "text-violet-400" },
-              ].map(({ label, value, icon: Icon, color }) => (
+                { label: "Avg Monthly Return", value: `${avgReturn}%`, icon: TrendingUp, color: "text-emerald-400", glow: "rgba(34,197,94,0.5)", top: "rgba(34,197,94,0.5)" },
+                { label: "Best Month", value: `${bestMonth}%`, icon: Zap, color: "text-amber-400", glow: "rgba(251,191,36,0.5)", top: "rgba(251,191,36,0.5)" },
+                { label: "Avg Drawdown", value: `${avgDrawdown}%`, icon: Shield, color: "text-blue-400", glow: "rgba(96,165,250,0.5)", top: "rgba(96,165,250,0.5)" },
+                { label: "Positive Months", value: `${winRate}%`, icon: BarChart2, color: "text-violet-400", glow: "rgba(167,139,250,0.5)", top: "rgba(167,139,250,0.5)" },
+              ].map(({ label, value, icon: Icon, color, glow, top }) => (
                 <div key={label} className="glass-card rounded-2xl p-4 md:p-5 text-center relative overflow-hidden">
-                  <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
+                  <div className="absolute top-0 left-0 right-0 h-px" style={{ background: `linear-gradient(90deg, transparent, ${top}, transparent)` }} />
                   <Icon style={{ width: 16, height: 16 }} className={`${color} mx-auto mb-2`} />
-                  <div className={`text-2xl md:text-3xl font-bold ${color}`}>{value}</div>
-                  <div className="text-[11px] text-muted-foreground mt-0.5">{label}</div>
+                  <div className={`text-2xl md:text-3xl font-bold ${color}`} style={{ filter: `drop-shadow(0 0 12px ${glow})` }}>{value}</div>
+                  <div className="text-[11px] text-muted-foreground mt-1 font-medium">{label}</div>
                 </div>
               ))}
             </div>
@@ -810,9 +825,10 @@ export default function Landing() {
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(59,130,246,0.07),transparent_65%)] pointer-events-none" />
         <div className="max-w-3xl mx-auto px-5 md:px-8 text-center">
           <FadeIn>
-            <div className="glass-card-glow rounded-3xl p-10 md:p-14 relative overflow-hidden">
-              <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-primary/50 to-transparent" />
-              <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-primary/20 to-transparent" />
+            <div className="cta-glow-card rounded-3xl p-10 md:p-14 relative overflow-hidden">
+              <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-indigo-400/60 to-transparent" />
+              <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-violet-400/20 to-transparent" />
+              <div className="absolute -top-32 left-1/2 -translate-x-1/2 w-80 h-80 bg-indigo-600/10 rounded-full blur-3xl pointer-events-none" />
 
               <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center mx-auto mb-6 shadow-[0_0_30px_rgba(59,130,246,0.4)]">
                 <DollarSign style={{ width: 24, height: 24 }} className="text-white" />
@@ -849,7 +865,8 @@ export default function Landing() {
         </div>
       </section>
 
-      <footer className="border-t border-white/[0.06] py-8">
+      <div className="gradient-divider" />
+      <footer className="py-8">
         <div className="max-w-7xl mx-auto px-5 md:px-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-muted-foreground">
           <div className="flex items-center gap-2">
             <div className="w-6 h-6 rounded-md bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center">
