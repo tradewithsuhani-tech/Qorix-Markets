@@ -29,6 +29,7 @@ import type {
   FundStats,
   GetAdminUsersParams,
   GetEquityChartParams,
+  GetMonthlyPerformanceParams,
   GetNotificationsParams,
   GetProfitHistoryParams,
   GetTradesParams,
@@ -36,6 +37,7 @@ import type {
   HealthStatus,
   Investment,
   LoginBody,
+  MonthlyPerformanceList,
   NotificationItem,
   NotificationList,
   PerformanceMetrics,
@@ -1763,6 +1765,112 @@ export function useGetDashboardFundStats<
   request?: SecondParameter<typeof customFetch>;
 }): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetDashboardFundStatsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Get monthly performance history
+ */
+export const getGetMonthlyPerformanceUrl = (
+  params?: GetMonthlyPerformanceParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/dashboard/monthly-performance?${stringifiedParams}`
+    : `/api/dashboard/monthly-performance`;
+};
+
+export const getMonthlyPerformance = async (
+  params?: GetMonthlyPerformanceParams,
+  options?: RequestInit,
+): Promise<MonthlyPerformanceList> => {
+  return customFetch<MonthlyPerformanceList>(
+    getGetMonthlyPerformanceUrl(params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getGetMonthlyPerformanceQueryKey = (
+  params?: GetMonthlyPerformanceParams,
+) => {
+  return [
+    `/api/dashboard/monthly-performance`,
+    ...(params ? [params] : []),
+  ] as const;
+};
+
+export const getGetMonthlyPerformanceQueryOptions = <
+  TData = Awaited<ReturnType<typeof getMonthlyPerformance>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetMonthlyPerformanceParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getMonthlyPerformance>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetMonthlyPerformanceQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getMonthlyPerformance>>
+  > = ({ signal }) =>
+    getMonthlyPerformance(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getMonthlyPerformance>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetMonthlyPerformanceQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getMonthlyPerformance>>
+>;
+export type GetMonthlyPerformanceQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get monthly performance history
+ */
+
+export function useGetMonthlyPerformance<
+  TData = Awaited<ReturnType<typeof getMonthlyPerformance>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetMonthlyPerformanceParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getMonthlyPerformance>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetMonthlyPerformanceQueryOptions(params, options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

@@ -8,8 +8,9 @@ import {
   systemSettingsTable,
   dailyProfitRunsTable,
   usersTable,
+  monthlyPerformanceTable,
 } from "@workspace/db";
-import { eq, gt } from "drizzle-orm";
+import { eq, gt, and } from "drizzle-orm";
 import { logger } from "./logger";
 import { createNotification } from "./notifications";
 import { getVipInfo } from "./vip";
@@ -233,6 +234,78 @@ export async function distributeDailyProfit(
           profit: dailyProfitAmount.toString(),
         })
         .onConflictDoNothing();
+
+      // Update monthly performance
+      const yearMonth = todayStr.slice(0, 7)!;
+      const isWinningDay = dailyProfitAmount > 0;
+      const existing = await tx
+        .select()
+        .from(monthlyPerformanceTable)
+        .where(
+          and(
+            eq(monthlyPerformanceTable.userId, inv.userId),
+            eq(monthlyPerformanceTable.yearMonth, yearMonth),
+          ),
+        )
+        .limit(1);
+
+      if (existing.length === 0) {
+        const startEquity = currentEquity - dailyProfitAmount;
+        const peakEq = Math.max(startEquity, currentEquity);
+        const drawdownPct = peakEq > 0 ? ((peakEq - currentEquity) / peakEq) * 100 : 0;
+        const monthlyReturnPct = startEquity > 0 ? ((currentEquity - startEquity) / startEquity) * 100 : 0;
+        const wr = isWinningDay ? 100 : 0;
+        await tx.insert(monthlyPerformanceTable).values({
+          userId: inv.userId,
+          yearMonth,
+          monthlyReturn: monthlyReturnPct.toString(),
+          maxDrawdown: drawdownPct.toString(),
+          winRate: wr.toString(),
+          totalProfit: dailyProfitAmount.toString(),
+          tradingDays: 1,
+          winningDays: isWinningDay ? 1 : 0,
+          startEquity: startEquity.toString(),
+          peakEquity: peakEq.toString(),
+        });
+      } else {
+        const rec = existing[0]!;
+        const prevStartEquity = parseFloat(rec.startEquity as string);
+        const prevPeakEquity = parseFloat(rec.peakEquity as string);
+        const prevTotalProfit = parseFloat(rec.totalProfit as string);
+        const prevTradingDays = rec.tradingDays;
+        const prevWinningDays = rec.winningDays;
+
+        const newPeakEquity = Math.max(prevPeakEquity, currentEquity);
+        const newTotalProfit = prevTotalProfit + dailyProfitAmount;
+        const newTradingDays = prevTradingDays + 1;
+        const newWinningDays = prevWinningDays + (isWinningDay ? 1 : 0);
+
+        const drawdownPct = newPeakEquity > 0 ? ((newPeakEquity - currentEquity) / newPeakEquity) * 100 : 0;
+        const prevMaxDrawdown = parseFloat(rec.maxDrawdown as string);
+        const newMaxDrawdown = Math.max(prevMaxDrawdown, drawdownPct);
+
+        const monthlyReturnPct = prevStartEquity > 0 ? ((currentEquity - prevStartEquity) / prevStartEquity) * 100 : 0;
+        const newWinRate = newTradingDays > 0 ? (newWinningDays / newTradingDays) * 100 : 0;
+
+        await tx
+          .update(monthlyPerformanceTable)
+          .set({
+            monthlyReturn: monthlyReturnPct.toString(),
+            maxDrawdown: newMaxDrawdown.toString(),
+            winRate: newWinRate.toString(),
+            totalProfit: newTotalProfit.toString(),
+            tradingDays: newTradingDays,
+            winningDays: newWinningDays,
+            peakEquity: newPeakEquity.toString(),
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(monthlyPerformanceTable.userId, inv.userId),
+              eq(monthlyPerformanceTable.yearMonth, yearMonth),
+            ),
+          );
+      }
 
       const symbols = ["BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT"];
       const symbol = symbols[Math.floor(Math.random() * symbols.length)]!;

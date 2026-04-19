@@ -400,6 +400,32 @@ export const GetDashboardFundStatsResponse = zod.object({
 });
 
 /**
+ * @summary Get monthly performance history
+ */
+export const getMonthlyPerformanceQueryFilterDefault = `6m`;
+
+export const GetMonthlyPerformanceQueryParams = zod.object({
+  filter: zod
+    .enum(["3m", "6m", "all"])
+    .default(getMonthlyPerformanceQueryFilterDefault),
+});
+
+export const GetMonthlyPerformanceResponseItem = zod.object({
+  yearMonth: zod.string(),
+  monthlyReturn: zod.number(),
+  maxDrawdown: zod.number(),
+  winRate: zod.number(),
+  totalProfit: zod.number(),
+  tradingDays: zod.number(),
+  winningDays: zod.number(),
+  startEquity: zod.number(),
+  peakEquity: zod.number(),
+});
+export const GetMonthlyPerformanceResponse = zod.array(
+  GetMonthlyPerformanceResponseItem,
+);
+
+/**
  * @summary Get user notifications
  */
 export const getNotificationsQueryLimitDefault = 20;

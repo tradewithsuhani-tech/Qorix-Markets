@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, walletsTable, investmentsTable, equityHistoryTable, tradesTable } from "@workspace/db";
+import { db, walletsTable, investmentsTable, equityHistoryTable, tradesTable, monthlyPerformanceTable } from "@workspace/db";
 import { eq, and, gte, desc, sum, count } from "drizzle-orm";
 import { authMiddleware, type AuthRequest } from "../middlewares/auth";
 import { getVipInfo } from "../lib/vip";
@@ -192,6 +192,46 @@ router.get("/dashboard/fund-stats", async (req: AuthRequest, res) => {
       ? parseFloat(((totalAUM / (totalAUM + reserveFund)) * 100).toFixed(1))
       : 0,
   });
+});
+
+router.get("/dashboard/monthly-performance", async (req: AuthRequest, res) => {
+  const filter = (req.query["filter"] as string) || "6m";
+
+  let since: string | null = null;
+  if (filter === "3m") {
+    const d = new Date();
+    d.setMonth(d.getMonth() - 3);
+    since = d.toISOString().slice(0, 7)!;
+  } else if (filter === "6m") {
+    const d = new Date();
+    d.setMonth(d.getMonth() - 6);
+    since = d.toISOString().slice(0, 7)!;
+  }
+
+  const conditions = [eq(monthlyPerformanceTable.userId, req.userId!)];
+  if (since) {
+    conditions.push(gte(monthlyPerformanceTable.yearMonth, since));
+  }
+
+  const records = await db
+    .select()
+    .from(monthlyPerformanceTable)
+    .where(and(...conditions))
+    .orderBy(monthlyPerformanceTable.yearMonth);
+
+  res.json(
+    records.map((r) => ({
+      yearMonth: r.yearMonth,
+      monthlyReturn: parseFloat(r.monthlyReturn as string),
+      maxDrawdown: parseFloat(r.maxDrawdown as string),
+      winRate: parseFloat(r.winRate as string),
+      totalProfit: parseFloat(r.totalProfit as string),
+      tradingDays: r.tradingDays,
+      winningDays: r.winningDays,
+      startEquity: parseFloat(r.startEquity as string),
+      peakEquity: parseFloat(r.peakEquity as string),
+    })),
+  );
 });
 
 export default router;
