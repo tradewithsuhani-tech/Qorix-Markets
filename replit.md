@@ -75,8 +75,21 @@ All routes prefixed with `/api`:
 - GET `/trades`
 - GET `/referral`, GET `/referral/referred-users`
 - GET `/dashboard/summary`, GET `/dashboard/equity-chart`
-- GET `/admin/stats`, POST `/admin/profit`, GET `/admin/users`
+- GET `/admin/stats`, POST `/admin/profit`, GET `/admin/profit/history`, GET `/admin/users`
 - GET `/admin/withdrawals`, POST `/admin/withdrawals/:id/approve`, POST `/admin/withdrawals/:id/reject`
+
+## Cron Jobs (node-cron)
+
+Defined in `artifacts/api-server/src/lib/cron.ts`, initialized on server start:
+- **Daily at midnight (00:00)**: Runs profit distribution using the last saved `daily_profit_percent` from `system_settings`. Skips if no rate is configured.
+- **Monthly on the 25th at midnight (00:00 25 * *)**: Sweeps all user `profit_balance` → `main_balance` and creates transfer transaction records.
+
+## Shared Profit Service
+
+`artifacts/api-server/src/lib/profit-service.ts` exposes:
+- `distributeDailyProfit(profitPercent)` — full distribution logic (drawdown check, compounding, equity snapshot, trade simulation, referral bonus, run log)
+- `transferProfitToMain()` — monthly sweep of profit_balance → main_balance
+- `getLastDailyProfitPercent()` — reads persisted rate from system_settings
 
 ## Design
 

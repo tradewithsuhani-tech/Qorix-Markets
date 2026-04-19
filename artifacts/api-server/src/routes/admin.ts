@@ -5,28 +5,17 @@ import {
   walletsTable,
   investmentsTable,
   transactionsTable,
-  tradesTable,
-  equityHistoryTable,
   systemSettingsTable,
   dailyProfitRunsTable,
 } from "@workspace/db";
-import { eq, sum, count, and, desc, sql } from "drizzle-orm";
+import { eq, sum, count, and, desc } from "drizzle-orm";
 import { authMiddleware, adminMiddleware, type AuthRequest } from "../middlewares/auth";
 import { SetDailyProfitBody } from "@workspace/api-zod";
+import { distributeDailyProfit, transferProfitToMain } from "../lib/profit-service";
 
 const router = Router();
 router.use(authMiddleware);
 router.use(adminMiddleware);
-
-const DRAWDOWN_LIMITS: Record<string, number> = {
-  low: 0.03,
-  medium: 0.05,
-  high: 0.10,
-};
-
-const REFERRAL_MONTHLY_RATE = 0.005;
-const DAYS_PER_MONTH = 30;
-const REFERRAL_DAILY_RATE = REFERRAL_MONTHLY_RATE / DAYS_PER_MONTH;
 
 async function getAdminStatsData() {
   const [totalUsersResult] = await db.select({ count: count() }).from(usersTable);
@@ -88,209 +77,7 @@ router.post("/admin/profit", async (req, res) => {
     return;
   }
 
-  await db.transaction(async (tx) => {
-    await tx
-      .insert(systemSettingsTable)
-      .values({ key: "daily_profit_percent", value: profitPercent.toString() })
-      .onConflictDoUpdate({
-        target: systemSettingsTable.key,
-        set: { value: profitPercent.toString(), updatedAt: new Date() },
-      });
-
-    const activeInvestments = await tx
-      .select()
-      .from(investmentsTable)
-      .where(eq(investmentsTable.isActive, true));
-
-    const todayStr = new Date().toISOString().split("T")[0]!;
-    let totalProfitDistributed = 0;
-    let totalReferralBonusPaid = 0;
-    let investorsAffected = 0;
-
-    const totalAUM = activeInvestments.reduce(
-      (acc, inv) => acc + parseFloat(inv.amount as string),
-      0,
-    );
-
-    for (const inv of activeInvestments) {
-      const amount = parseFloat(inv.amount as string);
-      const totalProfit = parseFloat(inv.totalProfit as string);
-      const currentDrawdown = parseFloat(inv.drawdown as string);
-      const drawdownLimit = (DRAWDOWN_LIMITS[inv.riskLevel] ?? 0.05) * amount;
-
-      if (currentDrawdown >= drawdownLimit) {
-        await tx
-          .update(investmentsTable)
-          .set({ isActive: false, stoppedAt: new Date() })
-          .where(eq(investmentsTable.userId, inv.userId));
-        continue;
-      }
-
-      const dailyProfitAmount = amount * (profitPercent / 100);
-      const newTotalProfit = totalProfit + dailyProfitAmount;
-
-      let newDrawdown = currentDrawdown;
-      if (profitPercent < 0) {
-        newDrawdown = currentDrawdown + Math.abs(dailyProfitAmount);
-      }
-
-      const walletRows = await tx
-        .select()
-        .from(walletsTable)
-        .where(eq(walletsTable.userId, inv.userId))
-        .limit(1);
-
-      if (walletRows.length === 0) continue;
-      const wallet = walletRows[0]!;
-
-      const profitBalance = parseFloat(wallet.profitBalance as string);
-      const tradingBalance = parseFloat(wallet.tradingBalance as string);
-
-      if (inv.autoCompound) {
-        const newAmount = amount + dailyProfitAmount;
-        await tx
-          .update(walletsTable)
-          .set({
-            tradingBalance: (tradingBalance + dailyProfitAmount).toString(),
-            updatedAt: new Date(),
-          })
-          .where(eq(walletsTable.userId, inv.userId));
-
-        await tx
-          .update(investmentsTable)
-          .set({
-            amount: newAmount.toString(),
-            totalProfit: newTotalProfit.toString(),
-            dailyProfit: dailyProfitAmount.toString(),
-            drawdown: newDrawdown.toString(),
-          })
-          .where(eq(investmentsTable.userId, inv.userId));
-      } else {
-        await tx
-          .update(walletsTable)
-          .set({
-            profitBalance: (profitBalance + dailyProfitAmount).toString(),
-            updatedAt: new Date(),
-          })
-          .where(eq(walletsTable.userId, inv.userId));
-
-        await tx
-          .update(investmentsTable)
-          .set({
-            totalProfit: newTotalProfit.toString(),
-            dailyProfit: dailyProfitAmount.toString(),
-            drawdown: newDrawdown.toString(),
-          })
-          .where(eq(investmentsTable.userId, inv.userId));
-      }
-
-      await tx.insert(transactionsTable).values({
-        userId: inv.userId,
-        type: "profit",
-        amount: dailyProfitAmount.toString(),
-        status: "completed",
-        description: `Daily profit distribution: ${profitPercent}%`,
-      });
-
-      const currentEquity = inv.autoCompound
-        ? (amount + dailyProfitAmount)
-        : amount;
-
-      await tx
-        .insert(equityHistoryTable)
-        .values({
-          userId: inv.userId,
-          date: todayStr,
-          equity: currentEquity.toString(),
-          profit: dailyProfitAmount.toString(),
-        })
-        .onConflictDoNothing();
-
-      const symbols = ["BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT"];
-      const symbol = symbols[Math.floor(Math.random() * symbols.length)]!;
-      const direction = profitPercent >= 0 ? "buy" : "sell";
-      const basePrice = symbol.startsWith("BTC")
-        ? 67000
-        : symbol.startsWith("ETH")
-          ? 3200
-          : symbol.startsWith("SOL")
-            ? 145
-            : 420;
-      const entryPrice = basePrice * (1 - 0.005);
-      const exitPrice = basePrice * (1 + profitPercent / 100);
-
-      await tx.insert(tradesTable).values({
-        userId: inv.userId,
-        symbol,
-        direction,
-        entryPrice: entryPrice.toString(),
-        exitPrice: exitPrice.toString(),
-        profit: dailyProfitAmount.toString(),
-        profitPercent: profitPercent.toString(),
-      });
-
-      totalProfitDistributed += dailyProfitAmount;
-      investorsAffected++;
-
-      const userRows = await tx
-        .select({ sponsorId: usersTable.sponsorId })
-        .from(usersTable)
-        .where(eq(usersTable.id, inv.userId))
-        .limit(1);
-
-      const sponsorId = userRows[0]?.sponsorId;
-      if (sponsorId && sponsorId !== inv.userId) {
-        const sponsorInvRows = await tx
-          .select({ isActive: investmentsTable.isActive })
-          .from(investmentsTable)
-          .where(eq(investmentsTable.userId, sponsorId))
-          .limit(1);
-
-        const sponsorActive = sponsorInvRows[0]?.isActive ?? false;
-        if (sponsorActive) {
-          const referralBonus = amount * REFERRAL_DAILY_RATE;
-
-          const sponsorWalletRows = await tx
-            .select()
-            .from(walletsTable)
-            .where(eq(walletsTable.userId, sponsorId))
-            .limit(1);
-
-          if (sponsorWalletRows.length > 0) {
-            const sponsorWallet = sponsorWalletRows[0]!;
-            const sponsorProfitBalance = parseFloat(sponsorWallet.profitBalance as string);
-
-            await tx
-              .update(walletsTable)
-              .set({
-                profitBalance: (sponsorProfitBalance + referralBonus).toString(),
-                updatedAt: new Date(),
-              })
-              .where(eq(walletsTable.userId, sponsorId));
-
-            await tx.insert(transactionsTable).values({
-              userId: sponsorId,
-              type: "referral_bonus",
-              amount: referralBonus.toString(),
-              status: "completed",
-              description: `Referral bonus from active investor (daily ${(REFERRAL_DAILY_RATE * 100).toFixed(4)}%)`,
-            });
-
-            totalReferralBonusPaid += referralBonus;
-          }
-        }
-      }
-    }
-
-    await tx.insert(dailyProfitRunsTable).values({
-      runDate: todayStr,
-      profitPercent: profitPercent.toString(),
-      totalAUM: totalAUM.toString(),
-      totalProfitDistributed: totalProfitDistributed.toString(),
-      investorsAffected,
-      referralBonusPaid: totalReferralBonusPaid.toString(),
-    });
-  });
+  await distributeDailyProfit(profitPercent);
 
   const stats = await getAdminStatsData();
   res.json(stats);
