@@ -27,6 +27,7 @@ import {
   MoreHorizontal,
   Briefcase,
   Brain,
+  MessageCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -376,6 +377,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       { href: "/admin", label: "Admin", icon: ShieldAlert },
       { href: "/admin/intelligence", label: "Intelligence", icon: Brain },
       { href: "/admin/fraud", label: "Fraud Monitor", icon: Shield },
+      { href: "/admin/chats", label: "Support Chats", icon: MessageCircle },
     ] : []),
     { href: "/settings", label: "Settings", icon: Settings },
   ];

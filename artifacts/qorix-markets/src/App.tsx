@@ -6,6 +6,8 @@ import NotFound from "@/pages/not-found";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import { PWAInstallPrompt } from "@/components/pwa-install-prompt";
 import { SplashScreen, useSplash } from "@/components/splash-screen";
+import { QorixAssistant } from "@/components/qorix-assistant";
+import AdminChatsPage from "@/pages/admin-chats";
 import { useLocation } from "wouter";
 import { useEffect } from "react";
 
@@ -89,6 +91,7 @@ function Router() {
       <Route path="/admin"><ProtectedRoute component={AdminPage} adminOnly={true} /></Route>
       <Route path="/admin/intelligence"><ProtectedRoute component={AdminIntelligencePage} adminOnly={true} /></Route>
       <Route path="/admin/fraud"><ProtectedRoute component={AdminFraudPage} adminOnly={true} /></Route>
+      <Route path="/admin/chats"><ProtectedRoute component={AdminChatsPage} adminOnly={true} /></Route>
       <Route path="/settings"><ProtectedRoute component={SettingsPage} /></Route>
       <Route path="/verify/:hashId" component={VerifyPage} />
       <Route path="/verify" component={VerifyPage} />
@@ -104,6 +107,7 @@ function AppContent() {
     <>
       {showSplash && <SplashScreen onDone={onSplashDone} />}
       <Router />
+      <QorixAssistant />
       <PWAInstallPrompt />
     </>
   );
