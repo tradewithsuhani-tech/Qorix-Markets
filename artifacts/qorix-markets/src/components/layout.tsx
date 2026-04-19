@@ -375,6 +375,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     ...(user?.isAdmin ? [
       { href: "/admin", label: "Admin", icon: ShieldAlert },
       { href: "/admin/intelligence", label: "Intelligence", icon: Brain },
+      { href: "/admin/fraud", label: "Fraud Monitor", icon: Shield },
     ] : []),
     { href: "/settings", label: "Settings", icon: Settings },
   ];
