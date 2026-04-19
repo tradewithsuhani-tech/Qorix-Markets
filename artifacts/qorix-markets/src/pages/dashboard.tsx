@@ -12,12 +12,14 @@ import {
 import { Layout } from "@/components/layout";
 import { VipBadge, VipCard } from "@/components/vip-badge";
 import { AnimatedCounter, BigBalanceCounter } from "@/components/animated-counter";
+import { useAuth } from "@/hooks/use-auth";
+import { generateMonthlyReport } from "@/lib/report-generator";
 import { motion, AnimatePresence } from "framer-motion";
 import { format } from "date-fns";
 import {
   ArrowUpRight, ArrowDownRight, Wallet, Activity, Clock, TrendingUp,
   TrendingDown, Zap, Target, ShieldCheck, BarChart2, Layers,
-  RefreshCw, Globe, PieChart, Award, Shield, AlertTriangle, CheckCircle
+  RefreshCw, Globe, PieChart, Award, Shield, AlertTriangle, CheckCircle, FileDown
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useState, useEffect, useRef } from "react";
@@ -287,9 +289,11 @@ function CapitalProtectionWidget({
 export default function Dashboard() {
   const [chartDays, setChartDays] = useState(30);
   const [pendingLimit, setPendingLimit] = useState<number | null>(null);
+  const [isGeneratingReport, setIsGeneratingReport] = useState(false);
   const prevProfitRef = useRef(0);
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { user } = useAuth();
 
   const { data: summary, isLoading: summaryLoading } = useGetDashboardSummary({
     query: { refetchInterval: 5000 }
@@ -346,6 +350,52 @@ export default function Dashboard() {
     date: format(new Date(e.date), "MMM dd"),
     value: e.profit,
   }));
+
+  const handleDownloadReport = async () => {
+    if (!user || !summary || !perf) {
+      toast({ title: "Data not ready", description: "Please wait for data to load.", variant: "destructive" });
+      return;
+    }
+    setIsGeneratingReport(true);
+    try {
+      await new Promise((r) => setTimeout(r, 50));
+      generateMonthlyReport({
+        user: { fullName: user.fullName, email: user.email, id: user.id },
+        summary: {
+          totalBalance: summary.totalBalance,
+          activeInvestment: summary.activeInvestment,
+          totalProfit: summary.totalProfit,
+          profitBalance: summary.profitBalance,
+          tradingBalance: summary.tradingBalance,
+          dailyProfitLoss: summary.dailyProfitLoss,
+          dailyProfitPercent: summary.dailyProfitPercent,
+          isTrading: summary.isTrading,
+          riskLevel: summary.riskLevel ?? null,
+        },
+        performance: {
+          winRate: perf.winRate,
+          totalTrades: perf.totalTrades,
+          avgReturn: perf.avgReturn,
+          maxDrawdown: perf.maxDrawdown,
+          drawdown: perf.drawdown,
+          riskScore: perf.riskScore,
+        },
+        vip: summary.vip
+          ? {
+              tier: summary.vip.tier,
+              label: summary.vip.label,
+              profitBonus: summary.vip.profitBonus,
+              withdrawalFee: summary.vip.withdrawalFee,
+            }
+          : undefined,
+      });
+      toast({ title: "Report downloaded", description: "Your monthly performance report has been saved." });
+    } catch {
+      toast({ title: "Download failed", description: "Could not generate the report.", variant: "destructive" });
+    } finally {
+      setIsGeneratingReport(false);
+    }
+  };
 
   const statCards = [
     {
@@ -483,11 +533,19 @@ export default function Dashboard() {
             <h1 className="text-2xl md:text-3xl font-bold tracking-tight gradient-text">Overview</h1>
             <p className="text-muted-foreground text-sm mt-0.5">Portfolio performance dashboard</p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
             {summary?.riskLevel && <RiskBadge score={perf?.riskScore ?? "Low"} />}
             {summary?.vip && (summary.vip.tier as string) !== "none" && (
               <VipBadge tier={summary.vip.tier as "silver" | "gold" | "platinum"} size="sm" />
             )}
+            <button
+              onClick={handleDownloadReport}
+              disabled={isGeneratingReport || summaryLoading || perfLoading}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all duration-150 bg-blue-500/10 border-blue-500/25 text-blue-400 hover:bg-blue-500/20 hover:border-blue-500/40 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <FileDown style={{ width: 12, height: 12 }} />
+              {isGeneratingReport ? "Generating…" : "Download Report"}
+            </button>
             <div className="flex items-center gap-2 text-sm bg-green-500/5 border border-green-500/15 rounded-full px-3 py-1.5">
               <span className="live-dot" />
               <span className="text-green-400 font-medium text-xs">Live · 5s</span>
