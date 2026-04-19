@@ -7,7 +7,7 @@ import {
 } from 'recharts';
 import { motion } from "framer-motion";
 import { format } from "date-fns";
-import { ArrowUpRight, ArrowDownRight, Wallet, Activity, Clock } from "lucide-react";
+import { ArrowUpRight, ArrowDownRight, Wallet, Activity, Clock, TrendingUp } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export default function Dashboard() {
@@ -15,7 +15,7 @@ export default function Dashboard() {
   const { data: equity, isLoading: equityLoading } = useGetEquityChart();
   const { data: tradesData, isLoading: tradesLoading } = useGetTrades({ limit: 5 });
 
-  const trades = tradesData?.data || [];
+  const trades = Array.isArray(tradesData) ? tradesData : [];
 
   return (
     <Layout>
