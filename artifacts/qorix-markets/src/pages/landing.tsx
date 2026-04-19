@@ -324,7 +324,25 @@ function maskId(id: string): string {
   return id.slice(0, 4) + "*".repeat(5) + id.slice(-2);
 }
 
-function genId(): string {
+const TRC20_CHARS = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+
+function genTRC20Address(): string {
+  let addr = "T";
+  for (let i = 0; i < 33; i++) addr += TRC20_CHARS[Math.floor(Math.random() * TRC20_CHARS.length)];
+  return addr;
+}
+
+function maskTRC20(addr: string): string {
+  return addr.slice(0, 6) + "**********" + addr.slice(-8);
+}
+
+function genInternalRef(): string {
+  const ts = Date.now().toString(36).toUpperCase();
+  const rand = Math.random().toString(36).slice(2, 7).toUpperCase();
+  return `TXF-${ts}-${rand}`;
+}
+
+function genUserId(): string {
   const num = Math.floor(10000000 + Math.random() * 89999999);
   return `QO${num}`;
 }
@@ -352,12 +370,15 @@ type ActivityEntry = {
   type: TxType;
   amount: number;
   time: Date;
+  reference: string;
+  network?: string;
 };
 
 function makeEntry(): ActivityEntry {
   const name = NAMES[Math.floor(Math.random() * NAMES.length)]!;
   const type = TX_TYPES[Math.floor(Math.random() * TX_TYPES.length)]!;
-  const userId = genId();
+  const userId = genUserId();
+  const trc20 = genTRC20Address();
   return {
     id: Math.random().toString(36).slice(2),
     name,
@@ -367,6 +388,8 @@ function makeEntry(): ActivityEntry {
     type,
     amount: genAmount(type),
     time: new Date(),
+    reference: type === "transfer" ? genInternalRef() : maskTRC20(trc20),
+    network: type !== "transfer" ? "USDT · TRC20" : undefined,
   };
 }
 
@@ -413,7 +436,7 @@ function LiveActivityFeed() {
         </div>
       </div>
 
-      <div style={{ height: "480px", overflow: "hidden" }}>
+      <div style={{ height: "560px", overflow: "hidden" }}>
         <AnimatePresence initial={false}>
           {entries.map((e) => {
             const meta = TYPE_META[e.type];
@@ -432,11 +455,17 @@ function LiveActivityFeed() {
                       {e.type === "deposit" ? "↓" : e.type === "withdrawal" ? "↑" : "⇄"}
                     </div>
                     <div className="min-w-0">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-sm font-bold text-white truncate">{e.maskedName}</span>
                         <span className="text-[10px] px-1.5 py-0.5 rounded font-mono" style={{ background: "rgba(255,255,255,0.05)", color: "rgba(148,163,184,0.7)" }}>{e.maskedUserId}</span>
                       </div>
                       <div className="text-[11px] text-slate-500 mt-0.5 font-mono">{formatDateTime(e.time)}</div>
+                      <div className="flex items-center gap-1.5 mt-1">
+                        <span className="font-mono text-[10px] tracking-wide truncate max-w-[220px]" style={{ color: e.network ? "rgba(52,211,153,0.65)" : "rgba(129,140,248,0.65)" }}>{e.reference}</span>
+                        {e.network && (
+                          <span className="text-[9px] px-1.5 py-0.5 rounded-full font-semibold shrink-0" style={{ background: "rgba(52,211,153,0.08)", color: "rgba(52,211,153,0.6)", border: "1px solid rgba(52,211,153,0.15)" }}>{e.network}</span>
+                        )}
+                      </div>
                     </div>
                   </div>
                   <div className="text-right shrink-0 ml-4">
