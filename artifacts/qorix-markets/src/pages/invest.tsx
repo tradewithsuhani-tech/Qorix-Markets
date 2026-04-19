@@ -1,12 +1,182 @@
-import { useGetInvestment, useStartInvestment, useStopInvestment, useToggleCompounding, useGetWallet, getGetWalletQueryKey, getGetInvestmentQueryKey } from "@workspace/api-client-react";
+import {
+  useGetInvestment,
+  useStartInvestment,
+  useStopInvestment,
+  useToggleCompounding,
+  useGetWallet,
+  getGetWalletQueryKey,
+  getGetInvestmentQueryKey,
+} from "@workspace/api-client-react";
 import { Layout } from "@/components/layout";
 import { AnimatedCounter } from "@/components/animated-counter";
-import { useState } from "react";
-import { motion } from "framer-motion";
-import { Shield, ShieldAlert, Zap, Settings, Play, Square, RefreshCw } from "lucide-react";
+import { useState, useMemo } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  Shield, Zap, BarChart2, Play, Square, RefreshCw,
+  TrendingUp, AlertTriangle, CheckCircle, ChevronRight,
+  ArrowUpRight, Info
+} from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { Switch } from "@/components/ui/switch";
+
+const RISK_PROFILES = [
+  {
+    id: "LOW",
+    label: "Conservative",
+    tagline: "Capital-first strategy",
+    description: "Minimal volatility with steady, predictable gains. Ideal for capital preservation.",
+    icon: Shield,
+    multiplier: 0.6,
+    minDailyPct: 0.3,
+    maxDailyPct: 0.6,
+    drawdownLimit: 3,
+    volatility: "Low",
+    score: 2,
+    color: "text-blue-400",
+    gradientFrom: "from-blue-500/20",
+    gradientTo: "to-blue-600/5",
+    borderActive: "border-blue-400/50",
+    borderIdle: "border-white/8",
+    glowColor: "rgba(59,130,246,0.15)",
+    glowActive: "0 0 30px rgba(59,130,246,0.2), 0 4px 24px rgba(0,0,0,0.4)",
+    badgeColor: "bg-blue-500/15 text-blue-400 border-blue-500/25",
+    barColor: "#3b82f6",
+    barWidth: "20%",
+    features: [
+      "Max 3% drawdown protection",
+      "0.3–0.6% effective daily rate",
+      "Low volatility exposure",
+    ],
+  },
+  {
+    id: "MEDIUM",
+    label: "Balanced",
+    tagline: "Optimized risk/reward",
+    description: "Best of both worlds. Consistent returns with moderate market exposure.",
+    icon: BarChart2,
+    multiplier: 1.0,
+    minDailyPct: 0.5,
+    maxDailyPct: 1.0,
+    drawdownLimit: 5,
+    volatility: "Medium",
+    score: 5,
+    color: "text-indigo-400",
+    gradientFrom: "from-indigo-500/20",
+    gradientTo: "to-indigo-600/5",
+    borderActive: "border-indigo-400/50",
+    borderIdle: "border-white/8",
+    glowColor: "rgba(99,102,241,0.15)",
+    glowActive: "0 0 30px rgba(99,102,241,0.2), 0 4px 24px rgba(0,0,0,0.4)",
+    badgeColor: "bg-indigo-500/15 text-indigo-400 border-indigo-500/25",
+    barColor: "#6366f1",
+    barWidth: "50%",
+    features: [
+      "Max 5% drawdown protection",
+      "0.5–1.0% effective daily rate",
+      "Balanced market exposure",
+    ],
+    recommended: true,
+  },
+  {
+    id: "HIGH",
+    label: "Aggressive",
+    tagline: "Maximum yield strategy",
+    description: "Higher returns with elevated market exposure. Suitable for risk-tolerant investors.",
+    icon: Zap,
+    multiplier: 1.5,
+    minDailyPct: 0.75,
+    maxDailyPct: 1.5,
+    drawdownLimit: 10,
+    volatility: "High",
+    score: 8,
+    color: "text-orange-400",
+    gradientFrom: "from-orange-500/20",
+    gradientTo: "to-red-600/5",
+    borderActive: "border-orange-400/50",
+    borderIdle: "border-white/8",
+    glowColor: "rgba(249,115,22,0.15)",
+    glowActive: "0 0 30px rgba(249,115,22,0.2), 0 4px 24px rgba(0,0,0,0.4)",
+    badgeColor: "bg-orange-500/15 text-orange-400 border-orange-500/25",
+    barColor: "#f97316",
+    barWidth: "80%",
+    features: [
+      "Max 10% drawdown protection",
+      "0.75–1.5% effective daily rate",
+      "High market exposure",
+    ],
+  },
+];
+
+function RiskMeter({ score }: { score: number }) {
+  return (
+    <div className="flex items-center gap-1.5">
+      {Array.from({ length: 10 }).map((_, i) => (
+        <div
+          key={i}
+          className="h-1.5 flex-1 rounded-full transition-all duration-300"
+          style={{
+            background: i < score
+              ? score <= 3 ? "#3b82f6"
+                : score <= 6 ? "#6366f1"
+                : "#f97316"
+              : "rgba(255,255,255,0.08)",
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
+function ExpectedReturns({ profile, amount }: { profile: typeof RISK_PROFILES[0]; amount: number }) {
+  const dailyMin = (amount * profile.minDailyPct) / 100;
+  const dailyMax = (amount * profile.maxDailyPct) / 100;
+  const monthlyMin = dailyMin * 30;
+  const monthlyMax = dailyMax * 30;
+  const protection = (amount * profile.drawdownLimit) / 100;
+
+  return (
+    <motion.div
+      key={`${profile.id}-${amount}`}
+      initial={{ opacity: 0, y: 4 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.2 }}
+      className="space-y-3"
+    >
+      <div className="grid grid-cols-2 gap-3">
+        <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+          <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Daily Est.</div>
+          <div className="font-bold text-green-400 text-sm">
+            +${dailyMin.toFixed(2)} – ${dailyMax.toFixed(2)}
+          </div>
+          <div className="text-[10px] text-muted-foreground mt-0.5">
+            {profile.minDailyPct}–{profile.maxDailyPct}% rate
+          </div>
+        </div>
+        <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+          <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Monthly Est.</div>
+          <div className="font-bold text-emerald-400 text-sm">
+            +${monthlyMin.toFixed(2)} – ${monthlyMax.toFixed(2)}
+          </div>
+          <div className="text-[10px] text-muted-foreground mt-0.5">30-day projection</div>
+        </div>
+      </div>
+      <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.06] flex items-center justify-between">
+        <div>
+          <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Drawdown Protection</div>
+          <div className="font-semibold text-sm">Max ${protection.toFixed(2)} loss</div>
+        </div>
+        <div className={`text-xs px-2 py-1 rounded-full border font-medium ${
+          profile.drawdownLimit <= 3 ? "bg-blue-500/15 text-blue-400 border-blue-500/25" :
+          profile.drawdownLimit <= 5 ? "bg-indigo-500/15 text-indigo-400 border-indigo-500/25" :
+          "bg-orange-500/15 text-orange-400 border-orange-500/25"
+        }`}>
+          {profile.drawdownLimit}% limit
+        </div>
+      </div>
+    </motion.div>
+  );
+}
 
 export default function InvestPage() {
   const { data: investment, isLoading } = useGetInvestment();
@@ -16,6 +186,15 @@ export default function InvestPage() {
 
   const [amount, setAmount] = useState("");
   const [riskLevel, setRiskLevel] = useState("MEDIUM");
+
+  const selectedProfile = useMemo(
+    () => RISK_PROFILES.find(p => p.id === riskLevel) ?? RISK_PROFILES[1]!,
+    [riskLevel]
+  );
+
+  const numAmount = parseFloat(amount) || 0;
+  const maxAmount = wallet?.tradingBalance || 0;
+  const canDeploy = numAmount > 0 && numAmount <= maxAmount;
 
   const startMutation = useStartInvestment({
     mutation: {
@@ -27,8 +206,8 @@ export default function InvestPage() {
       },
       onError: (err: any) => {
         toast({ title: "Failed to start", description: err.message, variant: "destructive" });
-      }
-    }
+      },
+    },
   });
 
   const stopMutation = useStopInvestment({
@@ -40,8 +219,8 @@ export default function InvestPage() {
       },
       onError: (err: any) => {
         toast({ title: "Failed to stop", description: err.message, variant: "destructive" });
-      }
-    }
+      },
+    },
   });
 
   const compoundMutation = useToggleCompounding({
@@ -49,151 +228,429 @@ export default function InvestPage() {
       onSuccess: () => {
         toast({ title: "Compounding updated" });
         queryClient.invalidateQueries({ queryKey: getGetInvestmentQueryKey() });
-      }
-    }
+      },
+    },
   });
 
-  const riskProfiles = [
-    { id: "LOW", name: "Conservative", target: "~3% daily", icon: Shield, color: "text-blue-400", bg: "bg-blue-400/20", border: "border-blue-400/50" },
-    { id: "MEDIUM", name: "Balanced", target: "~5% daily", icon: Settings, color: "text-primary", bg: "bg-primary/20", border: "border-primary/50" },
-    { id: "HIGH", name: "Aggressive", target: "~10% daily", icon: Zap, color: "text-red-400", bg: "bg-red-400/20", border: "border-red-400/50" },
-  ];
+  const activeProfile = RISK_PROFILES.find(
+    p => p.id === investment?.riskLevel?.toUpperCase()
+  ) ?? RISK_PROFILES[1]!;
 
   return (
     <Layout>
-      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4 }}
+        className="space-y-6"
+      >
+        {/* Header */}
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Investment Center</h1>
-          <p className="text-muted-foreground">Configure and monitor your automated trading algorithms.</p>
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Investment Center</h1>
+          <p className="text-muted-foreground text-sm mt-0.5">
+            Configure your risk profile and deploy capital into automated strategies.
+          </p>
         </div>
 
         {isLoading ? (
-          <div>Loading...</div>
+          <div className="flex items-center justify-center py-20">
+            <div className="animate-spin w-8 h-8 border-2 border-blue-500/30 border-t-blue-500 rounded-full" />
+          </div>
         ) : investment?.isActive ? (
-          <div className="space-y-6">
-            <div className="glass-card-glow p-8 rounded-2xl relative overflow-hidden">
-              <div className="absolute top-0 right-0 p-4">
-                <span className="flex items-center gap-2 px-3 py-1 bg-green-500/20 text-green-400 rounded-full text-sm font-medium border border-green-500/30 shadow-[0_0_10px_rgba(34,197,94,0.2)]">
-                  <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+          /* ── ACTIVE INVESTMENT VIEW ──────────────────────────────── */
+          <div className="space-y-5">
+            {/* Active Banner */}
+            <motion.div
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="glass-card p-6 md:p-8 rounded-2xl relative overflow-hidden"
+              style={{ boxShadow: activeProfile.glowActive }}
+            >
+              <div className={`absolute inset-0 bg-gradient-to-br ${activeProfile.gradientFrom} ${activeProfile.gradientTo} pointer-events-none`} />
+
+              <div className="relative">
+                <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${activeProfile.gradientFrom} border ${activeProfile.borderActive}`}>
+                      <activeProfile.icon style={{ width: 20, height: 20 }} className={activeProfile.color} />
+                    </div>
+                    <div>
+                      <div className="font-bold text-lg">{activeProfile.label} Strategy</div>
+                      <div className="text-xs text-muted-foreground">{activeProfile.tagline}</div>
+                    </div>
+                  </div>
+                  <span className="flex items-center gap-2 px-3 py-1.5 bg-green-500/15 text-green-400 rounded-full text-xs font-semibold border border-green-500/25">
+                    <span className="live-dot" style={{ width: 6, height: 6 }} />
+                    Trading Active
                   </span>
-                  Trading Active
-                </span>
-              </div>
+                </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                <div>
-                  <div className="text-sm text-muted-foreground mb-1">Invested Capital</div>
-                  <div className="text-4xl font-bold"><AnimatedCounter value={investment.amount} prefix="$" /></div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                  {[
+                    { label: "Invested Capital", value: <><AnimatedCounter value={investment.amount} prefix="$" /></>, color: "text-white" },
+                    { label: "Total Profit", value: <><AnimatedCounter value={investment.totalProfit} prefix="$" /></>, color: "text-green-400" },
+                    { label: "Today's Profit", value: <><AnimatedCounter value={investment.dailyProfit} prefix="$" /></>, color: "text-emerald-400" },
+                    { label: "Drawdown", value: `$${investment.drawdown.toFixed(2)}`, color: "text-orange-400" },
+                  ].map((item, i) => (
+                    <motion.div
+                      key={item.label}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: i * 0.06 }}
+                      className="stat-card p-4 rounded-xl"
+                    >
+                      <div className="text-xs text-muted-foreground mb-1.5">{item.label}</div>
+                      <div className={`text-xl font-bold ${item.color}`}>{item.value}</div>
+                    </motion.div>
+                  ))}
                 </div>
-                <div>
-                  <div className="text-sm text-muted-foreground mb-1">Total Profit Generated</div>
-                  <div className="text-4xl font-bold profit-text"><AnimatedCounter value={investment.totalProfit} prefix="$" /></div>
-                </div>
-                <div>
-                  <div className="text-sm text-muted-foreground mb-1">Current Risk Profile</div>
-                  <div className="text-2xl font-bold mt-1.5">{investment.riskLevel}</div>
-                </div>
-              </div>
 
-              <div className="mt-8 pt-8 border-t border-white/10 flex flex-col md:flex-row items-center justify-between gap-4">
-                <div className="flex items-center gap-4">
-                  <div className="flex items-center space-x-2">
-                    <Switch 
-                      checked={investment.autoCompound} 
-                      onCheckedChange={(checked) => compoundMutation.mutate({ data: { autoCompound: checked } })}
+                {/* Risk Meter */}
+                <div className="mb-6">
+                  <div className="flex justify-between text-xs mb-2">
+                    <span className="text-muted-foreground">Risk Exposure</span>
+                    <span className={`font-semibold ${activeProfile.color}`}>
+                      {activeProfile.volatility} · {activeProfile.score}/10
+                    </span>
+                  </div>
+                  <RiskMeter score={activeProfile.score} />
+                </div>
+
+                {/* Drawdown Progress */}
+                <div className="mb-6">
+                  <div className="flex justify-between text-xs mb-2">
+                    <span className="text-muted-foreground">Drawdown Usage</span>
+                    <span className="text-muted-foreground">
+                      ${investment.drawdown.toFixed(2)} / ${((investment.amount * activeProfile.drawdownLimit) / 100).toFixed(2)} max
+                    </span>
+                  </div>
+                  <div className="h-2 bg-white/5 rounded-full overflow-hidden">
+                    <motion.div
+                      initial={{ width: 0 }}
+                      animate={{
+                        width: `${Math.min((investment.drawdown / ((investment.amount * activeProfile.drawdownLimit) / 100)) * 100, 100)}%`
+                      }}
+                      transition={{ duration: 0.8, ease: "easeOut" }}
+                      className="h-full rounded-full"
+                      style={{
+                        background: `linear-gradient(90deg, ${activeProfile.barColor}, ${activeProfile.barColor}99)`
+                      }}
                     />
-                    <label className="text-sm font-medium flex items-center gap-2">
-                      <RefreshCw className="w-4 h-4" /> Auto-Compound Profits
-                    </label>
                   </div>
                 </div>
-                
-                <button 
-                  onClick={() => stopMutation.mutate({})}
-                  disabled={stopMutation.isPending}
-                  className="flex items-center gap-2 px-6 py-2.5 bg-red-500/10 text-red-500 hover:bg-red-500/20 border border-red-500/30 rounded-lg font-medium transition-colors"
-                >
-                  <Square className="w-4 h-4" /> Stop Trading
-                </button>
+
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-white/8">
+                  <div className="flex items-center gap-3">
+                    <Switch
+                      checked={investment.autoCompound}
+                      onCheckedChange={(checked) => compoundMutation.mutate({ data: { autoCompound: checked } })}
+                    />
+                    <span className="text-sm font-medium flex items-center gap-2">
+                      <RefreshCw style={{ width: 14, height: 14 }} className="text-blue-400" />
+                      Auto-Compound Profits
+                    </span>
+                    {investment.autoCompound && (
+                      <span className="text-xs bg-blue-500/15 text-blue-400 border border-blue-500/25 px-2 py-0.5 rounded-full">ON</span>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => stopMutation.mutate({})}
+                    disabled={stopMutation.isPending}
+                    className="flex items-center gap-2 px-5 py-2.5 bg-red-500/10 text-red-400 hover:bg-red-500/15 border border-red-500/25 rounded-xl font-medium transition-all text-sm disabled:opacity-50"
+                  >
+                    <Square style={{ width: 14, height: 14 }} />
+                    {stopMutation.isPending ? "Stopping..." : "Stop Trading"}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+
+            {/* Features of current profile */}
+            <div className="glass-card p-5 rounded-2xl">
+              <div className="flex items-center gap-2 mb-4">
+                <Info style={{ width: 14, height: 14 }} className="text-muted-foreground" />
+                <span className="text-sm font-medium text-muted-foreground">Active Strategy Details</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {activeProfile.features.map((f, i) => (
+                  <div key={i} className="flex items-center gap-2 text-sm">
+                    <CheckCircle style={{ width: 14, height: 14 }} className={activeProfile.color} />
+                    <span className="text-muted-foreground">{f}</span>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <div className="lg:col-span-2 space-y-6">
-              <div className="glass-card p-6 rounded-xl">
-                <h2 className="text-xl font-bold mb-6">Select Strategy Profile</h2>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {riskProfiles.map(profile => (
-                    <div 
-                      key={profile.id}
-                      onClick={() => setRiskLevel(profile.id)}
-                      className={`cursor-pointer border p-5 rounded-xl transition-all duration-200 ${riskLevel === profile.id ? `${profile.bg} ${profile.border} shadow-[0_0_15px_rgba(255,255,255,0.05)]` : 'bg-white/5 border-white/5 hover:border-white/20'}`}
-                    >
-                      <profile.icon className={`w-8 h-8 mb-3 ${profile.color}`} />
-                      <div className="font-bold text-lg">{profile.name}</div>
-                      <div className={`text-sm mt-1 ${profile.color}`}>{profile.target}</div>
-                    </div>
-                  ))}
+          /* ── SETUP VIEW ──────────────────────────────────────────── */
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
+            {/* Left: Strategy Selection + Amount */}
+            <div className="lg:col-span-3 space-y-5">
+
+              {/* Risk Profile Cards */}
+              <div className="glass-card p-5 rounded-2xl">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="font-semibold">Select Strategy Profile</h2>
+                  <span className="text-xs text-muted-foreground">3 profiles available</span>
+                </div>
+                <div className="space-y-3">
+                  {RISK_PROFILES.map((profile, i) => {
+                    const isSelected = riskLevel === profile.id;
+                    return (
+                      <motion.button
+                        key={profile.id}
+                        initial={{ opacity: 0, x: -12 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: i * 0.07 }}
+                        onClick={() => setRiskLevel(profile.id)}
+                        className={`w-full text-left p-4 rounded-xl border transition-all duration-200 relative overflow-hidden ${
+                          isSelected
+                            ? `${profile.borderActive} bg-gradient-to-r ${profile.gradientFrom} ${profile.gradientTo}`
+                            : "border-white/8 bg-white/[0.02] hover:bg-white/[0.04] hover:border-white/15"
+                        }`}
+                        style={isSelected ? { boxShadow: `0 0 20px ${profile.glowColor}` } : {}}
+                      >
+                        <div className="flex items-start gap-4">
+                          <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 mt-0.5 ${
+                            isSelected
+                              ? `bg-gradient-to-br ${profile.gradientFrom} ${profile.gradientTo} border ${profile.borderActive}`
+                              : "bg-white/5 border border-white/8"
+                          }`}>
+                            <profile.icon style={{ width: 18, height: 18 }} className={isSelected ? profile.color : "text-muted-foreground"} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-0.5">
+                              <span className="font-semibold">{profile.label}</span>
+                              {profile.recommended && (
+                                <span className="text-[9px] px-1.5 py-0.5 bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 rounded font-bold uppercase tracking-wide">
+                                  Recommended
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-xs text-muted-foreground mb-2">{profile.description}</div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${profile.badgeColor}`}>
+                                {profile.minDailyPct}–{profile.maxDailyPct}% daily
+                              </span>
+                              <span className="text-xs text-muted-foreground">
+                                {profile.drawdownLimit}% max drawdown
+                              </span>
+                              <span className={`text-xs ${
+                                profile.volatility === "Low" ? "text-blue-400"
+                                : profile.volatility === "Medium" ? "text-indigo-400"
+                                : "text-orange-400"
+                              }`}>
+                                {profile.volatility} volatility
+                              </span>
+                            </div>
+                          </div>
+                          <AnimatePresence>
+                            {isSelected && (
+                              <motion.div
+                                initial={{ scale: 0, opacity: 0 }}
+                                animate={{ scale: 1, opacity: 1 }}
+                                exit={{ scale: 0, opacity: 0 }}
+                                className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-2 ${profile.badgeColor} border`}
+                              >
+                                <CheckCircle style={{ width: 12, height: 12 }} />
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </div>
+
+                        {/* Risk Meter Bar */}
+                        {isSelected && (
+                          <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            className="mt-3 pt-3 border-t border-white/8"
+                          >
+                            <div className="flex justify-between text-[10px] text-muted-foreground mb-1.5">
+                              <span>Risk exposure</span>
+                              <span className={`font-medium ${profile.color}`}>{profile.score}/10</span>
+                            </div>
+                            <RiskMeter score={profile.score} />
+                          </motion.div>
+                        )}
+                      </motion.button>
+                    );
+                  })}
                 </div>
               </div>
 
-              <div className="glass-card p-6 rounded-xl">
-                <h2 className="text-xl font-bold mb-4">Allocation</h2>
-                <div className="mb-2 flex justify-between text-sm">
-                  <span className="text-muted-foreground">Amount to Invest</span>
-                  <span className="text-primary font-medium">Available: ${wallet?.tradingBalance?.toFixed(2) || 0}</span>
+              {/* Amount Input */}
+              <div className="glass-card p-5 rounded-2xl">
+                <div className="flex items-center justify-between mb-3">
+                  <h2 className="font-semibold">Capital Allocation</h2>
+                  <span className="text-xs text-muted-foreground">
+                    Available:{" "}
+                    <span className="text-blue-400 font-semibold">${maxAmount.toFixed(2)} USDT</span>
+                  </span>
                 </div>
-                <div className="relative">
-                  <input 
-                    type="number" 
-                    value={amount} 
+
+                <div className="relative mb-3">
+                  <input
+                    type="number"
+                    value={amount}
                     onChange={(e) => setAmount(e.target.value)}
-                    className="w-full bg-black/50 border border-white/10 rounded-lg p-4 text-xl font-bold text-white focus:ring-2 focus:ring-primary focus:outline-none pr-20"
+                    className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-2xl font-bold text-white focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 focus:outline-none pr-24 transition-all"
                     placeholder="0.00"
+                    min="0"
+                    max={maxAmount}
                   />
-                  <div className="absolute right-4 top-4 text-muted-foreground font-medium">USDT</div>
-                  <button 
-                    onClick={() => setAmount(String(wallet?.tradingBalance || 0))}
-                    className="absolute right-16 top-3 text-xs text-primary font-medium px-2 py-1.5 bg-primary/10 rounded hover:bg-primary/20 transition"
-                  >
-                    MAX
-                  </button>
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
+                    <button
+                      onClick={() => setAmount(String(Math.floor(maxAmount * 100) / 100))}
+                      className="text-xs text-blue-400 font-semibold px-2 py-1 bg-blue-500/10 hover:bg-blue-500/20 rounded-lg transition border border-blue-500/20"
+                    >
+                      MAX
+                    </button>
+                    <span className="text-muted-foreground text-sm font-medium">USDT</span>
+                  </div>
                 </div>
+
+                {/* Quick amount buttons */}
+                <div className="flex gap-2 flex-wrap">
+                  {[25, 50, 75, 100].map((pct) => (
+                    <button
+                      key={pct}
+                      onClick={() => setAmount(String(Math.floor(maxAmount * pct / 100 * 100) / 100))}
+                      className="text-xs px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/8 border border-white/8 hover:border-white/15 transition-all text-muted-foreground hover:text-white font-medium"
+                    >
+                      {pct}%
+                    </button>
+                  ))}
+                </div>
+
+                {amount && numAmount > maxAmount && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    className="flex items-center gap-2 mt-3 text-xs text-red-400 bg-red-500/8 border border-red-500/20 rounded-lg px-3 py-2"
+                  >
+                    <AlertTriangle style={{ width: 12, height: 12 }} />
+                    Exceeds available trading balance
+                  </motion.div>
+                )}
               </div>
             </div>
 
-            <div className="space-y-6">
-              <div className="glass-card p-6 rounded-xl border-primary/20">
-                <h3 className="font-bold text-lg mb-4">Summary</h3>
-                <div className="space-y-3 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Capital</span>
-                    <span className="font-medium">${amount || "0.00"}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Strategy</span>
-                    <span className="font-medium">{riskProfiles.find(r => r.id === riskLevel)?.name}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Expected Daily</span>
-                    <span className="font-medium profit-text">{riskProfiles.find(r => r.id === riskLevel)?.target}</span>
-                  </div>
+            {/* Right: Summary + Deploy */}
+            <div className="lg:col-span-2 space-y-4">
+              {/* Expected Returns Panel */}
+              <div className="glass-card p-5 rounded-2xl">
+                <div className="flex items-center gap-2 mb-4">
+                  <TrendingUp style={{ width: 15, height: 15 }} className={selectedProfile.color} />
+                  <h3 className="font-semibold text-sm">Expected Returns</h3>
+                  <AnimatePresence mode="wait">
+                    <motion.span
+                      key={selectedProfile.id}
+                      initial={{ opacity: 0, x: 4 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: -4 }}
+                      className={`ml-auto text-xs px-2 py-0.5 rounded-full border ${selectedProfile.badgeColor}`}
+                    >
+                      {selectedProfile.label}
+                    </motion.span>
+                  </AnimatePresence>
                 </div>
 
-                <div className="mt-6 pt-6 border-t border-white/10">
-                  <button 
-                    onClick={() => startMutation.mutate({ data: { amount: Number(amount), riskLevel } })}
-                    disabled={startMutation.isPending || !amount || Number(amount) <= 0 || Number(amount) > (wallet?.tradingBalance || 0)}
-                    className="w-full bg-primary hover:bg-primary/90 text-white font-bold py-4 rounded-lg shadow-[0_0_15px_rgba(59,130,246,0.4)] transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <Play className="w-5 h-5 fill-current" />
-                    Deploy Capital
-                  </button>
-                </div>
+                <AnimatePresence mode="wait">
+                  {numAmount > 0 ? (
+                    <ExpectedReturns
+                      key={`${selectedProfile.id}-${numAmount}`}
+                      profile={selectedProfile}
+                      amount={numAmount}
+                    />
+                  ) : (
+                    <motion.div
+                      key="placeholder"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      className="text-center py-6 text-muted-foreground"
+                    >
+                      <TrendingUp style={{ width: 28, height: 28 }} className="mx-auto mb-2 opacity-20" />
+                      <p className="text-xs">Enter an amount to see projections</p>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
+
+              {/* Strategy Summary */}
+              <div className="glass-card p-5 rounded-2xl">
+                <h3 className="font-semibold text-sm mb-4">Deployment Summary</h3>
+                <div className="space-y-2.5 text-sm">
+                  {[
+                    { label: "Capital", value: numAmount > 0 ? `$${numAmount.toFixed(2)} USDT` : "—" },
+                    { label: "Strategy", value: selectedProfile.label },
+                    { label: "Daily Rate", value: `${selectedProfile.minDailyPct}–${selectedProfile.maxDailyPct}%`, highlight: true },
+                    { label: "Risk Level", value: selectedProfile.volatility },
+                    { label: "Drawdown Limit", value: `${selectedProfile.drawdownLimit}%` },
+                    { label: "Compounding", value: "Configurable post-start" },
+                  ].map(({ label, value, highlight }) => (
+                    <div key={label} className="flex justify-between items-center py-1 border-b border-white/[0.04] last:border-0">
+                      <span className="text-muted-foreground">{label}</span>
+                      <span className={`font-medium ${highlight ? "text-green-400" : "text-white"}`}>{value}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <motion.button
+                  whileHover={canDeploy ? { scale: 1.01 } : {}}
+                  whileTap={canDeploy ? { scale: 0.99 } : {}}
+                  onClick={() => startMutation.mutate({ data: { amount: numAmount, riskLevel } })}
+                  disabled={startMutation.isPending || !canDeploy}
+                  className={`w-full mt-5 font-bold py-3.5 rounded-xl transition-all flex items-center justify-center gap-2 text-sm ${
+                    canDeploy
+                      ? "bg-blue-600 hover:bg-blue-500 text-white shadow-[0_0_20px_rgba(59,130,246,0.35)]"
+                      : "bg-white/5 text-muted-foreground cursor-not-allowed border border-white/8"
+                  }`}
+                >
+                  {startMutation.isPending ? (
+                    <>
+                      <RefreshCw style={{ width: 15, height: 15 }} className="animate-spin" />
+                      Deploying...
+                    </>
+                  ) : (
+                    <>
+                      <Play style={{ width: 15, height: 15 }} className="fill-current" />
+                      Deploy Capital
+                      <ChevronRight style={{ width: 14, height: 14 }} className="opacity-60" />
+                    </>
+                  )}
+                </motion.button>
+
+                {!canDeploy && numAmount === 0 && (
+                  <p className="text-center text-xs text-muted-foreground mt-2">
+                    Enter an amount to deploy
+                  </p>
+                )}
+              </div>
+
+              {/* Features */}
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={selectedProfile.id}
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -6 }}
+                  className="glass-card p-4 rounded-2xl"
+                >
+                  <div className="flex items-center gap-2 mb-3">
+                    <selectedProfile.icon style={{ width: 13, height: 13 }} className={selectedProfile.color} />
+                    <span className="text-xs text-muted-foreground font-medium">Strategy Includes</span>
+                  </div>
+                  <div className="space-y-2">
+                    {selectedProfile.features.map((f, i) => (
+                      <div key={i} className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <ArrowUpRight style={{ width: 11, height: 11 }} className={selectedProfile.color} />
+                        {f}
+                      </div>
+                    ))}
+                  </div>
+                </motion.div>
+              </AnimatePresence>
             </div>
           </div>
         )}

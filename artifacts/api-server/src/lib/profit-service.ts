@@ -18,6 +18,45 @@ export const DRAWDOWN_LIMITS: Record<string, number> = {
   high: 0.10,
 };
 
+export const RISK_MULTIPLIERS: Record<string, number> = {
+  low: 0.6,
+  medium: 1.0,
+  high: 1.5,
+};
+
+export const RISK_PROFILES = {
+  LOW: {
+    name: "Conservative",
+    multiplier: 0.6,
+    drawdownLimit: 0.03,
+    minDailyPct: 0.3,
+    maxDailyPct: 0.6,
+    description: "Capital-first strategy. Minimal volatility with steady, predictable gains.",
+    volatility: "Low",
+    score: 2,
+  },
+  MEDIUM: {
+    name: "Balanced",
+    multiplier: 1.0,
+    drawdownLimit: 0.05,
+    minDailyPct: 0.5,
+    maxDailyPct: 1.0,
+    description: "Optimized risk/reward ratio. Consistent returns with moderate exposure.",
+    volatility: "Medium",
+    score: 5,
+  },
+  HIGH: {
+    name: "Aggressive",
+    multiplier: 1.5,
+    drawdownLimit: 0.10,
+    minDailyPct: 0.75,
+    maxDailyPct: 1.5,
+    description: "Maximum yield strategy. Higher returns with elevated market exposure.",
+    volatility: "High",
+    score: 8,
+  },
+} as const;
+
 const REFERRAL_MONTHLY_RATE = 0.005;
 const DAYS_PER_MONTH = 30;
 const REFERRAL_DAILY_RATE = REFERRAL_MONTHLY_RATE / DAYS_PER_MONTH;
@@ -85,7 +124,10 @@ export async function distributeDailyProfit(
         continue;
       }
 
-      const dailyProfitAmount = amount * (profitPercent / 100);
+      const riskKey = (inv.riskLevel ?? "medium").toLowerCase();
+      const riskMultiplier = RISK_MULTIPLIERS[riskKey] ?? 1.0;
+      const adjustedProfitPercent = profitPercent * riskMultiplier;
+      const dailyProfitAmount = amount * (adjustedProfitPercent / 100);
       const newTotalProfit = totalProfit + dailyProfitAmount;
 
       let newDrawdown = currentDrawdown;
@@ -146,7 +188,7 @@ export async function distributeDailyProfit(
         type: "profit",
         amount: dailyProfitAmount.toString(),
         status: "completed",
-        description: `Daily profit distribution: ${profitPercent}%`,
+        description: `Daily profit (${inv.riskLevel} risk, ${adjustedProfitPercent.toFixed(2)}% effective rate)`,
       });
 
       const currentEquity = inv.autoCompound ? amount + dailyProfitAmount : amount;
@@ -162,7 +204,7 @@ export async function distributeDailyProfit(
 
       const symbols = ["BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT"];
       const symbol = symbols[Math.floor(Math.random() * symbols.length)]!;
-      const direction = profitPercent >= 0 ? "buy" : "sell";
+      const direction = adjustedProfitPercent >= 0 ? "buy" : "sell";
       const basePrice = symbol.startsWith("BTC")
         ? 67000
         : symbol.startsWith("ETH")
@@ -171,7 +213,7 @@ export async function distributeDailyProfit(
             ? 145
             : 420;
       const entryPrice = basePrice * (1 - 0.005);
-      const exitPrice = basePrice * (1 + profitPercent / 100);
+      const exitPrice = basePrice * (1 + adjustedProfitPercent / 100);
 
       await tx.insert(tradesTable).values({
         userId: inv.userId,
@@ -180,7 +222,7 @@ export async function distributeDailyProfit(
         entryPrice: entryPrice.toString(),
         exitPrice: exitPrice.toString(),
         profit: dailyProfitAmount.toString(),
-        profitPercent: profitPercent.toString(),
+        profitPercent: adjustedProfitPercent.toString(),
       });
 
       totalProfitDistributed += dailyProfitAmount;
