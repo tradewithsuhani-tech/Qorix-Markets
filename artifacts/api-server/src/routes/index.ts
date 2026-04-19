@@ -11,6 +11,7 @@ import notificationsRouter from "./notifications";
 import tradingDeskRouter from "./trading-desk";
 import reportsRouter from "./reports";
 import publicRouter from "./public";
+import fraudRouter from "./fraud";
 
 const router: IRouter = Router();
 
@@ -26,5 +27,6 @@ router.use(dashboardRouter);
 router.use(adminRouter);
 router.use(notificationsRouter);
 router.use(tradingDeskRouter);
+router.use(fraudRouter);
 
 export default router;

@@ -4,6 +4,7 @@ import { db, usersTable, walletsTable, investmentsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { authMiddleware, signToken, type AuthRequest } from "../middlewares/auth";
 import { RegisterBody, LoginBody } from "@workspace/api-zod";
+import { trackLoginEvent, runFraudChecks } from "../lib/fraud-service";
 import crypto from "crypto";
 
 const router = Router();
@@ -21,6 +22,15 @@ function formatUser(user: typeof usersTable.$inferSelect) {
     referralCode: user.referralCode,
     createdAt: user.createdAt.toISOString(),
   };
+}
+
+function getClientIp(req: any): string {
+  const forwarded = req.headers["x-forwarded-for"];
+  if (forwarded) {
+    const first = (Array.isArray(forwarded) ? forwarded[0] : forwarded).split(",")[0];
+    return first?.trim() ?? req.ip ?? "unknown";
+  }
+  return req.ip ?? req.connection?.remoteAddress ?? "unknown";
 }
 
 router.post("/auth/register", async (req, res) => {
@@ -66,6 +76,15 @@ router.post("/auth/register", async (req, res) => {
   await db.insert(walletsTable).values({ userId: newUser.id });
   await db.insert(investmentsTable).values({ userId: newUser.id });
 
+  const ip = getClientIp(req);
+  const ua = req.headers["user-agent"];
+
+  // Fire-and-forget: track event and run fraud checks
+  setImmediate(async () => {
+    await trackLoginEvent(newUser.id, ip, ua, "register");
+    await runFraudChecks(newUser.id, ip, ua, sponsorId ?? null);
+  });
+
   const token = signToken(newUser.id, newUser.isAdmin);
   res.status(201).json({ token, user: formatUser(newUser) });
 });
@@ -90,6 +109,15 @@ router.post("/auth/login", async (req, res) => {
     res.status(401).json({ error: "Invalid credentials" });
     return;
   }
+
+  const ip = getClientIp(req);
+  const ua = req.headers["user-agent"];
+
+  // Fire-and-forget: track event and run fraud checks
+  setImmediate(async () => {
+    await trackLoginEvent(user.id, ip, ua, "login");
+    await runFraudChecks(user.id, ip, ua, null);
+  });
 
   const token = signToken(user.id, user.isAdmin);
   res.json({ token, user: formatUser(user) });
