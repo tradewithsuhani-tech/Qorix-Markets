@@ -62,11 +62,12 @@ lib/
 10. **Notification System**: Real-time bell icon with badge, dropdown panel, per-event types (deposit, withdrawal, daily_profit, monthly_payout, drawdown_alert, system), mark-read/delete
 11. **Admin Panel**: Set daily profit %, view AUM, approve/reject withdrawals, user management
 12. **PWA**: manifest.json, service worker, mobile bottom navigation
+13. **Qorix Assistant Chatbot**: Floating chat button (bottom-right), predefined flows (How to Start, Investment Guide, Returns, Risk), quick reply buttons, typing animation, "Talk to Expert" escalation, admin chat panel with real-time replies and session resolution
 
 ## Demo Accounts
 
-- Admin: `admin@qorix.com` / `Admin123!`
-- Demo Investor: `demo@qorix.com` / (password hash seeded directly)
+- Admin: `admin@qorix.com` / `Admin@1234`
+- Demo User: `demo@qorix.com` / `Demo@1234`
 
 ## API Routes
 

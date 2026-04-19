@@ -13,6 +13,7 @@ import reportsRouter from "./reports";
 import publicRouter from "./public";
 import fraudRouter from "./fraud";
 import leaderboardRouter from "./leaderboard";
+import chatRouter from "./chat";
 
 const router: IRouter = Router();
 
@@ -25,6 +26,7 @@ router.use(transactionsRouter);
 router.use(investmentRouter);
 router.use(referralRouter);
 router.use(dashboardRouter);
+router.use(chatRouter);
 router.use(adminRouter);
 router.use(notificationsRouter);
 router.use(tradingDeskRouter);

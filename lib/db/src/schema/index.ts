@@ -12,3 +12,4 @@ export * from "./monthly-performance";
 export * from "./report-verifications";
 export * from "./ledger";
 export * from "./fraud";
+export * from "./chat";
