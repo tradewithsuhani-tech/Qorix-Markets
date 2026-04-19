@@ -1,5 +1,15 @@
-import { useState, useEffect } from "react";
-import { animate } from "framer-motion";
+import { useState, useEffect, useRef } from "react";
+import { motion, useSpring } from "framer-motion";
+
+function useAnimatedNumber(value: number) {
+  const spring = useSpring(value, { 
+    stiffness: 55, 
+    damping: 18, 
+    mass: 0.8
+  });
+  useEffect(() => { spring.set(value); }, [spring, value]);
+  return spring;
+}
 
 export function AnimatedCounter({ 
   value, 
@@ -14,27 +24,51 @@ export function AnimatedCounter({
   decimals?: number;
   className?: string;
 }) {
-  const [displayValue, setDisplayValue] = useState(0);
+  const springValue = useAnimatedNumber(value);
+  const [display, setDisplay] = useState(value);
 
   useEffect(() => {
-    const controls = animate(displayValue, value, {
-      duration: 1,
-      ease: "easeOut",
-      onUpdate: (v) => {
-        setDisplayValue(v);
-      },
-    });
-    return controls.stop;
-  }, [value]);
+    const unsub = springValue.on("change", (latest) => setDisplay(latest));
+    return unsub;
+  }, [springValue]);
 
   return (
-    <span className={className}>
+    <span className={`number-scroll inline-block font-variant-numeric tabular-nums ${className}`}>
       {prefix}
-      {displayValue.toLocaleString(undefined, {
+      {display.toLocaleString(undefined, {
         minimumFractionDigits: decimals,
         maximumFractionDigits: decimals,
       })}
       {suffix}
+    </span>
+  );
+}
+
+export function BigBalanceCounter({
+  value,
+  prefix = "$",
+  className = ""
+}: {
+  value: number;
+  prefix?: string;
+  className?: string;
+}) {
+  const springValue = useAnimatedNumber(value);
+  const [display, setDisplay] = useState(value);
+
+  useEffect(() => {
+    const unsub = springValue.on("change", (latest) => setDisplay(latest));
+    return unsub;
+  }, [springValue]);
+
+  const formatted = display.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const [intPart, decPart] = formatted.split(".");
+
+  return (
+    <span className={`number-scroll inline-flex items-end gap-0.5 ${className}`}>
+      <span className="text-muted-foreground text-lg font-medium mb-0.5">{prefix}</span>
+      <span className="font-bold tracking-tight">{intPart}</span>
+      <span className="text-muted-foreground text-xl font-medium mb-0.5">.{decPart}</span>
     </span>
   );
 }
