@@ -3,6 +3,7 @@ import {
   useGetEquityChart,
   useGetDashboardPerformance,
   useGetInvestment,
+  useGetMonthlyPerformance,
 } from "@workspace/api-client-react";
 import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
@@ -14,6 +15,9 @@ import {
   PieChart,
   Target,
   RefreshCw,
+  CalendarDays,
+  Trophy,
+  ShieldAlert,
 } from "lucide-react";
 import {
   Chart as ChartJS,
@@ -50,6 +54,38 @@ const TIME_FILTERS = [
   { label: "30D", days: 30 },
   { label: "90D", days: 90 },
 ];
+
+const PERF_FILTERS = [
+  { label: "3 Months", value: "3m" as const },
+  { label: "6 Months", value: "6m" as const },
+  { label: "All Time", value: "all" as const },
+];
+
+function PerfFilterBar({
+  selected,
+  onChange,
+}: {
+  selected: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div className="flex items-center gap-1 bg-white/[0.04] border border-white/8 rounded-xl p-1">
+      {PERF_FILTERS.map((f) => (
+        <button
+          key={f.value}
+          onClick={() => onChange(f.value)}
+          className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition-all duration-200 ${
+            selected === f.value
+              ? "bg-blue-500/25 text-blue-400 border border-blue-500/40 shadow-[0_0_8px_rgba(59,130,246,0.15)]"
+              : "text-muted-foreground hover:text-white"
+          }`}
+        >
+          {f.label}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 const CHART_DEFAULTS = {
   plugins: {
@@ -183,6 +219,7 @@ function ChartCard({
 
 export default function AnalyticsPage() {
   const [days, setDays] = useState(30);
+  const [perfFilter, setPerfFilter] = useState<"3m" | "6m" | "all">("6m");
 
   const { data: equityRaw, isLoading: equityLoading } = useGetEquityChart(
     { days },
@@ -194,6 +231,12 @@ export default function AnalyticsPage() {
   const { data: investment, isLoading: invLoading } = useGetInvestment({
     query: { refetchInterval: 15000 },
   });
+  const { data: monthlyRaw, isLoading: monthlyLoading } = useGetMonthlyPerformance(
+    { filter: perfFilter },
+    { query: { refetchInterval: 60000 } },
+  );
+
+  const monthlyData = Array.isArray(monthlyRaw) ? monthlyRaw : [];
 
   const equityArr = Array.isArray(equityRaw) ? [...equityRaw].reverse() : [];
 
@@ -662,6 +705,337 @@ export default function AnalyticsPage() {
             />
           </ChartCard>
         </div>
+
+        {/* Performance Dashboard — Monthly History */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.28, duration: 0.4 }}
+          className="space-y-4"
+        >
+          {/* Section header */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl flex items-center justify-center bg-indigo-500/15 border border-indigo-500/25">
+                <CalendarDays style={{ width: 14, height: 14, color: "#818cf8" }} />
+              </div>
+              <div>
+                <div className="font-semibold text-sm">Performance Dashboard</div>
+                <div className="text-[11px] text-muted-foreground">Monthly returns, drawdown & win rate</div>
+              </div>
+            </div>
+            <PerfFilterBar selected={perfFilter} onChange={(v) => setPerfFilter(v as "3m" | "6m" | "all")} />
+          </div>
+
+          {/* Monthly KPI strip */}
+          {monthlyData.length > 0 && (() => {
+            const totalReturn = monthlyData.reduce((a, m) => a + m.monthlyReturn, 0);
+            const avgWinRate = monthlyData.reduce((a, m) => a + m.winRate, 0) / monthlyData.length;
+            const worstDrawdown = Math.max(...monthlyData.map((m) => m.maxDrawdown));
+            const totalProfit = monthlyData.reduce((a, m) => a + m.totalProfit, 0);
+            return (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {[
+                  { label: "Cumulative Return", value: `${totalReturn >= 0 ? "+" : ""}${totalReturn.toFixed(2)}%`, color: totalReturn >= 0 ? "#22c55e" : "#ef4444", sub: `${monthlyData.length} months` },
+                  { label: "Avg Win Rate", value: `${avgWinRate.toFixed(1)}%`, color: "#facc15", sub: "Per month" },
+                  { label: "Peak Drawdown", value: `${worstDrawdown.toFixed(2)}%`, color: "#ef4444", sub: "Worst month" },
+                  { label: "Total Profit", value: `${totalProfit >= 0 ? "+" : ""}$${Math.abs(totalProfit).toFixed(2)}`, color: totalProfit >= 0 ? "#22c55e" : "#ef4444", sub: "USDT earned" },
+                ].map((s) => (
+                  <div key={s.label} className="stat-card p-4 rounded-2xl">
+                    <div className="text-xs text-muted-foreground mb-1.5 uppercase tracking-wider">{s.label}</div>
+                    <div className="text-xl font-bold tabular-nums" style={{ color: s.color }}>{s.value}</div>
+                    <div className="text-[11px] text-muted-foreground mt-1">{s.sub}</div>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
+
+          {monthlyData.length === 0 && !monthlyLoading && (
+            <div className="glass-card p-8 rounded-2xl flex flex-col items-center justify-center gap-3 text-center">
+              <CalendarDays style={{ width: 32, height: 32, color: "#4b5563" }} />
+              <div className="text-sm text-muted-foreground">No monthly performance data yet.</div>
+              <div className="text-[11px] text-muted-foreground">Data is recorded daily after each profit distribution run.</div>
+            </div>
+          )}
+
+          {monthlyLoading && (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {[0,1,2,3].map((i) => <Skeleton key={i} className="h-24 rounded-2xl" />)}
+            </div>
+          )}
+
+          {/* Monthly charts grid */}
+          {monthlyData.length > 0 && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+              {/* Monthly Returns Chart */}
+              <ChartCard
+                title="Monthly Returns"
+                subtitle="Return % per calendar month"
+                icon={TrendingUp}
+                iconColor="#818cf8"
+                loading={monthlyLoading}
+                stat={monthlyLoading ? undefined : (() => {
+                  const last = monthlyData[monthlyData.length - 1];
+                  return last ? `${last.monthlyReturn >= 0 ? "+" : ""}${last.monthlyReturn.toFixed(2)}%` : undefined;
+                })()}
+                statColor={(() => {
+                  const last = monthlyData[monthlyData.length - 1];
+                  return last && last.monthlyReturn >= 0 ? "#22c55e" : "#ef4444";
+                })()}
+                delay={0}
+              >
+                <Bar
+                  data={{
+                    labels: monthlyData.map((m) => {
+                      try { return format(parseISO(`${m.yearMonth}-01`), "MMM yy"); } catch { return m.yearMonth; }
+                    }),
+                    datasets: [
+                      {
+                        label: "Monthly Return %",
+                        data: monthlyData.map((m) => m.monthlyReturn),
+                        backgroundColor: monthlyData.map((m) =>
+                          m.monthlyReturn >= 0 ? "rgba(129,140,248,0.65)" : "rgba(239,68,68,0.65)",
+                        ),
+                        borderColor: monthlyData.map((m) =>
+                          m.monthlyReturn >= 0 ? "rgba(129,140,248,1)" : "rgba(239,68,68,1)",
+                        ),
+                        borderWidth: 1,
+                        borderRadius: 6,
+                        borderSkipped: false,
+                      },
+                    ],
+                  }}
+                  options={{
+                    ...CHART_DEFAULTS,
+                    plugins: {
+                      ...CHART_DEFAULTS.plugins,
+                      tooltip: {
+                        ...CHART_DEFAULTS.plugins.tooltip,
+                        callbacks: {
+                          label: (ctx: any) => {
+                            const v = Number(ctx.raw);
+                            return ` Return: ${v >= 0 ? "+" : ""}${v.toFixed(2)}%`;
+                          },
+                        },
+                      },
+                    },
+                    scales: {
+                      x: CHART_DEFAULTS.scales.x,
+                      y: {
+                        ...CHART_DEFAULTS.scales.y,
+                        ticks: {
+                          ...CHART_DEFAULTS.scales.y.ticks,
+                          callback: (v: any) => `${Number(v).toFixed(1)}%`,
+                        },
+                      },
+                    },
+                  }}
+                />
+              </ChartCard>
+
+              {/* Monthly Drawdown Chart */}
+              <ChartCard
+                title="Monthly Max Drawdown"
+                subtitle="Peak-to-trough decline per month"
+                icon={ShieldAlert}
+                iconColor="#f97316"
+                loading={monthlyLoading}
+                stat={monthlyLoading ? undefined : (() => {
+                  const worst = Math.max(...monthlyData.map((m) => m.maxDrawdown));
+                  return `${worst.toFixed(2)}% peak`;
+                })()}
+                statColor="#f97316"
+                delay={0.05}
+              >
+                <Bar
+                  data={{
+                    labels: monthlyData.map((m) => {
+                      try { return format(parseISO(`${m.yearMonth}-01`), "MMM yy"); } catch { return m.yearMonth; }
+                    }),
+                    datasets: [
+                      {
+                        label: "Max Drawdown %",
+                        data: monthlyData.map((m) => m.maxDrawdown),
+                        backgroundColor: "rgba(249,115,22,0.55)",
+                        borderColor: "rgba(249,115,22,1)",
+                        borderWidth: 1,
+                        borderRadius: 6,
+                        borderSkipped: false,
+                      },
+                    ],
+                  }}
+                  options={{
+                    ...CHART_DEFAULTS,
+                    plugins: {
+                      ...CHART_DEFAULTS.plugins,
+                      tooltip: {
+                        ...CHART_DEFAULTS.plugins.tooltip,
+                        callbacks: {
+                          label: (ctx: any) => ` Drawdown: ${Number(ctx.raw).toFixed(2)}%`,
+                        },
+                      },
+                    },
+                    scales: {
+                      x: CHART_DEFAULTS.scales.x,
+                      y: {
+                        ...CHART_DEFAULTS.scales.y,
+                        min: 0,
+                        ticks: {
+                          ...CHART_DEFAULTS.scales.y.ticks,
+                          callback: (v: any) => `${Number(v).toFixed(1)}%`,
+                        },
+                      },
+                    },
+                  }}
+                />
+              </ChartCard>
+
+              {/* Win Rate Chart */}
+              <ChartCard
+                title="Monthly Win Rate"
+                subtitle="% of profitable trading days per month"
+                icon={Trophy}
+                iconColor="#facc15"
+                loading={monthlyLoading}
+                stat={monthlyLoading ? undefined : (() => {
+                  const avg = monthlyData.reduce((a, m) => a + m.winRate, 0) / monthlyData.length;
+                  return `${avg.toFixed(1)}% avg`;
+                })()}
+                statColor="#facc15"
+                delay={0.1}
+              >
+                <Bar
+                  data={{
+                    labels: monthlyData.map((m) => {
+                      try { return format(parseISO(`${m.yearMonth}-01`), "MMM yy"); } catch { return m.yearMonth; }
+                    }),
+                    datasets: [
+                      {
+                        label: "Win Rate %",
+                        data: monthlyData.map((m) => m.winRate),
+                        backgroundColor: monthlyData.map((m) =>
+                          m.winRate >= 50 ? "rgba(250,204,21,0.55)" : "rgba(239,68,68,0.55)",
+                        ),
+                        borderColor: monthlyData.map((m) =>
+                          m.winRate >= 50 ? "rgba(250,204,21,1)" : "rgba(239,68,68,1)",
+                        ),
+                        borderWidth: 1,
+                        borderRadius: 6,
+                        borderSkipped: false,
+                      },
+                      {
+                        label: "50% Threshold",
+                        data: monthlyData.map(() => 50),
+                        type: "line" as const,
+                        borderColor: "rgba(255,255,255,0.2)",
+                        borderWidth: 1.5,
+                        borderDash: [6, 4],
+                        pointRadius: 0,
+                        fill: false,
+                        tension: 0,
+                      },
+                    ],
+                  }}
+                  options={{
+                    ...CHART_DEFAULTS,
+                    plugins: {
+                      ...CHART_DEFAULTS.plugins,
+                      legend: {
+                        display: true,
+                        labels: {
+                          color: "#64748b",
+                          boxWidth: 12,
+                          font: { size: 11 },
+                        },
+                      },
+                      tooltip: {
+                        ...CHART_DEFAULTS.plugins.tooltip,
+                        callbacks: {
+                          label: (ctx: any) => {
+                            if (ctx.dataset.label === "50% Threshold") return " 50% break-even";
+                            const v = Number(ctx.raw);
+                            const idx = ctx.dataIndex;
+                            const entry = monthlyData[idx];
+                            return [
+                              ` Win Rate: ${v.toFixed(1)}%`,
+                              entry ? ` (${entry.winningDays}W / ${entry.tradingDays - entry.winningDays}L of ${entry.tradingDays} days)` : "",
+                            ];
+                          },
+                        },
+                      },
+                    },
+                    scales: {
+                      x: CHART_DEFAULTS.scales.x,
+                      y: {
+                        ...CHART_DEFAULTS.scales.y,
+                        min: 0,
+                        max: 100,
+                        ticks: {
+                          ...CHART_DEFAULTS.scales.y.ticks,
+                          callback: (v: any) => `${Number(v).toFixed(0)}%`,
+                        },
+                      },
+                    },
+                  }}
+                />
+              </ChartCard>
+
+              {/* Monthly P&L Summary table */}
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.15, duration: 0.4 }}
+                className="glass-card p-5 rounded-2xl flex flex-col"
+              >
+                <div className="flex items-start justify-between mb-4">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-xl flex items-center justify-center bg-green-500/15 border border-green-500/25">
+                      <BarChart2 style={{ width: 14, height: 14, color: "#4ade80" }} />
+                    </div>
+                    <div>
+                      <div className="font-semibold text-sm">Monthly Breakdown</div>
+                      <div className="text-[11px] text-muted-foreground">Detailed per-month stats</div>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex-1 overflow-auto" style={{ maxHeight: 260 }}>
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="text-muted-foreground border-b border-white/8">
+                        <th className="pb-2 text-left font-medium">Month</th>
+                        <th className="pb-2 text-right font-medium">Return</th>
+                        <th className="pb-2 text-right font-medium">Max DD</th>
+                        <th className="pb-2 text-right font-medium">Win Rate</th>
+                        <th className="pb-2 text-right font-medium">P&L</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[...monthlyData].reverse().map((m) => {
+                        const label = (() => { try { return format(parseISO(`${m.yearMonth}-01`), "MMM yyyy"); } catch { return m.yearMonth; } })();
+                        return (
+                          <tr key={m.yearMonth} className="border-b border-white/[0.04] hover:bg-white/[0.03] transition-colors">
+                            <td className="py-2 font-medium">{label}</td>
+                            <td className={`py-2 text-right tabular-nums font-semibold ${m.monthlyReturn >= 0 ? "text-green-400" : "text-red-400"}`}>
+                              {m.monthlyReturn >= 0 ? "+" : ""}{m.monthlyReturn.toFixed(2)}%
+                            </td>
+                            <td className="py-2 text-right tabular-nums text-orange-400">{m.maxDrawdown.toFixed(2)}%</td>
+                            <td className={`py-2 text-right tabular-nums ${m.winRate >= 50 ? "text-yellow-400" : "text-red-400"}`}>
+                              {m.winRate.toFixed(1)}%
+                            </td>
+                            <td className={`py-2 text-right tabular-nums font-semibold ${m.totalProfit >= 0 ? "text-green-400" : "text-red-400"}`}>
+                              {m.totalProfit >= 0 ? "+" : ""}${Math.abs(m.totalProfit).toFixed(2)}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </motion.div>
 
         {/* Rolling Returns Comparison */}
         <motion.div

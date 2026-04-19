@@ -434,6 +434,26 @@ paths:
               schema:
                 $ref: "#/components/schemas/FundStats"
 
+  /dashboard/monthly-performance:
+    get:
+      operationId: getMonthlyPerformance
+      tags: [dashboard]
+      summary: Get monthly performance history
+      parameters:
+        - name: filter
+          in: query
+          schema:
+            type: string
+            enum: [3m, 6m, all]
+            default: 6m
+      responses:
+        "200":
+          description: Monthly performance history
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MonthlyPerformanceList"
+
   # NOTIFICATIONS
   /notifications:
     get:
@@ -1210,6 +1230,43 @@ components:
         - reserveFund
         - activeInvestors
         - utilizationRate
+
+    MonthlyPerformanceEntry:
+      type: object
+      properties:
+        yearMonth:
+          type: string
+        monthlyReturn:
+          type: number
+        maxDrawdown:
+          type: number
+        winRate:
+          type: number
+        totalProfit:
+          type: number
+        tradingDays:
+          type: integer
+        winningDays:
+          type: integer
+        startEquity:
+          type: number
+        peakEquity:
+          type: number
+      required:
+        - yearMonth
+        - monthlyReturn
+        - maxDrawdown
+        - winRate
+        - totalProfit
+        - tradingDays
+        - winningDays
+        - startEquity
+        - peakEquity
+
+    MonthlyPerformanceList:
+      type: array
+      items:
+        $ref: "#/components/schemas/MonthlyPerformanceEntry"
 
     # ADMIN
     AdminStats:

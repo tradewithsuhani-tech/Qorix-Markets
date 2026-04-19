@@ -238,6 +238,20 @@ export interface FundStats {
   utilizationRate: number;
 }
 
+export interface MonthlyPerformanceEntry {
+  yearMonth: string;
+  monthlyReturn: number;
+  maxDrawdown: number;
+  winRate: number;
+  totalProfit: number;
+  tradingDays: number;
+  winningDays: number;
+  startEquity: number;
+  peakEquity: number;
+}
+
+export type MonthlyPerformanceList = MonthlyPerformanceEntry[];
+
 export interface AdminStats {
   totalUsers: number;
   activeInvestors: number;
@@ -339,6 +353,19 @@ export type GetTradesParams = {
 export type GetEquityChartParams = {
   days?: number;
 };
+
+export type GetMonthlyPerformanceParams = {
+  filter?: GetMonthlyPerformanceFilter;
+};
+
+export type GetMonthlyPerformanceFilter =
+  (typeof GetMonthlyPerformanceFilter)[keyof typeof GetMonthlyPerformanceFilter];
+
+export const GetMonthlyPerformanceFilter = {
+  "3m": "3m",
+  "6m": "6m",
+  all: "all",
+} as const;
 
 export type GetNotificationsParams = {
   limit?: number;
