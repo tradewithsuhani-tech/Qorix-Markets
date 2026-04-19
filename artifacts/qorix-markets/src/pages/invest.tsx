@@ -5,6 +5,7 @@ import {
   useToggleCompounding,
   useUpdateProtection,
   useGetWallet,
+  useGetDashboardFundStats,
   getGetWalletQueryKey,
   getGetInvestmentQueryKey,
 } from "@workspace/api-client-react";
@@ -435,6 +436,7 @@ function ProtectionTriggeredView({
 export default function InvestPage() {
   const { data: investment, isLoading } = useGetInvestment();
   const { data: wallet } = useGetWallet();
+  const { data: fundStats } = useGetDashboardFundStats({ query: { refetchInterval: 30000 } });
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -522,6 +524,52 @@ export default function InvestPage() {
             Configure your risk profile and deploy capital into automated strategies.
           </p>
         </div>
+
+        {/* Limited Slots Banner */}
+        {fundStats && fundStats.maxSlots > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35 }}
+            className={`flex items-center justify-between gap-3 px-4 py-3 rounded-2xl border ${
+              fundStats.isFull
+                ? "bg-red-500/8 border-red-500/25"
+                : fundStats.availableSlots !== null && fundStats.availableSlots <= Math.ceil(fundStats.maxSlots * 0.2)
+                ? "bg-red-500/8 border-red-500/20"
+                : "bg-amber-500/8 border-amber-500/20"
+            }`}
+          >
+            <div className="flex items-center gap-3 min-w-0">
+              <div className={`shrink-0 w-8 h-8 rounded-xl flex items-center justify-center ${fundStats.isFull ? "bg-red-500/15" : "bg-amber-500/15"}`}>
+                <Zap style={{ width: 14, height: 14, color: fundStats.isFull ? "#f87171" : "#fbbf24" }} />
+              </div>
+              <div className="min-w-0">
+                <div className={`text-sm font-semibold ${fundStats.isFull ? "text-red-400" : "text-amber-400"}`}>
+                  {fundStats.isFull ? "All Investor Slots Are Full" : "⚡ Limited Slots Available"}
+                </div>
+                <div className="text-xs text-muted-foreground truncate">
+                  {fundStats.isFull
+                    ? `All ${fundStats.maxSlots} slots are currently occupied — new investments paused`
+                    : `Only ${fundStats.availableSlots} of ${fundStats.maxSlots} investor slots remain open`}
+                </div>
+              </div>
+            </div>
+            <div className="shrink-0 flex flex-col items-end gap-1">
+              <div className="text-xs tabular-nums font-semibold" style={{ color: fundStats.isFull ? "#f87171" : "#fbbf24" }}>
+                {fundStats.activeInvestors}/{fundStats.maxSlots}
+              </div>
+              <div className="w-24 h-1.5 bg-white/10 rounded-full overflow-hidden">
+                <div
+                  className="h-full rounded-full transition-all duration-700"
+                  style={{
+                    width: `${Math.min(100, (fundStats.activeInvestors / fundStats.maxSlots) * 100)}%`,
+                    background: fundStats.isFull ? "#ef4444" : "linear-gradient(90deg, #f59e0b, #f97316)"
+                  }}
+                />
+              </div>
+            </div>
+          </motion.div>
+        )}
 
         {isLoading ? (
           <div className="flex items-center justify-center py-20">

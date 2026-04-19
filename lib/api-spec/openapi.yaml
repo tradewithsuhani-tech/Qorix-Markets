@@ -568,6 +568,25 @@ paths:
               schema:
                 $ref: "#/components/schemas/AdminStats"
 
+  /admin/slots:
+    post:
+      operationId: setInvestorSlots
+      tags: [admin]
+      summary: Set the maximum number of active investor slots
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetInvestorSlotsBody"
+      responses:
+        "200":
+          description: Slots updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvestorSlots"
+
   /admin/profit/history:
     get:
       operationId: getProfitHistory
@@ -1224,12 +1243,21 @@ components:
           type: integer
         utilizationRate:
           type: number
+        maxSlots:
+          type: integer
+        availableSlots:
+          type: integer
+          nullable: true
+        isFull:
+          type: boolean
       required:
         - totalAUM
         - activeCapital
         - reserveFund
         - activeInvestors
         - utilizationRate
+        - maxSlots
+        - isFull
 
     MonthlyPerformanceEntry:
       type: object
@@ -1286,6 +1314,13 @@ components:
           type: number
         dailyProfitPercent:
           type: number
+        maxSlots:
+          type: integer
+        availableSlots:
+          type: integer
+          nullable: true
+        isFull:
+          type: boolean
       required:
         - totalUsers
         - activeInvestors
@@ -1294,6 +1329,34 @@ components:
         - pendingWithdrawals
         - pendingWithdrawalAmount
         - dailyProfitPercent
+        - maxSlots
+        - isFull
+
+    SetInvestorSlotsBody:
+      type: object
+      properties:
+        maxSlots:
+          type: integer
+          minimum: 0
+      required:
+        - maxSlots
+
+    InvestorSlots:
+      type: object
+      properties:
+        maxSlots:
+          type: integer
+        activeInvestors:
+          type: integer
+        availableSlots:
+          type: integer
+          nullable: true
+        isFull:
+          type: boolean
+      required:
+        - maxSlots
+        - activeInvestors
+        - isFull
 
     SetDailyProfitBody:
       type: object

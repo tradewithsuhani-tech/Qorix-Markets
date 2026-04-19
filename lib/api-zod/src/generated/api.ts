@@ -397,6 +397,9 @@ export const GetDashboardFundStatsResponse = zod.object({
   reserveFund: zod.number(),
   activeInvestors: zod.number(),
   utilizationRate: zod.number(),
+  maxSlots: zod.number(),
+  availableSlots: zod.number().nullish(),
+  isFull: zod.boolean(),
 });
 
 /**
@@ -504,6 +507,9 @@ export const GetAdminStatsResponse = zod.object({
   pendingWithdrawals: zod.number(),
   pendingWithdrawalAmount: zod.number(),
   dailyProfitPercent: zod.number(),
+  maxSlots: zod.number(),
+  availableSlots: zod.number().nullish(),
+  isFull: zod.boolean(),
 });
 
 /**
@@ -521,6 +527,25 @@ export const SetDailyProfitResponse = zod.object({
   pendingWithdrawals: zod.number(),
   pendingWithdrawalAmount: zod.number(),
   dailyProfitPercent: zod.number(),
+  maxSlots: zod.number(),
+  availableSlots: zod.number().nullish(),
+  isFull: zod.boolean(),
+});
+
+/**
+ * @summary Set the maximum number of active investor slots
+ */
+export const setInvestorSlotsBodyMaxSlotsMin = 0;
+
+export const SetInvestorSlotsBody = zod.object({
+  maxSlots: zod.number().min(setInvestorSlotsBodyMaxSlotsMin),
+});
+
+export const SetInvestorSlotsResponse = zod.object({
+  maxSlots: zod.number(),
+  activeInvestors: zod.number(),
+  availableSlots: zod.number().nullish(),
+  isFull: zod.boolean(),
 });
 
 /**
