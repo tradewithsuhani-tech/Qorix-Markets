@@ -11,6 +11,7 @@ import {
   type VipInfo,
 } from "@workspace/api-client-react";
 import { Layout } from "@/components/layout";
+import { GrowthPanel } from "@/components/growth-panel";
 import { VipBadge, VipCard } from "@/components/vip-badge";
 import { AnimatedCounter, BigBalanceCounter } from "@/components/animated-counter";
 import { useAuth } from "@/hooks/use-auth";
@@ -1081,11 +1082,24 @@ export default function Dashboard() {
           </motion.div>
         )}
 
+        {/* Growth & Leaderboard Panel */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.53, duration: 0.4 }}
+        >
+          <div className="flex items-center gap-2 mb-3">
+            <h2 className="text-base font-semibold">Growth & Rankings</h2>
+            <div className="h-px flex-1 bg-gradient-to-r from-white/10 to-transparent" />
+          </div>
+          <GrowthPanel />
+        </motion.div>
+
         {/* Fund Transparency */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.55, duration: 0.4 }}
+          transition={{ delay: 0.58, duration: 0.4 }}
         >
           <div className="flex items-center gap-2 mb-3">
             <h2 className="text-base font-semibold">Fund Transparency</h2>
