@@ -4,6 +4,8 @@ import { eq } from "drizzle-orm";
 import { authMiddleware, type AuthRequest } from "../middlewares/auth";
 import { DepositBody, WithdrawBody, TransferToTradingBody } from "@workspace/api-zod";
 import { createNotification } from "../lib/notifications";
+import { transactionLogger, errorLogger } from "../lib/logger";
+import { emitDepositEvent } from "../lib/event-bus";
 
 const router = Router();
 router.use(authMiddleware);
@@ -63,12 +65,30 @@ router.post("/wallet/deposit", async (req: AuthRequest, res) => {
     description: `USDT deposit of $${amount.toFixed(2)}`,
   });
 
+  transactionLogger.info(
+    {
+      event: "deposit",
+      userId: req.userId!,
+      amount,
+      newMainBalance: newMain,
+    },
+    "Deposit completed",
+  );
+
   await createNotification(
     req.userId!,
     "deposit",
     "Deposit Confirmed",
     `$${amount.toFixed(2)} USDT has been credited to your main balance.`,
   );
+
+  emitDepositEvent({
+    userId: req.userId!,
+    amount,
+    newMainBalance: newMain,
+  }).catch((err) => {
+    errorLogger.error({ err, userId: req.userId!, amount }, "Failed to emit deposit event");
+  });
 
   res.json(formatWallet(updated!));
 });
@@ -106,6 +126,17 @@ router.post("/wallet/withdraw", async (req: AuthRequest, res) => {
     description: `Withdrawal to ${walletAddress}`,
     walletAddress,
   }).returning();
+
+  transactionLogger.info(
+    {
+      event: "withdrawal_requested",
+      userId: req.userId!,
+      amount,
+      walletAddress: `${walletAddress.slice(0, 8)}...${walletAddress.slice(-4)}`,
+      transactionId: tx!.id,
+    },
+    "Withdrawal request created",
+  );
 
   await createNotification(
     req.userId!,
@@ -163,6 +194,17 @@ router.post("/wallet/transfer", async (req: AuthRequest, res) => {
     status: "completed",
     description: `Transfer $${amount.toFixed(2)} to trading balance`,
   });
+
+  transactionLogger.info(
+    {
+      event: "transfer_to_trading",
+      userId: req.userId!,
+      amount,
+      newMainBalance: mainBalance - amount,
+      newTradingBalance: tradingBalance + amount,
+    },
+    "Transfer to trading balance completed",
+  );
 
   res.json(formatWallet(updated!));
 });

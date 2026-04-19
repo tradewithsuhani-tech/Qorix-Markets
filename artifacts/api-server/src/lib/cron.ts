@@ -1,34 +1,24 @@
 import cron from "node-cron";
-import { logger } from "./logger";
-import { distributeDailyProfit, getLastDailyProfitPercent, transferProfitToMain } from "./profit-service";
+import { logger, profitLogger, errorLogger } from "./logger";
+import { getLastDailyProfitPercent, transferProfitToMain } from "./profit-service";
+import { emitProfitDistribution } from "./event-bus";
 
 export function initCronJobs(): void {
-  // Daily at midnight: distribute profit to all active investors
-  // Uses the last profit % set by admin; skips if no rate has been configured
   cron.schedule("0 0 * * *", async () => {
-    logger.info("Cron: daily profit distribution starting");
+    profitLogger.info("Cron: daily profit distribution — enqueuing job");
     try {
       const profitPercent = await getLastDailyProfitPercent();
       if (profitPercent === 0) {
-        logger.info("Cron: daily profit distribution skipped — no profit rate configured");
+        profitLogger.info("Cron: daily profit distribution skipped — no profit rate configured");
         return;
       }
-      const result = await distributeDailyProfit(profitPercent);
-      logger.info(
-        {
-          profitPercent,
-          investorsAffected: result.investorsAffected,
-          totalProfitDistributed: result.totalProfitDistributed,
-          referralBonusPaid: result.referralBonusPaid,
-        },
-        "Cron: daily profit distribution complete",
-      );
+      await emitProfitDistribution({ profitPercent, triggeredBy: "cron" });
+      profitLogger.info({ profitPercent }, "Cron: profit distribution job enqueued");
     } catch (err) {
-      logger.error({ err }, "Cron: daily profit distribution failed");
+      errorLogger.error({ err }, "Cron: failed to enqueue daily profit distribution");
     }
   });
 
-  // Monthly on the 25th at midnight: transfer all profit balances to main wallet
   cron.schedule("0 0 25 * *", async () => {
     logger.info("Cron: monthly profit-to-main transfer starting");
     try {
@@ -41,7 +31,7 @@ export function initCronJobs(): void {
         "Cron: monthly profit-to-main transfer complete",
       );
     } catch (err) {
-      logger.error({ err }, "Cron: monthly profit-to-main transfer failed");
+      errorLogger.error({ err }, "Cron: monthly profit-to-main transfer failed");
     }
   });
 

@@ -11,7 +11,9 @@ import {
 import { eq, sum, count, and, desc } from "drizzle-orm";
 import { authMiddleware, adminMiddleware, type AuthRequest } from "../middlewares/auth";
 import { SetDailyProfitBody } from "@workspace/api-zod";
-import { distributeDailyProfit, transferProfitToMain } from "../lib/profit-service";
+import { transferProfitToMain } from "../lib/profit-service";
+import { emitProfitDistribution } from "../lib/event-bus";
+import { transactionLogger, profitLogger, errorLogger } from "../lib/logger";
 
 const router = Router();
 router.use(authMiddleware);
@@ -64,7 +66,7 @@ router.get("/admin/stats", async (req, res) => {
   res.json(stats);
 });
 
-router.post("/admin/profit", async (req, res) => {
+router.post("/admin/profit", async (req: AuthRequest, res) => {
   const result = SetDailyProfitBody.safeParse(req.body);
   if (!result.success) {
     res.status(400).json({ error: "Invalid request" });
@@ -77,10 +79,20 @@ router.post("/admin/profit", async (req, res) => {
     return;
   }
 
-  await distributeDailyProfit(profitPercent);
+  try {
+    await emitProfitDistribution({ profitPercent, triggeredBy: "admin" });
+    profitLogger.info(
+      { profitPercent, adminId: req.userId },
+      "Admin: profit distribution job enqueued",
+    );
+  } catch (err) {
+    errorLogger.error({ err, profitPercent, adminId: req.userId }, "Admin: failed to enqueue profit distribution");
+    res.status(500).json({ error: "Failed to enqueue profit distribution" });
+    return;
+  }
 
   const stats = await getAdminStatsData();
-  res.json(stats);
+  res.json({ ...stats, queued: true });
 });
 
 router.get("/admin/profit/history", async (req, res) => {
@@ -200,6 +212,17 @@ router.post("/admin/withdrawals/:id/approve", async (req: AuthRequest, res) => {
     .where(eq(usersTable.id, updated.userId))
     .limit(1);
 
+  transactionLogger.info(
+    {
+      event: "withdrawal_approved",
+      transactionId: id,
+      userId: updated.userId,
+      amount: parseFloat(updated.amount as string),
+      adminId: req.userId,
+    },
+    "Withdrawal approved by admin",
+  );
+
   res.json({
     id: updated.id,
     userId: updated.userId,
@@ -249,6 +272,18 @@ router.post("/admin/withdrawals/:id/reject", async (req: AuthRequest, res) => {
   }
 
   const user = txUser[0];
+
+  transactionLogger.info(
+    {
+      event: "withdrawal_rejected",
+      transactionId: id,
+      userId: updated.userId,
+      amount: parseFloat(updated.amount as string),
+      adminId: req.userId,
+    },
+    "Withdrawal rejected by admin — funds refunded",
+  );
+
   res.json({
     id: updated.id,
     userId: updated.userId,

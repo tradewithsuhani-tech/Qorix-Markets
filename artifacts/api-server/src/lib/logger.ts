@@ -18,3 +18,7 @@ export const logger = pino({
         },
       }),
 });
+
+export const transactionLogger = logger.child({ module: "transactions" });
+export const profitLogger = logger.child({ module: "profit" });
+export const errorLogger = logger.child({ module: "error" });
