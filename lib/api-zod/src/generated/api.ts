@@ -16,6 +16,27 @@ export const HealthCheckResponse = zod.object({
 });
 
 /**
+ * Public endpoint returning real-time platform activity stats. No auth required.
+ * @summary Get live platform investor psychology indicators
+ */
+export const GetMarketIndicatorsResponse = zod.object({
+  activeInvestors: zod
+    .number()
+    .describe("Number of users with an active investment"),
+  usersEarningNow: zod
+    .number()
+    .describe("Number of users currently receiving returns"),
+  withdrawals24h: zod
+    .number()
+    .describe("Number of withdrawals processed in the last 24 hours"),
+  avgMonthlyReturn: zod
+    .number()
+    .describe(
+      "Estimated average monthly return based on last 30 days of profit runs",
+    ),
+});
+
+/**
  * @summary Register a new user
  */
 export const RegisterBody = zod.object({

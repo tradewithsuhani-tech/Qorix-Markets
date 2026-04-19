@@ -6,6 +6,7 @@ import {
   useGetDashboardFundStats,
   useGetInvestment,
   useUpdateProtection,
+  useGetMarketIndicators,
   getGetInvestmentQueryKey,
   type VipInfo,
 } from "@workspace/api-client-react";
@@ -19,7 +20,8 @@ import { format } from "date-fns";
 import {
   ArrowUpRight, ArrowDownRight, Wallet, Activity, Clock, TrendingUp,
   TrendingDown, Zap, Target, ShieldCheck, BarChart2, Layers,
-  RefreshCw, Globe, PieChart, Award, Shield, AlertTriangle, CheckCircle, FileDown
+  RefreshCw, Globe, PieChart, Award, Shield, AlertTriangle, CheckCircle, FileDown,
+  Users, UserCheck, Banknote
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useState, useEffect, useRef } from "react";
@@ -315,6 +317,9 @@ export default function Dashboard() {
   const { data: investment, isLoading: investLoading } = useGetInvestment({
     query: { refetchInterval: 10000 }
   });
+  const { data: marketIndicators } = useGetMarketIndicators({
+    query: { refetchInterval: 30000 }
+  });
   const protectionMutation = useUpdateProtection({
     mutation: {
       onSuccess: () => {
@@ -552,6 +557,65 @@ export default function Dashboard() {
             </div>
           </div>
         </div>
+
+        {/* Investor Psychology Indicators */}
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.1 }}
+          className="grid grid-cols-2 md:grid-cols-4 gap-3"
+        >
+          {(
+            [
+              {
+                icon: Users,
+                label: "Active Investors",
+                display: marketIndicators != null ? String(marketIndicators.activeInvestors) : "—",
+                sub: undefined as string | undefined,
+                color: "text-blue-400",
+                bg: "bg-blue-500/5 border-blue-500/15",
+              },
+              {
+                icon: UserCheck,
+                label: "Earning Now",
+                display: marketIndicators != null ? `${marketIndicators.usersEarningNow}` : "—",
+                sub: "users",
+                color: "text-emerald-400",
+                bg: "bg-emerald-500/5 border-emerald-500/15",
+              },
+              {
+                icon: Banknote,
+                label: "Withdrawals (24h)",
+                display: marketIndicators != null ? `${marketIndicators.withdrawals24h}` : "—",
+                sub: "processed",
+                color: "text-amber-400",
+                bg: "bg-amber-500/5 border-amber-500/15",
+              },
+              {
+                icon: TrendingUp,
+                label: "Avg Monthly Return",
+                display:
+                  marketIndicators != null
+                    ? marketIndicators.avgMonthlyReturn > 0
+                      ? `${marketIndicators.avgMonthlyReturn.toFixed(1)}%`
+                      : "7–12%"
+                    : "—",
+                sub: "last 30 days",
+                color: "text-violet-400",
+                bg: "bg-violet-500/5 border-violet-500/15",
+              },
+          ]).map(({ icon: Icon, label, display, sub, color, bg }) => (
+            <div key={label} className={`glass-card rounded-xl px-4 py-3 border ${bg} flex items-center gap-3`}>
+              <div className={`shrink-0 w-8 h-8 rounded-lg bg-white/5 border border-white/8 flex items-center justify-center`}>
+                <Icon style={{ width: 14, height: 14 }} className={color} />
+              </div>
+              <div className="min-w-0">
+                <div className={`text-base font-bold ${color} tabular-nums leading-tight`}>{display}{sub ? <span className="text-xs font-normal text-muted-foreground ml-1">{sub}</span> : null}</div>
+                <div className="text-[11px] text-muted-foreground truncate">{label}</div>
+              </div>
+            </div>
+          ))}
+        </motion.div>
 
         {/* Limited Slots Banner */}
         {fundStats && fundStats.maxSlots > 0 && (

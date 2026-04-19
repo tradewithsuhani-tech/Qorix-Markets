@@ -29,6 +29,17 @@ export interface HealthStatus {
   status: string;
 }
 
+export interface MarketIndicators {
+  /** Number of users with an active investment */
+  activeInvestors: number;
+  /** Number of users currently receiving returns */
+  usersEarningNow: number;
+  /** Number of withdrawals processed in the last 24 hours */
+  withdrawals24h: number;
+  /** Estimated average monthly return based on last 30 days of profit runs */
+  avgMonthlyReturn: number;
+}
+
 export interface ErrorResponse {
   error: string;
 }

@@ -40,6 +40,7 @@ import type {
   Investment,
   InvestorSlots,
   LoginBody,
+  MarketIndicators,
   MonthlyPerformanceList,
   NotificationItem,
   NotificationList,
@@ -142,6 +143,82 @@ export function useHealthCheck<
   request?: SecondParameter<typeof customFetch>;
 }): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getHealthCheckQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Public endpoint returning real-time platform activity stats. No auth required.
+ * @summary Get live platform investor psychology indicators
+ */
+export const getGetMarketIndicatorsUrl = () => {
+  return `/api/public/market-indicators`;
+};
+
+export const getMarketIndicators = async (
+  options?: RequestInit,
+): Promise<MarketIndicators> => {
+  return customFetch<MarketIndicators>(getGetMarketIndicatorsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetMarketIndicatorsQueryKey = () => {
+  return [`/api/public/market-indicators`] as const;
+};
+
+export const getGetMarketIndicatorsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getMarketIndicators>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getMarketIndicators>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetMarketIndicatorsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getMarketIndicators>>
+  > = ({ signal }) => getMarketIndicators({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getMarketIndicators>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetMarketIndicatorsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getMarketIndicators>>
+>;
+export type GetMarketIndicatorsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get live platform investor psychology indicators
+ */
+
+export function useGetMarketIndicators<
+  TData = Awaited<ReturnType<typeof getMarketIndicators>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getMarketIndicators>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetMarketIndicatorsQueryOptions(options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;
