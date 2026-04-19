@@ -674,6 +674,17 @@ export default function Landing() {
         </div>
       </section>
 
+      <section id="market-insights" className="py-16">
+        <div className="max-w-7xl mx-auto px-5 md:px-8">
+          <SectionHeader
+            eyebrow="Market Insights"
+            title="Today's high-impact economic events"
+            desc="Monitor the events that move markets. High-impact releases create volatility windows that our trading desks actively position around."
+          />
+          <FadeIn><EconomicNewsLandingWidget /></FadeIn>
+        </div>
+      </section>
+
       <section className="py-24 relative">
         <div className="absolute inset-0 pointer-events-none" style={{ background: "radial-gradient(ellipse at top, rgba(79,70,229,0.04) 0%, transparent 65%)" }} />
         <div className="max-w-7xl mx-auto px-5 md:px-8">
@@ -981,17 +992,6 @@ export default function Landing() {
               </FadeIn>
             ))}
           </div>
-        </div>
-      </section>
-
-      <section id="market-insights" className="py-24 relative">
-        <div className="max-w-7xl mx-auto px-5 md:px-8">
-          <SectionHeader
-            eyebrow="Market Insights"
-            title="Today's high-impact economic events"
-            desc="Monitor the events that move markets. High-impact releases create volatility windows that our trading desks actively position around."
-          />
-          <FadeIn><EconomicNewsLandingWidget /></FadeIn>
         </div>
       </section>
 
