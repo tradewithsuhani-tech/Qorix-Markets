@@ -96,10 +96,10 @@ const STRATEGIES = [
 ];
 
 const TRUST_POINTS = [
-  { icon: Shield, title: "Drawdown limits", desc: "3%, 5%, and 10% risk bands pause exposure before losses compound." },
-  { icon: Lock, title: "Segmented balances", desc: "Main, trading, and profit balances keep capital movement transparent." },
-  { icon: Eye, title: "Live reporting", desc: "Investors can see P&L, allocation, trades, and withdrawal history." },
-  { icon: Globe, title: "USDT based", desc: "Capital and payouts are tracked in stablecoin-denominated balances." },
+  { icon: Shield, title: "Risk-first mandate", desc: "Every allocation starts with a defined drawdown ceiling before capital is exposed." },
+  { icon: Lock, title: "Segregated wallet logic", desc: "Main, trading, and profit balances make capital movement clear and auditable." },
+  { icon: Eye, title: "Investor-grade reporting", desc: "Live P&L, allocation, trade activity, and withdrawal status stay visible." },
+  { icon: Globe, title: "USDT treasury base", desc: "Capital, returns, and payouts are tracked in stablecoin-denominated balances." },
 ];
 
 const WITHDRAWALS = [
@@ -110,9 +110,16 @@ const WITHDRAWALS = [
 ];
 
 const HOW_IT_WORKS = [
-  { step: "01", title: "Create your account", desc: "Register, secure your profile, and choose the amount you want available for trading." },
-  { step: "02", title: "Select a risk band", desc: "Pick low, medium, or high risk. Your drawdown limit is enforced automatically." },
-  { step: "03", title: "Track returns", desc: "Monitor profit, transfer balances, and request withdrawals from your dashboard." },
+  { step: "01", title: "Open investor access", desc: "Create your account and prepare the USDT amount you want assigned to the desk." },
+  { step: "02", title: "Choose your mandate", desc: "Select low, medium, or high risk. Your drawdown ceiling is locked into the system." },
+  { step: "03", title: "Monitor the fund OS", desc: "Track allocation, profit, risk status, transfers, and withdrawals from one dashboard." },
+];
+
+const INVESTOR_SYSTEM = [
+  { icon: Target, title: "Capital allocation engine", desc: "Funds are routed across scalping, swing, and hybrid strategies based on risk capacity and desk load." },
+  { icon: Shield, title: "Risk committee layer", desc: "Drawdown caps, exposure monitoring, and auto-pause rules keep the product built around capital survival." },
+  { icon: BarChart2, title: "Performance intelligence", desc: "Return, drawdown, trader activity, and investor balances are presented as decision-grade reporting." },
+  { icon: Clock, title: "24/7 execution cycle", desc: "The desk remains active across market sessions while investors can monitor performance without manual trading." },
 ];
 
 const fadeUp = {
@@ -223,31 +230,31 @@ export default function Landing() {
           <motion.div initial="hidden" animate="show" variants={fadeUp} className="max-w-4xl">
             <motion.div variants={fadeUp} className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-primary/30 bg-primary/8 text-xs font-semibold text-primary mb-7">
               <div className="live-dot w-1.5 h-1.5 shrink-0" />
-              {slotsRemaining} investor slots left in this onboarding round
+              Private allocation window open · {slotsRemaining} investor seats left
             </motion.div>
 
             <motion.h1 variants={fadeUp} className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight leading-[1.05] mb-6">
-              Put your USDT to work with a professional trading desk
-              <span className="gradient-text"> built for controlled returns.</span>
+              A hedge-fund style USDT trading system
+              <span className="gradient-text"> built for disciplined investors.</span>
             </motion.h1>
 
             <motion.p variants={fadeUp} className="text-lg md:text-xl text-muted-foreground max-w-2xl leading-relaxed mb-8">
-              Qorix Markets gives investors access to automated USDT strategies, live performance reporting, and hard drawdown controls before capital is exposed.
+              Qorix Markets combines professional traders, automated execution, capital allocation logic, and drawdown protection into one investor operating system.
             </motion.p>
 
             <motion.div variants={fadeUp} className="flex flex-col sm:flex-row gap-3 mb-7">
               <button onClick={() => setLocation("/login")} className="btn btn-primary text-base px-7 py-3.5 gap-2">
-                Start Investing <ArrowRight style={{ width: 16, height: 16 }} />
+                Apply for Access <ArrowRight style={{ width: 16, height: 16 }} />
               </button>
               <button onClick={scrollToPerf} className="btn btn-ghost text-base px-7 py-3.5 gap-2">
-                See Performance <ChevronDown style={{ width: 16, height: 16 }} />
+                Review Track Record <ChevronDown style={{ width: 16, height: 16 }} />
               </button>
             </motion.div>
 
             <motion.div variants={fadeUp} className="grid grid-cols-3 gap-3 max-w-2xl">
               {[
-                { label: "Live AUM", value: "$4.2M+" },
-                { label: "Traders", value: "43" },
+                { label: "Managed AUM", value: "$4.2M+" },
+                { label: "Desk traders", value: "43" },
                 { label: "Avg monthly", value: `${avgReturn}%` },
               ].map((s) => (
                 <div key={s.label} className="glass-card rounded-2xl p-4">
@@ -262,11 +269,11 @@ export default function Landing() {
             <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(34,197,94,0.12),transparent_45%)] pointer-events-none" />
             <div className="relative flex items-center justify-between mb-5">
               <div>
-                <div className="text-xs uppercase tracking-widest text-primary font-semibold">Live platform pulse</div>
-                <div className="text-sm text-muted-foreground mt-1">Updated every 30 seconds</div>
+                <div className="text-xs uppercase tracking-widest text-primary font-semibold">Qorix Capital OS</div>
+                <div className="text-sm text-muted-foreground mt-1">Allocation · Risk · Reporting</div>
               </div>
               <div className="flex items-center gap-2 text-xs text-emerald-400 font-semibold">
-                <div className="live-dot" /> Active
+                <div className="live-dot" /> Desk live
               </div>
             </div>
 
@@ -274,8 +281,8 @@ export default function Landing() {
               {[
                 { icon: Users, label: "Active investors", value: activeInvestors.toLocaleString(), color: "text-blue-400" },
                 { icon: UserCheck, label: "Earning now", value: earningNow.toLocaleString(), color: "text-emerald-400" },
-                { icon: Banknote, label: "24h withdrawals", value: withdrawals24h.toString(), color: "text-amber-400" },
-                { icon: Activity, label: "Strategies live", value: "3", color: "text-violet-400" },
+                { icon: Banknote, label: "Payout queue", value: withdrawals24h.toString(), color: "text-amber-400" },
+                { icon: Activity, label: "Active mandates", value: "3", color: "text-violet-400" },
               ].map(({ icon: Icon, label, value, color }) => (
                 <div key={label} className="rounded-2xl bg-white/[0.04] border border-white/[0.08] p-4">
                   <Icon style={{ width: 18, height: 18 }} className={`${color} mb-3`} />
@@ -288,8 +295,8 @@ export default function Landing() {
             <div className="relative rounded-2xl bg-black/20 border border-white/[0.08] p-4">
               <div className="flex items-center justify-between mb-3">
                 <div>
-                  <div className="text-sm font-semibold">Onboarding capacity</div>
-                  <div className="text-xs text-muted-foreground">Investor slots are capped to protect execution quality.</div>
+                  <div className="text-sm font-semibold">Fund capacity control</div>
+                  <div className="text-xs text-muted-foreground">New deposits are capped to protect strategy execution quality.</div>
                 </div>
                 <div className="text-right">
                   <div className="text-xl font-bold text-amber-400">{slotsRemaining}</div>
@@ -322,9 +329,70 @@ export default function Landing() {
         </div>
       </section>
 
+      <section className="py-20 md:py-24 relative">
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(99,102,241,0.045),transparent_70%)] pointer-events-none" />
+        <div className="max-w-7xl mx-auto px-5 md:px-8">
+          <SectionHeader eyebrow="Hedge fund system" title="Not a signal group. Not a basic bot. A capital operating system." desc="Qorix is structured like an allocation platform: strategy desk, risk layer, investor reporting, and controlled capacity all working together." />
+
+          <div className="grid lg:grid-cols-[0.95fr_1.05fr] gap-4 items-stretch">
+            <FadeIn>
+              <div className="glass-card-glow rounded-3xl p-6 md:p-8 h-full relative overflow-hidden">
+                <div className="absolute -right-16 -top-16 w-48 h-48 rounded-full bg-blue-500/10 blur-3xl" />
+                <div className="relative">
+                  <div className="flex items-center justify-between mb-8">
+                    <div>
+                      <div className="text-xs uppercase tracking-widest text-primary font-semibold">Investor mandate</div>
+                      <h3 className="text-2xl font-bold mt-2">Capital preservation first. Returns second.</h3>
+                    </div>
+                    <Star style={{ width: 24, height: 24 }} className="text-amber-400" />
+                  </div>
+
+                  <div className="space-y-4">
+                    {[
+                      { label: "Allocation style", value: "Multi-strategy USDT desk" },
+                      { label: "Core priority", value: "Drawdown-controlled growth" },
+                      { label: "Investor visibility", value: "Live reporting dashboard" },
+                      { label: "Capacity policy", value: "Limited onboarding rounds" },
+                    ].map((row) => (
+                      <div key={row.label} className="flex items-center justify-between rounded-2xl bg-white/[0.045] border border-white/[0.08] p-4">
+                        <span className="text-sm text-muted-foreground">{row.label}</span>
+                        <span className="text-sm font-semibold text-white text-right">{row.value}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="mt-7 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 p-4">
+                    <div className="flex items-start gap-3">
+                      <CheckCircle2 style={{ width: 18, height: 18 }} className="text-emerald-400 shrink-0 mt-0.5" />
+                      <p className="text-sm text-emerald-100/80 leading-relaxed">
+                        Built to attract serious investors who care about process, transparency, and controlled exposure instead of unrealistic profit promises.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </FadeIn>
+
+            <div className="grid sm:grid-cols-2 gap-4">
+              {INVESTOR_SYSTEM.map(({ icon: Icon, title, desc }, i) => (
+                <FadeIn key={title} delay={i * 0.08}>
+                  <div className="glass-card rounded-3xl p-6 h-full">
+                    <div className="w-11 h-11 rounded-2xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center mb-5">
+                      <Icon style={{ width: 19, height: 19 }} className="text-blue-400" />
+                    </div>
+                    <h3 className="font-semibold mb-2">{title}</h3>
+                    <p className="text-sm text-muted-foreground leading-relaxed">{desc}</p>
+                  </div>
+                </FadeIn>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section id="performance" ref={perfRef as any} className="py-20 md:py-24">
         <div className="max-w-7xl mx-auto px-5 md:px-8">
-          <SectionHeader eyebrow="Performance" title="Returns matter. Risk control matters more." desc="The platform is positioned around consistent monthly USDT returns with visible drawdown boundaries and transparent reporting." />
+          <SectionHeader eyebrow="Performance desk" title="Institutional-style performance without hiding the risk." desc="Investors see the return profile and the drawdown profile together, because a serious capital product must sell control as much as upside." />
 
           <FadeIn>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
@@ -405,11 +473,11 @@ export default function Landing() {
             <div className="glass-card-glow rounded-3xl p-6 md:p-8 grid lg:grid-cols-[1fr_auto] gap-6 items-center">
               <div>
                 <div className="text-xs font-semibold uppercase tracking-widest text-primary mb-2">Limited access</div>
-                <h2 className="text-2xl md:text-3xl font-bold tracking-tight mb-2">Reserve one of {slotsRemaining} remaining investor slots.</h2>
-                <p className="text-muted-foreground max-w-2xl">New capital is capped by strategy capacity so the desk can protect execution quality and drawdown rules.</p>
+                <h2 className="text-2xl md:text-3xl font-bold tracking-tight mb-2">Reserve one of {slotsRemaining} private allocation seats.</h2>
+                <p className="text-muted-foreground max-w-2xl">Qorix limits new capital by desk capacity, strategy liquidity, and risk mandate so investor growth does not dilute execution quality.</p>
               </div>
               <button onClick={() => setLocation("/login")} className="btn btn-primary text-base px-8 py-3.5 gap-2 w-full sm:w-auto">
-                Reserve My Slot <ArrowRight style={{ width: 16, height: 16 }} />
+                Apply for Allocation <ArrowRight style={{ width: 16, height: 16 }} />
               </button>
             </div>
           </FadeIn>
@@ -419,7 +487,7 @@ export default function Landing() {
       <section id="trading-desk" className="py-20 md:py-24 relative">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(59,130,246,0.04),transparent_70%)] pointer-events-none" />
         <div className="max-w-7xl mx-auto px-5 md:px-8">
-          <SectionHeader eyebrow="Trading desk" title="43 traders across 3 focused strategies" desc="Capital is allocated by strategy type, trader experience, and active risk conditions instead of a one-size-fits-all return target." />
+          <SectionHeader eyebrow="Trading desk" title="43 traders. 3 mandates. One controlled portfolio." desc="Capital is distributed by strategy type, trader experience, risk limits, and active desk conditions instead of a one-size-fits-all return promise." />
 
           <FadeIn>
             <div className="glass-card rounded-2xl p-6 md:p-8 mb-6 grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
@@ -472,7 +540,7 @@ export default function Landing() {
 
       <section className="py-20 md:py-24">
         <div className="max-w-7xl mx-auto px-5 md:px-8">
-          <SectionHeader eyebrow="Social proof" title="Real activity creates confidence" desc="Investors want to know the platform is alive: active users, recent payouts, and visible capital movement are surfaced clearly." />
+          <SectionHeader eyebrow="Investor confidence" title="Show movement. Show payouts. Show momentum." desc="Serious investors need proof that capital is active, payout requests are moving, and the platform has real participation." />
 
           <div className="grid lg:grid-cols-[0.9fr_1.1fr] gap-4">
             <FadeIn>
@@ -525,7 +593,7 @@ export default function Landing() {
       <section id="risk" className="py-20 md:py-24 relative">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(34,197,94,0.035),transparent_70%)] pointer-events-none" />
         <div className="max-w-7xl mx-auto px-5 md:px-8">
-          <SectionHeader eyebrow="Risk system" title="Drawdown protection is built into the product" desc="The platform does not just display risk after the fact. It uses risk bands, balance separation, and auto-pause logic to control exposure." />
+          <SectionHeader eyebrow="Risk system" title="The product sells controlled exposure, not blind upside." desc="Qorix does not just display risk after the fact. It uses risk bands, balance separation, and auto-pause logic to manage exposure before losses compound." />
 
           <div className="grid lg:grid-cols-[1fr_0.9fr] gap-4 items-stretch">
             <FadeIn>
@@ -584,7 +652,7 @@ export default function Landing() {
 
       <section id="how-it-works" className="py-20 md:py-24">
         <div className="max-w-7xl mx-auto px-5 md:px-8">
-          <SectionHeader eyebrow="How it works" title="Start in three simple steps" desc="The conversion path is intentionally simple: account, risk band, live dashboard." />
+          <SectionHeader eyebrow="How it works" title="From investor access to live allocation in three steps" desc="The journey feels premium but stays simple: open access, choose your risk mandate, then monitor the capital operating system." />
           <div className="grid md:grid-cols-3 gap-4">
             {HOW_IT_WORKS.map((item, i) => (
               <FadeIn key={item.step} delay={i * 0.08}>
@@ -612,14 +680,14 @@ export default function Landing() {
                 <DollarSign style={{ width: 24, height: 24 }} className="text-white" />
               </div>
 
-              <h2 className="text-3xl md:text-4xl font-bold tracking-tight mb-4">Ready to activate your trading account?</h2>
+              <h2 className="text-3xl md:text-4xl font-bold tracking-tight mb-4">Ready to request private investor access?</h2>
               <p className="text-muted-foreground text-lg leading-relaxed mb-8 max-w-xl mx-auto">
                 Join this onboarding round before capacity closes. Reserve a slot, select your risk band, and track every USDT from your dashboard.
               </p>
 
               <div className="flex flex-col sm:flex-row gap-3 justify-center">
                 <button onClick={() => setLocation("/login")} className="btn btn-primary text-base px-8 py-3.5 gap-2">
-                  Start Investing <ArrowRight style={{ width: 16, height: 16 }} />
+                  Apply for Access <ArrowRight style={{ width: 16, height: 16 }} />
                 </button>
                 <button onClick={scrollToPerf} className="btn btn-ghost text-base px-8 py-3.5 gap-2">
                   <BarChart2 style={{ width: 16, height: 16 }} /> View Performance
