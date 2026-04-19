@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Send, ChevronRight, MessageCircle, Sparkles, UserCheck, ArrowLeft, CheckCheck } from "lucide-react";
+import { X, Send, ChevronRight, MessageCircle, Sparkles, UserCheck, CheckCheck, SquareX, RotateCcw, MessageSquarePlus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
 
@@ -208,6 +208,8 @@ export function QorixAssistant() {
   const [expertMode, setExpertMode] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [hasUnread, setHasUnread] = useState(false);
+  const [chatEnded, setChatEnded] = useState(false);
+  const [showEndConfirm, setShowEndConfirm] = useState(false);
   const [pollTimer, setPollTimer] = useState<ReturnType<typeof setInterval> | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -355,6 +357,28 @@ export function QorixAssistant() {
     }
   }
 
+  async function handleEndChat() {
+    setShowEndConfirm(false);
+    if (sessionId && token) {
+      try { await apiPost(`/chat/session/${sessionId}/end`, {}); } catch { }
+    }
+    setChatEnded(true);
+    setExpertMode(false);
+  }
+
+  function handleStartNewChat() {
+    setMessages([]);
+    setSessionId(null);
+    setChatEnded(false);
+    setExpertMode(false);
+    setInputText("");
+    setShowEndConfirm(false);
+    // Trigger a fresh session
+    if (token) {
+      setTimeout(() => initSession(), 100);
+    }
+  }
+
   async function handleSendMessage() {
     const content = inputText.trim();
     if (!content || isSending) return;
@@ -478,15 +502,108 @@ export function QorixAssistant() {
                 </p>
               </div>
 
-              <button
-                onClick={() => setIsOpen(false)}
-                className="w-7 h-7 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center transition-colors"
-              >
-                <X className="w-3.5 h-3.5 text-white/60" />
-              </button>
+              <div className="flex items-center gap-1.5">
+                {/* End Chat button — only if chat is active */}
+                {!chatEnded && messages.length > 0 && (
+                  <div className="relative">
+                    <button
+                      onClick={() => setShowEndConfirm(v => !v)}
+                      title="End Chat"
+                      className="w-7 h-7 rounded-full bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 flex items-center justify-center transition-colors"
+                    >
+                      <SquareX className="w-3.5 h-3.5 text-red-400" />
+                    </button>
+
+                    {/* Confirmation popover */}
+                    <AnimatePresence>
+                      {showEndConfirm && (
+                        <motion.div
+                          initial={{ opacity: 0, y: -6, scale: 0.95 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          exit={{ opacity: 0, y: -4, scale: 0.95 }}
+                          transition={{ duration: 0.15 }}
+                          className="absolute right-0 top-9 w-48 z-10 rounded-xl overflow-hidden"
+                          style={{
+                            background: "#151b2d",
+                            border: "1px solid rgba(239,68,68,0.2)",
+                            boxShadow: "0 10px 30px rgba(0,0,0,0.5)",
+                          }}
+                        >
+                          <div className="px-3.5 py-3">
+                            <p className="text-xs font-semibold text-white mb-0.5">End this chat?</p>
+                            <p className="text-[10px] text-white/40 leading-relaxed">You can start a new conversation anytime.</p>
+                          </div>
+                          <div className="flex border-t border-white/[0.06]">
+                            <button
+                              onClick={() => setShowEndConfirm(false)}
+                              className="flex-1 py-2 text-[11px] text-white/50 hover:text-white hover:bg-white/5 transition-colors font-medium"
+                            >
+                              Cancel
+                            </button>
+                            <div className="w-px bg-white/[0.06]" />
+                            <button
+                              onClick={handleEndChat}
+                              className="flex-1 py-2 text-[11px] text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors font-semibold"
+                            >
+                              End Chat
+                            </button>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                )}
+
+                <button
+                  onClick={() => { setIsOpen(false); setShowEndConfirm(false); }}
+                  className="w-7 h-7 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center transition-colors"
+                >
+                  <X className="w-3.5 h-3.5 text-white/60" />
+                </button>
+              </div>
             </div>
 
+            {/* Chat Ended Screen */}
+            <AnimatePresence>
+              {chatEnded && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="flex-1 flex flex-col items-center justify-center px-6 gap-5"
+                >
+                  <motion.div
+                    initial={{ scale: 0.8, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    transition={{ delay: 0.1, type: "spring", stiffness: 200 }}
+                    className="w-16 h-16 rounded-2xl flex items-center justify-center"
+                    style={{ background: "linear-gradient(135deg, rgba(239,68,68,0.15), rgba(239,68,68,0.05))", border: "1px solid rgba(239,68,68,0.2)" }}
+                  >
+                    <SquareX className="w-8 h-8 text-red-400" />
+                  </motion.div>
+                  <div className="text-center">
+                    <p className="text-sm font-semibold text-white mb-1">Chat Ended</p>
+                    <p className="text-xs text-white/40 leading-relaxed">Your conversation has been closed. Start a new chat whenever you need help.</p>
+                  </div>
+                  <motion.button
+                    onClick={handleStartNewChat}
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.97 }}
+                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all"
+                    style={{
+                      background: "linear-gradient(135deg, #2563eb, #7c3aed)",
+                      boxShadow: "0 6px 20px rgba(99,102,241,0.3)",
+                      color: "white",
+                    }}
+                  >
+                    <MessageSquarePlus className="w-4 h-4" />
+                    Start New Chat
+                  </motion.button>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
             {/* Messages */}
+            {!chatEnded && (
             <div className="flex-1 overflow-y-auto px-4 py-4 space-y-0 scrollbar-thin">
               <AnimatePresence initial={false}>
                 {messages.map((msg) => (
@@ -497,10 +614,11 @@ export function QorixAssistant() {
               {isTyping && <TypingIndicator />}
               <div ref={messagesEndRef} />
             </div>
+            )}
 
             {/* Quick Replies */}
             <AnimatePresence>
-              {showOptions && !isTyping && !expertMode && (
+              {!chatEnded && showOptions && !isTyping && !expertMode && (
                 <motion.div
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -532,7 +650,7 @@ export function QorixAssistant() {
             </AnimatePresence>
 
             {/* Expert CTA (shown at bottom if not yet in expert mode) */}
-            {!expertMode && !showOptions && messages.length > 0 && !isTyping && (
+            {!chatEnded && !expertMode && !showOptions && messages.length > 0 && !isTyping && (
               <div className="px-4 pb-3 flex-shrink-0" style={{ borderTop: "1px solid rgba(255,255,255,0.04)" }}>
                 <motion.button
                   onClick={() => handleOptionClick("expert")}
@@ -553,7 +671,7 @@ export function QorixAssistant() {
             )}
 
             {/* Input */}
-            <div
+            {!chatEnded && <div
               className="px-3 pb-3 pt-2 flex-shrink-0"
               style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}
             >
@@ -584,7 +702,7 @@ export function QorixAssistant() {
                 </motion.button>
               </div>
               <p className="text-center text-[9px] text-white/20 mt-1.5">Powered by Qorix Markets</p>
-            </div>
+            </div>}
           </motion.div>
         )}
       </AnimatePresence>
