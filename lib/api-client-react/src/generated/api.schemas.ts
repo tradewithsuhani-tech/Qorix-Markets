@@ -170,6 +170,17 @@ export interface SetDailyProfitBody {
   profitPercent: number;
 }
 
+export interface DailyProfitRun {
+  id: number;
+  runDate: string;
+  profitPercent: number;
+  totalAUM: number;
+  totalProfitDistributed: number;
+  investorsAffected: number;
+  referralBonusPaid: number;
+  createdAt: string;
+}
+
 export interface AdminUser {
   id: number;
   email: string;
@@ -216,6 +227,10 @@ export type GetTradesParams = {
 
 export type GetEquityChartParams = {
   days?: number;
+};
+
+export type GetProfitHistoryParams = {
+  limit?: number;
 };
 
 export type GetAdminUsersParams = {

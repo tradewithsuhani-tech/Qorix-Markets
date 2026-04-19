@@ -21,12 +21,14 @@ import type {
   AdminUserList,
   AuthResponse,
   CompoundingBody,
+  DailyProfitRun,
   DashboardSummary,
   DepositBody,
   EquityPoint,
   ErrorResponse,
   GetAdminUsersParams,
   GetEquityChartParams,
+  GetProfitHistoryParams,
   GetTradesParams,
   GetTransactionsParams,
   HealthStatus,
@@ -1599,7 +1601,7 @@ export function useGetAdminStats<
 }
 
 /**
- * @summary Set daily profit percentage for all users
+ * @summary Set daily profit percentage and distribute to all active investors
  */
 export const getSetDailyProfitUrl = () => {
   return `/api/admin/profit`;
@@ -1662,7 +1664,7 @@ export type SetDailyProfitMutationBody = BodyType<SetDailyProfitBody>;
 export type SetDailyProfitMutationError = ErrorType<unknown>;
 
 /**
- * @summary Set daily profit percentage for all users
+ * @summary Set daily profit percentage and distribute to all active investors
  */
 export const useSetDailyProfit = <
   TError = ErrorType<unknown>,
@@ -1683,6 +1685,103 @@ export const useSetDailyProfit = <
 > => {
   return useMutation(getSetDailyProfitMutationOptions(options));
 };
+
+/**
+ * @summary Get daily profit distribution history
+ */
+export const getGetProfitHistoryUrl = (params?: GetProfitHistoryParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/admin/profit/history?${stringifiedParams}`
+    : `/api/admin/profit/history`;
+};
+
+export const getProfitHistory = async (
+  params?: GetProfitHistoryParams,
+  options?: RequestInit,
+): Promise<DailyProfitRun[]> => {
+  return customFetch<DailyProfitRun[]>(getGetProfitHistoryUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetProfitHistoryQueryKey = (
+  params?: GetProfitHistoryParams,
+) => {
+  return [`/api/admin/profit/history`, ...(params ? [params] : [])] as const;
+};
+
+export const getGetProfitHistoryQueryOptions = <
+  TData = Awaited<ReturnType<typeof getProfitHistory>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetProfitHistoryParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getProfitHistory>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetProfitHistoryQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getProfitHistory>>
+  > = ({ signal }) => getProfitHistory(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getProfitHistory>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetProfitHistoryQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getProfitHistory>>
+>;
+export type GetProfitHistoryQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get daily profit distribution history
+ */
+
+export function useGetProfitHistory<
+  TData = Awaited<ReturnType<typeof getProfitHistory>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetProfitHistoryParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getProfitHistory>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetProfitHistoryQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * @summary Get all users

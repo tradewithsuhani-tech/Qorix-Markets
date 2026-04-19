@@ -318,7 +318,7 @@ export const GetAdminStatsResponse = zod.object({
 });
 
 /**
- * @summary Set daily profit percentage for all users
+ * @summary Set daily profit percentage and distribute to all active investors
  */
 export const SetDailyProfitBody = zod.object({
   profitPercent: zod.number(),
@@ -333,6 +333,27 @@ export const SetDailyProfitResponse = zod.object({
   pendingWithdrawalAmount: zod.number(),
   dailyProfitPercent: zod.number(),
 });
+
+/**
+ * @summary Get daily profit distribution history
+ */
+export const getProfitHistoryQueryLimitDefault = 30;
+
+export const GetProfitHistoryQueryParams = zod.object({
+  limit: zod.coerce.number().default(getProfitHistoryQueryLimitDefault),
+});
+
+export const GetProfitHistoryResponseItem = zod.object({
+  id: zod.number(),
+  runDate: zod.string(),
+  profitPercent: zod.number(),
+  totalAUM: zod.number(),
+  totalProfitDistributed: zod.number(),
+  investorsAffected: zod.number(),
+  referralBonusPaid: zod.number(),
+  createdAt: zod.string(),
+});
+export const GetProfitHistoryResponse = zod.array(GetProfitHistoryResponseItem);
 
 /**
  * @summary Get all users

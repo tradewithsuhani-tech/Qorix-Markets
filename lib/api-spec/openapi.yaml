@@ -397,7 +397,7 @@ paths:
     post:
       operationId: setDailyProfit
       tags: [admin]
-      summary: Set daily profit percentage for all users
+      summary: Set daily profit percentage and distribute to all active investors
       requestBody:
         required: true
         content:
@@ -411,6 +411,27 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AdminStats"
+
+  /admin/profit/history:
+    get:
+      operationId: getProfitHistory
+      tags: [admin]
+      summary: Get daily profit distribution history
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 30
+      responses:
+        "200":
+          description: Profit distribution history
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DailyProfitRun"
 
   /admin/users:
     get:
@@ -882,6 +903,35 @@ components:
           type: number
       required:
         - profitPercent
+
+    DailyProfitRun:
+      type: object
+      properties:
+        id:
+          type: integer
+        runDate:
+          type: string
+        profitPercent:
+          type: number
+        totalAUM:
+          type: number
+        totalProfitDistributed:
+          type: number
+        investorsAffected:
+          type: integer
+        referralBonusPaid:
+          type: number
+        createdAt:
+          type: string
+      required:
+        - id
+        - runDate
+        - profitPercent
+        - totalAUM
+        - totalProfitDistributed
+        - investorsAffected
+        - referralBonusPaid
+        - createdAt
 
     AdminUser:
       type: object

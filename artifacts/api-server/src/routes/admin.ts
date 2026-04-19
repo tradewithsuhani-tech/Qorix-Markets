@@ -1,5 +1,15 @@
 import { Router } from "express";
-import { db, usersTable, walletsTable, investmentsTable, transactionsTable, tradesTable } from "@workspace/db";
+import {
+  db,
+  usersTable,
+  walletsTable,
+  investmentsTable,
+  transactionsTable,
+  tradesTable,
+  equityHistoryTable,
+  systemSettingsTable,
+  dailyProfitRunsTable,
+} from "@workspace/db";
 import { eq, sum, count, and, desc, sql } from "drizzle-orm";
 import { authMiddleware, adminMiddleware, type AuthRequest } from "../middlewares/auth";
 import { SetDailyProfitBody } from "@workspace/api-zod";
@@ -14,21 +24,42 @@ const DRAWDOWN_LIMITS: Record<string, number> = {
   high: 0.10,
 };
 
-router.get("/admin/stats", async (req, res) => {
+const REFERRAL_MONTHLY_RATE = 0.005;
+const DAYS_PER_MONTH = 30;
+const REFERRAL_DAILY_RATE = REFERRAL_MONTHLY_RATE / DAYS_PER_MONTH;
+
+async function getAdminStatsData() {
   const [totalUsersResult] = await db.select({ count: count() }).from(usersTable);
-  const [activeInvResult] = await db.select({ count: count() }).from(investmentsTable)
+  const [activeInvResult] = await db
+    .select({ count: count() })
+    .from(investmentsTable)
     .where(eq(investmentsTable.isActive, true));
-  const [aumResult] = await db.select({ total: sum(investmentsTable.amount) }).from(investmentsTable)
+  const [aumResult] = await db
+    .select({ total: sum(investmentsTable.amount) })
+    .from(investmentsTable)
     .where(eq(investmentsTable.isActive, true));
-  const [profitResult] = await db.select({ total: sum(investmentsTable.totalProfit) }).from(investmentsTable);
-  const [pendingResult] = await db.select({ count: count() }).from(transactionsTable)
+  const [profitResult] = await db
+    .select({ total: sum(investmentsTable.totalProfit) })
+    .from(investmentsTable);
+  const [pendingResult] = await db
+    .select({ count: count() })
+    .from(transactionsTable)
     .where(and(eq(transactionsTable.type, "withdrawal"), eq(transactionsTable.status, "pending")));
-  const [pendingAmountResult] = await db.select({ total: sum(transactionsTable.amount) }).from(transactionsTable)
+  const [pendingAmountResult] = await db
+    .select({ total: sum(transactionsTable.amount) })
+    .from(transactionsTable)
     .where(and(eq(transactionsTable.type, "withdrawal"), eq(transactionsTable.status, "pending")));
 
-  const dailyProfitSetting = 0;
+  const settingRows = await db
+    .select()
+    .from(systemSettingsTable)
+    .where(eq(systemSettingsTable.key, "daily_profit_percent"))
+    .limit(1);
+  const dailyProfitSetting = settingRows.length > 0
+    ? parseFloat(settingRows[0]!.value)
+    : 0;
 
-  res.json({
+  return {
     totalUsers: Number(totalUsersResult?.count ?? 0),
     activeInvestors: Number(activeInvResult?.count ?? 0),
     totalAUM: parseFloat(String(aumResult?.total ?? "0")) || 0,
@@ -36,7 +67,12 @@ router.get("/admin/stats", async (req, res) => {
     pendingWithdrawals: Number(pendingResult?.count ?? 0),
     pendingWithdrawalAmount: parseFloat(String(pendingAmountResult?.total ?? "0")) || 0,
     dailyProfitPercent: dailyProfitSetting,
-  });
+  };
+}
+
+router.get("/admin/stats", async (req, res) => {
+  const stats = await getAdminStatsData();
+  res.json(stats);
 });
 
 router.post("/admin/profit", async (req, res) => {
@@ -47,64 +83,99 @@ router.post("/admin/profit", async (req, res) => {
   }
 
   const { profitPercent } = result.data;
-  if (profitPercent < 0 || profitPercent > 100) {
-    res.status(400).json({ error: "Profit percent must be between 0 and 100" });
+  if (profitPercent < -100 || profitPercent > 100) {
+    res.status(400).json({ error: "Profit percent must be between -100 and 100" });
     return;
   }
 
-  const activeInvestments = await db.select()
-    .from(investmentsTable)
-    .where(eq(investmentsTable.isActive, true));
+  await db.transaction(async (tx) => {
+    await tx
+      .insert(systemSettingsTable)
+      .values({ key: "daily_profit_percent", value: profitPercent.toString() })
+      .onConflictDoUpdate({
+        target: systemSettingsTable.key,
+        set: { value: profitPercent.toString(), updatedAt: new Date() },
+      });
 
-  for (const inv of activeInvestments) {
-    const amount = parseFloat(inv.amount as string);
-    const totalProfit = parseFloat(inv.totalProfit as string);
-    const currentDrawdown = parseFloat(inv.drawdown as string);
-    const drawdownLimit = (DRAWDOWN_LIMITS[inv.riskLevel] ?? 0.05) * amount;
+    const activeInvestments = await tx
+      .select()
+      .from(investmentsTable)
+      .where(eq(investmentsTable.isActive, true));
 
-    const dailyProfitAmount = amount * (profitPercent / 100);
+    const todayStr = new Date().toISOString().split("T")[0]!;
+    let totalProfitDistributed = 0;
+    let totalReferralBonusPaid = 0;
+    let investorsAffected = 0;
 
-    if (currentDrawdown >= drawdownLimit) {
-      await db.update(investmentsTable)
-        .set({ isActive: false, stoppedAt: new Date() })
-        .where(eq(investmentsTable.userId, inv.userId));
-      continue;
-    }
+    const totalAUM = activeInvestments.reduce(
+      (acc, inv) => acc + parseFloat(inv.amount as string),
+      0,
+    );
 
-    const newTotalProfit = totalProfit + dailyProfitAmount;
-    let newDrawdown = currentDrawdown;
-    if (profitPercent < 0) {
-      newDrawdown = currentDrawdown + Math.abs(dailyProfitAmount);
-    }
+    for (const inv of activeInvestments) {
+      const amount = parseFloat(inv.amount as string);
+      const totalProfit = parseFloat(inv.totalProfit as string);
+      const currentDrawdown = parseFloat(inv.drawdown as string);
+      const drawdownLimit = (DRAWDOWN_LIMITS[inv.riskLevel] ?? 0.05) * amount;
 
-    const wallet = await db.select().from(walletsTable).where(eq(walletsTable.userId, inv.userId)).limit(1);
-    if (wallet.length > 0) {
-      const profitBalance = parseFloat(wallet[0]!.profitBalance as string);
-      const newProfitBalance = profitBalance + dailyProfitAmount;
+      if (currentDrawdown >= drawdownLimit) {
+        await tx
+          .update(investmentsTable)
+          .set({ isActive: false, stoppedAt: new Date() })
+          .where(eq(investmentsTable.userId, inv.userId));
+        continue;
+      }
+
+      const dailyProfitAmount = amount * (profitPercent / 100);
+      const newTotalProfit = totalProfit + dailyProfitAmount;
+
+      let newDrawdown = currentDrawdown;
+      if (profitPercent < 0) {
+        newDrawdown = currentDrawdown + Math.abs(dailyProfitAmount);
+      }
+
+      const walletRows = await tx
+        .select()
+        .from(walletsTable)
+        .where(eq(walletsTable.userId, inv.userId))
+        .limit(1);
+
+      if (walletRows.length === 0) continue;
+      const wallet = walletRows[0]!;
+
+      const profitBalance = parseFloat(wallet.profitBalance as string);
+      const tradingBalance = parseFloat(wallet.tradingBalance as string);
 
       if (inv.autoCompound) {
-        const tradingBalance = parseFloat(wallet[0]!.tradingBalance as string);
-        await db.update(walletsTable)
+        const newAmount = amount + dailyProfitAmount;
+        await tx
+          .update(walletsTable)
           .set({
             tradingBalance: (tradingBalance + dailyProfitAmount).toString(),
             updatedAt: new Date(),
           })
           .where(eq(walletsTable.userId, inv.userId));
 
-        await db.update(investmentsTable)
+        await tx
+          .update(investmentsTable)
           .set({
-            amount: (amount + dailyProfitAmount).toString(),
+            amount: newAmount.toString(),
             totalProfit: newTotalProfit.toString(),
             dailyProfit: dailyProfitAmount.toString(),
             drawdown: newDrawdown.toString(),
           })
           .where(eq(investmentsTable.userId, inv.userId));
       } else {
-        await db.update(walletsTable)
-          .set({ profitBalance: newProfitBalance.toString(), updatedAt: new Date() })
+        await tx
+          .update(walletsTable)
+          .set({
+            profitBalance: (profitBalance + dailyProfitAmount).toString(),
+            updatedAt: new Date(),
+          })
           .where(eq(walletsTable.userId, inv.userId));
 
-        await db.update(investmentsTable)
+        await tx
+          .update(investmentsTable)
           .set({
             totalProfit: newTotalProfit.toString(),
             dailyProfit: dailyProfitAmount.toString(),
@@ -113,7 +184,7 @@ router.post("/admin/profit", async (req, res) => {
           .where(eq(investmentsTable.userId, inv.userId));
       }
 
-      await db.insert(transactionsTable).values({
+      await tx.insert(transactionsTable).values({
         userId: inv.userId,
         type: "profit",
         amount: dailyProfitAmount.toString(),
@@ -121,14 +192,34 @@ router.post("/admin/profit", async (req, res) => {
         description: `Daily profit distribution: ${profitPercent}%`,
       });
 
+      const currentEquity = inv.autoCompound
+        ? (amount + dailyProfitAmount)
+        : amount;
+
+      await tx
+        .insert(equityHistoryTable)
+        .values({
+          userId: inv.userId,
+          date: todayStr,
+          equity: currentEquity.toString(),
+          profit: dailyProfitAmount.toString(),
+        })
+        .onConflictDoNothing();
+
       const symbols = ["BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT"];
       const symbol = symbols[Math.floor(Math.random() * symbols.length)]!;
       const direction = profitPercent >= 0 ? "buy" : "sell";
-      const basePrice = symbol.startsWith("BTC") ? 67000 : symbol.startsWith("ETH") ? 3200 : symbol.startsWith("SOL") ? 145 : 420;
+      const basePrice = symbol.startsWith("BTC")
+        ? 67000
+        : symbol.startsWith("ETH")
+          ? 3200
+          : symbol.startsWith("SOL")
+            ? 145
+            : 420;
       const entryPrice = basePrice * (1 - 0.005);
       const exitPrice = basePrice * (1 + profitPercent / 100);
 
-      await db.insert(tradesTable).values({
+      await tx.insert(tradesTable).values({
         userId: inv.userId,
         symbol,
         direction,
@@ -137,27 +228,95 @@ router.post("/admin/profit", async (req, res) => {
         profit: dailyProfitAmount.toString(),
         profitPercent: profitPercent.toString(),
       });
+
+      totalProfitDistributed += dailyProfitAmount;
+      investorsAffected++;
+
+      const userRows = await tx
+        .select({ sponsorId: usersTable.sponsorId })
+        .from(usersTable)
+        .where(eq(usersTable.id, inv.userId))
+        .limit(1);
+
+      const sponsorId = userRows[0]?.sponsorId;
+      if (sponsorId && sponsorId !== inv.userId) {
+        const sponsorInvRows = await tx
+          .select({ isActive: investmentsTable.isActive })
+          .from(investmentsTable)
+          .where(eq(investmentsTable.userId, sponsorId))
+          .limit(1);
+
+        const sponsorActive = sponsorInvRows[0]?.isActive ?? false;
+        if (sponsorActive) {
+          const referralBonus = amount * REFERRAL_DAILY_RATE;
+
+          const sponsorWalletRows = await tx
+            .select()
+            .from(walletsTable)
+            .where(eq(walletsTable.userId, sponsorId))
+            .limit(1);
+
+          if (sponsorWalletRows.length > 0) {
+            const sponsorWallet = sponsorWalletRows[0]!;
+            const sponsorProfitBalance = parseFloat(sponsorWallet.profitBalance as string);
+
+            await tx
+              .update(walletsTable)
+              .set({
+                profitBalance: (sponsorProfitBalance + referralBonus).toString(),
+                updatedAt: new Date(),
+              })
+              .where(eq(walletsTable.userId, sponsorId));
+
+            await tx.insert(transactionsTable).values({
+              userId: sponsorId,
+              type: "referral_bonus",
+              amount: referralBonus.toString(),
+              status: "completed",
+              description: `Referral bonus from active investor (daily ${(REFERRAL_DAILY_RATE * 100).toFixed(4)}%)`,
+            });
+
+            totalReferralBonusPaid += referralBonus;
+          }
+        }
+      }
     }
-  }
 
-  const [totalUsersResult] = await db.select({ count: count() }).from(usersTable);
-  const [activeInvResult] = await db.select({ count: count() }).from(investmentsTable).where(eq(investmentsTable.isActive, true));
-  const [aumResult] = await db.select({ total: sum(investmentsTable.amount) }).from(investmentsTable).where(eq(investmentsTable.isActive, true));
-  const [profitResult] = await db.select({ total: sum(investmentsTable.totalProfit) }).from(investmentsTable);
-  const [pendingResult] = await db.select({ count: count() }).from(transactionsTable)
-    .where(and(eq(transactionsTable.type, "withdrawal"), eq(transactionsTable.status, "pending")));
-  const [pendingAmountResult] = await db.select({ total: sum(transactionsTable.amount) }).from(transactionsTable)
-    .where(and(eq(transactionsTable.type, "withdrawal"), eq(transactionsTable.status, "pending")));
-
-  res.json({
-    totalUsers: Number(totalUsersResult?.count ?? 0),
-    activeInvestors: Number(activeInvResult?.count ?? 0),
-    totalAUM: parseFloat(String(aumResult?.total ?? "0")) || 0,
-    totalProfitPaid: parseFloat(String(profitResult?.total ?? "0")) || 0,
-    pendingWithdrawals: Number(pendingResult?.count ?? 0),
-    pendingWithdrawalAmount: parseFloat(String(pendingAmountResult?.total ?? "0")) || 0,
-    dailyProfitPercent: profitPercent,
+    await tx.insert(dailyProfitRunsTable).values({
+      runDate: todayStr,
+      profitPercent: profitPercent.toString(),
+      totalAUM: totalAUM.toString(),
+      totalProfitDistributed: totalProfitDistributed.toString(),
+      investorsAffected,
+      referralBonusPaid: totalReferralBonusPaid.toString(),
+    });
   });
+
+  const stats = await getAdminStatsData();
+  res.json(stats);
+});
+
+router.get("/admin/profit/history", async (req, res) => {
+  const limit = Math.min(parseInt(req.query["limit"] as string) || 30, 100);
+
+  const runs = await db
+    .select()
+    .from(dailyProfitRunsTable)
+    .orderBy(desc(dailyProfitRunsTable.createdAt))
+    .limit(limit);
+
+  res.json(
+    runs.map((r) => ({
+      id: r.id,
+      runDate: r.runDate,
+      profitPercent: parseFloat(r.profitPercent as string),
+      totalAUM: parseFloat(r.totalAUM as string),
+      totalProfitDistributed: parseFloat(r.totalProfitDistributed as string),
+      investorsAffected: r.investorsAffected,
+      referralBonusPaid: parseFloat(r.referralBonusPaid as string),
+      createdAt: r.createdAt.toISOString(),
+    })),
+  );
 });
 
 router.get("/admin/users", async (req, res) => {
@@ -170,56 +329,75 @@ router.get("/admin/users", async (req, res) => {
 
   const allUsers = await db.select().from(usersTable).limit(limit).offset(offset);
 
-  const data = await Promise.all(allUsers.map(async (u) => {
-    const wallets = await db.select().from(walletsTable).where(eq(walletsTable.userId, u.id)).limit(1);
-    const invs = await db.select().from(investmentsTable).where(eq(investmentsTable.userId, u.id)).limit(1);
-    const wallet = wallets[0];
-    const inv = invs[0];
-    return {
-      id: u.id,
-      email: u.email,
-      fullName: u.fullName,
-      isAdmin: u.isAdmin,
-      mainBalance: wallet ? parseFloat(wallet.mainBalance as string) : 0,
-      tradingBalance: wallet ? parseFloat(wallet.tradingBalance as string) : 0,
-      profitBalance: wallet ? parseFloat(wallet.profitBalance as string) : 0,
-      investmentAmount: inv ? parseFloat(inv.amount as string) : 0,
-      isTrading: inv?.isActive ?? false,
-      referralCode: u.referralCode,
-      createdAt: u.createdAt.toISOString(),
-    };
-  }));
+  const data = await Promise.all(
+    allUsers.map(async (u) => {
+      const wallets = await db
+        .select()
+        .from(walletsTable)
+        .where(eq(walletsTable.userId, u.id))
+        .limit(1);
+      const invs = await db
+        .select()
+        .from(investmentsTable)
+        .where(eq(investmentsTable.userId, u.id))
+        .limit(1);
+      const wallet = wallets[0];
+      const inv = invs[0];
+      return {
+        id: u.id,
+        email: u.email,
+        fullName: u.fullName,
+        isAdmin: u.isAdmin,
+        mainBalance: wallet ? parseFloat(wallet.mainBalance as string) : 0,
+        tradingBalance: wallet ? parseFloat(wallet.tradingBalance as string) : 0,
+        profitBalance: wallet ? parseFloat(wallet.profitBalance as string) : 0,
+        investmentAmount: inv ? parseFloat(inv.amount as string) : 0,
+        isTrading: inv?.isActive ?? false,
+        referralCode: u.referralCode,
+        createdAt: u.createdAt.toISOString(),
+      };
+    }),
+  );
 
   res.json({ data, total, page, totalPages: Math.ceil(total / limit) });
 });
 
 router.get("/admin/withdrawals", async (req, res) => {
-  const pending = await db.select().from(transactionsTable)
+  const pending = await db
+    .select()
+    .from(transactionsTable)
     .where(and(eq(transactionsTable.type, "withdrawal"), eq(transactionsTable.status, "pending")))
     .orderBy(desc(transactionsTable.createdAt));
 
-  const result = await Promise.all(pending.map(async (tx) => {
-    const users = await db.select().from(usersTable).where(eq(usersTable.id, tx.userId)).limit(1);
-    const user = users[0];
-    return {
-      id: tx.id,
-      userId: tx.userId,
-      userEmail: user?.email ?? "",
-      userFullName: user?.fullName ?? "",
-      amount: parseFloat(tx.amount as string),
-      walletAddress: tx.walletAddress ?? "",
-      status: tx.status,
-      requestedAt: tx.createdAt.toISOString(),
-      processedAt: null,
-    };
-  }));
+  const result = await Promise.all(
+    pending.map(async (tx) => {
+      const users = await db
+        .select()
+        .from(usersTable)
+        .where(eq(usersTable.id, tx.userId))
+        .limit(1);
+      const user = users[0];
+      return {
+        id: tx.id,
+        userId: tx.userId,
+        userEmail: user?.email ?? "",
+        userFullName: user?.fullName ?? "",
+        amount: parseFloat(tx.amount as string),
+        walletAddress: tx.walletAddress ?? "",
+        status: tx.status,
+        requestedAt: tx.createdAt.toISOString(),
+        processedAt: null,
+      };
+    }),
+  );
 
   res.json(result);
 });
 
 router.post("/admin/withdrawals/:id/approve", async (req: AuthRequest, res) => {
   const id = parseInt(req.params["id"]!);
-  const [updated] = await db.update(transactionsTable)
+  const [updated] = await db
+    .update(transactionsTable)
     .set({ status: "completed" })
     .where(and(eq(transactionsTable.id, id), eq(transactionsTable.type, "withdrawal")))
     .returning();
@@ -229,7 +407,11 @@ router.post("/admin/withdrawals/:id/approve", async (req: AuthRequest, res) => {
     return;
   }
 
-  const user = await db.select().from(usersTable).where(eq(usersTable.id, updated.userId)).limit(1);
+  const user = await db
+    .select()
+    .from(usersTable)
+    .where(eq(usersTable.id, updated.userId))
+    .limit(1);
 
   res.json({
     id: updated.id,
@@ -246,7 +428,8 @@ router.post("/admin/withdrawals/:id/approve", async (req: AuthRequest, res) => {
 
 router.post("/admin/withdrawals/:id/reject", async (req: AuthRequest, res) => {
   const id = parseInt(req.params["id"]!);
-  const [updated] = await db.update(transactionsTable)
+  const [updated] = await db
+    .update(transactionsTable)
     .set({ status: "rejected" })
     .where(and(eq(transactionsTable.id, id), eq(transactionsTable.type, "withdrawal")))
     .returning();
@@ -256,14 +439,23 @@ router.post("/admin/withdrawals/:id/reject", async (req: AuthRequest, res) => {
     return;
   }
 
-  const txUser = await db.select().from(usersTable).where(eq(usersTable.id, updated.userId)).limit(1);
+  const txUser = await db
+    .select()
+    .from(usersTable)
+    .where(eq(usersTable.id, updated.userId))
+    .limit(1);
 
   if (txUser.length > 0) {
-    const wallets = await db.select().from(walletsTable).where(eq(walletsTable.userId, updated.userId)).limit(1);
+    const wallets = await db
+      .select()
+      .from(walletsTable)
+      .where(eq(walletsTable.userId, updated.userId))
+      .limit(1);
     if (wallets.length > 0) {
       const profitBalance = parseFloat(wallets[0]!.profitBalance as string);
       const refundAmount = parseFloat(updated.amount as string);
-      await db.update(walletsTable)
+      await db
+        .update(walletsTable)
         .set({ profitBalance: (profitBalance + refundAmount).toString(), updatedAt: new Date() })
         .where(eq(walletsTable.userId, updated.userId));
     }

@@ -5,3 +5,4 @@ export * from "./investments";
 export * from "./trades";
 export * from "./equity";
 export * from "./settings";
+export * from "./daily-profit-runs";
