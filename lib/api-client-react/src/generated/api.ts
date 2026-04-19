@@ -27,6 +27,8 @@ import type {
   EquityPoint,
   ErrorResponse,
   FundStats,
+  GenerateReportBody,
+  GenerateReportResponse,
   GetAdminUsersParams,
   GetEquityChartParams,
   GetMonthlyPerformanceParams,
@@ -57,6 +59,7 @@ import type {
   TransactionList,
   TransferBody,
   User,
+  VerifyReportResponse,
   Wallet,
   WithdrawBody,
   WithdrawalRequest,
@@ -1873,6 +1876,179 @@ export function useGetMonthlyPerformance<
   },
 ): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetMonthlyPerformanceQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Generate a tamper-proof verification report for a monthly performance record
+ */
+export const getGenerateReportUrl = () => {
+  return `/api/reports/generate`;
+};
+
+export const generateReport = async (
+  generateReportBody: GenerateReportBody,
+  options?: RequestInit,
+): Promise<GenerateReportResponse> => {
+  return customFetch<GenerateReportResponse>(getGenerateReportUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(generateReportBody),
+  });
+};
+
+export const getGenerateReportMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof generateReport>>,
+    TError,
+    { data: BodyType<GenerateReportBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof generateReport>>,
+  TError,
+  { data: BodyType<GenerateReportBody> },
+  TContext
+> => {
+  const mutationKey = ["generateReport"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof generateReport>>,
+    { data: BodyType<GenerateReportBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return generateReport(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type GenerateReportMutationResult = NonNullable<
+  Awaited<ReturnType<typeof generateReport>>
+>;
+export type GenerateReportMutationBody = BodyType<GenerateReportBody>;
+export type GenerateReportMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Generate a tamper-proof verification report for a monthly performance record
+ */
+export const useGenerateReport = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof generateReport>>,
+    TError,
+    { data: BodyType<GenerateReportBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof generateReport>>,
+  TError,
+  { data: BodyType<GenerateReportBody> },
+  TContext
+> => {
+  return useMutation(getGenerateReportMutationOptions(options));
+};
+
+/**
+ * @summary Publicly verify a monthly performance report by hash ID
+ */
+export const getVerifyReportUrl = (hashId: string) => {
+  return `/api/verify/${hashId}`;
+};
+
+export const verifyReport = async (
+  hashId: string,
+  options?: RequestInit,
+): Promise<VerifyReportResponse> => {
+  return customFetch<VerifyReportResponse>(getVerifyReportUrl(hashId), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getVerifyReportQueryKey = (hashId: string) => {
+  return [`/api/verify/${hashId}`] as const;
+};
+
+export const getVerifyReportQueryOptions = <
+  TData = Awaited<ReturnType<typeof verifyReport>>,
+  TError = ErrorType<void>,
+>(
+  hashId: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof verifyReport>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getVerifyReportQueryKey(hashId);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof verifyReport>>> = ({
+    signal,
+  }) => verifyReport(hashId, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!hashId,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof verifyReport>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type VerifyReportQueryResult = NonNullable<
+  Awaited<ReturnType<typeof verifyReport>>
+>;
+export type VerifyReportQueryError = ErrorType<void>;
+
+/**
+ * @summary Publicly verify a monthly performance report by hash ID
+ */
+
+export function useVerifyReport<
+  TData = Awaited<ReturnType<typeof verifyReport>>,
+  TError = ErrorType<void>,
+>(
+  hashId: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof verifyReport>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getVerifyReportQueryOptions(hashId, options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

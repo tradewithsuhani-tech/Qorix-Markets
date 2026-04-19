@@ -9,11 +9,13 @@ import dashboardRouter from "./dashboard";
 import adminRouter from "./admin";
 import notificationsRouter from "./notifications";
 import tradingDeskRouter from "./trading-desk";
+import reportsRouter from "./reports";
 
 const router: IRouter = Router();
 
 router.use(healthRouter);
 router.use(authRouter);
+router.use(reportsRouter);
 router.use(walletRouter);
 router.use(transactionsRouter);
 router.use(investmentRouter);
