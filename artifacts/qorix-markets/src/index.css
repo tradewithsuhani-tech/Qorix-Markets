@@ -314,4 +314,55 @@
     -webkit-overflow-scrolling: touch;
     scroll-behavior: smooth;
   }
+
+  /* Native-feel tap states */
+  .tap-highlight {
+    -webkit-tap-highlight-color: rgba(59, 130, 246, 0.12);
+  }
+
+  /* Prevent text selection on interactive elements */
+  .no-select {
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  /* Smooth full-screen transitions */
+  @media all and (display-mode: standalone) {
+    html, body, #root {
+      height: 100%;
+      height: 100dvh;
+      overflow: hidden;
+    }
+
+    body {
+      padding-top: env(safe-area-inset-top, 0px);
+    }
+  }
+
+  /* Page transition layers */
+  .page-enter {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  .page-enter-active {
+    opacity: 1;
+    transform: translateY(0);
+    transition: opacity 0.25s ease, transform 0.25s ease;
+  }
+  .page-exit {
+    opacity: 1;
+  }
+  .page-exit-active {
+    opacity: 0;
+    transform: translateY(-6px);
+    transition: opacity 0.2s ease, transform 0.2s ease;
+  }
+
+  /* Active press scale for mobile buttons */
+  .press-scale {
+    transition: transform 0.12s ease;
+  }
+  .press-scale:active {
+    transform: scale(0.95);
+  }
 }

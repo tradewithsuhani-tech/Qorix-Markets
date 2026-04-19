@@ -1,10 +1,12 @@
-import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
+import { Switch, Route, Router as WouterRouter } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import { PWAInstallPrompt } from "@/components/pwa-install-prompt";
+import { SplashScreen, useSplash } from "@/components/splash-screen";
+import { useLocation } from "wouter";
 
 import Landing from "@/pages/landing";
 import Dashboard from "@/pages/dashboard";
@@ -18,12 +20,17 @@ import AnalyticsPage from "@/pages/analytics";
 
 const queryClient = new QueryClient();
 
-// Protected Route Wrapper
-const ProtectedRoute = ({ component: Component, adminOnly = false }: { component: any, adminOnly?: boolean }) => {
+const ProtectedRoute = ({ component: Component, adminOnly = false }: { component: any; adminOnly?: boolean }) => {
   const { user, token, isLoading } = useAuth();
   const [, setLocation] = useLocation();
 
-  if (isLoading) return <div className="h-screen w-full bg-background flex items-center justify-center">Loading...</div>;
+  if (isLoading) {
+    return (
+      <div className="h-screen w-full bg-background flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   if (!token || !user) {
     setLocation("/");
@@ -55,14 +62,25 @@ function Router() {
   );
 }
 
+function AppContent() {
+  const { showSplash, onSplashDone } = useSplash();
+
+  return (
+    <>
+      {showSplash && <SplashScreen onDone={onSplashDone} />}
+      <Router />
+      <PWAInstallPrompt />
+    </>
+  );
+}
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
           <AuthProvider>
-            <Router />
-            <PWAInstallPrompt />
+            <AppContent />
           </AuthProvider>
         </WouterRouter>
         <Toaster />

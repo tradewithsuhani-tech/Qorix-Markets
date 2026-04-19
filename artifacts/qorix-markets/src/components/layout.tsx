@@ -1,14 +1,14 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { motion, AnimatePresence } from "framer-motion";
-import { 
-  LayoutDashboard, 
-  Wallet, 
-  TrendingUp, 
-  History, 
-  Users, 
-  ShieldAlert, 
+import {
+  LayoutDashboard,
+  Wallet,
+  TrendingUp,
+  History,
+  Users,
+  ShieldAlert,
   Settings,
   LogOut,
   ChevronRight,
@@ -23,7 +23,8 @@ import {
   ArrowUpCircle,
   CalendarDays,
   Info,
-  CheckCheck
+  CheckCheck,
+  MoreHorizontal,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -64,6 +65,10 @@ function timeAgo(dateStr: string) {
   return `${Math.floor(h / 24)}d ago`;
 }
 
+function haptic(pattern: number | number[] = 10) {
+  if ("vibrate" in navigator) navigator.vibrate(pattern);
+}
+
 function NotificationPanel({ onClose }: { onClose: () => void }) {
   const qc = useQueryClient();
   const { data, isLoading } = useGetNotifications(
@@ -76,12 +81,8 @@ function NotificationPanel({ onClose }: { onClose: () => void }) {
 
   const invalidate = () => qc.invalidateQueries({ queryKey: getGetNotificationsQueryKey() });
 
-  const handleMarkRead = (id: number) => {
-    markRead.mutate({ id }, { onSuccess: invalidate });
-  };
-  const handleMarkAll = () => {
-    markAll.mutate(undefined, { onSuccess: invalidate });
-  };
+  const handleMarkRead = (id: number) => markRead.mutate({ id }, { onSuccess: invalidate });
+  const handleMarkAll = () => markAll.mutate(undefined, { onSuccess: invalidate });
   const handleDelete = (id: number, e: React.MouseEvent) => {
     e.stopPropagation();
     del.mutate({ id }, { onSuccess: invalidate });
@@ -99,7 +100,6 @@ function NotificationPanel({ onClose }: { onClose: () => void }) {
       className="absolute right-0 top-full mt-2 w-80 z-50 rounded-2xl border border-white/10 bg-[#0d1117] shadow-2xl shadow-black/50 overflow-hidden"
       style={{ backdropFilter: "blur(20px)" }}
     >
-      {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-white/8">
         <div className="flex items-center gap-2">
           <Bell className="w-4 h-4 text-blue-400" />
@@ -120,16 +120,11 @@ function NotificationPanel({ onClose }: { onClose: () => void }) {
               Mark all read
             </button>
           )}
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-lg text-muted-foreground hover:text-white hover:bg-white/5 transition-all"
-          >
+          <button onClick={onClose} className="p-1.5 rounded-lg text-muted-foreground hover:text-white hover:bg-white/5 transition-all">
             <X className="w-3.5 h-3.5" />
           </button>
         </div>
       </div>
-
-      {/* List */}
       <div className="max-h-[380px] overflow-y-auto">
         {isLoading ? (
           <div className="flex items-center justify-center py-12">
@@ -163,10 +158,7 @@ function NotificationPanel({ onClose }: { onClose: () => void }) {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-1">
-                      <span className={cn(
-                        "text-xs font-semibold leading-tight",
-                        n.isRead ? "text-muted-foreground" : "text-white"
-                      )}>
+                      <span className={cn("text-xs font-semibold leading-tight", n.isRead ? "text-muted-foreground" : "text-white")}>
                         {n.title}
                       </span>
                       <button
@@ -176,16 +168,10 @@ function NotificationPanel({ onClose }: { onClose: () => void }) {
                         <X className="w-3 h-3" />
                       </button>
                     </div>
-                    <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
-                      {n.message}
-                    </p>
-                    <span className="text-[10px] text-muted-foreground/60 mt-1 block">
-                      {timeAgo(n.createdAt)}
-                    </span>
+                    <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">{n.message}</p>
+                    <span className="text-[10px] text-muted-foreground/60 mt-1 block">{timeAgo(n.createdAt)}</span>
                   </div>
-                  {!n.isRead && (
-                    <div className="w-1.5 h-1.5 rounded-full bg-blue-400 shrink-0 mt-2" />
-                  )}
+                  {!n.isRead && <div className="w-1.5 h-1.5 rounded-full bg-blue-400 shrink-0 mt-2" />}
                 </motion.div>
               );
             })}
@@ -207,9 +193,7 @@ function NotificationBell() {
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     }
     if (open) document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
@@ -218,12 +202,10 @@ function NotificationBell() {
   return (
     <div ref={ref} className="relative">
       <button
-        onClick={() => setOpen((p) => !p)}
+        onClick={() => { setOpen((p) => !p); haptic(8); }}
         className={cn(
           "relative w-9 h-9 rounded-xl flex items-center justify-center transition-all duration-200",
-          open
-            ? "bg-blue-500/15 border border-blue-500/30 text-blue-400"
-            : "text-muted-foreground hover:text-white hover:bg-white/8 border border-transparent"
+          open ? "bg-blue-500/15 border border-blue-500/30 text-blue-400" : "text-muted-foreground hover:text-white hover:bg-white/8 border border-transparent"
         )}
       >
         {unread > 0 ? <BellDot className="w-4.5 h-4.5" /> : <Bell className="w-4.5 h-4.5" />}
@@ -279,16 +261,10 @@ function ProtectionBanner() {
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            <Link
-              href="/invest"
-              className="text-xs px-3 py-1.5 bg-red-500/15 hover:bg-red-500/25 text-red-400 border border-red-500/30 rounded-lg font-medium transition-all"
-            >
+            <Link href="/invest" className="text-xs px-3 py-1.5 bg-red-500/15 hover:bg-red-500/25 text-red-400 border border-red-500/30 rounded-lg font-medium transition-all">
               Review
             </Link>
-            <button
-              onClick={() => setDismissed(true)}
-              className="text-muted-foreground hover:text-white transition-colors p-1 rounded"
-            >
+            <button onClick={() => setDismissed(true)} className="text-muted-foreground hover:text-white transition-colors p-1 rounded">
               <X style={{ width: 13, height: 13 }} />
             </button>
           </div>
@@ -298,11 +274,91 @@ function ProtectionBanner() {
   );
 }
 
-export function Layout({ children }: { children: React.ReactNode }) {
-  const [location] = useLocation();
-  const { logout, user } = useAuth();
+function MoreSheet({
+  open,
+  onClose,
+  links,
+  location,
+  onNavigate,
+}: {
+  open: boolean;
+  onClose: () => void;
+  links: { href: string; label: string; icon: React.ElementType }[];
+  location: string;
+  onNavigate: (href: string) => void;
+}) {
+  return (
+    <AnimatePresence>
+      {open && (
+        <>
+          <motion.div
+            key="more-backdrop"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm"
+            onClick={onClose}
+          />
+          <motion.div
+            key="more-sheet"
+            initial={{ y: "100%" }}
+            animate={{ y: 0 }}
+            exit={{ y: "100%" }}
+            transition={{ type: "spring", bounce: 0.15, duration: 0.45 }}
+            className="fixed bottom-0 left-0 right-0 z-50 rounded-t-3xl bg-[#0d1525] border-t border-white/10 overflow-hidden"
+            style={{ paddingBottom: "max(env(safe-area-inset-bottom, 0px), 1rem)" }}
+          >
+            <div className="w-10 h-1 rounded-full bg-white/20 mx-auto mt-4 mb-4" />
+            <div className="px-4 pb-2">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 px-2">More</p>
+              <div className="space-y-1">
+                {links.map((link) => {
+                  const isActive = location === link.href;
+                  return (
+                    <button
+                      key={link.href}
+                      onClick={() => { onNavigate(link.href); haptic(10); }}
+                      className={cn(
+                        "flex items-center gap-3 w-full px-4 py-3.5 rounded-xl text-sm font-medium transition-all duration-200",
+                        isActive
+                          ? "bg-blue-500/10 border border-blue-500/20 text-blue-400"
+                          : "text-muted-foreground hover:text-white hover:bg-white/5"
+                      )}
+                    >
+                      <link.icon style={{ width: 18, height: 18 }} className={isActive ? "text-blue-400" : "text-muted-foreground"} />
+                      {link.label}
+                      {isActive && <ChevronRight style={{ width: 13, height: 13 }} className="ml-auto text-blue-400" />}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
+  );
+}
 
-  const links = [
+const pageVariants = {
+  initial: { opacity: 0, y: 10 },
+  animate: { opacity: 1, y: 0 },
+  exit: { opacity: 0, y: -6 },
+};
+
+const pageTransition = {
+  type: "tween" as const,
+  ease: [0.25, 0.46, 0.45, 0.94],
+  duration: 0.25,
+};
+
+export function Layout({ children }: { children: React.ReactNode }) {
+  const [location, navigate] = useLocation();
+  const { logout, user } = useAuth();
+  const [moreOpen, setMoreOpen] = useState(false);
+
+  const allLinks = [
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { href: "/wallet", label: "Wallet", icon: Wallet },
     { href: "/invest", label: "Invest", icon: TrendingUp },
@@ -313,11 +369,17 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/settings", label: "Settings", icon: Settings },
   ];
 
-  const mobileLinks = links.slice(0, 5);
+  const primaryNavLinks = allLinks.slice(0, 4);
+  const overflowLinks = allLinks.slice(4);
+  const isMoreActive = overflowLinks.some((l) => l.href === location);
+
+  const handleMoreNavigate = useCallback((href: string) => {
+    navigate(href);
+    setMoreOpen(false);
+  }, [navigate]);
 
   return (
     <div className="flex h-screen w-full bg-background overflow-hidden text-foreground selection:bg-primary/30">
-      
       {/* Desktop Sidebar */}
       <aside className="hidden md:flex flex-col w-64 border-r border-white/5 glass-nav shrink-0">
         <div className="p-6 pb-4">
@@ -335,22 +397,19 @@ export function Layout({ children }: { children: React.ReactNode }) {
             </div>
           </div>
         </div>
-
         <div className="mx-4 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent mb-2" />
-        
         <nav className="flex-1 px-3 py-3 space-y-0.5 overflow-y-auto">
-          {links.map((link) => {
+          {allLinks.map((link) => {
             const isActive = location === link.href;
             return (
-              <Link 
-                key={link.href} 
+              <Link
+                key={link.href}
                 href={link.href}
                 className={cn(
                   "group flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 relative",
-                  isActive 
-                    ? "text-white" 
-                    : "text-muted-foreground hover:text-white hover:bg-white/5"
+                  isActive ? "text-white" : "text-muted-foreground hover:text-white hover:bg-white/5"
                 )}
+                onClick={() => haptic(8)}
               >
                 {isActive && (
                   <motion.div
@@ -359,21 +418,14 @@ export function Layout({ children }: { children: React.ReactNode }) {
                     transition={{ type: "spring", bounce: 0.2, duration: 0.4 }}
                   />
                 )}
-                <link.icon className={cn(
-                  "relative z-10 shrink-0 transition-colors",
-                  isActive ? "text-blue-400" : "text-muted-foreground group-hover:text-white"
-                )} style={{ width: 17, height: 17 }} />
+                <link.icon className={cn("relative z-10 shrink-0 transition-colors", isActive ? "text-blue-400" : "text-muted-foreground group-hover:text-white")} style={{ width: 17, height: 17 }} />
                 <span className="relative z-10">{link.label}</span>
-                {isActive && (
-                  <ChevronRight className="ml-auto relative z-10 text-blue-400" style={{ width: 13, height: 13 }} />
-                )}
+                {isActive && <ChevronRight className="ml-auto relative z-10 text-blue-400" style={{ width: 13, height: 13 }} />}
               </Link>
             );
           })}
         </nav>
-
         <div className="mx-4 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent mb-2" />
-
         <div className="p-3">
           <div className="flex items-center gap-3 px-3 py-2 rounded-xl mb-1">
             <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500/30 to-indigo-500/30 border border-blue-500/20 flex items-center justify-center text-sm font-bold text-blue-400 shrink-0">
@@ -385,7 +437,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
             </div>
             <NotificationBell />
           </div>
-          <button 
+          <button
             onClick={logout}
             className="flex items-center gap-3 px-3 py-2.5 w-full rounded-xl text-sm font-medium text-muted-foreground hover:text-white hover:bg-white/5 transition-all duration-200"
           >
@@ -399,8 +451,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <main className="flex-1 flex flex-col h-full overflow-hidden relative">
         <ProtectionBanner />
 
-        {/* Mobile top bar with notifications */}
-        <div className="md:hidden flex items-center justify-between px-4 py-3 border-b border-white/5">
+        {/* Mobile top bar */}
+        <div className="md:hidden flex items-center justify-between px-4 py-3 border-b border-white/5 glass-nav shrink-0"
+          style={{ paddingTop: "max(0.75rem, env(safe-area-inset-top, 0.75rem))" }}
+        >
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center">
               <TrendingUp className="w-4 h-4 text-white" />
@@ -410,51 +464,106 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <NotificationBell />
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 md:p-8 pb-24 md:pb-8">
-          <div className="max-w-6xl mx-auto">
-            {children}
-          </div>
+        {/* Page content with transitions */}
+        <div className="flex-1 overflow-y-auto scroll-smooth-ios pb-24 md:pb-0">
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div
+              key={location}
+              variants={pageVariants}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              transition={pageTransition}
+              className="h-full"
+            >
+              <div className="p-4 md:p-8">
+                <div className="max-w-6xl mx-auto">
+                  {children}
+                </div>
+              </div>
+            </motion.div>
+          </AnimatePresence>
         </div>
       </main>
 
       {/* Mobile Bottom Nav */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 glass-nav z-50 px-4 pt-2 bottom-nav-safe">
-        <div className="flex justify-around items-center">
-          {mobileLinks.map((link) => {
+      <nav
+        className="md:hidden fixed bottom-0 left-0 right-0 glass-nav z-30"
+        style={{ paddingBottom: "max(env(safe-area-inset-bottom, 0px), 0.5rem)" }}
+      >
+        <div className="flex justify-around items-center px-2 pt-2">
+          {primaryNavLinks.map((link) => {
             const isActive = location === link.href;
             return (
-              <Link 
-                key={link.href} 
+              <Link
+                key={link.href}
                 href={link.href}
                 className="relative flex flex-col items-center justify-center w-14 py-1.5"
+                onClick={() => haptic(10)}
               >
                 {isActive && (
                   <motion.div
                     layoutId="bottom-nav-active"
                     className="absolute inset-0 rounded-xl bg-blue-500/10"
-                    transition={{ type: "spring", bounce: 0.2, duration: 0.35 }}
+                    transition={{ type: "spring", bounce: 0.25, duration: 0.35 }}
                   />
                 )}
                 {isActive && (
                   <motion.div
                     layoutId="bottom-nav-indicator"
-                    className="absolute -top-0.5 left-1/2 -translate-x-1/2 w-5 h-0.5 rounded-full bg-blue-400"
-                    transition={{ type: "spring", bounce: 0.2, duration: 0.35 }}
-                    style={{ boxShadow: "0 0 8px rgba(96,165,250,0.8)" }}
+                    className="absolute -top-0.5 left-1/2 -translate-x-1/2 w-6 h-0.5 rounded-full bg-blue-400"
+                    transition={{ type: "spring", bounce: 0.25, duration: 0.35 }}
+                    style={{ boxShadow: "0 0 8px rgba(96,165,250,0.9)" }}
                   />
                 )}
-                <div className={cn(
-                  "relative z-10 flex flex-col items-center gap-1 transition-all duration-200",
-                  isActive ? "text-blue-400" : "text-muted-foreground"
-                )}>
+                <motion.div
+                  className={cn("relative z-10 flex flex-col items-center gap-1 transition-colors duration-200", isActive ? "text-blue-400" : "text-muted-foreground")}
+                  animate={isActive ? { scale: 1.08 } : { scale: 1 }}
+                  transition={{ type: "spring", bounce: 0.4, duration: 0.3 }}
+                >
                   <link.icon style={{ width: 20, height: 20 }} />
                   <span className="text-[9px] font-medium leading-none">{link.label}</span>
-                </div>
+                </motion.div>
               </Link>
             );
           })}
+
+          {/* More button */}
+          <button
+            onClick={() => { setMoreOpen(true); haptic(10); }}
+            className="relative flex flex-col items-center justify-center w-14 py-1.5"
+          >
+            {isMoreActive && (
+              <motion.div
+                layoutId="bottom-nav-active"
+                className="absolute inset-0 rounded-xl bg-blue-500/10"
+                transition={{ type: "spring", bounce: 0.25, duration: 0.35 }}
+              />
+            )}
+            {isMoreActive && (
+              <motion.div
+                layoutId="bottom-nav-indicator"
+                className="absolute -top-0.5 left-1/2 -translate-x-1/2 w-6 h-0.5 rounded-full bg-blue-400"
+                transition={{ type: "spring", bounce: 0.25, duration: 0.35 }}
+                style={{ boxShadow: "0 0 8px rgba(96,165,250,0.9)" }}
+              />
+            )}
+            <div className={cn("relative z-10 flex flex-col items-center gap-1", isMoreActive ? "text-blue-400" : "text-muted-foreground")}>
+              <MoreHorizontal style={{ width: 20, height: 20 }} />
+              <span className="text-[9px] font-medium leading-none">More</span>
+            </div>
+          </button>
         </div>
       </nav>
+
+      {/* More sheet */}
+      <MoreSheet
+        open={moreOpen}
+        onClose={() => setMoreOpen(false)}
+        links={overflowLinks}
+        location={location}
+        onNavigate={handleMoreNavigate}
+      />
     </div>
   );
 }
