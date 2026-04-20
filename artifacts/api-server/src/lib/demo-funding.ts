@@ -11,6 +11,13 @@ export async function getDemoSignupAmount(): Promise<number> {
   return Number.isFinite(v) && v > 0 ? v : DEMO_DEFAULT_AMOUNT;
 }
 
+/** Toggle: when "false", new signups are NOT auto-credited demo funds. Default: true. */
+export async function isAutoDemoSignupEnabled(): Promise<boolean> {
+  const rows = await db.select().from(systemSettingsTable).where(eq(systemSettingsTable.key, "auto_demo_signup")).limit(1);
+  const v = (rows[0]?.value ?? "true").toLowerCase();
+  return v !== "false" && v !== "0" && v !== "off";
+}
+
 /**
  * Credit a user with demo funds: deposit + 30% allocated to trading + active investment row + ledger entries.
  * Idempotent guard: skips if a "[DEMO] Welcome funds" deposit already exists for the user.

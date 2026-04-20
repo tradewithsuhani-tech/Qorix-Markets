@@ -147,10 +147,12 @@ router.post("/auth/register", async (req, res) => {
   await db.insert(walletsTable).values({ userId: newUser.id });
   await db.insert(investmentsTable).values({ userId: newUser.id });
 
-  // Auto-credit demo welcome funds so user can immediately explore dashboard / trading
+  // Auto-credit demo welcome funds (gated by `auto_demo_signup` system setting; default ON)
   try {
-    const { seedDemoFunds } = await import("../lib/demo-funding");
-    await seedDemoFunds(newUser.id);
+    const { seedDemoFunds, isAutoDemoSignupEnabled } = await import("../lib/demo-funding");
+    if (await isAutoDemoSignupEnabled()) {
+      await seedDemoFunds(newUser.id);
+    }
   } catch (e) {
     // non-fatal — signup continues even if demo funding fails
     console.error("[DEMO] Failed to seed funds for new user", newUser.id, e);
