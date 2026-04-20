@@ -954,17 +954,38 @@ export default function Dashboard() {
                 Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-14 w-full rounded-xl" />)
               ) : trades.length === 0 ? (
                 <div className="flex flex-col h-full">
-                  {/* Waiting for setup — animated */}
-                  <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground py-6 relative overflow-hidden">
-                    <div className="relative w-16 h-16 mb-3">
-                      <span className="absolute inset-0 rounded-full bg-blue-500/20 animate-ping" />
-                      <span className="absolute inset-2 rounded-full bg-blue-500/30 animate-ping" style={{ animationDelay: "0.4s" }} />
-                      <div className="absolute inset-0 flex items-center justify-center">
-                        <Activity className="w-6 h-6 text-blue-400 animate-pulse" />
+                  {/* Waiting for setup — animated with gradient highlight */}
+                  <div className="flex-1 flex flex-col items-center justify-center py-6 relative overflow-hidden rounded-xl">
+                    {/* Ambient gradient backdrop */}
+                    <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-blue-500/10 via-indigo-500/5 to-purple-500/10" />
+                    <div className="pointer-events-none absolute -top-16 -left-16 w-48 h-48 rounded-full bg-blue-500/20 blur-3xl animate-pulse" />
+                    <div className="pointer-events-none absolute -bottom-16 -right-16 w-48 h-48 rounded-full bg-purple-500/20 blur-3xl animate-pulse" style={{ animationDelay: "1s" }} />
+
+                    {/* Shimmer sweep */}
+                    <div className="pointer-events-none absolute inset-0 overflow-hidden">
+                      <div className="absolute -inset-x-10 top-1/2 h-px bg-gradient-to-r from-transparent via-blue-400/40 to-transparent animate-pulse" />
+                    </div>
+
+                    {/* Icon with gradient ring */}
+                    <div className="relative w-20 h-20 mb-4">
+                      <span className="absolute inset-0 rounded-full bg-gradient-to-br from-blue-500/40 to-purple-500/30 blur-md animate-ping" />
+                      <span className="absolute inset-2 rounded-full bg-gradient-to-br from-blue-400/30 to-cyan-400/20 animate-ping" style={{ animationDelay: "0.4s" }} />
+                      <div className="absolute inset-3 rounded-full bg-gradient-to-br from-slate-900 to-slate-950 border border-blue-400/30 flex items-center justify-center shadow-[0_0_24px_-4px_rgba(59,130,246,0.6)]">
+                        <Activity className="w-7 h-7 text-blue-300 animate-pulse" strokeWidth={2.25} />
                       </div>
                     </div>
-                    <p className="text-sm font-medium text-blue-300/90">Waiting for setup…</p>
-                    <p className="text-[11px] opacity-50 mt-0.5">Scanning markets for next signal</p>
+
+                    <p className="text-sm font-semibold bg-gradient-to-r from-blue-300 via-cyan-200 to-indigo-300 bg-clip-text text-transparent tracking-wide">
+                      Waiting for setup…
+                    </p>
+                    <p className="text-[11px] text-white/50 mt-1">Scanning markets for next signal</p>
+
+                    {/* Animated progress dots */}
+                    <div className="flex items-center gap-1.5 mt-3">
+                      <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
+                      <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" style={{ animationDelay: "0.2s" }} />
+                      <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse" style={{ animationDelay: "0.4s" }} />
+                    </div>
                   </div>
 
                   {/* Recent closed strip */}
