@@ -369,6 +369,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const allLinks = [
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { href: "/wallet", label: "Wallet", icon: Wallet },
+    { href: "/deposit", label: "Deposit", icon: ArrowDownCircle },
     { href: "/invest", label: "Invest", icon: TrendingUp },
     { href: "/analytics", label: "Analytics", icon: BarChart2 },
     { href: "/market-insights", label: "Market Insights", icon: Globe },

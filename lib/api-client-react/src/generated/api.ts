@@ -20,9 +20,11 @@ import type {
   AdminStats,
   AdminUserList,
   AuthResponse,
+  BlockchainDepositHistory,
   CompoundingBody,
   DailyProfitRun,
   DashboardSummary,
+  DepositAddressResponse,
   DepositBody,
   EquityPoint,
   ErrorResponse,
@@ -30,6 +32,7 @@ import type {
   GenerateReportBody,
   GenerateReportResponse,
   GetAdminUsersParams,
+  GetBlockchainDepositHistoryParams,
   GetEquityChartParams,
   GetLedgerJournalParams,
   GetMonthlyPerformanceParams,
@@ -3555,6 +3558,187 @@ export function useGetTradingDeskTraders<
   request?: SecondParameter<typeof customFetch>;
 }): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetTradingDeskTradersQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Get or create user TRC20 USDT deposit address
+ */
+export const getGetDepositAddressUrl = () => {
+  return `/api/deposit/address`;
+};
+
+export const getDepositAddress = async (
+  options?: RequestInit,
+): Promise<DepositAddressResponse> => {
+  return customFetch<DepositAddressResponse>(getGetDepositAddressUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetDepositAddressQueryKey = () => {
+  return [`/api/deposit/address`] as const;
+};
+
+export const getGetDepositAddressQueryOptions = <
+  TData = Awaited<ReturnType<typeof getDepositAddress>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getDepositAddress>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetDepositAddressQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getDepositAddress>>
+  > = ({ signal }) => getDepositAddress({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getDepositAddress>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetDepositAddressQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getDepositAddress>>
+>;
+export type GetDepositAddressQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get or create user TRC20 USDT deposit address
+ */
+
+export function useGetDepositAddress<
+  TData = Awaited<ReturnType<typeof getDepositAddress>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getDepositAddress>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetDepositAddressQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Get blockchain deposit history for user
+ */
+export const getGetBlockchainDepositHistoryUrl = (
+  params?: GetBlockchainDepositHistoryParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/deposit/history?${stringifiedParams}`
+    : `/api/deposit/history`;
+};
+
+export const getBlockchainDepositHistory = async (
+  params?: GetBlockchainDepositHistoryParams,
+  options?: RequestInit,
+): Promise<BlockchainDepositHistory> => {
+  return customFetch<BlockchainDepositHistory>(
+    getGetBlockchainDepositHistoryUrl(params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getGetBlockchainDepositHistoryQueryKey = (
+  params?: GetBlockchainDepositHistoryParams,
+) => {
+  return [`/api/deposit/history`, ...(params ? [params] : [])] as const;
+};
+
+export const getGetBlockchainDepositHistoryQueryOptions = <
+  TData = Awaited<ReturnType<typeof getBlockchainDepositHistory>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetBlockchainDepositHistoryParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getBlockchainDepositHistory>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetBlockchainDepositHistoryQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getBlockchainDepositHistory>>
+  > = ({ signal }) =>
+    getBlockchainDepositHistory(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getBlockchainDepositHistory>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetBlockchainDepositHistoryQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getBlockchainDepositHistory>>
+>;
+export type GetBlockchainDepositHistoryQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get blockchain deposit history for user
+ */
+
+export function useGetBlockchainDepositHistory<
+  TData = Awaited<ReturnType<typeof getBlockchainDepositHistory>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetBlockchainDepositHistoryParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getBlockchainDepositHistory>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetBlockchainDepositHistoryQueryOptions(
+    params,
+    options,
+  );
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

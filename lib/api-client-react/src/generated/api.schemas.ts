@@ -466,6 +466,28 @@ export interface ReconciliationResult {
   accountBalances: ReconciliationResultAccountBalancesItem[];
 }
 
+export interface DepositAddressResponse {
+  address: string;
+  network: string;
+  token: string;
+}
+
+export interface BlockchainDepositItem {
+  id: number;
+  txHash: string;
+  fromAddress: string;
+  amount: number;
+  status: string;
+  credited: boolean;
+  blockTimestamp?: string | null;
+  creditedAt?: string | null;
+  createdAt: string;
+}
+
+export interface BlockchainDepositHistory {
+  deposits: BlockchainDepositItem[];
+}
+
 export type GetTransactionsParams = {
   page?: number;
   limit?: number;
@@ -510,4 +532,8 @@ export type GetAdminUsersParams = {
 export type GetLedgerJournalParams = {
   limit?: number;
   offset?: number;
+};
+
+export type GetBlockchainDepositHistoryParams = {
+  limit?: number;
 };

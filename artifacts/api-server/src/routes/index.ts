@@ -14,6 +14,7 @@ import publicRouter from "./public";
 import fraudRouter from "./fraud";
 import leaderboardRouter from "./leaderboard";
 import chatRouter from "./chat";
+import depositRouter from "./deposit";
 
 const router: IRouter = Router();
 
@@ -32,5 +33,6 @@ router.use(notificationsRouter);
 router.use(tradingDeskRouter);
 router.use(fraudRouter);
 router.use(leaderboardRouter);
+router.use(depositRouter);
 
 export default router;

@@ -875,3 +875,39 @@ export const GetTradingDeskTradersResponse = zod.object({
     }),
   ),
 });
+
+/**
+ * @summary Get or create user TRC20 USDT deposit address
+ */
+export const GetDepositAddressResponse = zod.object({
+  address: zod.string(),
+  network: zod.string(),
+  token: zod.string(),
+});
+
+/**
+ * @summary Get blockchain deposit history for user
+ */
+export const getBlockchainDepositHistoryQueryLimitDefault = 20;
+
+export const GetBlockchainDepositHistoryQueryParams = zod.object({
+  limit: zod.coerce
+    .number()
+    .default(getBlockchainDepositHistoryQueryLimitDefault),
+});
+
+export const GetBlockchainDepositHistoryResponse = zod.object({
+  deposits: zod.array(
+    zod.object({
+      id: zod.number(),
+      txHash: zod.string(),
+      fromAddress: zod.string(),
+      amount: zod.number(),
+      status: zod.string(),
+      credited: zod.boolean(),
+      blockTimestamp: zod.string().nullish(),
+      creditedAt: zod.string().nullish(),
+      createdAt: zod.string(),
+    }),
+  ),
+});

@@ -13,3 +13,5 @@ export * from "./report-verifications";
 export * from "./ledger";
 export * from "./fraud";
 export * from "./chat";
+export * from "./deposit-addresses";
+export * from "./blockchain-deposits";
