@@ -12,6 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { getGetWalletQueryKey } from "@workspace/api-client-react";
 import { VipBadge } from "@/components/vip-badge";
+import { AddressDisplay } from "@/components/address-display";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
 function apiUrl(path: string) { return `${BASE_URL}/api${path}`; }
@@ -451,11 +452,9 @@ export default function WalletPage() {
                       <Row label="You'll Receive" value={`$${withdrawReceipt.netAmount.toFixed(2)} USD`} highlight />
                       <Row label="Network Fee" value={`$${withdrawReceipt.fee.toFixed(2)}`} />
                       <Row label="From" value={withdrawReceipt.source === "main" ? "Main Balance" : "Profit Balance"} />
-                      <Row
-                        label="To Address"
-                        value={`${withdrawReceipt.address.slice(0, 10)}…${withdrawReceipt.address.slice(-6)}`}
-                        mono
-                      />
+                      <div className="flex items-center justify-between px-3 py-2.5">
+                        <span className="text-muted-foreground">To Address</span>
+                        <AddressDisplay address={withdrawReceipt.address} /></div>
                       <Row label="Submitted" value={new Date(withdrawReceipt.at).toLocaleString()} />
                     </div>
 

@@ -29,6 +29,7 @@ router.get("/transactions", async (req: AuthRequest, res) => {
       amount: parseFloat(t.amount as string),
       status: t.status,
       description: t.description,
+      walletAddress: t.walletAddress ?? null,
       createdAt: t.createdAt.toISOString(),
     })),
     total,
