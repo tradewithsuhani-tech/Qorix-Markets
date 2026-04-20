@@ -1,4 +1,4 @@
-import { db, walletsTable, transactionsTable, usersTable } from "@workspace/db";
+import { db, walletsTable, transactionsTable, usersTable, systemSettingsTable } from "@workspace/db";
 import { blockchainDepositsTable } from "@workspace/db/schema";
 import { eq, isNotNull } from "drizzle-orm";
 import { logger, errorLogger } from "./logger";
@@ -193,7 +193,15 @@ let monitorTimer: ReturnType<typeof setTimeout> | null = null;
 
 async function runPollCycle(): Promise<void> {
   try {
-    await pollPlatformAddress();
+    const testModeRows = await db.select({ value: systemSettingsTable.value })
+      .from(systemSettingsTable)
+      .where(eq(systemSettingsTable.key, "test_mode"))
+      .limit(1);
+    if (testModeRows[0]?.value === "true") {
+      logger.debug("TronGrid monitor paused — test mode active");
+    } else {
+      await pollPlatformAddress();
+    }
   } catch (err) {
     errorLogger.error({ err }, "Error in TronGrid poll cycle");
   } finally {

@@ -5,7 +5,7 @@ import { motion } from "framer-motion";
 import {
   Users, Activity, Wallet, CheckCircle, XCircle, ArrowUpFromLine, Layers,
   Server, Cpu, HardDrive, Zap, Bell, Globe, Shield, TrendingUp, MessageCircle, Brain,
-  ChevronRight,
+  ChevronRight, FlaskConical,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
@@ -37,6 +37,7 @@ const QUICK_LINKS = [
   { href: "/admin/content", icon: Globe, label: "Content", color: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20" },
   { href: "/admin/fraud", icon: Shield, label: "Fraud Monitor", color: "text-red-400 bg-red-500/10 border-red-500/20" },
   { href: "/admin/chats", icon: MessageCircle, label: "Support", color: "text-blue-400 bg-blue-500/10 border-blue-500/20" },
+  { href: "/admin/test", icon: FlaskConical, label: "Test Lab", color: "text-violet-400 bg-violet-500/10 border-violet-500/20" },
 ];
 
 export default function AdminPage() {

@@ -65,6 +65,7 @@ lib/
 13. **Qorix Assistant Chatbot**: Floating chat button (bottom-right), predefined flows (How to Start, Investment Guide, Returns, Risk), quick reply buttons, typing animation, "Talk to Expert" escalation, admin chat panel with real-time replies and session resolution
 14. **Separate Admin Portal**: Admins use `/admin-login` for a dedicated admin login flow. Admin-only pages use an admin navigation layout with no investor/user menu items.
 15. **Upgraded Admin System**: Admin modules include Dashboard, Users, Deposits, Withdrawals, Trading, Wallet, Analytics, System, Logs, Intelligence, Fraud Monitor, and Support Chats. User security controls include freeze/unfreeze, enable/disable, and force logout. System controls include maintenance mode, registration toggle, auto-withdraw limit, and in-app broadcast notifications.
+16. **Test Lab** (`/admin/test`): Isolated test environment for safe simulation. Accessible from the Admin Dashboard quick links. Features: Test Mode toggle (suspends real blockchain polling when active), 50 test user seeding with wallets and investments, full automated test suite (Deposit Engine, Profit Engine, Withdrawal Flow, Security, Fraud Detection, Load & Performance), JSON test report with pass/fail/warning breakdown, bug auto-detection with severity ratings, and one-click cleanup. All test data uses `@qorix-test.internal` email domain and is fully isolated from real users. Test Mode API: `GET/POST /api/test/status|enable|disable|seed-users|run-all` + `DELETE /api/test/cleanup`.
 
 ## Demo Accounts
 

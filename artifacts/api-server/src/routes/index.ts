@@ -16,6 +16,7 @@ import leaderboardRouter from "./leaderboard";
 import chatRouter from "./chat";
 import depositRouter from "./deposit";
 import cryptoDepositRouter from "./crypto-deposit";
+import testModeRouter from "./test-mode";
 
 const router: IRouter = Router();
 
@@ -36,5 +37,6 @@ router.use(tradingDeskRouter);
 router.use(fraudRouter);
 router.use(leaderboardRouter);
 router.use(depositRouter);
+router.use(testModeRouter);
 
 export default router;

@@ -10,6 +10,7 @@ import { QorixAssistant } from "@/components/qorix-assistant";
 import AdminChatsPage from "@/pages/admin-chats";
 import AdminCommunicationPage from "@/pages/admin-communication";
 import AdminContentPage from "@/pages/admin-content";
+import AdminTestPage from "@/pages/admin-test";
 import { useLocation } from "wouter";
 import { useEffect } from "react";
 
@@ -125,6 +126,7 @@ function Router() {
       <Route path="/admin/chats"><ProtectedRoute component={AdminChatsPage} adminOnly={true} /></Route>
       <Route path="/admin/communication"><ProtectedRoute component={AdminCommunicationPage} adminOnly={true} /></Route>
       <Route path="/admin/content"><ProtectedRoute component={AdminContentPage} adminOnly={true} /></Route>
+      <Route path="/admin/test"><ProtectedRoute component={AdminTestPage} adminOnly={true} /></Route>
       <Route path="/settings"><ProtectedRoute component={SettingsPage} /></Route>
       <Route path="/verify/:hashId" component={VerifyPage} />
       <Route path="/verify" component={VerifyPage} />

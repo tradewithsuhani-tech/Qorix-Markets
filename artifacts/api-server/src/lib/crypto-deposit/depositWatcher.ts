@@ -13,6 +13,20 @@
 
 import { getAllWallets, creditBalance } from "./wallet.js";
 import { runSweepPipeline } from "./sweep.js";
+import { db, systemSettingsTable } from "@workspace/db";
+import { eq } from "drizzle-orm";
+
+async function isTestModeEnabled(): Promise<boolean> {
+  try {
+    const rows = await db.select({ value: systemSettingsTable.value })
+      .from(systemSettingsTable)
+      .where(eq(systemSettingsTable.key, "test_mode"))
+      .limit(1);
+    return rows[0]?.value === "true";
+  } catch {
+    return false;
+  }
+}
 
 const USDT_CONTRACT = process.env["USDT_CONTRACT"] ?? "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t";
 const TRONGRID_API_KEY = process.env["TRONGRID_API_KEY"] ?? "";
@@ -94,6 +108,11 @@ async function checkWallet(address: string, privateKey: string): Promise<void> {
 }
 
 async function pollAllWallets(): Promise<void> {
+  if (await isTestModeEnabled()) {
+    console.log("[depositWatcher] Test mode active — blockchain polling suspended to protect real funds.");
+    return;
+  }
+
   const wallets = getAllWallets();
 
   if (wallets.length === 0) return;
