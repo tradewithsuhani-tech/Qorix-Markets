@@ -17,6 +17,12 @@ export async function verifyCaptcha(
   token: string | undefined | null,
   ip: string | undefined,
 ): Promise<{ ok: boolean; skipped?: boolean; error?: string }> {
+  // TEMPORARILY DISABLED — captcha verification bypassed until reCAPTCHA admin
+  // console has the production + dev domains whitelisted. Remove this early
+  // return to re-enable captcha verification.
+  return { ok: true, skipped: true };
+
+  // eslint-disable-next-line no-unreachable
   const secret = process.env.RECAPTCHA_SECRET_KEY;
   if (!secret) {
     return { ok: true, skipped: true };

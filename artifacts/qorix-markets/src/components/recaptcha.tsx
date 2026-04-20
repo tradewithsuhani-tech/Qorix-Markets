@@ -62,6 +62,11 @@ interface RecaptchaProps {
  * before captcha setup.
  */
 export function Recaptcha({ onVerify, onExpire }: RecaptchaProps) {
+  // TEMPORARILY DISABLED — render nothing until domains are whitelisted.
+  void onVerify; void onExpire;
+  return null;
+
+  // eslint-disable-next-line no-unreachable
   const siteKey = import.meta.env.VITE_RECAPTCHA_SITE_KEY as string | undefined;
   const containerRef = useRef<HTMLDivElement>(null);
   const widgetIdRef = useRef<number | null>(null);
@@ -111,4 +116,6 @@ export function Recaptcha({ onVerify, onExpire }: RecaptchaProps) {
   );
 }
 
-export const CAPTCHA_ENABLED = !!import.meta.env.VITE_RECAPTCHA_SITE_KEY;
+// TEMPORARILY DISABLED — re-enable by removing the `false &&` once
+// reCAPTCHA admin console has the production + dev domains whitelisted.
+export const CAPTCHA_ENABLED = false && !!import.meta.env.VITE_RECAPTCHA_SITE_KEY;
