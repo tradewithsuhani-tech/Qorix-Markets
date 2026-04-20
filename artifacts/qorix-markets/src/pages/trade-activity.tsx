@@ -1,6 +1,7 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { Activity, TrendingUp, TrendingDown } from "lucide-react";
+import { Activity, TrendingUp, TrendingDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { Layout } from "@/components/layout";
 import { findPair, formatPair } from "@/lib/pair-meta";
 import { PairIcon } from "@/components/pair-icon";
@@ -22,6 +23,30 @@ type Trade = {
   profitPercent: number;
   executedAt: string;
 };
+
+type SignalRecent = {
+  id: number;
+  pair: string;
+  direction: string;
+  entryPrice: string | number;
+  realizedExitPrice: string | number | null;
+  realizedProfitPercent: string | number | null;
+  closeReason: string | null;
+  closedAt: string;
+};
+
+type PeriodKey = "1D" | "1W" | "1M" | "3M" | "ALL" | "CUSTOM";
+
+const PERIODS: Array<{ key: PeriodKey; label: string; days: number | null }> = [
+  { key: "1D", label: "1D", days: 1 },
+  { key: "1W", label: "1W", days: 7 },
+  { key: "1M", label: "1M", days: 30 },
+  { key: "3M", label: "3M", days: 90 },
+  { key: "ALL", label: "All", days: null },
+  { key: "CUSTOM", label: "Custom", days: null },
+];
+
+const PAGE_SIZE = 15;
 
 function PairCell({ symbol }: { symbol: string }) {
   return (
@@ -45,29 +70,22 @@ function DirectionBadge({ direction }: { direction: string }) {
   );
 }
 
-type SignalRecent = {
-  id: number;
-  pair: string;
-  direction: string;
-  entryPrice: string | number;
-  realizedExitPrice: string | number | null;
-  realizedProfitPercent: string | number | null;
-  closeReason: string | null;
-  closedAt: string;
-};
-
 export default function TradeActivityPage() {
+  const [period, setPeriod] = useState<PeriodKey>("1M");
+  const [customFrom, setCustomFrom] = useState<string>("");
+  const [customTo, setCustomTo] = useState<string>("");
+  const [page, setPage] = useState(1);
+
   const { data, isLoading } = useQuery({
     queryKey: ["trades-activity"],
-    queryFn: () => apiFetch("/api/investment/trades?limit=100"),
+    queryFn: () => apiFetch("/api/investment/trades?limit=500"),
     refetchInterval: 15000,
+    placeholderData: keepPreviousData,
   });
 
   const personalTrades: Trade[] = Array.isArray(data) ? data : [];
 
-  // Platform-wide fallback so the page is never empty while signals are running.
-  // Only queried when the user has no personal trades yet.
-  const { data: recentData } = useQuery<{ trades: SignalRecent[] }>({
+  const { data: recentData, isLoading: recentLoading, isFetching: recentFetching } = useQuery<{ trades: SignalRecent[] }>({
     queryKey: ["signal-trades-recent-activity"],
     queryFn: async () => {
       const res = await fetch("/api/signal-trades/recent");
@@ -76,11 +94,12 @@ export default function TradeActivityPage() {
     },
     enabled: !isLoading && personalTrades.length === 0,
     refetchInterval: 15000,
+    placeholderData: keepPreviousData,
   });
 
   const usingPlatformFallback = personalTrades.length === 0 && (recentData?.trades?.length ?? 0) > 0;
 
-  const trades: Trade[] = personalTrades.length > 0
+  const allTrades: Trade[] = personalTrades.length > 0
     ? personalTrades
     : (recentData?.trades ?? []).map((t) => ({
         id: t.id,
@@ -93,9 +112,53 @@ export default function TradeActivityPage() {
         executedAt: t.closedAt,
       }));
 
-  const totalPL = trades.reduce((s, t) => s + t.profit, 0);
-  const wins = trades.filter((t) => (usingPlatformFallback ? t.profitPercent : t.profit) > 0).length;
-  const losses = trades.filter((t) => (usingPlatformFallback ? t.profitPercent : t.profit) < 0).length;
+  // Period filter (client-side)
+  const { fromTs, toTs } = useMemo(() => {
+    const now = Date.now();
+    if (period === "ALL") return { fromTs: 0, toTs: now + 86_400_000 };
+    if (period === "CUSTOM") {
+      const rawFrom = customFrom ? new Date(customFrom).getTime() : NaN;
+      const rawTo = customTo ? new Date(customTo).getTime() : NaN;
+      let from = Number.isFinite(rawFrom) ? rawFrom : 0;
+      let to = Number.isFinite(rawTo) ? rawTo + 86_400_000 - 1 : now + 86_400_000;
+      if (from > to) [from, to] = [to, from];
+      return { fromTs: from, toTs: to };
+    }
+    const def = PERIODS.find((p) => p.key === period);
+    const days = def?.days ?? 30;
+    return { fromTs: now - days * 86_400_000, toTs: now + 86_400_000 };
+  }, [period, customFrom, customTo]);
+
+  const filtered = useMemo(() => {
+    return allTrades.filter((t) => {
+      const ts = new Date(t.executedAt).getTime();
+      return ts >= fromTs && ts <= toTs;
+    });
+  }, [allTrades, fromTs, toTs]);
+
+  const totalPL = filtered.reduce((s, t) => s + t.profit, 0);
+  const totalPctAvg = filtered.length > 0
+    ? filtered.reduce((s, t) => s + (t.profitPercent || 0), 0) / filtered.length
+    : 0;
+  const wins = filtered.filter((t) => (usingPlatformFallback ? t.profitPercent : t.profit) > 0).length;
+  const losses = filtered.filter((t) => (usingPlatformFallback ? t.profitPercent : t.profit) < 0).length;
+  const winRate = filtered.length ? `${((wins / filtered.length) * 100).toFixed(0)}%` : "0%";
+
+  // Pagination
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const pageStart = (safePage - 1) * PAGE_SIZE;
+  const pageRows = filtered.slice(pageStart, pageStart + PAGE_SIZE);
+
+  function choosePeriod(key: PeriodKey) {
+    setPeriod(key);
+    setPage(1);
+  }
+
+  // Show loader only when we genuinely have nothing to render yet —
+  // either personal query still loading, or fallback is loading after personal resolved empty.
+  const fallbackPending = personalTrades.length === 0 && (recentLoading || (recentFetching && !recentData));
+  const showInitialLoader = allTrades.length === 0 && (isLoading || fallbackPending);
 
   return (
     <Layout>
@@ -114,9 +177,21 @@ export default function TradeActivityPage() {
           </div>
           {!usingPlatformFallback && (
             <div className="text-right">
-              <div className="text-[10px] text-white/40 uppercase tracking-wider">Total P/L</div>
+              <div className="text-[10px] text-white/40 uppercase tracking-wider">
+                P/L ({PERIODS.find((p) => p.key === period)?.label})
+              </div>
               <div className={`text-lg font-bold ${totalPL >= 0 ? "text-emerald-400" : "text-red-400"}`}>
                 {totalPL >= 0 ? "+" : ""}${totalPL.toFixed(2)}
+              </div>
+            </div>
+          )}
+          {usingPlatformFallback && (
+            <div className="text-right">
+              <div className="text-[10px] text-white/40 uppercase tracking-wider">
+                Avg P/L ({PERIODS.find((p) => p.key === period)?.label})
+              </div>
+              <div className={`text-lg font-bold ${totalPctAvg >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                {totalPctAvg >= 0 ? "+" : ""}{totalPctAvg.toFixed(2)}%
               </div>
             </div>
           )}
@@ -128,11 +203,48 @@ export default function TradeActivityPage() {
           </div>
         )}
 
+        {/* Period filter */}
+        <div className="flex flex-wrap items-center gap-2">
+          {PERIODS.map((p) => (
+            <button
+              key={p.key}
+              onClick={() => choosePeriod(p.key)}
+              className={`text-xs px-3 py-1.5 rounded-lg font-medium transition-all duration-150 border ${
+                period === p.key
+                  ? "bg-blue-500/20 text-blue-300 border-blue-500/40"
+                  : "text-white/60 hover:text-white hover:bg-white/5 border-white/10"
+              }`}
+            >
+              {p.label}
+            </button>
+          ))}
+          {period === "CUSTOM" && (
+            <div className="flex items-center gap-2 ml-1">
+              <input
+                type="date"
+                value={customFrom}
+                onChange={(e) => { setCustomFrom(e.target.value); setPage(1); }}
+                className="bg-white/[0.03] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white/90 focus:outline-none focus:border-blue-500/40"
+              />
+              <span className="text-white/40 text-xs">→</span>
+              <input
+                type="date"
+                value={customTo}
+                onChange={(e) => { setCustomTo(e.target.value); setPage(1); }}
+                className="bg-white/[0.03] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white/90 focus:outline-none focus:border-blue-500/40"
+              />
+            </div>
+          )}
+          <div className="ml-auto text-[11px] text-white/40">
+            {filtered.length} trade{filtered.length === 1 ? "" : "s"}
+          </div>
+        </div>
+
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <Stat label="Total Trades" value={String(trades.length)} />
+          <Stat label="Total Trades" value={String(filtered.length)} />
           <Stat label="Winners" value={String(wins)} tint="emerald" />
           <Stat label="Losers" value={String(losses)} tint="rose" />
-          <Stat label="Win Rate" value={trades.length ? `${((wins / trades.length) * 100).toFixed(0)}%` : "0%"} tint="blue" />
+          <Stat label="Win Rate" value={winRate} tint="blue" />
         </div>
 
         <motion.div
@@ -149,24 +261,23 @@ export default function TradeActivityPage() {
             <span className="text-right">Time</span>
           </div>
 
-          {isLoading ? (
+          {showInitialLoader ? (
             <div className="py-16 text-center text-sm text-white/30">Loading trades…</div>
-          ) : trades.length === 0 ? (
+          ) : filtered.length === 0 ? (
             <div className="py-16 text-center">
               <Activity className="w-10 h-10 mx-auto text-white/20 mb-3" />
-              <div className="text-sm text-white/50">No trades yet</div>
-              <div className="text-xs text-white/30 mt-1">Your executed signal trades will appear here</div>
+              <div className="text-sm text-white/50">No trades in this period</div>
+              <div className="text-xs text-white/30 mt-1">Try a wider range or select All</div>
             </div>
           ) : (
-            trades.map((t, i) => {
+            pageRows.map((t, i) => {
               const meta = findPair(t.symbol);
               const dp = meta ? (meta.pipSize < 0.01 ? 5 : 3) : 4;
-              const pnlCls = t.profit >= 0 ? "text-emerald-400" : "text-red-400";
               return (
                 <div
                   key={t.id}
                   className={`grid grid-cols-2 sm:grid-cols-[1.5fr_1fr_1.2fr_1.2fr_1fr_1fr] items-center gap-y-2 px-5 py-3 ${
-                    i < trades.length - 1 ? "border-b border-white/[0.04]" : ""
+                    i < pageRows.length - 1 ? "border-b border-white/[0.04]" : ""
                   } hover:bg-white/[0.02] transition-colors`}
                 >
                   <PairCell symbol={t.symbol} />
@@ -194,6 +305,35 @@ export default function TradeActivityPage() {
                 </div>
               );
             })
+          )}
+
+          {filtered.length > PAGE_SIZE && (
+            <div className="flex items-center justify-between px-5 py-3 border-t border-white/5 bg-white/[0.01]">
+              <div className="text-[11px] text-white/40">
+                Showing {pageStart + 1}–{Math.min(pageStart + PAGE_SIZE, filtered.length)} of {filtered.length}
+              </div>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={safePage <= 1}
+                  className="p-1.5 rounded-lg border border-white/10 text-white/60 hover:text-white hover:bg-white/5 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  aria-label="Previous page"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <div className="text-xs text-white/60 px-2 tabular-nums">
+                  Page {safePage} / {totalPages}
+                </div>
+                <button
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={safePage >= totalPages}
+                  className="p-1.5 rounded-lg border border-white/10 text-white/60 hover:text-white hover:bg-white/5 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  aria-label="Next page"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
           )}
         </motion.div>
       </div>
