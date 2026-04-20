@@ -1,10 +1,49 @@
 import { useMemo, useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { Activity, TrendingUp, TrendingDown, ChevronLeft, ChevronRight } from "lucide-react";
+import { Activity, TrendingUp, TrendingDown, ChevronLeft, ChevronRight, CalendarIcon } from "lucide-react";
 import { Layout } from "@/components/layout";
 import { findPair, formatPair } from "@/lib/pair-meta";
 import { PairIcon } from "@/components/pair-icon";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { format } from "date-fns";
+
+function DateField({
+  value,
+  onChange,
+  placeholder,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder: string;
+}) {
+  const date = value ? new Date(value) : undefined;
+  const valid = date && !isNaN(date.getTime()) ? date : undefined;
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="flex items-center gap-2 bg-white/[0.03] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white/90 hover:bg-white/[0.05] hover:border-white/20 focus:outline-none focus:border-blue-500/40 transition-colors min-w-[140px]"
+        >
+          <CalendarIcon className="w-3.5 h-3.5 text-white/50 shrink-0" />
+          <span className={valid ? "text-white/90" : "text-white/40"}>
+            {valid ? format(valid, "dd MMM yyyy") : placeholder}
+          </span>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-auto p-0 bg-slate-900 border-white/10" align="start">
+        <Calendar
+          mode="single"
+          selected={valid}
+          onSelect={(d) => onChange(d ? format(d, "yyyy-MM-dd") : "")}
+          initialFocus
+        />
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 async function apiFetch(path: string) {
   const token = localStorage.getItem("qorix_token");
@@ -220,18 +259,16 @@ export default function TradeActivityPage() {
           ))}
           {period === "CUSTOM" && (
             <div className="flex items-center gap-2 ml-1">
-              <input
-                type="date"
+              <DateField
                 value={customFrom}
-                onChange={(e) => { setCustomFrom(e.target.value); setPage(1); }}
-                className="bg-white/[0.03] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white/90 focus:outline-none focus:border-blue-500/40"
+                onChange={(v) => { setCustomFrom(v); setPage(1); }}
+                placeholder="From date"
               />
               <span className="text-white/40 text-xs">→</span>
-              <input
-                type="date"
+              <DateField
                 value={customTo}
-                onChange={(e) => { setCustomTo(e.target.value); setPage(1); }}
-                className="bg-white/[0.03] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white/90 focus:outline-none focus:border-blue-500/40"
+                onChange={(v) => { setCustomTo(v); setPage(1); }}
+                placeholder="To date"
               />
             </div>
           )}
