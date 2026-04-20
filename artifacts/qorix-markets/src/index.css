@@ -552,6 +552,13 @@
     opacity: 0.5;
     cursor: not-allowed;
   }
+  .field-input-icon-left {
+    padding-left: 38px !important;
+  }
+  .field-input-icon-both {
+    padding-left: 38px !important;
+    padding-right: 42px !important;
+  }
 
   /* ── Premium button base ───────────────────────────────────────────────── */
   .btn {
