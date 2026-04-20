@@ -995,16 +995,36 @@ export default function Landing() {
         </div>
       </section>
 
-      <footer className="border-t py-8" style={{ borderColor: "rgba(255,255,255,0.05)" }}>
-        <div className="max-w-7xl mx-auto px-5 md:px-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-600">
-          <div className="flex items-center gap-2">
-            <div className="w-5 h-5 rounded flex items-center justify-center" style={{ background: "linear-gradient(135deg,#2563eb,#7c3aed)" }}>
-              <TrendingUp size={9} className="text-white" />
+      <footer className="border-t" style={{ borderColor: "rgba(255,255,255,0.05)" }}>
+        <div className="max-w-7xl mx-auto px-5 md:px-8 py-8">
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 mb-6">
+            <div className="flex items-center gap-2.5">
+              <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: "linear-gradient(135deg,#2563eb,#7c3aed)" }}>
+                <TrendingUp size={12} className="text-white" />
+              </div>
+              <div>
+                <div className="font-black text-sm text-white">Qorix<span style={{ background: "linear-gradient(90deg,#38bdf8,#818cf8)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>Markets</span></div>
+                <div className="text-[10px] text-slate-600">USDT Capital Desk · All rights reserved</div>
+              </div>
             </div>
-            <span className="font-bold text-slate-400">QorixMarkets</span>
-            <span>· USDT Capital Desk · All rights reserved</span>
+            <nav className="flex flex-wrap gap-x-6 gap-y-2 text-xs">
+              {[
+                ["Terms & Conditions", "/legal/terms"],
+                ["Privacy Policy", "/legal/privacy"],
+                ["Risk Disclosure", "/legal/risk-disclosure"],
+                ["AML / KYC Policy", "/legal/aml-kyc"],
+              ].map(([label, path]) => (
+                <button key={path} onClick={() => setLocation(path)} className="text-slate-500 hover:text-slate-300 transition-colors font-medium">
+                  {label}
+                </button>
+              ))}
+            </nav>
           </div>
-          <div>Past returns do not guarantee future results. Capital deployed in USDT trading carries inherent market risk. Only invest what you can afford to expose.</div>
+          <div className="border-t pt-5" style={{ borderColor: "rgba(255,255,255,0.04)" }}>
+            <p className="text-[11px] text-slate-600 leading-relaxed max-w-3xl">
+              <strong className="text-slate-500">Risk Warning:</strong> Past returns do not guarantee future results. Capital deployed in USDT trading carries inherent market risk. Drawdown protection mechanisms limit but do not eliminate the possibility of loss. Only invest funds you can afford to lose. QorixMarkets is not a regulated investment adviser — this platform does not constitute personalised financial advice.
+            </p>
+          </div>
         </div>
       </footer>
     </div>

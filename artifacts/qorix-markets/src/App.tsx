@@ -27,6 +27,10 @@ import TradingDeskPage from "@/pages/trading-desk";
 import VerifyPage from "@/pages/verify";
 import MarketInsightsPage from "@/pages/market-insights";
 import { HighImpactNotificationBanner } from "@/components/economic-news-widget";
+import TermsPage from "@/pages/legal/terms";
+import PrivacyPage from "@/pages/legal/privacy";
+import RiskDisclosurePage from "@/pages/legal/risk-disclosure";
+import AmlKycPage from "@/pages/legal/aml-kyc";
 
 const queryClient = new QueryClient();
 
@@ -98,6 +102,10 @@ function Router() {
       <Route path="/verify/:hashId" component={VerifyPage} />
       <Route path="/verify" component={VerifyPage} />
       <Route path="/market-insights"><ProtectedRoute component={MarketInsightsPage} /></Route>
+      <Route path="/legal/terms" component={TermsPage} />
+      <Route path="/legal/privacy" component={PrivacyPage} />
+      <Route path="/legal/risk-disclosure" component={RiskDisclosurePage} />
+      <Route path="/legal/aml-kyc" component={AmlKycPage} />
       <Route component={NotFound} />
     </Switch>
   );
