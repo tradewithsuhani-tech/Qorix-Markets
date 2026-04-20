@@ -15,6 +15,7 @@ import Landing from "@/pages/landing";
 import LoginPage from "@/pages/login";
 import Dashboard from "@/pages/dashboard";
 import WalletPage from "@/pages/wallet";
+import DepositPage from "@/pages/deposit";
 import InvestPage from "@/pages/invest";
 import TransactionsPage from "@/pages/transactions";
 import ReferralPage from "@/pages/referral";
@@ -89,6 +90,7 @@ function Router() {
       <Route path="/login"><PublicOnlyRoute component={LoginPage} /></Route>
       <Route path="/dashboard"><ProtectedRoute component={Dashboard} /></Route>
       <Route path="/wallet"><ProtectedRoute component={WalletPage} /></Route>
+      <Route path="/deposit"><ProtectedRoute component={DepositPage} /></Route>
       <Route path="/invest"><ProtectedRoute component={InvestPage} /></Route>
       <Route path="/transactions"><ProtectedRoute component={TransactionsPage} /></Route>
       <Route path="/referral"><ProtectedRoute component={ReferralPage} /></Route>

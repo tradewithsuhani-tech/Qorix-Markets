@@ -11,6 +11,7 @@ async function main() {
   const { startProfitDistributionWorker } = await import("./workers/profit-distribution-worker");
   const { startDepositWorker } = await import("./workers/deposit-worker");
   const { startProfitEventWorker } = await import("./workers/profit-event-worker");
+  const { startTronMonitor } = await import("./lib/tron-monitor");
 
   const rawPort = process.env["PORT"];
   if (!rawPort) throw new Error("PORT environment variable is required but was not provided.");
@@ -20,9 +21,11 @@ async function main() {
   const profitDistributionWorker = startProfitDistributionWorker();
   const depositWorker = startDepositWorker();
   const profitEventWorker = startProfitEventWorker();
+  const tronMonitor = startTronMonitor();
 
   const gracefulShutdown = async (signal: string) => {
     logger.info({ signal }, "Received shutdown signal — closing workers and server");
+    tronMonitor.stop();
     await Promise.all([
       profitDistributionWorker.close(),
       depositWorker.close(),
