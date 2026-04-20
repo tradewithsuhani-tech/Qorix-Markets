@@ -34,16 +34,8 @@ import {
   ResponsiveContainer, ReferenceLine, CartesianGrid
 } from "recharts";
 
-const TIME_FILTERS = [
-  { label: "1D", days: 1 },
-  { label: "7D", days: 7 },
-  { label: "30D", days: 30 },
-  { label: "6M", days: 180 },
-  { label: "1Y", days: 365 },
-  { label: "All", days: 3650 },
-];
-
-const RETURNS_FILTERS = TIME_FILTERS;
+const periodLabel = (days: number) =>
+  DAYS_PERIOD_OPTIONS.find((o) => o.value === days)?.label ?? `${days}D`;
 
 function ProfitTicker({ value, prev }: { value: number; prev: number }) {
   const up = value >= prev;
@@ -1087,7 +1079,7 @@ export default function Dashboard() {
                 <p className="text-xs text-muted-foreground">Drawdown analysis</p>
               </div>
               <div className="text-xs text-muted-foreground bg-white/5 border border-white/5 px-2.5 py-1 rounded-full">
-                {TIME_FILTERS.find(f => f.days === chartDays)?.label}
+                {periodLabel(chartDays)}
               </div>
             </div>
             <div className="flex-1" style={{ minHeight: 180 }}>
@@ -1179,7 +1171,7 @@ export default function Dashboard() {
                       {isPos ? "+" : ""}{last.toFixed(2)}%
                     </span>
                     <span className="text-xs text-muted-foreground">
-                      over {RETURNS_FILTERS.find(f => f.days === returnsDays)?.label}
+                      over {periodLabel(returnsDays)}
                     </span>
                   </div>
                   <div className="flex-1" style={{ minHeight: 160 }}>
