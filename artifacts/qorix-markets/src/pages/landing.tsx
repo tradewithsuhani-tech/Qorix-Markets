@@ -588,9 +588,9 @@ export default function Landing() {
               transition={{ duration: 0.7, delay: 0.15 }}
               className="text-5xl sm:text-6xl xl:text-[4.25rem] font-black tracking-[-0.03em] leading-[1.0] mb-6 text-white"
             >
-              Institutional USD<br />returns, without<br />the{" "}
+              Professional traders.<br />Your capital.<br />
               <span style={{ background: "linear-gradient(135deg, #38bdf8 0%, #818cf8 50%, #e879f9 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
-                fund minimum.
+                Daily returns.
               </span>
             </motion.h1>
 
@@ -600,7 +600,7 @@ export default function Landing() {
               transition={{ duration: 0.6, delay: 0.22 }}
               className="text-lg md:text-xl text-slate-400 max-w-xl mx-auto xl:mx-0 leading-relaxed mb-10"
             >
-              Qorix deploys your USD across three professional trading desks — scalping, swing, and arbitrage — with built-in drawdown protection, live reporting, and zero manual trading required on your end.
+              Join 200+ investors who've handed their USDT to our 43-strong trading desk. Institutional strategies — scalping, swing & arbitrage — running 24/7, with live performance reporting and monthly payouts straight to your wallet.
             </motion.p>
 
             <motion.div
