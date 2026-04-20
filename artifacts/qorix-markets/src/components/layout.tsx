@@ -29,6 +29,7 @@ import {
   Brain,
   MessageCircle,
   Globe,
+  Trophy,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -376,6 +377,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/trading-desk", label: "Trading Desk", icon: Briefcase },
     { href: "/transactions", label: "History", icon: History },
     { href: "/referral", label: "Referrals", icon: Users },
+    { href: "/rewards", label: "Rewards", icon: Trophy },
     ...(user?.isAdmin ? [
       { href: "/admin", label: "Admin", icon: ShieldAlert },
       { href: "/admin/intelligence", label: "Intelligence", icon: Brain },
