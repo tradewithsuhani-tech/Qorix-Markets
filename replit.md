@@ -64,6 +64,7 @@ lib/
 12. **PWA**: manifest.json, service worker, mobile bottom navigation
 13. **Qorix Assistant Chatbot**: Floating chat button (bottom-right), predefined flows (How to Start, Investment Guide, Returns, Risk), quick reply buttons, typing animation, "Talk to Expert" escalation, admin chat panel with real-time replies and session resolution
 14. **Separate Admin Portal**: Admins use `/admin-login` for a dedicated admin login flow. Admin-only pages use an admin navigation layout with no investor/user menu items.
+15. **Upgraded Admin System**: Admin modules include Dashboard, Users, Deposits, Withdrawals, Trading, Wallet, Analytics, System, Logs, Intelligence, Fraud Monitor, and Support Chats. User security controls include freeze/unfreeze, enable/disable, and force logout. System controls include maintenance mode, registration toggle, auto-withdraw limit, and in-app broadcast notifications.
 
 ## Demo Accounts
 
@@ -109,7 +110,7 @@ All routes prefixed with `/api`:
 
 - Public/user login: `/login`
 - Admin-only login: `/admin-login`
-- Admin portal: `/admin`, `/admin/intelligence`, `/admin/fraud`, `/admin/chats`
+- Admin portal: `/admin`, `/admin/users`, `/admin/deposits`, `/admin/withdrawals`, `/admin/trading`, `/admin/wallet`, `/admin/analytics`, `/admin/system`, `/admin/logs`, `/admin/intelligence`, `/admin/fraud`, `/admin/chats`
 
 ## Cron Jobs (node-cron)
 

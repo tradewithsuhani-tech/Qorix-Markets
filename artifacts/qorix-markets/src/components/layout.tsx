@@ -30,6 +30,7 @@ import {
   MessageCircle,
   Globe,
   Trophy,
+  Database,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -383,7 +384,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
   ];
 
   const adminLinks = [
-    { href: "/admin", label: "Control Panel", icon: ShieldAlert },
+    { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
+    { href: "/admin/users", label: "Users", icon: Users },
+    { href: "/admin/deposits", label: "Deposits", icon: ArrowDownCircle },
+    { href: "/admin/withdrawals", label: "Withdrawals", icon: ArrowUpCircle },
+    { href: "/admin/trading", label: "Trading", icon: TrendingUp },
+    { href: "/admin/wallet", label: "Wallet", icon: Wallet },
+    { href: "/admin/analytics", label: "Analytics", icon: BarChart2 },
+    { href: "/admin/system", label: "System", icon: Settings },
+    { href: "/admin/logs", label: "Logs", icon: Database },
     { href: "/admin/intelligence", label: "Intelligence", icon: Brain },
     { href: "/admin/fraud", label: "Fraud Monitor", icon: Shield },
     { href: "/admin/chats", label: "Support Chats", icon: MessageCircle },

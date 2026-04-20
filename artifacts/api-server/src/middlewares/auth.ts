@@ -1,5 +1,7 @@
 import type { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
+import { db, systemSettingsTable, usersTable } from "@workspace/db";
+import { eq } from "drizzle-orm";
 
 const JWT_SECRET = process.env["SESSION_SECRET"] || "qorix-markets-secret";
 
@@ -8,7 +10,7 @@ export interface AuthRequest extends Request {
   isAdmin?: boolean;
 }
 
-export function authMiddleware(req: AuthRequest, res: Response, next: NextFunction) {
+export async function authMiddleware(req: AuthRequest, res: Response, next: NextFunction) {
   const authHeader = req.headers["authorization"];
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
     res.status(401).json({ error: "Unauthorized" });
@@ -17,19 +19,56 @@ export function authMiddleware(req: AuthRequest, res: Response, next: NextFuncti
 
   const token = authHeader.substring(7);
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as { userId: number; isAdmin: boolean };
+    const decoded = jwt.verify(token, JWT_SECRET) as { userId: number; isAdmin: boolean; iat?: number };
+    const users = await db.select().from(usersTable).where(eq(usersTable.id, decoded.userId)).limit(1);
+    const user = users[0];
+    if (!user || user.isDisabled || (user.isFrozen && !user.isAdmin)) {
+      res.status(401).json({ error: "Account access is restricted" });
+      return;
+    }
+    const maintenanceRows = await db
+      .select({ value: systemSettingsTable.value })
+      .from(systemSettingsTable)
+      .where(eq(systemSettingsTable.key, "maintenance_mode"))
+      .limit(1);
+    if (maintenanceRows[0]?.value === "true" && !user.isAdmin) {
+      res.status(503).json({ error: "System under maintenance" });
+      return;
+    }
+    if (user.forceLogoutAfter && decoded.iat && decoded.iat * 1000 < user.forceLogoutAfter.getTime()) {
+      res.status(401).json({ error: "Session expired" });
+      return;
+    }
     req.userId = decoded.userId;
-    req.isAdmin = decoded.isAdmin;
+    req.isAdmin = user.isAdmin;
     next();
   } catch {
     res.status(401).json({ error: "Invalid token" });
   }
 }
 
-export function adminMiddleware(req: AuthRequest, res: Response, next: NextFunction) {
+export async function adminMiddleware(req: AuthRequest, res: Response, next: NextFunction) {
   if (!req.isAdmin) {
     res.status(403).json({ error: "Admin access required" });
     return;
+  }
+  const whitelistRows = await db
+    .select({ value: systemSettingsTable.value })
+    .from(systemSettingsTable)
+    .where(eq(systemSettingsTable.key, "admin_ip_whitelist"))
+    .limit(1);
+  const whitelist = whitelistRows[0]?.value
+    ?.split(",")
+    .map((ip) => ip.trim())
+    .filter(Boolean) ?? [];
+  if (whitelist.length > 0) {
+    const forwarded = req.headers["x-forwarded-for"];
+    const ip = (Array.isArray(forwarded) ? forwarded[0] : forwarded)?.split(",")[0]?.trim() || req.ip || "";
+    const normalized = ip.replace("::ffff:", "");
+    if (!whitelist.includes(ip) && !whitelist.includes(normalized)) {
+      res.status(403).json({ error: "Admin IP is not allowed" });
+      return;
+    }
   }
   next();
 }
