@@ -2,9 +2,15 @@ import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { Activity, TrendingUp, TrendingDown } from "lucide-react";
 import Layout from "@/components/layout";
-import { apiFetch } from "@/lib/api";
 import { findPair, formatPair } from "@/lib/pair-meta";
 import { PairIcon } from "@/components/pair-icon";
+
+async function apiFetch(path: string) {
+  const token = localStorage.getItem("token");
+  const res = await fetch(path, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+  if (!res.ok) throw new Error(`${res.status}`);
+  return res.json();
+}
 
 type Trade = {
   id: number;
