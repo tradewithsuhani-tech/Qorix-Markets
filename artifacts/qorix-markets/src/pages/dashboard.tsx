@@ -22,7 +22,7 @@ import {
   ArrowUpRight, ArrowDownRight, Wallet, Activity, Clock, TrendingUp,
   TrendingDown, Zap, Target, ShieldCheck, BarChart2, Layers,
   RefreshCw, Globe, PieChart, Award, Shield, AlertTriangle, CheckCircle, FileDown,
-  Users, UserCheck, Banknote
+  Users, UserCheck, Banknote, X
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useState, useEffect, useRef } from "react";
@@ -148,6 +148,12 @@ function CapitalProtectionWidget({
 
   const selectedLimit = pendingLimit ?? drawdownLimit;
   const hasChanges = pendingLimit !== null && pendingLimit !== drawdownLimit;
+  const [showConfirm, setShowConfirm] = useState(false);
+  const labelFor = (p: number) => (p <= 3 ? "Conservative" : p <= 5 ? "Balanced" : "Aggressive");
+  const currentBuffer = (amount * drawdownLimit) / 100;
+  const newBuffer = pendingLimit !== null ? (amount * pendingLimit) / 100 : currentBuffer;
+  const bufferDiff = newBuffer - currentBuffer;
+  const isWider = pendingLimit !== null && pendingLimit > drawdownLimit;
 
   const statusBg = isTriggered
     ? "bg-red-500/15 text-red-400 border-red-500/25"
@@ -297,15 +303,11 @@ function CapitalProtectionWidget({
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: "auto" }}
                 exit={{ opacity: 0, height: 0 }}
-                onClick={() => onSave(pendingLimit!)}
+                onClick={() => setShowConfirm(true)}
                 disabled={isSaving}
                 className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold transition-all disabled:opacity-60 flex items-center justify-center gap-2"
               >
-                {isSaving ? (
-                  <><RefreshCw style={{ width: 13, height: 13 }} className="animate-spin" /> Saving...</>
-                ) : (
-                  <><CheckCircle style={{ width: 13, height: 13 }} /> Apply {pendingLimit}% Limit</>
-                )}
+                <CheckCircle style={{ width: 13, height: 13 }} /> Review Change
               </motion.button>
             )}
           </AnimatePresence>
@@ -316,6 +318,107 @@ function CapitalProtectionWidget({
           </div>
         </div>
       </div>
+
+      {/* Confirmation modal */}
+      <AnimatePresence>
+        {showConfirm && pendingLimit !== null && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
+            onClick={() => setShowConfirm(false)}
+          >
+            <motion.div
+              initial={{ y: 24, opacity: 0, scale: 0.97 }}
+              animate={{ y: 0, opacity: 1, scale: 1 }}
+              exit={{ y: 20, opacity: 0 }}
+              transition={{ type: "spring", stiffness: 260, damping: 22 }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-md bg-[#0b1020] border border-white/10 rounded-2xl shadow-2xl overflow-hidden"
+            >
+              <div className="flex items-center justify-between px-5 py-4 border-b border-white/5">
+                <div className="flex items-center gap-2">
+                  <Shield style={{ width: 16, height: 16 }} className="text-blue-400" />
+                  <h3 className="font-semibold">Confirm Protection Change</h3>
+                </div>
+                <button
+                  onClick={() => setShowConfirm(false)}
+                  className="p-1.5 rounded-lg hover:bg-white/5 text-muted-foreground hover:text-white transition-colors"
+                >
+                  <X style={{ width: 16, height: 16 }} />
+                </button>
+              </div>
+
+              <div className="p-5 space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  Review how this change affects your capital protection before applying.
+                </p>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="rounded-xl border border-white/10 bg-black/20 p-3 space-y-1">
+                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Current</div>
+                    <div className="text-2xl font-bold">{drawdownLimit}%</div>
+                    <div className="text-[11px] text-muted-foreground">{labelFor(drawdownLimit)}</div>
+                    <div className="pt-2 border-t border-white/5 mt-2">
+                      <div className="text-[10px] text-muted-foreground">Max loss buffer</div>
+                      <div className="text-sm font-semibold text-white">${currentBuffer.toFixed(2)}</div>
+                    </div>
+                  </div>
+                  <div className={`rounded-xl border p-3 space-y-1 ${isWider ? "border-amber-500/35 bg-amber-500/5" : "border-emerald-500/35 bg-emerald-500/5"}`}>
+                    <div className={`text-[10px] uppercase tracking-wider ${isWider ? "text-amber-400" : "text-emerald-400"}`}>After change</div>
+                    <div className={`text-2xl font-bold ${isWider ? "text-amber-300" : "text-emerald-300"}`}>{pendingLimit}%</div>
+                    <div className="text-[11px] text-muted-foreground">{labelFor(pendingLimit)}</div>
+                    <div className="pt-2 border-t border-white/5 mt-2">
+                      <div className="text-[10px] text-muted-foreground">Max loss buffer</div>
+                      <div className={`text-sm font-semibold ${isWider ? "text-amber-300" : "text-emerald-300"}`}>${newBuffer.toFixed(2)}</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className={`rounded-xl border px-3 py-2.5 text-xs flex items-start gap-2 ${
+                  isWider ? "border-amber-500/25 bg-amber-500/5 text-amber-300/95" : "border-emerald-500/25 bg-emerald-500/8 text-emerald-300/95"
+                }`}>
+                  {isWider ? (
+                    <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                  ) : (
+                    <Shield className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                  )}
+                  <span>
+                    {isWider
+                      ? <>You are <b>widening</b> the cap — trading can run longer in losses. Stop-out will trigger at a <b>${Math.abs(bufferDiff).toFixed(2)} larger</b> drawdown.</>
+                      : <>You are <b>tightening</b> the cap — trading will stop sooner. Stop-out will trigger at a <b>${Math.abs(bufferDiff).toFixed(2)} smaller</b> drawdown for faster capital protection.</>}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                  <button
+                    onClick={() => setShowConfirm(false)}
+                    disabled={isSaving}
+                    className="px-4 py-2.5 rounded-xl bg-white/5 border border-white/10 text-sm text-white hover:bg-white/10 transition-colors disabled:opacity-60"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => {
+                      onSave(pendingLimit);
+                      setShowConfirm(false);
+                    }}
+                    disabled={isSaving}
+                    className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
+                  >
+                    {isSaving ? (
+                      <><RefreshCw style={{ width: 13, height: 13 }} className="animate-spin" /> Applying…</>
+                    ) : (
+                      <>Apply {pendingLimit}% Limit</>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
