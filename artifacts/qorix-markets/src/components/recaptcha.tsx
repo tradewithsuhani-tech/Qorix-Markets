@@ -13,27 +13,42 @@ declare global {
 
 const SCRIPT_SRC = "https://www.google.com/recaptcha/api.js?render=explicit";
 
+async function waitForGrecaptcha(timeoutMs = 8000): Promise<void> {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    if (window.grecaptcha?.render) return;
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  throw new Error("reCAPTCHA did not become ready");
+}
+
 function loadRecaptchaScript(): Promise<void> {
   if (typeof window === "undefined") return Promise.resolve();
   if (window.grecaptcha?.render) return Promise.resolve();
   if (window.__recaptchaScriptLoading) return window.__recaptchaScriptLoading;
 
-  window.__recaptchaScriptLoading = new Promise<void>((resolve, reject) => {
+  const promise = new Promise<void>((resolve, reject) => {
     const existing = document.querySelector(`script[src^="https://www.google.com/recaptcha/api.js"]`);
     if (existing) {
-      existing.addEventListener("load", () => resolve());
-      existing.addEventListener("error", () => reject(new Error("Failed to load reCAPTCHA")));
+      // Script tag is already in DOM. It may have already fired `load` before
+      // we attached listeners — fall back to polling for `window.grecaptcha`.
+      waitForGrecaptcha().then(resolve).catch(reject);
       return;
     }
     const s = document.createElement("script");
     s.src = SCRIPT_SRC;
     s.async = true;
     s.defer = true;
-    s.onload = () => resolve();
+    s.onload = () => waitForGrecaptcha().then(resolve).catch(reject);
     s.onerror = () => reject(new Error("Failed to load reCAPTCHA"));
     document.head.appendChild(s);
   });
-  return window.__recaptchaScriptLoading;
+
+  // On rejection, clear the cached promise so callers can retry on next mount.
+  promise.catch(() => { window.__recaptchaScriptLoading = undefined; });
+
+  window.__recaptchaScriptLoading = promise;
+  return promise;
 }
 
 interface RecaptchaProps {

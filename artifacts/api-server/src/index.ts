@@ -48,6 +48,16 @@ async function main() {
       process.exit(1);
     }
     logger.info({ port }, "Server listening");
+    if (!process.env.RECAPTCHA_SECRET_KEY) {
+      const msg = "RECAPTCHA_SECRET_KEY not set — captcha is DISABLED on /auth routes";
+      if (process.env.NODE_ENV === "production") errorLogger.error(msg);
+      else logger.warn(msg);
+    }
+    if (!process.env.AWS_ACCESS_KEY_ID || !process.env.AWS_SECRET_ACCESS_KEY || !process.env.AWS_REGION || !process.env.SES_FROM_EMAIL) {
+      const msg = "Amazon SES not fully configured — emails will NOT be delivered";
+      if (process.env.NODE_ENV === "production") errorLogger.error(msg);
+      else logger.warn(msg);
+    }
     initCronJobs();
   });
 }
