@@ -293,15 +293,8 @@ export function QorixAssistant({ guestMode = false }: { guestMode?: boolean } = 
   const scheduleNudgeRef = useRef<() => void>(() => {});
 
   scheduleNudgeRef.current = () => {
-    if (nudgeTimerRef.current) clearTimeout(nudgeTimerRef.current);
-    nudgeTimerRef.current = setTimeout(() => {
-      setShowNudge(true);
-      setNudgeIndex(prev => (prev + 1) % NUDGE_MESSAGES.length);
-      nudgeHideTimerRef.current = setTimeout(() => {
-        setShowNudge(false);
-        scheduleNudgeRef.current();
-      }, 8000);
-    }, 15000);
+    // Nudge bubble disabled — was distracting users.
+    // Chat button stays visible; users open it when they want.
   };
 
   const scheduleNudge = useCallback(() => scheduleNudgeRef.current(), []);
