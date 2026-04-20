@@ -247,6 +247,18 @@ function MessageBubble({ msg }: { msg: Message }) {
   );
 }
 
+// ─── Nudge Messages ───────────────────────────────────────────────────────────
+
+const NUDGE_MESSAGES = [
+  "👋 Hi! I'm Qorix Assistant — ask me anything about investing!",
+  "💹 Want to know your potential earnings? I can show you in seconds!",
+  "🚀 Ready to grow your money? I'll guide you step by step.",
+  "🛡️ Wondering if your funds are safe? Let's talk about our protection system.",
+  "💰 Our investors earned up to 10% last month. Want to know how?",
+  "⏰ New month, new profits — don't miss the next payout cycle!",
+  "🌍 Thousands of investors are earning daily on Qorix Markets. Join them!",
+];
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export function QorixAssistant({ guestMode = false }: { guestMode?: boolean } = {}) {
@@ -263,6 +275,10 @@ export function QorixAssistant({ guestMode = false }: { guestMode?: boolean } = 
   const [chatEnded, setChatEnded] = useState(false);
   const [showEndConfirm, setShowEndConfirm] = useState(false);
   const [pollTimer, setPollTimer] = useState<ReturnType<typeof setInterval> | null>(null);
+  const [showNudge, setShowNudge] = useState(false);
+  const [nudgeIndex, setNudgeIndex] = useState(0);
+  const nudgeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const nudgeHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -271,6 +287,49 @@ export function QorixAssistant({ guestMode = false }: { guestMode?: boolean } = 
   }, []);
 
   useEffect(() => { scrollToBottom(); }, [messages, isTyping]);
+
+  // Nudge bubble: show every 15s when chat is closed
+  // Use a ref so the recursive setTimeout always calls the latest version
+  const scheduleNudgeRef = useRef<() => void>(() => {});
+
+  scheduleNudgeRef.current = () => {
+    if (nudgeTimerRef.current) clearTimeout(nudgeTimerRef.current);
+    nudgeTimerRef.current = setTimeout(() => {
+      setShowNudge(true);
+      setNudgeIndex(prev => (prev + 1) % NUDGE_MESSAGES.length);
+      nudgeHideTimerRef.current = setTimeout(() => {
+        setShowNudge(false);
+        scheduleNudgeRef.current();
+      }, 8000);
+    }, 15000);
+  };
+
+  const scheduleNudge = useCallback(() => scheduleNudgeRef.current(), []);
+
+  useEffect(() => {
+    scheduleNudge();
+    return () => {
+      if (nudgeTimerRef.current) clearTimeout(nudgeTimerRef.current);
+      if (nudgeHideTimerRef.current) clearTimeout(nudgeHideTimerRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (isOpen) {
+      setShowNudge(false);
+      if (nudgeTimerRef.current) clearTimeout(nudgeTimerRef.current);
+      if (nudgeHideTimerRef.current) clearTimeout(nudgeHideTimerRef.current);
+    } else {
+      scheduleNudge();
+    }
+  }, [isOpen]);
+
+  const dismissNudge = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setShowNudge(false);
+    if (nudgeHideTimerRef.current) clearTimeout(nudgeHideTimerRef.current);
+    scheduleNudge();
+  };
 
   // Focus input when opened
   useEffect(() => {
@@ -514,6 +573,62 @@ export function QorixAssistant({ guestMode = false }: { guestMode?: boolean } = 
 
   return (
     <>
+      {/* Nudge Bubble */}
+      <AnimatePresence>
+        {showNudge && !isOpen && (
+          <motion.div
+            initial={{ opacity: 0, y: 10, scale: 0.92 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 8, scale: 0.94 }}
+            transition={{ type: "spring", stiffness: 260, damping: 22 }}
+            className="fixed bottom-24 right-6 z-50 max-w-[260px] cursor-pointer"
+            onClick={() => { setShowNudge(false); setIsOpen(true); }}
+          >
+            <div
+              className="relative rounded-2xl rounded-br-sm px-4 py-3 shadow-2xl"
+              style={{
+                background: "linear-gradient(135deg, #1a1f2e 0%, #0f1422 100%)",
+                border: "1px solid rgba(99,102,241,0.25)",
+                boxShadow: "0 12px 40px rgba(0,0,0,0.6), 0 0 0 1px rgba(99,102,241,0.1)",
+              }}
+            >
+              {/* Close X */}
+              <button
+                onClick={dismissNudge}
+                className="absolute -top-2 -left-2 w-5 h-5 rounded-full bg-[#1e2436] border border-white/10 flex items-center justify-center hover:bg-white/10 transition-colors"
+              >
+                <X className="w-2.5 h-2.5 text-white/60" />
+              </button>
+
+              {/* Pulse dot */}
+              <div className="flex items-start gap-2.5">
+                <div className="relative mt-0.5 shrink-0">
+                  <div className="w-2 h-2 rounded-full bg-emerald-400" />
+                  <motion.div
+                    className="absolute inset-0 rounded-full bg-emerald-400"
+                    animate={{ scale: [1, 2.2], opacity: [0.6, 0] }}
+                    transition={{ duration: 1.5, repeat: Infinity, ease: "easeOut" }}
+                  />
+                </div>
+                <p className="text-sm text-white/90 leading-snug font-medium">
+                  {NUDGE_MESSAGES[nudgeIndex]}
+                </p>
+              </div>
+
+              {/* Tail */}
+              <div
+                className="absolute -bottom-2 right-5 w-3 h-3 rotate-45"
+                style={{
+                  background: "#0f1422",
+                  border: "1px solid rgba(99,102,241,0.25)",
+                  clipPath: "polygon(100% 0, 100% 100%, 0 100%)",
+                }}
+              />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Floating Button */}
       <motion.button
         onClick={() => setIsOpen(true)}
