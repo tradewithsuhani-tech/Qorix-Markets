@@ -56,11 +56,18 @@ export default function AdminSignalTradesPage() {
   const [entryPrice, setEntryPrice] = useState("");
   const [tpPrice, setTpPrice] = useState("");
   const [slPrice, setSlPrice] = useState("");
-  const [profitPct, setProfitPct] = useState("");
   const [scheduledAt, setScheduledAt] = useState("");
-  const [notes, setNotes] = useState("");
 
   const pipSize = PAIR_DEFAULTS[pair.toUpperCase()] ?? 0.0001;
+
+  // Auto-derive expected profit % from TP price move (no manual input needed)
+  const derivedProfitPct = (() => {
+    const e = parseFloat(entryPrice);
+    const t = parseFloat(tpPrice);
+    if (!e || !t || e <= 0) return 0;
+    const move = direction === "BUY" ? (t - e) / e : (e - t) / e;
+    return move > 0 ? +(move * 100).toFixed(4) : 0;
+  })();
 
   const { data: runningData } = useQuery({
     queryKey: ["admin-trades-running"],
@@ -81,13 +88,12 @@ export default function AdminSignalTradesPage() {
         tpPrice: tpPrice ? parseFloat(tpPrice) : undefined,
         slPrice: slPrice ? parseFloat(slPrice) : undefined,
         pipSize,
-        expectedProfitPercent: parseFloat(profitPct),
+        expectedProfitPercent: derivedProfitPct,
         scheduledAt: scheduledAt || undefined,
-        notes: notes || undefined,
       }),
     onSuccess: () => {
       toast({ title: "Trade opened", description: `${pair} ${direction} signal is live` });
-      setEntryPrice(""); setTpPrice(""); setSlPrice(""); setProfitPct(""); setScheduledAt(""); setNotes("");
+      setEntryPrice(""); setTpPrice(""); setSlPrice(""); setScheduledAt("");
       qc.invalidateQueries({ queryKey: ["admin-trades-running"] });
     },
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
@@ -169,10 +175,6 @@ export default function AdminSignalTradesPage() {
               <input type="number" step="any" value={entryPrice} onChange={(e) => setEntryPrice(e.target.value)} placeholder="2380.50" className={inputCls} />
             </Field>
 
-            <Field label="Expected Profit % (at TP)">
-              <input type="number" step="0.01" value={profitPct} onChange={(e) => setProfitPct(e.target.value)} placeholder="1.25" className={inputCls} />
-            </Field>
-
             <Field label={<><Target className="w-3 h-3 inline mr-1 text-emerald-400" /> TP Price</>}>
               <input type="number" step="any" value={tpPrice} onChange={(e) => setTpPrice(e.target.value)} placeholder={direction === "BUY" ? "above entry" : "below entry"} className={inputCls} />
               {tpPrice && entryPrice && (
@@ -194,15 +196,11 @@ export default function AdminSignalTradesPage() {
             <Field label="Date & Time (optional)">
               <input type="datetime-local" value={scheduledAt} onChange={(e) => setScheduledAt(e.target.value)} className={inputCls} />
             </Field>
-
-            <Field label="Notes (optional)">
-              <input type="text" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="London open" className={inputCls} />
-            </Field>
           </div>
 
           <div className="flex items-center justify-between flex-wrap gap-3 pt-1">
-            <PreviewBar entry={parseFloat(entryPrice)} tp={parseFloat(tpPrice)} sl={parseFloat(slPrice)} pipSize={pipSize} pct={parseFloat(profitPct)} />
-            <button onClick={() => createMut.mutate()} disabled={createMut.isPending || !entryPrice || !profitPct || (!tpPrice && !slPrice)}
+            <PreviewBar entry={parseFloat(entryPrice)} tp={parseFloat(tpPrice)} sl={parseFloat(slPrice)} pipSize={pipSize} pct={derivedProfitPct} />
+            <button onClick={() => createMut.mutate()} disabled={createMut.isPending || !entryPrice || !tpPrice}
               className="px-5 py-2.5 rounded-xl bg-violet-500/20 border border-violet-500/40 text-violet-200 hover:bg-violet-500/30 disabled:opacity-40 transition-colors text-sm font-medium flex items-center gap-2">
               {createMut.isPending ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
               Open Trade

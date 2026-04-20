@@ -29,6 +29,7 @@ router.get("/signal-trades/recent", async (_req, res) => {
       entryPrice: t.entryPrice,
       realizedExitPrice: t.realizedExitPrice,
       realizedProfitPercent: t.realizedProfitPercent,
+      closeReason: t.closeReason,
       closedAt: t.closedAt,
     })),
   });

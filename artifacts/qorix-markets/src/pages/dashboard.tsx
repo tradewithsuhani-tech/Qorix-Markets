@@ -855,19 +855,25 @@ export default function Dashboard() {
                     <div className="border-t border-white/5 pt-2.5 mt-2">
                       <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1.5 px-1">Recent</div>
                       <div className="space-y-1.5">
-                        {recentTradesData.trades.slice(0, 3).map((t) => {
+                        {recentTradesData.trades.slice(0, 3).map((t: any) => {
                           const pct = parseFloat(t.realizedProfitPercent || "0");
+                          const isManual = t.closeReason === 'manual';
                           const isWin = pct >= 0;
+                          const badgeLabel = isManual ? 'MANUAL' : (isWin ? 'TP HIT' : 'SL HIT');
+                          const badgeCls = isManual
+                            ? 'bg-amber-500/15 text-amber-400'
+                            : (isWin ? 'bg-emerald-500/15 text-emerald-400' : 'bg-red-500/15 text-red-400');
+                          const valueCls = isWin ? 'text-emerald-400' : 'text-red-400';
                           return (
                             <motion.div key={t.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }}
                               className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-white/[0.02] border border-white/[0.04]">
                               <div className="flex items-center gap-2">
                                 <span className="text-xs font-semibold">{t.pair}</span>
-                                <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold ${isWin ? 'bg-emerald-500/15 text-emerald-400' : 'bg-red-500/15 text-red-400'}`}>
-                                  {isWin ? 'TP HIT' : 'SL HIT'}
+                                <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold ${badgeCls}`}>
+                                  {badgeLabel}
                                 </span>
                               </div>
-                              <span className={`text-[11px] font-mono font-semibold ${isWin ? 'text-emerald-400' : 'text-red-400'}`}>
+                              <span className={`text-[11px] font-mono font-semibold ${valueCls}`}>
                                 {pct >= 0 ? '+' : ''}{pct.toFixed(2)}%
                               </span>
                             </motion.div>
