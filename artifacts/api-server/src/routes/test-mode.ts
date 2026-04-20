@@ -1,7 +1,7 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
-import { db, usersTable, walletsTable, investmentsTable, transactionsTable, systemSettingsTable } from "@workspace/db";
+import { db, usersTable, walletsTable, investmentsTable, transactionsTable, systemSettingsTable, glAccountsTable } from "@workspace/db";
 import { eq, like, and, count, sql } from "drizzle-orm";
 import { authMiddleware, adminMiddleware, type AuthRequest } from "../middlewares/auth";
 import { ensureUserAccounts, postJournalEntry, journalForTransaction, journalForSystem } from "../lib/ledger-service";
@@ -694,12 +694,53 @@ router.delete("/test/cleanup", async (req, res) => {
   const testUsers = await db.select().from(usersTable).where(like(usersTable.email, `%${TEST_EMAIL_SUFFIX}`));
   let deleted = 0;
 
+  const testUserIdSet = new Set(testUsers.map((u) => u.id));
   for (const user of testUsers) {
     try {
-      await db.delete(transactionsTable).where(eq(transactionsTable.userId, user.id));
-      await db.delete(investmentsTable).where(eq(investmentsTable.userId, user.id));
-      await db.delete(walletsTable).where(eq(walletsTable.userId, user.id));
-      await db.delete(usersTable).where(eq(usersTable.id, user.id));
+      await db.transaction(async (tx) => {
+        // Collect this user's ledger account IDs to scope journal deletion
+        const userAccounts = await tx.select({ id: glAccountsTable.id })
+          .from(glAccountsTable).where(eq(glAccountsTable.userId, user.id));
+        const accountIds = userAccounts.map((a) => a.id);
+
+        if (accountIds.length > 0) {
+          // Find every journal that touched any of this user's accounts
+          const candidateJournals = await tx.execute(sql`
+            SELECT DISTINCT journal_id FROM ledger_entries WHERE account_id = ANY(${accountIds})
+          `);
+          const journalIds = (candidateJournals.rows as Array<{ journal_id: string }>).map((r) => r.journal_id);
+
+          // Safety: whole-journal deletion is only safe if every user-scoped entry
+          // in these journals belongs to a test user. If a journal ever mixes a test
+          // user with a real user, abort to avoid corrupting real-user ledger state.
+          if (journalIds.length > 0) {
+            const mixedCheck = await tx.execute(sql`
+              SELECT DISTINCT ga.user_id
+              FROM ledger_entries le JOIN gl_accounts ga ON ga.id = le.account_id
+              WHERE le.journal_id = ANY(${journalIds}) AND ga.user_id IS NOT NULL
+            `);
+            const touchedUserIds = (mixedCheck.rows as Array<{ user_id: number }>).map((r) => r.user_id);
+            const realUserInvolved = touchedUserIds.find(
+              (uid) => uid !== user.id && !testUserIdSet.has(uid),
+            );
+            if (realUserInvolved !== undefined) {
+              throw new Error(
+                `Mixed journal detected for test user #${user.id} (also touches real user #${realUserInvolved}); aborting to protect ledger integrity.`,
+              );
+            }
+
+            await tx.execute(sql`
+              DELETE FROM ledger_entries WHERE journal_id = ANY(${journalIds})
+            `);
+          }
+          await tx.delete(glAccountsTable).where(eq(glAccountsTable.userId, user.id));
+        }
+
+        await tx.delete(transactionsTable).where(eq(transactionsTable.userId, user.id));
+        await tx.delete(investmentsTable).where(eq(investmentsTable.userId, user.id));
+        await tx.delete(walletsTable).where(eq(walletsTable.userId, user.id));
+        await tx.delete(usersTable).where(eq(usersTable.id, user.id));
+      });
       deleted++;
     } catch { }
   }
