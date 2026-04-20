@@ -19,6 +19,7 @@ import cryptoDepositRouter from "./crypto-deposit";
 import testModeRouter from "./test-mode";
 import tasksRouter from "./tasks";
 import adminTasksRouter from "./admin-tasks";
+import signalTradesRouter from "./signal-trades";
 
 const router: IRouter = Router();
 
@@ -42,5 +43,6 @@ router.use(depositRouter);
 router.use(testModeRouter);
 router.use(tasksRouter);
 router.use(adminTasksRouter);
+router.use(signalTradesRouter);
 
 export default router;

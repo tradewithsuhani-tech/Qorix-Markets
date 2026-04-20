@@ -29,6 +29,8 @@ import AdminPage from "@/pages/admin";
 import AdminIntelligencePage from "@/pages/admin-intelligence";
 import AdminFraudPage from "@/pages/admin-fraud";
 import AdminTaskProofsPage from "@/pages/admin-task-proofs";
+import AdminSignalTradesPage from "@/pages/admin-signal-trades";
+import SignalHistoryPage from "@/pages/signal-history";
 import SettingsPage from "@/pages/settings";
 import {
   AdminAnalyticsPage,
@@ -115,6 +117,8 @@ function Router() {
       <Route path="/tasks"><ProtectedRoute component={TasksPage} /></Route>
       <Route path="/analytics"><ProtectedRoute component={AnalyticsPage} /></Route>
       <Route path="/trading-desk"><ProtectedRoute component={TradingDeskPage} /></Route>
+      <Route path="/signal-history"><ProtectedRoute component={SignalHistoryPage} /></Route>
+      <Route path="/admin/signal-trades"><ProtectedRoute component={AdminSignalTradesPage} adminOnly={true} /></Route>
       <Route path="/admin"><ProtectedRoute component={AdminPage} adminOnly={true} /></Route>
       <Route path="/admin/users"><ProtectedRoute component={AdminUsersPage} adminOnly={true} /></Route>
       <Route path="/admin/deposits"><ProtectedRoute component={() => <AdminTransactionsPage mode="deposits" />} adminOnly={true} /></Route>

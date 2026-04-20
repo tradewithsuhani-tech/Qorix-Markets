@@ -142,6 +142,20 @@ Defined in `artifacts/api-server/src/lib/cron.ts`, initialized on server start:
 - `dashboard/summary` exposes `vip` object: `{ tier, label, profitBonus, withdrawalFee, minAmount, nextTier }`
 - Frontend: `VipBadge` and `VipCard` components in `vip-badge.tsx`; badge shown in desktop sidebar user card, mobile top bar, and wallet withdraw panel; full VIP card on Settings page
 
+## Signal Trading System
+Admin opens a signal trade (pair, BUY/SELL, entry, pips target, expected profit %); on close,
+realized profit % is distributed proportionally to every user's `trading_balance`.
+- Schema: `signal_trades`, `signal_trade_distributions` (UNIQUE on `trade_id, user_id`).
+- Service: `lib/signal-trade-service.ts` (atomic claim via `running → closing` status update,
+  per-user wallet update + transaction row + distribution audit + double-entry journal,
+  reverts to `running` if distribution fails).
+- Routes: `POST /api/admin/signal-trades`, `POST /api/admin/signal-trades/:id/close`,
+  `GET /api/admin/signal-trades?status=`, `GET /api/signal-trades/history`,
+  `GET /api/signal-trades/recent`.
+- Pages: `/admin/signal-trades` (admin), `/signal-history` (user).
+- Ledger: profit → debit `platform:profit_expense`, credit `user:{id}:profit`.
+  Loss path reverses both legs (debit user profit, credit profit_expense).
+
 ## Shared Profit Service
 
 `artifacts/api-server/src/lib/profit-service.ts` exposes:
