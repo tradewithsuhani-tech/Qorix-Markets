@@ -2,6 +2,7 @@ import {
   db,
   signalTradesTable,
   signalTradeDistributionsTable,
+  signalTradeAuditTable,
   walletsTable,
   usersTable,
   transactionsTable,
@@ -20,13 +21,32 @@ export type CreateTradeInput = {
   pair: string;
   direction: "BUY" | "SELL";
   entryPrice: number;
-  pipsTarget: number;
+  tpPrice?: number;
+  slPrice?: number;
+  pipsTarget?: number;
   pipSize?: number;
   expectedProfitPercent: number;
+  scheduledAt?: Date;
   notes?: string;
   idempotencyKey?: string;
   createdBy?: number;
 };
+
+async function writeAudit(
+  tradeId: number,
+  action: string,
+  details: Record<string, unknown> | string | null = null,
+  actorUserId?: number,
+  tx?: any,
+) {
+  const runner = tx ?? db;
+  await runner.insert(signalTradeAuditTable).values({
+    tradeId,
+    action,
+    actorUserId: actorUserId ?? null,
+    details: details === null ? null : typeof details === "string" ? details : JSON.stringify(details),
+  });
+}
 
 export type CloseTradeInput = {
   tradeId: number;
@@ -43,7 +63,34 @@ function calcExitPrice(entry: number, direction: "BUY" | "SELL", pipsTarget: num
 
 export async function createSignalTrade(input: CreateTradeInput) {
   const pipSize = input.pipSize ?? 0.0001;
-  const exitPrice = calcExitPrice(input.entryPrice, input.direction, input.pipsTarget, pipSize);
+
+  // TP is the canonical source of truth when provided.
+  // If both tpPrice and pipsTarget given, derive pipsTarget from tpPrice (ignoring user-supplied pipsTarget) for consistency.
+  let pipsTarget: number;
+  if (input.tpPrice !== undefined) {
+    pipsTarget = Math.abs(input.tpPrice - input.entryPrice) / pipSize;
+  } else if (input.pipsTarget && input.pipsTarget > 0) {
+    pipsTarget = input.pipsTarget;
+  } else {
+    throw new Error("Either pipsTarget or tpPrice required");
+  }
+  if (pipsTarget <= 0) throw new Error("Computed pipsTarget must be positive");
+
+  // Validate TP/SL direction sanity
+  if (input.tpPrice !== undefined) {
+    if (input.direction === "BUY" && input.tpPrice <= input.entryPrice)
+      throw new Error("BUY: TP must be above entry");
+    if (input.direction === "SELL" && input.tpPrice >= input.entryPrice)
+      throw new Error("SELL: TP must be below entry");
+  }
+  if (input.slPrice !== undefined) {
+    if (input.direction === "BUY" && input.slPrice >= input.entryPrice)
+      throw new Error("BUY: SL must be below entry");
+    if (input.direction === "SELL" && input.slPrice <= input.entryPrice)
+      throw new Error("SELL: SL must be above entry");
+  }
+
+  const exitPrice = input.tpPrice ?? calcExitPrice(input.entryPrice, input.direction, pipsTarget, pipSize);
   const idempotencyKey = input.idempotencyKey ?? `trade:${randomUUID()}`;
 
   // Duplicate prevention: same pair + direction + entry price within last 60 seconds
@@ -70,9 +117,12 @@ export async function createSignalTrade(input: CreateTradeInput) {
       pair: input.pair.toUpperCase(),
       direction: input.direction,
       entryPrice: input.entryPrice.toString(),
-      pipsTarget: input.pipsTarget.toString(),
+      pipsTarget: pipsTarget.toString(),
       pipSize: pipSize.toString(),
       exitPrice: exitPrice.toString(),
+      tpPrice: input.tpPrice?.toString() ?? null,
+      slPrice: input.slPrice?.toString() ?? null,
+      scheduledAt: input.scheduledAt ?? null,
       expectedProfitPercent: input.expectedProfitPercent.toString(),
       status: "running",
       notes: input.notes,
@@ -81,11 +131,63 @@ export async function createSignalTrade(input: CreateTradeInput) {
     })
     .returning();
 
+  await writeAudit(created!.id, "created", {
+    pair: created!.pair, direction: created!.direction,
+    entry: input.entryPrice, tp: input.tpPrice, sl: input.slPrice,
+    expectedProfitPercent: input.expectedProfitPercent,
+    scheduledAt: input.scheduledAt,
+  }, input.createdBy);
+
   logger.info({ tradeId: created!.id, pair: input.pair }, "[signal-trade] created");
   return created!;
 }
 
-export async function closeSignalTrade(input: CloseTradeInput) {
+// Hit TP — uses TP price as exit, full expected profit %
+export async function hitTakeProfit(tradeId: number, actorUserId?: number) {
+  const t = await db.select().from(signalTradesTable).where(eq(signalTradesTable.id, tradeId)).limit(1);
+  if (t.length === 0) throw new Error(`Trade #${tradeId} not found`);
+  const trade = t[0]!;
+  if (!trade.tpPrice) throw new Error("Trade has no TP price configured");
+  // Note: click audit is written inside closeSignalTrade only after successful claim,
+  // to avoid noisy duplicate click logs on rejected (already-closed) clicks.
+  return closeSignalTrade({
+    tradeId,
+    realizedExitPrice: parseFloat(trade.tpPrice as string),
+    realizedProfitPercent: parseFloat(trade.expectedProfitPercent as string),
+    closeReason: "target_hit",
+  }, actorUserId, "tp_clicked");
+}
+
+// Hit SL — exit at SL price, loss = expected% × (slPips/tpPips)
+export async function hitStopLoss(tradeId: number, actorUserId?: number) {
+  const t = await db.select().from(signalTradesTable).where(eq(signalTradesTable.id, tradeId)).limit(1);
+  if (t.length === 0) throw new Error(`Trade #${tradeId} not found`);
+  const trade = t[0]!;
+  if (!trade.slPrice) throw new Error("Trade has no SL price configured");
+
+  const entry = parseFloat(trade.entryPrice as string);
+  const sl = parseFloat(trade.slPrice as string);
+  const pipSize = parseFloat(trade.pipSize as string);
+  const tpPips = parseFloat(trade.pipsTarget as string);
+  const slPips = Math.abs(entry - sl) / pipSize;
+  const expectedPct = parseFloat(trade.expectedProfitPercent as string);
+  const lossPct = -1 * expectedPct * (slPips / tpPips);
+
+  return closeSignalTrade({
+    tradeId,
+    realizedExitPrice: sl,
+    realizedProfitPercent: lossPct,
+    closeReason: "stop_loss",
+  }, actorUserId, "sl_clicked");
+}
+
+export async function getTradeAuditLog(tradeId: number) {
+  return await db.select().from(signalTradeAuditTable)
+    .where(eq(signalTradeAuditTable.tradeId, tradeId))
+    .orderBy(desc(signalTradeAuditTable.createdAt));
+}
+
+export async function closeSignalTrade(input: CloseTradeInput, actorUserId?: number, clickAction?: string) {
   // Atomic claim: only one concurrent close request can flip status running -> closing
   const claimed = await db
     .update(signalTradesTable)
@@ -102,14 +204,23 @@ export async function closeSignalTrade(input: CloseTradeInput) {
   }
   const t = claimed[0]!;
 
+  // Click audit (only after successful claim — avoids noisy duplicate clicks)
+  if (clickAction) {
+    await writeAudit(t.id, clickAction, {
+      realizedExitPrice: input.realizedExitPrice,
+      realizedProfitPercent: input.realizedProfitPercent,
+    }, actorUserId);
+  }
+
   // Determine realized profit %
   const expectedPct = parseFloat(t.expectedProfitPercent as string);
   const realizedPct = input.realizedProfitPercent ?? expectedPct;
   const realizedExit = input.realizedExitPrice ?? parseFloat(t.exitPrice as string);
   const closeReason = input.closeReason ?? "target_hit";
 
-  // Slippage clamp safety: realized must be within +/- 50% of expected unless manual override
-  if (closeReason !== "manual") {
+  // Slippage clamp safety: realized must be within +/- 50% of expected.
+  // Skip for explicit TP/SL/manual paths (caller knows the realized %).
+  if (closeReason === "slippage") {
     const drift = Math.abs(realizedPct - expectedPct);
     const limit = Math.max(0.5, Math.abs(expectedPct) * 0.5);
     if (drift > limit) {
@@ -140,6 +251,10 @@ export async function closeSignalTrade(input: CloseTradeInput) {
         notes: input.notes ?? t.notes,
       })
       .where(eq(signalTradesTable.id, t.id));
+    await writeAudit(t.id, "closed", {
+      realizedProfitPercent: realizedPct, realizedExitPrice: realizedExit,
+      closeReason, users: 0, totalDistributed: 0,
+    }, actorUserId);
     return { tradeId: t.id, distributed: 0, users: 0 };
   }
 
@@ -232,6 +347,14 @@ export async function closeSignalTrade(input: CloseTradeInput) {
       .where(and(eq(signalTradesTable.id, t.id), eq(signalTradesTable.status, "closing")));
     throw err;
   }
+
+  await writeAudit(t.id, "closed", {
+    realizedProfitPercent: realizedPct,
+    realizedExitPrice: realizedExit,
+    closeReason,
+    users: eligible.length,
+    totalDistributed,
+  }, actorUserId);
 
   logger.info(
     { tradeId: t.id, users: eligible.length, distributed: totalDistributed },

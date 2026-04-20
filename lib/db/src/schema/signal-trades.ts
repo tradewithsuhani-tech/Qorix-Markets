@@ -10,6 +10,9 @@ export const signalTradesTable = pgTable("signal_trades", {
   pipsTarget: numeric("pips_target", { precision: 12, scale: 2 }).notNull(),
   pipSize: numeric("pip_size", { precision: 12, scale: 6 }).notNull().default("0.0001"),
   exitPrice: numeric("exit_price", { precision: 18, scale: 5 }).notNull(),
+  tpPrice: numeric("tp_price", { precision: 18, scale: 5 }),
+  slPrice: numeric("sl_price", { precision: 18, scale: 5 }),
+  scheduledAt: timestamp("scheduled_at"),
   expectedProfitPercent: numeric("expected_profit_percent", { precision: 8, scale: 4 }).notNull(),
   realizedProfitPercent: numeric("realized_profit_percent", { precision: 8, scale: 4 }),
   realizedExitPrice: numeric("realized_exit_price", { precision: 18, scale: 5 }),
@@ -37,6 +40,19 @@ export const signalTradeDistributionsTable = pgTable("signal_trade_distributions
   tradeUserUnique: uniqueIndex("signal_trade_dist_trade_user_unique").on(t.tradeId, t.userId),
   userIdx: index("signal_trade_dist_user_idx").on(t.userId),
 }));
+
+export const signalTradeAuditTable = pgTable("signal_trade_audit", {
+  id: serial("id").primaryKey(),
+  tradeId: integer("trade_id").notNull(),
+  action: varchar("action", { length: 30 }).notNull(),
+  actorUserId: integer("actor_user_id"),
+  details: text("details"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (t) => ({
+  tradeIdx: index("signal_trade_audit_trade_idx").on(t.tradeId),
+}));
+
+export type SignalTradeAudit = typeof signalTradeAuditTable.$inferSelect;
 
 export const insertSignalTradeSchema = createInsertSchema(signalTradesTable).omit({
   id: true, exitPrice: true, expectedProfitPercent: true, realizedProfitPercent: true,
