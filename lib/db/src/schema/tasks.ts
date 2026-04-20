@@ -8,6 +8,7 @@ import {
   timestamp,
   numeric,
   index,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 
 // ---------------------------------------------------------------------------
@@ -42,12 +43,16 @@ export const userTaskCompletionsTable = pgTable(
     status: varchar("status", { length: 20 }).notNull().default("completed"),
     // completed | pending_review | rejected
     pointsAwarded: integer("points_awarded").notNull().default(0),
+    // Period bucket for idempotency: "ALL" for one-time, "YYYY-MM-DD" for daily,
+    // "YYYY-Www" for weekly. Enforces uniqueness so concurrent claims can't double-award.
+    periodKey: varchar("period_key", { length: 16 }).notNull().default("ALL"),
     completedAt: timestamp("completed_at").notNull().defaultNow(),
   },
   (t) => [
     index("utc_user_id_idx").on(t.userId),
     index("utc_task_id_idx").on(t.taskId),
     index("utc_user_task_idx").on(t.userId, t.taskId),
+    uniqueIndex("utc_user_task_period_uniq").on(t.userId, t.taskId, t.periodKey),
   ],
 );
 

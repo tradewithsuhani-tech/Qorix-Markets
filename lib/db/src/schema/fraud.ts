@@ -1,4 +1,5 @@
-import { pgTable, serial, integer, varchar, text, boolean, timestamp, index } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, varchar, text, boolean, timestamp, index, uniqueIndex } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 export const loginEventsTable = pgTable(
   "login_events",
@@ -37,6 +38,10 @@ export const fraudFlagsTable = pgTable(
     index("fraud_flags_user_id_idx").on(t.userId),
     index("fraud_flags_type_idx").on(t.flagType),
     index("fraud_flags_resolved_idx").on(t.isResolved),
+    // Prevent duplicate active flags of the same type for the same user
+    uniqueIndex("fraud_flags_user_type_unresolved_uniq")
+      .on(t.userId, t.flagType)
+      .where(sql`is_resolved = false`),
   ],
 );
 
