@@ -143,8 +143,7 @@ export default function LoginPage() {
                       placeholder="Full Name"
                       value={fullName}
                       onChange={(e) => setFullName(e.target.value)}
-                      className="field-input"
-                      style={{ paddingLeft: "38px" }}
+                      className="field-input field-input-icon-left"
                     />
                   </div>
                 </motion.div>
@@ -163,8 +162,7 @@ export default function LoginPage() {
                 placeholder="Email Address"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="field-input"
-                style={{ paddingLeft: "38px" }}
+                className="field-input field-input-icon-left"
               />
             </div>
 
@@ -180,8 +178,7 @@ export default function LoginPage() {
                 placeholder="Password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="field-input"
-                style={{ paddingLeft: "38px", paddingRight: "42px" }}
+                className="field-input field-input-icon-both"
               />
               <button
                 type="button"
