@@ -7,8 +7,7 @@ import {
   Wallet as WalletIcon, ArrowDownToLine, ArrowUpFromLine,
   ArrowRightLeft, Info, AlertCircle, Copy, CheckCheck,
   QrCode, ExternalLink, AlertTriangle, ChevronRight,
-  CheckCircle2, Clock, RefreshCw, LinkIcon, Loader2,
-  ShieldCheck, ArrowLeft,
+  CheckCircle2, Loader2, ShieldCheck, ArrowLeft,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
@@ -88,7 +87,6 @@ type DepositStep = "amount" | "payment" | "confirmed";
 
 interface DepositInfo {
   platformAddress: string;
-  userTronAddress: string | null;
 }
 
 function DepositCard({ onDepositConfirmed }: { onDepositConfirmed: () => void }) {
@@ -96,9 +94,6 @@ function DepositCard({ onDepositConfirmed }: { onDepositConfirmed: () => void })
   const [amount, setAmount] = useState("");
   const [info, setInfo] = useState<DepositInfo | null>(null);
   const [infoLoading, setInfoLoading] = useState(false);
-  const [tronInput, setTronInput] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState("");
   const [polling, setPolling] = useState(false);
   const [lastDepositCount, setLastDepositCount] = useState<number | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -113,7 +108,6 @@ function DepositCard({ onDepositConfirmed }: { onDepositConfirmed: () => void })
       const d = await res.json();
       setInfo({
         platformAddress: d.platformAddress ?? "",
-        userTronAddress: d.userTronAddress ?? null,
       });
     } catch {
     } finally {
@@ -142,33 +136,6 @@ function DepositCard({ onDepositConfirmed }: { onDepositConfirmed: () => void })
     setStep("payment");
   };
 
-  const handleSaveTronAddress = async () => {
-    setSaving(true);
-    setSaveError("");
-    const token = localStorage.getItem("qorix_token");
-    try {
-      const res = await fetch(getApiUrl("/deposit/tron-address"), {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({ tronAddress: tronInput.trim() }),
-      });
-      if (!res.ok) {
-        const d = await res.json();
-        setSaveError(d.error ?? "Invalid address");
-      } else {
-        setInfo((prev) => prev ? { ...prev, userTronAddress: tronInput.trim() } : prev);
-        setTronInput("");
-      }
-    } catch {
-      setSaveError("Network error. Please try again.");
-    } finally {
-      setSaving(false);
-    }
-  };
-
   useEffect(() => {
     if (step !== "payment" || lastDepositCount === null) return;
 
@@ -194,7 +161,6 @@ function DepositCard({ onDepositConfirmed }: { onDepositConfirmed: () => void })
     setInfo(null);
     setLastDepositCount(null);
     setPolling(false);
-    setSaveError("");
   };
 
   return (
@@ -315,53 +281,6 @@ function DepositCard({ onDepositConfirmed }: { onDepositConfirmed: () => void })
                 </div>
               ) : info ? (
                 <>
-                  {/* TronLink wallet registration */}
-                  {!info.userTronAddress ? (
-                    <div className="border border-amber-500/25 bg-amber-500/6 rounded-xl p-4 space-y-3">
-                      <div className="flex items-center gap-2">
-                        <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                        <span className="text-xs font-semibold text-amber-400">Register your sender wallet first</span>
-                      </div>
-                      <p className="text-xs text-muted-foreground leading-relaxed">
-                        Enter your TronLink wallet address (the one you'll send USDT from) so the system can verify and credit your deposit.
-                      </p>
-                      <div className="flex gap-2">
-                        <div className="flex-1 bg-white/4 border border-white/10 rounded-xl px-3 py-2 flex items-center gap-2">
-                          <LinkIcon className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                          <input
-                            type="text"
-                            value={tronInput}
-                            onChange={(e) => setTronInput(e.target.value)}
-                            placeholder="T… (your TronLink address)"
-                            className="bg-transparent text-xs text-white placeholder:text-muted-foreground/50 outline-none w-full font-mono"
-                          />
-                        </div>
-                        <button
-                          onClick={handleSaveTronAddress}
-                          disabled={saving || !tronInput.trim()}
-                          className="px-4 py-2 rounded-xl text-xs font-semibold bg-blue-500/20 text-blue-400 border border-blue-500/30 hover:bg-blue-500/30 transition-all disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
-                        >
-                          {saving ? "Saving…" : "Save"}
-                        </button>
-                      </div>
-                      {saveError && <p className="text-xs text-red-400">{saveError}</p>}
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-3 bg-emerald-500/8 border border-emerald-500/20 rounded-xl px-3 py-2.5">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <span className="text-[10px] text-emerald-400 font-medium">Sender wallet registered</span>
-                        <div className="text-xs font-mono text-white/60 truncate">{info.userTronAddress}</div>
-                      </div>
-                      <button
-                        onClick={() => setInfo((prev) => prev ? { ...prev, userTronAddress: null } : prev)}
-                        className="text-[10px] text-muted-foreground hover:text-white transition-colors shrink-0"
-                      >
-                        Change
-                      </button>
-                    </div>
-                  )}
-
                   {/* QR Code + address */}
                   {info.platformAddress ? (
                     <div className="flex flex-col sm:flex-row items-center gap-5">
