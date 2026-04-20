@@ -9,8 +9,9 @@ import {
   dailyProfitRunsTable,
   usersTable,
   monthlyPerformanceTable,
+  signalTradeDistributionsTable,
 } from "@workspace/db";
-import { eq, gt, and } from "drizzle-orm";
+import { eq, gt, and, isNull, sql, inArray } from "drizzle-orm";
 import { logger } from "./logger";
 import { createNotification } from "./notifications";
 import { getVipInfo } from "./vip";
@@ -436,6 +437,126 @@ export async function distributeDailyProfit(
     totalAUM: 0,
     referralBonusPaid: totalReferralBonusPaid,
   };
+}
+
+/**
+ * Monthly 25th sweep: moves each user's unswept signal-trade net P/L
+ * from TRADING balance → PROFIT balance. Profit balance remains user-withdrawable
+ * at any time (main/trading are untouched by this sweep).
+ */
+export async function sweepSignalProfitsToProfitWallet(): Promise<{
+  usersProcessed: number;
+  totalTransferred: number;
+}> {
+  const now = new Date();
+
+  // Aggregate net unswept signal P/L per user
+  const aggregates = await db
+    .select({
+      userId: signalTradeDistributionsTable.userId,
+      netAmount: sql<string>`sum(${signalTradeDistributionsTable.profitAmount})`,
+    })
+    .from(signalTradeDistributionsTable)
+    .where(isNull(signalTradeDistributionsTable.sweptAt))
+    .groupBy(signalTradeDistributionsTable.userId);
+
+  let usersProcessed = 0;
+  let totalTransferred = 0;
+
+  for (const agg of aggregates) {
+    const netAmount = parseFloat(agg.netAmount ?? "0");
+    if (netAmount <= 0) {
+      // Net loss or zero — mark as swept so they don't accumulate, no transfer
+      await db
+        .update(signalTradeDistributionsTable)
+        .set({ sweptAt: now })
+        .where(
+          and(
+            eq(signalTradeDistributionsTable.userId, agg.userId),
+            isNull(signalTradeDistributionsTable.sweptAt),
+          ),
+        );
+      continue;
+    }
+
+    await db.transaction(async (tx) => {
+      // Re-check available trading balance — cap transfer to what's actually there.
+      const wRows = await tx.select().from(walletsTable).where(eq(walletsTable.userId, agg.userId)).limit(1);
+      const w = wRows[0];
+      if (!w) return;
+      const tradingNow = parseFloat(w.tradingBalance as string);
+      const moveAmount = Math.min(netAmount, tradingNow);
+      if (moveAmount <= 0) {
+        await tx
+          .update(signalTradeDistributionsTable)
+          .set({ sweptAt: now })
+          .where(
+            and(
+              eq(signalTradeDistributionsTable.userId, agg.userId),
+              isNull(signalTradeDistributionsTable.sweptAt),
+            ),
+          );
+        return;
+      }
+
+      // Denormalized wallet update: trading -= moveAmount, profit += moveAmount
+      await tx
+        .update(walletsTable)
+        .set({
+          tradingBalance: (tradingNow - moveAmount).toString(),
+          profitBalance: (parseFloat(w.profitBalance as string) + moveAmount).toString(),
+          updatedAt: now,
+        })
+        .where(eq(walletsTable.userId, agg.userId));
+
+      // Transaction record
+      const [payoutTxn] = await tx
+        .insert(transactionsTable)
+        .values({
+          userId: agg.userId,
+          type: "transfer",
+          amount: moveAmount.toString(),
+          status: "completed",
+          description: `Monthly signal-profit sweep: $${moveAmount.toFixed(2)} moved from trading to profit wallet`,
+        })
+        .returning({ id: transactionsTable.id });
+
+      // Double-entry ledger
+      await ensureUserAccounts(agg.userId, tx);
+      await postJournalEntry(
+        journalForTransaction(payoutTxn!.id),
+        [
+          { accountCode: `user:${agg.userId}:trading`, entryType: "debit",  amount: moveAmount, description: "Monthly sweep — trading cleared to profit" },
+          { accountCode: `user:${agg.userId}:profit`,  entryType: "credit", amount: moveAmount, description: "Monthly sweep — credited to profit wallet" },
+        ],
+        payoutTxn!.id,
+        tx,
+      );
+
+      // Mark all unswept distributions as swept
+      await tx
+        .update(signalTradeDistributionsTable)
+        .set({ sweptAt: now })
+        .where(
+          and(
+            eq(signalTradeDistributionsTable.userId, agg.userId),
+            isNull(signalTradeDistributionsTable.sweptAt),
+          ),
+        );
+
+      await createNotification(
+        agg.userId,
+        "monthly_payout",
+        "Monthly Profit Sweep",
+        `$${moveAmount.toFixed(2)} USDT has been moved from your trading balance to your profit wallet and is now available for withdrawal.`,
+      );
+
+      usersProcessed++;
+      totalTransferred += moveAmount;
+    });
+  }
+
+  return { usersProcessed, totalTransferred };
 }
 
 export async function transferProfitToMain(): Promise<{

@@ -35,6 +35,7 @@ export const signalTradeDistributionsTable = pgTable("signal_trade_distributions
   userId: integer("user_id").notNull(),
   shareBasisAmount: numeric("share_basis", { precision: 18, scale: 8 }).notNull(),
   profitAmount: numeric("profit_amount", { precision: 18, scale: 8 }).notNull(),
+  sweptAt: timestamp("swept_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 }, (t) => ({
   tradeUserUnique: uniqueIndex("signal_trade_dist_trade_user_unique").on(t.tradeId, t.userId),

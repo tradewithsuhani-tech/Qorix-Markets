@@ -1,6 +1,6 @@
 import cron from "node-cron";
 import { logger, profitLogger, errorLogger } from "./logger";
-import { getLastDailyProfitPercent, transferProfitToMain } from "./profit-service";
+import { getLastDailyProfitPercent, sweepSignalProfitsToProfitWallet } from "./profit-service";
 import { emitProfitDistribution } from "./event-bus";
 
 export function initCronJobs(): void {
@@ -20,20 +20,20 @@ export function initCronJobs(): void {
   });
 
   cron.schedule("0 0 25 * *", async () => {
-    logger.info("Cron: monthly profit-to-main transfer starting");
+    logger.info("Cron: monthly trading→profit sweep starting");
     try {
-      const result = await transferProfitToMain();
+      const result = await sweepSignalProfitsToProfitWallet();
       logger.info(
         {
           usersProcessed: result.usersProcessed,
           totalTransferred: result.totalTransferred,
         },
-        "Cron: monthly profit-to-main transfer complete",
+        "Cron: monthly trading→profit sweep complete",
       );
     } catch (err) {
-      errorLogger.error({ err }, "Cron: monthly profit-to-main transfer failed");
+      errorLogger.error({ err }, "Cron: monthly trading→profit sweep failed");
     }
   });
 
-  logger.info("Cron: jobs registered — daily profit (00:00), monthly payout (25th 00:00)");
+  logger.info("Cron: jobs registered — daily profit (00:00), monthly trading→profit sweep (25th 00:00)");
 }
