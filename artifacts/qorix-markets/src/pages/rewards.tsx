@@ -5,7 +5,7 @@ import { motion } from "framer-motion";
 import {
   Copy, Users, DollarSign, Award, CheckCircle2, TrendingUp,
   Star, Crown, Zap, Shield, ChevronRight, Gift, Trophy,
-  ArrowRight, Info, Sparkles,
+  ArrowRight, Info, Sparkles, Clock, CalendarClock,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -114,6 +114,47 @@ function getNextLevel(currentLevelId: string) {
   return idx < PARTNER_LEVELS.length - 1 ? PARTNER_LEVELS[idx + 1] : null;
 }
 
+// Returns days remaining until the next commission payout (25th of current/next month)
+function getDaysLeftInPeriod(): number {
+  const now = new Date();
+  const day = now.getDate();
+  const payoutDay = 25;
+  let target: Date;
+  if (day < payoutDay) {
+    target = new Date(now.getFullYear(), now.getMonth(), payoutDay);
+  } else {
+    // Past the 25th — next period ends 25th of next month
+    target = new Date(now.getFullYear(), now.getMonth() + 1, payoutDay);
+  }
+  const diff = target.getTime() - now.getTime();
+  return Math.ceil(diff / (1000 * 60 * 60 * 24));
+}
+
+function DaysLeftBadge({ daysLeft, size = "md" }: { daysLeft: number; size?: "sm" | "md" }) {
+  const urgent = daysLeft <= 5;
+  const warning = daysLeft <= 14;
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.85 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ duration: 0.4, ease: "easeOut" }}
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-full border font-semibold",
+        size === "sm" ? "px-2 py-0.5 text-[10px]" : "px-2.5 py-1 text-xs",
+        urgent
+          ? "bg-red-500/15 border-red-500/30 text-red-400"
+          : warning
+          ? "bg-amber-500/15 border-amber-500/30 text-amber-400"
+          : "bg-blue-500/15 border-blue-500/30 text-blue-400"
+      )}
+    >
+      <Clock className={size === "sm" ? "w-2.5 h-2.5" : "w-3 h-3"} />
+      <span>{daysLeft}d left</span>
+      <ChevronRight className={size === "sm" ? "w-2.5 h-2.5 opacity-60" : "w-3 h-3 opacity-60"} />
+    </motion.div>
+  );
+}
+
 function ProgressBar({ value, max, colorClass = "bg-blue-500" }: { value: number; max: number; colorClass?: string }) {
   const pct = max > 0 ? Math.min((value / max) * 100, 100) : 0;
   return (
@@ -151,6 +192,7 @@ export default function RewardsPage() {
 
   const currentLevel = getPartnerLevel(activeReferrals, networkAum);
   const nextLevel = getNextLevel(currentLevel.id);
+  const daysLeft = getDaysLeftInPeriod();
 
   const handleCopy = () => {
     if (referral?.referralCode) {
@@ -211,7 +253,7 @@ export default function RewardsPage() {
                 <div className="space-y-2.5">
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-muted-foreground">Progress to {nextLevel.label}</span>
-                    <span className={cn("font-semibold", nextLevel.color)}>{nextLevel.label}</span>
+                    <DaysLeftBadge daysLeft={daysLeft} size="sm" />
                   </div>
 
                   {/* Active referrals progress */}
@@ -488,14 +530,24 @@ export default function RewardsPage() {
 
         {/* Qualification criteria detail */}
         <motion.div variants={item} className="glass-card rounded-2xl p-5">
-          <div className="flex items-center gap-2 mb-4">
+          <div className="flex items-center gap-2 mb-1">
             <CheckCircle2 className="w-4 h-4 text-blue-400" />
             <span className="text-sm font-semibold text-white">Qualification Criteria</span>
             {nextLevel && (
-              <span className={cn("text-xs font-semibold ml-auto", nextLevel.color)}>
-                Next: {nextLevel.label} <ArrowRight className="w-3 h-3 inline" />
+              <span className={cn("text-xs font-semibold", nextLevel.color)}>
+                ({[activeReferrals >= nextLevel.minReferrals, networkAum >= nextLevel.minNetworkAum].filter(Boolean).length}/2)
               </span>
             )}
+            <div className="ml-auto flex items-center gap-2">
+              <DaysLeftBadge daysLeft={daysLeft} size="md" />
+            </div>
+          </div>
+          {/* Period info strip */}
+          <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground mb-4 pl-0.5">
+            <CalendarClock className="w-3 h-3 shrink-0" />
+            <span>
+              Commissions paid on the <span className="text-white font-medium">25th of each month</span> — meet criteria before the deadline to level up.
+            </span>
           </div>
 
           {nextLevel ? (
