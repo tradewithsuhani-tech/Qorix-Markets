@@ -15,11 +15,13 @@ import fraudRouter from "./fraud";
 import leaderboardRouter from "./leaderboard";
 import chatRouter from "./chat";
 import depositRouter from "./deposit";
+import cryptoDepositRouter from "./crypto-deposit";
 
 const router: IRouter = Router();
 
 router.use(healthRouter);
 router.use(publicRouter);
+router.use(cryptoDepositRouter);
 router.use(authRouter);
 router.use(reportsRouter);
 router.use(walletRouter);
