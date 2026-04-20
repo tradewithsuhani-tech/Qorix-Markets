@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from "react";
+import React, { useState, useCallback } from "react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { motion, AnimatePresence } from "framer-motion";
@@ -190,41 +190,41 @@ function NotificationPanel({ onClose }: { onClose: () => void }) {
 
 function NotificationBell() {
   const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
   const { data } = useGetNotifications(
     { limit: 1, unread: "true" },
     { query: { refetchInterval: 30000 } }
   );
   const unread = data?.unreadCount ?? 0;
 
-  useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    }
-    if (open) document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, [open]);
-
   return (
-    <div ref={ref} className="relative">
-      <button
-        onClick={() => { setOpen((p) => !p); haptic(8); }}
-        className={cn(
-          "relative w-9 h-9 rounded-xl flex items-center justify-center transition-all duration-200",
-          open ? "bg-blue-500/15 border border-blue-500/30 text-blue-400" : "text-muted-foreground hover:text-white hover:bg-white/8 border border-transparent"
-        )}
-      >
-        {unread > 0 ? <BellDot className="w-4.5 h-4.5" /> : <Bell className="w-4.5 h-4.5" />}
-        {unread > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 w-4 h-4 text-[9px] font-bold bg-blue-500 text-white rounded-full flex items-center justify-center leading-none">
-            {unread > 9 ? "9+" : unread}
-          </span>
-        )}
-      </button>
-      <AnimatePresence>
-        {open && <NotificationPanel onClose={() => setOpen(false)} />}
-      </AnimatePresence>
-    </div>
+    <>
+      {/* Backdrop — closes panel when clicking outside */}
+      {open && (
+        <div
+          className="fixed inset-0 z-40"
+          onClick={() => setOpen(false)}
+        />
+      )}
+      <div className="relative z-50">
+        <button
+          onClick={() => { setOpen((p) => !p); haptic(8); }}
+          className={cn(
+            "relative w-9 h-9 rounded-xl flex items-center justify-center transition-all duration-200",
+            open ? "bg-blue-500/15 border border-blue-500/30 text-blue-400" : "text-muted-foreground hover:text-white hover:bg-white/8 border border-transparent"
+          )}
+        >
+          {unread > 0 ? <BellDot className="w-4.5 h-4.5" /> : <Bell className="w-4.5 h-4.5" />}
+          {unread > 0 && (
+            <span className="absolute -top-0.5 -right-0.5 w-4 h-4 text-[9px] font-bold bg-blue-500 text-white rounded-full flex items-center justify-center leading-none">
+              {unread > 9 ? "9+" : unread}
+            </span>
+          )}
+        </button>
+        <AnimatePresence>
+          {open && <NotificationPanel onClose={() => setOpen(false)} />}
+        </AnimatePresence>
+      </div>
+    </>
   );
 }
 
