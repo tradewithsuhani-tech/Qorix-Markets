@@ -24,8 +24,8 @@ import {
 } from "../lib/ledger-service";
 
 const router = Router();
-router.use(authMiddleware);
-router.use(adminMiddleware);
+router.use("/admin", authMiddleware);
+router.use("/admin", adminMiddleware);
 
 export async function getSlotData() {
   const slotRows = await db
