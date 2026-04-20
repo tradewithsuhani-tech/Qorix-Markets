@@ -408,16 +408,23 @@ export async function closeSignalTrade(input: CloseTradeInput, actorUserId?: num
           tx,
         );
       } else {
-        const loss = Math.abs(profit);
-        await postJournalEntry(
-          journalForSystem(`signal-${t.id}-u${w.userId}-loss`),
-          [
-            { accountCode: `user:${w.userId}:profit`, entryType: "debit",  amount: loss, description: `Signal #${t.id} loss` },
-            { accountCode: "platform:profit_expense", entryType: "credit", amount: loss, description: `Signal #${t.id} loss reversal` },
-          ],
-          txRow!.id,
-          tx,
-        );
+        const requestedLoss = Math.abs(profit);
+        // Cap loss to user's available profit balance — a user cannot lose more
+        // profit than they currently hold. If profit balance is 0, the platform
+        // absorbs the loss entirely (user's own money in main/trading is untouched).
+        const availableProfit = await getLedgerBalance(`user:${w.userId}:profit`, tx);
+        const loss = Math.max(0, Math.min(requestedLoss, availableProfit));
+        if (loss > 0) {
+          await postJournalEntry(
+            journalForSystem(`signal-${t.id}-u${w.userId}-loss`),
+            [
+              { accountCode: `user:${w.userId}:profit`, entryType: "debit",  amount: loss, description: `Signal #${t.id} loss` },
+              { accountCode: "platform:profit_expense", entryType: "credit", amount: loss, description: `Signal #${t.id} loss reversal` },
+            ],
+            txRow!.id,
+            tx,
+          );
+        }
       }
 
       totalDistributed += profit;
