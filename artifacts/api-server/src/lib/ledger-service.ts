@@ -7,30 +7,15 @@ import { logger } from "./logger";
 // Chart of accounts — platform-level system accounts
 // ---------------------------------------------------------------------------
 export const SYSTEM_ACCOUNTS = [
-  {
-    code: "platform:usdt_pool",
-    name: "Platform USDT Pool",
-    accountType: "asset",
-    normalBalance: "debit",
-  },
-  {
-    code: "platform:fee_revenue",
-    name: "Platform Fee Revenue",
-    accountType: "revenue",
-    normalBalance: "credit",
-  },
-  {
-    code: "platform:profit_expense",
-    name: "Daily Profit Distributed",
-    accountType: "expense",
-    normalBalance: "debit",
-  },
-  {
-    code: "platform:referral_expense",
-    name: "Referral Bonuses Paid",
-    accountType: "expense",
-    normalBalance: "debit",
-  },
+  { code: "platform:usdt_pool",          name: "Platform USDT Pool",            accountType: "asset",     normalBalance: "debit"  },
+  { code: "platform:user_liability",     name: "Aggregate User Liability",      accountType: "liability", normalBalance: "credit" },
+  { code: "platform:fee_revenue",        name: "Platform Fee Revenue",          accountType: "revenue",   normalBalance: "credit" },
+  { code: "platform:profit_expense",     name: "Daily Profit Distributed",      accountType: "expense",   normalBalance: "debit"  },
+  { code: "platform:referral_expense",   name: "Referral Bonuses Paid",         accountType: "expense",   normalBalance: "debit"  },
+  { code: "platform:hot_wallet",         name: "Hot Wallet (On-Chain)",         accountType: "asset",     normalBalance: "debit"  },
+  { code: "platform:cold_wallet",        name: "Cold Wallet (Reserve)",         accountType: "asset",     normalBalance: "debit"  },
+  { code: "platform:pending_deposits",   name: "Pending Deposits (In-Flight)",  accountType: "asset",     normalBalance: "debit"  },
+  { code: "platform:pending_withdrawals",name: "Pending Withdrawals (Held)",    accountType: "liability", normalBalance: "credit" },
 ] as const;
 
 // Per-user account definitions (suffix → metadata)
@@ -38,7 +23,13 @@ const USER_ACCOUNT_DEFS = [
   { suffix: "main",    name: "Main Wallet",    accountType: "liability", normalBalance: "credit" },
   { suffix: "trading", name: "Trading Wallet", accountType: "liability", normalBalance: "credit" },
   { suffix: "profit",  name: "Profit Wallet",  accountType: "liability", normalBalance: "credit" },
+  { suffix: "locked",  name: "Locked Funds",   accountType: "liability", normalBalance: "credit" },
 ] as const;
+
+// Accounts where balance is allowed to go negative (system expense/revenue accumulators
+// and asset accounts that can be temporarily over-credited during reconciliation).
+// User liability accounts must NEVER go negative — that means user owes platform.
+const NEGATIVE_BALANCE_ALLOWED_PREFIXES = ["platform:profit_expense", "platform:referral_expense", "platform:fee_revenue"];
 
 export type JournalLine = {
   accountCode: string;
@@ -172,6 +163,36 @@ export async function postJournalEntry(
     accountMap.set(line.accountCode, existing[0]!.id);
   }
 
+  // Negative-balance guard: aggregate net change per account, then for each
+  // user liability account verify resulting balance >= 0.
+  const netByAccount = new Map<string, number>();
+  for (const l of lines) {
+    const sign = l.entryType === "credit" ? 1 : -1; // credit-normal: credits add, debits subtract
+    netByAccount.set(l.accountCode, (netByAccount.get(l.accountCode) ?? 0) + sign * l.amount);
+  }
+
+  for (const [code, delta] of netByAccount.entries()) {
+    if (NEGATIVE_BALANCE_ALLOWED_PREFIXES.some((p) => code.startsWith(p))) continue;
+    const acct = accountMap.get(code)!;
+    const meta = await db_
+      .select({ accountType: glAccountsTable.accountType, normalBalance: glAccountsTable.normalBalance })
+      .from(glAccountsTable)
+      .where(eq(glAccountsTable.id, acct))
+      .limit(1);
+    const normalBalance = meta[0]?.normalBalance ?? "credit";
+    // Only enforce on credit-normal liability accounts (user wallets, pending withdrawals, user_liability)
+    if (normalBalance !== "credit") continue;
+    if (delta >= 0) continue; // net credit — can't go negative from this entry alone
+
+    const current = await getLedgerBalance(code, db_);
+    const projected = current + delta;
+    if (projected < -0.000001) {
+      throw new Error(
+        `Journal ${journalId}: insufficient balance on "${code}" (current=${current.toFixed(8)}, attempted change=${delta.toFixed(8)})`,
+      );
+    }
+  }
+
   const entries = lines.map((line) => ({
     journalId,
     transactionId: transactionId ?? undefined,
@@ -200,8 +221,9 @@ export function journalForSystem(prefix: string): string {
 // Get running balance for an account (debits - credits for debit-normal,
 // credits - debits for credit-normal)
 // ---------------------------------------------------------------------------
-export async function getLedgerBalance(accountCode: string): Promise<number> {
-  const rows = await db
+export async function getLedgerBalance(accountCode: string, txn?: any): Promise<number> {
+  const db_ = txn ?? db;
+  const rows = await db_
     .select({
       entryType: ledgerEntriesTable.entryType,
       total: sql<string>`sum(${ledgerEntriesTable.amount})`,
@@ -218,7 +240,7 @@ export async function getLedgerBalance(accountCode: string): Promise<number> {
   }
 
   // Determine normal balance from gl_accounts
-  const acct = await db
+  const acct = await db_
     .select({ normalBalance: glAccountsTable.normalBalance })
     .from(glAccountsTable)
     .where(eq(glAccountsTable.code, accountCode))
