@@ -1,0 +1,148 @@
+Implement full automated testing system for Qorix Markets platform.
+
+-----------------------------------
+1. TEST ENVIRONMENT
+-----------------------------------
+
+- Create "Test Mode" toggle in admin panel
+- In test mode:
+  - Use sandbox wallets / mock blockchain
+  - Prevent real fund movement
+  - Simulate deposits and withdrawals
+
+-----------------------------------
+2. USER SIMULATION (50 USERS)
+-----------------------------------
+
+- Generate 50 test users automatically:
+  - Different balances
+  - Different risk levels (low, medium, high)
+
+- Simulate:
+  - Login / logout
+  - Dashboard activity
+  - Investment activation
+
+-----------------------------------
+3. DEPOSIT TESTING
+-----------------------------------
+
+- Simulate deposits:
+  - Small ($10)
+  - Medium ($100)
+  - Large ($500)
+
+- Test cases:
+  - Multiple deposits same user
+  - Duplicate transaction hash
+  - Invalid transaction
+
+- Verify:
+  - Auto credit works
+  - No duplicate credit
+
+-----------------------------------
+4. PROFIT ENGINE TESTING
+-----------------------------------
+
+- Simulate daily PnL:
+  - Positive day
+  - Negative day
+  - Zero day
+
+- Verify:
+  - Correct profit calculation
+  - Risk-based distribution
+  - No rounding errors
+
+-----------------------------------
+5. WITHDRAWAL TESTING
+-----------------------------------
+
+- Simulate withdrawals:
+  - Small / large amounts
+  - Multiple requests
+
+- Test:
+  - Insufficient balance
+  - Rapid repeated requests
+
+- Verify:
+  - System blocks invalid actions
+  - Status updates correctly
+
+-----------------------------------
+6. SECURITY TESTING
+-----------------------------------
+
+- Simulate:
+  - Multiple failed login attempts
+  - Brute force attempts
+  - Session hijack attempts
+
+- Verify:
+  - Account lock after attempts
+  - Session invalidation
+  - Rate limiting
+
+-----------------------------------
+7. FRAUD TESTING
+-----------------------------------
+
+- Simulate:
+  - Self-referral abuse
+  - Multiple accounts same IP
+  - Fake deposit injection
+
+- Verify:
+  - System detects anomalies
+  - Flags suspicious activity
+
+-----------------------------------
+8. SYSTEM LOAD TEST
+-----------------------------------
+
+- Simulate 50 users active simultaneously:
+  - Login
+  - Dashboard load
+  - Transactions
+
+- Measure:
+  - Response time
+  - Errors
+  - Crashes
+
+-----------------------------------
+9. LOGGING & REPORT
+-----------------------------------
+
+- Log all events:
+  - Deposits
+  - Withdrawals
+  - Login attempts
+  - Admin actions
+
+- Generate test report:
+  - Passed tests
+  - Failed tests
+  - Detected bugs
+  - Suggested fixes
+
+-----------------------------------
+10. AUTO BUG DETECTION
+-----------------------------------
+
+- Identify:
+  - Duplicate credits
+  - Incorrect balances
+  - Failed transactions
+
+- Suggest fixes automatically
+
+-----------------------------------
+GOAL
+-----------------------------------
+
+Simulate real-world usage with 50 users,
+identify all bugs, security issues, and performance problems,
+and generate a complete test report with fixes.
