@@ -4,6 +4,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import { TrendingUp, Lock, Mail, User as UserIcon, ArrowLeft, Eye, EyeOff, ShieldCheck, CheckCircle2 } from "lucide-react";
+import { QorixLogo } from "@/components/qorix-logo";
 import { useToast } from "@/hooks/use-toast";
 import { Recaptcha, CAPTCHA_ENABLED } from "@/components/recaptcha";
 
