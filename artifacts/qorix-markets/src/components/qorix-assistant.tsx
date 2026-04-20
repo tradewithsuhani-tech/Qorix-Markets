@@ -28,17 +28,17 @@ type FlowKey = "main" | "how_to_start" | "investment_guide" | "returns" | "risk"
 
 const FLOWS: Record<FlowKey, { message: string; options?: QuickOption[] }> = {
   main: {
-    message: "Hello! I'm **Qorix Assistant** 👋\n\nWelcome to **Qorix Markets** — where retail investors get access to professional-grade trading strategies.\n\n📊 Our platform is built to deliver consistent, performance-based returns with strong risk management built-in.\n\n💡 Whether you're starting small or scaling up, we make investing simple, automated, and transparent.\n\nWhat would you like to explore?",
+    message: "Hello! I'm **Qorix Assistant** 👋\n\nWelcome to **Qorix Markets** — where everyday investors access the same professional trading infrastructure used by institutional desks.\n\n📊 Our platform delivers consistent monthly returns through three active trading strategies, with built-in capital protection and a live investor dashboard.\n\n💡 Simple to join, transparent to monitor, and professionally managed 24/7.\n\nWhat would you like to explore?",
     options: [
       { label: "🚀 How to Start", value: "how_to_start" },
       { label: "📊 Investment Guide", value: "investment_guide" },
       { label: "💹 Returns Explained", value: "returns" },
-      { label: "⚠️ Risk Explained", value: "risk" },
+      { label: "🛡️ Capital Protection", value: "risk" },
       { label: "💬 Talk to Expert", value: "expert" },
     ],
   },
   how_to_start: {
-    message: "**Getting started on Qorix Markets is simple:**\n\n1️⃣ **Create Your Account** — Sign up with your email in under 2 minutes.\n\n2️⃣ **Deposit USDT** — Add funds securely to your wallet. Minimum deposit applies — check the Wallet section.\n\n3️⃣ **Activate Investing** — Head to the *Invest* tab and activate your profile in one click.\n\n4️⃣ **Choose Your Risk Level** — Pick from Low, Medium, or High based on your comfort and goals.\n\n5️⃣ **Let It Work** — Our professional trading desk runs 24/7. You receive daily performance updates and monthly payouts automatically.\n\n🎯 *Most investors are fully set up in under 10 minutes.*",
+    message: "**Getting started on Qorix Markets is simple:**\n\n1️⃣ **Create Your Account** — Sign up with your email in under 2 minutes.\n\n2️⃣ **Fund Your Wallet** — Add USD securely to your investor wallet. Check the Wallet section for minimum deposit details.\n\n3️⃣ **Activate Investing** — Head to the *Invest* tab and activate your profile in one click.\n\n4️⃣ **Choose Your Tier** — Pick Conservative, Balanced, or Growth based on your goals. Your drawdown ceiling is locked in before any capital moves.\n\n5️⃣ **Earn While You Sleep** — Our professional trading desk operates 24/7. You receive daily performance updates and monthly profit payouts automatically.\n\n🎯 *Most investors are fully set up and earning in under 10 minutes.*",
     options: [
       { label: "🚀 Start Investing", value: "start_investing" },
       { label: "📊 Investment Guide", value: "investment_guide" },
@@ -47,25 +47,25 @@ const FLOWS: Record<FlowKey, { message: string; options?: QuickOption[] }> = {
     ],
   },
   investment_guide: {
-    message: "**Qorix Investment Guide**\n\n📌 **Professional Trading Desk:**\nYour funds are allocated to our quant strategies, executed 24/7 across multiple asset classes — so you never miss an opportunity.\n\n📌 **Historical Performance Ranges** *(not guaranteed):*\n• 🟢 **Low Risk** → ~1.5% – 5% monthly\n• 🟡 **Medium Risk** → ~3% – 8% monthly\n• 🔴 **High Risk** → ~5% – 10%+ monthly\n\n📌 **Auto-Compounding:**\nTurn on auto-compounding to reinvest your returns automatically — accelerating growth over time.\n\n📌 **Monthly Payouts:**\nProfits flow into your profit balance every month, available to withdraw anytime.\n\n*Returns are based on historical performance and are not guaranteed. Actual results depend on market conditions.*",
+    message: "**Qorix Investment Guide**\n\n📌 **Professional Trading Desk:**\nYour funds are deployed across three active strategies — scalping, swing, and arbitrage — executed 24/7 by our 43-strong professional desk.\n\n📌 **Strong Monthly Performance:**\n• 🟢 **Conservative** → ~1.5% – 5% monthly\n• 🟡 **Balanced** → ~3% – 8% monthly\n• 🔴 **Growth** → ~5% – 10%+ monthly\n\n📌 **Auto-Compounding:**\nReinvest your returns automatically to accelerate growth over time — activated in one click.\n\n📌 **Monthly Payouts:**\nProfits flow into your dedicated profit wallet every month, available to withdraw on your own schedule — anytime.",
     options: [
       { label: "🚀 Start Investing", value: "start_investing" },
       { label: "💹 Returns Explained", value: "returns" },
-      { label: "⚠️ Risk Explained", value: "risk" },
+      { label: "🛡️ Capital Protection", value: "risk" },
       { label: "💬 Talk to Expert", value: "expert" },
     ],
   },
   returns: {
-    message: "**Understanding Returns on Qorix**\n\n💹 **Performance-Based Returns:**\nAll returns are driven by real trading performance — no fixed or guaranteed income.\n\n📈 **Historical Performance Ranges** *(indicative only):*\n• 🟢 **Low Risk** → ~1.5% – 5% monthly\n• 🟡 **Medium Risk** → ~3% – 8% monthly\n• 🔴 **High Risk** → ~5% – 10%+ monthly\n\nTop-performing periods have delivered strong returns under higher risk settings when market conditions were favorable.\n\n📊 **Full Transparency:**\n• Daily profit updates in your Dashboard\n• Real-time equity tracking in Analytics\n• Verified monthly performance reports\n• Complete trade history visibility\n\n⚡ *Returns vary based on market volatility, your risk level, and overall platform performance. Past performance does not guarantee future results.*",
+    message: "**Returns at Qorix Markets**\n\n💹 **Consistent Monthly Performance:**\nQorixMarkets has delivered positive returns across 10 consecutive months through disciplined desk execution and active profit management.\n\n📈 **Typical Monthly Return Ranges:**\n• 🟢 **Conservative** → ~1.5% – 5% monthly\n• 🟡 **Balanced** → ~3% – 8% monthly\n• 🔴 **Growth** → ~5% – 10%+ monthly\n\nPeak periods have seen strong double-digit performance under Growth settings when market conditions aligned with our desk strategies.\n\n📊 **Full Profit Transparency:**\n• Daily profit updates in your Dashboard\n• Real-time equity tracking in Analytics\n• Monthly performance reports\n• Complete payout and withdrawal history",
     options: [
       { label: "🚀 Start Investing", value: "start_investing" },
-      { label: "⚠️ Risk Explained", value: "risk" },
+      { label: "🛡️ Capital Protection", value: "risk" },
       { label: "📊 Investment Guide", value: "investment_guide" },
       { label: "💬 Talk to Expert", value: "expert" },
     ],
   },
   risk: {
-    message: "**Understanding Risk on Qorix**\n\n⚠️ **Market Risk:**\nAll investments carry inherent risk. Asset values can go up or down based on market conditions.\n\n🛡️ **Our Risk Management System:**\n• **Drawdown Limits:** 3% (Low) / 5% (Medium) / 10% (High) — trading auto-pauses if hit\n• **Automated Stop-Loss** on all active positions\n• **Strategy Diversification** across uncorrelated instruments\n• **24/7 Real-time monitoring** by our risk team\n\n💼 **What This Means for You:**\nYour downside exposure is capped by your chosen risk level. The system is designed to protect capital while pursuing performance-based returns.\n\n🔐 **Platform Security:**\nFunds held in segregated wallets. Multi-layer encryption and regular audits.\n\n📋 *Only invest funds you're comfortable committing for the medium term. Do not use borrowed capital.*",
+    message: "**Your Capital Protection System**\n\n🛡️ **Protection-First Architecture:**\nEvery investment begins with a defined drawdown ceiling — locked before a single dollar is traded.\n\n✅ **Three protection tiers to match your goals:**\n• 🟢 **Conservative (3% ceiling)** — stable, low-volatility growth\n• 🟡 **Balanced (5% ceiling)** — optimised returns with controlled exposure\n• 🔴 **Growth (10% ceiling)** — maximum performance potential\n\n🔒 **How it works:**\n• Real-time equity monitoring on all active positions\n• Auto-pause triggers if your ceiling is approached\n• Profits held in a dedicated wallet — separate from trading capital\n• 24/7 desk oversight by our professional risk team\n\n🏦 **Platform Security:**\nFunds held in segregated wallets. End-to-end encryption, multi-factor authentication, and regular security audits.",
     options: [
       { label: "🚀 Start Investing", value: "start_investing" },
       { label: "📊 Investment Guide", value: "investment_guide" },

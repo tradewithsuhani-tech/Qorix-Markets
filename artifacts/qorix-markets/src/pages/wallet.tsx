@@ -174,13 +174,13 @@ export default function WalletPage() {
                 <ArrowDownToLine style={{ width: 16, height: 16 }} />
               </div>
               <div>
-                <div className="font-semibold text-sm">Deposit USDT</div>
+                <div className="font-semibold text-sm">Deposit USD</div>
                 <div className="text-xs text-muted-foreground">Add funds to your account</div>
               </div>
             </div>
             <div className="space-y-3">
               <div>
-                <label className="text-xs text-muted-foreground font-medium mb-1.5 block">Amount (USDT)</label>
+                <label className="text-xs text-muted-foreground font-medium mb-1.5 block">Amount (USD)</label>
                 <input
                   type="number"
                   value={depositAmount}
@@ -206,7 +206,7 @@ export default function WalletPage() {
                 disabled={depositMutation.isPending || !depositAmount || Number(depositAmount) <= 0}
                 className="btn btn-primary w-full"
               >
-                {depositMutation.isPending ? "Processing…" : "Deposit USDT"}
+                {depositMutation.isPending ? "Processing…" : "Deposit USD"}
               </button>
             </div>
           </div>
@@ -224,7 +224,7 @@ export default function WalletPage() {
             </div>
             <div className="space-y-3">
               <div>
-                <label className="text-xs text-muted-foreground font-medium mb-1.5 block">Amount (USDT)</label>
+                <label className="text-xs text-muted-foreground font-medium mb-1.5 block">Amount (USD)</label>
                 <div className="relative">
                   <input
                     type="number"
@@ -245,7 +245,7 @@ export default function WalletPage() {
               {wallet && (
                 <div className="flex items-center justify-between text-xs text-muted-foreground px-1">
                   <span>Available</span>
-                  <span className="font-medium text-white">${(wallet.mainBalance || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT</span>
+                  <span className="font-medium text-white">${(wallet.mainBalance || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD</span>
                 </div>
               )}
               <button
@@ -268,14 +268,14 @@ export default function WalletPage() {
                 </div>
                 <div>
                   <div className="font-semibold text-sm">Withdraw Profits</div>
-                  <div className="text-xs text-muted-foreground">Send to TRC20 wallet</div>
+                  <div className="text-xs text-muted-foreground">Send to USD wallet</div>
                 </div>
               </div>
               <VipBadge tier={vipTier} size="xs" />
             </div>
             <div className="space-y-3">
               <div>
-                <label className="text-xs text-muted-foreground font-medium mb-1.5 block">Amount (USDT)</label>
+                <label className="text-xs text-muted-foreground font-medium mb-1.5 block">Amount (USD)</label>
                 <div className="relative">
                   <input
                     type="number"
@@ -306,13 +306,13 @@ export default function WalletPage() {
                   <div className="h-px bg-white/5" />
                   <div className="flex items-center justify-between font-semibold">
                     <span className="text-muted-foreground">You receive</span>
-                    <span className="text-emerald-400">${netWithdraw.toFixed(2)} USDT</span>
+                    <span className="text-emerald-400">${netWithdraw.toFixed(2)} USD</span>
                   </div>
                 </div>
               )}
 
               <div>
-                <label className="text-xs text-muted-foreground font-medium mb-1.5 block">USDT Wallet Address (TRC20)</label>
+                <label className="text-xs text-muted-foreground font-medium mb-1.5 block">USD Wallet Address</label>
                 <input
                   type="text"
                   value={withdrawAddress}
@@ -338,7 +338,7 @@ export default function WalletPage() {
         <motion.div variants={item}>
           <div className="flex items-start gap-3 px-4 py-3 rounded-xl bg-blue-500/8 border border-blue-500/15 text-xs text-muted-foreground">
             <AlertCircle style={{ width: 14, height: 14 }} className="text-blue-400 shrink-0 mt-0.5" />
-            <span>Withdrawals are reviewed within 24 hours. Ensure your TRC20 address is correct — funds sent to wrong addresses cannot be recovered.</span>
+            <span>Withdrawals are reviewed within 24 hours. Ensure your wallet address is correct — funds sent to wrong addresses cannot be recovered.</span>
           </div>
         </motion.div>
 

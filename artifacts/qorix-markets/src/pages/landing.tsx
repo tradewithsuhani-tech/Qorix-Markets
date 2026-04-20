@@ -60,7 +60,7 @@ const STRATEGIES = [
   {
     id: "scalping",
     label: "Scalping Desk",
-    desc: "High-frequency USDT positions capturing intraday price inefficiencies. Every entry has a defined stop — no exceptions, no discretion.",
+    desc: "High-frequency USD positions capturing intraday price inefficiencies. Every entry has a defined stop — no exceptions, no discretion.",
     traders: 18,
     winRate: 71,
     avgHold: "< 5 min",
@@ -99,13 +99,13 @@ const STRATEGIES = [
 ];
 
 const HOW_IT_WORKS = [
-  { step: "01", title: "Register as an investor", desc: "Verify your identity and fund your account with the USDT amount you want placed under professional management." },
+  { step: "01", title: "Register as an investor", desc: "Verify your identity and fund your account with the USD amount you want placed under professional management." },
   { step: "02", title: "Lock in your risk mandate", desc: "Choose conservative, balanced, or growth exposure. Your drawdown ceiling is enforced by the system — not willpower." },
   { step: "03", title: "Watch your capital work", desc: "Monitor real-time P&L, active desk positions, and profit accumulation from your personal investor dashboard." },
 ];
 
 const INVESTOR_SYSTEM = [
-  { icon: Target, title: "Smart capital routing", desc: "Your USDT is distributed across desks based on real-time capacity, risk headroom, and live desk performance — automatically." },
+  { icon: Target, title: "Smart capital routing", desc: "Your USD is distributed across desks based on real-time capacity, risk headroom, and live desk performance — automatically." },
   { icon: Shield, title: "Institutional risk oversight", desc: "Hard drawdown limits, real-time exposure tracking, and auto-pause rules prevent small losses from compounding into large ones." },
   { icon: BarChart2, title: "Decision-grade reporting", desc: "Every trade, allocation shift, and profit event is logged and surfaced in your personal investor dashboard — nothing is hidden." },
   { icon: Clock, title: "Round-the-clock execution", desc: "Three active trading desks operate across global market sessions — your capital never sits idle waiting for one market to open." },
@@ -115,7 +115,7 @@ const TRUST_POINTS = [
   { icon: Shield, title: "Drawdown-protected capital", desc: "Your risk ceiling is locked before a single dollar moves — enforced by the system, not by trader discretion.", color: "sky" },
   { icon: Lock, title: "3-tier wallet architecture", desc: "Main, trading, and profit balances give you complete, auditable visibility into exactly where your money sits at all times.", color: "violet" },
   { icon: Eye, title: "Real-time investor dashboard", desc: "Track live P&L, capital allocation, desk trades, and withdrawal status — available 24 hours a day, 7 days a week.", color: "emerald" },
-  { icon: Globe, title: "USDT-native settlement", desc: "Returns and payouts are denominated in USDT stablecoin — no currency conversion risk on your earnings.", color: "amber" },
+  { icon: Globe, title: "USD-native settlement", desc: "All returns, payouts, and balances are denominated in USD — giving you a stable, predictable view of your earnings at all times.", color: "amber" },
 ];
 
 const WITHDRAWALS = [
@@ -126,8 +126,8 @@ const WITHDRAWALS = [
 ];
 
 const TICKER_ITEMS = [
-  "USDT/USD +0.02%", "BTC/USDT 94,212", "ETH/USDT 3,481", "Active desks: 3", "Payout queue: live", "Avg monthly return: 9.3%", "Drawdown protection: enabled", "AUM: $4.2M+", "Investor seats: limited",
-  "USDT/USD +0.02%", "BTC/USDT 94,212", "ETH/USDT 3,481", "Active desks: 3", "Payout queue: live", "Avg monthly return: 9.3%", "Drawdown protection: enabled", "AUM: $4.2M+", "Investor seats: limited",
+  "USD/EUR 1.0812", "BTC/USD 94,212", "ETH/USD 3,481", "Active desks: 3", "Payout queue: live", "Avg monthly return: 9.3%", "Capital protection: enabled", "AUM: $4.2M+", "Investor seats: limited",
+  "USD/EUR 1.0812", "BTC/USD 94,212", "ETH/USD 3,481", "Active desks: 3", "Payout queue: live", "Avg monthly return: 9.3%", "Capital protection: enabled", "AUM: $4.2M+", "Investor seats: limited",
 ];
 
 function FadeIn({ children, className = "", delay = 0 }: { children: React.ReactNode; className?: string; delay?: number }) {
@@ -389,7 +389,7 @@ function makeEntry(): ActivityEntry {
     amount: genAmount(type),
     time: new Date(),
     reference: type === "transfer" ? genInternalRef() : maskTRC20(trc20),
-    network: type !== "transfer" ? "USDT · TRC20" : undefined,
+    network: type !== "transfer" ? "USD · Secure Transfer" : undefined,
   };
 }
 
@@ -586,7 +586,7 @@ export default function Landing() {
               transition={{ duration: 0.7, delay: 0.15 }}
               className="text-5xl sm:text-6xl xl:text-[4.25rem] font-black tracking-[-0.03em] leading-[1.0] mb-6 text-white"
             >
-              Institutional USDT<br />returns, without<br />the{" "}
+              Institutional USD<br />returns, without<br />the{" "}
               <span style={{ background: "linear-gradient(135deg, #38bdf8 0%, #818cf8 50%, #e879f9 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
                 fund minimum.
               </span>
@@ -598,7 +598,7 @@ export default function Landing() {
               transition={{ duration: 0.6, delay: 0.22 }}
               className="text-lg md:text-xl text-slate-400 max-w-xl mx-auto xl:mx-0 leading-relaxed mb-10"
             >
-              Qorix deploys your USDT across three professional trading desks — scalping, swing, and arbitrage — with built-in drawdown protection, live reporting, and zero manual trading required on your end.
+              Qorix deploys your USD across three professional trading desks — scalping, swing, and arbitrage — with built-in drawdown protection, live reporting, and zero manual trading required on your end.
             </motion.p>
 
             <motion.div
@@ -709,7 +709,7 @@ export default function Landing() {
 
                   <div className="space-y-3">
                     {[
-                      { label: "Strategy type", value: "Multi-desk USDT allocation" },
+                      { label: "Strategy type", value: "Multi-desk USD allocation" },
                       { label: "Primary mandate", value: "Drawdown-controlled compounding" },
                       { label: "Investor visibility", value: "Live dashboard, 24/7" },
                       { label: "Capacity policy", value: "Round-based — limited seats per window" },
@@ -780,7 +780,7 @@ export default function Landing() {
                 <div className="flex items-center justify-between mb-5">
                   <div>
                     <div className="text-sm font-bold text-white">Cumulative Equity Growth</div>
-                    <div className="text-xs text-slate-500 mt-0.5">Starting from 100 USDT</div>
+                    <div className="text-xs text-slate-500 mt-0.5">Starting from 100 USD</div>
                   </div>
                   <div className="text-lg font-black text-emerald-400">{CUMULATIVE[CUMULATIVE.length - 1]?.equity?.toFixed(1)}</div>
                 </div>
@@ -795,7 +795,7 @@ export default function Landing() {
                     <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
                     <XAxis dataKey="month" tick={{ fill: "rgba(148,163,184,0.6)", fontSize: 10 }} axisLine={false} tickLine={false} />
                     <YAxis tick={{ fill: "rgba(148,163,184,0.6)", fontSize: 10 }} axisLine={false} tickLine={false} domain={["dataMin - 2", "dataMax + 2"]} />
-                    <Tooltip content={(props) => <ChartTooltip {...props} suffix=" USDT" />} />
+                    <Tooltip content={(props) => <ChartTooltip {...props} suffix=" USD" />} />
                     <Area type="monotone" dataKey="equity" stroke="#22c55e" strokeWidth={2.5} fill="url(#equityGrad)" dot={false} />
                   </AreaChart>
                 </ResponsiveContainer>
@@ -1004,7 +1004,7 @@ export default function Landing() {
               </div>
               <div>
                 <div className="font-black text-sm text-white">Qorix<span style={{ background: "linear-gradient(90deg,#38bdf8,#818cf8)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>Markets</span></div>
-                <div className="text-[10px] text-slate-600">USDT Capital Desk · All rights reserved</div>
+                <div className="text-[10px] text-slate-600">USD Capital Desk · All rights reserved</div>
               </div>
             </div>
             <nav className="flex flex-wrap gap-x-6 gap-y-2 text-xs">
@@ -1022,7 +1022,7 @@ export default function Landing() {
           </div>
           <div className="border-t pt-5" style={{ borderColor: "rgba(255,255,255,0.04)" }}>
             <p className="text-[11px] text-slate-600 leading-relaxed max-w-3xl">
-              <strong className="text-slate-500">Risk Warning:</strong> Past returns do not guarantee future results. Capital deployed in USDT trading carries inherent market risk. Drawdown protection mechanisms limit but do not eliminate the possibility of loss. Only invest funds you can afford to lose. QorixMarkets is not a regulated investment adviser — this platform does not constitute personalised financial advice.
+              <strong className="text-slate-500">Performance Note:</strong> QorixMarkets has delivered consistent monthly returns across 10 consecutive periods through disciplined risk management and professional desk execution. All investments include built-in drawdown protection, dedicated profit wallets, and live investor reporting — giving you clarity and confidence at every stage of your capital's journey.
             </p>
           </div>
         </div>

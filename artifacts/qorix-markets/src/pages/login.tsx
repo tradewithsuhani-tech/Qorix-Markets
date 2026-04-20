@@ -97,7 +97,7 @@ export default function LoginPage() {
               </motion.h1>
             </AnimatePresence>
             <p className="text-sm text-muted-foreground">
-              {isLogin ? "Sign in to access your trading terminal." : "Start automated USDT trading today."}
+              {isLogin ? "Sign in to access your trading terminal." : "Start automated USD trading today."}
             </p>
           </div>
 

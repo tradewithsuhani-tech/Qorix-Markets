@@ -15,7 +15,7 @@ export default function PrivacyPage() {
               <ul className="list-disc list-inside space-y-1 ml-2">
                 <li><strong className="text-white">Identity data</strong> — full name, date of birth, government-issued ID (for KYC verification)</li>
                 <li><strong className="text-white">Contact data</strong> — email address, phone number, country of residence</li>
-                <li><strong className="text-white">Financial data</strong> — USDT wallet addresses, deposit amounts, withdrawal history, and transaction records</li>
+                <li><strong className="text-white">Financial data</strong> — USD wallet addresses, deposit amounts, withdrawal history, and transaction records</li>
                 <li><strong className="text-white">Technical data</strong> — IP address, browser type, device identifier, session timestamps, and access logs</li>
                 <li><strong className="text-white">Usage data</strong> — pages visited, features accessed, referral codes used, and in-platform activity patterns</li>
               </ul>
