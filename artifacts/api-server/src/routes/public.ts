@@ -1,8 +1,38 @@
 import { Router } from "express";
 import { db, investmentsTable, transactionsTable, dailyProfitRunsTable } from "@workspace/db";
 import { eq, and, gte, avg, count } from "drizzle-orm";
+import { listTrades } from "../lib/signal-trade-service";
 
 const router = Router();
+
+// Public: currently running signal trades — pair + direction only (anti-copy)
+router.get("/signal-trades/running", async (_req, res) => {
+  const trades = await listTrades({ status: "running", limit: 20 });
+  res.json({
+    trades: trades.map((t) => ({
+      id: t.id,
+      pair: t.pair,
+      direction: t.direction,
+      createdAt: t.createdAt,
+    })),
+  });
+});
+
+// Public: recent closed signal trades (trust display)
+router.get("/signal-trades/recent", async (_req, res) => {
+  const trades = await listTrades({ status: "closed", limit: 20 });
+  res.json({
+    trades: trades.map((t) => ({
+      id: t.id,
+      pair: t.pair,
+      direction: t.direction,
+      entryPrice: t.entryPrice,
+      realizedExitPrice: t.realizedExitPrice,
+      realizedProfitPercent: t.realizedProfitPercent,
+      closedAt: t.closedAt,
+    })),
+  });
+});
 
 router.get("/public/market-indicators", async (_req, res) => {
   const [activeInvResult] = await db

@@ -26,7 +26,7 @@ import {
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useState, useEffect, useRef } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import {
   AreaChart, Area, BarChart, Bar, Cell, XAxis, YAxis, Tooltip,
@@ -336,10 +336,15 @@ export default function Dashboard() {
     { days: chartDays },
     { query: { refetchInterval: 15000 } }
   );
-  const { data: tradesData, isLoading: tradesLoading } = useGetTrades(
-    { limit: 8 },
-    { query: { refetchInterval: 5000 } }
-  );
+  const { data: tradesData, isLoading: tradesLoading } = useQuery<{ trades: Array<{ id: number; pair: string; direction: string; createdAt: string }> }>({
+    queryKey: ["signal-trades-running"],
+    queryFn: async () => {
+      const res = await fetch("/api/signal-trades/running");
+      if (!res.ok) throw new Error("Failed to fetch");
+      return res.json();
+    },
+    refetchInterval: 5000,
+  });
   const { data: perf, isLoading: perfLoading } = useGetDashboardPerformance({
     query: { refetchInterval: 30000 }
   });
@@ -365,7 +370,7 @@ export default function Dashboard() {
     },
   });
 
-  const trades = Array.isArray(tradesData) ? tradesData : [];
+  const trades = Array.isArray(tradesData?.trades) ? tradesData.trades : [];
   const equityArr = Array.isArray(equity) ? equity : [];
 
   const dailyPL = summary?.dailyProfitLoss || 0;
@@ -828,39 +833,41 @@ export default function Dashboard() {
                   <p className="text-xs opacity-50 mt-0.5">Start investing to see activity</p>
                 </div>
               ) : (
-                trades.map((trade, i) => (
-                  <motion.div
-                    key={trade.id}
-                    initial={{ opacity: 0, x: 12 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: i * 0.04 }}
-                    className="flex items-center justify-between p-3 rounded-xl bg-white/[0.03] border border-white/[0.06] hover:border-blue-500/20 hover:bg-white/[0.05] transition-all duration-150"
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <div className={`w-1 h-9 rounded-full ${trade.direction === 'LONG' ? 'bg-green-500' : 'bg-red-500'}`} />
-                      <div>
-                        <div className="font-semibold text-sm flex items-center gap-1.5">
-                          {trade.symbol}
-                          <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold ${trade.direction === 'LONG' ? 'bg-green-500/15 text-green-400' : 'bg-red-500/15 text-red-400'}`}>
-                            {trade.direction}
+                trades.map((trade: any, i: number) => {
+                  const isBuy = trade.direction === 'BUY' || trade.direction === 'LONG';
+                  return (
+                    <motion.div
+                      key={trade.id}
+                      initial={{ opacity: 0, x: 12 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: i * 0.04 }}
+                      className="flex items-center justify-between p-3 rounded-xl bg-white/[0.03] border border-white/[0.06] hover:border-blue-500/20 hover:bg-white/[0.05] transition-all duration-150"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <div className={`w-1 h-9 rounded-full ${isBuy ? 'bg-green-500' : 'bg-red-500'}`} />
+                        <div>
+                          <div className="font-semibold text-sm flex items-center gap-1.5">
+                            {trade.pair}
+                            <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold ${isBuy ? 'bg-green-500/15 text-green-400' : 'bg-red-500/15 text-red-400'}`}>
+                              {trade.direction}
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-muted-foreground">In progress…</div>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="flex items-center gap-1.5 text-[11px] text-amber-400 font-medium">
+                          <span className="relative flex h-1.5 w-1.5">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-60"></span>
+                            <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-amber-400"></span>
                           </span>
+                          RUNNING
                         </div>
-                        <div className="text-[11px] text-muted-foreground">
-                          {format(new Date(trade.executedAt), "MMM dd, HH:mm")}
-                        </div>
+                        <div className="text-[10px] text-muted-foreground mt-0.5">Result on close</div>
                       </div>
-                    </div>
-                    <div className="text-right">
-                      <div className={`font-bold text-sm ${trade.profit >= 0 ? 'profit-text' : 'loss-text'} flex items-center justify-end gap-0.5`}>
-                        {trade.profit >= 0 ? <ArrowUpRight style={{ width: 13, height: 13 }} /> : <ArrowDownRight style={{ width: 13, height: 13 }} />}
-                        ${Math.abs(trade.profit).toFixed(2)}
-                      </div>
-                      <div className={`text-[11px] ${trade.profitPercent >= 0 ? 'text-green-500' : 'text-red-400'}`}>
-                        {trade.profitPercent > 0 ? '+' : ''}{trade.profitPercent}%
-                      </div>
-                    </div>
-                  </motion.div>
-                ))
+                    </motion.div>
+                  );
+                })
               )}
             </div>
           </motion.div>

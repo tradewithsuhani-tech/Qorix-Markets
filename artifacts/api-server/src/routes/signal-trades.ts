@@ -183,20 +183,4 @@ router.get(
   },
 );
 
-// ---------- Public: list of recent closed trades (for trust display) ----------
-router.get("/signal-trades/recent", async (_req, res) => {
-  const trades = await listTrades({ status: "closed", limit: 20 });
-  res.json({
-    trades: trades.map((t) => ({
-      id: t.id,
-      pair: t.pair,
-      direction: t.direction,
-      entryPrice: t.entryPrice,
-      realizedExitPrice: t.realizedExitPrice,
-      realizedProfitPercent: t.realizedProfitPercent,
-      closedAt: t.closedAt,
-    })),
-  });
-});
-
 export default router;
