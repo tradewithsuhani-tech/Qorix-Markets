@@ -17,7 +17,7 @@ const STRATEGY_CFG: Record<string, {
   scalping: {
     color: "#3b82f6", bg: "bg-blue-500/10", border: "border-blue-500/25",
     icon: Zap,
-    desc: "High-frequency micro-trades capturing small price movements across USDT pairs. Runs continuously 24/7.",
+    desc: "High-frequency micro-trades capturing small price movements across USD pairs. Runs continuously 24/7.",
     tags: ["< 5 min holds", "High frequency", "Low risk per trade"],
   },
   swing: {

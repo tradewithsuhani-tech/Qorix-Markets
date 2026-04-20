@@ -783,7 +783,7 @@ export default function AnalyticsPage() {
                   { label: "Cumulative Return", value: `${totalReturn >= 0 ? "+" : ""}${totalReturn.toFixed(2)}%`, color: totalReturn >= 0 ? "#22c55e" : "#ef4444", sub: `${monthlyData.length} months` },
                   { label: "Avg Win Rate", value: `${avgWinRate.toFixed(1)}%`, color: "#facc15", sub: "Per month" },
                   { label: "Peak Drawdown", value: `${worstDrawdown.toFixed(2)}%`, color: "#ef4444", sub: "Worst month" },
-                  { label: "Total Profit", value: `${totalProfit >= 0 ? "+" : ""}$${Math.abs(totalProfit).toFixed(2)}`, color: totalProfit >= 0 ? "#22c55e" : "#ef4444", sub: "USDT earned" },
+                  { label: "Total Profit", value: `${totalProfit >= 0 ? "+" : ""}$${Math.abs(totalProfit).toFixed(2)}`, color: totalProfit >= 0 ? "#22c55e" : "#ef4444", sub: "USD earned" },
                 ].map((s) => (
                   <div key={s.label} className="stat-card p-4 rounded-2xl">
                     <div className="text-xs text-muted-foreground mb-1.5 uppercase tracking-wider">{s.label}</div>

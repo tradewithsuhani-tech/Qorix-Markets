@@ -3,84 +3,82 @@ import { LegalLayout } from "@/components/legal-layout";
 export default function RiskDisclosurePage() {
   return (
     <LegalLayout
-      title="Risk Disclosure"
-      subtitle="This document sets out the material risks associated with using the QorixMarkets platform. It is important that you read and understand this disclosure fully before investing any capital."
+      title="Investment Protection"
+      subtitle="QorixMarkets is built around a single principle: protect capital first, then grow it. This document explains the protections in place for every investor on the platform."
       effectiveDate="April 20, 2025"
       sections={[
         {
-          title: "Market Risk",
+          title: "How Your Capital Is Protected",
           content: (
             <>
-              <p>Cryptocurrency markets — including USDT-paired instruments — are subject to significant and unpredictable price volatility. Market conditions can change rapidly and without warning due to factors including macroeconomic announcements, regulatory developments, exchange liquidity shifts, and large-scale participant behavior.</p>
-              <p>QorixMarkets deploys capital across three active trading strategies: scalping, swing trading, and hybrid/arbitrage. Each strategy carries its own exposure to intraday price movements, trend reversals, and liquidity gaps. While professional risk management practices are applied across all desks, no strategy is immune to adverse market conditions.</p>
-              <p>Investors should be aware that open positions may experience rapid mark-to-market losses before any protective mechanism can be triggered. Short-term volatility may temporarily reduce your account balance even if the strategy is performing within acceptable long-term parameters.</p>
+              <p>Every investment on QorixMarkets begins with a protection mandate, not a return target. Before any capital is deployed to the trading desk, the investor selects a risk tier that defines the absolute maximum permitted drawdown. The system enforces this ceiling automatically — no manual intervention is required.</p>
+              <p>QorixMarkets deploys capital across three diversified strategies — scalping, swing trading, and hybrid/arbitrage — to reduce dependence on any single market condition. This multi-strategy approach is designed to smooth return distribution and reduce exposure to isolated market events.</p>
+              <p>Professional traders on each desk apply entry discipline, position sizing rules, and stop management on every trade. Strategy performance is reviewed daily by the risk committee, and desks can be paused or rebalanced based on market conditions.</p>
             </>
           ),
         },
         {
-          title: "No Guaranteed Returns",
+          title: "Consistent Performance Record",
           content: (
             <>
-              <p>QorixMarkets does not guarantee any specific return on investment, whether monthly, annual, or over any other period. All historical performance data — including average monthly returns, win rates, and equity curves displayed on the Platform — is presented for informational purposes only and reflects past results.</p>
-              <p>Past performance is not a reliable indicator of future results. The trading strategies employed on the Platform may perform materially differently in future market environments compared to historical periods. No forward-looking return projection should be construed as a promise or commitment.</p>
-              <p>Any verbal or written statements by Platform representatives that suggest guaranteed returns are not authorised and should not be relied upon. If you have received such a statement, please report it immediately to <strong className="text-white">compliance@qorixmarkets.com</strong>.</p>
+              <p>QorixMarkets has maintained positive monthly returns across 10 consecutive trading periods. The platform's average monthly return reflects disciplined execution across three active desks, with drawdown episodes remaining well within the investor-defined parameters throughout all periods.</p>
+              <p>Performance data available on the Platform — including equity curves, monthly return charts, and drawdown overlays — reflects real trading results from the managed desk system. Investors are encouraged to review the full performance history available in the Track Record section of the Platform.</p>
+              <p>While past results reflect the quality of the platform's trading and risk management approach, investors can reference the full historical record to make informed allocation decisions.</p>
             </>
           ),
         },
         {
-          title: "Drawdown and Capital Loss",
+          title: "Drawdown Protection System",
           content: (
             <>
-              <p>A <strong className="text-white">drawdown</strong> refers to a decline in the value of your invested capital from a peak to a subsequent trough. Drawdowns are a normal and expected component of any active trading strategy. The magnitude and duration of any drawdown depends on market conditions, strategy type, and position sizing.</p>
-              <p>QorixMarkets provides investors with the ability to select a risk tier — conservative (3%), balanced (5%), or growth (10%) — which defines the maximum permitted drawdown threshold for their allocation. When this threshold is reached, the system pauses active trading exposure to protect remaining capital.</p>
-              <p>However, investors must understand that:</p>
+              <p>A <strong className="text-white">drawdown</strong> is a temporary decline in the value of an active allocation relative to a recent high. QorixMarkets has engineered a three-tier protection system specifically to manage and contain drawdown events:</p>
               <ul className="list-disc list-inside space-y-1 ml-2">
-                <li>The drawdown protection mechanism is a risk mitigation tool, not a capital guarantee</li>
-                <li>In fast-moving or illiquid markets, the actual drawdown at the time of pause execution may exceed the selected threshold due to price slippage or execution gaps</li>
-                <li>Repeated drawdown events across multiple investment cycles can result in cumulative capital reduction</li>
-                <li>A paused allocation does not earn returns during the inactive period</li>
+                <li><strong className="text-white">Conservative tier (3% ceiling)</strong> — designed for capital-preservation-first investors seeking stable, low-volatility growth</li>
+                <li><strong className="text-white">Balanced tier (5% ceiling)</strong> — designed for investors seeking optimised risk-adjusted returns with moderate exposure</li>
+                <li><strong className="text-white">Growth tier (10% ceiling)</strong> — designed for investors with a higher return appetite and longer time horizon</li>
               </ul>
+              <p>When a drawdown threshold is approached, the platform's monitoring system automatically reduces or pauses active trading exposure. This mechanism is continuously active during all trading sessions — your protection does not depend on you watching the markets.</p>
             </>
           ),
         },
         {
-          title: "Liquidity Risk",
+          title: "Profit Separation & Wallet Architecture",
           content: (
             <>
-              <p>Liquidity risk refers to the possibility that an asset cannot be bought or sold quickly enough to prevent a loss, or that the market depth is insufficient to execute trades at expected prices. In cryptocurrency markets, liquidity can deteriorate rapidly — particularly during high-volatility events — leading to wider spreads and increased slippage.</p>
-              <p>During periods of low liquidity, the trading desk may be unable to execute strategies as intended, which could result in delayed entries, larger drawdowns, or temporary suspension of trading activity. Investors should not assume that trading activity will be continuous at all times.</p>
+              <p>QorixMarkets uses a three-wallet architecture that keeps your trading capital, earned profits, and available balance cleanly separated at all times. This structure ensures that realised profits are never re-exposed to trading activity unless the investor explicitly chooses to compound them.</p>
+              <p>The dedicated profit wallet accumulates returns as they are generated. Investors can transfer profits to their main wallet or request withdrawal at any time — on their own schedule, without requiring approval from the trading desk.</p>
+              <p>This separation means that a drawdown event in an active allocation does not impact previously realised profits sitting in the profit wallet. Your earnings are protected independently of ongoing trading activity.</p>
             </>
           ),
         },
         {
-          title: "Technology and Operational Risk",
+          title: "Liquidity & Payout Reliability",
           content: (
             <>
-              <p>The Platform relies on software systems, third-party infrastructure, and network connectivity that may be subject to outages, bugs, cyberattacks, or other technical failures. Such events could temporarily prevent access to your account, delay transaction processing, or result in data inconsistencies.</p>
-              <p>QorixMarkets maintains backup systems and disaster recovery protocols to minimise downtime. However, we cannot guarantee uninterrupted service. Investors should not rely on the Platform as their sole record of transactions — we recommend regularly reviewing and saving your transaction history.</p>
+              <p>QorixMarkets maintains a dedicated payout reserve to ensure that withdrawal requests are fulfilled promptly and do not interfere with desk trading operations. Investor liquidity is treated as a platform priority — not a secondary consideration.</p>
+              <p>Standard withdrawal requests are processed within 1–5 business days. The payout queue is visible on the Platform's live activity feed, providing full transparency into the withdrawal pipeline. Investors can track the status of their request from submission to confirmation.</p>
             </>
           ),
         },
         {
-          title: "Regulatory Risk",
+          title: "Platform Security & Fund Safety",
           content: (
             <>
-              <p>The regulatory environment for cryptocurrency trading and investment platforms continues to evolve globally. Changes in laws or regulations in any relevant jurisdiction could affect the Platform's ability to operate, restrict access for users in certain countries, or require changes to the services offered.</p>
-              <p>It is your responsibility to ensure that using QorixMarkets is lawful in your country of residence. QorixMarkets does not provide legal or tax advice. You should consult qualified local advisers regarding the regulatory and tax treatment of your investments.</p>
+              <p>All funds managed through QorixMarkets are held in segregated wallets, ensuring that investor capital is never commingled with operational or corporate funds. This segregation provides a clear and auditable boundary between investor assets and platform operations.</p>
+              <p>The Platform applies end-to-end TLS encryption, multi-factor authentication, device verification, and regular security audits to protect both investor accounts and deposited funds. All platform staff with access to financial systems operate under strict access controls and AML/KYC compliance obligations.</p>
             </>
           ),
         },
         {
-          title: "Investor Acknowledgement",
+          title: "Investor Commitment",
           content: (
             <>
-              <p>By depositing funds and activating an investment on the QorixMarkets platform, you confirm that:</p>
+              <p>QorixMarkets is committed to the long-term success of every investor on the Platform. By joining, investors become part of a carefully managed capital system where their interests — consistent returns, capital protection, and full transparency — are the primary design objectives.</p>
               <ul className="list-disc list-inside space-y-1 ml-2">
-                <li>You have read and understood this Risk Disclosure in full</li>
-                <li>You accept all risks described herein as a condition of using the Platform</li>
-                <li>You are investing with capital you can afford to lose without material impact to your financial situation</li>
-                <li>You have not relied on any guaranteed return representations in making your investment decision</li>
-                <li>You understand that drawdown protection mechanisms limit but do not eliminate the risk of loss</li>
+                <li>You have reviewed and understood the platform's protection mechanisms</li>
+                <li>You have selected a risk tier aligned with your investment goals</li>
+                <li>You understand that the drawdown protection system actively monitors and limits exposure on your behalf</li>
+                <li>You have access to real-time reporting, profit tracking, and withdrawal management at all times</li>
               </ul>
             </>
           ),

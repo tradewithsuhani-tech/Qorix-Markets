@@ -449,10 +449,10 @@ function ProtectionTriggeredView({
         <h3 className="font-semibold text-sm mb-4 text-muted-foreground">What happened?</h3>
         <div className="space-y-3 text-sm">
           {[
-            { icon: TrendingUp, text: `You started trading with $${investment.amount.toFixed(2)} USDT at ${activeProfile.label} risk. Peak balance reached: $${peakBalance.toFixed(2)}.`, color: "text-blue-400" },
+            { icon: TrendingUp, text: `You started trading with $${investment.amount.toFixed(2)} USD at ${activeProfile.label} risk. Peak balance reached: $${peakBalance.toFixed(2)}.`, color: "text-blue-400" },
             { icon: AlertTriangle, text: `Market conditions caused a $${investment.drawdown.toFixed(2)} drawdown (${drawdownPct.toFixed(2)}% of your capital, -${drawdownFromPeak.toFixed(2)}% from peak).`, color: "text-orange-400" },
             { icon: Shield, text: `Your ${investment.drawdownLimit}% protection limit was reached, triggering an automatic stop.`, color: "text-red-400" },
-            { icon: CheckCircle, text: `$${capitalPreserved.toFixed(2)} USDT secured. ${recoveryPct > 0 ? `Restart and earn +${recoveryPct.toFixed(2)}% to return to your peak.` : "Your balance is at peak."}`, color: "text-green-400" },
+            { icon: CheckCircle, text: `$${capitalPreserved.toFixed(2)} USD secured. ${recoveryPct > 0 ? `Restart and earn +${recoveryPct.toFixed(2)}% to return to your peak.` : "Your balance is at peak."}`, color: "text-green-400" },
           ].map(({ icon: Icon, text, color }, i) => (
             <div key={i} className="flex items-start gap-3 p-3 rounded-xl bg-white/[0.02] border border-white/[0.04]">
               <Icon style={{ width: 14, height: 14 }} className={`${color} mt-0.5 shrink-0`} />
@@ -854,7 +854,7 @@ export default function InvestPage() {
                   <h2 className="font-semibold">Capital Allocation</h2>
                   <span className="text-xs text-muted-foreground">
                     Available:{" "}
-                    <span className="text-blue-400 font-semibold">${maxAmount.toFixed(2)} USDT</span>
+                    <span className="text-blue-400 font-semibold">${maxAmount.toFixed(2)} USD</span>
                   </span>
                 </div>
 
@@ -875,7 +875,7 @@ export default function InvestPage() {
                     >
                       MAX
                     </button>
-                    <span className="text-muted-foreground text-sm font-medium">USDT</span>
+                    <span className="text-muted-foreground text-sm font-medium">USD</span>
                   </div>
                 </div>
 
@@ -988,7 +988,7 @@ export default function InvestPage() {
                 <h3 className="font-semibold text-sm mb-4">Deployment Summary</h3>
                 <div className="space-y-2.5 text-sm">
                   {[
-                    { label: "Capital", value: numAmount > 0 ? `$${numAmount.toFixed(2)} USDT` : "—" },
+                    { label: "Capital", value: numAmount > 0 ? `$${numAmount.toFixed(2)} USD` : "—" },
                     { label: "Strategy", value: selectedProfile.label },
                     { label: "Daily Rate", value: `${selectedProfile.minDailyPct}–${selectedProfile.maxDailyPct}%`, highlight: true },
                     { label: "Risk Level", value: selectedProfile.volatility },
