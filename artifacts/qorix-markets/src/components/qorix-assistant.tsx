@@ -249,7 +249,7 @@ function MessageBubble({ msg }: { msg: Message }) {
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-export function QorixAssistant() {
+export function QorixAssistant({ guestMode = false }: { guestMode?: boolean } = {}) {
   const { user, token } = useAuth();
   const [, navigate] = useLocation();
   const [isOpen, setIsOpen] = useState(false);
@@ -277,9 +277,13 @@ export function QorixAssistant() {
     if (isOpen) {
       setHasUnread(false);
       setTimeout(() => inputRef.current?.focus(), 300);
-      if (!sessionId && token) initSession();
+      if (guestMode && messages.length === 0) {
+        showBotMessage(FLOWS.main.message, FLOWS.main.options);
+      } else if (!sessionId && token) {
+        initSession();
+      }
     }
-  }, [isOpen, token]);
+  }, [isOpen, token, guestMode]);
 
   // Poll for admin replies in expert mode
   useEffect(() => {
@@ -365,17 +369,35 @@ export function QorixAssistant() {
     if (value === "start_investing") {
       addUserMessage("Start Investing");
       await saveUserMessage("Start Investing");
-      const msg = "Great! Let me take you to the investment dashboard. 🚀\n\nFrom there you can activate your investment profile, choose your risk level, and begin your journey with Qorix Markets.";
-      showBotMessage(msg, []);
+      const msg = guestMode
+        ? "Great! To get started, you'll need to create a free account or sign in. 🚀\n\nIt only takes 2 minutes — then you can activate your investment profile and begin earning."
+        : "Great! Let me take you to the investment dashboard. 🚀\n\nFrom there you can activate your investment profile, choose your risk level, and begin your journey with Qorix Markets.";
+      showBotMessage(msg, guestMode ? [{ label: "🔐 Sign In / Register", value: "go_login" }] : []);
       saveBotMessage(msg);
+      if (!guestMode) {
+        setTimeout(() => {
+          setIsOpen(false);
+          navigate("/invest");
+        }, 1800);
+      }
+      return;
+    }
+
+    if (value === "go_login") {
+      addUserMessage("Sign In / Register");
       setTimeout(() => {
         setIsOpen(false);
-        navigate("/invest");
-      }, 1800);
+        navigate("/login");
+      }, 400);
       return;
     }
 
     if (value === "expert") {
+      if (guestMode) {
+        addUserMessage("Talk to Expert");
+        showBotMessage("To connect with our expert team, please create a free account first. Our advisors are standing by! 💬\n\nSign up takes under 2 minutes.", [{ label: "🔐 Sign In / Register", value: "go_login" }, { label: "🏠 Back to Menu", value: "main_menu" }]);
+        return;
+      }
       addUserMessage("Talk to Expert");
       await saveUserMessage("Talk to Expert");
       await handleExpertRequest();
@@ -442,8 +464,9 @@ export function QorixAssistant() {
     setExpertMode(false);
     setInputText("");
     setShowEndConfirm(false);
-    // Trigger a fresh session
-    if (token) {
+    if (guestMode) {
+      setTimeout(() => showBotMessage(FLOWS.main.message, FLOWS.main.options), 100);
+    } else if (token) {
       setTimeout(() => initSession(), 100);
     }
   }
@@ -487,7 +510,7 @@ export function QorixAssistant() {
   const lastBotMessage = [...messages].reverse().find(m => m.type === "bot" && m.options && m.options.length > 0);
   const showOptions = lastBotMessage?.options && lastBotMessage.options.length > 0;
 
-  if (!token) return null;
+  if (!token && !guestMode) return null;
 
   return (
     <>

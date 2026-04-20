@@ -1,5 +1,6 @@
 import { useRef, useEffect, useState } from "react";
 import { EconomicNewsLandingWidget } from "@/components/economic-news-widget";
+import { QorixAssistant } from "@/components/qorix-assistant";
 import { useLocation } from "wouter";
 import { motion, useInView, useMotionValue, useSpring, AnimatePresence } from "framer-motion";
 import {
@@ -522,6 +523,7 @@ export default function Landing() {
   const slotsFilled = Math.min(95, Math.round(((slotsTotal - slotsRemaining) / slotsTotal) * 100));
 
   return (
+    <>
     <div className="min-h-screen overflow-x-hidden" style={{ background: "#050814", color: "#e2e8f0" }}>
 
       <header className="sticky top-0 z-50 border-b" style={{ background: "rgba(5,8,20,0.88)", backdropFilter: "blur(24px)", borderColor: "rgba(255,255,255,0.06)" }}>
@@ -1028,5 +1030,7 @@ export default function Landing() {
         </div>
       </footer>
     </div>
+    <QorixAssistant guestMode />
+    </>
   );
 }
