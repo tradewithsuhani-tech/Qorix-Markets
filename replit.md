@@ -69,6 +69,27 @@ lib/
 - Admin: `admin@qorix.com` / `Admin@1234`
 - Demo User: `demo@qorix.com` / `Demo@1234`
 
+## TRON USDT Deposit System (Modular)
+
+Self-contained on-chain deposit pipeline in `artifacts/api-server/src/lib/crypto-deposit/`:
+
+- **`wallet.ts`** — In-memory wallet store. `createWallet()` generates a fresh TRON address + private key pair (via `tron-address.ts`) and tracks a per-wallet USDT balance.
+- **`depositWatcher.ts`** — Background poller (every 15 s). Iterates all registered wallets, fetches TRC20 USDT transfers from TronGrid, deduplicates by tx hash, credits balance, and kicks off the sweep pipeline.
+- **`sweep.ts`** — Two-step sweep: (1) sends 1 TRX from MAIN_WALLET to the deposit wallet for gas, waits 8 s, then (2) sweeps all USDT back to MAIN_WALLET using TronWeb + the user's private key.
+
+**Required env vars** (set in Secrets):
+
+| Variable | Description |
+|---|---|
+| `TRONGRID_API_KEY` | TronGrid Pro API key |
+| `MAIN_WALLET` | Platform wallet address (receives swept USDT) |
+| `MAIN_PRIVATE_KEY` | Private key for MAIN_WALLET (sends TRX gas + is destination) |
+| `USDT_CONTRACT` | TRC20 USDT contract (default: `TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t`) |
+
+**Public API endpoints** (no auth required):
+- `POST /api/create-wallet` — generate a new deposit wallet
+- `GET /api/balance/:address` — query in-memory USDT balance
+
 ## API Routes
 
 All routes prefixed with `/api`:

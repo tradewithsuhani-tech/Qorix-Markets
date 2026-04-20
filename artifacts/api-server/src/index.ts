@@ -12,6 +12,7 @@ async function main() {
   const { startDepositWorker } = await import("./workers/deposit-worker");
   const { startProfitEventWorker } = await import("./workers/profit-event-worker");
   const { startTronMonitor } = await import("./lib/tron-monitor");
+  const { startDepositWatcher } = await import("./lib/crypto-deposit/depositWatcher");
 
   const rawPort = process.env["PORT"];
   if (!rawPort) throw new Error("PORT environment variable is required but was not provided.");
@@ -22,10 +23,12 @@ async function main() {
   const depositWorker = startDepositWorker();
   const profitEventWorker = startProfitEventWorker();
   const tronMonitor = startTronMonitor();
+  const depositWatcher = startDepositWatcher();
 
   const gracefulShutdown = async (signal: string) => {
     logger.info({ signal }, "Received shutdown signal — closing workers and server");
     tronMonitor.stop();
+    depositWatcher.stop();
     await Promise.all([
       profitDistributionWorker.close(),
       depositWorker.close(),
