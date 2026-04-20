@@ -5,6 +5,7 @@ import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import { TrendingUp, Lock, Mail, User as UserIcon, ArrowLeft, Eye, EyeOff, ShieldCheck, CheckCircle2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { Turnstile, CAPTCHA_ENABLED } from "@/components/turnstile";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
 function apiUrl(path: string) { return `${BASE_URL}/api${path}`; }
@@ -134,6 +135,7 @@ export default function LoginPage() {
   const [referralCode, setReferralCode] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showOtpStep, setShowOtpStep] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState("");
   const autoHideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pageLoadTime = useRef<number>(Date.now());
 
@@ -185,26 +187,32 @@ export default function LoginPage() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
+    if (CAPTCHA_ENABLED && !captchaToken) {
+      toast({ title: "Please complete the captcha", variant: "destructive" });
+      return;
+    }
+
     if (isLogin) {
-      loginMutation.mutate({ data: { email, password } });
+      loginMutation.mutate({ data: { email, password, captchaToken } as any });
     } else {
-      // Pass page load time header via a custom approach — we attach it to the body
-      // The backend reads x-page-load-time header; we send it via a custom fetch
-      // For the generated hook we can pass it as extra body fields (backend ignores unknown body fields)
       registerMutation.mutate({
         data: {
           email,
           password,
           fullName,
           referralCode: referralCode || undefined,
+          captchaToken,
           _hp: "",            // honeypot — must be empty (bots fill this)
           _plt: pageLoadTime.current.toString(), // page load time for bot timing check
         } as any,
       });
     }
+    // Turnstile tokens are single-use; widget will auto-refresh via callback
+    setCaptchaToken("");
   };
 
   const isPending = loginMutation.isPending || registerMutation.isPending;
+  const canSubmit = !isPending && (!CAPTCHA_ENABLED || !!captchaToken);
 
   // ── OTP verification step ──
   if (showOtpStep) {
@@ -382,7 +390,17 @@ export default function LoginPage() {
               )}
             </AnimatePresence>
 
-            <button type="submit" disabled={isPending} className="btn btn-primary w-full mt-1">
+            {CAPTCHA_ENABLED && (
+              <div className="pt-1">
+                <Turnstile
+                  onVerify={(t) => setCaptchaToken(t)}
+                  onExpire={() => setCaptchaToken("")}
+                  action={isLogin ? "login" : "register"}
+                />
+              </div>
+            )}
+
+            <button type="submit" disabled={!canSubmit} className="btn btn-primary w-full mt-1">
               {isPending ? "Please wait…" : isLogin ? "Sign In" : "Create Account"}
             </button>
           </form>
