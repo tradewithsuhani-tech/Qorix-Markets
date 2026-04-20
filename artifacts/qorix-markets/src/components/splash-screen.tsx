@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { TrendingUp } from "lucide-react";
+import { QorixLogo } from "@/components/qorix-logo";
 
 export function SplashScreen({ onDone }: { onDone: () => void }) {
   const [phase, setPhase] = useState<"in" | "hold" | "out">("in");
@@ -43,8 +43,8 @@ export function SplashScreen({ onDone }: { onDone: () => void }) {
                 boxShadow: "0 0 60px 10px rgba(59,130,246,0.25)",
               }}
             />
-            <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-2xl shadow-blue-500/30 relative">
-              <TrendingUp className="w-10 h-10 text-white" />
+            <div className="w-24 h-24 rounded-2xl overflow-hidden flex items-center justify-center shadow-2xl shadow-blue-500/30 relative">
+              <QorixLogo size={96} />
             </div>
           </motion.div>
 
