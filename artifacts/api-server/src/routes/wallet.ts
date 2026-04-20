@@ -17,25 +17,32 @@ import { verifyOtp } from "../lib/email-service";
 const router = Router();
 router.use(authMiddleware);
 
-function formatWallet(w: typeof walletsTable.$inferSelect) {
+function formatWallet(w: typeof walletsTable.$inferSelect, points = 0) {
   return {
     id: w.id,
     userId: w.userId,
     mainBalance: parseFloat(w.mainBalance as string),
     tradingBalance: parseFloat(w.tradingBalance as string),
     profitBalance: parseFloat(w.profitBalance as string),
+    points,
     updatedAt: w.updatedAt.toISOString(),
   };
 }
 
+async function getUserPoints(userId: number): Promise<number> {
+  const rows = await db.select({ points: usersTable.points }).from(usersTable).where(eq(usersTable.id, userId)).limit(1);
+  return rows[0]?.points ?? 0;
+}
+
 router.get("/wallet", async (req: AuthRequest, res) => {
   const wallets = await db.select().from(walletsTable).where(eq(walletsTable.userId, req.userId!)).limit(1);
+  const points = await getUserPoints(req.userId!);
   if (wallets.length === 0) {
     const [newWallet] = await db.insert(walletsTable).values({ userId: req.userId! }).returning();
-    res.json(formatWallet(newWallet!));
+    res.json(formatWallet(newWallet!, points));
     return;
   }
-  res.json(formatWallet(wallets[0]!));
+  res.json(formatWallet(wallets[0]!, points));
 });
 
 router.post("/wallet/deposit", async (req: AuthRequest, res) => {

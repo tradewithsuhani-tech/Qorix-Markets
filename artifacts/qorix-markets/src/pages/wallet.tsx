@@ -65,7 +65,9 @@ export default function WalletPage() {
   const [withdrawAmount, setWithdrawAmount] = useState("");
   const [withdrawAddress, setWithdrawAddress] = useState("");
   const [withdrawSource, setWithdrawSource] = useState<"profit" | "main">("profit");
+  const [usePoints, setUsePoints] = useState(false);
   const [transferAmount, setTransferAmount] = useState("");
+  const userPoints = (wallet as any)?.points ?? 0;
 
   // OTP withdrawal flow
   const [withdrawStep, setWithdrawStep] = useState<"form" | "review" | "otp" | "success">("form");
@@ -106,10 +108,11 @@ export default function WalletPage() {
           walletAddress: withdrawAddress,
           otp: withdrawOtp,
           source: withdrawSource,
+          usePoints: pointsToSpend,
         }),
       });
       const amt = Number(withdrawAmount);
-      const fee = amt * withdrawalFee;
+      const fee = feeAmount;
       setWithdrawReceipt({
         id: res.id,
         netAmount: amt - fee,
@@ -141,8 +144,12 @@ export default function WalletPage() {
     }
   });
 
-  const netWithdraw = Number(withdrawAmount) * (1 - withdrawalFee);
-  const feeAmount = Number(withdrawAmount) * withdrawalFee;
+  const grossFee = Number(withdrawAmount) * withdrawalFee;
+  const maxPointsByValue = Math.floor((grossFee * 0.5) * 100); // 1pt = $0.01, max 50% off
+  const pointsToSpend = usePoints ? Math.min(userPoints, maxPointsByValue) : 0;
+  const pointsDiscount = pointsToSpend * 0.01;
+  const feeAmount = Math.max(0, grossFee - pointsDiscount);
+  const netWithdraw = Number(withdrawAmount) - feeAmount;
 
   return (
     <Layout>
@@ -346,8 +353,29 @@ export default function WalletPage() {
                       <Info style={{ width: 11, height: 11 }} />
                       Fee ({withdrawalFeePercent}% · {vip?.label ?? "Standard"})
                     </span>
-                    <span className="text-red-400">−${feeAmount.toFixed(2)}</span>
+                    <span className="text-red-400">−${grossFee.toFixed(2)}</span>
                   </div>
+                  {userPoints > 0 && maxPointsByValue > 0 && withdrawStep !== "otp" && (
+                    <button
+                      type="button"
+                      onClick={() => setUsePoints(!usePoints)}
+                      className={`w-full flex items-center justify-between rounded-lg px-2 py-1.5 border transition-colors ${
+                        usePoints
+                          ? "bg-amber-500/15 border-amber-500/40 text-amber-300"
+                          : "bg-white/[0.02] border-white/10 text-muted-foreground hover:bg-white/[0.04]"
+                      }`}
+                    >
+                      <span className="flex items-center gap-1.5">
+                        <span className={`w-3.5 h-3.5 rounded-sm border flex items-center justify-center ${usePoints ? "bg-amber-400 border-amber-400" : "border-white/20"}`}>
+                          {usePoints && <CheckCircle2 style={{ width: 10, height: 10 }} className="text-black" />}
+                        </span>
+                        Use {pointsToSpend > 0 ? pointsToSpend : "up to " + Math.min(userPoints, maxPointsByValue)} pts ({userPoints.toLocaleString()} avail)
+                      </span>
+                      {usePoints && pointsDiscount > 0 && (
+                        <span className="text-emerald-400 font-semibold">−${pointsDiscount.toFixed(2)}</span>
+                      )}
+                    </button>
+                  )}
                   <div className="h-px bg-white/5" />
                   <div className="flex items-center justify-between font-semibold">
                     <span className="text-muted-foreground">You receive</span>
