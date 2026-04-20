@@ -140,9 +140,14 @@ router.post("/wallet/withdraw", async (req: AuthRequest, res) => {
     return;
   }
 
+  const rawSource = (req.body?.source as string | undefined) ?? "profit";
+  const source: "main" | "profit" = rawSource === "main" ? "main" : "profit";
+
   const profitBalance = parseFloat(wallet.profitBalance as string);
-  if (amount > profitBalance) {
-    res.status(400).json({ error: "Insufficient profit balance" });
+  const mainBalance = parseFloat(wallet.mainBalance as string);
+  const sourceBalance = source === "main" ? mainBalance : profitBalance;
+  if (amount > sourceBalance) {
+    res.status(400).json({ error: `Insufficient ${source} balance` });
     return;
   }
 
@@ -159,10 +164,18 @@ router.post("/wallet/withdraw", async (req: AuthRequest, res) => {
   const [txnRecord] = await db.transaction(async (tx) => {
     await ensureUserAccounts(req.userId!, tx);
 
+    const balanceUpdate: Record<string, any> = { updatedAt: new Date() };
+    if (source === "main") {
+      balanceUpdate["mainBalance"] = (mainBalance - amount).toString();
+    } else {
+      balanceUpdate["profitBalance"] = (profitBalance - amount).toString();
+    }
     await tx
       .update(walletsTable)
-      .set({ profitBalance: (profitBalance - amount).toString(), updatedAt: new Date() })
+      .set(balanceUpdate)
       .where(eq(walletsTable.userId, req.userId!));
+
+    const userAccountCode = `user:${req.userId!}:${source}`;
 
     if (feeAmount > 0) {
       const [feeTxn] = await tx
@@ -179,7 +192,7 @@ router.post("/wallet/withdraw", async (req: AuthRequest, res) => {
       await postJournalEntry(
         journalForTransaction(feeTxn!.id),
         [
-          { accountCode: `user:${req.userId!}:profit`, entryType: "debit", amount: feeAmount, description: `Withdrawal fee charged` },
+          { accountCode: userAccountCode, entryType: "debit", amount: feeAmount, description: `Withdrawal fee charged` },
           { accountCode: "platform:fee_revenue", entryType: "credit", amount: feeAmount, description: `Fee revenue — ${vipInfo.label} tier` },
         ],
         feeTxn!.id,
@@ -194,7 +207,7 @@ router.post("/wallet/withdraw", async (req: AuthRequest, res) => {
         type: "withdrawal",
         amount: netAmount.toString(),
         status: "pending",
-        description: `Withdrawal to ${walletAddress}${feeAmount > 0 ? ` (fee: $${feeAmount.toFixed(2)})` : ""}`,
+        description: `Withdrawal from ${source} to ${walletAddress}${feeAmount > 0 ? ` (fee: $${feeAmount.toFixed(2)})` : ""}`,
         walletAddress,
       })
       .returning();
@@ -202,7 +215,7 @@ router.post("/wallet/withdraw", async (req: AuthRequest, res) => {
     await postJournalEntry(
       journalForTransaction(withdrawalTxn!.id),
       [
-        { accountCode: `user:${req.userId!}:profit`, entryType: "debit", amount: netAmount, description: `Withdrawal requested to ${walletAddress}` },
+        { accountCode: userAccountCode, entryType: "debit", amount: netAmount, description: `Withdrawal requested to ${walletAddress}` },
         { accountCode: "platform:usdt_pool", entryType: "credit", amount: netAmount, description: `Withdrawal outflow` },
       ],
       withdrawalTxn!.id,

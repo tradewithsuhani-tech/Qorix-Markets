@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Wallet as WalletIcon, ArrowUpFromLine,
   ArrowRightLeft, Info, AlertCircle, Mail, ShieldCheck, X,
+  CheckCircle2, Clock,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
@@ -62,13 +63,23 @@ export default function WalletPage() {
 
   const [withdrawAmount, setWithdrawAmount] = useState("");
   const [withdrawAddress, setWithdrawAddress] = useState("");
+  const [withdrawSource, setWithdrawSource] = useState<"profit" | "main">("profit");
   const [transferAmount, setTransferAmount] = useState("");
 
   // OTP withdrawal flow
-  const [withdrawStep, setWithdrawStep] = useState<"form" | "otp">("form");
+  const [withdrawStep, setWithdrawStep] = useState<"form" | "otp" | "success">("form");
   const [withdrawOtp, setWithdrawOtp] = useState("");
   const [sendingOtp, setSendingOtp] = useState(false);
   const [withdrawing, setWithdrawing] = useState(false);
+  const [withdrawReceipt, setWithdrawReceipt] = useState<{
+    id: number; netAmount: number; fee: number; source: string; address: string; at: string;
+  } | null>(null);
+
+  const sourceBalance = withdrawSource === "main" ? (wallet?.mainBalance || 0) : (wallet?.profitBalance || 0);
+  const resetWithdrawForm = () => {
+    setWithdrawAmount(""); setWithdrawAddress(""); setWithdrawOtp("");
+    setWithdrawStep("form"); setWithdrawReceipt(null);
+  };
 
   const requestWithdrawalOtp = async () => {
     setSendingOtp(true);
@@ -87,16 +98,28 @@ export default function WalletPage() {
     if (!withdrawOtp.trim()) return;
     setWithdrawing(true);
     try {
-      await apiFetch("/wallet/withdraw", {
+      const res = await apiFetch("/wallet/withdraw", {
         method: "POST",
-        body: JSON.stringify({ amount: Number(withdrawAmount), walletAddress: withdrawAddress, otp: withdrawOtp }),
+        body: JSON.stringify({
+          amount: Number(withdrawAmount),
+          walletAddress: withdrawAddress,
+          otp: withdrawOtp,
+          source: withdrawSource,
+        }),
       });
+      const amt = Number(withdrawAmount);
+      const fee = amt * withdrawalFee;
+      setWithdrawReceipt({
+        id: res.id,
+        netAmount: amt - fee,
+        fee,
+        source: withdrawSource,
+        address: withdrawAddress,
+        at: res.createdAt ?? new Date().toISOString(),
+      });
+      setWithdrawStep("success");
       toast({ title: "Withdrawal requested", description: "Your request is pending admin approval." });
       queryClient.invalidateQueries({ queryKey: getGetWalletQueryKey() });
-      setWithdrawAmount("");
-      setWithdrawAddress("");
-      setWithdrawOtp("");
-      setWithdrawStep("form");
     } catch (err: any) {
       toast({ title: "Withdrawal failed", description: err.message, variant: "destructive" });
     } finally {
@@ -253,13 +276,46 @@ export default function WalletPage() {
                   <ArrowUpFromLine style={{ width: 16, height: 16 }} />
                 </div>
                 <div>
-                  <div className="font-semibold text-sm">Withdraw Profits</div>
+                  <div className="font-semibold text-sm">Withdraw Funds</div>
                   <div className="text-xs text-muted-foreground">Send to USD wallet</div>
                 </div>
               </div>
               <VipBadge tier={vipTier} size="xs" />
             </div>
+
+            {withdrawStep !== "success" && (
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => { setWithdrawSource("profit"); setWithdrawAmount(""); }}
+                  className={`rounded-xl px-3 py-2.5 border text-left transition-all ${
+                    withdrawSource === "profit"
+                      ? "bg-emerald-500/15 border-emerald-500/50"
+                      : "bg-white/[0.02] border-white/10 hover:bg-white/[0.04]"
+                  }`}
+                >
+                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground">From Profit</div>
+                  <div className={`text-sm font-bold ${withdrawSource === "profit" ? "text-emerald-400" : "text-white/80"}`}>
+                    ${(wallet?.profitBalance || 0).toFixed(2)}
+                  </div>
+                </button>
+                <button
+                  onClick={() => { setWithdrawSource("main"); setWithdrawAmount(""); }}
+                  className={`rounded-xl px-3 py-2.5 border text-left transition-all ${
+                    withdrawSource === "main"
+                      ? "bg-blue-500/15 border-blue-500/50"
+                      : "bg-white/[0.02] border-white/10 hover:bg-white/[0.04]"
+                  }`}
+                >
+                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground">From Main</div>
+                  <div className={`text-sm font-bold ${withdrawSource === "main" ? "text-blue-400" : "text-white/80"}`}>
+                    ${(wallet?.mainBalance || 0).toFixed(2)}
+                  </div>
+                </button>
+              </div>
+            )}
+
             <div className="space-y-3">
+              {withdrawStep !== "success" && (
               <div>
                 <label className="text-xs text-muted-foreground font-medium mb-1.5 block">Amount (USD)</label>
                 <div className="relative">
@@ -270,15 +326,17 @@ export default function WalletPage() {
                     className="field-input pr-14"
                     placeholder="100"
                     min="0"
+                    disabled={withdrawStep === "otp"}
                   />
                   <button
-                    onClick={() => setWithdrawAmount(String(wallet?.profitBalance || 0))}
+                    onClick={() => setWithdrawAmount(String(sourceBalance))}
                     className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-blue-400 font-bold px-2 py-1 bg-blue-500/10 rounded-lg hover:bg-blue-500/20 transition"
                   >
                     MAX
                   </button>
                 </div>
               </div>
+              )}
 
               {Number(withdrawAmount) > 0 && (
                 <div className="bg-black/20 border border-white/8 rounded-xl px-3 py-2.5 space-y-1.5 text-xs">
@@ -297,32 +355,37 @@ export default function WalletPage() {
                 </div>
               )}
 
-              <div>
-                <label className="text-xs text-muted-foreground font-medium mb-1.5 block">USD Wallet Address</label>
-                <input
-                  type="text"
-                  value={withdrawAddress}
-                  onChange={(e) => setWithdrawAddress(e.target.value)}
-                  className="field-input font-mono text-sm"
-                  placeholder="T…"
-                />
-              </div>
+              {withdrawStep !== "success" && (
+                <div>
+                  <label className="text-xs text-muted-foreground font-medium mb-1.5 block">USD Wallet Address</label>
+                  <input
+                    type="text"
+                    value={withdrawAddress}
+                    onChange={(e) => setWithdrawAddress(e.target.value)}
+                    className="field-input font-mono text-sm"
+                    placeholder="T…"
+                    disabled={withdrawStep === "otp"}
+                  />
+                </div>
+              )}
 
               <AnimatePresence mode="wait">
-                {withdrawStep === "form" ? (
+                {withdrawStep === "form" && (
                   <motion.button
                     key="request-otp"
                     initial={{ opacity: 0, y: 4 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -4 }}
                     onClick={requestWithdrawalOtp}
-                    disabled={sendingOtp || !withdrawAmount || !withdrawAddress || Number(withdrawAmount) <= 0}
+                    disabled={sendingOtp || !withdrawAmount || !withdrawAddress || Number(withdrawAmount) <= 0 || Number(withdrawAmount) > sourceBalance}
                     className="btn btn-success w-full flex items-center justify-center gap-2"
                   >
                     <Mail style={{ width: 14, height: 14 }} />
-                    {sendingOtp ? "Sending OTP…" : "Send Confirmation Code"}
+                    {sendingOtp ? "Sending OTP…" : Number(withdrawAmount) > sourceBalance ? "Amount exceeds balance" : "Send Confirmation Code"}
                   </motion.button>
-                ) : (
+                )}
+
+                {withdrawStep === "otp" && (
                   <motion.div
                     key="otp-step"
                     initial={{ opacity: 0, y: 4 }}
@@ -361,6 +424,62 @@ export default function WalletPage() {
                     </button>
                   </motion.div>
                 )}
+
+                {withdrawStep === "success" && withdrawReceipt && (
+                  <motion.div
+                    key="success-step"
+                    initial={{ opacity: 0, scale: 0.96 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="space-y-4"
+                  >
+                    <div className="flex flex-col items-center text-center py-3">
+                      <motion.div
+                        initial={{ scale: 0 }}
+                        animate={{ scale: 1 }}
+                        transition={{ type: "spring", stiffness: 260, damping: 18 }}
+                        className="w-14 h-14 rounded-full bg-emerald-500/15 border border-emerald-500/40 flex items-center justify-center mb-3"
+                      >
+                        <CheckCircle2 className="w-7 h-7 text-emerald-400" />
+                      </motion.div>
+                      <div className="text-base font-bold text-white">Withdrawal Requested</div>
+                      <div className="text-xs text-muted-foreground mt-0.5">Your funds are on the way</div>
+                    </div>
+
+                    <div className="rounded-xl border border-white/10 bg-black/20 divide-y divide-white/5 text-xs">
+                      <Row label="Reference ID" value={`#WD-${withdrawReceipt.id}`} mono />
+                      <Row label="You'll Receive" value={`$${withdrawReceipt.netAmount.toFixed(2)} USD`} highlight />
+                      <Row label="Network Fee" value={`$${withdrawReceipt.fee.toFixed(2)}`} />
+                      <Row label="From" value={withdrawReceipt.source === "main" ? "Main Balance" : "Profit Balance"} />
+                      <Row
+                        label="To Address"
+                        value={`${withdrawReceipt.address.slice(0, 10)}…${withdrawReceipt.address.slice(-6)}`}
+                        mono
+                      />
+                      <Row label="Submitted" value={new Date(withdrawReceipt.at).toLocaleString()} />
+                    </div>
+
+                    <div className="flex items-start gap-2 rounded-xl border border-amber-500/20 bg-amber-500/5 px-3 py-2.5 text-xs text-amber-300/90">
+                      <Clock className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                      <span>Admin will review within <b>24 hours</b>. You'll receive a notification once approved and funds are dispatched to your wallet.</span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        onClick={resetWithdrawForm}
+                        className="px-4 py-2.5 rounded-xl bg-white/5 border border-white/10 text-sm text-white hover:bg-white/10 transition-colors"
+                      >
+                        New Withdrawal
+                      </button>
+                      <a
+                        href="/transactions"
+                        className="px-4 py-2.5 rounded-xl bg-blue-500/15 border border-blue-500/40 text-sm text-blue-300 hover:bg-blue-500/25 transition-colors text-center"
+                      >
+                        View Transactions
+                      </a>
+                    </div>
+                  </motion.div>
+                )}
               </AnimatePresence>
             </div>
           </div>
@@ -377,5 +496,16 @@ export default function WalletPage() {
 
       </motion.div>
     </Layout>
+  );
+}
+
+function Row({ label, value, mono, highlight }: { label: string; value: string; mono?: boolean; highlight?: boolean }) {
+  return (
+    <div className="flex items-center justify-between px-3 py-2.5">
+      <span className="text-muted-foreground">{label}</span>
+      <span className={`${mono ? "font-mono" : "font-medium"} ${highlight ? "text-emerald-400 font-bold" : "text-white"}`}>
+        {value}
+      </span>
+    </div>
   );
 }
