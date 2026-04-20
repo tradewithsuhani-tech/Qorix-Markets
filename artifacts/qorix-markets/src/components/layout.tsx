@@ -380,6 +380,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/analytics", label: "Analytics", icon: BarChart2 },
     { href: "/market-insights", label: "Market Insights", icon: Globe },
     { href: "/trading-desk", label: "Trading Desk", icon: Briefcase },
+    { href: "/trade-activity", label: "Trade Activity", icon: Activity },
     { href: "/transactions", label: "History", icon: History },
     { href: "/referral", label: "Referrals", icon: Users },
     { href: "/rewards", label: "Rewards", icon: Trophy },
