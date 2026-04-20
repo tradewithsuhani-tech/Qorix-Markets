@@ -2,6 +2,24 @@ import { db, emailOtpsTable, usersTable } from "@workspace/db";
 import { eq, and, gt } from "drizzle-orm";
 import { logger } from "./logger";
 import crypto from "crypto";
+import { SESClient, SendEmailCommand } from "@aws-sdk/client-ses";
+
+// ---------------------------------------------------------------------------
+// Amazon SES client (lazy-initialized; only created if AWS creds are set)
+// ---------------------------------------------------------------------------
+let sesClient: SESClient | null = null;
+function getSesClient(): SESClient | null {
+  if (sesClient) return sesClient;
+  const region = process.env.AWS_REGION;
+  const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
+  const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
+  if (!region || !accessKeyId || !secretAccessKey) return null;
+  sesClient = new SESClient({
+    region,
+    credentials: { accessKeyId, secretAccessKey },
+  });
+  return sesClient;
+}
 
 function generateOtp(length = 6): string {
   const digits = "0123456789";
@@ -14,16 +32,36 @@ function generateOtp(length = 6): string {
 }
 
 // ---------------------------------------------------------------------------
-// In production replace this with a real SMTP/Resend/SendGrid call.
-// In development the OTP is printed to the server log so devs can test.
+// Send an email via Amazon SES. Falls back to a dev log when AWS creds or
+// SES_FROM_EMAIL are not configured (so local/dev flow works without setup).
 // ---------------------------------------------------------------------------
 async function sendEmail(to: string, subject: string, body: string): Promise<void> {
-  if (process.env.NODE_ENV !== "production") {
-    logger.info({ to, subject, body }, "[email-service] DEV — email would be sent");
+  const client = getSesClient();
+  const from = process.env.SES_FROM_EMAIL;
+
+  if (!client || !from) {
+    if (process.env.NODE_ENV !== "production") {
+      logger.info({ to, subject, body }, "[email-service] DEV — email would be sent (SES not configured)");
+    } else {
+      logger.warn({ to, subject }, "[email-service] SES not configured — email NOT sent");
+    }
     return;
   }
-  // Production: integrate real email provider here (Resend, SendGrid, SMTP, etc.)
-  logger.warn({ to, subject }, "[email-service] No email provider configured — email NOT sent");
+
+  try {
+    await client.send(new SendEmailCommand({
+      Source: from,
+      Destination: { ToAddresses: [to] },
+      Message: {
+        Subject: { Data: subject, Charset: "UTF-8" },
+        Body: { Text: { Data: body, Charset: "UTF-8" } },
+      },
+    }));
+    logger.info({ to, subject }, "[email-service] email sent via SES");
+  } catch (err) {
+    logger.error({ err, to, subject }, "[email-service] SES send failed");
+    // Don't throw — we still want the OTP saved in DB so user can retry
+  }
 }
 
 // ---------------------------------------------------------------------------
