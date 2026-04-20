@@ -19,6 +19,7 @@ import DepositPage from "@/pages/deposit";
 import InvestPage from "@/pages/invest";
 import TransactionsPage from "@/pages/transactions";
 import ReferralPage from "@/pages/referral";
+import RewardsPage from "@/pages/rewards";
 import AdminPage from "@/pages/admin";
 import AdminIntelligencePage from "@/pages/admin-intelligence";
 import AdminFraudPage from "@/pages/admin-fraud";
@@ -94,6 +95,7 @@ function Router() {
       <Route path="/invest"><ProtectedRoute component={InvestPage} /></Route>
       <Route path="/transactions"><ProtectedRoute component={TransactionsPage} /></Route>
       <Route path="/referral"><ProtectedRoute component={ReferralPage} /></Route>
+      <Route path="/rewards"><ProtectedRoute component={RewardsPage} /></Route>
       <Route path="/analytics"><ProtectedRoute component={AnalyticsPage} /></Route>
       <Route path="/trading-desk"><ProtectedRoute component={TradingDeskPage} /></Route>
       <Route path="/admin"><ProtectedRoute component={AdminPage} adminOnly={true} /></Route>
