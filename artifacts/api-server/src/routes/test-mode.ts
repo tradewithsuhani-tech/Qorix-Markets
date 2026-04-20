@@ -532,13 +532,17 @@ router.post("/test/seed-users", async (req, res) => {
           description: `[TEST] Seed deposit of $${depositAmount}`,
         }).returning();
 
+        const tradingAlloc = depositAmount * 0.3;
+        const mainRemainder = depositAmount - tradingAlloc;
+
         await db.update(walletsTable).set({
-          mainBalance: depositAmount.toString(),
-          tradingBalance: (depositAmount * 0.3).toString(),
-          profitBalance: (depositAmount * 0.05).toString(),
+          mainBalance: mainRemainder.toString(),
+          tradingBalance: tradingAlloc.toString(),
+          profitBalance: "0",
           updatedAt: new Date(),
         }).where(eq(walletsTable.userId, user.id));
 
+        // Journal 1: deposit (usdt_pool ← funds, user:main credited)
         await postJournalEntry(
           journalForTransaction(txn!.id),
           [
@@ -548,9 +552,18 @@ router.post("/test/seed-users", async (req, res) => {
           txn!.id,
         );
 
+        // Journal 2: internal transfer main → trading (so wallets match ledger)
+        await postJournalEntry(
+          journalForSystem(`seed-alloc-${user.id}`),
+          [
+            { accountCode: `user:${user.id}:main`,    entryType: "debit",  amount: tradingAlloc, description: "Test seed: allocate to trading" },
+            { accountCode: `user:${user.id}:trading`, entryType: "credit", amount: tradingAlloc, description: "Test seed: allocate to trading" },
+          ],
+        );
+
         await db.insert(investmentsTable).values({
           userId: user.id,
-          amount: (depositAmount * 0.3).toString(),
+          amount: tradingAlloc.toString(),
           riskLevel,
           isActive: true,
           startedAt: new Date(),
