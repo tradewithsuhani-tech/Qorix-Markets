@@ -9,7 +9,9 @@ import {
   dailyProfitRunsTable,
   glAccountsTable,
   ledgerEntriesTable,
+  notificationsTable,
 } from "@workspace/db";
+import { loginEventsTable } from "@workspace/db/schema";
 import { eq, sum, count, and, desc, sql } from "drizzle-orm";
 import { authMiddleware, adminMiddleware, type AuthRequest } from "../middlewares/auth";
 import { SetDailyProfitBody } from "@workspace/api-zod";
@@ -178,10 +180,15 @@ router.get("/admin/users", async (req, res) => {
         email: u.email,
         fullName: u.fullName,
         isAdmin: u.isAdmin,
+        adminRole: u.adminRole,
+        kycStatus: u.kycStatus,
+        isDisabled: u.isDisabled,
+        isFrozen: u.isFrozen,
         mainBalance: wallet ? parseFloat(wallet.mainBalance as string) : 0,
         tradingBalance: wallet ? parseFloat(wallet.tradingBalance as string) : 0,
         profitBalance: wallet ? parseFloat(wallet.profitBalance as string) : 0,
         investmentAmount: inv ? parseFloat(inv.amount as string) : 0,
+        riskLevel: inv?.riskLevel ?? "low",
         isTrading: inv?.isActive ?? false,
         referralCode: u.referralCode,
         createdAt: u.createdAt.toISOString(),
@@ -190,6 +197,167 @@ router.get("/admin/users", async (req, res) => {
   );
 
   res.json({ data, total, page, totalPages: Math.ceil(total / limit) });
+});
+
+router.post("/admin/users/:id/action", async (req: AuthRequest, res) => {
+  const id = parseInt(req.params["id"]!);
+  const { action } = req.body as { action?: string };
+  const updates: Partial<typeof usersTable.$inferInsert> = {};
+
+  if (action === "freeze") updates.isFrozen = true;
+  else if (action === "unfreeze") updates.isFrozen = false;
+  else if (action === "disable") updates.isDisabled = true;
+  else if (action === "enable") updates.isDisabled = false;
+  else if (action === "force_logout") updates.forceLogoutAfter = new Date();
+  else {
+    res.status(400).json({ error: "Unsupported user action" });
+    return;
+  }
+
+  const [updated] = await db.update(usersTable).set(updates).where(eq(usersTable.id, id)).returning();
+  if (!updated) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+
+  transactionLogger.info({ event: "admin_user_action", adminId: req.userId, userId: id, action }, "Admin user action");
+  res.json({
+    id: updated.id,
+    email: updated.email,
+    isDisabled: updated.isDisabled,
+    isFrozen: updated.isFrozen,
+    forceLogoutAfter: updated.forceLogoutAfter?.toISOString() ?? null,
+  });
+});
+
+router.get("/admin/transactions", async (req, res) => {
+  const limit = Math.min(parseInt(req.query["limit"] as string) || 80, 200);
+  const type = req.query["type"] as string | undefined;
+  const status = req.query["status"] as string | undefined;
+  const filters = [
+    type && type !== "all" ? eq(transactionsTable.type, type) : undefined,
+    status && status !== "all" ? eq(transactionsTable.status, status) : undefined,
+  ].filter(Boolean) as any[];
+
+  const rows = await db
+    .select()
+    .from(transactionsTable)
+    .where(filters.length ? and(...filters) : undefined)
+    .orderBy(desc(transactionsTable.createdAt))
+    .limit(limit);
+
+  const data = await Promise.all(rows.map(async (t) => {
+    const user = await db.select({ email: usersTable.email, fullName: usersTable.fullName }).from(usersTable).where(eq(usersTable.id, t.userId)).limit(1);
+    return {
+      id: t.id,
+      userId: t.userId,
+      userEmail: user[0]?.email ?? "",
+      userFullName: user[0]?.fullName ?? "",
+      type: t.type,
+      amount: parseFloat(t.amount as string),
+      status: t.status,
+      description: t.description ?? "",
+      walletAddress: t.walletAddress ?? "",
+      txHash: t.txHash ?? "",
+      createdAt: t.createdAt.toISOString(),
+    };
+  }));
+
+  res.json({ data });
+});
+
+router.get("/admin/settings", async (_req: AuthRequest, res) => {
+  const rows = await db.select().from(systemSettingsTable);
+  const settings = Object.fromEntries(rows.map((r) => [r.key, r.value]));
+  res.json({
+    maintenanceMode: settings["maintenance_mode"] === "true",
+    maintenanceMessage: settings["maintenance_message"] ?? "System under maintenance",
+    registrationEnabled: settings["registration_enabled"] !== "false",
+    autoWithdrawLimit: Number(settings["auto_withdraw_limit"] ?? "0"),
+    popupTitle: settings["popup_title"] ?? "",
+    popupMessage: settings["popup_message"] ?? "",
+    popupButtonText: settings["popup_button_text"] ?? "",
+    popupRedirectLink: settings["popup_redirect_link"] ?? "",
+    popupMode: settings["popup_mode"] ?? "off",
+    adminIpWhitelist: settings["admin_ip_whitelist"] ?? "",
+  });
+});
+
+router.post("/admin/settings", async (req: AuthRequest, res) => {
+  const allowed: Record<string, string> = {
+    maintenanceMode: "maintenance_mode",
+    maintenanceMessage: "maintenance_message",
+    registrationEnabled: "registration_enabled",
+    autoWithdrawLimit: "auto_withdraw_limit",
+    popupTitle: "popup_title",
+    popupMessage: "popup_message",
+    popupButtonText: "popup_button_text",
+    popupRedirectLink: "popup_redirect_link",
+    popupMode: "popup_mode",
+    adminIpWhitelist: "admin_ip_whitelist",
+  };
+
+  for (const [bodyKey, settingKey] of Object.entries(allowed)) {
+    if (bodyKey in req.body) {
+      await db.insert(systemSettingsTable).values({ key: settingKey, value: String(req.body[bodyKey]) }).onConflictDoUpdate({
+        target: systemSettingsTable.key,
+        set: { value: String(req.body[bodyKey]), updatedAt: new Date() },
+      });
+    }
+  }
+
+  transactionLogger.info({ event: "admin_settings_update", adminId: req.userId, keys: Object.keys(req.body) }, "Admin settings updated");
+  const rows = await db.select().from(systemSettingsTable);
+  res.json({ success: true, settings: Object.fromEntries(rows.map((r) => [r.key, r.value])) });
+});
+
+router.post("/admin/broadcast", async (req: AuthRequest, res) => {
+  const { title, message, audience = "all" } = req.body as { title?: string; message?: string; audience?: string };
+  if (!title || !message) {
+    res.status(400).json({ error: "Title and message are required" });
+    return;
+  }
+
+  const users = await db.select({ id: usersTable.id, isAdmin: usersTable.isAdmin }).from(usersTable);
+  const recipients = users.filter((u) => audience === "admins" ? u.isAdmin : !u.isAdmin || audience === "all");
+  if (recipients.length > 0) {
+    await db.insert(notificationsTable).values(recipients.map((u) => ({
+      userId: u.id,
+      type: "system",
+      title,
+      message,
+    })));
+  }
+
+  transactionLogger.info({ event: "admin_broadcast", adminId: req.userId, audience, recipients: recipients.length }, "Admin broadcast sent");
+  res.json({ success: true, recipients: recipients.length });
+});
+
+router.get("/admin/logs", async (_req: AuthRequest, res) => {
+  const [loginEvents, journalEntries] = await Promise.all([
+    db.select().from(loginEventsTable).orderBy(desc(loginEventsTable.createdAt)).limit(50),
+    db.select().from(ledgerEntriesTable).orderBy(desc(ledgerEntriesTable.id)).limit(50),
+  ]);
+
+  res.json({
+    loginEvents: loginEvents.map((e) => ({
+      id: e.id,
+      userId: e.userId,
+      ipAddress: e.ipAddress,
+      userAgent: e.userAgent,
+      eventType: e.eventType,
+      createdAt: e.createdAt.toISOString(),
+    })),
+    ledgerEntries: journalEntries.map((e) => ({
+      id: e.id,
+      journalId: e.journalId,
+      accountCode: e.accountCode,
+      entryType: e.entryType,
+      amount: parseFloat(e.amount as string),
+      description: e.description ?? "",
+      createdAt: e.createdAt.toISOString(),
+    })),
+  });
 });
 
 router.get("/admin/withdrawals", async (req, res) => {

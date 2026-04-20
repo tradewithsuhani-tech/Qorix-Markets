@@ -25,6 +25,15 @@ import AdminPage from "@/pages/admin";
 import AdminIntelligencePage from "@/pages/admin-intelligence";
 import AdminFraudPage from "@/pages/admin-fraud";
 import SettingsPage from "@/pages/settings";
+import {
+  AdminAnalyticsPage,
+  AdminLogsPage,
+  AdminSystemPage,
+  AdminTradingPage,
+  AdminTransactionsPage,
+  AdminUsersPage,
+  AdminWalletPage,
+} from "@/pages/admin-modules";
 import AnalyticsPage from "@/pages/analytics";
 import TradingDeskPage from "@/pages/trading-desk";
 import VerifyPage from "@/pages/verify";
@@ -101,6 +110,14 @@ function Router() {
       <Route path="/analytics"><ProtectedRoute component={AnalyticsPage} /></Route>
       <Route path="/trading-desk"><ProtectedRoute component={TradingDeskPage} /></Route>
       <Route path="/admin"><ProtectedRoute component={AdminPage} adminOnly={true} /></Route>
+      <Route path="/admin/users"><ProtectedRoute component={AdminUsersPage} adminOnly={true} /></Route>
+      <Route path="/admin/deposits"><ProtectedRoute component={() => <AdminTransactionsPage mode="deposits" />} adminOnly={true} /></Route>
+      <Route path="/admin/withdrawals"><ProtectedRoute component={() => <AdminTransactionsPage mode="withdrawals" />} adminOnly={true} /></Route>
+      <Route path="/admin/trading"><ProtectedRoute component={AdminTradingPage} adminOnly={true} /></Route>
+      <Route path="/admin/wallet"><ProtectedRoute component={AdminWalletPage} adminOnly={true} /></Route>
+      <Route path="/admin/analytics"><ProtectedRoute component={AdminAnalyticsPage} adminOnly={true} /></Route>
+      <Route path="/admin/system"><ProtectedRoute component={AdminSystemPage} adminOnly={true} /></Route>
+      <Route path="/admin/logs"><ProtectedRoute component={AdminLogsPage} adminOnly={true} /></Route>
       <Route path="/admin/intelligence"><ProtectedRoute component={AdminIntelligencePage} adminOnly={true} /></Route>
       <Route path="/admin/fraud"><ProtectedRoute component={AdminFraudPage} adminOnly={true} /></Route>
       <Route path="/admin/chats"><ProtectedRoute component={AdminChatsPage} adminOnly={true} /></Route>

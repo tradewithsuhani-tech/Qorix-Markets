@@ -1,13 +1,21 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
-import { db, usersTable, walletsTable, investmentsTable } from "@workspace/db";
+import { db, usersTable, walletsTable, investmentsTable, systemSettingsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { authMiddleware, signToken, type AuthRequest } from "../middlewares/auth";
 import { RegisterBody, LoginBody } from "@workspace/api-zod";
 import { trackLoginEvent, runFraudChecks } from "../lib/fraud-service";
 import crypto from "crypto";
+import rateLimit from "express-rate-limit";
 
 const router = Router();
+
+const loginRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 function generateReferralCode(): string {
   return "QX" + crypto.randomBytes(4).toString("hex").toUpperCase();
@@ -19,6 +27,10 @@ function formatUser(user: typeof usersTable.$inferSelect) {
     email: user.email,
     fullName: user.fullName,
     isAdmin: user.isAdmin,
+    adminRole: user.adminRole,
+    kycStatus: user.kycStatus,
+    isDisabled: user.isDisabled,
+    isFrozen: user.isFrozen,
     referralCode: user.referralCode,
     createdAt: user.createdAt.toISOString(),
   };
@@ -34,6 +46,16 @@ function getClientIp(req: any): string {
 }
 
 router.post("/auth/register", async (req, res) => {
+  const registrationSetting = await db
+    .select({ value: systemSettingsTable.value })
+    .from(systemSettingsTable)
+    .where(eq(systemSettingsTable.key, "registration_enabled"))
+    .limit(1);
+  if (registrationSetting[0]?.value === "false") {
+    res.status(403).json({ error: "Registration is currently disabled" });
+    return;
+  }
+
   const result = RegisterBody.safeParse(req.body);
   if (!result.success) {
     res.status(400).json({ error: "Validation failed" });
@@ -89,7 +111,7 @@ router.post("/auth/register", async (req, res) => {
   res.status(201).json({ token, user: formatUser(newUser) });
 });
 
-router.post("/auth/login", async (req, res) => {
+router.post("/auth/login", loginRateLimit, async (req, res) => {
   const result = LoginBody.safeParse(req.body);
   if (!result.success) {
     res.status(400).json({ error: "Validation failed" });
@@ -104,6 +126,10 @@ router.post("/auth/login", async (req, res) => {
   }
 
   const user = users[0]!;
+  if (user.isDisabled || (user.isFrozen && !user.isAdmin)) {
+    res.status(403).json({ error: "Account access is restricted" });
+    return;
+  }
   const valid = await bcrypt.compare(password, user.passwordHash);
   if (!valid) {
     res.status(401).json({ error: "Invalid credentials" });

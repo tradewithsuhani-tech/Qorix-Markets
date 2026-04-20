@@ -1,0 +1,210 @@
+Build a complete high-security admin panel for Qorix Markets.
+
+-----------------------------------
+CORE MODULES
+-----------------------------------
+
+1. DASHBOARD
+- Total users
+- Active investors
+- Total deposits / withdrawals
+- AUM (assets under management)
+- Daily PnL
+- Charts (growth, activity)
+
+-----------------------------------
+
+2. USER MANAGEMENT
+- View all users (search, filter)
+- KYC status
+- Wallet balance
+- Risk level
+
+Actions:
+- Freeze / unfreeze account
+- Force logout
+- Reset password
+- Enable/disable user
+
+-----------------------------------
+
+3. DEPOSIT MANAGEMENT
+- View all deposits
+- Status: pending / confirmed
+- Transaction hash
+- Manual credit option (admin only)
+
+-----------------------------------
+
+4. WITHDRAWAL MANAGEMENT
+- View all requests
+- Approve / reject
+- Auto + manual processing
+- Show tx hash after transfer
+
+Controls:
+- Set auto-withdraw limit
+- Large withdrawal → manual approval
+
+-----------------------------------
+
+5. TRADING CONTROL
+- View total AUM
+- Daily performance logs
+- Strategy performance
+
+Controls:
+- Adjust performance % (if needed)
+- Pause / resume trading system
+- Trigger payout manually
+
+-----------------------------------
+
+6. WALLET CONTROL
+- Hot wallet balance
+- Internal system balance
+- Profit pool tracking
+
+-----------------------------------
+
+7. ANALYTICS
+- User growth graph
+- Deposit/withdraw trends
+- Active vs inactive users
+
+-----------------------------------
+
+8. SYSTEM CONTROL (VERY IMPORTANT)
+
+A. Maintenance Mode:
+- Enable/disable full platform access
+- Show message: "System under maintenance"
+
+B. Registration Control:
+- Enable / disable new user signup
+
+C. Global Settings:
+- Update platform-wide parameters
+
+-----------------------------------
+
+9. COMMUNICATION SYSTEM 🔥
+
+A. Email System:
+- Send email to:
+  • All users
+  • Selected users
+- Templates:
+  • Announcement
+  • Promotion
+  • Alert
+
+B. Popup Notification System:
+- Admin can create popup message
+- Show on user dashboard or landing page
+
+Options:
+- Title
+- Message
+- Button text
+- Redirect link
+- Show once / always
+
+C. Broadcast Notification:
+- Push message to all users (in-app)
+
+-----------------------------------
+
+10. CONTENT CONTROL
+
+- Update homepage text
+- Update stats (AUM, investors etc.)
+- Update announcements
+
+-----------------------------------
+
+11. LOGS & MONITORING 🔥
+
+- Admin activity logs (who did what)
+- Login logs (IP, device)
+- Transaction logs
+- Error logs
+
+-----------------------------------
+
+SECURITY SYSTEM (CRITICAL)
+-----------------------------------
+
+1. Role-Based Access (RBAC):
+- Super Admin (full access)
+- Finance Admin (withdrawal control)
+- Support Admin (user support only)
+
+-----------------------------------
+
+2. 2FA LOGIN:
+- Google Authenticator / Email OTP
+
+-----------------------------------
+
+3. IP WHITELIST:
+- Admin panel accessible only from allowed IPs
+
+-----------------------------------
+
+4. SESSION SECURITY:
+- Auto logout after inactivity
+- Prevent multiple logins
+
+-----------------------------------
+
+5. ACTION CONFIRMATION:
+- Withdrawal approval → double confirm
+- Critical actions → OTP verify
+
+-----------------------------------
+
+6. RATE LIMIT:
+- Prevent brute force login
+
+-----------------------------------
+
+7. AUDIT TRAIL:
+- Track all admin actions permanently
+
+-----------------------------------
+
+ADVANCED FEATURES (PRO LEVEL)
+-----------------------------------
+
+- Manual balance adjustment (with logs)
+- Fraud detection alerts
+- Withdrawal delay system
+- Auto-disable suspicious accounts
+- System health monitor (API, blockchain listener)
+
+-----------------------------------
+
+UI REQUIREMENTS
+-----------------------------------
+
+- Clean fintech-style dashboard
+- Sidebar navigation:
+  Dashboard / Users / Deposits / Withdrawals / Trading / Wallet / Analytics / System / Logs
+
+- Dark theme
+- Fast loading
+- Mobile responsive
+
+-----------------------------------
+
+GOAL
+-----------------------------------
+
+Build a secure, scalable, and professional admin system similar to top fintech platforms.
+
+Focus on:
+- Security
+- Control
+- Transparency
+- Stability
