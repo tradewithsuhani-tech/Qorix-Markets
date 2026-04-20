@@ -163,6 +163,57 @@ realized profit % is distributed proportionally to every user's `trading_balance
 - `transferProfitToMain()` — monthly sweep of profit_balance → main_balance
 - `getLastDailyProfitPercent()` — reads persisted rate from system_settings
 
+## Anti-Fraud & Viral Growth System
+
+Defense-in-depth, three layers:
+
+**1. Application-layer guards (fast path)**
+- KYC required for withdrawals + KYC/deposit-gated tasks (`task-service.ts`)
+- 24h new-account withdrawal cool-off (`wallet.ts`)
+- Daily referral cap: 10 sponsored signups per user per calendar day (`auth.ts /register`) — silently drops sponsor link past limit
+- Weekly referral points cap (1000 pts/week) (`task-service.ts awardPoints`)
+- Daily total points cap (200 pts/day)
+- IP signup rate limit + honeypot + reCAPTCHA on `/register`
+- Email-OTP gated withdrawals (`/auth/withdrawal-otp`)
+- Auto-freeze user on 3+ unresolved high-severity fraud flags (`fraud-service.ts`)
+
+**2. Atomic SQL guards (race-condition prevention)**
+- Wallet balance debit: `UPDATE … SET balance = balance - $amt WHERE balance >= $amt RETURNING id` — 0 rows ⇒ throws `INSUFFICIENT_BALANCE` and rolls back the transaction (`wallet.ts /withdraw`)
+- Points debit (for fee discount): same atomic guarded pattern → throws `INSUFFICIENT_POINTS`
+- Both run inside a single `db.transaction(async tx => …)` so any failure rolls back the withdrawal request, ledger journal, and points debit together
+
+**3. Schema-level idempotency (defense in depth)**
+- `fraud_flags`: partial unique index `(user_id, flag_type) WHERE is_resolved = false` — no concurrent duplicate active flags. `raiseFraudFlag` uses `ON CONFLICT DO NOTHING` with explicit target.
+- `user_task_completions`: unique `(user_id, task_id, period_key)`. `period_key` is computed in UTC: `YYYY-MM-DD` for daily, `YYYY-Www` (ISO week) for weekly, `"ALL"` for one_time/social/referral. `completeTask` uses `ON CONFLICT DO NOTHING`. `todayStart`/`weekStart` SQL filters were also switched to UTC to keep the application pre-check aligned with the DB unique constraint.
+
+**Points → withdrawal fee discount**
+- 1 pt = $0.01, max 50% of fee
+- Wallet GET response now includes user `points`
+- `/wallet/withdraw` accepts `usePoints` field; UI on wallet page lets users toggle "Use X pts" before review
+
+### ⚠️ Production migration note (one-time)
+
+Before running `pnpm --filter @workspace/db run push` against the **production** DB the first time, back-fill `period_key` on existing rows so the new unique index doesn't conflict on historical daily/weekly completions:
+
+```sql
+-- Run BEFORE schema push on prod (idempotent):
+UPDATE user_task_completions u
+SET period_key = CASE
+  WHEN t.category = 'daily'  THEN to_char(u.completed_at AT TIME ZONE 'UTC', 'YYYY-MM-DD')
+  WHEN t.category = 'weekly' THEN to_char(u.completed_at AT TIME ZONE 'UTC', 'IYYY-"W"IW')
+  ELSE 'ALL'
+END
+FROM tasks t
+WHERE t.id = u.task_id AND u.period_key = 'ALL';
+```
+
+If push has already been attempted and the index failed, drop the bad index, run the backfill above, then re-push.
+
+### External services to verify post-deploy
+
+- **AWS SES**: sender email must be verified; request production access to leave sandbox
+- **reCAPTCHA**: live domain `qorix-markets-1.replit.app` must be added in the reCAPTCHA console
+
 ## Design
 
 - Dark theme: deep navy/obsidian (HSL 224 71% 4%) + electric blue (#3b82f6)
