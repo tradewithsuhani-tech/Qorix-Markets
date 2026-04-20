@@ -516,7 +516,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         {/* Page content with transitions */}
         <div
           className="flex-1 overflow-y-auto scroll-smooth-ios md:pb-0"
-          style={{ paddingBottom: "calc(8.5rem + env(safe-area-inset-bottom, 0px))" }}
+          style={{ paddingBottom: "calc(10rem + env(safe-area-inset-bottom, 0px))" }}
         >
           <AnimatePresence mode="wait" initial={false}>
             <motion.div

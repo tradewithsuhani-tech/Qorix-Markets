@@ -525,7 +525,7 @@ export default function Landing() {
 
   return (
     <>
-    <div className="min-h-screen overflow-x-hidden" style={{ background: "#050814", color: "#e2e8f0" }}>
+    <div className="min-h-screen w-full max-w-[100vw] overflow-x-clip" style={{ background: "#050814", color: "#e2e8f0" }}>
 
       <header className="sticky top-0 z-50 border-b" style={{ background: "rgba(5,8,20,0.88)", backdropFilter: "blur(24px)", borderColor: "rgba(255,255,255,0.06)" }}>
         <div className="max-w-7xl mx-auto px-5 md:px-8 h-14 flex items-center justify-between">
@@ -542,9 +542,9 @@ export default function Landing() {
             ))}
           </nav>
 
-          <div className="flex items-center gap-2">
-            <button onClick={() => setLocation("/login")} className="btn btn-ghost text-sm px-4 py-2">Sign In</button>
-            <button onClick={() => setLocation("/login")} className="btn btn-primary text-sm px-4 py-2">Claim Your Seat</button>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button onClick={() => setLocation("/login")} className="btn btn-ghost text-xs md:text-sm px-2.5 md:px-4 py-1.5 md:py-2 whitespace-nowrap">Sign In</button>
+            <button onClick={() => setLocation("/login")} className="btn btn-primary text-xs md:text-sm px-2.5 md:px-4 py-1.5 md:py-2 whitespace-nowrap"><span className="md:hidden">Get Seat</span><span className="hidden md:inline">Claim Your Seat</span></button>
           </div>
         </div>
       </header>
