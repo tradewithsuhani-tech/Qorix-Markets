@@ -486,12 +486,12 @@ export async function closeSignalTrade(input: CloseTradeInput, actorUserId?: num
 
   // Fire notifications (non-blocking)
   for (const w of eligible) {
-    createNotification({
-      userId: w.userId,
-      type: "daily_profit",
-      title: `Trade closed: ${t.pair}`,
-      message: `Signal #${t.id} ${t.direction} returned ${realizedPct.toFixed(2)}%`,
-    }).catch(() => {});
+    createNotification(
+      w.userId,
+      "daily_profit",
+      `Trade closed: ${t.pair}`,
+      `Signal #${t.id} ${t.direction} returned ${realizedPct.toFixed(2)}%`,
+    ).catch(() => {});
   }
 
   return { tradeId: t.id, distributed: totalDistributed, users: eligible.length };
