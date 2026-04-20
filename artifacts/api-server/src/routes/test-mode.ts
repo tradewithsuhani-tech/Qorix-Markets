@@ -4,7 +4,7 @@ import crypto from "crypto";
 import { db, usersTable, walletsTable, investmentsTable, transactionsTable, systemSettingsTable } from "@workspace/db";
 import { eq, like, and, count, sql } from "drizzle-orm";
 import { authMiddleware, adminMiddleware, type AuthRequest } from "../middlewares/auth";
-import { ensureUserAccounts, postJournalEntry, journalForTransaction } from "../lib/ledger-service";
+import { ensureUserAccounts, postJournalEntry, journalForTransaction, journalForSystem } from "../lib/ledger-service";
 
 const router = Router();
 router.use("/test", authMiddleware);
@@ -172,18 +172,35 @@ async function runProfitTests(testUsers: typeof usersTable.$inferSelect[]): Prom
         const profit = parseFloat(inv.amount as string) * dailyRate * mult;
 
         if (profit > 0) {
-          const wallets = await db.select().from(walletsTable).where(eq(walletsTable.userId, inv.userId)).limit(1);
-          const wallet = wallets[0];
-          if (!wallet) continue;
-          const newProfit = parseFloat(wallet.profitBalance as string) + profit;
-          await db.update(walletsTable).set({ profitBalance: newProfit.toString(), updatedAt: new Date() })
-            .where(eq(walletsTable.userId, inv.userId));
-          await db.insert(transactionsTable).values({
-            userId: inv.userId,
-            type: "profit",
-            amount: profit.toFixed(6),
-            status: "completed",
-            description: `[TEST] Simulated daily profit (${scenario})`,
+          await db.transaction(async (tx) => {
+            const wallets = await tx.select().from(walletsTable).where(eq(walletsTable.userId, inv.userId)).limit(1);
+            const wallet = wallets[0];
+            if (!wallet) return;
+
+            await ensureUserAccounts(inv.userId, tx);
+
+            const newProfit = parseFloat(wallet.profitBalance as string) + profit;
+            await tx.update(walletsTable).set({ profitBalance: newProfit.toString(), updatedAt: new Date() })
+              .where(eq(walletsTable.userId, inv.userId));
+
+            const [profitTxn] = await tx.insert(transactionsTable).values({
+              userId: inv.userId,
+              type: "profit",
+              amount: profit.toFixed(6),
+              status: "completed",
+              description: `[TEST] Simulated daily profit (${scenario})`,
+            }).returning();
+
+            // Double-entry: platform profit expense (debit) → user profit wallet (credit)
+            await postJournalEntry(
+              journalForTransaction(profitTxn!.id),
+              [
+                { accountCode: "platform:profit_expense", entryType: "debit", amount: profit, description: `[TEST] Simulated profit for user ${inv.userId}` },
+                { accountCode: `user:${inv.userId}:profit`, entryType: "credit", amount: profit, description: `[TEST] Simulated profit credit` },
+              ],
+              profitTxn!.id,
+              tx,
+            );
           });
         }
         processed++;
@@ -231,15 +248,33 @@ async function runWithdrawalTests(testUsers: typeof usersTable.$inferSelect[]): 
       const wdAmt = Math.min(profitBal * 0.5, 50);
       try {
         const newBal = profitBal - wdAmt;
-        await db.update(walletsTable).set({ profitBalance: newBal.toString(), updatedAt: new Date() })
-          .where(eq(walletsTable.userId, user.id));
-        await db.insert(transactionsTable).values({
-          userId: user.id,
-          type: "withdrawal",
-          amount: wdAmt.toFixed(2),
-          status: "pending",
-          description: `[TEST] Simulated withdrawal of $${wdAmt.toFixed(2)}`,
+
+        await db.transaction(async (tx) => {
+          await ensureUserAccounts(user.id, tx);
+
+          await tx.update(walletsTable).set({ profitBalance: newBal.toString(), updatedAt: new Date() })
+            .where(eq(walletsTable.userId, user.id));
+
+          const [wdTxn] = await tx.insert(transactionsTable).values({
+            userId: user.id,
+            type: "withdrawal",
+            amount: wdAmt.toFixed(2),
+            status: "pending",
+            description: `[TEST] Simulated withdrawal of $${wdAmt.toFixed(2)}`,
+          }).returning();
+
+          // Double-entry: user profit wallet (debit) → pending_withdrawals liability (credit, still on platform books)
+          await postJournalEntry(
+            journalForTransaction(wdTxn!.id),
+            [
+              { accountCode: `user:${user.id}:profit`, entryType: "debit", amount: wdAmt, description: `[TEST] Withdrawal hold` },
+              { accountCode: "platform:pending_withdrawals", entryType: "credit", amount: wdAmt, description: `[TEST] Withdrawal pending for user ${user.id}` },
+            ],
+            wdTxn!.id,
+            tx,
+          );
         });
+
         results.push({
           name: `Withdrawal — user #${user.id} ($${wdAmt.toFixed(2)})`,
           status: "passed",
