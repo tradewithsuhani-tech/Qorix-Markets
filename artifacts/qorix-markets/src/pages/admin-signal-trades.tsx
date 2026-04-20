@@ -308,12 +308,26 @@ function OutcomeBadge({ reason }: { reason: string | null }) {
 function PreviewBar({ entry, tp, sl, pipSize, pct }: { entry: number; tp: number; sl: number; pipSize: number; pct: number }) {
   const tpPips = entry && tp ? Math.abs(tp - entry) / pipSize : 0;
   const slPips = entry && sl ? Math.abs(entry - sl) / pipSize : 0;
-  const lossPct = pct && tpPips ? -1 * pct * (slPips / tpPips) : 0;
+  const hasPct = Number.isFinite(pct) && pct > 0;
+  const lossPct = hasPct && tpPips ? -1 * pct * (slPips / tpPips) : 0;
   if (!entry) return <div />;
   return (
-    <div className="text-xs text-white/40 flex flex-wrap gap-3">
-      {tp > 0 && <span>TP: <span className="text-emerald-300">{tpPips.toFixed(1)} pips → +{pct.toFixed(2)}%</span></span>}
-      {sl > 0 && <span>SL: <span className="text-red-300">{slPips.toFixed(1)} pips → {lossPct.toFixed(2)}%</span></span>}
+    <div className="text-xs text-white/40 flex flex-wrap gap-3 items-center">
+      {tp > 0 && (
+        <span>
+          TP: <span className="text-emerald-300">{tpPips.toFixed(1)} pips</span>
+          {hasPct && <span className="text-emerald-300"> → +{pct.toFixed(2)}%</span>}
+        </span>
+      )}
+      {sl > 0 && (
+        <span>
+          SL: <span className="text-red-300">{slPips.toFixed(1)} pips</span>
+          {hasPct && tpPips > 0 && <span className="text-red-300"> → {lossPct.toFixed(2)}%</span>}
+        </span>
+      )}
+      {!hasPct && (tp > 0 || sl > 0) && (
+        <span className="text-amber-300/80">Set Expected Profit % to enable Open Trade</span>
+      )}
     </div>
   );
 }
