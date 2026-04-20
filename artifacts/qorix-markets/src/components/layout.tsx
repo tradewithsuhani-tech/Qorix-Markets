@@ -364,10 +364,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const [location, navigate] = useLocation();
   const { logout, user } = useAuth();
   const [moreOpen, setMoreOpen] = useState(false);
-  const { data: summary } = useGetDashboardSummary({ query: { refetchInterval: 60000 } });
+  const isAdminArea = location.startsWith("/admin");
+  const { data: summary } = useGetDashboardSummary({ query: { refetchInterval: 60000, enabled: !isAdminArea } });
   const vipTier = (summary?.vip?.tier ?? "none") as "none" | "silver" | "gold" | "platinum";
 
-  const allLinks = [
+  const userLinks = [
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { href: "/wallet", label: "Wallet", icon: Wallet },
     { href: "/deposit", label: "Deposit", icon: ArrowDownCircle },
@@ -378,14 +379,17 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/transactions", label: "History", icon: History },
     { href: "/referral", label: "Referrals", icon: Users },
     { href: "/rewards", label: "Rewards", icon: Trophy },
-    ...(user?.isAdmin ? [
-      { href: "/admin", label: "Admin", icon: ShieldAlert },
-      { href: "/admin/intelligence", label: "Intelligence", icon: Brain },
-      { href: "/admin/fraud", label: "Fraud Monitor", icon: Shield },
-      { href: "/admin/chats", label: "Support Chats", icon: MessageCircle },
-    ] : []),
     { href: "/settings", label: "Settings", icon: Settings },
   ];
+
+  const adminLinks = [
+    { href: "/admin", label: "Control Panel", icon: ShieldAlert },
+    { href: "/admin/intelligence", label: "Intelligence", icon: Brain },
+    { href: "/admin/fraud", label: "Fraud Monitor", icon: Shield },
+    { href: "/admin/chats", label: "Support Chats", icon: MessageCircle },
+  ];
+
+  const allLinks = isAdminArea ? adminLinks : userLinks;
 
   const primaryNavLinks = allLinks.slice(0, 4);
   const overflowLinks = allLinks.slice(4);
@@ -447,16 +451,16 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <div className="p-3">
           <div className="flex items-center gap-3 px-3 py-2 rounded-xl mb-1">
             <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500/30 to-indigo-500/30 border border-blue-500/20 flex items-center justify-center text-sm font-bold text-blue-400 shrink-0">
-              {user?.fullName?.[0]?.toUpperCase() || "U"}
+              {isAdminArea ? "A" : user?.fullName?.[0]?.toUpperCase() || "U"}
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-1.5">
-                <div className="text-sm font-medium text-white truncate">{user?.fullName}</div>
-                <VipBadge tier={vipTier} size="xs" />
+                <div className="text-sm font-medium text-white truncate">{isAdminArea ? "Qorix Admin" : user?.fullName}</div>
+                {!isAdminArea && <VipBadge tier={vipTier} size="xs" />}
               </div>
-              <div className="text-xs text-muted-foreground truncate">{user?.email}</div>
+              <div className="text-xs text-muted-foreground truncate">{isAdminArea ? "Admin Console" : user?.email}</div>
             </div>
-            <NotificationBell />
+            {!isAdminArea && <NotificationBell />}
           </div>
           <button
             onClick={logout}
@@ -470,7 +474,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col h-full overflow-hidden relative">
-        <ProtectionBanner />
+        {!isAdminArea && <ProtectionBanner />}
 
         {/* Mobile top bar */}
         <div className="md:hidden flex items-center justify-between px-4 py-3 border-b border-white/5 glass-nav shrink-0"
@@ -481,9 +485,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
               <TrendingUp className="w-4 h-4 text-white" />
             </div>
             <span className="text-sm font-bold text-white">Qorix<span className="text-blue-400">Markets</span></span>
-            <VipBadge tier={vipTier} size="xs" />
+            {!isAdminArea && <VipBadge tier={vipTier} size="xs" />}
           </div>
-          <NotificationBell />
+          {!isAdminArea && <NotificationBell />}
         </div>
 
         {/* Page content with transitions */}

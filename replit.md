@@ -63,6 +63,7 @@ lib/
 11. **Admin Panel**: Set daily profit %, view AUM, approve/reject withdrawals, user management
 12. **PWA**: manifest.json, service worker, mobile bottom navigation
 13. **Qorix Assistant Chatbot**: Floating chat button (bottom-right), predefined flows (How to Start, Investment Guide, Returns, Risk), quick reply buttons, typing animation, "Talk to Expert" escalation, admin chat panel with real-time replies and session resolution
+14. **Separate Admin Portal**: Admins use `/admin-login` for a dedicated admin login flow. Admin-only pages use an admin navigation layout with no investor/user menu items.
 
 ## Demo Accounts
 
@@ -103,6 +104,12 @@ All routes prefixed with `/api`:
 - GET `/admin/stats`, POST `/admin/profit`, GET `/admin/profit/history`, GET `/admin/users`
 - GET `/admin/withdrawals`, POST `/admin/withdrawals/:id/approve`, POST `/admin/withdrawals/:id/reject`
 - GET `/notifications`, PATCH `/notifications/read-all`, PATCH `/notifications/:id/read`, DELETE `/notifications/:id`
+
+## Frontend Routes
+
+- Public/user login: `/login`
+- Admin-only login: `/admin-login`
+- Admin portal: `/admin`, `/admin/intelligence`, `/admin/fraud`, `/admin/chats`
 
 ## Cron Jobs (node-cron)
 

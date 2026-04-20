@@ -13,6 +13,7 @@ import { useEffect } from "react";
 
 import Landing from "@/pages/landing";
 import LoginPage from "@/pages/login";
+import AdminLoginPage from "@/pages/admin-login";
 import Dashboard from "@/pages/dashboard";
 import WalletPage from "@/pages/wallet";
 import DepositPage from "@/pages/deposit";
@@ -49,7 +50,7 @@ const ProtectedRoute = ({ component: Component, adminOnly = false }: { component
   }
 
   if (!token || !user) {
-    setLocation("/");
+    setLocation(adminOnly ? "/admin-login" : "/");
     return null;
   }
 
@@ -61,15 +62,15 @@ const ProtectedRoute = ({ component: Component, adminOnly = false }: { component
   return <Component />;
 };
 
-const PublicOnlyRoute = ({ component: Component }: { component: any }) => {
+const PublicOnlyRoute = ({ component: Component, adminRedirect = false }: { component: any; adminRedirect?: boolean }) => {
   const { user, token, isLoading } = useAuth();
   const [, setLocation] = useLocation();
 
   useEffect(() => {
     if (!isLoading && token && user) {
-      setLocation("/dashboard");
+      setLocation(adminRedirect && user.isAdmin ? "/admin" : "/dashboard");
     }
-  }, [isLoading, token, user]);
+  }, [isLoading, token, user, adminRedirect]);
 
   if (isLoading) {
     return (
@@ -89,6 +90,7 @@ function Router() {
     <Switch>
       <Route path="/" component={Landing} />
       <Route path="/login"><PublicOnlyRoute component={LoginPage} /></Route>
+      <Route path="/admin-login"><PublicOnlyRoute component={AdminLoginPage} adminRedirect={true} /></Route>
       <Route path="/dashboard"><ProtectedRoute component={Dashboard} /></Route>
       <Route path="/wallet"><ProtectedRoute component={WalletPage} /></Route>
       <Route path="/deposit"><ProtectedRoute component={DepositPage} /></Route>
@@ -117,14 +119,16 @@ function Router() {
 
 function AppContent() {
   const { showSplash, onSplashDone } = useSplash();
+  const [location] = useLocation();
+  const isAdminArea = location.startsWith("/admin");
 
   return (
     <>
       {showSplash && <SplashScreen onDone={onSplashDone} />}
       <Router />
-      <HighImpactNotificationBanner />
-      <QorixAssistant />
-      <PWAInstallPrompt />
+      {!isAdminArea && <HighImpactNotificationBanner />}
+      {!isAdminArea && <QorixAssistant />}
+      {!isAdminArea && <PWAInstallPrompt />}
     </>
   );
 }
