@@ -588,9 +588,9 @@ export default function Landing() {
               transition={{ duration: 0.7, delay: 0.15 }}
               className="text-5xl sm:text-6xl xl:text-[4.25rem] font-black tracking-[-0.03em] leading-[1.0] mb-6 text-white"
             >
-              Institutional USD<br />returns, without<br />the{" "}
+              Stop Guessing<br />the Markets.<br />Start{" "}
               <span style={{ background: "linear-gradient(135deg, #38bdf8 0%, #818cf8 50%, #e879f9 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
-                guesswork.
+                Compounding.
               </span>
             </motion.h1>
 
@@ -600,7 +600,7 @@ export default function Landing() {
               transition={{ duration: 0.6, delay: 0.22 }}
               className="text-lg md:text-xl text-slate-400 max-w-xl mx-auto xl:mx-0 leading-relaxed mb-10"
             >
-              Qorix deploys your USD across three professional trading desks — scalping, swing, and arbitrage — with built-in drawdown protection, live reporting, and zero manual trading required on your end.
+              Qorix runs disciplined forex strategies — scalping, swing, and arbitrage — across professional trading desks, delivering steady returns with built-in drawdown protection, live reporting, and zero emotional trading or manual effort required on your end.
             </motion.p>
 
             <motion.div
