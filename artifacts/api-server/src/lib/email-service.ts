@@ -40,8 +40,14 @@ async function sendEmail(to: string, subject: string, body: string): Promise<voi
   const from = process.env.SES_FROM_EMAIL;
 
   if (!client || !from) {
+    // Never log message body (contains OTP). Gated debug print only when
+    // explicitly opted in via EMAIL_DEBUG_OTP=1.
     if (process.env.NODE_ENV !== "production") {
-      logger.info({ to, subject, body }, "[email-service] DEV — email would be sent (SES not configured)");
+      if (process.env.EMAIL_DEBUG_OTP === "1") {
+        logger.warn({ to, subject, body }, "[email-service] DEV OTP debug (EMAIL_DEBUG_OTP=1)");
+      } else {
+        logger.info({ to, subject }, "[email-service] DEV — email would be sent (SES not configured)");
+      }
     } else {
       logger.warn({ to, subject }, "[email-service] SES not configured — email NOT sent");
     }
@@ -94,7 +100,9 @@ export async function sendOtp(
 
   await sendEmail(email, `Qorix Markets — ${purposeLabel} Code`, body);
 
-  logger.info({ userId, purpose, otp: process.env.NODE_ENV !== "production" ? otp : "***" }, "[email-service] OTP created");
+  // Never log OTP plaintext. Use EMAIL_DEBUG_OTP=1 in dev only if you need it.
+  const otpForLog = process.env.EMAIL_DEBUG_OTP === "1" && process.env.NODE_ENV !== "production" ? otp : "***";
+  logger.info({ userId, purpose, otp: otpForLog }, "[email-service] OTP created");
 
   return { otp, expiresAt };
 }
