@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Layout } from "@/components/layout";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
-  TrendingUp, TrendingDown, Plus, X, Activity, CheckCircle2,
-  AlertTriangle, Clock, Users, DollarSign, RefreshCw,
+  TrendingUp, TrendingDown, Plus, Activity, CheckCircle2,
+  Target, ShieldAlert, X, Clock, RefreshCw, FileText, ChevronDown, ChevronUp,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -12,7 +12,6 @@ function authHeaders() {
   const t = localStorage.getItem("qorix_token");
   return { "Content-Type": "application/json", ...(t ? { Authorization: `Bearer ${t}` } : {}) };
 }
-
 async function apiFetch(path: string, method = "GET", body?: unknown) {
   const res = await fetch(path, { method, headers: authHeaders(), body: body ? JSON.stringify(body) : undefined });
   const data = await res.json();
@@ -25,16 +24,20 @@ type Trade = {
   pair: string;
   direction: "BUY" | "SELL";
   entryPrice: string;
+  tpPrice: string | null;
+  slPrice: string | null;
   pipsTarget: string;
   pipSize: string;
   exitPrice: string;
   expectedProfitPercent: string;
   realizedProfitPercent: string | null;
   realizedExitPrice: string | null;
-  status: "running" | "closed";
+  status: "running" | "closing" | "closed";
   closeReason: string | null;
   totalDistributed: string | null;
   affectedUsers: number | null;
+  notes: string | null;
+  scheduledAt: string | null;
   createdAt: string;
   closedAt: string | null;
 };
@@ -51,68 +54,68 @@ export default function AdminSignalTradesPage() {
   const [pair, setPair] = useState("XAUUSD");
   const [direction, setDirection] = useState<"BUY" | "SELL">("BUY");
   const [entryPrice, setEntryPrice] = useState("");
-  const [pipsTarget, setPipsTarget] = useState("");
+  const [tpPrice, setTpPrice] = useState("");
+  const [slPrice, setSlPrice] = useState("");
   const [profitPct, setProfitPct] = useState("");
+  const [scheduledAt, setScheduledAt] = useState("");
   const [notes, setNotes] = useState("");
 
   const pipSize = PAIR_DEFAULTS[pair.toUpperCase()] ?? 0.0001;
-  const previewExit = (() => {
-    const e = parseFloat(entryPrice);
-    const p = parseFloat(pipsTarget);
-    if (!e || !p) return null;
-    const move = p * pipSize;
-    return direction === "BUY" ? e + move : e - move;
-  })();
 
-  const { data: runningData, refetch: refetchRunning } = useQuery({
+  const { data: runningData } = useQuery({
     queryKey: ["admin-trades-running"],
     queryFn: () => apiFetch("/api/admin/signal-trades?status=running"),
-    refetchInterval: 5000,
+    refetchInterval: 4000,
   });
   const { data: closedData } = useQuery({
     queryKey: ["admin-trades-closed"],
     queryFn: () => apiFetch("/api/admin/signal-trades?status=closed"),
-    refetchInterval: 10000,
+    refetchInterval: 8000,
   });
 
   const createMut = useMutation({
     mutationFn: () =>
       apiFetch("/api/admin/signal-trades", "POST", {
-        pair,
-        direction,
+        pair, direction,
         entryPrice: parseFloat(entryPrice),
-        pipsTarget: parseFloat(pipsTarget),
+        tpPrice: tpPrice ? parseFloat(tpPrice) : undefined,
+        slPrice: slPrice ? parseFloat(slPrice) : undefined,
         pipSize,
         expectedProfitPercent: parseFloat(profitPct),
+        scheduledAt: scheduledAt || undefined,
         notes: notes || undefined,
       }),
     onSuccess: () => {
-      toast({ title: "Trade created", description: `${pair} ${direction} signal opened` });
-      setEntryPrice(""); setPipsTarget(""); setProfitPct(""); setNotes("");
+      toast({ title: "Trade opened", description: `${pair} ${direction} signal is live` });
+      setEntryPrice(""); setTpPrice(""); setSlPrice(""); setProfitPct(""); setScheduledAt(""); setNotes("");
       qc.invalidateQueries({ queryKey: ["admin-trades-running"] });
     },
     onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
   });
 
-  const closeMut = useMutation({
-    mutationFn: (vars: { id: number; pct?: number; manual?: boolean }) =>
-      apiFetch(`/api/admin/signal-trades/${vars.id}/close`, "POST", {
-        realizedProfitPercent: vars.pct,
-        closeReason: vars.manual ? "manual" : "target_hit",
-      }),
-    onSuccess: (d: any) => {
-      toast({
-        title: "Trade closed",
-        description: `Distributed $${Number(d.distributed).toFixed(2)} to ${d.users} users`,
-      });
-      qc.invalidateQueries({ queryKey: ["admin-trades-running"] });
-      qc.invalidateQueries({ queryKey: ["admin-trades-closed"] });
-    },
-    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  const tpMut = useMutation({
+    mutationFn: (id: number) => apiFetch(`/api/admin/signal-trades/${id}/tp`, "POST"),
+    onSuccess: (d: any) => { toast({ title: "TP HIT", description: `+$${Number(d.distributed).toFixed(2)} → ${d.users} users` }); qc.invalidateQueries(); },
+    onError: (e: any) => toast({ title: "TP failed", description: e.message, variant: "destructive" }),
+  });
+  const slMut = useMutation({
+    mutationFn: (id: number) => apiFetch(`/api/admin/signal-trades/${id}/sl`, "POST"),
+    onSuccess: (d: any) => { toast({ title: "SL HIT", description: `${Number(d.distributed).toFixed(2)} loss applied to ${d.users} users` }); qc.invalidateQueries(); },
+    onError: (e: any) => toast({ title: "SL failed", description: e.message, variant: "destructive" }),
+  });
+  const manualMut = useMutation({
+    mutationFn: (vars: { id: number; pct: number }) =>
+      apiFetch(`/api/admin/signal-trades/${vars.id}/close`, "POST", { realizedProfitPercent: vars.pct, closeReason: "manual" }),
+    onSuccess: (d: any) => { toast({ title: "Manual close", description: `${Number(d.distributed).toFixed(2)} distributed` }); qc.invalidateQueries(); },
+    onError: (e: any) => toast({ title: "Close failed", description: e.message, variant: "destructive" }),
   });
 
   const running: Trade[] = runningData?.trades ?? [];
   const closed: Trade[] = closedData?.trades ?? [];
+
+  const totalRealizedToday = closed
+    .filter((t) => t.closedAt && new Date(t.closedAt).toDateString() === new Date().toDateString())
+    .reduce((s, t) => s + parseFloat(t.totalDistributed ?? "0"), 0);
 
   return (
     <Layout>
@@ -121,144 +124,102 @@ export default function AdminSignalTradesPage() {
           <div className="p-2.5 rounded-xl bg-violet-500/15 border border-violet-500/30">
             <Activity className="w-6 h-6 text-violet-400" />
           </div>
-          <div>
-            <h1 className="text-2xl font-bold text-white">Signal Trades</h1>
-            <p className="text-sm text-white/50">Create signals, close trades, distribute profit to all active traders.</p>
+          <div className="flex-1">
+            <h1 className="text-2xl font-bold text-white">Signal Trade Control</h1>
+            <p className="text-sm text-white/50">Manual trading control — TP / SL / Manual close with double-entry distribution.</p>
+          </div>
+          <div className="text-right">
+            <div className="text-[10px] text-white/40 uppercase tracking-wider">Today distributed</div>
+            <div className={`text-lg font-bold ${totalRealizedToday >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+              ${totalRealizedToday.toFixed(2)}
+            </div>
           </div>
         </div>
 
         {/* Create form */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="border border-white/10 bg-white/3 rounded-2xl p-5 space-y-4"
-        >
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+          className="border border-white/10 bg-white/3 rounded-2xl p-5 space-y-4">
           <div className="flex items-center gap-2 text-white/80 text-sm font-medium">
-            <Plus className="w-4 h-4" /> New Signal Trade
+            <Plus className="w-4 h-4" /> Open New Trade
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            <div>
-              <label className="text-xs text-white/50 block mb-1">Pair</label>
-              <input
-                type="text"
-                value={pair}
-                onChange={(e) => setPair(e.target.value.toUpperCase())}
-                placeholder="XAUUSD"
-                className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white outline-none focus:border-violet-400/40"
-              />
-              <div className="text-[10px] text-white/30 mt-1">pip size: {pipSize}</div>
-            </div>
-            <div>
-              <label className="text-xs text-white/50 block mb-1">Direction</label>
+            <Field label={`Pair (pip ${pipSize})`}>
+              <input type="text" value={pair} onChange={(e) => setPair(e.target.value.toUpperCase())} placeholder="XAUUSD" className={inputCls} />
+            </Field>
+
+            <Field label="Direction">
               <div className="flex gap-2">
-                <button
-                  onClick={() => setDirection("BUY")}
+                <button onClick={() => setDirection("BUY")}
                   className={`flex-1 py-2 rounded-xl text-sm font-medium border transition-colors ${
-                    direction === "BUY"
-                      ? "bg-emerald-500/20 border-emerald-500/40 text-emerald-300"
-                      : "bg-white/5 border-white/10 text-white/60"
-                  }`}
-                >
+                    direction === "BUY" ? "bg-emerald-500/20 border-emerald-500/40 text-emerald-300" : "bg-white/5 border-white/10 text-white/60"
+                  }`}>
                   <TrendingUp className="w-3.5 h-3.5 inline mr-1" /> BUY
                 </button>
-                <button
-                  onClick={() => setDirection("SELL")}
+                <button onClick={() => setDirection("SELL")}
                   className={`flex-1 py-2 rounded-xl text-sm font-medium border transition-colors ${
-                    direction === "SELL"
-                      ? "bg-red-500/20 border-red-500/40 text-red-300"
-                      : "bg-white/5 border-white/10 text-white/60"
-                  }`}
-                >
+                    direction === "SELL" ? "bg-red-500/20 border-red-500/40 text-red-300" : "bg-white/5 border-white/10 text-white/60"
+                  }`}>
                   <TrendingDown className="w-3.5 h-3.5 inline mr-1" /> SELL
                 </button>
               </div>
-            </div>
-            <div>
-              <label className="text-xs text-white/50 block mb-1">Entry Price</label>
-              <input
-                type="number"
-                step="any"
-                value={entryPrice}
-                onChange={(e) => setEntryPrice(e.target.value)}
-                placeholder="2380.50"
-                className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white outline-none focus:border-violet-400/40"
-              />
-            </div>
-            <div>
-              <label className="text-xs text-white/50 block mb-1">Pips Target</label>
-              <input
-                type="number"
-                step="any"
-                value={pipsTarget}
-                onChange={(e) => setPipsTarget(e.target.value)}
-                placeholder="50"
-                className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white outline-none focus:border-violet-400/40"
-              />
-            </div>
-            <div>
-              <label className="text-xs text-white/50 block mb-1">Expected Profit %</label>
-              <input
-                type="number"
-                step="0.01"
-                value={profitPct}
-                onChange={(e) => setProfitPct(e.target.value)}
-                placeholder="1.25"
-                className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white outline-none focus:border-violet-400/40"
-              />
-            </div>
-            <div className="lg:col-span-3">
-              <label className="text-xs text-white/50 block mb-1">Notes (optional)</label>
-              <input
-                type="text"
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="London open breakout"
-                className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white outline-none focus:border-violet-400/40"
-              />
-            </div>
+            </Field>
+
+            <Field label="Entry Price">
+              <input type="number" step="any" value={entryPrice} onChange={(e) => setEntryPrice(e.target.value)} placeholder="2380.50" className={inputCls} />
+            </Field>
+
+            <Field label="Expected Profit % (at TP)">
+              <input type="number" step="0.01" value={profitPct} onChange={(e) => setProfitPct(e.target.value)} placeholder="1.25" className={inputCls} />
+            </Field>
+
+            <Field label={<><Target className="w-3 h-3 inline mr-1 text-emerald-400" /> TP Price</>}>
+              <input type="number" step="any" value={tpPrice} onChange={(e) => setTpPrice(e.target.value)} placeholder={direction === "BUY" ? "above entry" : "below entry"} className={inputCls} />
+            </Field>
+
+            <Field label={<><ShieldAlert className="w-3 h-3 inline mr-1 text-red-400" /> SL Price</>}>
+              <input type="number" step="any" value={slPrice} onChange={(e) => setSlPrice(e.target.value)} placeholder={direction === "BUY" ? "below entry" : "above entry"} className={inputCls} />
+            </Field>
+
+            <Field label="Date & Time (optional)">
+              <input type="datetime-local" value={scheduledAt} onChange={(e) => setScheduledAt(e.target.value)} className={inputCls} />
+            </Field>
+
+            <Field label="Notes (optional)">
+              <input type="text" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="London open" className={inputCls} />
+            </Field>
           </div>
 
-          <div className="flex items-center justify-between flex-wrap gap-3">
-            <div className="text-xs text-white/50">
-              {previewExit !== null && (
-                <span>
-                  Calculated exit: <span className="text-white/90 font-mono">{previewExit.toFixed(5)}</span>
-                </span>
-              )}
-            </div>
-            <button
-              onClick={() => createMut.mutate()}
-              disabled={createMut.isPending || !entryPrice || !pipsTarget || !profitPct}
-              className="px-5 py-2 rounded-xl bg-violet-500/20 border border-violet-500/40 text-violet-200 hover:bg-violet-500/30 disabled:opacity-40 transition-colors text-sm font-medium flex items-center gap-2"
-            >
+          <div className="flex items-center justify-between flex-wrap gap-3 pt-1">
+            <PreviewBar entry={parseFloat(entryPrice)} tp={parseFloat(tpPrice)} sl={parseFloat(slPrice)} pipSize={pipSize} pct={parseFloat(profitPct)} />
+            <button onClick={() => createMut.mutate()} disabled={createMut.isPending || !entryPrice || !profitPct || (!tpPrice && !slPrice)}
+              className="px-5 py-2.5 rounded-xl bg-violet-500/20 border border-violet-500/40 text-violet-200 hover:bg-violet-500/30 disabled:opacity-40 transition-colors text-sm font-medium flex items-center gap-2">
               {createMut.isPending ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
-              Open Signal
+              Open Trade
             </button>
           </div>
         </motion.div>
 
-        {/* Running trades */}
-        <div className="space-y-2">
-          <div className="flex items-center gap-2 text-white/70 text-sm font-medium">
-            <Clock className="w-4 h-4" /> Running Trades ({running.length})
-          </div>
+        {/* Running */}
+        <Section icon={<Clock className="w-4 h-4" />} title={`Running (${running.length})`}>
           {running.length === 0 ? (
-            <div className="text-center py-10 text-white/30 text-sm border border-white/5 rounded-xl">No active signals</div>
+            <Empty>No active signals — open one above.</Empty>
           ) : (
             <div className="grid gap-2">
               {running.map((t) => (
-                <RunningRow key={t.id} t={t} onClose={(pct, manual) => closeMut.mutate({ id: t.id, pct, manual })} closing={closeMut.isPending} />
+                <RunningCard key={t.id} t={t}
+                  onTP={() => tpMut.mutate(t.id)}
+                  onSL={() => slMut.mutate(t.id)}
+                  onManual={(pct) => manualMut.mutate({ id: t.id, pct })}
+                  busy={tpMut.isPending || slMut.isPending || manualMut.isPending}
+                />
               ))}
             </div>
           )}
-        </div>
+        </Section>
 
-        {/* Closed history */}
-        <div className="space-y-2">
-          <div className="flex items-center gap-2 text-white/70 text-sm font-medium">
-            <CheckCircle2 className="w-4 h-4" /> Recent Closed ({closed.length})
-          </div>
+        {/* Closed */}
+        <Section icon={<CheckCircle2 className="w-4 h-4" />} title={`Closed (${closed.length})`}>
           <div className="overflow-x-auto border border-white/5 rounded-xl">
             <table className="w-full text-sm">
               <thead className="text-xs text-white/40 bg-white/3">
@@ -268,84 +229,186 @@ export default function AdminSignalTradesPage() {
                   <th className="text-left px-3 py-2">Dir</th>
                   <th className="text-right px-3 py-2">Entry</th>
                   <th className="text-right px-3 py-2">Exit</th>
-                  <th className="text-right px-3 py-2">Realized %</th>
+                  <th className="text-right px-3 py-2">PnL %</th>
                   <th className="text-right px-3 py-2">Distributed</th>
                   <th className="text-right px-3 py-2">Users</th>
-                  <th className="text-left px-3 py-2">Reason</th>
+                  <th className="text-left px-3 py-2">Outcome</th>
                   <th className="text-right px-3 py-2">Closed</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
-                {closed.map((t) => (
-                  <tr key={t.id} className="text-white/80">
-                    <td className="px-3 py-2 text-white/40">{t.id}</td>
-                    <td className="px-3 py-2 font-medium">{t.pair}</td>
-                    <td className={`px-3 py-2 font-medium ${t.direction === "BUY" ? "text-emerald-400" : "text-red-400"}`}>{t.direction}</td>
-                    <td className="px-3 py-2 text-right font-mono">{Number(t.entryPrice).toFixed(5)}</td>
-                    <td className="px-3 py-2 text-right font-mono">{t.realizedExitPrice ? Number(t.realizedExitPrice).toFixed(5) : "—"}</td>
-                    <td className={`px-3 py-2 text-right font-mono ${parseFloat(t.realizedProfitPercent ?? "0") >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-                      {t.realizedProfitPercent ? `${parseFloat(t.realizedProfitPercent).toFixed(2)}%` : "—"}
-                    </td>
-                    <td className="px-3 py-2 text-right font-mono">${Number(t.totalDistributed ?? 0).toFixed(2)}</td>
-                    <td className="px-3 py-2 text-right">{t.affectedUsers ?? 0}</td>
-                    <td className="px-3 py-2 text-xs text-white/50">{t.closeReason ?? "—"}</td>
-                    <td className="px-3 py-2 text-right text-xs text-white/40">{t.closedAt ? new Date(t.closedAt).toLocaleString() : "—"}</td>
-                  </tr>
-                ))}
-                {closed.length === 0 && (
-                  <tr><td colSpan={10} className="px-3 py-6 text-center text-white/30">No closed trades yet</td></tr>
-                )}
+                {closed.map((t) => {
+                  const pct = parseFloat(t.realizedProfitPercent ?? "0");
+                  return (
+                    <tr key={t.id} className="text-white/80">
+                      <td className="px-3 py-2 text-white/40">{t.id}</td>
+                      <td className="px-3 py-2 font-medium">{t.pair}</td>
+                      <td className={`px-3 py-2 font-medium ${t.direction === "BUY" ? "text-emerald-400" : "text-red-400"}`}>{t.direction}</td>
+                      <td className="px-3 py-2 text-right font-mono text-xs">{Number(t.entryPrice).toFixed(5)}</td>
+                      <td className="px-3 py-2 text-right font-mono text-xs">{t.realizedExitPrice ? Number(t.realizedExitPrice).toFixed(5) : "—"}</td>
+                      <td className={`px-3 py-2 text-right font-mono ${pct >= 0 ? "text-emerald-400" : "text-red-400"}`}>{pct.toFixed(2)}%</td>
+                      <td className="px-3 py-2 text-right font-mono">${Number(t.totalDistributed ?? 0).toFixed(2)}</td>
+                      <td className="px-3 py-2 text-right">{t.affectedUsers ?? 0}</td>
+                      <td className="px-3 py-2 text-xs"><OutcomeBadge reason={t.closeReason} /></td>
+                      <td className="px-3 py-2 text-right text-[10px] text-white/40">{t.closedAt ? new Date(t.closedAt).toLocaleString() : "—"}</td>
+                    </tr>
+                  );
+                })}
+                {closed.length === 0 && <tr><td colSpan={10} className="px-3 py-6 text-center text-white/30">No closed trades yet</td></tr>}
               </tbody>
             </table>
           </div>
-        </div>
+        </Section>
       </div>
     </Layout>
   );
 }
 
-function RunningRow({ t, onClose, closing }: { t: Trade; onClose: (pct?: number, manual?: boolean) => void; closing: boolean }) {
-  const [override, setOverride] = useState("");
+const inputCls = "w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white outline-none focus:border-violet-400/40";
+
+function Field({ label, children }: { label: React.ReactNode; children: React.ReactNode }) {
   return (
-    <div className="border border-white/10 rounded-xl p-4 bg-white/3 flex flex-wrap items-center gap-3">
-      <div className="flex items-center gap-2">
-        <div className={`px-2 py-0.5 rounded-md text-xs font-medium ${t.direction === "BUY" ? "bg-emerald-500/15 text-emerald-300" : "bg-red-500/15 text-red-300"}`}>
-          {t.direction}
+    <div>
+      <label className="text-xs text-white/50 block mb-1">{label}</label>
+      {children}
+    </div>
+  );
+}
+
+function Section({ icon, title, children }: { icon: React.ReactNode; title: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2 text-white/70 text-sm font-medium">{icon} {title}</div>
+      {children}
+    </div>
+  );
+}
+
+function Empty({ children }: { children: React.ReactNode }) {
+  return <div className="text-center py-10 text-white/30 text-sm border border-white/5 rounded-xl">{children}</div>;
+}
+
+function OutcomeBadge({ reason }: { reason: string | null }) {
+  if (reason === "target_hit") return <span className="px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300 text-[10px] font-medium">TP</span>;
+  if (reason === "stop_loss") return <span className="px-1.5 py-0.5 rounded bg-red-500/15 text-red-300 text-[10px] font-medium">SL</span>;
+  if (reason === "manual") return <span className="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 text-[10px] font-medium">MANUAL</span>;
+  return <span className="text-white/40 text-[10px]">{reason ?? "—"}</span>;
+}
+
+function PreviewBar({ entry, tp, sl, pipSize, pct }: { entry: number; tp: number; sl: number; pipSize: number; pct: number }) {
+  const tpPips = entry && tp ? Math.abs(tp - entry) / pipSize : 0;
+  const slPips = entry && sl ? Math.abs(entry - sl) / pipSize : 0;
+  const lossPct = pct && tpPips ? -1 * pct * (slPips / tpPips) : 0;
+  if (!entry) return <div />;
+  return (
+    <div className="text-xs text-white/40 flex flex-wrap gap-3">
+      {tp > 0 && <span>TP: <span className="text-emerald-300">{tpPips.toFixed(1)} pips → +{pct.toFixed(2)}%</span></span>}
+      {sl > 0 && <span>SL: <span className="text-red-300">{slPips.toFixed(1)} pips → {lossPct.toFixed(2)}%</span></span>}
+    </div>
+  );
+}
+
+function RunningCard({ t, onTP, onSL, onManual, busy }: {
+  t: Trade; onTP: () => void; onSL: () => void; onManual: (pct: number) => void; busy: boolean;
+}) {
+  const [confirmAction, setConfirmAction] = useState<"tp" | "sl" | null>(null);
+  const [manualPct, setManualPct] = useState("");
+  const [showAudit, setShowAudit] = useState(false);
+  const expectedPct = parseFloat(t.expectedProfitPercent);
+
+  return (
+    <div className="border border-white/10 rounded-xl bg-white/3 overflow-hidden">
+      <div className="p-4 flex flex-wrap items-center gap-3">
+        <div className="flex items-center gap-2">
+          <div className={`px-2 py-0.5 rounded-md text-xs font-medium ${t.direction === "BUY" ? "bg-emerald-500/15 text-emerald-300" : "bg-red-500/15 text-red-300"}`}>{t.direction}</div>
+          <div className="font-medium text-white">{t.pair}</div>
+          <div className="text-xs text-white/40">#{t.id}</div>
+          {t.status === "closing" && <span className="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 text-[10px]">CLOSING…</span>}
         </div>
-        <div className="font-medium text-white">{t.pair}</div>
-        <div className="text-xs text-white/40">#{t.id}</div>
+        <div className="text-xs text-white/60 flex gap-3 flex-wrap">
+          <span>Entry <span className="text-white/90 font-mono">{Number(t.entryPrice).toFixed(5)}</span></span>
+          {t.tpPrice && <span>TP <span className="text-emerald-300 font-mono">{Number(t.tpPrice).toFixed(5)}</span></span>}
+          {t.slPrice && <span>SL <span className="text-red-300 font-mono">{Number(t.slPrice).toFixed(5)}</span></span>}
+          <span className="text-emerald-300">+{expectedPct.toFixed(2)}%</span>
+        </div>
+        <div className="ml-auto flex items-center gap-2">
+          {t.tpPrice && (
+            <button
+              onClick={() => confirmAction === "tp" ? onTP() : setConfirmAction("tp")}
+              disabled={busy || t.status !== "running"}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors disabled:opacity-40 ${
+                confirmAction === "tp" ? "bg-emerald-500/40 border-emerald-400 text-white" : "bg-emerald-500/15 border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/25"
+              }`}
+            >
+              <Target className="w-3 h-3 inline mr-1" />
+              {confirmAction === "tp" ? "Confirm TP" : "TP HIT"}
+            </button>
+          )}
+          {t.slPrice && (
+            <button
+              onClick={() => confirmAction === "sl" ? onSL() : setConfirmAction("sl")}
+              disabled={busy || t.status !== "running"}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors disabled:opacity-40 ${
+                confirmAction === "sl" ? "bg-red-500/40 border-red-400 text-white" : "bg-red-500/15 border-red-500/30 text-red-300 hover:bg-red-500/25"
+              }`}
+            >
+              <ShieldAlert className="w-3 h-3 inline mr-1" />
+              {confirmAction === "sl" ? "Confirm SL" : "SL HIT"}
+            </button>
+          )}
+          {confirmAction && (
+            <button onClick={() => setConfirmAction(null)} className="px-2 py-1.5 rounded-lg bg-white/5 text-white/50 text-xs"><X className="w-3 h-3" /></button>
+          )}
+          <button onClick={() => setShowAudit((v) => !v)} className="px-2 py-1.5 rounded-lg bg-white/5 border border-white/10 text-white/60 text-xs">
+            <FileText className="w-3 h-3 inline mr-1" />Audit {showAudit ? <ChevronUp className="w-3 h-3 inline" /> : <ChevronDown className="w-3 h-3 inline" />}
+          </button>
+        </div>
       </div>
-      <div className="text-xs text-white/60 flex gap-3 flex-wrap">
-        <span>Entry: <span className="text-white/90 font-mono">{Number(t.entryPrice).toFixed(5)}</span></span>
-        <span>Target: <span className="text-white/90 font-mono">{Number(t.exitPrice).toFixed(5)}</span></span>
-        <span>{t.pipsTarget} pips</span>
-        <span className="text-emerald-300">{Number(t.expectedProfitPercent).toFixed(2)}%</span>
-      </div>
-      <div className="ml-auto flex items-center gap-2">
-        <input
-          type="number"
-          step="0.01"
-          value={override}
-          onChange={(e) => setOverride(e.target.value)}
-          placeholder="override %"
-          className="w-24 bg-white/5 border border-white/10 rounded-lg px-2 py-1 text-xs text-white outline-none"
-        />
-        <button
-          onClick={() => onClose(override ? parseFloat(override) : undefined, false)}
-          disabled={closing}
-          className="px-3 py-1.5 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs hover:bg-emerald-500/25 disabled:opacity-40"
-        >
-          Close @ Target
+      <div className="px-4 pb-3 flex items-center gap-2 border-t border-white/5 pt-3 bg-white/2">
+        <span className="text-[10px] text-white/40 uppercase tracking-wider">Manual close</span>
+        <input type="number" step="0.01" value={manualPct} onChange={(e) => setManualPct(e.target.value)} placeholder="profit %"
+          className="w-28 bg-white/5 border border-white/10 rounded-lg px-2 py-1 text-xs text-white outline-none" />
+        <button onClick={() => manualPct && onManual(parseFloat(manualPct))} disabled={busy || !manualPct || t.status !== "running"}
+          className="px-3 py-1 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs hover:bg-amber-500/25 disabled:opacity-40">
+          Manual Close
         </button>
-        <button
-          onClick={() => onClose(override ? parseFloat(override) : undefined, true)}
-          disabled={closing || !override}
-          className="px-3 py-1.5 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs hover:bg-amber-500/25 disabled:opacity-40"
-          title="Force close with manual % (bypasses slippage check)"
-        >
-          <AlertTriangle className="w-3 h-3 inline mr-1" /> Manual
-        </button>
+        {t.notes && <span className="text-[11px] text-white/40 ml-auto italic">{t.notes}</span>}
       </div>
+      <AnimatePresence>
+        {showAudit && (
+          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }}
+            className="overflow-hidden border-t border-white/5">
+            <AuditLog tradeId={t.id} />
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+function AuditLog({ tradeId }: { tradeId: number }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ["trade-audit", tradeId],
+    queryFn: () => apiFetch(`/api/admin/signal-trades/${tradeId}/audit`),
+    refetchInterval: 5000,
+  });
+  const log = (data?.log ?? []) as { id: number; action: string; actorUserId: number | null; details: string | null; createdAt: string }[];
+  return (
+    <div className="px-4 py-3 bg-black/20">
+      {isLoading ? <div className="text-xs text-white/30">loading…</div> : log.length === 0 ? (
+        <div className="text-xs text-white/30">no audit entries</div>
+      ) : (
+        <div className="space-y-1.5">
+          {log.map((e) => (
+            <div key={e.id} className="text-[11px] flex items-start gap-2">
+              <span className="text-white/30 font-mono w-32 shrink-0">{new Date(e.createdAt).toLocaleString()}</span>
+              <span className="px-1.5 py-0.5 rounded bg-violet-500/15 text-violet-300 font-medium uppercase">{e.action}</span>
+              {e.actorUserId && <span className="text-white/40">u#{e.actorUserId}</span>}
+              {e.details && <span className="text-white/50 break-all">{e.details}</span>}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

@@ -3,6 +3,9 @@ import { authMiddleware, adminMiddleware, type AuthRequest } from "../middleware
 import {
   createSignalTrade,
   closeSignalTrade,
+  hitTakeProfit,
+  hitStopLoss,
+  getTradeAuditLog,
   listTrades,
   getUserTradeHistory,
 } from "../lib/signal-trade-service";
@@ -25,17 +28,30 @@ router.post(
     const pair = typeof b.pair === "string" ? b.pair.trim() : "";
     const direction = b.direction;
     const entryPrice = num(b.entryPrice);
+    const tpPrice = num(b.tpPrice);
+    const slPrice = num(b.slPrice);
     const pipsTarget = num(b.pipsTarget);
     const pipSize = num(b.pipSize);
     const expectedProfitPercent = num(b.expectedProfitPercent);
+    const scheduledAtRaw = b.scheduledAt;
 
     if (pair.length < 2 || pair.length > 20) { res.status(400).json({ error: "Invalid pair" }); return; }
     if (direction !== "BUY" && direction !== "SELL") { res.status(400).json({ error: "direction must be BUY or SELL" }); return; }
     if (entryPrice === null || entryPrice <= 0) { res.status(400).json({ error: "Invalid entryPrice" }); return; }
-    if (pipsTarget === null || pipsTarget <= 0) { res.status(400).json({ error: "Invalid pipsTarget" }); return; }
+    if (tpPrice !== null && tpPrice <= 0) { res.status(400).json({ error: "Invalid tpPrice" }); return; }
+    if (slPrice !== null && slPrice <= 0) { res.status(400).json({ error: "Invalid slPrice" }); return; }
+    if (tpPrice === null && (pipsTarget === null || pipsTarget <= 0)) {
+      res.status(400).json({ error: "Provide either tpPrice or pipsTarget" }); return;
+    }
     if (pipSize !== null && pipSize <= 0) { res.status(400).json({ error: "pipSize must be positive" }); return; }
     if (expectedProfitPercent === null || expectedProfitPercent < -50 || expectedProfitPercent > 50) {
       res.status(400).json({ error: "expectedProfitPercent must be between -50 and 50" }); return;
+    }
+    let scheduledAt: Date | undefined;
+    if (scheduledAtRaw) {
+      const d = new Date(String(scheduledAtRaw));
+      if (isNaN(d.getTime())) { res.status(400).json({ error: "Invalid scheduledAt" }); return; }
+      scheduledAt = d;
     }
 
     try {
@@ -43,9 +59,12 @@ router.post(
         pair,
         direction,
         entryPrice,
-        pipsTarget,
+        tpPrice: tpPrice ?? undefined,
+        slPrice: slPrice ?? undefined,
+        pipsTarget: pipsTarget ?? undefined,
         pipSize: pipSize ?? undefined,
         expectedProfitPercent,
+        scheduledAt,
         notes: typeof b.notes === "string" ? b.notes.slice(0, 500) : undefined,
         idempotencyKey: typeof b.idempotencyKey === "string" ? b.idempotencyKey.slice(0, 80) : undefined,
         createdBy: req.userId!,
@@ -92,6 +111,53 @@ router.post(
     } catch (e: any) {
       res.status(400).json({ error: e.message });
     }
+  },
+);
+
+// ---------- Admin: TP HIT (one-click close at TP price) ----------
+router.post(
+  "/admin/signal-trades/:id/tp",
+  authMiddleware,
+  adminMiddleware,
+  async (req: AuthRequest, res) => {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) { res.status(400).json({ error: "Invalid trade id" }); return; }
+    try {
+      const result = await hitTakeProfit(id, req.userId);
+      res.json({ success: true, outcome: "TP", ...result });
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  },
+);
+
+// ---------- Admin: SL HIT (one-click close at SL price) ----------
+router.post(
+  "/admin/signal-trades/:id/sl",
+  authMiddleware,
+  adminMiddleware,
+  async (req: AuthRequest, res) => {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) { res.status(400).json({ error: "Invalid trade id" }); return; }
+    try {
+      const result = await hitStopLoss(id, req.userId);
+      res.json({ success: true, outcome: "SL", ...result });
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  },
+);
+
+// ---------- Admin: audit log for one trade ----------
+router.get(
+  "/admin/signal-trades/:id/audit",
+  authMiddleware,
+  adminMiddleware,
+  async (req: AuthRequest, res) => {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) { res.status(400).json({ error: "Invalid trade id" }); return; }
+    const log = await getTradeAuditLog(id);
+    res.json({ log });
   },
 );
 
