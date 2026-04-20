@@ -1,5 +1,5 @@
-import { db, walletsTable, investmentsTable, transactionsTable, systemSettingsTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { db, walletsTable, investmentsTable, transactionsTable, systemSettingsTable, equityHistoryTable, monthlyPerformanceTable } from "@workspace/db";
+import { eq, sql } from "drizzle-orm";
 import { ensureUserAccounts, postJournalEntry, journalForTransaction, journalForSystem } from "./ledger-service";
 import { logger } from "./logger";
 
@@ -93,6 +93,66 @@ export async function seedDemoFunds(userId: number, amount?: number): Promise<{ 
     }).where(eq(investmentsTable.userId, userId));
   }
 
+  // Backfill 30-day equity history so Advanced Analytics charts render a real curve
+  try {
+    await backfillEquityHistory(userId, amt);
+  } catch (e) {
+    logger.error(`[DEMO] Equity backfill failed for user ${userId}: ${(e as Error).message}`);
+  }
+
   logger.info(`[DEMO] Credited user #${userId} with $${amt} (main=${mainRemainder}, trading=${tradingAlloc})`);
   return { credited: true, amount: amt };
+}
+
+/**
+ * Seed 30 days of realistic equity progression ending at the current equity.
+ * Skip if rows already exist (idempotent). Uses SQL generate_series for efficiency.
+ */
+export async function backfillEquityHistory(userId: number, currentEquity: number): Promise<void> {
+  const existing = await db.select().from(equityHistoryTable).where(eq(equityHistoryTable.userId, userId)).limit(1);
+  if (existing.length > 0) return;
+
+  // 30 days of sinusoidal growth ending at current equity (today's row is separate)
+  await db.execute(sql`
+    INSERT INTO equity_history (user_id, date, equity, profit)
+    SELECT
+      ${userId}::int,
+      (CURRENT_DATE - (29 - gs.n) * INTERVAL '1 day')::date,
+      ROUND((
+        ${currentEquity}::numeric * 0.80
+        + ${currentEquity}::numeric * 0.20 * (gs.n / 29.0)
+        + ${currentEquity}::numeric * 0.01 * SIN(gs.n * 0.7 + ${userId}::int * 0.3)
+      )::numeric, 8),
+      ROUND((
+        ${currentEquity}::numeric * 0.007
+        + ${currentEquity}::numeric * 0.005 * SIN(gs.n * 0.7 + ${userId}::int * 0.3)
+      )::numeric, 8)
+    FROM generate_series(0, 28) AS gs(n)
+    ON CONFLICT DO NOTHING
+  `);
+
+  // Today's row = actual current equity
+  await db.insert(equityHistoryTable).values({
+    userId,
+    date: new Date().toISOString().split("T")[0]!,
+    equity: currentEquity.toString(),
+    profit: "0",
+  }).onConflictDoNothing();
+
+  // Monthly performance starter row
+  const ym = new Date().toISOString().slice(0, 7);
+  const startEq = +(currentEquity * 0.80).toFixed(2);
+  const monthlyReturn = startEq > 0 ? +(((currentEquity - startEq) / startEq) * 100).toFixed(4) : 0;
+  await db.insert(monthlyPerformanceTable).values({
+    userId,
+    yearMonth: ym,
+    monthlyReturn: monthlyReturn.toString(),
+    maxDrawdown: "0",
+    winRate: "100",
+    totalProfit: (currentEquity - startEq).toFixed(2),
+    tradingDays: 30,
+    winningDays: 20,
+    startEquity: startEq.toString(),
+    peakEquity: currentEquity.toString(),
+  }).onConflictDoNothing();
 }
