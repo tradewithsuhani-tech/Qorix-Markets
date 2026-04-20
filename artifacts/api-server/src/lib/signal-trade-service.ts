@@ -275,11 +275,20 @@ export async function closeSignalTrade(input: CloseTradeInput, actorUserId?: num
 
       await ensureUserAccounts(w.userId, tx);
 
-      // Update wallet (profit goes to profit_balance)
-      const newProfitBal = sql`${walletsTable.profitBalance}::numeric + ${profit.toString()}::numeric`;
+      // Signal trade P/L flows into trading balance. At month-end (25th), accumulated
+      // gains are swept from trading → profit wallet. Profit wallet is user-withdrawable.
+      // Cap negative P/L to available trading balance so the user's trading account
+      // never goes below zero (platform absorbs anything beyond).
+      const currentTrading = parseFloat(w.tradingBalance as string);
+      const appliedDelta = profit >= 0 ? profit : -Math.min(Math.abs(profit), currentTrading);
+      if (appliedDelta === 0 && profit < 0) {
+        // Nothing to debit — skip entirely for this user on this trade
+        continue;
+      }
+      const newTradingBal = sql`${walletsTable.tradingBalance}::numeric + ${appliedDelta.toString()}::numeric`;
       await tx
         .update(walletsTable)
-        .set({ profitBalance: newProfitBal as any, updatedAt: new Date() })
+        .set({ tradingBalance: newTradingBal as any, updatedAt: new Date() })
         .where(eq(walletsTable.userId, w.userId));
 
       // Mirror profit into investments aggregate for dashboard widgets (Total Profit / Daily P&L / Active Investment)
@@ -396,38 +405,33 @@ export async function closeSignalTrade(input: CloseTradeInput, actorUserId?: num
         profitAmount: profit.toString(),
       });
 
-      // Double-entry: profit_expense ↑ debit, user:profit ↑ credit (loss handled with sign reversal)
-      if (profit > 0) {
+      // Double-entry: signal P/L lands in user's TRADING ledger account.
+      // Gains: profit_expense → user:trading. Losses: user:trading → profit_expense.
+      // Loss amount already capped to currentTrading above (appliedDelta).
+      if (appliedDelta > 0) {
         await postJournalEntry(
           journalForSystem(`signal-${t.id}-u${w.userId}`),
           [
-            { accountCode: "platform:profit_expense", entryType: "debit",  amount: profit, description: `Signal #${t.id} payout` },
-            { accountCode: `user:${w.userId}:profit`, entryType: "credit", amount: profit, description: `Signal #${t.id} payout` },
+            { accountCode: "platform:profit_expense",   entryType: "debit",  amount: appliedDelta, description: `Signal #${t.id} payout` },
+            { accountCode: `user:${w.userId}:trading`,  entryType: "credit", amount: appliedDelta, description: `Signal #${t.id} payout` },
           ],
           txRow!.id,
           tx,
         );
-      } else {
-        const requestedLoss = Math.abs(profit);
-        // Cap loss to user's available profit balance — a user cannot lose more
-        // profit than they currently hold. If profit balance is 0, the platform
-        // absorbs the loss entirely (user's own money in main/trading is untouched).
-        const availableProfit = await getLedgerBalance(`user:${w.userId}:profit`, tx);
-        const loss = Math.max(0, Math.min(requestedLoss, availableProfit));
-        if (loss > 0) {
-          await postJournalEntry(
-            journalForSystem(`signal-${t.id}-u${w.userId}-loss`),
-            [
-              { accountCode: `user:${w.userId}:profit`, entryType: "debit",  amount: loss, description: `Signal #${t.id} loss` },
-              { accountCode: "platform:profit_expense", entryType: "credit", amount: loss, description: `Signal #${t.id} loss reversal` },
-            ],
-            txRow!.id,
-            tx,
-          );
-        }
+      } else if (appliedDelta < 0) {
+        const loss = Math.abs(appliedDelta);
+        await postJournalEntry(
+          journalForSystem(`signal-${t.id}-u${w.userId}-loss`),
+          [
+            { accountCode: `user:${w.userId}:trading`,  entryType: "debit",  amount: loss, description: `Signal #${t.id} loss` },
+            { accountCode: "platform:profit_expense",   entryType: "credit", amount: loss, description: `Signal #${t.id} loss reversal` },
+          ],
+          txRow!.id,
+          tx,
+        );
       }
 
-      totalDistributed += profit;
+      totalDistributed += appliedDelta;
     }
 
     await tx
