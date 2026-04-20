@@ -173,15 +173,16 @@ async function runProfitTests(testUsers: typeof usersTable.$inferSelect[]): Prom
 
         if (profit > 0) {
           await db.transaction(async (tx) => {
-            const wallets = await tx.select().from(walletsTable).where(eq(walletsTable.userId, inv.userId)).limit(1);
-            const wallet = wallets[0];
-            if (!wallet) return;
+            const walletExists = await tx.select({ id: walletsTable.id }).from(walletsTable).where(eq(walletsTable.userId, inv.userId)).limit(1);
+            if (walletExists.length === 0) return;
 
             await ensureUserAccounts(inv.userId, tx);
 
-            const newProfit = parseFloat(wallet.profitBalance as string) + profit;
-            await tx.update(walletsTable).set({ profitBalance: newProfit.toString(), updatedAt: new Date() })
-              .where(eq(walletsTable.userId, inv.userId));
+            // Atomic increment — avoids lost updates under concurrent simulated runs.
+            await tx.update(walletsTable).set({
+              profitBalance: sql`${walletsTable.profitBalance}::numeric + ${profit.toString()}::numeric` as any,
+              updatedAt: new Date(),
+            }).where(eq(walletsTable.userId, inv.userId));
 
             const [profitTxn] = await tx.insert(transactionsTable).values({
               userId: inv.userId,
@@ -239,21 +240,31 @@ async function runWithdrawalTests(testUsers: typeof usersTable.$inferSelect[]): 
   const sample = testUsers.slice(0, 5);
 
   for (const user of sample) {
-    const wallets = await db.select().from(walletsTable).where(eq(walletsTable.userId, user.id)).limit(1);
-    const wallet = wallets[0];
-    if (!wallet) continue;
-    const profitBal = parseFloat(wallet.profitBalance as string);
-    if (profitBal > 5) {
+    // Peek at current profit balance (outside tx) just to decide whether to attempt —
+    // the authoritative check uses a conditional decrement inside the transaction.
+    const snapshot = await db.select({ profitBalance: walletsTable.profitBalance })
+      .from(walletsTable).where(eq(walletsTable.userId, user.id)).limit(1);
+    const snapBal = snapshot[0] ? parseFloat(snapshot[0].profitBalance as string) : 0;
+    if (snapBal > 5) {
       const t0 = Date.now();
-      const wdAmt = Math.min(profitBal * 0.5, 50);
+      const wdAmt = Math.min(snapBal * 0.5, 50);
       try {
-        const newBal = profitBal - wdAmt;
-
-        await db.transaction(async (tx) => {
+        const newBal = await db.transaction(async (tx) => {
           await ensureUserAccounts(user.id, tx);
 
-          await tx.update(walletsTable).set({ profitBalance: newBal.toString(), updatedAt: new Date() })
-            .where(eq(walletsTable.userId, user.id));
+          // Conditional atomic decrement — only succeeds if balance is still sufficient.
+          // Prevents lost updates and over-withdrawal under concurrent test runs.
+          const updated = await tx.update(walletsTable).set({
+            profitBalance: sql`${walletsTable.profitBalance}::numeric - ${wdAmt.toString()}::numeric` as any,
+            updatedAt: new Date(),
+          }).where(and(
+            eq(walletsTable.userId, user.id),
+            sql`${walletsTable.profitBalance}::numeric >= ${wdAmt.toString()}::numeric`,
+          )).returning({ profitBalance: walletsTable.profitBalance });
+
+          if (updated.length === 0) {
+            throw new Error("Insufficient profit balance (concurrent update)");
+          }
 
           const [wdTxn] = await tx.insert(transactionsTable).values({
             userId: user.id,
@@ -273,12 +284,14 @@ async function runWithdrawalTests(testUsers: typeof usersTable.$inferSelect[]): 
             wdTxn!.id,
             tx,
           );
+
+          return parseFloat(updated[0]!.profitBalance as string);
         });
 
         results.push({
           name: `Withdrawal — user #${user.id} ($${wdAmt.toFixed(2)})`,
           status: "passed",
-          detail: `Profit reduced from $${profitBal.toFixed(2)} → $${newBal.toFixed(2)}, status=pending`,
+          detail: `Profit reduced to $${newBal.toFixed(2)}, status=pending`,
           durationMs: Date.now() - t0,
         });
       } catch (e: any) {
