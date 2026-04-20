@@ -194,6 +194,26 @@ export const WEEKLY_REFERRAL_POINTS_CAP = 1000;
 // ---------------------------------------------------------------------------
 // Get today's start timestamp
 // ---------------------------------------------------------------------------
+function computePeriodKey(category: string): string {
+  const now = new Date();
+  if (category === "daily") {
+    const y = now.getUTCFullYear();
+    const m = String(now.getUTCMonth() + 1).padStart(2, "0");
+    const d = String(now.getUTCDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }
+  if (category === "weekly") {
+    // ISO week-numbering year + week
+    const date = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    const dayNum = (date.getUTCDay() + 6) % 7; // Monday = 0
+    date.setUTCDate(date.getUTCDate() - dayNum + 3); // nearest Thursday
+    const firstThursday = new Date(Date.UTC(date.getUTCFullYear(), 0, 4));
+    const week = 1 + Math.round(((date.getTime() - firstThursday.getTime()) / 86400000 - 3 + ((firstThursday.getUTCDay() + 6) % 7)) / 7);
+    return `${date.getUTCFullYear()}-W${String(week).padStart(2, "0")}`;
+  }
+  return "ALL"; // one_time, social, referral
+}
+
 function todayStart(): Date {
   const d = new Date();
   d.setHours(0, 0, 0, 0);
@@ -409,15 +429,28 @@ export async function completeTask(
     }
   }
 
-  const [completion] = await db
+  const periodKey = computePeriodKey(task.category);
+  const inserted = await db
     .insert(userTaskCompletionsTable)
     .values({
       userId,
       taskId: task.id,
       status: "completed",
       pointsAwarded: task.pointReward,
+      periodKey,
+    })
+    .onConflictDoNothing({
+      target: [
+        userTaskCompletionsTable.userId,
+        userTaskCompletionsTable.taskId,
+        userTaskCompletionsTable.periodKey,
+      ],
     })
     .returning();
+  const completion = inserted[0];
+  if (!completion) {
+    return { success: false, error: "Already completed for this period" };
+  }
 
   const { awarded, capped } = await awardPoints(
     userId,

@@ -66,12 +66,20 @@ async function raiseFraudFlag(
 
   if (existing.length > 0) return; // already flagged recently
 
-  await db.insert(fraudFlagsTable).values({
-    userId,
-    flagType,
-    severity,
-    details: JSON.stringify(details),
-  });
+  // Atomic insert; partial unique index (user_id, flag_type) WHERE is_resolved=false
+  // prevents concurrent duplicate inserts.
+  const inserted = await db
+    .insert(fraudFlagsTable)
+    .values({
+      userId,
+      flagType,
+      severity,
+      details: JSON.stringify(details),
+    })
+    .onConflictDoNothing()
+    .returning({ id: fraudFlagsTable.id });
+
+  if (inserted.length === 0) return; // race lost — flag already exists
 
   logger.warn({ userId, flagType, severity, details }, "fraud-service: flag raised");
 
