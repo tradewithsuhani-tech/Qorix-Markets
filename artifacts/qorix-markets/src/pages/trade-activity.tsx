@@ -9,37 +9,158 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
 
-function DateField({
-  value,
-  onChange,
-  placeholder,
+type DateRange = { from?: Date; to?: Date };
+
+const RANGE_PRESETS: Array<{ key: string; label: string; days: number }> = [
+  { key: "3d", label: "Last 3 days", days: 3 },
+  { key: "7d", label: "Last 7 days", days: 7 },
+  { key: "30d", label: "Last 30 days", days: 30 },
+  { key: "3m", label: "Last 3 months", days: 90 },
+];
+
+function DateRangePicker({
+  fromValue,
+  toValue,
+  onApply,
 }: {
-  value: string;
-  onChange: (v: string) => void;
-  placeholder: string;
+  fromValue: string;
+  toValue: string;
+  onApply: (from: string, to: string) => void;
 }) {
-  const date = value ? new Date(value) : undefined;
-  const valid = date && !isNaN(date.getTime()) ? date : undefined;
+  const parse = (s: string): Date | undefined => {
+    if (!s) return undefined;
+    const d = new Date(s);
+    return isNaN(d.getTime()) ? undefined : d;
+  };
+
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState<DateRange>({
+    from: parse(fromValue),
+    to: parse(toValue),
+  });
+  const [activePreset, setActivePreset] = useState<string>("custom");
+
+  // Re-sync draft whenever the popover opens (so reopen reflects current applied value).
+  function openChange(next: boolean) {
+    setOpen(next);
+    if (next) {
+      setDraft({ from: parse(fromValue), to: parse(toValue) });
+      setActivePreset("custom");
+    }
+  }
+
+  function applyPreset(days: number, key: string) {
+    const to = new Date();
+    const from = new Date();
+    from.setDate(to.getDate() - days + 1);
+    setDraft({ from, to });
+    setActivePreset(key);
+  }
+
+  function handleApply() {
+    const f = draft.from ? format(draft.from, "yyyy-MM-dd") : "";
+    const t = draft.to ? format(draft.to, "yyyy-MM-dd") : (draft.from ? format(draft.from, "yyyy-MM-dd") : "");
+    onApply(f, t);
+    setOpen(false);
+  }
+
+  const triggerLabel = (() => {
+    const f = parse(fromValue);
+    const t = parse(toValue);
+    if (f && t) return `${format(f, "dd MMM yyyy")} → ${format(t, "dd MMM yyyy")}`;
+    if (f) return `From ${format(f, "dd MMM yyyy")}`;
+    return "Select date range";
+  })();
+
   return (
-    <Popover>
+    <Popover open={open} onOpenChange={openChange}>
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="flex items-center gap-2 bg-white/[0.03] border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white/90 hover:bg-white/[0.05] hover:border-white/20 focus:outline-none focus:border-blue-500/40 transition-colors min-w-[140px]"
+          className="flex items-center gap-2 bg-white/[0.03] border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white/90 hover:bg-white/[0.05] hover:border-white/20 focus:outline-none focus:border-blue-500/40 transition-colors"
         >
-          <CalendarIcon className="w-3.5 h-3.5 text-white/50 shrink-0" />
-          <span className={valid ? "text-white/90" : "text-white/40"}>
-            {valid ? format(valid, "dd MMM yyyy") : placeholder}
-          </span>
+          <CalendarIcon className="w-3.5 h-3.5 text-white/60 shrink-0" />
+          <span>{triggerLabel}</span>
         </button>
       </PopoverTrigger>
-      <PopoverContent className="w-auto p-0 bg-slate-900 border-white/10" align="start">
-        <Calendar
-          mode="single"
-          selected={valid}
-          onSelect={(d) => onChange(d ? format(d, "yyyy-MM-dd") : "")}
-          initialFocus
-        />
+      <PopoverContent
+        className="w-auto p-0 bg-slate-950 border border-white/10 shadow-2xl rounded-xl overflow-hidden"
+        align="start"
+        sideOffset={8}
+      >
+        <div className="flex flex-col md:flex-row">
+          {/* Preset sidebar */}
+          <div className="flex flex-col gap-0.5 p-2 md:w-44 md:border-r md:border-white/10 bg-white/[0.02]">
+            {RANGE_PRESETS.map((p) => (
+              <button
+                key={p.key}
+                type="button"
+                onClick={() => applyPreset(p.days, p.key)}
+                className={`text-left text-xs px-3 py-2 rounded-lg transition-colors ${
+                  activePreset === p.key
+                    ? "bg-blue-500/20 text-blue-200"
+                    : "text-white/70 hover:bg-white/5 hover:text-white"
+                }`}
+              >
+                {p.label}
+              </button>
+            ))}
+            <div className="h-px bg-white/5 my-1" />
+            <button
+              type="button"
+              onClick={() => setActivePreset("custom")}
+              className={`text-left text-xs px-3 py-2 rounded-lg transition-colors ${
+                activePreset === "custom"
+                  ? "bg-blue-500/20 text-blue-200"
+                  : "text-white/70 hover:bg-white/5 hover:text-white"
+              }`}
+            >
+              Custom date
+            </button>
+          </div>
+
+          {/* Calendar */}
+          <div className="p-2">
+            <Calendar
+              mode="range"
+              selected={draft as any}
+              onSelect={(r: any) => {
+                setDraft({ from: r?.from, to: r?.to });
+                setActivePreset("custom");
+              }}
+              numberOfMonths={1}
+              initialFocus
+            />
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-between gap-2 px-3 py-2.5 border-t border-white/10 bg-white/[0.02]">
+          <div className="text-[11px] text-white/50">
+            {draft.from && draft.to
+              ? `${format(draft.from, "dd MMM")} – ${format(draft.to, "dd MMM yyyy")}`
+              : draft.from
+              ? `From ${format(draft.from, "dd MMM yyyy")}`
+              : "Pick a start and end date"}
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              className="text-xs px-3 py-1.5 rounded-lg text-white/70 hover:text-white hover:bg-white/5 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleApply}
+              disabled={!draft.from}
+              className="text-xs font-semibold px-3.5 py-1.5 rounded-lg bg-blue-500 text-white hover:bg-blue-400 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              Set date
+            </button>
+          </div>
+        </div>
       </PopoverContent>
     </Popover>
   );
@@ -258,17 +379,15 @@ export default function TradeActivityPage() {
             </button>
           ))}
           {period === "CUSTOM" && (
-            <div className="flex items-center gap-2 ml-1">
-              <DateField
-                value={customFrom}
-                onChange={(v) => { setCustomFrom(v); setPage(1); }}
-                placeholder="From date"
-              />
-              <span className="text-white/40 text-xs">→</span>
-              <DateField
-                value={customTo}
-                onChange={(v) => { setCustomTo(v); setPage(1); }}
-                placeholder="To date"
+            <div className="ml-1">
+              <DateRangePicker
+                fromValue={customFrom}
+                toValue={customTo}
+                onApply={(f, t) => {
+                  setCustomFrom(f);
+                  setCustomTo(t);
+                  setPage(1);
+                }}
               />
             </div>
           )}
