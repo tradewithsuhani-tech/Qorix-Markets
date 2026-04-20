@@ -5,7 +5,7 @@ import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import { TrendingUp, Lock, Mail, User as UserIcon, ArrowLeft, Eye, EyeOff, ShieldCheck, CheckCircle2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { Turnstile, CAPTCHA_ENABLED } from "@/components/turnstile";
+import { Recaptcha, CAPTCHA_ENABLED } from "@/components/recaptcha";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
 function apiUrl(path: string) { return `${BASE_URL}/api${path}`; }
@@ -392,10 +392,9 @@ export default function LoginPage() {
 
             {CAPTCHA_ENABLED && (
               <div className="pt-1">
-                <Turnstile
+                <Recaptcha
                   onVerify={(t) => setCaptchaToken(t)}
                   onExpire={() => setCaptchaToken("")}
-                  action={isLogin ? "login" : "register"}
                 />
               </div>
             )}
