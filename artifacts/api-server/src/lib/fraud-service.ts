@@ -76,7 +76,10 @@ async function raiseFraudFlag(
       severity,
       details: JSON.stringify(details),
     })
-    .onConflictDoNothing()
+    .onConflictDoNothing({
+      target: [fraudFlagsTable.userId, fraudFlagsTable.flagType],
+      where: sql`is_resolved = false`,
+    })
     .returning({ id: fraudFlagsTable.id });
 
   if (inserted.length === 0) return; // race lost — flag already exists
