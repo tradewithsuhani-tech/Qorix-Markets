@@ -1,4 +1,4 @@
-import { pgTable, serial, text, boolean, timestamp, varchar } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, text, boolean, timestamp, varchar } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -16,6 +16,8 @@ export const usersTable = pgTable("users", {
   referralCode: varchar("referral_code", { length: 20 }).notNull().unique(),
   sponsorId: serial("sponsor_id"),
   tronAddress: varchar("tron_address", { length: 64 }),
+  emailVerified: boolean("email_verified").notNull().default(false),
+  points: integer("points").notNull().default(0),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

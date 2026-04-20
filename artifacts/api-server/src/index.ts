@@ -1,9 +1,11 @@
 import { ensureRedisRunning } from "./lib/start-redis";
 import { initSystemAccounts } from "./lib/ledger-service";
+import { seedTasks } from "./lib/task-service";
 
 async function main() {
   await ensureRedisRunning();
   await initSystemAccounts();
+  await seedTasks();
 
   const { default: app } = await import("./app");
   const { logger, errorLogger } = await import("./lib/logger");

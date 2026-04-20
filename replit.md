@@ -58,6 +58,12 @@ lib/
 6. **Referral System**: Unique referral codes, sponsor earns 0.5% monthly on active investment
 7. **Dashboard**: Animated balances, equity area chart, recent trades, P&L display
 8. **Capital Protection**: Configurable drawdown limits (3/5/10%), auto-pause trading, sticky banner
+9. **Anti-Fraud / Signup Security**: Honeypot field, IP signup rate limiting (5/IP/day), bot timing detection, device fingerprint & IP tracking, multi-account detection
+10. **Email OTP Verification**: 6-digit OTP on signup and withdrawal confirmation; dev mode logs OTP to console
+11. **Task & Points System**: Daily/weekly/social/one-time task definitions (seeded at startup); points awarded per task; daily cap of 200pts; points usable for fee discounts & VIP upgrades; admin-side task proof approval/rejection
+12. **Social Task Verification**: Users submit URL/text proof; admin review queue at /admin/task-proofs
+13. **Withdrawal Security**: OTP required before every withdrawal; large withdrawals require admin approval
+14. **Points Ledger**: Full points history per user; admin can grant/deduct points
 9. **Advanced Analytics**: Equity curve, drawdown chart, profit distribution, risk/return scatter, rolling returns (Chart.js)
 10. **Notification System**: Real-time bell icon with badge, dropdown panel, per-event types (deposit, withdrawal, daily_profit, monthly_payout, drawdown_alert, system), mark-read/delete
 11. **Admin Panel**: Set daily profit %, view AUM, approve/reject withdrawals, user management

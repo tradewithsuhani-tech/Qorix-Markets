@@ -31,6 +31,8 @@ import {
   Globe,
   Trophy,
   Database,
+  ListChecks,
+  ClipboardCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -380,6 +382,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/transactions", label: "History", icon: History },
     { href: "/referral", label: "Referrals", icon: Users },
     { href: "/rewards", label: "Rewards", icon: Trophy },
+    { href: "/tasks", label: "Tasks", icon: ListChecks },
     { href: "/settings", label: "Settings", icon: Settings },
   ];
 
@@ -397,6 +400,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/admin/logs", label: "Logs", icon: Database },
     { href: "/admin/fraud", label: "Fraud Monitor", icon: Shield },
     { href: "/admin/chats", label: "Support Chats", icon: MessageCircle },
+    { href: "/admin/task-proofs", label: "Task Proofs", icon: ClipboardCheck },
   ];
 
   const allLinks = isAdminArea ? adminLinks : userLinks;

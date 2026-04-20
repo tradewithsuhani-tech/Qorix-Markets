@@ -1,10 +1,11 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
-import { db, usersTable, walletsTable, investmentsTable, systemSettingsTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { db, usersTable, walletsTable, investmentsTable, systemSettingsTable, ipSignupsTable } from "@workspace/db";
+import { eq, and, gte, count } from "drizzle-orm";
 import { authMiddleware, signToken, type AuthRequest } from "../middlewares/auth";
 import { RegisterBody, LoginBody } from "@workspace/api-zod";
 import { trackLoginEvent, runFraudChecks } from "../lib/fraud-service";
+import { sendOtp, verifyOtp, getDevOtp } from "../lib/email-service";
 import crypto from "crypto";
 import rateLimit from "express-rate-limit";
 
@@ -17,8 +18,24 @@ const loginRateLimit = rateLimit({
   legacyHeaders: false,
 });
 
+// Max 5 new accounts per IP per day
+const SIGNUP_IP_DAILY_LIMIT = 5;
+
 function generateReferralCode(): string {
   return "QX" + crypto.randomBytes(4).toString("hex").toUpperCase();
+}
+
+function getClientIp(req: any): string {
+  const forwarded = req.headers["x-forwarded-for"];
+  if (forwarded) {
+    const first = (Array.isArray(forwarded) ? forwarded[0] : forwarded).split(",")[0];
+    return first?.trim() ?? req.ip ?? "unknown";
+  }
+  return req.ip ?? req.connection?.remoteAddress ?? "unknown";
+}
+
+function normalizeIp(ip: string): string {
+  return ip.replace(/^::ffff:/, "").trim();
 }
 
 function formatUser(user: typeof usersTable.$inferSelect) {
@@ -32,20 +49,23 @@ function formatUser(user: typeof usersTable.$inferSelect) {
     isDisabled: user.isDisabled,
     isFrozen: user.isFrozen,
     referralCode: user.referralCode,
+    emailVerified: user.emailVerified,
+    points: user.points,
     createdAt: user.createdAt.toISOString(),
   };
 }
 
-function getClientIp(req: any): string {
-  const forwarded = req.headers["x-forwarded-for"];
-  if (forwarded) {
-    const first = (Array.isArray(forwarded) ? forwarded[0] : forwarded).split(",")[0];
-    return first?.trim() ?? req.ip ?? "unknown";
-  }
-  return req.ip ?? req.connection?.remoteAddress ?? "unknown";
-}
-
+// ---------------------------------------------------------------------------
+// POST /auth/register
+// ---------------------------------------------------------------------------
 router.post("/auth/register", async (req, res) => {
+  // --- Honeypot check (bots fill hidden fields, humans don't) ---
+  if (req.body._hp && req.body._hp !== "") {
+    // Silently reject — don't reveal this check to bots
+    res.status(201).json({ token: "ok", user: {} });
+    return;
+  }
+
   const registrationSetting = await db
     .select({ value: systemSettingsTable.value })
     .from(systemSettingsTable)
@@ -64,6 +84,32 @@ router.post("/auth/register", async (req, res) => {
 
   const { email, password, fullName, referralCode: sponsorCode } = result.data;
 
+  // --- IP rate limit check ---
+  const rawIp = getClientIp(req);
+  const ip = normalizeIp(rawIp);
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+  const [ipCount] = await db
+    .select({ cnt: count() })
+    .from(ipSignupsTable)
+    .where(and(eq(ipSignupsTable.ipAddress, ip), gte(ipSignupsTable.createdAt, since)));
+
+  if (Number(ipCount?.cnt ?? 0) >= SIGNUP_IP_DAILY_LIMIT) {
+    res.status(429).json({ error: "Too many accounts created from this network today. Please try again tomorrow." });
+    return;
+  }
+
+  // --- Behavior timing check (fast-action bot detection) ---
+  const plt = req.body._plt || req.headers["x-page-load-time"];
+  if (plt) {
+    const loadTs = parseInt(String(plt), 10);
+    if (!isNaN(loadTs) && Date.now() - loadTs < 3000) {
+      // Form completed in under 3 seconds — likely a bot
+      res.status(429).json({ error: "Please slow down and try again" });
+      return;
+    }
+  }
+
   const existing = await db.select().from(usersTable).where(eq(usersTable.email, email)).limit(1);
   if (existing.length > 0) {
     res.status(409).json({ error: "Email already registered" });
@@ -80,6 +126,7 @@ router.post("/auth/register", async (req, res) => {
 
   const passwordHash = await bcrypt.hash(password, 12);
   const referralCode = generateReferralCode();
+  const ua = req.headers["user-agent"];
 
   const [newUser] = await db.insert(usersTable).values({
     email,
@@ -88,6 +135,8 @@ router.post("/auth/register", async (req, res) => {
     isAdmin: false,
     referralCode,
     sponsorId: sponsorId ?? 0,
+    emailVerified: false,
+    points: 0,
   }).returning();
 
   if (!newUser) {
@@ -98,8 +147,8 @@ router.post("/auth/register", async (req, res) => {
   await db.insert(walletsTable).values({ userId: newUser.id });
   await db.insert(investmentsTable).values({ userId: newUser.id });
 
-  const ip = getClientIp(req);
-  const ua = req.headers["user-agent"];
+  // Track IP signup
+  await db.insert(ipSignupsTable).values({ ipAddress: ip, userId: newUser.id });
 
   // Fire-and-forget: track event and run fraud checks
   setImmediate(async () => {
@@ -107,10 +156,22 @@ router.post("/auth/register", async (req, res) => {
     await runFraudChecks(newUser.id, ip, ua, sponsorId ?? null);
   });
 
+  // Send email OTP for verification (fire-and-forget, don't block response)
+  setImmediate(async () => {
+    try {
+      await sendOtp(newUser.id, email, "verify_email");
+    } catch (err) {
+      // Non-fatal — user can resend
+    }
+  });
+
   const token = signToken(newUser.id, newUser.isAdmin);
   res.status(201).json({ token, user: formatUser(newUser) });
 });
 
+// ---------------------------------------------------------------------------
+// POST /auth/login
+// ---------------------------------------------------------------------------
 router.post("/auth/login", loginRateLimit, async (req, res) => {
   const result = LoginBody.safeParse(req.body);
   if (!result.success) {
@@ -139,7 +200,6 @@ router.post("/auth/login", loginRateLimit, async (req, res) => {
   const ip = getClientIp(req);
   const ua = req.headers["user-agent"];
 
-  // Fire-and-forget: track event and run fraud checks
   setImmediate(async () => {
     await trackLoginEvent(user.id, ip, ua, "login");
     await runFraudChecks(user.id, ip, ua, null);
@@ -149,6 +209,9 @@ router.post("/auth/login", loginRateLimit, async (req, res) => {
   res.json({ token, user: formatUser(user) });
 });
 
+// ---------------------------------------------------------------------------
+// GET /auth/me
+// ---------------------------------------------------------------------------
 router.get("/auth/me", authMiddleware, async (req: AuthRequest, res) => {
   const users = await db.select().from(usersTable).where(eq(usersTable.id, req.userId!)).limit(1);
   if (users.length === 0) {
@@ -156,6 +219,100 @@ router.get("/auth/me", authMiddleware, async (req: AuthRequest, res) => {
     return;
   }
   res.json(formatUser(users[0]!));
+});
+
+// ---------------------------------------------------------------------------
+// POST /auth/send-otp — resend email verification OTP
+// ---------------------------------------------------------------------------
+router.post("/auth/send-otp", authMiddleware, async (req: AuthRequest, res) => {
+  const users = await db.select({ id: usersTable.id, email: usersTable.email, emailVerified: usersTable.emailVerified })
+    .from(usersTable)
+    .where(eq(usersTable.id, req.userId!))
+    .limit(1);
+
+  if (users.length === 0) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+
+  const user = users[0]!;
+  if (user.emailVerified) {
+    res.status(400).json({ error: "Email already verified" });
+    return;
+  }
+
+  await sendOtp(user.id, user.email, "verify_email");
+  res.json({ success: true, message: "OTP sent to your email" });
+});
+
+// ---------------------------------------------------------------------------
+// POST /auth/verify-email — verify OTP and mark email as verified
+// ---------------------------------------------------------------------------
+router.post("/auth/verify-email", authMiddleware, async (req: AuthRequest, res) => {
+  const { otp } = req.body;
+  if (!otp || typeof otp !== "string") {
+    res.status(400).json({ error: "OTP is required" });
+    return;
+  }
+
+  const result = await verifyOtp(req.userId!, otp, "verify_email");
+  if (!result.valid) {
+    res.status(400).json({ error: result.error ?? "Invalid OTP" });
+    return;
+  }
+
+  await db
+    .update(usersTable)
+    .set({ emailVerified: true })
+    .where(eq(usersTable.id, req.userId!));
+
+  // Award points for email verification (one-time task)
+  setImmediate(async () => {
+    try {
+      const { completeTask } = await import("../lib/task-service");
+      // trigger the KYC-adjacent "verified email" bonus via general points award
+      const { awardPoints } = await import("../lib/task-service");
+      await awardPoints(req.userId!, 25, "task_reward", "Email verification bonus");
+    } catch { /* non-fatal */ }
+  });
+
+  res.json({ success: true, message: "Email verified successfully" });
+});
+
+// ---------------------------------------------------------------------------
+// POST /auth/withdrawal-otp — send OTP before a withdrawal
+// ---------------------------------------------------------------------------
+router.post("/auth/withdrawal-otp", authMiddleware, async (req: AuthRequest, res) => {
+  const users = await db
+    .select({ id: usersTable.id, email: usersTable.email })
+    .from(usersTable)
+    .where(eq(usersTable.id, req.userId!))
+    .limit(1);
+
+  if (users.length === 0) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+
+  await sendOtp(users[0]!.id, users[0]!.email, "withdrawal_confirm");
+  res.json({ success: true, message: "Withdrawal confirmation OTP sent to your email" });
+});
+
+// ---------------------------------------------------------------------------
+// GET /auth/dev-otp — DEV ONLY: retrieve latest OTP for testing
+// ---------------------------------------------------------------------------
+router.get("/auth/dev-otp", async (req, res) => {
+  if (process.env.NODE_ENV === "production") {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+  const { email, purpose } = req.query;
+  if (!email || typeof email !== "string") {
+    res.status(400).json({ error: "email query param required" });
+    return;
+  }
+  const otp = await getDevOtp(email, (purpose as string) || "verify_email");
+  res.json({ otp });
 });
 
 export default router;
