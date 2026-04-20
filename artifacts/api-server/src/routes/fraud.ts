@@ -6,8 +6,8 @@ import { getFraudStats } from "../lib/fraud-service";
 import { errorLogger } from "../lib/logger";
 
 const router = Router();
-router.use(authMiddleware);
-router.use(adminMiddleware);
+router.use("/admin", authMiddleware);
+router.use("/admin", adminMiddleware);
 
 // ---------------------------------------------------------------------------
 // GET /admin/fraud/stats
