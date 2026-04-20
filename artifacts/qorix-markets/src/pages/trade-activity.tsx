@@ -6,7 +6,7 @@ import { findPair, formatPair } from "@/lib/pair-meta";
 import { PairIcon } from "@/components/pair-icon";
 
 async function apiFetch(path: string) {
-  const token = localStorage.getItem("token");
+  const token = localStorage.getItem("qorix_token");
   const res = await fetch(path, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
   if (!res.ok) throw new Error(`${res.status}`);
   return res.json();
