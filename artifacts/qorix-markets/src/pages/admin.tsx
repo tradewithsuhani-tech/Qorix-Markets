@@ -270,14 +270,14 @@ export default function AdminPage() {
                 </span>
               ) : null}
             </div>
-            <div className="flex-1 overflow-y-auto">
-              <table className="w-full text-sm text-left">
-                <thead className="bg-white/5 border-b border-white/10 sticky top-0 backdrop-blur-md">
+            <div className="flex-1 overflow-auto">
+              <table className="w-full text-sm text-left min-w-[560px]">
+                <thead className="bg-white/5 border-b border-white/10 sticky top-0 backdrop-blur-md z-10">
                   <tr>
                     <th className="px-4 py-3 font-medium text-muted-foreground">User</th>
                     <th className="px-4 py-3 font-medium text-muted-foreground">Amount</th>
                     <th className="px-4 py-3 font-medium text-muted-foreground">Address</th>
-                    <th className="px-4 py-3 font-medium text-muted-foreground">Action</th>
+                    <th className="px-4 py-3 font-medium text-muted-foreground text-right">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
@@ -303,8 +303,8 @@ export default function AdminPage() {
                         <td className="px-4 py-3 text-xs">
                           <AddressDisplay address={req.walletAddress} />
                         </td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-2">
+                        <td className="px-4 py-3 text-right">
+                          <div className="flex items-center gap-2 justify-end">
                             <button
                               onClick={() => approveMutation.mutate({ id: req.id, data: {} })}
                               disabled={approveMutation.isPending || rejectMutation.isPending}

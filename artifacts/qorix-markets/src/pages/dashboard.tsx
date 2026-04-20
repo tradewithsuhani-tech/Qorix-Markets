@@ -11,6 +11,7 @@ import {
   type VipInfo,
 } from "@workspace/api-client-react";
 import { Layout } from "@/components/layout";
+import { PeriodFilter, DAYS_PERIOD_OPTIONS } from "@/components/period-filter";
 import { GrowthPanel } from "@/components/growth-panel";
 import { VipBadge, VipCard } from "@/components/vip-badge";
 import { AnimatedCounter, BigBalanceCounter } from "@/components/animated-counter";
@@ -866,21 +867,12 @@ export default function Dashboard() {
                 <h3 className="font-semibold">Equity Curve</h3>
                 <p className="text-xs text-muted-foreground">Portfolio value over time</p>
               </div>
-              <div className="flex items-center gap-1">
-                {TIME_FILTERS.map(f => (
-                  <button
-                    key={f.label}
-                    onClick={() => setChartDays(f.days)}
-                    className={`text-xs px-2.5 py-1 rounded-lg font-medium transition-all duration-150 ${
-                      chartDays === f.days
-                        ? "bg-blue-500/20 text-blue-400 border border-blue-500/30"
-                        : "text-muted-foreground hover:text-white hover:bg-white/5 border border-transparent"
-                    }`}
-                  >
-                    {f.label}
-                  </button>
-                ))}
-              </div>
+              <PeriodFilter
+                options={DAYS_PERIOD_OPTIONS}
+                selected={chartDays}
+                onChange={(v) => setChartDays(Number(v))}
+                ariaLabel="Equity curve period"
+              />
             </div>
             <div className="flex-1" style={{ minHeight: 260 }}>
               {equityLoading ? (
@@ -1159,21 +1151,12 @@ export default function Dashboard() {
                 <h3 className="font-semibold">Rolling Returns</h3>
                 <p className="text-xs text-muted-foreground">Cumulative return over selected period</p>
               </div>
-              <div className="flex items-center gap-1">
-                {RETURNS_FILTERS.map(f => (
-                  <button
-                    key={f.label}
-                    onClick={() => setReturnsDays(f.days)}
-                    className={`text-[11px] px-2 py-1 rounded-lg font-medium transition-all duration-150 ${
-                      returnsDays === f.days
-                        ? "bg-blue-500/20 text-blue-400 border border-blue-500/30"
-                        : "text-muted-foreground hover:text-white hover:bg-white/5 border border-transparent"
-                    }`}
-                  >
-                    {f.label}
-                  </button>
-                ))}
-              </div>
+              <PeriodFilter
+                options={DAYS_PERIOD_OPTIONS}
+                selected={returnsDays}
+                onChange={(v) => setReturnsDays(Number(v))}
+                ariaLabel="Rolling returns period"
+              />
             </div>
 
             {(() => {
