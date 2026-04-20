@@ -6,6 +6,8 @@ import {
   walletsTable,
   usersTable,
   transactionsTable,
+  investmentsTable,
+  tradesTable,
 } from "@workspace/db";
 import { eq, and, sql, gt, desc } from "drizzle-orm";
 import { randomUUID } from "crypto";
@@ -277,6 +279,42 @@ export async function closeSignalTrade(input: CloseTradeInput, actorUserId?: num
         .update(walletsTable)
         .set({ profitBalance: newProfitBal as any, updatedAt: new Date() })
         .where(eq(walletsTable.userId, w.userId));
+
+      // Mirror profit into investments aggregate for dashboard widgets (Total Profit / Daily P&L / Active Investment)
+      const invRows = await tx.select().from(investmentsTable).where(eq(investmentsTable.userId, w.userId)).limit(1);
+      if (invRows.length > 0) {
+        await tx
+          .update(investmentsTable)
+          .set({
+            totalProfit: sql`${investmentsTable.totalProfit}::numeric + ${profit.toString()}::numeric` as any,
+            dailyProfit: sql`${investmentsTable.dailyProfit}::numeric + ${profit.toString()}::numeric` as any,
+            isActive: true,
+            updatedAt: new Date(),
+          })
+          .where(eq(investmentsTable.userId, w.userId));
+      } else {
+        await tx.insert(investmentsTable).values({
+          userId: w.userId,
+          amount: basis.toString(),
+          totalProfit: profit.toString(),
+          dailyProfit: profit.toString(),
+          isActive: true,
+          riskLevel: "low",
+        });
+      }
+
+      // Trade row for win/loss & performance widgets
+      await tx.insert(tradesTable).values({
+        userId: w.userId,
+        symbol: t.pair,
+        direction: t.direction === "BUY" ? "LONG" : "SHORT",
+        entryPrice: t.entryPrice as any,
+        exitPrice: realizedExit.toString(),
+        amount: basis.toString(),
+        profit: profit.toString(),
+        profitPercent: realizedPct.toString(),
+        executedAt: new Date(),
+      });
 
       // Insert transaction record
       const [txRow] = await tx
