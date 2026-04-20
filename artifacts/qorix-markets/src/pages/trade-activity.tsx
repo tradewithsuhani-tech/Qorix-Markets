@@ -45,6 +45,17 @@ function DirectionBadge({ direction }: { direction: string }) {
   );
 }
 
+type SignalRecent = {
+  id: number;
+  pair: string;
+  direction: string;
+  entryPrice: string | number;
+  realizedExitPrice: string | number | null;
+  realizedProfitPercent: string | number | null;
+  closeReason: string | null;
+  closedAt: string;
+};
+
 export default function TradeActivityPage() {
   const { data, isLoading } = useQuery({
     queryKey: ["trades-activity"],
@@ -52,10 +63,39 @@ export default function TradeActivityPage() {
     refetchInterval: 15000,
   });
 
-  const trades: Trade[] = Array.isArray(data) ? data : [];
+  const personalTrades: Trade[] = Array.isArray(data) ? data : [];
+
+  // Platform-wide fallback so the page is never empty while signals are running.
+  // Only queried when the user has no personal trades yet.
+  const { data: recentData } = useQuery<{ trades: SignalRecent[] }>({
+    queryKey: ["signal-trades-recent-activity"],
+    queryFn: async () => {
+      const res = await fetch("/api/signal-trades/recent");
+      if (!res.ok) throw new Error("failed");
+      return res.json();
+    },
+    enabled: !isLoading && personalTrades.length === 0,
+    refetchInterval: 15000,
+  });
+
+  const usingPlatformFallback = personalTrades.length === 0 && (recentData?.trades?.length ?? 0) > 0;
+
+  const trades: Trade[] = personalTrades.length > 0
+    ? personalTrades
+    : (recentData?.trades ?? []).map((t) => ({
+        id: t.id,
+        symbol: t.pair,
+        direction: t.direction,
+        entryPrice: Number(t.entryPrice) || 0,
+        exitPrice: Number(t.realizedExitPrice) || 0,
+        profit: 0,
+        profitPercent: Number(t.realizedProfitPercent) || 0,
+        executedAt: t.closedAt,
+      }));
+
   const totalPL = trades.reduce((s, t) => s + t.profit, 0);
-  const wins = trades.filter((t) => t.profit > 0).length;
-  const losses = trades.filter((t) => t.profit < 0).length;
+  const wins = trades.filter((t) => (usingPlatformFallback ? t.profitPercent : t.profit) > 0).length;
+  const losses = trades.filter((t) => (usingPlatformFallback ? t.profitPercent : t.profit) < 0).length;
 
   return (
     <Layout>
@@ -66,15 +106,27 @@ export default function TradeActivityPage() {
           </div>
           <div className="flex-1">
             <h1 className="text-2xl font-bold text-white">Trade Activity</h1>
-            <p className="text-sm text-white/50">All your executed signal trades — live MT-style terminal view</p>
+            <p className="text-sm text-white/50">
+              {usingPlatformFallback
+                ? "Showing recent platform signal trades — deposit to start participating"
+                : "All your executed signal trades — live MT-style terminal view"}
+            </p>
           </div>
-          <div className="text-right">
-            <div className="text-[10px] text-white/40 uppercase tracking-wider">Total P/L</div>
-            <div className={`text-lg font-bold ${totalPL >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-              {totalPL >= 0 ? "+" : ""}${totalPL.toFixed(2)}
+          {!usingPlatformFallback && (
+            <div className="text-right">
+              <div className="text-[10px] text-white/40 uppercase tracking-wider">Total P/L</div>
+              <div className={`text-lg font-bold ${totalPL >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                {totalPL >= 0 ? "+" : ""}${totalPL.toFixed(2)}
+              </div>
             </div>
-          </div>
+          )}
         </div>
+
+        {usingPlatformFallback && (
+          <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 px-4 py-3 text-xs text-blue-200/90">
+            You have no personal trades yet. Listed below are the platform's recent signal trades for reference. Your own executions will appear here once you fund your trading wallet.
+          </div>
+        )}
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <Stat label="Total Trades" value={String(trades.length)} />
@@ -93,7 +145,7 @@ export default function TradeActivityPage() {
             <span>Type</span>
             <span className="text-right">Open price</span>
             <span className="text-right">Close price</span>
-            <span className="text-right">P/L, USD</span>
+            <span className="text-right">{usingPlatformFallback ? "P/L, %" : "P/L, USD"}</span>
             <span className="text-right">Time</span>
           </div>
 
@@ -127,8 +179,12 @@ export default function TradeActivityPage() {
                     <span className="sm:hidden text-[10px] text-white/40 mr-2">Close</span>
                     {t.exitPrice.toFixed(dp)}
                   </div>
-                  <div className={`text-right font-mono text-sm font-semibold ${pnlCls}`}>
-                    {t.profit >= 0 ? "+" : ""}{t.profit.toFixed(2)}
+                  <div className={`text-right font-mono text-sm font-semibold ${
+                    (usingPlatformFallback ? t.profitPercent : t.profit) >= 0 ? "text-emerald-400" : "text-red-400"
+                  }`}>
+                    {usingPlatformFallback
+                      ? `${t.profitPercent >= 0 ? "+" : ""}${t.profitPercent.toFixed(2)}%`
+                      : `${t.profit >= 0 ? "+" : ""}${t.profit.toFixed(2)}`}
                   </div>
                   <div className="text-right text-xs text-white/40">
                     {new Date(t.executedAt).toLocaleString(undefined, {

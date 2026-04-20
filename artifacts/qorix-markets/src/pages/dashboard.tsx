@@ -458,7 +458,7 @@ export default function Dashboard() {
     },
     refetchInterval: 5000,
   });
-  const { data: recentTradesData } = useQuery<{ trades: Array<{ id: number; pair: string; direction: string; realizedProfitPercent: string; closedAt: string }> }>({
+  const { data: recentTradesData } = useQuery<{ trades: Array<{ id: number; pair: string; direction: string; entryPrice: string; realizedExitPrice: string | null; realizedProfitPercent: string; closeReason: string | null; closedAt: string }> }>({
     queryKey: ["signal-trades-recent"],
     queryFn: async () => {
       const res = await fetch("/api/signal-trades/recent");
@@ -981,18 +981,35 @@ export default function Dashboard() {
                             ? 'bg-amber-500/15 text-amber-400'
                             : (isWin ? 'bg-emerald-500/15 text-emerald-400' : 'bg-red-500/15 text-red-400');
                           const valueCls = isWin ? 'text-emerald-400' : 'text-red-400';
+                          const entry = parseFloat(t.entryPrice || "0");
+                          const exit = parseFloat(t.realizedExitPrice || "0");
+                          const dp = t.pair === 'XAUUSD' || t.pair === 'USOIL' ? 2 : t.pair === 'BTCUSD' ? 1 : 4;
+                          const fmt = (n: number) => Number.isFinite(n) && n > 0
+                            ? n.toLocaleString(undefined, { minimumFractionDigits: dp, maximumFractionDigits: dp })
+                            : '—';
+                          const isBuy = t.direction === 'BUY' || t.direction === 'LONG';
                           return (
                             <motion.div key={t.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-                              className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-white/[0.02] border border-white/[0.04]">
-                              <div className="flex items-center gap-2">
-                                <span className="text-xs font-semibold">{t.pair}</span>
-                                <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold ${badgeCls}`}>
-                                  {badgeLabel}
+                              className="px-2.5 py-1.5 rounded-lg bg-white/[0.02] border border-white/[0.04]">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs font-semibold">{t.pair}</span>
+                                  <span className={`text-[9px] px-1 py-0.5 rounded font-bold ${isBuy ? 'bg-sky-500/15 text-sky-400' : 'bg-rose-500/15 text-rose-400'}`}>
+                                    {isBuy ? 'BUY' : 'SELL'}
+                                  </span>
+                                  <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold ${badgeCls}`}>
+                                    {badgeLabel}
+                                  </span>
+                                </div>
+                                <span className={`text-[11px] font-mono font-semibold ${valueCls}`}>
+                                  {pct >= 0 ? '+' : ''}{pct.toFixed(2)}%
                                 </span>
                               </div>
-                              <span className={`text-[11px] font-mono font-semibold ${valueCls}`}>
-                                {pct >= 0 ? '+' : ''}{pct.toFixed(2)}%
-                              </span>
+                              <div className="mt-1 flex items-center justify-between text-[10px] font-mono text-muted-foreground">
+                                <span>Entry <span className="text-white/80">{fmt(entry)}</span></span>
+                                <span className="opacity-40">→</span>
+                                <span>Exit <span className="text-white/80">{fmt(exit)}</span></span>
+                              </div>
                             </motion.div>
                           );
                         })}
