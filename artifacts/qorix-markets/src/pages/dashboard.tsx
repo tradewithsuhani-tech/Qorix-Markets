@@ -39,6 +39,14 @@ const TIME_FILTERS = [
   { label: "90D", days: 90 },
 ];
 
+const RETURNS_FILTERS = [
+  { label: "7D", days: 7 },
+  { label: "30D", days: 30 },
+  { label: "6M", days: 180 },
+  { label: "1Y", days: 365 },
+  { label: "All", days: 3650 },
+];
+
 function ProfitTicker({ value, prev }: { value: number; prev: number }) {
   const up = value >= prev;
   return (
@@ -425,6 +433,7 @@ function CapitalProtectionWidget({
 
 export default function Dashboard() {
   const [chartDays, setChartDays] = useState(30);
+  const [returnsDays, setReturnsDays] = useState(30);
   const [pendingLimit, setPendingLimit] = useState<number | null>(null);
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
   const prevProfitRef = useRef(0);
@@ -438,6 +447,10 @@ export default function Dashboard() {
   const { data: equity, isLoading: equityLoading } = useGetEquityChart(
     { days: chartDays },
     { query: { refetchInterval: 15000 } }
+  );
+  const { data: returnsEquity, isLoading: returnsLoading } = useGetEquityChart(
+    { days: returnsDays },
+    { query: { refetchInterval: 30000 } }
   );
   const { data: tradesData, isLoading: tradesLoading } = useQuery<{ trades: Array<{ id: number; pair: string; direction: string; createdAt: string }> }>({
     queryKey: ["signal-trades-running"],
@@ -1090,59 +1103,121 @@ export default function Dashboard() {
             </div>
           </motion.div>
 
-          {/* Rolling Returns */}
+          {/* Rolling Returns — line chart */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.4, duration: 0.4 }}
-            className="glass-card p-5 rounded-2xl"
+            className="glass-card p-5 rounded-2xl flex flex-col"
+            style={{ minHeight: 240 }}
           >
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex items-start justify-between mb-3 gap-3 flex-wrap">
               <div>
                 <h3 className="font-semibold">Rolling Returns</h3>
-                <p className="text-xs text-muted-foreground">Period performance comparison</p>
+                <p className="text-xs text-muted-foreground">Cumulative return over selected period</p>
+              </div>
+              <div className="flex items-center gap-1">
+                {RETURNS_FILTERS.map(f => (
+                  <button
+                    key={f.label}
+                    onClick={() => setReturnsDays(f.days)}
+                    className={`text-[11px] px-2 py-1 rounded-lg font-medium transition-all duration-150 ${
+                      returnsDays === f.days
+                        ? "bg-blue-500/20 text-blue-400 border border-blue-500/30"
+                        : "text-muted-foreground hover:text-white hover:bg-white/5 border border-transparent"
+                    }`}
+                  >
+                    {f.label}
+                  </button>
+                ))}
               </div>
             </div>
-            <div className="space-y-4 mt-2">
-              {perfLoading ? (
-                Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-12 w-full rounded-xl" />)
-              ) : (
-                (perf?.rollingReturns ?? [{ period: "7D", return: 0 }, { period: "30D", return: 0 }, { period: "90D", return: 0 }]).map((r, i) => {
-                  const isPos = r.return >= 0;
-                  const pct = Math.min(Math.abs(r.return), 100);
-                  return (
-                    <motion.div
-                      key={r.period}
-                      initial={{ opacity: 0, x: -10 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: 0.45 + i * 0.05 }}
-                      className="space-y-1.5"
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-muted-foreground font-medium w-8">{r.period}</span>
-                          <span className={`text-sm font-bold tabular-nums ${isPos ? "profit-text" : "loss-text"}`}>
-                            {isPos ? "+" : ""}{r.return.toFixed(2)}%
-                          </span>
-                        </div>
-                        <span className={`text-xs px-2 py-0.5 rounded-full ${isPos ? "bg-green-500/10 text-green-400" : "bg-red-500/10 text-red-400"}`}>
-                          {isPos ? "▲" : "▼"}
-                        </span>
+
+            {(() => {
+              const rawArr = Array.isArray(returnsEquity) ? (returnsEquity as Array<{ date: string; equity: number }>) : [];
+              const arr = [...rawArr].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+              const base = arr.length > 0 ? Number(arr[0].equity) || 0 : 0;
+              const series = arr.map(p => ({
+                date: format(new Date(p.date), "MMM dd"),
+                ret: base > 0 ? ((Number(p.equity) - base) / base) * 100 : 0,
+              }));
+              const last = series.length > 0 ? series[series.length - 1].ret : 0;
+              const isPos = last >= 0;
+              const stroke = isPos ? "rgba(34,197,94,1)" : "rgba(239,68,68,1)";
+              const gradTop = isPos ? "rgba(34,197,94,0.32)" : "rgba(239,68,68,0.32)";
+
+              return (
+                <>
+                  <div className="flex items-baseline gap-2 mb-2">
+                    <span className={`text-2xl font-bold tabular-nums ${isPos ? "profit-text" : "loss-text"}`}>
+                      {isPos ? "+" : ""}{last.toFixed(2)}%
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      over {RETURNS_FILTERS.find(f => f.days === returnsDays)?.label}
+                    </span>
+                  </div>
+                  <div className="flex-1" style={{ minHeight: 160 }}>
+                    {returnsLoading ? (
+                      <div className="w-full h-full flex items-end gap-1 pb-2">
+                        {Array.from({ length: 20 }).map((_, i) => (
+                          <div key={i} className="flex-1 bg-white/5 rounded-t animate-pulse" style={{ height: `${30 + (i * 3) % 60}%` }} />
+                        ))}
                       </div>
-                      <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
-                        <motion.div
-                          initial={{ width: 0 }}
-                          animate={{ width: `${pct}%` }}
-                          transition={{ delay: 0.5 + i * 0.1, duration: 0.6, ease: "easeOut" }}
-                          className="h-full rounded-full"
-                          style={{ background: isPos ? "linear-gradient(90deg,#22c55e,#16a34a)" : "linear-gradient(90deg,#ef4444,#dc2626)" }}
-                        />
+                    ) : series.length < 2 ? (
+                      <div className="w-full h-full flex items-center justify-center text-xs text-muted-foreground">
+                        Not enough data for this period yet
                       </div>
-                    </motion.div>
-                  );
-                })
-              )}
-            </div>
+                    ) : (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={series} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+                          <defs>
+                            <linearGradient id="returnsGrad" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="0%" stopColor={gradTop} />
+                              <stop offset="100%" stopColor="rgba(0,0,0,0)" />
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
+                          <XAxis
+                            dataKey="date"
+                            tick={{ fill: "#64748b", fontSize: 10 }}
+                            axisLine={false}
+                            tickLine={false}
+                            interval="preserveStartEnd"
+                          />
+                          <YAxis
+                            tick={{ fill: "#64748b", fontSize: 10 }}
+                            axisLine={false}
+                            tickLine={false}
+                            tickFormatter={v => `${Number(v).toFixed(1)}%`}
+                            width={48}
+                          />
+                          <Tooltip
+                            contentStyle={{
+                              background: "rgba(15,23,42,0.95)",
+                              border: "1px solid rgba(255,255,255,0.1)",
+                              borderRadius: 8,
+                              fontSize: 12,
+                            }}
+                            formatter={(v: any) => [`${Number(v).toFixed(2)}%`, "Return"]}
+                          />
+                          <ReferenceLine y={0} stroke="rgba(255,255,255,0.15)" strokeDasharray="4 2" />
+                          <Area
+                            type="monotone"
+                            dataKey="ret"
+                            name="Return"
+                            stroke={stroke}
+                            strokeWidth={2}
+                            fill="url(#returnsGrad)"
+                            dot={false}
+                            activeDot={{ r: 4, fill: stroke, strokeWidth: 0 }}
+                          />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    )}
+                  </div>
+                </>
+              );
+            })()}
 
             {/* Live Profit Ticker */}
             <div className="mt-5 pt-4 border-t border-white/5">
