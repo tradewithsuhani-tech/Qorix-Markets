@@ -74,6 +74,36 @@ async function raiseFraudFlag(
   });
 
   logger.warn({ userId, flagType, severity, details }, "fraud-service: flag raised");
+
+  // --- Auto-freeze on 3+ unresolved high-severity flags ---
+  if (severity === "high") {
+    const [highCount] = await db
+      .select({ cnt: count() })
+      .from(fraudFlagsTable)
+      .where(
+        and(
+          eq(fraudFlagsTable.userId, userId),
+          eq(fraudFlagsTable.severity, "high"),
+          eq(fraudFlagsTable.isResolved, false),
+        ),
+      );
+
+    if (Number(highCount?.cnt ?? 0) >= 3) {
+      const userRows = await db
+        .select({ isFrozen: usersTable.isFrozen, isAdmin: usersTable.isAdmin })
+        .from(usersTable)
+        .where(eq(usersTable.id, userId))
+        .limit(1);
+      const u = userRows[0];
+      if (u && !u.isAdmin && !u.isFrozen) {
+        await db
+          .update(usersTable)
+          .set({ isFrozen: true })
+          .where(eq(usersTable.id, userId));
+        logger.error({ userId, highFlagCount: highCount?.cnt }, "fraud-service: AUTO-FROZEN account due to repeated high-severity flags");
+      }
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------

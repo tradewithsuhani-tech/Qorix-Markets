@@ -283,7 +283,26 @@ export async function hasCompletedTaskEver(userId: number, taskId: number): Prom
 }
 
 // ---------------------------------------------------------------------------
-// Award points to a user, respecting the daily cap
+// Check how many referral points a user earned this week
+// ---------------------------------------------------------------------------
+async function weeklyReferralPointsEarned(userId: number): Promise<number> {
+  const since = weekStart();
+  const [row] = await db
+    .select({ total: sum(pointsTransactionsTable.amount) })
+    .from(pointsTransactionsTable)
+    .where(
+      and(
+        eq(pointsTransactionsTable.userId, userId),
+        gte(pointsTransactionsTable.createdAt, since),
+        sql`${pointsTransactionsTable.amount} > 0`,
+        sql`${pointsTransactionsTable.description} ILIKE '%referral%'`,
+      ),
+    );
+  return Number(row?.total ?? 0);
+}
+
+// ---------------------------------------------------------------------------
+// Award points to a user, respecting the daily cap (and weekly cap for referrals)
 // ---------------------------------------------------------------------------
 export async function awardPoints(
   userId: number,
@@ -296,7 +315,16 @@ export async function awardPoints(
 
   const earned = await dailyPointsEarned(userId);
   const remaining = Math.max(0, DAILY_POINTS_CAP - earned);
-  const toAward = Math.min(amount, remaining);
+  let toAward = Math.min(amount, remaining);
+
+  // Enforce weekly referral cap for referral-type rewards
+  const isReferralReward =
+    description.toLowerCase().includes("referral") || type === "referral_reward";
+  if (isReferralReward) {
+    const referralEarnedThisWeek = await weeklyReferralPointsEarned(userId);
+    const referralRemaining = Math.max(0, WEEKLY_REFERRAL_POINTS_CAP - referralEarnedThisWeek);
+    toAward = Math.min(toAward, referralRemaining);
+  }
 
   if (toAward <= 0) {
     return { awarded: 0, capped: true };
@@ -337,6 +365,34 @@ export async function completeTask(
   const task = tasks[0]!;
 
   if (task.requiresProof) return { success: false, error: "This task requires proof submission" };
+
+  // KYC / deposit gating
+  if (task.requiresKyc || task.requiresDeposit) {
+    const userRows = await db
+      .select({ kycStatus: usersTable.kycStatus })
+      .from(usersTable)
+      .where(eq(usersTable.id, userId))
+      .limit(1);
+    if (task.requiresKyc && userRows[0]?.kycStatus !== "approved") {
+      return { success: false, error: "Complete KYC verification to claim this reward" };
+    }
+    if (task.requiresDeposit) {
+      const { transactionsTable } = await import("@workspace/db");
+      const [depCount] = await db
+        .select({ cnt: count() })
+        .from(transactionsTable)
+        .where(
+          and(
+            eq(transactionsTable.userId, userId),
+            eq(transactionsTable.type, "deposit"),
+            eq(transactionsTable.status, "completed"),
+          ),
+        );
+      if (Number(depCount?.cnt ?? 0) === 0) {
+        return { success: false, error: "Make your first deposit to claim this reward" };
+      }
+    }
+  }
 
   // Check repetition rules
   if (task.category === "daily") {

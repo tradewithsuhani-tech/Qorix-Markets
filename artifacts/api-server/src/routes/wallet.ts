@@ -112,6 +112,12 @@ router.post("/wallet/deposit", async (req: AuthRequest, res) => {
   res.json(formatWallet(updated!));
 });
 
+// Withdrawal lock window for brand-new accounts (anti-fraud cool-off)
+const NEW_ACCOUNT_WITHDRAWAL_LOCK_HOURS = 24;
+// 1 point = $0.01 fee discount; max 50% of fee can be redeemed
+const POINTS_TO_FEE_RATE = 0.01;
+const MAX_FEE_DISCOUNT_RATIO = 0.5;
+
 router.post("/wallet/withdraw", async (req: AuthRequest, res) => {
   const result = WithdrawBody.safeParse(req.body);
   if (!result.success) {
@@ -120,6 +126,31 @@ router.post("/wallet/withdraw", async (req: AuthRequest, res) => {
   }
 
   const { amount, walletAddress } = result.data;
+
+  // --- User status / KYC / cool-off checks ---
+  const userRows = await db.select().from(usersTable).where(eq(usersTable.id, req.userId!)).limit(1);
+  const user = userRows[0];
+  if (!user) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+  if (user.isDisabled || user.isFrozen) {
+    res.status(403).json({ error: "account_restricted", message: "Withdrawals are blocked for restricted accounts" });
+    return;
+  }
+  if (user.kycStatus !== "approved") {
+    res.status(403).json({ error: "kyc_required", message: "Complete KYC verification before withdrawing" });
+    return;
+  }
+  const accountAgeMs = Date.now() - new Date(user.createdAt).getTime();
+  if (accountAgeMs < NEW_ACCOUNT_WITHDRAWAL_LOCK_HOURS * 60 * 60 * 1000) {
+    const hoursLeft = Math.ceil(NEW_ACCOUNT_WITHDRAWAL_LOCK_HOURS - accountAgeMs / 3_600_000);
+    res.status(403).json({
+      error: "withdrawal_locked_new_account",
+      message: `New accounts must wait ${NEW_ACCOUNT_WITHDRAWAL_LOCK_HOURS}h before first withdrawal (${hoursLeft}h remaining)`,
+    });
+    return;
+  }
 
   // --- Withdrawal OTP verification ---
   const { otp } = req.body;
@@ -158,26 +189,64 @@ router.post("/wallet/withdraw", async (req: AuthRequest, res) => {
     .limit(1);
   const investmentAmount = invRows[0] ? parseFloat(invRows[0].amount as string) : 0;
   const vipInfo = getVipInfo(investmentAmount);
-  const feeAmount = parseFloat((amount * vipInfo.withdrawalFee).toFixed(8));
+  const grossFee = parseFloat((amount * vipInfo.withdrawalFee).toFixed(8));
+
+  // --- Optional points-based fee discount ---
+  const requestedPoints = Math.max(0, parseInt(req.body?.usePoints, 10) || 0);
+  const maxFeeDiscount = parseFloat((grossFee * MAX_FEE_DISCOUNT_RATIO).toFixed(8));
+  const maxPointsByValue = Math.floor(maxFeeDiscount / POINTS_TO_FEE_RATE);
+  const pointsToSpend = Math.min(requestedPoints, user.points, maxPointsByValue);
+  const feeDiscount = parseFloat((pointsToSpend * POINTS_TO_FEE_RATE).toFixed(8));
+  const feeAmount = parseFloat((grossFee - feeDiscount).toFixed(8));
   const netAmount = parseFloat((amount - feeAmount).toFixed(8));
 
-  const [txnRecord] = await db.transaction(async (tx) => {
-    await ensureUserAccounts(req.userId!, tx);
+  const { sql } = await import("drizzle-orm");
+  const { pointsTransactionsTable } = await import("@workspace/db");
 
-    const balanceUpdate: Record<string, any> = { updatedAt: new Date() };
-    if (source === "main") {
-      balanceUpdate["mainBalance"] = (mainBalance - amount).toString();
-    } else {
-      balanceUpdate["profitBalance"] = (profitBalance - amount).toString();
-    }
-    await tx
-      .update(walletsTable)
-      .set(balanceUpdate)
-      .where(eq(walletsTable.userId, req.userId!));
+  let txnRecord: typeof transactionsTable.$inferSelect | undefined;
+  try {
+    txnRecord = await db.transaction(async (tx) => {
+      await ensureUserAccounts(req.userId!, tx);
 
-    const userAccountCode = `user:${req.userId!}:${source}`;
+      // --- Atomic guarded balance debit (prevents over-withdrawal under concurrency) ---
+      const balanceCol = source === "main" ? walletsTable.mainBalance : walletsTable.profitBalance;
+      const balanceColName = source === "main" ? "mainBalance" : "profitBalance";
+      const balanceUpdate: Record<string, any> = {
+        updatedAt: new Date(),
+        [balanceColName]: sql`${balanceCol} - ${amount}`,
+      };
+      const debitResult = await tx
+        .update(walletsTable)
+        .set(balanceUpdate)
+        .where(and(eq(walletsTable.userId, req.userId!), gte(balanceCol, amount.toString())))
+        .returning({ id: walletsTable.id });
+      if (debitResult.length === 0) {
+        throw new Error("INSUFFICIENT_BALANCE");
+      }
+
+      const userAccountCode = `user:${req.userId!}:${source}`;
+
+      // --- Atomic guarded points debit (prevents double-spend under concurrency) ---
+      if (pointsToSpend > 0) {
+        const pointsResult = await tx
+          .update(usersTable)
+          .set({ points: sql`${usersTable.points} - ${pointsToSpend}` })
+          .where(and(eq(usersTable.id, req.userId!), gte(usersTable.points, pointsToSpend)))
+          .returning({ id: usersTable.id });
+        if (pointsResult.length === 0) {
+          throw new Error("INSUFFICIENT_POINTS");
+        }
+        await tx.insert(pointsTransactionsTable).values({
+          userId: req.userId!,
+          amount: -pointsToSpend,
+          type: "withdrawal_discount",
+          description: `Spent ${pointsToSpend} points for $${feeDiscount.toFixed(2)} fee discount`,
+        });
+      }
 
     if (feeAmount > 0) {
+      const feeDescParts = [`${(vipInfo.withdrawalFee * 100).toFixed(1)}% · ${vipInfo.label} tier`];
+      if (feeDiscount > 0) feeDescParts.push(`-$${feeDiscount.toFixed(2)} points discount`);
       const [feeTxn] = await tx
         .insert(transactionsTable)
         .values({
@@ -185,7 +254,7 @@ router.post("/wallet/withdraw", async (req: AuthRequest, res) => {
           type: "fee",
           amount: feeAmount.toString(),
           status: "completed",
-          description: `Withdrawal fee (${(vipInfo.withdrawalFee * 100).toFixed(1)}% · ${vipInfo.label} tier)`,
+          description: `Withdrawal fee (${feeDescParts.join(" · ")})`,
         })
         .returning();
 
@@ -222,8 +291,19 @@ router.post("/wallet/withdraw", async (req: AuthRequest, res) => {
       tx,
     );
 
-    return [withdrawalTxn] as const;
-  });
+      return withdrawalTxn!;
+    });
+  } catch (err: any) {
+    if (err?.message === "INSUFFICIENT_BALANCE") {
+      res.status(400).json({ error: `Insufficient ${source} balance` });
+      return;
+    }
+    if (err?.message === "INSUFFICIENT_POINTS") {
+      res.status(400).json({ error: "Insufficient points balance" });
+      return;
+    }
+    throw err;
+  }
 
   transactionLogger.info(
     {

@@ -21,6 +21,8 @@ const loginRateLimit = rateLimit({
 
 // Max 5 new accounts per IP per day
 const SIGNUP_IP_DAILY_LIMIT = 5;
+// Max 10 referrals per sponsor per day (anti farming)
+const SIGNUP_REFERRAL_DAILY_LIMIT = 10;
 
 function generateReferralCode(): string {
   return "QX" + crypto.randomBytes(4).toString("hex").toUpperCase();
@@ -128,7 +130,19 @@ router.post("/auth/register", async (req, res) => {
   if (sponsorCode) {
     const sponsor = await db.select().from(usersTable).where(eq(usersTable.referralCode, sponsorCode)).limit(1);
     if (sponsor.length > 0) {
-      sponsorId = sponsor[0]!.id;
+      const candidateSponsorId = sponsor[0]!.id;
+      // Cap referrals per sponsor per day — beyond cap, allow signup but drop sponsor link
+      const sinceDay = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const [refCount] = await db
+        .select({ cnt: count() })
+        .from(usersTable)
+        .where(and(eq(usersTable.sponsorId, candidateSponsorId), gte(usersTable.createdAt, sinceDay)));
+      if (Number(refCount?.cnt ?? 0) >= SIGNUP_REFERRAL_DAILY_LIMIT) {
+        // Sponsor exceeded daily referral cap — orphan this signup, no reward
+        sponsorId = undefined;
+      } else {
+        sponsorId = candidateSponsorId;
+      }
     }
   }
 
