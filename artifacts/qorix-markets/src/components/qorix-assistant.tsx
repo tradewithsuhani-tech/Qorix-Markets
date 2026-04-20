@@ -581,7 +581,7 @@ export function QorixAssistant({ guestMode = false }: { guestMode?: boolean } = 
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 8, scale: 0.94 }}
             transition={{ type: "spring", stiffness: 260, damping: 22 }}
-            className="fixed bottom-24 right-6 z-50 max-w-[260px] cursor-pointer"
+            className="fixed bottom-40 right-4 md:bottom-24 md:right-6 z-40 max-w-[260px] cursor-pointer"
             onClick={() => { setShowNudge(false); setIsOpen(true); }}
           >
             <div
@@ -633,7 +633,7 @@ export function QorixAssistant({ guestMode = false }: { guestMode?: boolean } = 
       <motion.button
         onClick={() => setIsOpen(true)}
         className={cn(
-          "fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full shadow-2xl",
+          "fixed bottom-24 right-4 md:bottom-6 md:right-6 z-40 w-12 h-12 md:w-14 md:h-14 rounded-full shadow-2xl",
           "bg-gradient-to-br from-blue-600 to-blue-700",
           "flex items-center justify-center",
           "hover:scale-105 active:scale-95 transition-transform",
