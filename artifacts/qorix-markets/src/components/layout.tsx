@@ -494,8 +494,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
         {!isAdminArea && <ProtectionBanner />}
 
         {/* Mobile top bar */}
-        <div className="md:hidden flex items-center justify-between px-4 py-3 border-b border-white/5 glass-nav shrink-0"
-          style={{ paddingTop: "max(0.75rem, env(safe-area-inset-top, 0.75rem))" }}
+        <div className="md:hidden flex items-center justify-between px-4 py-3 border-b border-white/5 shrink-0"
+          style={{
+            paddingTop: "max(0.75rem, env(safe-area-inset-top, 0.75rem))",
+            background: "rgba(5, 8, 22, 0.85)",
+            backdropFilter: "blur(24px) saturate(200%)",
+            WebkitBackdropFilter: "blur(24px) saturate(200%)",
+          }}
         >
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center">

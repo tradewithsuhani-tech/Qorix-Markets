@@ -102,10 +102,41 @@ const PublicOnlyRoute = ({ component: Component, adminRedirect = false }: { comp
   return <Component />;
 };
 
+function LandingOrRedirect() {
+  const { user, token, isLoading } = useAuth();
+  const [, setLocation] = useLocation();
+
+  useEffect(() => {
+    if (isLoading) return;
+    // If logged in, go to dashboard
+    if (token && user) {
+      setLocation(user.isAdmin ? "/admin" : "/dashboard");
+      return;
+    }
+    // If running as installed PWA (standalone), skip landing → login
+    const isStandalone =
+      window.matchMedia?.("(display-mode: standalone)").matches ||
+      // iOS Safari PWA
+      (window.navigator as any).standalone === true;
+    if (isStandalone) {
+      setLocation("/login");
+    }
+  }, [isLoading, token, user]);
+
+  if (isLoading) {
+    return (
+      <div className="h-screen w-full bg-background flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" />
+      </div>
+    );
+  }
+  return <Landing />;
+}
+
 function Router() {
   return (
     <Switch>
-      <Route path="/" component={Landing} />
+      <Route path="/" component={LandingOrRedirect} />
       <Route path="/login"><PublicOnlyRoute component={LoginPage} /></Route>
       <Route path="/admin-login"><PublicOnlyRoute component={AdminLoginPage} adminRedirect={true} /></Route>
       <Route path="/dashboard"><ProtectedRoute component={Dashboard} /></Route>
