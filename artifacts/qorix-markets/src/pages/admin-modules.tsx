@@ -30,6 +30,7 @@ import {
   HardDrive,
   CheckCheck,
 } from "lucide-react";
+import { AddressDisplay } from "@/components/address-display";
 import { useToast } from "@/hooks/use-toast";
 
 function token() {
@@ -474,7 +475,9 @@ function TransactionTable({ rows, loading }: { rows: any[]; loading: boolean }) 
                 <td className="p-4"><div className="font-medium">{r.userFullName || "User"}</div><div className="text-xs text-muted-foreground">{r.userEmail}</div></td>
                 <td className="p-4 font-bold">{money(r.amount)}</td>
                 <td className="p-4"><StatusBadge value={r.status} /></td>
-                <td className="p-4 font-mono text-xs text-muted-foreground max-w-[280px] truncate" title={r.txHash || r.walletAddress}>{r.txHash || r.walletAddress || r.description}</td>
+                <td className="p-4 text-xs text-muted-foreground max-w-[280px]">
+                  {r.txHash ? <AddressDisplay address={r.txHash} /> : r.walletAddress ? <AddressDisplay address={r.walletAddress} /> : <span className="truncate">{r.description}</span>}
+                </td>
                 <td className="p-4 text-xs text-muted-foreground">{new Date(r.createdAt).toLocaleString()}</td>
               </tr>
             ))}

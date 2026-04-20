@@ -1,4 +1,5 @@
 import { Layout } from "@/components/layout";
+import { PeriodFilter, DAYS_PERIOD_OPTIONS } from "@/components/period-filter";
 import {
   useGetEquityChart,
   useGetDashboardPerformance,
@@ -57,46 +58,13 @@ ChartJS.register(
   Filler,
 );
 
-const TIME_FILTERS = [
-  { label: "1D", days: 1 },
-  { label: "7D", days: 7 },
-  { label: "30D", days: 30 },
-  { label: "6M", days: 180 },
-  { label: "1Y", days: 365 },
-  { label: "All", days: 3650 },
-];
+const TIME_FILTERS = DAYS_PERIOD_OPTIONS.map((o) => ({ label: o.label, days: o.value }));
 
 const PERF_FILTERS = [
   { label: "3 Months", value: "3m" as const },
   { label: "6 Months", value: "6m" as const },
   { label: "All Time", value: "all" as const },
-];
-
-function PerfFilterBar({
-  selected,
-  onChange,
-}: {
-  selected: string;
-  onChange: (v: string) => void;
-}) {
-  return (
-    <div className="flex items-center gap-1 bg-white/[0.04] border border-white/8 rounded-xl p-1">
-      {PERF_FILTERS.map((f) => (
-        <button
-          key={f.value}
-          onClick={() => onChange(f.value)}
-          className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition-all duration-200 ${
-            selected === f.value
-              ? "bg-blue-500/25 text-blue-400 border border-blue-500/40 shadow-[0_0_8px_rgba(59,130,246,0.15)]"
-              : "text-muted-foreground hover:text-white"
-          }`}
-        >
-          {f.label}
-        </button>
-      ))}
-    </div>
-  );
-}
+] as const;
 
 const CHART_DEFAULTS = {
   plugins: {
@@ -129,31 +97,6 @@ const CHART_DEFAULTS = {
   animation: { duration: 600, easing: "easeOutQuart" as const },
 };
 
-function FilterBar({
-  selected,
-  onChange,
-}: {
-  selected: number;
-  onChange: (d: number) => void;
-}) {
-  return (
-    <div className="flex items-center gap-1 bg-white/[0.04] border border-white/8 rounded-xl p-1">
-      {TIME_FILTERS.map((f) => (
-        <button
-          key={f.label}
-          onClick={() => onChange(f.days)}
-          className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition-all duration-200 ${
-            selected === f.days
-              ? "bg-blue-500/25 text-blue-400 border border-blue-500/40 shadow-[0_0_8px_rgba(59,130,246,0.15)]"
-              : "text-muted-foreground hover:text-white"
-          }`}
-        >
-          {f.label}
-        </button>
-      ))}
-    </div>
-  );
-}
 
 function ChartCard({
   title,
@@ -374,7 +317,12 @@ export default function AnalyticsPage() {
               <RefreshCw style={{ width: 10, height: 10, animationDuration: "4s" }} className="text-green-400 animate-spin" />
               <span className="text-green-400 font-medium">Live</span>
             </div>
-            <FilterBar selected={days} onChange={setDays} />
+            <PeriodFilter
+              options={DAYS_PERIOD_OPTIONS}
+              selected={days}
+              onChange={setDays}
+              ariaLabel="Equity & drawdown period"
+            />
           </div>
         </div>
 
@@ -771,7 +719,12 @@ export default function AnalyticsPage() {
                 <div className="text-[11px] text-muted-foreground">Monthly returns, drawdown & win rate</div>
               </div>
             </div>
-            <PerfFilterBar selected={perfFilter} onChange={(v) => setPerfFilter(v as "3m" | "6m" | "all")} />
+            <PeriodFilter
+              options={PERF_FILTERS}
+              selected={perfFilter}
+              onChange={(v) => setPerfFilter(v as "3m" | "6m" | "all")}
+              ariaLabel="Monthly performance period"
+            />
           </div>
 
           {/* Monthly KPI strip */}

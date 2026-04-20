@@ -12,7 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { getGetWalletQueryKey } from "@workspace/api-client-react";
 import { VipBadge } from "@/components/vip-badge";
-import { AddressDisplay } from "@/components/address-display";
+import { AddressDisplay, maskAddress } from "@/components/address-display";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
 function apiUrl(path: string) { return `${BASE_URL}/api${path}`; }
@@ -68,7 +68,7 @@ export default function WalletPage() {
   const [transferAmount, setTransferAmount] = useState("");
 
   // OTP withdrawal flow
-  const [withdrawStep, setWithdrawStep] = useState<"form" | "otp" | "success">("form");
+  const [withdrawStep, setWithdrawStep] = useState<"form" | "review" | "otp" | "success">("form");
   const [withdrawOtp, setWithdrawOtp] = useState("");
   const [sendingOtp, setSendingOtp] = useState(false);
   const [withdrawing, setWithdrawing] = useState(false);
@@ -373,17 +373,66 @@ export default function WalletPage() {
               <AnimatePresence mode="wait">
                 {withdrawStep === "form" && (
                   <motion.button
-                    key="request-otp"
+                    key="review-btn"
                     initial={{ opacity: 0, y: 4 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -4 }}
-                    onClick={requestWithdrawalOtp}
-                    disabled={sendingOtp || !withdrawAmount || !withdrawAddress || Number(withdrawAmount) <= 0 || Number(withdrawAmount) > sourceBalance}
+                    onClick={() => setWithdrawStep("review")}
+                    disabled={!withdrawAmount || !withdrawAddress || Number(withdrawAmount) <= 0 || Number(withdrawAmount) > sourceBalance}
                     className="btn btn-success w-full flex items-center justify-center gap-2"
                   >
-                    <Mail style={{ width: 14, height: 14 }} />
-                    {sendingOtp ? "Sending OTP…" : Number(withdrawAmount) > sourceBalance ? "Amount exceeds balance" : "Send Confirmation Code"}
+                    {Number(withdrawAmount) > sourceBalance ? "Amount exceeds balance" : "Review Withdrawal"}
                   </motion.button>
+                )}
+
+                {withdrawStep === "review" && (
+                  <motion.div
+                    key="review-step"
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -4 }}
+                    className="space-y-3"
+                  >
+                    <div className="flex items-center gap-2 text-xs text-amber-300 bg-amber-500/10 border border-amber-500/25 rounded-xl px-3 py-2">
+                      <AlertCircle style={{ width: 13, height: 13 }} />
+                      Review carefully. Funds sent to a wrong address cannot be recovered.
+                    </div>
+                    <div className="rounded-xl border border-white/10 bg-black/25 divide-y divide-white/5 text-xs">
+                      <Row label="From" value={withdrawSource === "main" ? "Main Balance" : "Profit Balance"} />
+                      <Row label="Amount" value={`$${Number(withdrawAmount).toFixed(2)}`} />
+                      <Row label={`Fee (${withdrawalFeePercent}% · ${vip?.label ?? "Standard"})`} value={`−$${feeAmount.toFixed(2)}`} />
+                      <Row label="You'll Receive" value={`$${netWithdraw.toFixed(2)} USD`} highlight />
+                      <div className="flex items-center justify-between px-3 py-2.5 gap-2">
+                        <span className="text-muted-foreground shrink-0">To</span>
+                        <AddressDisplay address={withdrawAddress} className="min-w-0" />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        onClick={() => setWithdrawStep("form")}
+                        disabled={sendingOtp}
+                        className="px-4 py-2.5 rounded-xl bg-white/5 border border-white/10 text-sm text-white hover:bg-white/10 transition-colors disabled:opacity-50"
+                      >
+                        Back
+                      </button>
+                      <button
+                        onClick={requestWithdrawalOtp}
+                        disabled={
+                          sendingOtp ||
+                          !withdrawAmount ||
+                          !withdrawAddress ||
+                          Number(withdrawAmount) <= 0 ||
+                          Number(withdrawAmount) > sourceBalance
+                        }
+                        className="btn btn-success flex items-center justify-center gap-2"
+                      >
+                        <Mail style={{ width: 14, height: 14 }} />
+                        {Number(withdrawAmount) > sourceBalance
+                          ? "Balance changed — go back"
+                          : sendingOtp ? "Sending…" : "Confirm & Send Code"}
+                      </button>
+                    </div>
+                  </motion.div>
                 )}
 
                 {withdrawStep === "otp" && (
@@ -394,6 +443,16 @@ export default function WalletPage() {
                     exit={{ opacity: 0, y: -4 }}
                     className="space-y-2"
                   >
+                    <div className="rounded-xl border border-white/10 bg-black/25 px-3 py-2 text-[11px] space-y-0.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">Sending</span>
+                        <span className="text-emerald-400 font-bold">${netWithdraw.toFixed(2)} USD</span>
+                      </div>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-muted-foreground shrink-0">To</span>
+                        <span className="font-mono text-white truncate" title={withdrawAddress}>{maskAddress(withdrawAddress)}</span>
+                      </div>
+                    </div>
                     <div className="flex items-center gap-2 text-xs text-blue-400 bg-blue-500/10 border border-blue-500/20 rounded-xl px-3 py-2">
                       <ShieldCheck style={{ width: 13, height: 13 }} />
                       Enter the 6-digit code sent to your email
