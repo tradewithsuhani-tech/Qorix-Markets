@@ -1,16 +1,26 @@
-import { useGetWallet, useDeposit, useWithdraw, useTransferToTrading, useGetDashboardSummary } from "@workspace/api-client-react";
+import { useGetWallet, useWithdraw, useTransferToTrading, useGetDashboardSummary } from "@workspace/api-client-react";
 import { Layout } from "@/components/layout";
 import { AnimatedCounter } from "@/components/animated-counter";
-import { useState } from "react";
-import { motion } from "framer-motion";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Wallet as WalletIcon, ArrowDownToLine, ArrowUpFromLine,
-  ArrowRightLeft, Info, CheckCircle2, AlertCircle
+  ArrowRightLeft, Info, AlertCircle, Copy, CheckCheck,
+  QrCode, ExternalLink, AlertTriangle, ChevronRight,
+  CheckCircle2, Clock, RefreshCw, LinkIcon, Loader2,
+  ShieldCheck, ArrowLeft,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { getGetWalletQueryKey } from "@workspace/api-client-react";
 import { VipBadge } from "@/components/vip-badge";
+import QRCode from "qrcode";
+import { cn } from "@/lib/utils";
+
+const BASE_URL = import.meta.env.BASE_URL ?? "/";
+function getApiUrl(path: string) {
+  return `${BASE_URL}api${path}`;
+}
 
 function BalanceSkeleton() {
   return (
@@ -31,6 +41,440 @@ const item = {
   show: { opacity: 1, y: 0, transition: { duration: 0.35, ease: "easeOut" } },
 };
 
+function QRCodeCanvas({ value }: { value: string }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    if (!canvasRef.current || !value) return;
+    QRCode.toCanvas(canvasRef.current, value, {
+      width: 170,
+      margin: 2,
+      color: { dark: "#ffffff", light: "#0d1117" },
+    });
+  }, [value]);
+  return (
+    <canvas
+      ref={canvasRef}
+      className="rounded-xl border border-white/10"
+      style={{ width: 170, height: 170 }}
+    />
+  );
+}
+
+function CopyButton({ text, label = "Copy" }: { text: string; label?: string }) {
+  const [copied, setCopied] = useState(false);
+  const handle = () => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+  return (
+    <button
+      onClick={handle}
+      className={cn(
+        "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all shrink-0",
+        copied
+          ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30"
+          : "bg-white/5 text-muted-foreground hover:text-white hover:bg-white/10 border border-white/10",
+      )}
+    >
+      {copied ? <CheckCheck className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+      {copied ? "Copied!" : label}
+    </button>
+  );
+}
+
+type DepositStep = "amount" | "payment" | "confirmed";
+
+interface DepositInfo {
+  platformAddress: string;
+  userTronAddress: string | null;
+}
+
+function DepositCard({ onDepositConfirmed }: { onDepositConfirmed: () => void }) {
+  const [step, setStep] = useState<DepositStep>("amount");
+  const [amount, setAmount] = useState("");
+  const [info, setInfo] = useState<DepositInfo | null>(null);
+  const [infoLoading, setInfoLoading] = useState(false);
+  const [tronInput, setTronInput] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
+  const [polling, setPolling] = useState(false);
+  const [lastDepositCount, setLastDepositCount] = useState<number | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const fetchDepositInfo = useCallback(async () => {
+    setInfoLoading(true);
+    const token = localStorage.getItem("qorix_token");
+    try {
+      const res = await fetch(getApiUrl("/deposit/address"), {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      const d = await res.json();
+      setInfo({
+        platformAddress: d.platformAddress ?? "",
+        userTronAddress: d.userTronAddress ?? null,
+      });
+    } catch {
+    } finally {
+      setInfoLoading(false);
+    }
+  }, []);
+
+  const fetchDepositCount = useCallback(async (): Promise<number> => {
+    const token = localStorage.getItem("qorix_token");
+    try {
+      const res = await fetch(getApiUrl("/deposit/history?limit=50"), {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      const d = await res.json();
+      return (d.deposits ?? []).filter((dep: any) => dep.status === "confirmed").length;
+    } catch {
+      return 0;
+    }
+  }, []);
+
+  const handleProceed = async () => {
+    if (!amount || Number(amount) <= 0) return;
+    await fetchDepositInfo();
+    const count = await fetchDepositCount();
+    setLastDepositCount(count);
+    setStep("payment");
+  };
+
+  const handleSaveTronAddress = async () => {
+    setSaving(true);
+    setSaveError("");
+    const token = localStorage.getItem("qorix_token");
+    try {
+      const res = await fetch(getApiUrl("/deposit/tron-address"), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ tronAddress: tronInput.trim() }),
+      });
+      if (!res.ok) {
+        const d = await res.json();
+        setSaveError(d.error ?? "Invalid address");
+      } else {
+        setInfo((prev) => prev ? { ...prev, userTronAddress: tronInput.trim() } : prev);
+        setTronInput("");
+      }
+    } catch {
+      setSaveError("Network error. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  useEffect(() => {
+    if (step !== "payment" || lastDepositCount === null) return;
+
+    setPolling(true);
+    pollRef.current = setInterval(async () => {
+      const count = await fetchDepositCount();
+      if (count > lastDepositCount) {
+        clearInterval(pollRef.current!);
+        setPolling(false);
+        setStep("confirmed");
+        onDepositConfirmed();
+      }
+    }, 10000);
+
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, [step, lastDepositCount, fetchDepositCount, onDepositConfirmed]);
+
+  const reset = () => {
+    setStep("amount");
+    setAmount("");
+    setInfo(null);
+    setLastDepositCount(null);
+    setPolling(false);
+    setSaveError("");
+  };
+
+  return (
+    <div className="glass-card rounded-2xl overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center gap-2.5 px-5 pt-5 pb-4 border-b border-white/8">
+        {step !== "amount" && (
+          <button
+            onClick={reset}
+            className="p-1.5 -ml-1 rounded-lg text-muted-foreground hover:text-white hover:bg-white/5 transition-all"
+          >
+            <ArrowLeft className="w-4 h-4" />
+          </button>
+        )}
+        <div className="p-2 rounded-xl bg-blue-500/15 text-blue-400">
+          <ArrowDownToLine style={{ width: 16, height: 16 }} />
+        </div>
+        <div className="flex-1">
+          <div className="font-semibold text-sm">Deposit USDT</div>
+          <div className="text-xs text-muted-foreground">TRC20 · TRON Network</div>
+        </div>
+        {/* Step indicator */}
+        <div className="flex items-center gap-1.5">
+          {(["amount", "payment", "confirmed"] as DepositStep[]).map((s, i) => (
+            <div
+              key={s}
+              className={cn(
+                "w-6 h-1 rounded-full transition-all duration-300",
+                step === s ? "bg-blue-500" : i < ["amount", "payment", "confirmed"].indexOf(step) ? "bg-emerald-500/60" : "bg-white/10"
+              )}
+            />
+          ))}
+        </div>
+      </div>
+
+      <div className="px-5 pb-5 pt-4">
+        <AnimatePresence mode="wait">
+          {/* Step 1: Amount */}
+          {step === "amount" && (
+            <motion.div
+              key="amount"
+              initial={{ opacity: 0, x: -16 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 16 }}
+              transition={{ duration: 0.25 }}
+              className="space-y-4"
+            >
+              <div>
+                <label className="text-xs text-muted-foreground font-medium mb-1.5 block">
+                  Amount (USDT)
+                </label>
+                <input
+                  type="number"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  className="field-input"
+                  placeholder="Enter amount"
+                  min="1"
+                />
+              </div>
+              <div className="grid grid-cols-4 gap-1.5">
+                {[100, 500, 1000, 5000].map((amt) => (
+                  <button
+                    key={amt}
+                    onClick={() => setAmount(String(amt))}
+                    className={cn(
+                      "text-xs py-1.5 rounded-lg border font-medium transition-all",
+                      amount === String(amt)
+                        ? "bg-blue-500/20 text-blue-400 border-blue-500/40"
+                        : "bg-white/5 hover:bg-blue-500/15 hover:text-blue-400 border-white/8 hover:border-blue-500/25 text-muted-foreground"
+                    )}
+                  >
+                    ${amt >= 1000 ? `${amt / 1000}k` : amt}
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex items-start gap-2.5 bg-blue-500/6 border border-blue-500/15 rounded-xl px-3 py-2.5">
+                <ShieldCheck className="w-3.5 h-3.5 text-blue-400 shrink-0 mt-0.5" />
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Send exactly <span className="text-white font-semibold">{amount ? `${amount} USDT` : "the entered amount"}</span> via <span className="text-white font-medium">TRON (TRC20)</span>. Deposits are auto-detected and credited within ~15 seconds.
+                </p>
+              </div>
+
+              <button
+                onClick={handleProceed}
+                disabled={!amount || Number(amount) < 1}
+                className="btn btn-primary w-full flex items-center justify-center gap-2"
+              >
+                Get Deposit Address
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </motion.div>
+          )}
+
+          {/* Step 2: Payment */}
+          {step === "payment" && (
+            <motion.div
+              key="payment"
+              initial={{ opacity: 0, x: 16 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -16 }}
+              transition={{ duration: 0.25 }}
+              className="space-y-5"
+            >
+              {/* Amount to send */}
+              <div className="flex items-center justify-between bg-blue-500/8 border border-blue-500/20 rounded-xl px-4 py-3">
+                <span className="text-xs text-muted-foreground">Send exactly</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-base font-bold text-white">{amount} USDT</span>
+                  <span className="text-[10px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 px-1.5 py-0.5 rounded-full uppercase tracking-wider">TRC20</span>
+                </div>
+              </div>
+
+              {infoLoading ? (
+                <div className="flex items-center justify-center py-10">
+                  <Loader2 className="w-6 h-6 text-blue-400 animate-spin" />
+                </div>
+              ) : info ? (
+                <>
+                  {/* TronLink wallet registration */}
+                  {!info.userTronAddress ? (
+                    <div className="border border-amber-500/25 bg-amber-500/6 rounded-xl p-4 space-y-3">
+                      <div className="flex items-center gap-2">
+                        <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                        <span className="text-xs font-semibold text-amber-400">Register your sender wallet first</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground leading-relaxed">
+                        Enter your TronLink wallet address (the one you'll send USDT from) so the system can verify and credit your deposit.
+                      </p>
+                      <div className="flex gap-2">
+                        <div className="flex-1 bg-white/4 border border-white/10 rounded-xl px-3 py-2 flex items-center gap-2">
+                          <LinkIcon className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                          <input
+                            type="text"
+                            value={tronInput}
+                            onChange={(e) => setTronInput(e.target.value)}
+                            placeholder="T… (your TronLink address)"
+                            className="bg-transparent text-xs text-white placeholder:text-muted-foreground/50 outline-none w-full font-mono"
+                          />
+                        </div>
+                        <button
+                          onClick={handleSaveTronAddress}
+                          disabled={saving || !tronInput.trim()}
+                          className="px-4 py-2 rounded-xl text-xs font-semibold bg-blue-500/20 text-blue-400 border border-blue-500/30 hover:bg-blue-500/30 transition-all disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+                        >
+                          {saving ? "Saving…" : "Save"}
+                        </button>
+                      </div>
+                      {saveError && <p className="text-xs text-red-400">{saveError}</p>}
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-3 bg-emerald-500/8 border border-emerald-500/20 rounded-xl px-3 py-2.5">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <span className="text-[10px] text-emerald-400 font-medium">Sender wallet registered</span>
+                        <div className="text-xs font-mono text-white/60 truncate">{info.userTronAddress}</div>
+                      </div>
+                      <button
+                        onClick={() => setInfo((prev) => prev ? { ...prev, userTronAddress: null } : prev)}
+                        className="text-[10px] text-muted-foreground hover:text-white transition-colors shrink-0"
+                      >
+                        Change
+                      </button>
+                    </div>
+                  )}
+
+                  {/* QR Code + address */}
+                  {info.platformAddress ? (
+                    <div className="flex flex-col sm:flex-row items-center gap-5">
+                      <div className="flex flex-col items-center gap-2 shrink-0">
+                        <div className="p-3 rounded-xl bg-[#0d1117] border border-white/10">
+                          <QRCodeCanvas value={info.platformAddress} />
+                        </div>
+                        <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                          <QrCode className="w-3 h-3" />
+                          Scan to pay
+                        </div>
+                      </div>
+
+                      <div className="flex-1 w-full space-y-3">
+                        <div>
+                          <div className="text-[10px] text-muted-foreground mb-1.5 uppercase tracking-wider font-semibold">
+                            Platform Deposit Address
+                          </div>
+                          <div className="bg-white/4 border border-white/10 rounded-xl px-3 py-2.5 flex items-center justify-between gap-2">
+                            <span className="text-xs font-mono text-white break-all leading-relaxed">{info.platformAddress}</span>
+                            <CopyButton text={info.platformAddress} />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="bg-white/4 border border-white/10 rounded-xl px-3 py-2">
+                            <div className="text-[10px] text-muted-foreground mb-0.5 uppercase tracking-wider">Network</div>
+                            <div className="text-xs font-semibold text-emerald-400">TRON (TRC20)</div>
+                          </div>
+                          <div className="bg-white/4 border border-white/10 rounded-xl px-3 py-2">
+                            <div className="text-[10px] text-muted-foreground mb-0.5 uppercase tracking-wider">Token</div>
+                            <div className="text-xs font-semibold text-white">USDT</div>
+                          </div>
+                          <div className="bg-white/4 border border-white/10 rounded-xl px-3 py-2">
+                            <div className="text-[10px] text-muted-foreground mb-0.5 uppercase tracking-wider">Min. Deposit</div>
+                            <div className="text-xs font-semibold text-white">1 USDT</div>
+                          </div>
+                          <div className="bg-white/4 border border-white/10 rounded-xl px-3 py-2">
+                            <div className="text-[10px] text-muted-foreground mb-0.5 uppercase tracking-wider">Confirmations</div>
+                            <div className="text-xs font-semibold text-white">~1–3 min</div>
+                          </div>
+                        </div>
+
+                        <a
+                          href={`https://tronscan.org/#/address/${info.platformAddress}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300 transition-colors"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                          View on TronScan
+                        </a>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center gap-2 py-6 text-muted-foreground">
+                      <WalletIcon className="w-7 h-7 opacity-30" />
+                      <p className="text-sm">Platform address not configured</p>
+                    </div>
+                  )}
+                </>
+              ) : null}
+
+              {/* Waiting indicator */}
+              {polling && (
+                <div className="flex items-center gap-3 bg-blue-500/8 border border-blue-500/20 rounded-xl px-4 py-3">
+                  <Loader2 className="w-4 h-4 text-blue-400 animate-spin shrink-0" />
+                  <div>
+                    <div className="text-xs font-semibold text-blue-400">Waiting for payment…</div>
+                    <div className="text-[11px] text-muted-foreground mt-0.5">Checking every 10 seconds. Do not close this page.</div>
+                  </div>
+                </div>
+              )}
+
+              {/* Warning */}
+              <div className="flex gap-2.5 bg-amber-500/6 border border-amber-500/20 rounded-xl px-3 py-2.5">
+                <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                <p className="text-xs text-amber-200/80 leading-relaxed">
+                  Send only <span className="font-semibold text-white">USDT (TRC20)</span> to this address. Other tokens or networks will be lost permanently.
+                </p>
+              </div>
+            </motion.div>
+          )}
+
+          {/* Step 3: Confirmed */}
+          {step === "confirmed" && (
+            <motion.div
+              key="confirmed"
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.3 }}
+              className="flex flex-col items-center gap-4 py-6 text-center"
+            >
+              <div className="w-16 h-16 rounded-full bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center">
+                <CheckCircle2 className="w-8 h-8 text-emerald-400" />
+              </div>
+              <div>
+                <div className="text-base font-bold text-white">Deposit Confirmed!</div>
+                <div className="text-sm text-muted-foreground mt-1">
+                  <span className="text-emerald-400 font-semibold">{amount} USDT</span> has been credited to your main balance.
+                </div>
+              </div>
+              <button onClick={reset} className="btn btn-primary mt-2 px-6">
+                Make Another Deposit
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    </div>
+  );
+}
+
 export default function WalletPage() {
   const { data: wallet, isLoading } = useGetWallet();
   const { data: summary } = useGetDashboardSummary();
@@ -42,23 +486,9 @@ export default function WalletPage() {
   const withdrawalFeePercent = (withdrawalFee * 100).toFixed(1);
   const { toast } = useToast();
 
-  const [depositAmount, setDepositAmount] = useState("");
   const [withdrawAmount, setWithdrawAmount] = useState("");
   const [withdrawAddress, setWithdrawAddress] = useState("");
   const [transferAmount, setTransferAmount] = useState("");
-
-  const depositMutation = useDeposit({
-    mutation: {
-      onSuccess: () => {
-        toast({ title: "Deposit successful", description: "Funds have been added to your main balance." });
-        queryClient.invalidateQueries({ queryKey: getGetWalletQueryKey() });
-        setDepositAmount("");
-      },
-      onError: (err: any) => {
-        toast({ title: "Deposit failed", description: err.message, variant: "destructive" });
-      }
-    }
-  });
 
   const withdrawMutation = useWithdraw({
     mutation: {
@@ -86,6 +516,11 @@ export default function WalletPage() {
       }
     }
   });
+
+  const handleDepositConfirmed = () => {
+    queryClient.invalidateQueries({ queryKey: getGetWalletQueryKey() });
+    toast({ title: "Deposit confirmed!", description: "Funds have been credited to your main balance." });
+  };
 
   const netWithdraw = Number(withdrawAmount) * (1 - withdrawalFee);
   const feeAmount = Number(withdrawAmount) * withdrawalFee;
@@ -164,52 +599,13 @@ export default function WalletPage() {
           </div>
         </motion.div>
 
-        {/* Action Cards */}
-        <motion.div variants={item} className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-5">
+        {/* Deposit Card (2-step flow) */}
+        <motion.div variants={item}>
+          <DepositCard onDepositConfirmed={handleDepositConfirmed} />
+        </motion.div>
 
-          {/* Deposit */}
-          <div className="glass-card p-5 rounded-2xl space-y-4">
-            <div className="flex items-center gap-2.5">
-              <div className="p-2 rounded-xl bg-blue-500/15 text-blue-400">
-                <ArrowDownToLine style={{ width: 16, height: 16 }} />
-              </div>
-              <div>
-                <div className="font-semibold text-sm">Deposit USD</div>
-                <div className="text-xs text-muted-foreground">Add funds to your account</div>
-              </div>
-            </div>
-            <div className="space-y-3">
-              <div>
-                <label className="text-xs text-muted-foreground font-medium mb-1.5 block">Amount (USD)</label>
-                <input
-                  type="number"
-                  value={depositAmount}
-                  onChange={(e) => setDepositAmount(e.target.value)}
-                  className="field-input"
-                  placeholder="1,000"
-                  min="0"
-                />
-              </div>
-              <div className="grid grid-cols-4 gap-1.5">
-                {[100, 500, 1000, 5000].map((amt) => (
-                  <button
-                    key={amt}
-                    onClick={() => setDepositAmount(String(amt))}
-                    className="text-xs py-1.5 rounded-lg bg-white/5 hover:bg-blue-500/15 hover:text-blue-400 border border-white/8 hover:border-blue-500/25 text-muted-foreground font-medium transition-all"
-                  >
-                    ${amt >= 1000 ? `${amt / 1000}k` : amt}
-                  </button>
-                ))}
-              </div>
-              <button
-                onClick={() => depositMutation.mutate({ data: { amount: Number(depositAmount) } })}
-                disabled={depositMutation.isPending || !depositAmount || Number(depositAmount) <= 0}
-                className="btn btn-primary w-full"
-              >
-                {depositMutation.isPending ? "Processing…" : "Deposit USD"}
-              </button>
-            </div>
-          </div>
+        {/* Transfer + Withdraw */}
+        <motion.div variants={item} className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
 
           {/* Transfer */}
           <div className="glass-card p-5 rounded-2xl space-y-4">
