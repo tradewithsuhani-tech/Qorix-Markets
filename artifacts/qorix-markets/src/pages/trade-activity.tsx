@@ -3,6 +3,7 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { Activity, TrendingUp, TrendingDown, ChevronLeft, ChevronRight, CalendarIcon } from "lucide-react";
 import { Layout } from "@/components/layout";
+import { PeriodFilter } from "@/components/period-filter";
 import { findPair, formatPair } from "@/lib/pair-meta";
 import { PairIcon } from "@/components/pair-icon";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -365,19 +366,12 @@ export default function TradeActivityPage() {
 
         {/* Period filter */}
         <div className="flex flex-wrap items-center gap-2">
-          {PERIODS.map((p) => (
-            <button
-              key={p.key}
-              onClick={() => choosePeriod(p.key)}
-              className={`text-xs px-3 py-1.5 rounded-lg font-medium transition-all duration-150 border ${
-                period === p.key
-                  ? "bg-blue-500/20 text-blue-300 border-blue-500/40"
-                  : "text-white/60 hover:text-white hover:bg-white/5 border-white/10"
-              }`}
-            >
-              {p.label}
-            </button>
-          ))}
+          <PeriodFilter
+            options={PERIODS.map((p) => ({ label: p.label, value: p.key }))}
+            selected={period}
+            onChange={(v) => choosePeriod(v as PeriodKey)}
+            ariaLabel="Trade activity period"
+          />
           {period === "CUSTOM" && (
             <div className="ml-1">
               <DateRangePicker

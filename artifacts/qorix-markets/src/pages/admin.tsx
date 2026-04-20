@@ -7,6 +7,7 @@ import {
   Server, Cpu, HardDrive, Zap, Bell, Globe, Shield, TrendingUp, MessageCircle, Brain,
   ChevronRight, FlaskConical,
 } from "lucide-react";
+import { AddressDisplay } from "@/components/address-display";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { getGetPendingWithdrawalsQueryKey, getGetAdminStatsQueryKey } from "@workspace/api-client-react";
@@ -299,8 +300,8 @@ export default function AdminPage() {
                         <td className="px-4 py-3 font-bold font-mono text-amber-500">
                           ${req.amount.toFixed(2)}
                         </td>
-                        <td className="px-4 py-3 font-mono text-xs text-muted-foreground truncate max-w-[150px]" title={req.walletAddress}>
-                          {req.walletAddress}
+                        <td className="px-4 py-3 text-xs">
+                          <AddressDisplay address={req.walletAddress} />
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2">
