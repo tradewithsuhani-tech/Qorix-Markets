@@ -345,6 +345,15 @@ export default function Dashboard() {
     },
     refetchInterval: 5000,
   });
+  const { data: recentTradesData } = useQuery<{ trades: Array<{ id: number; pair: string; direction: string; realizedProfitPercent: string; closedAt: string }> }>({
+    queryKey: ["signal-trades-recent"],
+    queryFn: async () => {
+      const res = await fetch("/api/signal-trades/recent");
+      if (!res.ok) throw new Error("Failed to fetch");
+      return res.json();
+    },
+    refetchInterval: 10000,
+  });
   const { data: perf, isLoading: perfLoading } = useGetDashboardPerformance({
     query: { refetchInterval: 30000 }
   });
@@ -827,10 +836,46 @@ export default function Dashboard() {
               {tradesLoading ? (
                 Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-14 w-full rounded-xl" />)
               ) : trades.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-full text-muted-foreground py-8">
-                  <Clock style={{ width: 28, height: 28 }} className="mb-2 opacity-30" />
-                  <p className="text-sm">No trades yet</p>
-                  <p className="text-xs opacity-50 mt-0.5">Start investing to see activity</p>
+                <div className="flex flex-col h-full">
+                  {/* Waiting for setup — animated */}
+                  <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground py-6 relative overflow-hidden">
+                    <div className="relative w-16 h-16 mb-3">
+                      <span className="absolute inset-0 rounded-full bg-blue-500/20 animate-ping" />
+                      <span className="absolute inset-2 rounded-full bg-blue-500/30 animate-ping" style={{ animationDelay: "0.4s" }} />
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <Activity className="w-6 h-6 text-blue-400 animate-pulse" />
+                      </div>
+                    </div>
+                    <p className="text-sm font-medium text-blue-300/90">Waiting for setup…</p>
+                    <p className="text-[11px] opacity-50 mt-0.5">Scanning markets for next signal</p>
+                  </div>
+
+                  {/* Recent closed strip */}
+                  {recentTradesData?.trades && recentTradesData.trades.length > 0 && (
+                    <div className="border-t border-white/5 pt-2.5 mt-2">
+                      <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1.5 px-1">Recent</div>
+                      <div className="space-y-1.5">
+                        {recentTradesData.trades.slice(0, 3).map((t) => {
+                          const pct = parseFloat(t.realizedProfitPercent || "0");
+                          const isWin = pct >= 0;
+                          return (
+                            <motion.div key={t.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                              className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-white/[0.02] border border-white/[0.04]">
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-semibold">{t.pair}</span>
+                                <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold ${isWin ? 'bg-emerald-500/15 text-emerald-400' : 'bg-red-500/15 text-red-400'}`}>
+                                  {isWin ? 'TP HIT' : 'SL HIT'}
+                                </span>
+                              </div>
+                              <span className={`text-[11px] font-mono font-semibold ${isWin ? 'text-emerald-400' : 'text-red-400'}`}>
+                                {pct >= 0 ? '+' : ''}{pct.toFixed(2)}%
+                              </span>
+                            </motion.div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
               ) : (
                 trades.map((trade: any, i: number) => {

@@ -44,8 +44,8 @@ router.post(
       res.status(400).json({ error: "Provide either tpPrice or pipsTarget" }); return;
     }
     if (pipSize !== null && pipSize <= 0) { res.status(400).json({ error: "pipSize must be positive" }); return; }
-    if (expectedProfitPercent === null || expectedProfitPercent < -50 || expectedProfitPercent > 50) {
-      res.status(400).json({ error: "expectedProfitPercent must be between -50 and 50" }); return;
+    if (expectedProfitPercent === null) {
+      res.status(400).json({ error: "expectedProfitPercent required" }); return;
     }
     let scheduledAt: Date | undefined;
     if (scheduledAtRaw) {

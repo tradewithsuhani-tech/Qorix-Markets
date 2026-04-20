@@ -175,10 +175,20 @@ export default function AdminSignalTradesPage() {
 
             <Field label={<><Target className="w-3 h-3 inline mr-1 text-emerald-400" /> TP Price</>}>
               <input type="number" step="any" value={tpPrice} onChange={(e) => setTpPrice(e.target.value)} placeholder={direction === "BUY" ? "above entry" : "below entry"} className={inputCls} />
+              {tpPrice && entryPrice && (
+                <div className="text-[10px] text-emerald-300/80 mt-1 font-mono">
+                  ≈ {(Math.abs(parseFloat(tpPrice) - parseFloat(entryPrice)) / pipSize).toFixed(1)} pips
+                </div>
+              )}
             </Field>
 
             <Field label={<><ShieldAlert className="w-3 h-3 inline mr-1 text-red-400" /> SL Price</>}>
               <input type="number" step="any" value={slPrice} onChange={(e) => setSlPrice(e.target.value)} placeholder={direction === "BUY" ? "below entry" : "above entry"} className={inputCls} />
+              {slPrice && entryPrice && (
+                <div className="text-[10px] text-red-300/80 mt-1 font-mono">
+                  ≈ {(Math.abs(parseFloat(entryPrice) - parseFloat(slPrice)) / pipSize).toFixed(1)} pips
+                </div>
+              )}
             </Field>
 
             <Field label="Date & Time (optional)">
