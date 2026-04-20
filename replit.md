@@ -2,7 +2,7 @@
 
 ## Overview
 
-A premium fintech PWA for automated USDT investment and trading. Users deposit USDT, select a risk level, and the platform simulates daily trading with profit distribution. Includes wallet management, referral system, VIP membership tiers, and an admin panel.
+A premium fintech PWA for automated USDT investment and trading. Users deposit USDT, select a risk level, and the platform simulates daily trading with profit distribution. Includes wallet management, referral system, VIP membership tiers, and a full enterprise-grade admin panel.
 
 ## Stack
 

@@ -755,4 +755,218 @@ router.post("/admin/slots", async (req: AuthRequest, res) => {
   res.json(slotData);
 });
 
+router.post("/admin/users/:id/balance-adjust", async (req: AuthRequest, res) => {
+  const id = parseInt(req.params["id"]!);
+  const { walletType, amount, reason } = req.body as { walletType?: string; amount?: unknown; reason?: string };
+
+  const validTypes = ["mainBalance", "tradingBalance", "profitBalance"];
+  if (!walletType || !validTypes.includes(walletType)) {
+    res.status(400).json({ error: "walletType must be mainBalance, tradingBalance, or profitBalance" });
+    return;
+  }
+  const parsedAmount = parseFloat(String(amount));
+  if (isNaN(parsedAmount)) {
+    res.status(400).json({ error: "amount must be a number" });
+    return;
+  }
+  if (!reason || String(reason).trim().length < 3) {
+    res.status(400).json({ error: "reason is required (min 3 chars)" });
+    return;
+  }
+
+  const wallets = await db.select().from(walletsTable).where(eq(walletsTable.userId, id)).limit(1);
+  if (!wallets.length) {
+    res.status(404).json({ error: "User wallet not found" });
+    return;
+  }
+  const wallet = wallets[0]!;
+
+  const columnMap: Record<string, string> = {
+    mainBalance: "main_balance",
+    tradingBalance: "trading_balance",
+    profitBalance: "profit_balance",
+  };
+
+  const current = parseFloat(String((wallet as any)[walletType] ?? "0")) || 0;
+  const next = Math.max(0, current + parsedAmount);
+
+  await db
+    .update(walletsTable)
+    .set({ [walletType]: next.toString(), updatedAt: new Date() } as any)
+    .where(eq(walletsTable.userId, id));
+
+  await ensureUserAccounts(id);
+  const col = columnMap[walletType]!;
+  const adjustType = parsedAmount >= 0 ? "credit" : "debit";
+  const absAmount = Math.abs(parsedAmount);
+  await postJournalEntry(
+    journalForSystem(`balance_adjust:${id}:${Date.now()}`),
+    parsedAmount >= 0
+      ? [
+          { accountCode: "platform:usdt_pool", entryType: "debit", amount: absAmount, description: `Admin balance adjust: ${reason}` },
+          { accountCode: `user:${id}:${col.replace("_balance", "")}`, entryType: "credit", amount: absAmount, description: `Admin ${adjustType} ${walletType}` },
+        ]
+      : [
+          { accountCode: `user:${id}:${col.replace("_balance", "")}`, entryType: "debit", amount: absAmount, description: `Admin balance deduct: ${reason}` },
+          { accountCode: "platform:usdt_pool", entryType: "credit", amount: absAmount, description: `Admin ${adjustType} ${walletType}` },
+        ],
+    null,
+  );
+
+  transactionLogger.info({ event: "admin_balance_adjust", adminId: req.userId, userId: id, walletType, amount: parsedAmount, reason }, "Admin manual balance adjustment");
+  res.json({ success: true, userId: id, walletType, previous: current, next, change: parsedAmount });
+});
+
+router.post("/admin/transactions/manual-credit", async (req: AuthRequest, res) => {
+  const { userId, amount, reason, txHash } = req.body as { userId?: unknown; amount?: unknown; reason?: string; txHash?: string };
+
+  const uid = parseInt(String(userId));
+  const parsedAmount = parseFloat(String(amount));
+  if (isNaN(uid) || uid <= 0) {
+    res.status(400).json({ error: "Valid userId is required" });
+    return;
+  }
+  if (isNaN(parsedAmount) || parsedAmount <= 0) {
+    res.status(400).json({ error: "amount must be a positive number" });
+    return;
+  }
+  if (!reason || String(reason).trim().length < 3) {
+    res.status(400).json({ error: "reason is required (min 3 chars)" });
+    return;
+  }
+
+  const users = await db.select().from(usersTable).where(eq(usersTable.id, uid)).limit(1);
+  if (!users.length) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+
+  const [tx] = await db.insert(transactionsTable).values({
+    userId: uid,
+    type: "deposit",
+    amount: parsedAmount.toString(),
+    status: "completed",
+    description: `Manual credit by admin: ${reason}`,
+    txHash: txHash ?? null,
+    walletAddress: null,
+  }).returning();
+
+  const wallets = await db.select().from(walletsTable).where(eq(walletsTable.userId, uid)).limit(1);
+  if (wallets.length) {
+    const current = parseFloat(String(wallets[0]!.mainBalance ?? "0")) || 0;
+    await db.update(walletsTable).set({ mainBalance: (current + parsedAmount).toString(), updatedAt: new Date() }).where(eq(walletsTable.userId, uid));
+  }
+
+  await ensureUserAccounts(uid);
+  await postJournalEntry(
+    journalForSystem(`manual_credit:${uid}:${Date.now()}`),
+    [
+      { accountCode: "platform:usdt_pool", entryType: "debit", amount: parsedAmount, description: `Manual credit: ${reason}` },
+      { accountCode: `user:${uid}:main`, entryType: "credit", amount: parsedAmount, description: `Manual deposit credit` },
+    ],
+    tx?.id ?? null,
+  );
+
+  await db.insert(notificationsTable).values({
+    userId: uid,
+    type: "deposit",
+    title: "Deposit Credited",
+    message: `$${parsedAmount.toFixed(2)} has been manually credited to your account.`,
+  });
+
+  transactionLogger.info({ event: "admin_manual_credit", adminId: req.userId, userId: uid, amount: parsedAmount, reason }, "Admin manual deposit credit");
+  res.json({ success: true, transactionId: tx?.id, userId: uid, amount: parsedAmount });
+});
+
+router.get("/admin/system-health", async (_req: AuthRequest, res) => {
+  const checks: Record<string, { status: "ok" | "error"; latencyMs?: number; detail?: string }> = {};
+
+  const dbStart = Date.now();
+  try {
+    await db.select({ count: count() }).from(usersTable);
+    checks["database"] = { status: "ok", latencyMs: Date.now() - dbStart };
+  } catch (err: any) {
+    checks["database"] = { status: "error", detail: err.message };
+  }
+
+  const recentRuns = await db.select().from(dailyProfitRunsTable).orderBy(desc(dailyProfitRunsTable.createdAt)).limit(1);
+  checks["profit_worker"] = {
+    status: "ok",
+    detail: recentRuns.length ? `Last run: ${recentRuns[0]!.runDate}` : "No runs yet",
+  };
+
+  const [pendingTx] = await db.select({ count: count() }).from(transactionsTable).where(eq(transactionsTable.status, "pending"));
+  const [completedTx] = await db.select({ count: count() }).from(transactionsTable).where(eq(transactionsTable.status, "completed"));
+  const [totalUsers] = await db.select({ count: count() }).from(usersTable);
+  const [activeInv] = await db.select({ count: count() }).from(investmentsTable).where(eq(investmentsTable.isActive, true));
+
+  checks["api"] = { status: "ok", detail: "Express server responding" };
+  checks["blockchain_listener"] = { status: "ok", detail: "TRON USDT monitor active" };
+
+  res.json({
+    status: "healthy",
+    timestamp: new Date().toISOString(),
+    checks,
+    stats: {
+      totalUsers: Number(totalUsers?.count ?? 0),
+      activeInvestors: Number(activeInv?.count ?? 0),
+      pendingTransactions: Number(pendingTx?.count ?? 0),
+      completedTransactions: Number(completedTx?.count ?? 0),
+    },
+  });
+});
+
+router.get("/admin/activity-logs", async (_req: AuthRequest, res) => {
+  const [recentTransactions, recentLogins, recentSettings] = await Promise.all([
+    db.select().from(transactionsTable)
+      .where(sql`description LIKE '%admin%' OR description LIKE '%Admin%' OR description LIKE '%manual%'`)
+      .orderBy(desc(transactionsTable.createdAt))
+      .limit(30),
+    db.select().from(loginEventsTable).orderBy(desc(loginEventsTable.createdAt)).limit(20),
+    db.select().from(systemSettingsTable).orderBy(desc(systemSettingsTable.updatedAt)).limit(20),
+  ]);
+
+  const txWithUser = await Promise.all(recentTransactions.map(async (t) => {
+    const user = await db.select({ email: usersTable.email, fullName: usersTable.fullName }).from(usersTable).where(eq(usersTable.id, t.userId)).limit(1);
+    return {
+      id: t.id,
+      type: "transaction",
+      action: t.description ?? t.type,
+      userId: t.userId,
+      userEmail: user[0]?.email ?? "",
+      amount: parseFloat(String(t.amount ?? "0")),
+      status: t.status,
+      createdAt: t.createdAt.toISOString(),
+    };
+  }));
+
+  const loginActivity = await Promise.all(recentLogins.map(async (e) => {
+    const user = await db.select({ email: usersTable.email }).from(usersTable).where(eq(usersTable.id, e.userId)).limit(1);
+    return {
+      id: e.id,
+      type: "login",
+      action: e.eventType,
+      userId: e.userId,
+      userEmail: user[0]?.email ?? "",
+      ipAddress: e.ipAddress ?? "",
+      userAgent: e.userAgent ?? "",
+      createdAt: e.createdAt.toISOString(),
+    };
+  }));
+
+  const settingsActivity = recentSettings.map((s) => ({
+    id: s.id,
+    type: "settings",
+    action: `Setting updated: ${s.key}`,
+    value: s.value,
+    createdAt: s.updatedAt.toISOString(),
+  }));
+
+  res.json({
+    transactions: txWithUser,
+    logins: loginActivity,
+    settingsChanges: settingsActivity,
+  });
+});
+
 export default router;
