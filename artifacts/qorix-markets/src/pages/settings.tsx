@@ -1,7 +1,7 @@
 import { Layout } from "@/components/layout";
 import { useAuth } from "@/hooks/use-auth";
 import { motion } from "framer-motion";
-import { User as UserIcon, Mail, Calendar, Shield, Crown, Copy, CheckCircle2 } from "lucide-react";
+import { User as UserIcon, Mail, Calendar, Shield, Crown, Copy, CheckCircle2, LogOut } from "lucide-react";
 import { format } from "date-fns";
 import { useGetDashboardSummary } from "@workspace/api-client-react";
 import { VipBadge, VipCard } from "@/components/vip-badge";
@@ -24,7 +24,8 @@ function InfoRow({ label, value, mono = false }: { label: string; value: string;
 }
 
 export default function SettingsPage() {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const { data: summary, isLoading } = useGetDashboardSummary();
   const { toast } = useToast();
   const [copied, setCopied] = useState(false);
@@ -145,6 +146,46 @@ export default function SettingsPage() {
             <VipCard vip={vip as VipInfo} investmentAmount={summary?.activeInvestment ?? 0} />
           </motion.div>
         ) : null}
+
+        {/* Logout */}
+        <motion.div variants={item} className="glass-card rounded-2xl p-5 space-y-3">
+          <div className="flex items-center gap-2.5 mb-1">
+            <div className="p-2 rounded-xl bg-red-500/15 text-red-400">
+              <LogOut style={{ width: 15, height: 15 }} />
+            </div>
+            <h3 className="font-semibold">Sign Out</h3>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            You'll be logged out of this device. You can sign back in anytime with your email and password.
+          </p>
+          {!showLogoutConfirm ? (
+            <button
+              onClick={() => setShowLogoutConfirm(true)}
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-300 font-semibold text-sm transition-all"
+            >
+              <LogOut style={{ width: 15, height: 15 }} />
+              Logout
+            </button>
+          ) : (
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-white text-center">Are you sure you want to logout?</p>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => setShowLogoutConfirm(false)}
+                  className="px-4 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-sm font-medium transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={logout}
+                  className="px-4 py-2.5 rounded-xl bg-red-500 hover:bg-red-600 text-white text-sm font-semibold transition-all"
+                >
+                  Yes, Logout
+                </button>
+              </div>
+            </div>
+          )}
+        </motion.div>
       </motion.div>
     </Layout>
   );
