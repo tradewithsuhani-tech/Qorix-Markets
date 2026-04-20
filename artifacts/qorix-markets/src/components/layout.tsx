@@ -1,6 +1,7 @@
 import React, { useState, useCallback } from "react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
+import { QorixLogo } from "@/components/qorix-logo";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   LayoutDashboard,
@@ -423,8 +424,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <aside className="hidden md:flex flex-col w-64 border-r border-white/5 glass-nav shrink-0">
         <div className="p-6 pb-4">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/25">
-              <TrendingUp className="w-5 h-5 text-white" />
+            <div className="w-9 h-9 rounded-xl overflow-hidden flex items-center justify-center shadow-lg shadow-blue-500/25">
+              <QorixLogo size={36} />
             </div>
             <div>
               <div className="text-lg font-bold tracking-tight text-white leading-none">
@@ -503,8 +504,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
           }}
         >
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center">
-              <TrendingUp className="w-4 h-4 text-white" />
+            <div className="w-7 h-7 rounded-lg overflow-hidden flex items-center justify-center">
+              <QorixLogo size={28} />
             </div>
             <span className="text-sm font-bold text-white">Qorix<span className="text-blue-400">Markets</span></span>
             {!isAdminArea && <VipBadge tier={vipTier} size="xs" />}

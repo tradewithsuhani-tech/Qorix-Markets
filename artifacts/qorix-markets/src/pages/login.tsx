@@ -260,8 +260,8 @@ export default function LoginPage() {
       >
         {/* Logo */}
         <div className="flex items-center gap-3 mb-8 justify-center">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-[0_0_22px_rgba(59,130,246,0.38)]">
-            <TrendingUp style={{ width: 18, height: 18 }} className="text-white" />
+          <div className="w-12 h-12 rounded-xl overflow-hidden flex items-center justify-center shadow-[0_0_22px_rgba(59,130,246,0.38)]">
+            <QorixLogo size={48} />
           </div>
           <span className="text-xl font-bold">Qorix<span className="text-primary font-light">Markets</span></span>
         </div>

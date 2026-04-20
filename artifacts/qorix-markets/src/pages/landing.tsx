@@ -1,6 +1,7 @@
 import { useRef, useEffect, useState } from "react";
 import { EconomicNewsLandingWidget } from "@/components/economic-news-widget";
 import { QorixAssistant } from "@/components/qorix-assistant";
+import { QorixLogo } from "@/components/qorix-logo";
 import { useLocation } from "wouter";
 import { motion, useInView, useMotionValue, useSpring, AnimatePresence } from "framer-motion";
 import {
@@ -529,8 +530,8 @@ export default function Landing() {
       <header className="sticky top-0 z-50 border-b" style={{ background: "rgba(5,8,20,0.88)", backdropFilter: "blur(24px)", borderColor: "rgba(255,255,255,0.06)" }}>
         <div className="max-w-7xl mx-auto px-5 md:px-8 h-14 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: "linear-gradient(135deg,#2563eb,#7c3aed)", boxShadow: "0 0 20px rgba(99,102,241,0.4)" }}>
-              <TrendingUp size={14} className="text-white" />
+            <div className="w-8 h-8 rounded-lg overflow-hidden flex items-center justify-center" style={{ boxShadow: "0 0 20px rgba(99,102,241,0.4)" }}>
+              <QorixLogo size={32} />
             </div>
             <span className="font-black tracking-tight text-[15px] text-white">Qorix<span style={{ background: "linear-gradient(90deg,#38bdf8,#818cf8)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>Markets</span></span>
           </div>
@@ -1001,8 +1002,8 @@ export default function Landing() {
         <div className="max-w-7xl mx-auto px-5 md:px-8 py-8">
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 mb-6">
             <div className="flex items-center gap-2.5">
-              <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: "linear-gradient(135deg,#2563eb,#7c3aed)" }}>
-                <TrendingUp size={12} className="text-white" />
+              <div className="w-7 h-7 rounded-lg overflow-hidden flex items-center justify-center">
+                <QorixLogo size={28} />
               </div>
               <div>
                 <div className="font-black text-sm text-white">Qorix<span style={{ background: "linear-gradient(90deg,#38bdf8,#818cf8)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>Markets</span></div>
