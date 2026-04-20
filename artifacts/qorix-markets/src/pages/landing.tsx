@@ -813,7 +813,7 @@ export default function Landing() {
                     <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
                     <XAxis dataKey="month" tick={{ fill: "rgba(148,163,184,0.6)", fontSize: 10 }} axisLine={false} tickLine={false} />
                     <YAxis tick={{ fill: "rgba(148,163,184,0.6)", fontSize: 10 }} axisLine={false} tickLine={false} />
-                    <Tooltip content={(props) => <ChartTooltip {...props} suffix="%" />} />
+                    <Tooltip content={(props) => <ChartTooltip {...props} suffix="%" />} cursor={{ fill: "rgba(255,255,255,0.04)" }} />
                     <Bar dataKey="return" fill="#22c55e" fillOpacity={0.75} radius={[4, 4, 0, 0]} />
                     <Bar dataKey="drawdown" fill="#ef4444" fillOpacity={0.45} radius={[4, 4, 0, 0]} />
                   </BarChart>
