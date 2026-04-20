@@ -15,3 +15,5 @@ export * from "./fraud";
 export * from "./chat";
 export * from "./deposit-addresses";
 export * from "./blockchain-deposits";
+export * from "./email-otps";
+export * from "./tasks";

@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, walletsTable, transactionsTable, investmentsTable } from "@workspace/db";
+import { db, walletsTable, transactionsTable, investmentsTable, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { authMiddleware, type AuthRequest } from "../middlewares/auth";
 import { DepositBody, WithdrawBody, TransferToTradingBody } from "@workspace/api-zod";
@@ -12,6 +12,7 @@ import {
   postJournalEntry,
   journalForTransaction,
 } from "../lib/ledger-service";
+import { verifyOtp } from "../lib/email-service";
 
 const router = Router();
 router.use(authMiddleware);
@@ -119,6 +120,19 @@ router.post("/wallet/withdraw", async (req: AuthRequest, res) => {
   }
 
   const { amount, walletAddress } = result.data;
+
+  // --- Withdrawal OTP verification ---
+  const { otp } = req.body;
+  if (!otp || typeof otp !== "string") {
+    res.status(400).json({ error: "withdrawal_otp_required", message: "Please request a withdrawal OTP first" });
+    return;
+  }
+
+  const otpResult = await verifyOtp(req.userId!, otp, "withdrawal_confirm");
+  if (!otpResult.valid) {
+    res.status(400).json({ error: "invalid_otp", message: otpResult.error ?? "Invalid or expired OTP" });
+    return;
+  }
   const wallets = await db.select().from(walletsTable).where(eq(walletsTable.userId, req.userId!)).limit(1);
   const wallet = wallets[0];
   if (!wallet) {

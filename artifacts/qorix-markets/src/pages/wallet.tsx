@@ -1,16 +1,34 @@
-import { useGetWallet, useWithdraw, useTransferToTrading, useGetDashboardSummary } from "@workspace/api-client-react";
+import { useGetWallet, useTransferToTrading, useGetDashboardSummary } from "@workspace/api-client-react";
 import { Layout } from "@/components/layout";
 import { AnimatedCounter } from "@/components/animated-counter";
 import { useState } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Wallet as WalletIcon, ArrowUpFromLine,
-  ArrowRightLeft, Info, AlertCircle,
+  ArrowRightLeft, Info, AlertCircle, Mail, ShieldCheck, X,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { getGetWalletQueryKey } from "@workspace/api-client-react";
 import { VipBadge } from "@/components/vip-badge";
+
+const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
+function apiUrl(path: string) { return `${BASE_URL}/api${path}`; }
+function getToken() { try { return localStorage.getItem("qorix_token"); } catch { return null; } }
+async function apiFetch(path: string, options: RequestInit = {}) {
+  const token = getToken();
+  const res = await fetch(apiUrl(path), {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...options.headers,
+    },
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw Object.assign(new Error(data.message || data.error || "Request failed"), { data, status: res.status });
+  return data;
+}
 
 function BalanceSkeleton() {
   return (
@@ -46,19 +64,45 @@ export default function WalletPage() {
   const [withdrawAddress, setWithdrawAddress] = useState("");
   const [transferAmount, setTransferAmount] = useState("");
 
-  const withdrawMutation = useWithdraw({
-    mutation: {
-      onSuccess: () => {
-        toast({ title: "Withdrawal requested", description: "Your request is pending admin approval." });
-        queryClient.invalidateQueries({ queryKey: getGetWalletQueryKey() });
-        setWithdrawAmount("");
-        setWithdrawAddress("");
-      },
-      onError: (err: any) => {
-        toast({ title: "Withdrawal failed", description: err.message, variant: "destructive" });
-      }
+  // OTP withdrawal flow
+  const [withdrawStep, setWithdrawStep] = useState<"form" | "otp">("form");
+  const [withdrawOtp, setWithdrawOtp] = useState("");
+  const [sendingOtp, setSendingOtp] = useState(false);
+  const [withdrawing, setWithdrawing] = useState(false);
+
+  const requestWithdrawalOtp = async () => {
+    setSendingOtp(true);
+    try {
+      await apiFetch("/auth/withdrawal-otp", { method: "POST" });
+      setWithdrawStep("otp");
+      toast({ title: "OTP sent!", description: "Enter the code from your email to confirm." });
+    } catch (err: any) {
+      toast({ title: "Failed to send OTP", description: err.message, variant: "destructive" });
+    } finally {
+      setSendingOtp(false);
     }
-  });
+  };
+
+  const confirmWithdrawal = async () => {
+    if (!withdrawOtp.trim()) return;
+    setWithdrawing(true);
+    try {
+      await apiFetch("/wallet/withdraw", {
+        method: "POST",
+        body: JSON.stringify({ amount: Number(withdrawAmount), walletAddress: withdrawAddress, otp: withdrawOtp }),
+      });
+      toast({ title: "Withdrawal requested", description: "Your request is pending admin approval." });
+      queryClient.invalidateQueries({ queryKey: getGetWalletQueryKey() });
+      setWithdrawAmount("");
+      setWithdrawAddress("");
+      setWithdrawOtp("");
+      setWithdrawStep("form");
+    } catch (err: any) {
+      toast({ title: "Withdrawal failed", description: err.message, variant: "destructive" });
+    } finally {
+      setWithdrawing(false);
+    }
+  };
 
   const transferMutation = useTransferToTrading({
     mutation: {
@@ -264,13 +308,60 @@ export default function WalletPage() {
                 />
               </div>
 
-              <button
-                onClick={() => withdrawMutation.mutate({ data: { amount: Number(withdrawAmount), walletAddress: withdrawAddress } })}
-                disabled={withdrawMutation.isPending || !withdrawAmount || !withdrawAddress || Number(withdrawAmount) <= 0}
-                className="btn btn-success w-full"
-              >
-                {withdrawMutation.isPending ? "Processing…" : "Request Withdrawal"}
-              </button>
+              <AnimatePresence mode="wait">
+                {withdrawStep === "form" ? (
+                  <motion.button
+                    key="request-otp"
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -4 }}
+                    onClick={requestWithdrawalOtp}
+                    disabled={sendingOtp || !withdrawAmount || !withdrawAddress || Number(withdrawAmount) <= 0}
+                    className="btn btn-success w-full flex items-center justify-center gap-2"
+                  >
+                    <Mail style={{ width: 14, height: 14 }} />
+                    {sendingOtp ? "Sending OTP…" : "Send Confirmation Code"}
+                  </motion.button>
+                ) : (
+                  <motion.div
+                    key="otp-step"
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -4 }}
+                    className="space-y-2"
+                  >
+                    <div className="flex items-center gap-2 text-xs text-blue-400 bg-blue-500/10 border border-blue-500/20 rounded-xl px-3 py-2">
+                      <ShieldCheck style={{ width: 13, height: 13 }} />
+                      Enter the 6-digit code sent to your email
+                    </div>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={6}
+                        value={withdrawOtp}
+                        onChange={(e) => setWithdrawOtp(e.target.value.replace(/\D/g, ""))}
+                        placeholder="000000"
+                        className="flex-1 field-input text-center font-mono tracking-widest text-lg"
+                        autoFocus
+                      />
+                      <button
+                        onClick={() => { setWithdrawStep("form"); setWithdrawOtp(""); }}
+                        className="px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-muted-foreground hover:bg-white/10 transition-colors"
+                      >
+                        <X style={{ width: 14, height: 14 }} />
+                      </button>
+                    </div>
+                    <button
+                      onClick={confirmWithdrawal}
+                      disabled={withdrawing || withdrawOtp.length < 6}
+                      className="btn btn-success w-full"
+                    >
+                      {withdrawing ? "Processing…" : "Confirm Withdrawal"}
+                    </button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           </div>
 

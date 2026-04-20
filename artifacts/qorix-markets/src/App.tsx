@@ -24,9 +24,11 @@ import InvestPage from "@/pages/invest";
 import TransactionsPage from "@/pages/transactions";
 import ReferralPage from "@/pages/referral";
 import RewardsPage from "@/pages/rewards";
+import TasksPage from "@/pages/tasks";
 import AdminPage from "@/pages/admin";
 import AdminIntelligencePage from "@/pages/admin-intelligence";
 import AdminFraudPage from "@/pages/admin-fraud";
+import AdminTaskProofsPage from "@/pages/admin-task-proofs";
 import SettingsPage from "@/pages/settings";
 import {
   AdminAnalyticsPage,
@@ -110,6 +112,7 @@ function Router() {
       <Route path="/transactions"><ProtectedRoute component={TransactionsPage} /></Route>
       <Route path="/referral"><ProtectedRoute component={ReferralPage} /></Route>
       <Route path="/rewards"><ProtectedRoute component={RewardsPage} /></Route>
+      <Route path="/tasks"><ProtectedRoute component={TasksPage} /></Route>
       <Route path="/analytics"><ProtectedRoute component={AnalyticsPage} /></Route>
       <Route path="/trading-desk"><ProtectedRoute component={TradingDeskPage} /></Route>
       <Route path="/admin"><ProtectedRoute component={AdminPage} adminOnly={true} /></Route>
@@ -123,6 +126,7 @@ function Router() {
       <Route path="/admin/logs"><ProtectedRoute component={AdminLogsPage} adminOnly={true} /></Route>
       <Route path="/admin/intelligence"><ProtectedRoute component={AdminIntelligencePage} adminOnly={true} /></Route>
       <Route path="/admin/fraud"><ProtectedRoute component={AdminFraudPage} adminOnly={true} /></Route>
+      <Route path="/admin/task-proofs"><ProtectedRoute component={AdminTaskProofsPage} adminOnly={true} /></Route>
       <Route path="/admin/chats"><ProtectedRoute component={AdminChatsPage} adminOnly={true} /></Route>
       <Route path="/admin/communication"><ProtectedRoute component={AdminCommunicationPage} adminOnly={true} /></Route>
       <Route path="/admin/content"><ProtectedRoute component={AdminContentPage} adminOnly={true} /></Route>

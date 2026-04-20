@@ -17,6 +17,8 @@ import chatRouter from "./chat";
 import depositRouter from "./deposit";
 import cryptoDepositRouter from "./crypto-deposit";
 import testModeRouter from "./test-mode";
+import tasksRouter from "./tasks";
+import adminTasksRouter from "./admin-tasks";
 
 const router: IRouter = Router();
 
@@ -38,5 +40,7 @@ router.use(fraudRouter);
 router.use(leaderboardRouter);
 router.use(depositRouter);
 router.use(testModeRouter);
+router.use(tasksRouter);
+router.use(adminTasksRouter);
 
 export default router;
