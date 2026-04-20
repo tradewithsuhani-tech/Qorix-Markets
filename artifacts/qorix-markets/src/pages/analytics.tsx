@@ -58,9 +58,12 @@ ChartJS.register(
 );
 
 const TIME_FILTERS = [
+  { label: "1D", days: 1 },
   { label: "7D", days: 7 },
   { label: "30D", days: 30 },
-  { label: "90D", days: 90 },
+  { label: "6M", days: 180 },
+  { label: "1Y", days: 365 },
+  { label: "All", days: 3650 },
 ];
 
 const PERF_FILTERS = [

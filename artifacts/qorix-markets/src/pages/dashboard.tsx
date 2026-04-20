@@ -34,18 +34,15 @@ import {
 } from "recharts";
 
 const TIME_FILTERS = [
-  { label: "7D", days: 7 },
-  { label: "30D", days: 30 },
-  { label: "90D", days: 90 },
-];
-
-const RETURNS_FILTERS = [
+  { label: "1D", days: 1 },
   { label: "7D", days: 7 },
   { label: "30D", days: 30 },
   { label: "6M", days: 180 },
   { label: "1Y", days: 365 },
   { label: "All", days: 3650 },
 ];
+
+const RETURNS_FILTERS = TIME_FILTERS;
 
 function ProfitTicker({ value, prev }: { value: number; prev: number }) {
   const up = value >= prev;
@@ -916,7 +913,11 @@ export default function Dashboard() {
                       tickFormatter={v => `$${Number(v).toLocaleString()}`}
                       width={70}
                     />
-                    <Tooltip content={<CustomTooltip />} />
+                    <Tooltip
+                      content={<CustomTooltip />}
+                      cursor={{ stroke: "rgba(148,163,184,0.25)", strokeWidth: 1 }}
+                      wrapperStyle={{ outline: "none" }}
+                    />
                     <Area
                       type="monotone"
                       dataKey="equity"
@@ -1087,7 +1088,11 @@ export default function Dashboard() {
                       tickFormatter={v => `$${Number(v).toFixed(0)}`}
                       width={55}
                     />
-                    <Tooltip content={<DrawdownTooltip />} />
+                    <Tooltip
+                      content={<DrawdownTooltip />}
+                      cursor={{ fill: "rgba(148,163,184,0.08)" }}
+                      wrapperStyle={{ outline: "none" }}
+                    />
                     <ReferenceLine y={0} stroke="rgba(255,255,255,0.1)" strokeDasharray="4 2" />
                     <Bar dataKey="value" radius={[3, 3, 0, 0]}>
                       {drawdownData.map((entry, index) => (
