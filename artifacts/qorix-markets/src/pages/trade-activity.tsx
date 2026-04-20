@@ -4,6 +4,7 @@ import { Activity, TrendingUp, TrendingDown } from "lucide-react";
 import Layout from "@/components/layout";
 import { apiFetch } from "@/lib/api";
 import { findPair, formatPair } from "@/lib/pair-meta";
+import { PairIcon } from "@/components/pair-icon";
 
 type Trade = {
   id: number;
@@ -17,15 +18,9 @@ type Trade = {
 };
 
 function PairCell({ symbol }: { symbol: string }) {
-  const meta = findPair(symbol);
   return (
-    <div className="flex items-center gap-2">
-      <span
-        className="inline-flex items-center justify-center w-7 h-7 rounded-full text-base shrink-0"
-        style={{ background: `${meta?.color ?? "#444"}20`, border: `1px solid ${meta?.color ?? "#444"}40` }}
-      >
-        {meta?.icon ?? "📈"}
-      </span>
+    <div className="flex items-center gap-3">
+      <PairIcon code={symbol} size={18} />
       <span className="text-sm font-semibold text-white">{formatPair(symbol)}</span>
     </div>
   );
