@@ -43,6 +43,7 @@ import {
 } from "@/pages/admin-modules";
 import AnalyticsPage from "@/pages/analytics";
 import TradingDeskPage from "@/pages/trading-desk";
+import TradeActivityPage from "@/pages/trade-activity";
 import VerifyPage from "@/pages/verify";
 import MarketInsightsPage from "@/pages/market-insights";
 import { HighImpactNotificationBanner } from "@/components/economic-news-widget";
@@ -117,6 +118,7 @@ function Router() {
       <Route path="/tasks"><ProtectedRoute component={TasksPage} /></Route>
       <Route path="/analytics"><ProtectedRoute component={AnalyticsPage} /></Route>
       <Route path="/trading-desk"><ProtectedRoute component={TradingDeskPage} /></Route>
+      <Route path="/trade-activity"><ProtectedRoute component={TradeActivityPage} /></Route>
       <Route path="/signal-history"><ProtectedRoute component={SignalHistoryPage} /></Route>
       <Route path="/admin/signal-trades"><ProtectedRoute component={AdminSignalTradesPage} adminOnly={true} /></Route>
       <Route path="/admin"><ProtectedRoute component={AdminPage} adminOnly={true} /></Route>

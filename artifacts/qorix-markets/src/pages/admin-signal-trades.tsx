@@ -42,10 +42,9 @@ type Trade = {
   closedAt: string | null;
 };
 
-const PAIR_DEFAULTS: Record<string, number> = {
-  XAUUSD: 0.01, BTCUSD: 1, ETHUSD: 0.1,
-  EURUSD: 0.0001, GBPUSD: 0.0001, USDJPY: 0.01,
-};
+import { PAIRS, PAIR_BY_CODE } from "@/lib/pair-meta";
+
+const PAIR_DEFAULTS: Record<string, number> = Object.fromEntries(PAIRS.map(p => [p.code, p.pipSize]));
 
 export default function AdminSignalTradesPage() {
   const { toast } = useToast();
@@ -151,7 +150,31 @@ export default function AdminSignalTradesPage() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             <Field label={`Pair (pip ${pipSize})`}>
-              <input type="text" value={pair} onChange={(e) => setPair(e.target.value.toUpperCase())} placeholder="XAUUSD" className={inputCls} />
+              <div className="grid grid-cols-2 gap-2">
+                {PAIRS.map((p) => {
+                  const active = pair === p.code;
+                  return (
+                    <button
+                      key={p.code}
+                      type="button"
+                      onClick={() => setPair(p.code)}
+                      className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border transition-all text-left ${
+                        active
+                          ? "bg-blue-500/15 border-blue-500/50 text-white"
+                          : "bg-white/[0.02] border-white/10 text-white/70 hover:bg-white/[0.04] hover:border-white/20"
+                      }`}
+                    >
+                      <span
+                        className="inline-flex items-center justify-center w-6 h-6 rounded-full text-sm shrink-0"
+                        style={{ background: `${p.color}20`, border: `1px solid ${p.color}40` }}
+                      >
+                        {p.icon}
+                      </span>
+                      <span className="text-sm font-semibold">{p.display}</span>
+                    </button>
+                  );
+                })}
+              </div>
             </Field>
 
             <Field label="Direction">
