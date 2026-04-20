@@ -6,6 +6,7 @@ import { authMiddleware, signToken, type AuthRequest } from "../middlewares/auth
 import { RegisterBody, LoginBody } from "@workspace/api-zod";
 import { trackLoginEvent, runFraudChecks } from "../lib/fraud-service";
 import { sendOtp, verifyOtp, getDevOtp } from "../lib/email-service";
+import { verifyCaptcha } from "../lib/captcha-service";
 import crypto from "crypto";
 import rateLimit from "express-rate-limit";
 
@@ -87,6 +88,13 @@ router.post("/auth/register", async (req, res) => {
   // --- IP rate limit check ---
   const rawIp = getClientIp(req);
   const ip = normalizeIp(rawIp);
+
+  // --- Captcha check (skipped if TURNSTILE_SECRET_KEY not configured) ---
+  const captchaResult = await verifyCaptcha(req.body.captchaToken, ip);
+  if (!captchaResult.ok) {
+    res.status(400).json({ error: captchaResult.error ?? "Captcha required" });
+    return;
+  }
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
   const [ipCount] = await db
@@ -191,6 +199,15 @@ router.post("/auth/login", loginRateLimit, async (req, res) => {
   }
 
   const { email, password } = result.data;
+
+  // --- Captcha check (skipped if TURNSTILE_SECRET_KEY not configured) ---
+  const loginIp = normalizeIp(getClientIp(req));
+  const captchaResult = await verifyCaptcha(req.body.captchaToken, loginIp);
+  if (!captchaResult.ok) {
+    res.status(400).json({ error: captchaResult.error ?? "Captcha required" });
+    return;
+  }
+
   const users = await db.select().from(usersTable).where(eq(usersTable.email, email)).limit(1);
   if (users.length === 0) {
     res.status(401).json({ error: "Invalid credentials" });
