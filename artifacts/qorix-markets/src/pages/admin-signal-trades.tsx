@@ -43,6 +43,7 @@ type Trade = {
 };
 
 import { PAIRS, PAIR_BY_CODE } from "@/lib/pair-meta";
+import { PairIcon } from "@/components/pair-icon";
 
 const PAIR_DEFAULTS: Record<string, number> = Object.fromEntries(PAIRS.map(p => [p.code, p.pipSize]));
 
@@ -164,12 +165,7 @@ export default function AdminSignalTradesPage() {
                           : "bg-white/[0.02] border-white/10 text-white/70 hover:bg-white/[0.04] hover:border-white/20"
                       }`}
                     >
-                      <span
-                        className="inline-flex items-center justify-center w-6 h-6 rounded-full text-sm shrink-0"
-                        style={{ background: `${p.color}20`, border: `1px solid ${p.color}40` }}
-                      >
-                        {p.icon}
-                      </span>
+                      <PairIcon code={p.code} size={18} />
                       <span className="text-sm font-semibold">{p.display}</span>
                     </button>
                   );
