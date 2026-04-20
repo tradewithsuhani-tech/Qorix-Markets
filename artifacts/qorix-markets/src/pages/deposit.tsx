@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useGetBlockchainDepositHistory } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { getGetBlockchainDepositHistoryQueryKey } from "@workspace/api-client-react";
@@ -16,7 +16,9 @@ import {
   ExternalLink,
   Wallet,
   ChevronRight,
-  LinkIcon,
+  ArrowLeft,
+  Loader2,
+  ShieldCheck,
 } from "lucide-react";
 import { Layout } from "@/components/layout";
 import { cn } from "@/lib/utils";
@@ -83,16 +85,19 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
+type DepositStep = "amount" | "address" | "confirmed";
+
 export default function DepositPage() {
   const qc = useQueryClient();
-  const [platformAddress, setPlatformAddress] = useState("");
-  const [userTronAddress, setUserTronAddress] = useState<string | null>(null);
-  const [addressLoading, setAddressLoading] = useState(true);
 
-  const [tronInput, setTronInput] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState("");
-  const [saveSuccess, setSaveSuccess] = useState(false);
+  // Deposit stepper state
+  const [step, setStep] = useState<DepositStep>("amount");
+  const [amount, setAmount] = useState("");
+  const [platformAddress, setPlatformAddress] = useState("");
+  const [addressLoading, setAddressLoading] = useState(false);
+  const [polling, setPolling] = useState(false);
+  const [lastDepositCount, setLastDepositCount] = useState<number | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const { data: historyData, isLoading: historyLoading, refetch } = useGetBlockchainDepositHistory(
     { limit: 20 },
@@ -101,47 +106,68 @@ export default function DepositPage() {
 
   const deposits = historyData?.deposits ?? [];
 
-  useEffect(() => {
-    const token = localStorage.getItem("qorix_token");
-    fetch(getApiUrl("/deposit/address"), {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    })
-      .then((r) => r.json())
-      .then((d) => {
-        setPlatformAddress(d.platformAddress ?? "");
-        setUserTronAddress(d.userTronAddress ?? null);
-      })
-      .catch(() => {})
-      .finally(() => setAddressLoading(false));
-  }, []);
-
-  const handleSaveTronAddress = async () => {
-    setSaving(true);
-    setSaveError("");
-    setSaveSuccess(false);
+  const fetchAddress = useCallback(async () => {
+    setAddressLoading(true);
     const token = localStorage.getItem("qorix_token");
     try {
-      const res = await fetch(getApiUrl("/deposit/tron-address"), {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({ tronAddress: tronInput.trim() }),
+      const res = await fetch(getApiUrl("/deposit/address"), {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
-      if (!res.ok) {
-        const data = await res.json();
-        setSaveError(data.error ?? "Invalid address");
-      } else {
-        setUserTronAddress(tronInput.trim());
-        setSaveSuccess(true);
-        setTronInput("");
-      }
+      const d = await res.json();
+      setPlatformAddress(d.platformAddress ?? "");
     } catch {
-      setSaveError("Network error. Please try again.");
     } finally {
-      setSaving(false);
+      setAddressLoading(false);
     }
+  }, []);
+
+  const fetchConfirmedCount = useCallback(async (): Promise<number> => {
+    const token = localStorage.getItem("qorix_token");
+    try {
+      const res = await fetch(getApiUrl("/deposit/history?limit=50"), {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      const d = await res.json();
+      return (d.deposits ?? []).filter((dep: any) => dep.status === "confirmed").length;
+    } catch {
+      return 0;
+    }
+  }, []);
+
+  const handleNext = async () => {
+    if (!amount || Number(amount) < 1) return;
+    await fetchAddress();
+    const count = await fetchConfirmedCount();
+    setLastDepositCount(count);
+    setStep("address");
+  };
+
+  // Poll for new confirmed deposits after moving to address step
+  useEffect(() => {
+    if (step !== "address" || lastDepositCount === null) return;
+
+    setPolling(true);
+    pollRef.current = setInterval(async () => {
+      const count = await fetchConfirmedCount();
+      if (count > lastDepositCount) {
+        clearInterval(pollRef.current!);
+        setPolling(false);
+        setStep("confirmed");
+        qc.invalidateQueries({ queryKey: getGetBlockchainDepositHistoryQueryKey() });
+        refetch();
+      }
+    }, 10000);
+
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  }, [step, lastDepositCount, fetchConfirmedCount, qc, refetch]);
+
+  const reset = () => {
+    setStep("amount");
+    setAmount("");
+    setPlatformAddress("");
+    setLastDepositCount(null);
+    setPolling(false);
+    if (pollRef.current) clearInterval(pollRef.current);
   };
 
   const handleRefresh = () => {
@@ -152,167 +178,251 @@ export default function DepositPage() {
   return (
     <Layout>
       <div className="max-w-2xl mx-auto space-y-6">
+
         {/* Header */}
         <div>
-          <h1 className="text-2xl font-bold text-white">USDT Deposit</h1>
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight gradient-text">Deposit USDT</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Send USDT via TRC20 to the platform address. Funds are credited automatically.
+            Send USDT via TRC20. Deposits are detected automatically and credited to your balance.
           </p>
         </div>
 
-        {/* Step 1 — Register TronLink Address */}
+        {/* Stepper Card */}
         <motion.div
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3 }}
-          className="glass-card rounded-2xl p-5"
+          className="glass-card rounded-2xl overflow-hidden"
         >
-          <div className="flex items-center gap-2 mb-4">
-            <div className="w-6 h-6 rounded-full bg-blue-500/20 border border-blue-500/30 flex items-center justify-center text-[11px] font-bold text-blue-400">1</div>
-            <span className="text-sm font-semibold text-white">Register Your TronLink Wallet</span>
-          </div>
-
-          {userTronAddress ? (
-            <div className="flex items-center gap-3 bg-emerald-500/8 border border-emerald-500/20 rounded-xl px-4 py-3">
-              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-              <div className="flex-1 min-w-0">
-                <div className="text-xs text-emerald-400 font-medium mb-0.5">Wallet Registered</div>
-                <div className="text-xs font-mono text-white/70 truncate">{userTronAddress}</div>
-              </div>
+          {/* Card header with step indicator */}
+          <div className="flex items-center gap-3 px-5 pt-5 pb-4 border-b border-white/8">
+            {step !== "amount" && step !== "confirmed" && (
               <button
-                onClick={() => setUserTronAddress(null)}
-                className="text-[10px] text-muted-foreground hover:text-white transition-colors shrink-0"
+                onClick={reset}
+                className="p-1.5 -ml-1 rounded-lg text-muted-foreground hover:text-white hover:bg-white/5 transition-all"
               >
-                Change
+                <ArrowLeft className="w-4 h-4" />
               </button>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                Enter your <span className="text-white font-medium">TronLink wallet address</span> (the address you will send USDT from). This links your wallet to your account so deposits are credited automatically.
-              </p>
-              <div className="flex gap-2">
-                <div className="flex-1 bg-white/4 border border-white/10 rounded-xl px-3 py-2.5 flex items-center gap-2">
-                  <LinkIcon className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                  <input
-                    type="text"
-                    value={tronInput}
-                    onChange={(e) => setTronInput(e.target.value)}
-                    placeholder="T... (your TronLink address)"
-                    className="bg-transparent text-xs text-white placeholder:text-muted-foreground/50 outline-none w-full font-mono"
-                  />
-                </div>
-                <button
-                  onClick={handleSaveTronAddress}
-                  disabled={saving || !tronInput.trim()}
-                  className="px-4 py-2 rounded-xl text-xs font-semibold bg-blue-500/20 text-blue-400 border border-blue-500/30 hover:bg-blue-500/30 transition-all disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
-                >
-                  {saving ? "Saving…" : "Save"}
-                </button>
+            )}
+            <div className="flex-1">
+              <div className="text-sm font-semibold text-white">
+                {step === "amount" && "Step 1 — Enter Amount"}
+                {step === "address" && "Step 2 — Send USDT"}
+                {step === "confirmed" && "Deposit Confirmed"}
               </div>
-              {saveError && <p className="text-xs text-red-400">{saveError}</p>}
-              {saveSuccess && <p className="text-xs text-emerald-400">Wallet registered successfully!</p>}
-            </div>
-          )}
-        </motion.div>
-
-        {/* Step 2 — Platform Deposit Address */}
-        <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, delay: 0.05 }}
-          className="glass-card rounded-2xl p-6"
-        >
-          <div className="flex items-center gap-2 mb-5">
-            <div className="w-6 h-6 rounded-full bg-blue-500/20 border border-blue-500/30 flex items-center justify-center text-[11px] font-bold text-blue-400">2</div>
-            <div>
-              <div className="text-sm font-semibold text-white">Send USDT to Platform Address</div>
               <div className="flex items-center gap-1.5 mt-0.5">
                 <span className="text-[10px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 px-1.5 py-0.5 rounded-full uppercase tracking-wider">TRC20</span>
                 <span className="text-[10px] text-muted-foreground">USDT · TRON Network</span>
               </div>
             </div>
+            {/* Step dots */}
+            <div className="flex items-center gap-1.5">
+              {(["amount", "address", "confirmed"] as DepositStep[]).map((s, i) => (
+                <div
+                  key={s}
+                  className={cn(
+                    "h-1 rounded-full transition-all duration-300",
+                    step === s ? "w-6 bg-blue-500" :
+                    i < ["amount", "address", "confirmed"].indexOf(step) ? "w-4 bg-emerald-500/60" :
+                    "w-4 bg-white/10"
+                  )}
+                />
+              ))}
+            </div>
           </div>
 
-          {addressLoading ? (
-            <div className="flex flex-col items-center gap-4 py-8">
-              <div className="w-6 h-6 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" />
-              <p className="text-sm text-muted-foreground">Loading address…</p>
-            </div>
-          ) : platformAddress ? (
-            <div className="flex flex-col md:flex-row items-center gap-6">
-              {/* QR Code */}
-              <div className="flex flex-col items-center gap-2 shrink-0">
-                <div className="p-3 rounded-xl bg-[#0d1117] border border-white/10">
-                  <QRCodeCanvas value={platformAddress} />
-                </div>
-                <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                  <QrCode className="w-3 h-3" />
-                  Scan to deposit
-                </div>
-              </div>
+          <div className="px-5 pb-6 pt-5">
+            <AnimatePresence mode="wait">
 
-              {/* Address + info */}
-              <div className="flex-1 w-full space-y-4">
-                <div>
-                  <div className="text-[11px] text-muted-foreground mb-1.5 uppercase tracking-wider font-semibold">
-                    Platform Wallet Address
-                  </div>
-                  <div className="bg-white/4 border border-white/10 rounded-xl px-3 py-2.5 flex items-center justify-between gap-2">
-                    <span className="text-xs font-mono text-white break-all leading-relaxed">{platformAddress}</span>
-                    <CopyButton text={platformAddress} />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="bg-white/4 border border-white/10 rounded-xl px-3 py-2.5">
-                    <div className="text-[10px] text-muted-foreground mb-1 uppercase tracking-wider">Network</div>
-                    <div className="text-xs font-semibold text-emerald-400">TRON (TRC20)</div>
-                  </div>
-                  <div className="bg-white/4 border border-white/10 rounded-xl px-3 py-2.5">
-                    <div className="text-[10px] text-muted-foreground mb-1 uppercase tracking-wider">Token</div>
-                    <div className="text-xs font-semibold text-white">USDT</div>
-                  </div>
-                  <div className="bg-white/4 border border-white/10 rounded-xl px-3 py-2.5">
-                    <div className="text-[10px] text-muted-foreground mb-1 uppercase tracking-wider">Min. Deposit</div>
-                    <div className="text-xs font-semibold text-white">1 USDT</div>
-                  </div>
-                  <div className="bg-white/4 border border-white/10 rounded-xl px-3 py-2.5">
-                    <div className="text-[10px] text-muted-foreground mb-1 uppercase tracking-wider">Confirmations</div>
-                    <div className="text-xs font-semibold text-white">~1–3 min</div>
-                  </div>
-                </div>
-
-                <a
-                  href={`https://tronscan.org/#/address/${platformAddress}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300 transition-colors"
+              {/* Step 1: Amount */}
+              {step === "amount" && (
+                <motion.div
+                  key="amount"
+                  initial={{ opacity: 0, x: -16 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: 16 }}
+                  transition={{ duration: 0.22 }}
+                  className="space-y-4"
                 >
-                  <ExternalLink className="w-3.5 h-3.5" />
-                  View on TronScan
-                </a>
-              </div>
-            </div>
-          ) : (
-            <div className="flex flex-col items-center gap-2 py-6">
-              <Wallet className="w-8 h-8 text-muted-foreground/30" />
-              <p className="text-sm text-muted-foreground">Platform deposit address not configured</p>
-            </div>
-          )}
-        </motion.div>
+                  <div>
+                    <label className="text-xs text-muted-foreground font-medium mb-1.5 block">Amount (USDT)</label>
+                    <input
+                      type="number"
+                      value={amount}
+                      onChange={(e) => setAmount(e.target.value)}
+                      className="field-input"
+                      placeholder="Enter amount"
+                      min="1"
+                    />
+                  </div>
 
-        {/* Warning */}
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, delay: 0.1 }}
-          className="flex gap-3 bg-amber-500/8 border border-amber-500/25 rounded-xl px-4 py-3.5"
-        >
-          <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-          <div className="text-xs text-amber-200/80 leading-relaxed">
-            <span className="font-semibold text-amber-400">Important: </span>
-            Send only <span className="font-semibold text-white">USDT (TRC20)</span> to this address. You must register your TronLink wallet (Step 1) before sending so your deposit is credited automatically. Minimum deposit is <span className="font-semibold text-white">1 USDT</span>.
+                  <div className="grid grid-cols-4 gap-2">
+                    {[100, 500, 1000, 5000].map((amt) => (
+                      <button
+                        key={amt}
+                        onClick={() => setAmount(String(amt))}
+                        className={cn(
+                          "text-xs py-2 rounded-xl border font-medium transition-all",
+                          amount === String(amt)
+                            ? "bg-blue-500/20 text-blue-400 border-blue-500/40"
+                            : "bg-white/5 hover:bg-blue-500/15 hover:text-blue-400 border-white/8 hover:border-blue-500/25 text-muted-foreground"
+                        )}
+                      >
+                        ${amt >= 1000 ? `${amt / 1000}k` : amt}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="flex items-start gap-2.5 bg-blue-500/6 border border-blue-500/15 rounded-xl px-3 py-2.5">
+                    <ShieldCheck className="w-3.5 h-3.5 text-blue-400 shrink-0 mt-0.5" />
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      Send exactly <span className="text-white font-semibold">{amount ? `${amount} USDT` : "the entered amount"}</span> via <span className="text-white font-medium">TRON (TRC20)</span>. Your deposit will be detected and credited within ~15 seconds.
+                    </p>
+                  </div>
+
+                  <button
+                    onClick={handleNext}
+                    disabled={!amount || Number(amount) < 1}
+                    className="btn btn-primary w-full flex items-center justify-center gap-2"
+                  >
+                    Next — Get Deposit Address
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </motion.div>
+              )}
+
+              {/* Step 2: Address + QR */}
+              {step === "address" && (
+                <motion.div
+                  key="address"
+                  initial={{ opacity: 0, x: 16 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -16 }}
+                  transition={{ duration: 0.22 }}
+                  className="space-y-5"
+                >
+                  {/* Amount badge */}
+                  <div className="flex items-center justify-between bg-blue-500/8 border border-blue-500/20 rounded-xl px-4 py-3">
+                    <span className="text-xs text-muted-foreground">Send exactly</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-base font-bold text-white">{amount} USDT</span>
+                      <span className="text-[10px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 px-1.5 py-0.5 rounded-full uppercase tracking-wider">TRC20</span>
+                    </div>
+                  </div>
+
+                  {addressLoading ? (
+                    <div className="flex items-center justify-center py-12">
+                      <Loader2 className="w-6 h-6 text-blue-400 animate-spin" />
+                    </div>
+                  ) : platformAddress ? (
+                    <div className="flex flex-col md:flex-row items-center gap-6">
+                      {/* QR Code */}
+                      <div className="flex flex-col items-center gap-2 shrink-0">
+                        <div className="p-3 rounded-xl bg-[#0d1117] border border-white/10">
+                          <QRCodeCanvas value={platformAddress} />
+                        </div>
+                        <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                          <QrCode className="w-3 h-3" />
+                          Scan to deposit
+                        </div>
+                      </div>
+
+                      {/* Address + info */}
+                      <div className="flex-1 w-full space-y-4">
+                        <div>
+                          <div className="text-[11px] text-muted-foreground mb-1.5 uppercase tracking-wider font-semibold">
+                            Platform Wallet Address
+                          </div>
+                          <div className="bg-white/4 border border-white/10 rounded-xl px-3 py-2.5 flex items-center justify-between gap-2">
+                            <span className="text-xs font-mono text-white break-all leading-relaxed">{platformAddress}</span>
+                            <CopyButton text={platformAddress} />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="bg-white/4 border border-white/10 rounded-xl px-3 py-2.5">
+                            <div className="text-[10px] text-muted-foreground mb-1 uppercase tracking-wider">Network</div>
+                            <div className="text-xs font-semibold text-emerald-400">TRON (TRC20)</div>
+                          </div>
+                          <div className="bg-white/4 border border-white/10 rounded-xl px-3 py-2.5">
+                            <div className="text-[10px] text-muted-foreground mb-1 uppercase tracking-wider">Token</div>
+                            <div className="text-xs font-semibold text-white">USDT</div>
+                          </div>
+                          <div className="bg-white/4 border border-white/10 rounded-xl px-3 py-2.5">
+                            <div className="text-[10px] text-muted-foreground mb-1 uppercase tracking-wider">Min. Deposit</div>
+                            <div className="text-xs font-semibold text-white">1 USDT</div>
+                          </div>
+                          <div className="bg-white/4 border border-white/10 rounded-xl px-3 py-2.5">
+                            <div className="text-[10px] text-muted-foreground mb-1 uppercase tracking-wider">Confirmations</div>
+                            <div className="text-xs font-semibold text-white">~1–3 min</div>
+                          </div>
+                        </div>
+
+                        <a
+                          href={`https://tronscan.org/#/address/${platformAddress}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300 transition-colors"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                          View on TronScan
+                        </a>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center gap-2 py-8">
+                      <Wallet className="w-8 h-8 text-muted-foreground/30" />
+                      <p className="text-sm text-muted-foreground">Platform address not configured</p>
+                    </div>
+                  )}
+
+                  {/* Waiting indicator */}
+                  {polling && (
+                    <div className="flex items-center gap-3 bg-blue-500/8 border border-blue-500/20 rounded-xl px-4 py-3">
+                      <Loader2 className="w-4 h-4 text-blue-400 animate-spin shrink-0" />
+                      <div>
+                        <div className="text-xs font-semibold text-blue-400">Waiting for payment…</div>
+                        <div className="text-[11px] text-muted-foreground mt-0.5">Checking every 10 seconds. Do not close this page.</div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Warning */}
+                  <div className="flex gap-3 bg-amber-500/8 border border-amber-500/25 rounded-xl px-4 py-3.5">
+                    <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                    <div className="text-xs text-amber-200/80 leading-relaxed">
+                      <span className="font-semibold text-amber-400">Important: </span>
+                      Send only <span className="font-semibold text-white">USDT (TRC20)</span> to this address. Other tokens or networks will be lost permanently. Minimum deposit is <span className="font-semibold text-white">1 USDT</span>.
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+
+              {/* Step 3: Confirmed */}
+              {step === "confirmed" && (
+                <motion.div
+                  key="confirmed"
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ duration: 0.3 }}
+                  className="flex flex-col items-center gap-4 py-8 text-center"
+                >
+                  <div className="w-16 h-16 rounded-full bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center">
+                    <CheckCircle2 className="w-8 h-8 text-emerald-400" />
+                  </div>
+                  <div>
+                    <div className="text-lg font-bold text-white">Deposit Confirmed!</div>
+                    <div className="text-sm text-muted-foreground mt-1">
+                      <span className="text-emerald-400 font-semibold">{amount} USDT</span> has been credited to your main balance.
+                    </div>
+                  </div>
+                  <button onClick={reset} className="btn btn-primary mt-2 px-8">
+                    Make Another Deposit
+                  </button>
+                </motion.div>
+              )}
+
+            </AnimatePresence>
           </div>
         </motion.div>
 
@@ -320,7 +430,7 @@ export default function DepositPage() {
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, delay: 0.15 }}
+          transition={{ duration: 0.3, delay: 0.1 }}
           className="glass-card rounded-2xl p-5"
         >
           <div className="flex items-center gap-2 mb-4">
@@ -329,9 +439,9 @@ export default function DepositPage() {
           </div>
           <div className="space-y-3">
             {[
-              { step: "1", text: "Register your TronLink wallet address above" },
+              { step: "1", text: "Enter the amount of USDT you want to deposit" },
               { step: "2", text: "Copy the platform address or scan the QR code" },
-              { step: "3", text: "Send USDT (TRC20) from your registered TronLink wallet" },
+              { step: "3", text: "Send USDT (TRC20) from your wallet to the address shown" },
               { step: "4", text: "System detects your transaction within ~15 seconds and credits your balance" },
             ].map(({ step, text }) => (
               <div key={step} className="flex items-start gap-3">
@@ -348,7 +458,7 @@ export default function DepositPage() {
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, delay: 0.2 }}
+          transition={{ duration: 0.3, delay: 0.15 }}
           className="glass-card rounded-2xl overflow-hidden"
         >
           <div className="flex items-center justify-between px-5 py-4 border-b border-white/8">
@@ -444,6 +554,7 @@ export default function DepositPage() {
             </div>
           )}
         </motion.div>
+
       </div>
     </Layout>
   );
