@@ -8,6 +8,8 @@ import {
   transactionsTable,
   investmentsTable,
   tradesTable,
+  equityHistoryTable,
+  monthlyPerformanceTable,
 } from "@workspace/db";
 import { eq, and, sql, gt, desc } from "drizzle-orm";
 import { randomUUID } from "crypto";
@@ -315,6 +317,64 @@ export async function closeSignalTrade(input: CloseTradeInput, actorUserId?: num
         profitPercent: realizedPct.toString(),
         executedAt: new Date(),
       });
+
+      // Equity snapshot (Equity Curve, Drawdown, Rolling Returns)
+      const wRows = await tx.select().from(walletsTable).where(eq(walletsTable.userId, w.userId)).limit(1);
+      const wAfter = wRows[0]!;
+      const equityNow = parseFloat(wAfter.mainBalance as string) + parseFloat(wAfter.tradingBalance as string) + parseFloat(wAfter.profitBalance as string);
+      const today = new Date().toISOString().split("T")[0]!;
+      const eqExisting = await tx.select().from(equityHistoryTable)
+        .where(and(eq(equityHistoryTable.userId, w.userId), eq(equityHistoryTable.date, today))).limit(1);
+      if (eqExisting.length > 0) {
+        await tx.update(equityHistoryTable)
+          .set({
+            equity: equityNow.toString(),
+            profit: sql`${equityHistoryTable.profit}::numeric + ${profit.toString()}::numeric` as any,
+          })
+          .where(and(eq(equityHistoryTable.userId, w.userId), eq(equityHistoryTable.date, today)));
+      } else {
+        await tx.insert(equityHistoryTable).values({
+          userId: w.userId, date: today, equity: equityNow.toString(), profit: profit.toString(),
+        });
+      }
+
+      // Monthly performance upsert (Performance Dashboard, Monthly comparison)
+      const ym = today.slice(0, 7);
+      const startEquityToday = equityNow - profit;
+      const mpRows = await tx.select().from(monthlyPerformanceTable)
+        .where(and(eq(monthlyPerformanceTable.userId, w.userId), eq(monthlyPerformanceTable.yearMonth, ym))).limit(1);
+      if (mpRows.length > 0) {
+        const m = mpRows[0]!;
+        const newTotal = parseFloat(m.totalProfit as string) + profit;
+        const newPeak = Math.max(parseFloat(m.peakEquity as string), equityNow);
+        const startEq = parseFloat(m.startEquity as string) || startEquityToday;
+        const monthlyReturn = startEq > 0 ? ((equityNow - startEq) / startEq) * 100 : 0;
+        const dd = newPeak > 0 ? Math.max(0, (newPeak - equityNow) / newPeak * 100) : 0;
+        const winningDays = profit > 0 ? m.winningDays + 1 : m.winningDays;
+        const tradingDays = m.tradingDays + 1;
+        const winRate = tradingDays > 0 ? (winningDays / tradingDays) * 100 : 0;
+        await tx.update(monthlyPerformanceTable).set({
+          totalProfit: newTotal.toString(),
+          peakEquity: newPeak.toString(),
+          monthlyReturn: monthlyReturn.toFixed(4),
+          maxDrawdown: Math.max(parseFloat(m.maxDrawdown as string), dd).toFixed(4),
+          tradingDays, winningDays,
+          winRate: winRate.toFixed(4),
+          updatedAt: new Date(),
+        }).where(and(eq(monthlyPerformanceTable.userId, w.userId), eq(monthlyPerformanceTable.yearMonth, ym)));
+      } else {
+        await tx.insert(monthlyPerformanceTable).values({
+          userId: w.userId, yearMonth: ym,
+          monthlyReturn: startEquityToday > 0 ? ((profit / startEquityToday) * 100).toFixed(4) : "0",
+          maxDrawdown: "0",
+          winRate: profit > 0 ? "100" : "0",
+          totalProfit: profit.toString(),
+          tradingDays: 1,
+          winningDays: profit > 0 ? 1 : 0,
+          startEquity: startEquityToday.toString(),
+          peakEquity: equityNow.toString(),
+        });
+      }
 
       // Insert transaction record
       const [txRow] = await tx
