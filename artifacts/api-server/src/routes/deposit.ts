@@ -1,10 +1,12 @@
 import { Router } from "express";
-import { db } from "@workspace/db";
-import { depositAddressesTable, blockchainDepositsTable } from "@workspace/db/schema";
+import { db, usersTable } from "@workspace/db";
+import { blockchainDepositsTable } from "@workspace/db/schema";
 import { eq, desc } from "drizzle-orm";
 import { authMiddleware, type AuthRequest } from "../middlewares/auth";
-import { generateTronAddress } from "../lib/tron-address";
+import { isValidTronAddress } from "../lib/tron-address";
 import { logger } from "../lib/logger";
+
+const PLATFORM_TRON_ADDRESS = process.env["PLATFORM_TRON_ADDRESS"] ?? "";
 
 const router = Router();
 router.use(authMiddleware);
@@ -12,32 +14,37 @@ router.use(authMiddleware);
 router.get("/deposit/address", async (req: AuthRequest, res) => {
   const userId = req.userId!;
 
-  const existing = await db
-    .select()
-    .from(depositAddressesTable)
-    .where(eq(depositAddressesTable.userId, userId))
+  const users = await db.select({ tronAddress: usersTable.tronAddress })
+    .from(usersTable)
+    .where(eq(usersTable.id, userId))
     .limit(1);
 
-  if (existing.length > 0) {
-    res.json({
-      address: existing[0]!.trc20Address,
-      network: "TRC20",
-      token: "USDT",
-    });
-    return;
-  }
-
-  const { address } = generateTronAddress();
-
-  await db.insert(depositAddressesTable).values({ userId, trc20Address: address });
-
-  logger.info({ userId, address }, "Generated new TRC20 deposit address");
+  const tronAddress = users[0]?.tronAddress ?? null;
 
   res.json({
-    address,
+    platformAddress: PLATFORM_TRON_ADDRESS,
+    userTronAddress: tronAddress,
     network: "TRC20",
     token: "USDT",
   });
+});
+
+router.post("/deposit/tron-address", async (req: AuthRequest, res) => {
+  const userId = req.userId!;
+  const { tronAddress } = req.body;
+
+  if (!tronAddress || !isValidTronAddress(tronAddress)) {
+    res.status(400).json({ error: "Invalid TRC20 address" });
+    return;
+  }
+
+  await db.update(usersTable)
+    .set({ tronAddress })
+    .where(eq(usersTable.id, userId));
+
+  logger.info({ userId, tronAddress }, "User registered TronLink wallet address");
+
+  res.json({ success: true, tronAddress });
 });
 
 router.get("/deposit/history", async (req: AuthRequest, res) => {

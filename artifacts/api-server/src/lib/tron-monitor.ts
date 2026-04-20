@@ -1,6 +1,6 @@
-import { db, walletsTable, transactionsTable } from "@workspace/db";
-import { depositAddressesTable, blockchainDepositsTable } from "@workspace/db/schema";
-import { eq, and } from "drizzle-orm";
+import { db, walletsTable, transactionsTable, usersTable } from "@workspace/db";
+import { blockchainDepositsTable } from "@workspace/db/schema";
+import { eq, isNotNull } from "drizzle-orm";
 import { logger, errorLogger } from "./logger";
 import { createNotification } from "./notifications";
 import { emitDepositEvent } from "./event-bus";
@@ -9,6 +9,7 @@ import { ensureUserAccounts, postJournalEntry, journalForTransaction } from "./l
 const USDT_CONTRACT = "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t";
 const TRONGRID_BASE = "https://api.trongrid.io";
 const TRONGRID_API_KEY = process.env["TRONGRID_API_KEY"] ?? "";
+const PLATFORM_TRON_ADDRESS = process.env["PLATFORM_TRON_ADDRESS"] ?? "";
 const MIN_AMOUNT_USDT = 1;
 const POLL_INTERVAL_MS = 15_000;
 
@@ -112,8 +113,27 @@ async function creditUserDeposit(
   logger.info({ userId, amount, txHash }, "Blockchain USDT deposit credited");
 }
 
-async function pollAddress(userId: number, address: string): Promise<void> {
-  const transfers = await fetchTRC20Transfers(address);
+async function pollPlatformAddress(): Promise<void> {
+  if (!PLATFORM_TRON_ADDRESS) {
+    errorLogger.warn("PLATFORM_TRON_ADDRESS not set — skipping TronGrid poll");
+    return;
+  }
+
+  const transfers = await fetchTRC20Transfers(PLATFORM_TRON_ADDRESS);
+
+  // Load all users who have registered a TronLink address
+  const usersWithTron = await db
+    .select({ id: usersTable.id, tronAddress: usersTable.tronAddress })
+    .from(usersTable)
+    .where(isNotNull(usersTable.tronAddress));
+
+  // Build a map: senderAddress (lowercase) → userId
+  const senderMap = new Map<string, number>();
+  for (const u of usersWithTron) {
+    if (u.tronAddress) {
+      senderMap.set(u.tronAddress.toLowerCase(), u.id);
+    }
+  }
 
   for (const t of transfers) {
     if (t.type !== "Transfer") continue;
@@ -125,6 +145,7 @@ async function pollAddress(userId: number, address: string): Promise<void> {
 
     const txHash = t.transaction_id;
 
+    // Check if already processed
     const existing = await db
       .select({ id: blockchainDepositsTable.id, credited: blockchainDepositsTable.credited })
       .from(blockchainDepositsTable)
@@ -133,28 +154,38 @@ async function pollAddress(userId: number, address: string): Promise<void> {
 
     if (existing.length > 0) {
       if (!existing[0]!.credited) {
-        await creditUserDeposit(userId, amount, txHash, existing[0]!.id);
+        const rec = existing[0]!;
+        const dep = await db.select().from(blockchainDepositsTable).where(eq(blockchainDepositsTable.id, rec.id)).limit(1);
+        if (dep[0]?.userId) {
+          await creditUserDeposit(dep[0].userId, amount, txHash, rec.id);
+        }
       }
       continue;
     }
 
+    // Match sender to a registered user
+    const userId = senderMap.get(t.from.toLowerCase()) ?? null;
+
     const [inserted] = await db
       .insert(blockchainDepositsTable)
       .values({
-        userId,
+        userId: userId ?? 0,
         txHash,
         fromAddress: t.from,
         toAddress: t.to,
         amount: amount.toString(),
-        status: "pending",
+        status: userId ? "pending" : "unmatched",
         credited: false,
         blockTimestamp: new Date(t.block_timestamp),
       })
       .returning({ id: blockchainDepositsTable.id });
 
-    logger.info({ userId, txHash, amount, from: t.from }, "New blockchain USDT deposit detected");
-
-    await creditUserDeposit(userId, amount, txHash, inserted!.id);
+    if (userId) {
+      logger.info({ userId, txHash, amount, from: t.from }, "New USDT deposit detected — auto-crediting matched user");
+      await creditUserDeposit(userId, amount, txHash, inserted!.id);
+    } else {
+      logger.warn({ txHash, amount, from: t.from }, "New USDT deposit detected — no matching user (needs admin review)");
+    }
   }
 }
 
@@ -162,15 +193,7 @@ let monitorTimer: ReturnType<typeof setTimeout> | null = null;
 
 async function runPollCycle(): Promise<void> {
   try {
-    const addresses = await db
-      .select({ userId: depositAddressesTable.userId, address: depositAddressesTable.trc20Address })
-      .from(depositAddressesTable);
-
-    for (const { userId, address } of addresses) {
-      await pollAddress(userId, address).catch((err) =>
-        errorLogger.error({ err, userId, address }, "Error polling address"),
-      );
-    }
+    await pollPlatformAddress();
   } catch (err) {
     errorLogger.error({ err }, "Error in TronGrid poll cycle");
   } finally {
@@ -179,7 +202,7 @@ async function runPollCycle(): Promise<void> {
 }
 
 export function startTronMonitor(): { stop: () => void } {
-  logger.info({ interval: POLL_INTERVAL_MS }, "TronGrid USDT monitor started");
+  logger.info({ interval: POLL_INTERVAL_MS, platformAddress: PLATFORM_TRON_ADDRESS }, "TronGrid USDT monitor started");
   monitorTimer = setTimeout(runPollCycle, 5_000);
   return {
     stop: () => {

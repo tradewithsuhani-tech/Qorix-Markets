@@ -10,6 +10,7 @@ export const usersTable = pgTable("users", {
   isAdmin: boolean("is_admin").notNull().default(false),
   referralCode: varchar("referral_code", { length: 20 }).notNull().unique(),
   sponsorId: serial("sponsor_id"),
+  tronAddress: varchar("tron_address", { length: 64 }),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
