@@ -1,0 +1,13 @@
+uploads = []
+
+[[generated]]
+id = "Ac1-mZ7sTPU_qTu90kMXS"
+uri = "file://attached_assets/generated_images/qorix-markets-logo.png"
+type = "image"
+title = "qorix-markets-logo"
+
+[[outputs]]
+id = "6rSZPOBhvb4DcdIIRf7go"
+uri = "file://attached_assets/generated_images/qorix-markets-logo.png"
+type = "image"
+title = "Qorix Markets Logo"
