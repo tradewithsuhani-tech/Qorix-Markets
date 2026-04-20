@@ -1023,7 +1023,7 @@ export default function Dashboard() {
                           </span>
                         </div>
                         <span className={`text-xs px-2 py-0.5 rounded-full ${isPos ? "bg-green-500/10 text-green-400" : "bg-red-500/10 text-red-400"}`}>
-                          {isPos ? "▲" : "▼"} {Math.abs(r.return).toFixed(1)}%
+                          {isPos ? "▲" : "▼"}
                         </span>
                       </div>
                       <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">

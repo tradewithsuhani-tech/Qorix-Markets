@@ -277,14 +277,18 @@ export async function closeSignalTrade(input: CloseTradeInput, actorUserId?: num
 
       // Signal trade P/L flows into trading balance. At month-end (25th), accumulated
       // gains are swept from trading → profit wallet. Profit wallet is user-withdrawable.
-      // Cap negative P/L to available trading balance so the user's trading account
-      // never goes below zero (platform absorbs anything beyond).
+      // Per-user cap: if the expected loss exceeds this user's trading balance, their
+      // position auto-closes at their cap (their trading balance falls to 0) while the
+      // signal trade itself continues to settle for every other user as normal.
+      // There is no "platform absorbs the rest" — the user simply stops out here.
       const currentTrading = parseFloat(w.tradingBalance as string);
-      const appliedDelta = profit >= 0 ? profit : -Math.min(Math.abs(profit), currentTrading);
-      if (appliedDelta === 0 && profit < 0) {
-        // Nothing to debit — skip entirely for this user on this trade
-        continue;
-      }
+      const requestedLoss = profit < 0 ? Math.abs(profit) : 0;
+      const cappedAtUserLimit = profit < 0 && requestedLoss > currentTrading;
+      const appliedDelta = profit >= 0 ? profit : -Math.min(requestedLoss, currentTrading);
+      // Zero-balance users are already excluded by the `gt(tradingBalance, 0)` filter
+      // on `eligible`, so we never reach here with appliedDelta === 0 for losses.
+      // All downstream accounting uses `appliedDelta` so ledger, wallet, dashboards,
+      // and history stay in lockstep when a user's loss is capped at their balance.
       const newTradingBal = sql`${walletsTable.tradingBalance}::numeric + ${appliedDelta.toString()}::numeric`;
       await tx
         .update(walletsTable)
@@ -297,8 +301,8 @@ export async function closeSignalTrade(input: CloseTradeInput, actorUserId?: num
         await tx
           .update(investmentsTable)
           .set({
-            totalProfit: sql`${investmentsTable.totalProfit}::numeric + ${profit.toString()}::numeric` as any,
-            dailyProfit: sql`${investmentsTable.dailyProfit}::numeric + ${profit.toString()}::numeric` as any,
+            totalProfit: sql`${investmentsTable.totalProfit}::numeric + ${appliedDelta.toString()}::numeric` as any,
+            dailyProfit: sql`${investmentsTable.dailyProfit}::numeric + ${appliedDelta.toString()}::numeric` as any,
             isActive: true,
             updatedAt: new Date(),
           })
@@ -307,8 +311,8 @@ export async function closeSignalTrade(input: CloseTradeInput, actorUserId?: num
         await tx.insert(investmentsTable).values({
           userId: w.userId,
           amount: basis.toString(),
-          totalProfit: profit.toString(),
-          dailyProfit: profit.toString(),
+          totalProfit: appliedDelta.toString(),
+          dailyProfit: appliedDelta.toString(),
           isActive: true,
           riskLevel: "low",
         });
@@ -322,7 +326,7 @@ export async function closeSignalTrade(input: CloseTradeInput, actorUserId?: num
         entryPrice: t.entryPrice as any,
         exitPrice: realizedExit.toString(),
         amount: basis.toString(),
-        profit: profit.toString(),
+        profit: appliedDelta.toString(),
         profitPercent: realizedPct.toString(),
         executedAt: new Date(),
       });
@@ -338,28 +342,28 @@ export async function closeSignalTrade(input: CloseTradeInput, actorUserId?: num
         await tx.update(equityHistoryTable)
           .set({
             equity: equityNow.toString(),
-            profit: sql`${equityHistoryTable.profit}::numeric + ${profit.toString()}::numeric` as any,
+            profit: sql`${equityHistoryTable.profit}::numeric + ${appliedDelta.toString()}::numeric` as any,
           })
           .where(and(eq(equityHistoryTable.userId, w.userId), eq(equityHistoryTable.date, today)));
       } else {
         await tx.insert(equityHistoryTable).values({
-          userId: w.userId, date: today, equity: equityNow.toString(), profit: profit.toString(),
+          userId: w.userId, date: today, equity: equityNow.toString(), profit: appliedDelta.toString(),
         });
       }
 
       // Monthly performance upsert (Performance Dashboard, Monthly comparison)
       const ym = today.slice(0, 7);
-      const startEquityToday = equityNow - profit;
+      const startEquityToday = equityNow - appliedDelta;
       const mpRows = await tx.select().from(monthlyPerformanceTable)
         .where(and(eq(monthlyPerformanceTable.userId, w.userId), eq(monthlyPerformanceTable.yearMonth, ym))).limit(1);
       if (mpRows.length > 0) {
         const m = mpRows[0]!;
-        const newTotal = parseFloat(m.totalProfit as string) + profit;
+        const newTotal = parseFloat(m.totalProfit as string) + appliedDelta;
         const newPeak = Math.max(parseFloat(m.peakEquity as string), equityNow);
         const startEq = parseFloat(m.startEquity as string) || startEquityToday;
         const monthlyReturn = startEq > 0 ? ((equityNow - startEq) / startEq) * 100 : 0;
         const dd = newPeak > 0 ? Math.max(0, (newPeak - equityNow) / newPeak * 100) : 0;
-        const winningDays = profit > 0 ? m.winningDays + 1 : m.winningDays;
+        const winningDays = appliedDelta > 0 ? m.winningDays + 1 : m.winningDays;
         const tradingDays = m.tradingDays + 1;
         const winRate = tradingDays > 0 ? (winningDays / tradingDays) * 100 : 0;
         await tx.update(monthlyPerformanceTable).set({
@@ -374,12 +378,12 @@ export async function closeSignalTrade(input: CloseTradeInput, actorUserId?: num
       } else {
         await tx.insert(monthlyPerformanceTable).values({
           userId: w.userId, yearMonth: ym,
-          monthlyReturn: startEquityToday > 0 ? ((profit / startEquityToday) * 100).toFixed(4) : "0",
+          monthlyReturn: startEquityToday > 0 ? ((appliedDelta / startEquityToday) * 100).toFixed(4) : "0",
           maxDrawdown: "0",
-          winRate: profit > 0 ? "100" : "0",
-          totalProfit: profit.toString(),
+          winRate: appliedDelta > 0 ? "100" : "0",
+          totalProfit: appliedDelta.toString(),
           tradingDays: 1,
-          winningDays: profit > 0 ? 1 : 0,
+          winningDays: appliedDelta > 0 ? 1 : 0,
           startEquity: startEquityToday.toString(),
           peakEquity: equityNow.toString(),
         });
@@ -391,9 +395,9 @@ export async function closeSignalTrade(input: CloseTradeInput, actorUserId?: num
         .values({
           userId: w.userId,
           type: "profit",
-          amount: profit.toString(),
+          amount: appliedDelta.toString(),
           status: "completed",
-          description: `Signal trade #${t.id} ${t.pair} ${t.direction} (${realizedPct.toFixed(2)}%)`,
+          description: `Signal trade #${t.id} ${t.pair} ${t.direction} (${realizedPct.toFixed(2)}%)${cappedAtUserLimit ? " [capped at balance]" : ""}`,
         })
         .returning({ id: transactionsTable.id });
 
@@ -402,7 +406,7 @@ export async function closeSignalTrade(input: CloseTradeInput, actorUserId?: num
         tradeId: t.id,
         userId: w.userId,
         shareBasisAmount: basis.toString(),
-        profitAmount: profit.toString(),
+        profitAmount: appliedDelta.toString(),
       });
 
       // Double-entry: signal P/L lands in user's TRADING ledger account.
@@ -429,6 +433,16 @@ export async function closeSignalTrade(input: CloseTradeInput, actorUserId?: num
           txRow!.id,
           tx,
         );
+        if (cappedAtUserLimit) {
+          // This user's position auto-closed at their cap. The signal trade itself
+          // continues to settle for every remaining user in this loop.
+          await createNotification(
+            w.userId,
+            "drawdown_alert",
+            "Position auto-closed at protection cap",
+            `Signal #${t.id}: loss capped at your trading balance ($${loss.toFixed(2)}). Your position is closed; your trading balance is now $0.`,
+          ).catch(() => {});
+        }
       }
 
       totalDistributed += appliedDelta;
