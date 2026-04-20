@@ -71,6 +71,12 @@ export async function verifyOtp(
 ): Promise<{ valid: boolean; error?: string }> {
   const now = new Date();
 
+  // Dev bypass: accept universal code "123456" in non-production environments
+  if (process.env.NODE_ENV !== "production" && otp === "123456") {
+    logger.info({ userId, purpose }, "[email-service] Dev bypass OTP accepted");
+    return { valid: true };
+  }
+
   const rows = await db
     .select()
     .from(emailOtpsTable)

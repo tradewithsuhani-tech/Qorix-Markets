@@ -396,7 +396,10 @@ router.post("/admin/withdrawals/:id/approve", async (req: AuthRequest, res) => {
   const id = parseInt(req.params["id"]!);
   const [updated] = await db
     .update(transactionsTable)
-    .set({ status: "completed" })
+    .set({
+      status: "completed",
+      description: sql`COALESCE(${transactionsTable.description}, '') || ' · Approved — sent to your payment partner (arrives within 30 min to 3 working days)'`,
+    })
     .where(and(eq(transactionsTable.id, id), eq(transactionsTable.type, "withdrawal")))
     .returning();
 
@@ -410,6 +413,14 @@ router.post("/admin/withdrawals/:id/approve", async (req: AuthRequest, res) => {
     .from(usersTable)
     .where(eq(usersTable.id, updated.userId))
     .limit(1);
+
+  const netAmount = parseFloat(updated.amount as string);
+  await db.insert(notificationsTable).values({
+    userId: updated.userId,
+    type: "withdrawal",
+    title: "Withdrawal Approved",
+    message: `Your withdrawal of $${netAmount.toFixed(2)} has been approved and sent to our payment partner. Funds will arrive at ${(updated.walletAddress ?? "").slice(0, 8)}…${(updated.walletAddress ?? "").slice(-4)} within 30 minutes to 3 working days.`,
+  });
 
   transactionLogger.info(
     {
