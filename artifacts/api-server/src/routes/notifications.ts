@@ -1,10 +1,34 @@
 import { Router } from "express";
-import { db, notificationsTable } from "@workspace/db";
+import { db, notificationsTable, systemSettingsTable } from "@workspace/db";
 import { eq, desc, and } from "drizzle-orm";
 import { authMiddleware, type AuthRequest } from "../middlewares/auth";
 
 const router = Router();
 router.use(authMiddleware);
+
+// Public-to-logged-in-users: fetch the active dashboard popup configured by admin
+router.get("/popup", async (_req: AuthRequest, res) => {
+  const rows = await db.select().from(systemSettingsTable);
+  const s = Object.fromEntries(rows.map((r) => [r.key, r.value]));
+  const mode = s["popup_mode"] ?? "off";
+  const title = s["popup_title"] ?? "";
+  const message = s["popup_message"] ?? "";
+  if (mode === "off" || (!title && !message)) {
+    res.json({ active: false });
+    return;
+  }
+  res.json({
+    active: true,
+    mode, // "once" | "always"
+    title,
+    message,
+    buttonText: s["popup_button_text"] ?? "Got it",
+    redirectLink: s["popup_redirect_link"] ?? "",
+    // Version stamp from updatedAt of the popup_message setting so dismiss-once
+    // can be reset by admin edits without manual user-side action.
+    version: rows.find((r) => r.key === "popup_message")?.updatedAt?.toISOString() ?? "v1",
+  });
+});
 
 function fmt(n: typeof notificationsTable.$inferSelect) {
   return {

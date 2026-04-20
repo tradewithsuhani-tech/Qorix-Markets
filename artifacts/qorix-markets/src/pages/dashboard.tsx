@@ -11,6 +11,7 @@ import {
   type VipInfo,
 } from "@workspace/api-client-react";
 import { Layout } from "@/components/layout";
+import { AdminPopup } from "@/components/admin-popup";
 import { PeriodFilter, DAYS_PERIOD_OPTIONS } from "@/components/period-filter";
 import { GrowthPanel } from "@/components/growth-panel";
 import { VipBadge, VipCard } from "@/components/vip-badge";
@@ -678,6 +679,7 @@ export default function Dashboard() {
 
   return (
     <Layout>
+      <AdminPopup />
       <motion.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
