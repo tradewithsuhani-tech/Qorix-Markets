@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Send, ChevronRight, MessageCircle, Sparkles, UserCheck, CheckCheck, SquareX, RotateCcw, MessageSquarePlus, TrendingUp } from "lucide-react";
+import { X, Send, ChevronRight, MessageCircle, Headphones, UserCheck, CheckCheck, SquareX, RotateCcw, MessageSquarePlus, TrendingUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
 import { useLocation } from "wouter";
@@ -113,8 +113,8 @@ async function apiGet(path: string) {
 function TypingIndicator() {
   return (
     <div className="flex items-end gap-2 mb-3">
-      <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-500 to-violet-600 flex items-center justify-center flex-shrink-0 shadow-lg shadow-blue-500/20">
-        <Sparkles className="w-3.5 h-3.5 text-white" />
+      <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center flex-shrink-0 shadow-lg shadow-blue-500/20">
+        <Headphones className="w-3.5 h-3.5 text-white" />
       </div>
       <div className="bg-[#1a1f2e] border border-white/[0.06] rounded-2xl rounded-bl-sm px-4 py-3">
         <div className="flex gap-1.5 items-center h-4">
@@ -225,9 +225,9 @@ function MessageBubble({ msg }: { msg: Message }) {
         "w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 shadow-lg",
         isAdmin
           ? "bg-gradient-to-br from-emerald-500 to-teal-600 shadow-emerald-500/20"
-          : "bg-gradient-to-br from-blue-500 to-violet-600 shadow-blue-500/20"
+          : "bg-gradient-to-br from-blue-500 to-blue-600 shadow-blue-500/20"
       )}>
-        {isAdmin ? <UserCheck className="w-3.5 h-3.5 text-white" /> : <Sparkles className="w-3.5 h-3.5 text-white" />}
+        {isAdmin ? <UserCheck className="w-3.5 h-3.5 text-white" /> : <Headphones className="w-3.5 h-3.5 text-white" />}
       </div>
       <div className="max-w-[80%]">
         {isAdmin && (
@@ -634,7 +634,7 @@ export function QorixAssistant({ guestMode = false }: { guestMode?: boolean } = 
         onClick={() => setIsOpen(true)}
         className={cn(
           "fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full shadow-2xl",
-          "bg-gradient-to-br from-blue-600 to-violet-600",
+          "bg-gradient-to-br from-blue-600 to-blue-700",
           "flex items-center justify-center",
           "hover:scale-105 active:scale-95 transition-transform",
           isOpen && "hidden"
@@ -689,8 +689,8 @@ export function QorixAssistant({ guestMode = false }: { guestMode?: boolean } = 
             >
               {/* Bot Avatar */}
               <div className="relative">
-                <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-violet-600 flex items-center justify-center shadow-lg shadow-blue-500/30">
-                  <Sparkles className="w-4.5 h-4.5 text-white" />
+                <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center shadow-lg shadow-blue-500/30">
+                  <Headphones className="w-4 h-4 text-white" />
                 </div>
                 <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-400 rounded-full border-2 border-[#0f1422]" />
               </div>
@@ -705,7 +705,7 @@ export function QorixAssistant({ guestMode = false }: { guestMode?: boolean } = 
                   )}
                 </div>
                 <p className="text-[11px] text-white/40">
-                  {expertMode ? "Live support active" : "AI-powered financial guide"}
+                  {expertMode ? "Live support active" : "Customer support"}
                 </p>
               </div>
 
@@ -847,7 +847,7 @@ export function QorixAssistant({ guestMode = false }: { guestMode?: boolean } = 
                         className={cn(
                           "text-xs px-3 py-1.5 rounded-xl font-medium transition-all duration-150",
                           opt.value === "expert"
-                            ? "bg-gradient-to-r from-violet-600/30 to-blue-600/30 border border-violet-500/30 text-violet-300 hover:border-violet-500/60 hover:bg-violet-600/40"
+                            ? "bg-gradient-to-r from-emerald-600/25 to-teal-600/25 border border-emerald-500/30 text-emerald-300 hover:border-emerald-500/60 hover:bg-emerald-600/40"
                             : "bg-white/5 border border-white/10 text-white/70 hover:bg-white/10 hover:text-white hover:border-white/20"
                         )}
                       >
@@ -904,7 +904,7 @@ export function QorixAssistant({ guestMode = false }: { guestMode?: boolean } = 
                   className={cn(
                     "w-7 h-7 rounded-lg flex items-center justify-center transition-all",
                     inputText.trim()
-                      ? "bg-gradient-to-br from-blue-600 to-violet-600 text-white shadow-lg shadow-blue-500/30"
+                      ? "bg-gradient-to-br from-blue-600 to-blue-700 text-white shadow-lg shadow-blue-500/30"
                       : "bg-white/5 text-white/20"
                   )}
                 >
