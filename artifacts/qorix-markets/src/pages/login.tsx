@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useLogin, useRegister } from "@workspace/api-client-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
-import { TrendingUp, Lock, Mail, User as UserIcon, ArrowLeft } from "lucide-react";
+import { TrendingUp, Lock, Mail, User as UserIcon, ArrowLeft, Eye, EyeOff } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 export default function LoginPage() {
@@ -12,10 +12,30 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const [referralCode, setReferralCode] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const autoHideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const { login: setAuthData } = useAuth();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+
+  const handleTogglePassword = () => {
+    if (autoHideTimer.current) clearTimeout(autoHideTimer.current);
+    if (!showPassword) {
+      setShowPassword(true);
+      autoHideTimer.current = setTimeout(() => {
+        setShowPassword(false);
+      }, 3000);
+    } else {
+      setShowPassword(false);
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      if (autoHideTimer.current) clearTimeout(autoHideTimer.current);
+    };
+  }, []);
 
   const loginMutation = useLogin({
     mutation: {
@@ -113,21 +133,69 @@ export default function LoginPage() {
                   className="overflow-hidden"
                 >
                   <div className="relative pb-0.5">
-                    <UserIcon style={{ width: 15, height: 15 }} className="absolute left-3.5 top-3.5 text-muted-foreground pointer-events-none" />
-                    <input type="text" required placeholder="Full Name" value={fullName} onChange={(e) => setFullName(e.target.value)} className="field-input pl-10" />
+                    <UserIcon
+                      style={{ width: 15, height: 15 }}
+                      className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none z-10"
+                    />
+                    <input
+                      type="text"
+                      required
+                      placeholder="Full Name"
+                      value={fullName}
+                      onChange={(e) => setFullName(e.target.value)}
+                      className="field-input"
+                      style={{ paddingLeft: "38px" }}
+                    />
                   </div>
                 </motion.div>
               )}
             </AnimatePresence>
 
+            {/* Email field */}
             <div className="relative">
-              <Mail style={{ width: 15, height: 15 }} className="absolute left-3.5 top-3.5 text-muted-foreground pointer-events-none" />
-              <input type="email" required placeholder="Email Address" value={email} onChange={(e) => setEmail(e.target.value)} className="field-input pl-10" />
+              <Mail
+                style={{ width: 15, height: 15 }}
+                className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none z-10"
+              />
+              <input
+                type="email"
+                required
+                placeholder="Email Address"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="field-input"
+                style={{ paddingLeft: "38px" }}
+              />
             </div>
 
+            {/* Password field */}
             <div className="relative">
-              <Lock style={{ width: 15, height: 15 }} className="absolute left-3.5 top-3.5 text-muted-foreground pointer-events-none" />
-              <input type="password" required placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} className="field-input pl-10" />
+              <Lock
+                style={{ width: 15, height: 15 }}
+                className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none z-10"
+              />
+              <input
+                type={showPassword ? "text" : "password"}
+                required
+                placeholder="Password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="field-input"
+                style={{ paddingLeft: "38px", paddingRight: "42px" }}
+              />
+              <button
+                type="button"
+                onClick={handleTogglePassword}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-white transition-colors z-10"
+                tabIndex={-1}
+                aria-label={showPassword ? "Hide password" : "Show password"}
+              >
+                {showPassword ? (
+                  <EyeOff style={{ width: 16, height: 16 }} />
+                ) : (
+                  <Eye style={{ width: 16, height: 16 }} />
+                )}
+              </button>
             </div>
 
             <AnimatePresence>
@@ -140,7 +208,13 @@ export default function LoginPage() {
                   className="overflow-hidden"
                 >
                   <div className="pb-0.5">
-                    <input type="text" placeholder="Referral Code (Optional)" value={referralCode} onChange={(e) => setReferralCode(e.target.value)} className="field-input" />
+                    <input
+                      type="text"
+                      placeholder="Referral Code (Optional)"
+                      value={referralCode}
+                      onChange={(e) => setReferralCode(e.target.value)}
+                      className="field-input"
+                    />
                   </div>
                 </motion.div>
               )}
