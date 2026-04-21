@@ -77,6 +77,32 @@ function timeAgo(dateStr: string) {
   return `${Math.floor(h / 24)}d ago`;
 }
 
+// Exness-style absolute date: "16 Apr 2026, 19:08"
+function formatNotifDate(dateStr: string) {
+  const d = new Date(dateStr);
+  const day = d.getDate();
+  const month = d.toLocaleString("en-US", { month: "short" });
+  const year = d.getFullYear();
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  return `${day} ${month} ${year}, ${hh}:${mm}`;
+}
+
+function groupByMonth<T extends { createdAt: string }>(items: T[]): [string, T[]][] {
+  const groups: Record<string, T[]> = {};
+  const order: string[] = [];
+  for (const it of items) {
+    const d = new Date(it.createdAt);
+    const key = d.toLocaleString("en-US", { month: "long", year: "numeric" });
+    if (!groups[key]) {
+      groups[key] = [];
+      order.push(key);
+    }
+    groups[key].push(it);
+  }
+  return order.map((k) => [k, groups[k]]);
+}
+
 function haptic(pattern: number | number[] = 10) {
   if ("vibrate" in navigator) navigator.vibrate(pattern);
 }
@@ -102,27 +128,100 @@ function NotificationPanel({ onClose, variant }: { onClose: () => void; variant:
 
   const notifications = data?.notifications ?? [];
   const unread = data?.unreadCount ?? 0;
+  const isMobile = variant === "mobile";
+  const grouped = groupByMonth(notifications);
 
+  // -------- MOBILE: Exness-style FULL-SCREEN page --------
+  if (isMobile) {
+    return (
+      <motion.div
+        initial={{ x: "100%" }}
+        animate={{ x: 0 }}
+        exit={{ x: "100%" }}
+        transition={{ duration: 0.25, ease: [0.32, 0.72, 0, 1] }}
+        className="fixed inset-0 z-[80] bg-[#050816] flex flex-col"
+        style={{
+          paddingTop: "env(safe-area-inset-top, 0px)",
+          paddingBottom: "env(safe-area-inset-bottom, 0px)",
+        }}
+      >
+        {/* Header: X close + title (left), Mark as read (right) */}
+        <div className="flex items-center justify-between px-4 py-4 border-b border-white/8 shrink-0">
+          <div className="flex items-center gap-4">
+            <button onClick={onClose} className="p-1 -ml-1 text-white" aria-label="Close">
+              <X className="w-6 h-6" />
+            </button>
+            <span className="text-base font-semibold text-white">Notifications</span>
+          </div>
+          {unread > 0 && (
+            <button
+              onClick={handleMarkAll}
+              className="text-sm text-blue-400 font-medium px-2 py-1 active:opacity-60"
+            >
+              Mark as read
+            </button>
+          )}
+        </div>
+
+        {/* List */}
+        <div className="flex-1 overflow-y-auto">
+          {isLoading ? (
+            <div className="flex items-center justify-center py-16">
+              <div className="w-6 h-6 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" />
+            </div>
+          ) : notifications.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-24 gap-3">
+              <Bell className="w-10 h-10 text-muted-foreground/30" />
+              <p className="text-base text-muted-foreground">No notifications yet</p>
+            </div>
+          ) : (
+            grouped.map(([month, items]) => (
+              <div key={month}>
+                <div className="px-4 pt-5 pb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground/70">
+                  {month}
+                </div>
+                {items.map((n) => (
+                  <div
+                    key={n.id}
+                    onClick={() => !n.isRead && handleMarkRead(n.id)}
+                    className="flex items-start justify-between gap-3 px-4 py-4 border-b border-white/5 active:bg-white/5"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className={cn(
+                        "text-base font-semibold leading-snug",
+                        n.isRead ? "text-muted-foreground" : "text-white"
+                      )}>
+                        {n.title}
+                      </div>
+                      <p className="text-sm text-muted-foreground mt-1 leading-relaxed">
+                        {n.message}
+                      </p>
+                      <div className="text-xs text-muted-foreground/60 mt-2">
+                        {formatNotifDate(n.createdAt)}
+                      </div>
+                    </div>
+                    {!n.isRead && (
+                      <div className="w-2.5 h-2.5 rounded-full bg-red-500 shrink-0 mt-2" />
+                    )}
+                  </div>
+                ))}
+              </div>
+            ))
+          )}
+        </div>
+      </motion.div>
+    );
+  }
+
+  // -------- DESKTOP: anchored dropdown (unchanged) --------
   return (
     <motion.div
       initial={{ opacity: 0, y: -8, scale: 0.97 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: -8, scale: 0.97 }}
       transition={{ duration: 0.18, ease: "easeOut" }}
-      className={cn(
-        "z-50 rounded-2xl border border-white/10 bg-[#0d1117] shadow-2xl shadow-black/50 overflow-hidden",
-        // MOBILE: hard-fixed full-width sheet pinned under the top bar. No responsive switching —
-        // this instance is ONLY ever rendered from the mobile top-bar bell (md:hidden).
-        variant === "mobile" && "fixed left-3 right-3",
-        // DESKTOP: classic anchored popover under the sidebar bell (sidebar bell is md:hidden hidden md:flex parent).
-        variant === "desktop" && "absolute right-0 bottom-full mb-2 w-[20rem] max-w-[calc(100vw-1.5rem)]"
-      )}
-      style={{
-        ...(variant === "mobile"
-          ? { top: "calc(env(safe-area-inset-top, 0px) + 60px)" }
-          : {}),
-        backdropFilter: "blur(20px)",
-      }}
+      className="z-50 rounded-2xl border border-white/10 bg-[#0d1117] shadow-2xl shadow-black/50 overflow-hidden absolute right-0 bottom-full mb-2 w-[20rem] max-w-[calc(100vw-1.5rem)]"
+      style={{ backdropFilter: "blur(20px)" }}
     >
       <div className="flex items-center justify-between px-4 py-3 border-b border-white/8">
         <div className="flex items-center gap-2">
