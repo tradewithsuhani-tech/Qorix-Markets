@@ -518,13 +518,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <main className="flex-1 flex flex-col h-full overflow-hidden relative">
         {!isAdminArea && <ProtectionBanner />}
 
-        {/* Mobile top bar */}
-        <div className="md:hidden flex items-center justify-between px-4 py-3 border-b border-white/5 shrink-0"
+        {/* Mobile top bar — relative + z-[60] so logo + bell stay ABOVE the notification backdrop (z-40)
+            and panel (z-50). Solid bg ensures dim never bleeds through. */}
+        <div className="md:hidden relative z-[60] flex items-center justify-between px-4 py-3 border-b border-white/5 shrink-0"
           style={{
             paddingTop: "max(0.75rem, env(safe-area-inset-top, 0.75rem))",
-            background: "rgba(5, 8, 22, 0.85)",
-            backdropFilter: "blur(24px) saturate(200%)",
-            WebkitBackdropFilter: "blur(24px) saturate(200%)",
+            background: "#050816",
           }}
         >
           <div className="flex items-center gap-2">
