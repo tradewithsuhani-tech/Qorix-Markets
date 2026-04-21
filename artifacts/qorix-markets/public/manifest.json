@@ -77,6 +77,43 @@
       "label": "Qorix Markets Mobile Experience"
     }
   ],
+  "iarc_rating_id": "e84b072d-71b3-4d3e-86ae-31a8ce4e53b7",
+  "launch_handler": {
+    "client_mode": ["navigate-existing", "auto"]
+  },
+  "handle_links": "preferred",
+  "scope_extensions": [
+    { "origin": "https://www.qorixmarkets.com" },
+    { "origin": "https://api.qorixmarkets.com" }
+  ],
+  "edge_side_panel": {
+    "preferred_width": 480
+  },
+  "file_handlers": [
+    {
+      "action": "/transactions/import",
+      "accept": {
+        "text/csv": [".csv"],
+        "application/json": [".json"]
+      },
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    }
+  ],
+  "share_target": {
+    "action": "/share",
+    "method": "GET",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url"
+    }
+  },
+  "protocol_handlers": [
+    {
+      "protocol": "web+qorix",
+      "url": "/?action=%s"
+    }
+  ],
   "prefer_related_applications": false,
   "related_applications": [
     {
