@@ -920,11 +920,16 @@
   /* Single source of truth for mobile bottom-nav height + safe area.
      Use .pb-mobile-nav on any scrollable container that sits above the bottom nav. */
   :root {
-    --mobile-nav-height: 64px;
+    /* Real measured bottom-nav height with comfortable buffer.
+       Nav inner = pt-2 (8) + icon (20) + gap (4) + label (12) + py-1.5 (12) + pb-safe (8+) ≈ 64px,
+       plus the floating chat FAB (~56px tall, bottom-right) sitting above the nav.
+       We pad enough to clear BOTH so nothing important hides. */
+    --mobile-nav-height: 72px;
     --mobile-nav-safe: calc(var(--mobile-nav-height) + env(safe-area-inset-bottom, 0px));
   }
   .pb-mobile-nav {
-    padding-bottom: calc(var(--mobile-nav-safe) + 1.25rem);
+    /* Generous bottom space so last card / button is fully visible above nav + chat FAB. */
+    padding-bottom: calc(var(--mobile-nav-safe) + 4rem);
   }
   @media (min-width: 768px) {
     .pb-mobile-nav { padding-bottom: 0; }
