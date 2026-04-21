@@ -916,6 +916,25 @@
     background-clip: text;
   }
 
+  /* ───────── Mobile responsive helpers ───────── */
+  /* Single source of truth for mobile bottom-nav height + safe area.
+     Use .pb-mobile-nav on any scrollable container that sits above the bottom nav. */
+  :root {
+    --mobile-nav-height: 64px;
+    --mobile-nav-safe: calc(var(--mobile-nav-height) + env(safe-area-inset-bottom, 0px));
+  }
+  .pb-mobile-nav {
+    padding-bottom: calc(var(--mobile-nav-safe) + 1.25rem);
+  }
+  @media (min-width: 768px) {
+    .pb-mobile-nav { padding-bottom: 0; }
+  }
+  .pt-mobile-safe {
+    padding-top: max(0.75rem, env(safe-area-inset-top, 0.75rem));
+  }
+  /* Prevent horizontal scroll on small screens caused by stray wide children */
+  html, body { overflow-x: hidden; }
+
   /* CTA card enhanced glow */
   .cta-glow-card {
     background: linear-gradient(135deg, rgba(59,130,246,0.12) 0%, rgba(99,102,241,0.08) 50%, rgba(139,92,246,0.06) 100%);

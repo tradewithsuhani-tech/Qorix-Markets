@@ -6,6 +6,8 @@ import { Layout } from "@/components/layout";
 import { PeriodFilter } from "@/components/period-filter";
 import { findPair, formatPair } from "@/lib/pair-meta";
 import { PairIcon } from "@/components/pair-icon";
+import { MobileTradeList } from "@/components/mobile-trade-list";
+import { cn } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
@@ -231,11 +233,14 @@ function DirectionBadge({ direction }: { direction: string }) {
   );
 }
 
+type TradeTab = "open" | "pending" | "closed";
+
 export default function TradeActivityPage() {
   const [period, setPeriod] = useState<PeriodKey>("1M");
   const [customFrom, setCustomFrom] = useState<string>("");
   const [customTo, setCustomTo] = useState<string>("");
   const [page, setPage] = useState(1);
+  const [tab, setTab] = useState<TradeTab>("closed");
 
   const { data, isLoading } = useQuery({
     queryKey: ["trades-activity"],
@@ -397,10 +402,63 @@ export default function TradeActivityPage() {
           <Stat label="Win Rate" value={winRate} tint="blue" />
         </div>
 
+        {/* Open / Pending / Closed tabs (Exness-style, mobile only).
+            Desktop keeps the original MT-style table per product spec — no UX regression.
+            Open & Pending are placeholders until live-position streaming is wired in. */}
+        <div className="sm:hidden flex items-center gap-6 border-b border-white/8 -mx-1 px-1">
+          {(["open", "pending", "closed"] as const).map((t) => {
+            const active = tab === t;
+            const label = t === "open" ? "Open" : t === "pending" ? "Pending" : "Closed";
+            return (
+              <button
+                key={t}
+                onClick={() => setTab(t)}
+                className={cn(
+                  "relative pb-3 pt-1 text-sm font-medium transition-colors",
+                  active ? "text-white" : "text-white/45 hover:text-white/75"
+                )}
+              >
+                {label}
+                {active && (
+                  <motion.span
+                    layoutId="trade-tab-underline"
+                    className="absolute -bottom-px left-0 right-0 h-0.5 bg-white rounded-full"
+                    transition={{ type: "spring", bounce: 0.2, duration: 0.4 }}
+                  />
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* MOBILE: Exness-style grouped card list (only for Closed; Open/Pending are placeholders) */}
+        <div className="sm:hidden">
+          {tab !== "closed" ? (
+            <div className="py-16 text-center rounded-2xl border border-white/8 bg-white/[0.02]">
+              <Activity className="w-9 h-9 mx-auto text-white/20 mb-3" />
+              <div className="text-sm text-white/55">
+                No {tab === "open" ? "open positions" : "pending orders"}
+              </div>
+              <div className="text-xs text-white/30 mt-1">
+                {tab === "open"
+                  ? "Live positions will appear here once a signal trade is open"
+                  : "Pending limit/stop orders will appear here"}
+              </div>
+            </div>
+          ) : (
+            <MobileTradeList
+              trades={filtered}
+              loading={showInitialLoader}
+              showPercent={usingPlatformFallback}
+            />
+          )}
+        </div>
+
+        {/* DESKTOP: original MT-style grid table (unchanged) */}
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="rounded-2xl border border-white/10 bg-white/[0.02] overflow-hidden"
+          className="hidden sm:block rounded-2xl border border-white/10 bg-white/[0.02] overflow-hidden"
         >
           <div className="hidden sm:grid grid-cols-[1.5fr_1fr_1.2fr_1.2fr_1fr_1fr] text-[11px] uppercase tracking-wider text-white/40 px-5 py-3 border-b border-white/5 bg-white/[0.02]">
             <span>Symbol</span>

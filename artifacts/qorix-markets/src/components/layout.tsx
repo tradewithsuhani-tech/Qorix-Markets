@@ -109,8 +109,18 @@ function NotificationPanel({ onClose }: { onClose: () => void }) {
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: -8, scale: 0.97 }}
       transition={{ duration: 0.18, ease: "easeOut" }}
-      className="absolute right-0 top-full mt-2 w-[min(20rem,calc(100vw-1.5rem))] max-w-[calc(100vw-1.5rem)] z-50 rounded-2xl border border-white/10 bg-[#0d1117] shadow-2xl shadow-black/50 overflow-hidden"
-      style={{ backdropFilter: "blur(20px)" }}
+      className={cn(
+        // Mobile: full-width sheet pinned just below the mobile top bar, capped height, internal scroll.
+        // Desktop (sm+): classic right-aligned popover under the bell.
+        "fixed left-3 right-3 z-50 rounded-2xl border border-white/10 bg-[#0d1117] shadow-2xl shadow-black/50 overflow-hidden",
+        "sm:absolute sm:left-auto sm:right-0 sm:top-full sm:mt-2 sm:w-[20rem] sm:max-w-[calc(100vw-1.5rem)]"
+      )}
+      style={{
+        // Notch-aware top offset on mobile: safe-area-top + top-bar height (~56px) + small gap.
+        // Overridden to `auto` on sm+ via Tailwind class above (sm:top-full handles desktop).
+        top: "calc(env(safe-area-inset-top, 0px) + 56px)",
+        backdropFilter: "blur(20px)",
+      }}
     >
       <div className="flex items-center justify-between px-4 py-3 border-b border-white/8">
         <div className="flex items-center gap-2">
@@ -137,7 +147,7 @@ function NotificationPanel({ onClose }: { onClose: () => void }) {
           </button>
         </div>
       </div>
-      <div className="max-h-[380px] overflow-y-auto">
+      <div className="max-h-[60vh] sm:max-h-[380px] overflow-y-auto">
         {isLoading ? (
           <div className="flex items-center justify-center py-12">
             <div className="w-5 h-5 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" />
@@ -513,11 +523,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
           {!isAdminArea && <NotificationBell />}
         </div>
 
-        {/* Page content with transitions */}
-        <div
-          className="flex-1 overflow-y-auto scroll-smooth-ios md:pb-0"
-          style={{ paddingBottom: "calc(10rem + env(safe-area-inset-bottom, 0px))" }}
-        >
+        {/* Page content with transitions.
+            Mobile: bottom padding = nav height + safe-area + breathing room (via .pb-mobile-nav).
+            Desktop: zero bottom padding. */}
+        <div className="flex-1 overflow-y-auto scroll-smooth-ios pb-mobile-nav">
           <AnimatePresence mode="wait" initial={false}>
             <motion.div
               key={location}
