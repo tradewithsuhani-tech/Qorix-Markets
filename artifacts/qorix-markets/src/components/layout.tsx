@@ -214,13 +214,22 @@ function NotificationBell() {
 
   return (
     <>
-      {/* Backdrop — closes panel when clicking outside */}
-      {open && (
-        <div
-          className="fixed inset-0 z-40"
-          onClick={() => setOpen(false)}
-        />
-      )}
+      {/* Backdrop — dims the page and closes the panel on tap/click anywhere outside.
+          Visible dim + blur so user clearly sees that the rest of the screen is "behind" the panel. */}
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            key="notif-backdrop"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.18 }}
+            className="fixed inset-0 z-40 bg-black/55 sm:bg-black/30 backdrop-blur-sm"
+            onClick={() => setOpen(false)}
+            onTouchStart={() => setOpen(false)}
+          />
+        )}
+      </AnimatePresence>
       <div className="relative z-50">
         <button
           onClick={() => { setOpen((p) => !p); haptic(8); }}
