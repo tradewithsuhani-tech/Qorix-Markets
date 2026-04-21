@@ -126,8 +126,9 @@ channel = "stable-25_05"
 [userenv]
 
 [userenv.shared]
-JWT_SECRET = "6251a374cc059b50296fe02a33f735e90bb26a4c7eb43943a3dfdf70ed6c314b12eab8402927f7f4a4026e9c55643f896f86a662646dbf09dbc3e6fb91132411"
+JWT_SECRET = "a4415ee4d9c184b7fdfd60d53a9e11248354917cc36818b61c7d3d8315dec1f242e610daf207f790dc34f346b65f2015"
 PLATFORM_TRON_ADDRESS = "TU8TXrttDwGdHqkpqkobxdTTTJrrpBXGN1"
 SMTP_HOST = "smtp.gmail.com"
 SMTP_PORT = "587"
 SMTP_USER = "no-reply@qorixmarkets.com"
+GOOGLE_CALLBACK_URL = "http://localhost:3001/auth/google/callback"
