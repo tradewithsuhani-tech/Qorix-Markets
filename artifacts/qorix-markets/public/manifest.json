@@ -6,7 +6,7 @@
   "start_url": "/?source=pwa",
   "scope": "/",
   "display": "standalone",
-  "display_override": ["standalone", "minimal-ui", "browser"],
+  "display_override": ["window-controls-overlay", "tabbed", "standalone", "minimal-ui", "browser"],
   "orientation": "portrait-primary",
   "background_color": "#0a0f1c",
   "theme_color": "#3b82f6",
@@ -83,8 +83,30 @@
   },
   "handle_links": "preferred",
   "scope_extensions": [
-    { "origin": "https://www.qorixmarkets.com" },
-    { "origin": "https://api.qorixmarkets.com" }
+    { "origin": "https://*.qorixmarkets.com" }
+  ],
+  "widgets": [
+    {
+      "name": "Portfolio Snapshot",
+      "short_name": "Portfolio",
+      "description": "Quick view of your Qorix portfolio balance and today's P/L.",
+      "tag": "portfolio-snapshot",
+      "ms_ac_template": "/widgets/portfolio-template.json",
+      "data": "/widgets/portfolio-data.json",
+      "type": "application/json",
+      "screenshots": [
+        {
+          "src": "/screenshot-narrow-750x1334.jpg",
+          "sizes": "750x1334",
+          "label": "Portfolio widget preview"
+        }
+      ],
+      "icons": [
+        { "src": "/icon-192.png", "sizes": "192x192" }
+      ],
+      "auth": false,
+      "update": 900
+    }
   ],
   "edge_side_panel": {
     "preferred_width": 480

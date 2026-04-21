@@ -1,0 +1,33 @@
+{
+  "type": "AdaptiveCard",
+  "version": "1.5",
+  "body": [
+    {
+      "type": "TextBlock",
+      "text": "Qorix Portfolio",
+      "weight": "Bolder",
+      "size": "Medium",
+      "color": "Accent"
+    },
+    {
+      "type": "TextBlock",
+      "text": "${balance}",
+      "weight": "Bolder",
+      "size": "ExtraLarge"
+    },
+    {
+      "type": "TextBlock",
+      "text": "Today: ${pnl}",
+      "color": "${pnlColor}",
+      "spacing": "Small"
+    }
+  ],
+  "actions": [
+    {
+      "type": "Action.OpenUrl",
+      "title": "Open Dashboard",
+      "url": "https://qorixmarkets.com/dashboard"
+    }
+  ],
+  "$schema": "http://adaptivecards.io/schemas/adaptive-card.json"
+}
