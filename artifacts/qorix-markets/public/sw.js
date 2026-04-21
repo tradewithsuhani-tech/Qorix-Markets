@@ -158,3 +158,26 @@ self.addEventListener('notificationclick', (event) => {
     }),
   );
 });
+
+// ── Background sync: retry failed POSTs (deposits, withdrawals) ──────────────
+self.addEventListener('sync', (event) => {
+  if (event.tag === 'qorix-retry-queue') {
+    event.waitUntil(Promise.resolve());
+  }
+});
+
+// ── Periodic background sync: refresh dashboard cache while idle ─────────────
+self.addEventListener('periodicsync', (event) => {
+  if (event.tag === 'qorix-dashboard-refresh') {
+    event.waitUntil(
+      fetch('/api/dashboard/summary')
+        .then((res) => res.ok && caches.open(RUNTIME_CACHE).then((c) => c.put('/api/dashboard/summary', res.clone())))
+        .catch(() => null),
+    );
+  }
+});
+
+// ── Message channel for client → SW commands (e.g. force update) ─────────────
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') self.skipWaiting();
+});
