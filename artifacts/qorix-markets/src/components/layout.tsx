@@ -81,7 +81,7 @@ function haptic(pattern: number | number[] = 10) {
   if ("vibrate" in navigator) navigator.vibrate(pattern);
 }
 
-function NotificationPanel({ onClose }: { onClose: () => void }) {
+function NotificationPanel({ onClose, variant }: { onClose: () => void; variant: "mobile" | "desktop" }) {
   const qc = useQueryClient();
   const { data, isLoading } = useGetNotifications(
     { limit: 20 },
@@ -110,14 +110,17 @@ function NotificationPanel({ onClose }: { onClose: () => void }) {
       exit={{ opacity: 0, y: -8, scale: 0.97 }}
       transition={{ duration: 0.18, ease: "easeOut" }}
       className={cn(
-        // Mobile (<md, where the bell lives in the top bar): full-width sheet just below top bar.
-        // Desktop (md+): classic right-aligned popover under the bell in the sidebar.
-        "fixed left-3 right-3 z-50 rounded-2xl border border-white/10 bg-[#0d1117] shadow-2xl shadow-black/50 overflow-hidden",
-        "md:absolute md:left-auto md:right-0 md:top-full md:mt-2 md:w-[20rem] md:max-w-[calc(100vw-1.5rem)]"
+        "z-50 rounded-2xl border border-white/10 bg-[#0d1117] shadow-2xl shadow-black/50 overflow-hidden",
+        // MOBILE: hard-fixed full-width sheet pinned under the top bar. No responsive switching —
+        // this instance is ONLY ever rendered from the mobile top-bar bell (md:hidden).
+        variant === "mobile" && "fixed left-3 right-3",
+        // DESKTOP: classic anchored popover under the sidebar bell (sidebar bell is md:hidden hidden md:flex parent).
+        variant === "desktop" && "absolute right-0 bottom-full mb-2 w-[20rem] max-w-[calc(100vw-1.5rem)]"
       )}
       style={{
-        // Mobile top offset = notch + top-bar height + small gap. Reset to auto on desktop via inline media query.
-        top: "calc(env(safe-area-inset-top, 0px) + 60px)",
+        ...(variant === "mobile"
+          ? { top: "calc(env(safe-area-inset-top, 0px) + 60px)" }
+          : {}),
         backdropFilter: "blur(20px)",
       }}
     >
@@ -203,7 +206,7 @@ function NotificationPanel({ onClose }: { onClose: () => void }) {
   );
 }
 
-function NotificationBell() {
+function NotificationBell({ variant = "mobile" }: { variant?: "mobile" | "desktop" }) {
   const [open, setOpen] = useState(false);
   const { data } = useGetNotifications(
     { limit: 1, unread: "true" },
@@ -499,7 +502,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
               </div>
               <div className="text-xs text-muted-foreground truncate">{isAdminArea ? "Admin Console" : user?.email}</div>
             </div>
-            {!isAdminArea && <NotificationBell />}
+            {!isAdminArea && <NotificationBell variant="desktop" />}
           </div>
           <button
             onClick={logout}
@@ -531,13 +534,14 @@ export function Layout({ children }: { children: React.ReactNode }) {
             <span className="text-sm font-bold text-white">Qorix<span className="text-blue-400">Markets</span></span>
             {!isAdminArea && <VipBadge tier={vipTier} size="xs" />}
           </div>
-          {!isAdminArea && <NotificationBell />}
+          {!isAdminArea && <NotificationBell variant="mobile" />}
         </div>
 
         {/* Page content with transitions.
-            Mobile: bottom padding = nav height + safe-area + breathing room (via .pb-mobile-nav).
-            Desktop: zero bottom padding. */}
-        <div className="flex-1 overflow-y-auto scroll-smooth-ios pb-mobile-nav">
+            Mobile bottom clearance is enforced by an EXPLICIT spacer div inside the children
+            (see <MobileBottomSpacer /> below) — far more reliable than padding-bottom on the
+            scroll container, which some pages were bypassing. */}
+        <div className="flex-1 overflow-y-auto scroll-smooth-ios">
           <AnimatePresence mode="wait" initial={false}>
             <motion.div
               key={location}
@@ -546,13 +550,22 @@ export function Layout({ children }: { children: React.ReactNode }) {
               animate="animate"
               exit="exit"
               transition={pageTransition}
-              className="h-full"
             >
               <div className="p-4 md:p-8">
                 <div className="max-w-6xl mx-auto">
                   {children}
                 </div>
               </div>
+              {/* Hard spacer: guarantees ~180px clear above the bottom nav + chat FAB on mobile,
+                  zero on desktop. Cannot be overridden by any page's own layout. */}
+              <div
+                aria-hidden
+                className="md:hidden w-full"
+                style={{
+                  height:
+                    "calc(72px + env(safe-area-inset-bottom, 0px) + 6rem)",
+                }}
+              />
             </motion.div>
           </AnimatePresence>
         </div>
