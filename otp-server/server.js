@@ -2,8 +2,15 @@ require('dotenv').config();
 
 const express = require('express');
 const cors = require('cors');
+const session = require('express-session');
+const crypto = require('crypto');
 const nodemailer = require('nodemailer');
 const rateLimit = require('express-rate-limit');
+
+const passport = require('./lib/passport');
+const googleAuthRouter = require('./routes/google-auth');
+const { authMiddleware } = require('./lib/jwt');
+const users = require('./lib/users');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -12,6 +19,7 @@ const SMTP_HOST = process.env.SMTP_HOST || 'smtp.gmail.com';
 const SMTP_PORT = parseInt(process.env.SMTP_PORT || '587', 10);
 const SMTP_USER = process.env.SMTP_USER;
 const SMTP_PASS = process.env.SMTP_PASS;
+const SESSION_SECRET = process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex');
 const OTP_EXPIRY_MS = 5 * 60 * 1000;
 
 if (!SMTP_USER || !SMTP_PASS) {
@@ -19,8 +27,17 @@ if (!SMTP_USER || !SMTP_PASS) {
   process.exit(1);
 }
 
-app.use(cors());
+app.use(cors({ origin: true, credentials: true }));
 app.use(express.json({ limit: '10kb' }));
+app.use(
+  session({
+    secret: SESSION_SECRET,
+    resave: false,
+    saveUninitialized: false,
+    cookie: { secure: false, httpOnly: true, maxAge: 10 * 60 * 1000 },
+  })
+);
+app.use(passport.initialize());
 
 const otpStore = new Map();
 const resetStore = new Map();
@@ -110,6 +127,27 @@ app.get('/health', (_req, res) => {
   res.json({ success: true, status: 'ok', uptime: process.uptime() });
 });
 
+app.use('/auth', googleAuthRouter);
+
+app.get('/me', authMiddleware, (req, res) => {
+  res.json({ success: true, user: req.user });
+});
+
+app.get('/users', authMiddleware, (_req, res) => {
+  res.json({
+    success: true,
+    count: users.listUsers().length,
+    users: users.listUsers().map((u) => ({
+      id: u.id,
+      email: u.email,
+      name: u.name,
+      picture: u.picture,
+      provider: u.provider,
+      createdAt: u.createdAt,
+    })),
+  });
+});
+
 app.post('/send-otp', sendOtpLimiter, async (req, res) => {
   try {
     const { email } = req.body || {};
@@ -162,17 +200,14 @@ app.post('/verify-otp', verifyOtpLimiter, (req, res) => {
     if (!record) {
       return res.status(400).json({ success: false, error: 'OTP not found. Please request a new one.' });
     }
-
     if (record.expiresAt < Date.now()) {
       otpStore.delete(normalizedEmail);
       return res.status(400).json({ success: false, error: 'OTP has expired. Please request a new one.' });
     }
-
     if (record.attempts >= 5) {
       otpStore.delete(normalizedEmail);
       return res.status(429).json({ success: false, error: 'Too many failed attempts. Please request a new OTP.' });
     }
-
     if (record.otp !== otp) {
       record.attempts += 1;
       return res.status(400).json({
@@ -334,5 +369,5 @@ app.use((err, _req, res, _next) => {
 });
 
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`OTP server running on port ${PORT}`);
+  console.log(`Auth server running on port ${PORT}`);
 });
