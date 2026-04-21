@@ -928,8 +928,9 @@
     --mobile-nav-safe: calc(var(--mobile-nav-height) + env(safe-area-inset-bottom, 0px));
   }
   .pb-mobile-nav {
-    /* Generous bottom space so last card / button is fully visible above nav + chat FAB. */
-    padding-bottom: calc(var(--mobile-nav-safe) + 4rem);
+    /* Very generous bottom space (~72 nav + safe + 96px buffer) so the last card,
+       button, or list item is comfortably above the bottom nav AND the floating chat FAB. */
+    padding-bottom: calc(var(--mobile-nav-safe) + 6rem);
   }
   @media (min-width: 768px) {
     .pb-mobile-nav { padding-bottom: 0; }

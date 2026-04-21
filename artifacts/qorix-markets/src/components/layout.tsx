@@ -110,15 +110,14 @@ function NotificationPanel({ onClose }: { onClose: () => void }) {
       exit={{ opacity: 0, y: -8, scale: 0.97 }}
       transition={{ duration: 0.18, ease: "easeOut" }}
       className={cn(
-        // Mobile: full-width sheet pinned just below the mobile top bar, capped height, internal scroll.
-        // Desktop (sm+): classic right-aligned popover under the bell.
+        // Mobile (<md, where the bell lives in the top bar): full-width sheet just below top bar.
+        // Desktop (md+): classic right-aligned popover under the bell in the sidebar.
         "fixed left-3 right-3 z-50 rounded-2xl border border-white/10 bg-[#0d1117] shadow-2xl shadow-black/50 overflow-hidden",
-        "sm:absolute sm:left-auto sm:right-0 sm:top-full sm:mt-2 sm:w-[20rem] sm:max-w-[calc(100vw-1.5rem)]"
+        "md:absolute md:left-auto md:right-0 md:top-full md:mt-2 md:w-[20rem] md:max-w-[calc(100vw-1.5rem)]"
       )}
       style={{
-        // Notch-aware top offset on mobile: safe-area-top + top-bar height (~56px) + small gap.
-        // Overridden to `auto` on sm+ via Tailwind class above (sm:top-full handles desktop).
-        top: "calc(env(safe-area-inset-top, 0px) + 56px)",
+        // Mobile top offset = notch + top-bar height + small gap. Reset to auto on desktop via inline media query.
+        top: "calc(env(safe-area-inset-top, 0px) + 60px)",
         backdropFilter: "blur(20px)",
       }}
     >
@@ -224,7 +223,10 @@ function NotificationBell() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.18 }}
-            className="fixed inset-0 z-40 bg-black/55 sm:bg-black/30 backdrop-blur-sm"
+            // Mobile (<md): backdrop starts BELOW top bar so logo + bell stay visible.
+            // Desktop (md+): full inset, lighter dim.
+            className="fixed left-0 right-0 bottom-0 z-40 bg-black/55 backdrop-blur-sm md:inset-0 md:bg-black/30"
+            style={{ top: "calc(env(safe-area-inset-top, 0px) + 56px)" }}
             onClick={() => setOpen(false)}
             onTouchStart={() => setOpen(false)}
           />
