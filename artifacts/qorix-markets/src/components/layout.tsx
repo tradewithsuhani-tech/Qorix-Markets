@@ -1,4 +1,6 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
+import { initNotificationSound } from "@/lib/notification-sound";
+import { useNotificationSoundOnNew } from "@/hooks/use-notification-sound";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { QorixLogo } from "@/components/qorix-logo";
@@ -495,6 +497,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const isAdminArea = location.startsWith("/admin");
   const { data: summary } = useGetDashboardSummary({ query: { refetchInterval: 60000, enabled: !isAdminArea } });
   const vipTier = (summary?.vip?.tier ?? "none") as "none" | "silver" | "gold" | "platinum";
+
+  // Notification sound: arm WebAudio on first user gesture; play tone when a new notif arrives.
+  useEffect(() => { initNotificationSound(); }, []);
+  useNotificationSoundOnNew();
 
   const userLinks = [
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },

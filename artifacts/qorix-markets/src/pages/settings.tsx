@@ -1,7 +1,8 @@
 import { Layout } from "@/components/layout";
 import { useAuth } from "@/hooks/use-auth";
 import { motion } from "framer-motion";
-import { User as UserIcon, Mail, Calendar, Shield, Crown, Copy, CheckCircle2, LogOut } from "lucide-react";
+import { User as UserIcon, Mail, Calendar, Shield, Crown, Copy, CheckCircle2, LogOut, Volume2, VolumeX } from "lucide-react";
+import { isSoundEnabled, setSoundEnabled, playNotificationSound } from "@/lib/notification-sound";
 import { format } from "date-fns";
 import { useGetDashboardSummary } from "@workspace/api-client-react";
 import { VipBadge, VipCard } from "@/components/vip-badge";
@@ -29,6 +30,20 @@ export default function SettingsPage() {
   const { data: summary, isLoading } = useGetDashboardSummary();
   const { toast } = useToast();
   const [copied, setCopied] = useState(false);
+  const [soundOn, setSoundOn] = useState(() => isSoundEnabled());
+
+  const toggleSound = () => {
+    const next = !soundOn;
+    setSoundOn(next);
+    setSoundEnabled(next);
+    if (next) {
+      // Preview the sound when turning ON
+      playNotificationSound("generic");
+      toast({ title: "Notification sound enabled" });
+    } else {
+      toast({ title: "Notification sound muted" });
+    }
+  };
 
   if (!user) return null;
 
@@ -146,6 +161,39 @@ export default function SettingsPage() {
             <VipCard vip={vip as VipInfo} investmentAmount={summary?.activeInvestment ?? 0} />
           </motion.div>
         ) : null}
+
+        {/* Preferences */}
+        <motion.div variants={item} className="glass-card rounded-2xl p-5 space-y-4">
+          <div className="flex items-center gap-2.5 mb-1">
+            <div className="p-2 rounded-xl bg-purple-500/15 text-purple-400">
+              {soundOn ? <Volume2 style={{ width: 15, height: 15 }} /> : <VolumeX style={{ width: 15, height: 15 }} />}
+            </div>
+            <h3 className="font-semibold">Preferences</h3>
+          </div>
+
+          <div className="flex items-center justify-between p-3.5 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+            <div className="flex-1 min-w-0 pr-3">
+              <div className="text-sm font-medium">Notification Sound</div>
+              <div className="text-xs text-muted-foreground mt-0.5">
+                Play a chime when a new alert arrives.
+              </div>
+            </div>
+            <button
+              onClick={toggleSound}
+              role="switch"
+              aria-checked={soundOn}
+              className={`relative w-12 h-7 rounded-full transition-colors duration-200 shrink-0 ${
+                soundOn ? "bg-blue-500" : "bg-white/15"
+              }`}
+            >
+              <span
+                className={`absolute top-0.5 left-0.5 w-6 h-6 rounded-full bg-white shadow transition-transform duration-200 ${
+                  soundOn ? "translate-x-5" : "translate-x-0"
+                }`}
+              />
+            </button>
+          </div>
+        </motion.div>
 
         {/* Logout */}
         <motion.div variants={item} className="glass-card rounded-2xl p-5 space-y-3">
