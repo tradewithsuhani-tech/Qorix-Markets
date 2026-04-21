@@ -58,6 +58,29 @@
   <p>Trusted Web Activity (TWA) ke through aapki PWA ek native Android app ban jayegi — full-screen, no URL bar, push notifications, splash screen, Play Store me list. Sab kuch ek-baar set up karo, future updates apne aap web se sync ho jayenge.</p>
 </div>
 
+<section class="card" style="border:2px solid var(--green);background:linear-gradient(135deg,rgba(16,185,129,.08),rgba(59,130,246,.08))">
+  <h2>⚡ Fastest Path: PWABuilder (3 clicks, zero install)</h2>
+  <p style="color:var(--text)">Agar aap install/terminal nahi karna chahte, Microsoft ka <b>PWABuilder</b> use karo — browser me hi APK + AAB ban jata hai. Recommended for non-developers.</p>
+  <ol>
+    <li>Open <a href="https://www.pwabuilder.com" target="_blank"><b>pwabuilder.com</b></a></li>
+    <li>URL daalo: <pre style="margin:6px 0"><button class="copy-btn" data-copy="https://qorixmarkets.com">Copy</button><code>https://qorixmarkets.com</code></pre></li>
+    <li><b>Start</b> dabao → "Package For Stores" → <b>Android</b> → <b>Generate Package</b></li>
+    <li>Form auto-fill ho jayega manifest se. Bas confirm karo:
+      <ul>
+        <li>Package ID: <code>com.qorixmarkets.app</code></li>
+        <li>App name: <code>Qorix Markets</code></li>
+        <li>Launcher name: <code>Qorix</code></li>
+        <li>Signing key: <b>"Generate new"</b> select karo (ZIP me keystore + password milega — backup zaroor lena!)</li>
+      </ul>
+    </li>
+    <li>Download ZIP — andar <code>app-release-signed.apk</code>, <code>app-release-bundle.aab</code>, <code>assetlinks.json</code>, aur <code>signing-key-info.txt</code> milega.</li>
+    <li><code>assetlinks.json</code> ka content copy karke <b>Step 4</b> (niche) follow karo.</li>
+  </ol>
+  <div class="alert success">🎯 <b>5 minute me</b> Play Store-ready AAB file mil jayegi — bina kuch install kiye!</div>
+  <div class="alert">⚠️ <b>Keystore backup zaroor save karo</b> (Google Drive / password manager me). Yeh kho gayi to future updates impossible — naya app dobara publish karna padega.</div>
+  <p style="color:var(--muted);font-size:13px;margin-top:12px">Niche ke steps (Bubblewrap CLI) sirf advanced devs ke liye hain jo apne control me build karna chahte hain. PWABuilder use karne ke baad direct <b>Step 4</b> par jao.</p>
+</section>
+
 <section class="card">
   <h2>✨ Aapko kya milega</h2>
   <div class="grid">
