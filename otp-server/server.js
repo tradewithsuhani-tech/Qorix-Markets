@@ -23,11 +23,15 @@ app.use(cors());
 app.use(express.json({ limit: '10kb' }));
 
 const otpStore = new Map();
+const resetStore = new Map();
 
 setInterval(() => {
   const now = Date.now();
   for (const [email, record] of otpStore.entries()) {
     if (record.expiresAt < now) otpStore.delete(email);
+  }
+  for (const [email, record] of resetStore.entries()) {
+    if (record.expiresAt < now) resetStore.delete(email);
   }
 }, 60 * 1000);
 
@@ -82,6 +86,25 @@ const buildOtpEmail = (otp) => ({
     </div>
   `,
 });
+
+const buildResetEmail = (otp) => ({
+  subject: 'Password Reset Request',
+  text: `Your password reset code is: ${otp}\n\nThis code is valid for 5 minutes.\nIf you didn't request a password reset, please ignore this email and your password will remain unchanged.`,
+  html: `
+    <div style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto;padding:24px;background:#f7f9fc;border-radius:12px">
+      <h2 style="color:#d93025;margin:0 0 16px">🔐 Password Reset Request</h2>
+      <p style="font-size:14px;color:#444;margin:0 0 20px">Use the code below to reset your password.</p>
+      <div style="font-size:36px;letter-spacing:8px;font-weight:700;color:#111;background:#fff;padding:18px;border-radius:8px;text-align:center;border:1px solid #e0e4ea">
+        ${otp}
+      </div>
+      <p style="font-size:13px;color:#666;margin:20px 0 0">This code expires in <strong>5 minutes</strong>.</p>
+      <p style="font-size:12px;color:#d93025;margin:12px 0 0;font-weight:600">⚠️ If you didn't request a password reset, please ignore this email — your password will remain unchanged.</p>
+    </div>
+  `,
+});
+
+const isStrongPassword = (pw) =>
+  typeof pw === 'string' && pw.length >= 8 && pw.length <= 128;
 
 app.get('/health', (_req, res) => {
   res.json({ success: true, status: 'ok', uptime: process.uptime() });
@@ -164,6 +187,140 @@ app.post('/verify-otp', verifyOtpLimiter, (req, res) => {
   } catch (err) {
     console.error('verify-otp error:', err.message);
     return res.status(500).json({ success: false, error: 'Failed to verify OTP' });
+  }
+});
+
+app.post('/forgot-password', sendOtpLimiter, async (req, res) => {
+  try {
+    const { email } = req.body || {};
+
+    if (!isValidEmail(email)) {
+      return res.status(400).json({ success: false, error: 'Invalid email address' });
+    }
+
+    const normalizedEmail = email.toLowerCase().trim();
+    const otp = generateOTP();
+    const expiresAt = Date.now() + OTP_EXPIRY_MS;
+
+    resetStore.set(normalizedEmail, { otp, expiresAt, attempts: 0, verified: false });
+
+    const { subject, text, html } = buildResetEmail(otp);
+
+    await transporter.sendMail({
+      from: `"Qorix Markets" <${SMTP_USER}>`,
+      to: normalizedEmail,
+      subject,
+      text,
+      html,
+    });
+
+    return res.json({
+      success: true,
+      message: 'Password reset code sent to your email',
+      expiresInSeconds: OTP_EXPIRY_MS / 1000,
+    });
+  } catch (err) {
+    console.error('forgot-password error:', err.message);
+    return res.status(500).json({ success: false, error: 'Failed to send reset code' });
+  }
+});
+
+app.post('/verify-reset-otp', verifyOtpLimiter, (req, res) => {
+  try {
+    const { email, otp } = req.body || {};
+
+    if (!isValidEmail(email)) {
+      return res.status(400).json({ success: false, error: 'Invalid email address' });
+    }
+    if (typeof otp !== 'string' || !/^\d{6}$/.test(otp)) {
+      return res.status(400).json({ success: false, error: 'OTP must be a 6-digit code' });
+    }
+
+    const normalizedEmail = email.toLowerCase().trim();
+    const record = resetStore.get(normalizedEmail);
+
+    if (!record) {
+      return res.status(400).json({ success: false, error: 'Reset code not found. Please request a new one.' });
+    }
+    if (record.expiresAt < Date.now()) {
+      resetStore.delete(normalizedEmail);
+      return res.status(400).json({ success: false, error: 'Reset code has expired. Please request a new one.' });
+    }
+    if (record.attempts >= 5) {
+      resetStore.delete(normalizedEmail);
+      return res.status(429).json({ success: false, error: 'Too many failed attempts. Please request a new reset code.' });
+    }
+    if (record.otp !== otp) {
+      record.attempts += 1;
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid reset code',
+        attemptsRemaining: 5 - record.attempts,
+      });
+    }
+
+    record.verified = true;
+    record.expiresAt = Date.now() + OTP_EXPIRY_MS;
+    return res.json({
+      success: true,
+      message: 'Reset code verified. You can now set a new password.',
+    });
+  } catch (err) {
+    console.error('verify-reset-otp error:', err.message);
+    return res.status(500).json({ success: false, error: 'Failed to verify reset code' });
+  }
+});
+
+app.post('/reset-password', verifyOtpLimiter, (req, res) => {
+  try {
+    const { email, otp, newPassword } = req.body || {};
+
+    if (!isValidEmail(email)) {
+      return res.status(400).json({ success: false, error: 'Invalid email address' });
+    }
+    if (typeof otp !== 'string' || !/^\d{6}$/.test(otp)) {
+      return res.status(400).json({ success: false, error: 'OTP must be a 6-digit code' });
+    }
+    if (!isStrongPassword(newPassword)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Password must be 8-128 characters long',
+      });
+    }
+
+    const normalizedEmail = email.toLowerCase().trim();
+    const record = resetStore.get(normalizedEmail);
+
+    if (!record) {
+      return res.status(400).json({ success: false, error: 'Reset code not found. Please request a new one.' });
+    }
+    if (record.expiresAt < Date.now()) {
+      resetStore.delete(normalizedEmail);
+      return res.status(400).json({ success: false, error: 'Reset code has expired. Please request a new one.' });
+    }
+    if (record.otp !== otp) {
+      record.attempts = (record.attempts || 0) + 1;
+      if (record.attempts >= 5) {
+        resetStore.delete(normalizedEmail);
+        return res.status(429).json({ success: false, error: 'Too many failed attempts. Please request a new reset code.' });
+      }
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid reset code',
+        attemptsRemaining: 5 - record.attempts,
+      });
+    }
+
+    resetStore.delete(normalizedEmail);
+
+    return res.json({
+      success: true,
+      message: 'Password reset successfully',
+      email: normalizedEmail,
+    });
+  } catch (err) {
+    console.error('reset-password error:', err.message);
+    return res.status(500).json({ success: false, error: 'Failed to reset password' });
   }
 });
 
