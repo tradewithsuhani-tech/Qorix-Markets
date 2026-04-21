@@ -350,7 +350,7 @@ function NotificationBell({ variant = "mobile" }: { variant?: "mobile" | "deskto
           )}
         </button>
         <AnimatePresence>
-          {open && <NotificationPanel onClose={() => setOpen(false)} />}
+          {open && <NotificationPanel onClose={() => setOpen(false)} variant={variant} />}
         </AnimatePresence>
       </div>
     </>
