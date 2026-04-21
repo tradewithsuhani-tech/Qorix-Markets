@@ -1,0 +1,429 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Qorix Markets — API Documentation</title>
+<link rel="icon" href="/qorix-favicon.png?v=4" />
+<style>
+  :root{
+    --bg:#0a0e1a; --panel:#11172a; --panel2:#0d1322; --border:#1f2942;
+    --text:#e6edf7; --muted:#8b96b0; --accent:#3b82f6; --accent2:#60a5fa;
+    --green:#10b981; --orange:#f59e0b; --red:#ef4444; --purple:#a855f7;
+    --code:#0b1020;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  a{color:var(--accent2);text-decoration:none}
+  a:hover{text-decoration:underline}
+  header{position:sticky;top:0;z-index:10;background:rgba(10,14,26,.92);backdrop-filter:blur(8px);border-bottom:1px solid var(--border);padding:14px 24px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+  header h1{margin:0;font-size:18px;font-weight:600;letter-spacing:.2px}
+  header .badge{font-size:11px;padding:3px 8px;border-radius:6px;background:var(--green);color:#0b1020;font-weight:700}
+  header input{flex:1;min-width:200px;max-width:480px;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:var(--panel2);color:var(--text);font-size:14px;outline:none}
+  header input:focus{border-color:var(--accent)}
+  .layout{display:grid;grid-template-columns:240px 1fr;gap:24px;max-width:1200px;margin:0 auto;padding:24px}
+  nav.sidebar{position:sticky;top:80px;align-self:start;max-height:calc(100vh - 100px);overflow-y:auto;border:1px solid var(--border);background:var(--panel2);border-radius:12px;padding:12px}
+  nav.sidebar a{display:block;padding:6px 10px;border-radius:6px;color:var(--muted);font-size:13px}
+  nav.sidebar a:hover{background:var(--panel);color:var(--text);text-decoration:none}
+  main{min-width:0}
+  section.card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:20px}
+  section.card h2{margin:0 0 12px 0;font-size:18px;display:flex;align-items:center;gap:8px}
+  section.card h2 .emoji{font-size:20px}
+  section.card p{color:var(--muted);margin:6px 0}
+  .url-box{display:flex;align-items:center;gap:8px;background:var(--code);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;margin:6px 0}
+  .url-box code{flex:1;color:#a5d6ff;word-break:break-all}
+  .copy-btn{background:var(--accent);border:0;color:white;padding:5px 10px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600}
+  .copy-btn:hover{background:var(--accent2)}
+  .copy-btn.copied{background:var(--green)}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin:8px 0}
+  th,td{text-align:left;padding:10px;border-bottom:1px solid var(--border);vertical-align:top}
+  th{color:var(--muted);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.5px}
+  td code{background:var(--code);padding:2px 6px;border-radius:4px;font-size:12px;color:#a5d6ff}
+  .method{display:inline-block;padding:3px 8px;border-radius:5px;font-size:11px;font-weight:700;font-family:ui-monospace,monospace;min-width:50px;text-align:center}
+  .m-get{background:#1e3a5f;color:#60a5fa}
+  .m-post{background:#1e4a3a;color:#34d399}
+  .m-put,.m-patch{background:#5f3a1e;color:#fbbf24}
+  .m-delete{background:#5f1e1e;color:#f87171}
+  .auth-yes{color:var(--green);font-weight:600}
+  .auth-no{color:var(--muted)}
+  pre{background:var(--code);border:1px solid var(--border);border-radius:8px;padding:14px;overflow-x:auto;font-size:12px;color:#cbd5e1;margin:8px 0}
+  pre code{color:#cbd5e1}
+  .json-key{color:#60a5fa}
+  .json-str{color:#34d399}
+  .json-num{color:#fbbf24}
+  .alert{border-radius:8px;padding:12px 14px;margin:10px 0;font-size:13px;border-left:3px solid var(--orange);background:rgba(245,158,11,.08);color:#fde68a}
+  .alert.info{border-color:var(--accent);background:rgba(59,130,246,.08);color:#bfdbfe}
+  ul.checklist{padding-left:20px;color:var(--muted)}
+  ul.checklist li{margin:6px 0;color:var(--text)}
+  .footer{text-align:center;color:var(--muted);font-size:12px;padding:24px}
+  @media(max-width:760px){
+    .layout{grid-template-columns:1fr;padding:16px}
+    nav.sidebar{position:static;max-height:none;display:none}
+    header h1{font-size:16px}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Qorix Markets <span style="color:var(--muted);font-weight:400">— REST API</span></h1>
+  <span class="badge">v1 LIVE</span>
+  <input id="search" placeholder="Search endpoints (e.g. wallet, login, otp)…" />
+</header>
+
+<div class="layout">
+  <nav class="sidebar">
+    <a href="#overview">Overview</a>
+    <a href="#auth">Auth & OTP</a>
+    <a href="#endpoints-auth">🔐 Auth</a>
+    <a href="#endpoints-wallet">💰 Wallet</a>
+    <a href="#endpoints-deposit">💵 Deposit</a>
+    <a href="#endpoints-investment">📈 Investment</a>
+    <a href="#endpoints-dashboard">📊 Dashboard</a>
+    <a href="#endpoints-referral">👥 Referral</a>
+    <a href="#endpoints-tasks">🎯 Tasks & Points</a>
+    <a href="#endpoints-chat">💬 Chat</a>
+    <a href="#endpoints-notif">🔔 Notifications</a>
+    <a href="#endpoints-tx">🧾 Transactions</a>
+    <a href="#endpoints-health">🏥 Health</a>
+    <a href="#endpoints-admin">🛠️ Admin</a>
+    <a href="#responses">Response Format</a>
+    <a href="#mobile">Mobile Checklist</a>
+  </nav>
+
+  <main>
+
+  <section class="card" id="overview">
+    <h2><span class="emoji">🌐</span> Base URL</h2>
+    <div class="url-box"><code>https://qorixmarkets.com/api</code><button class="copy-btn" data-copy="https://qorixmarkets.com/api">Copy</button></div>
+    <p>All endpoints are mounted under <code>/api</code>. Use HTTPS only.</p>
+  </section>
+
+  <section class="card" id="auth">
+    <h2><span class="emoji">🔑</span> Authentication</h2>
+    <ul class="checklist">
+      <li><b>Type:</b> JWT Bearer token (HS256), issued at register/login.</li>
+      <li><b>Header:</b> <code>Authorization: Bearer &lt;jwt_token&gt;</code></li>
+      <li><b>Token payload:</b> <code>{ id, email, role, isAdmin }</code></li>
+      <li><b>Expiry:</b> 7 days. After expiry, force re-login on <code>401</code>.</li>
+    </ul>
+    <div class="alert">⚠️ <b>reCAPTCHA is currently DISABLED</b> on the backend (re-enabling soon). Mobile app can omit the <code>captchaToken</code> field for now. When re-enabled, send Google reCAPTCHA v2 token as <code>captchaToken</code>.</div>
+
+    <h2 style="margin-top:20px"><span class="emoji">📧</span> OTP Flow (Email)</h2>
+    <ul class="checklist">
+      <li>OTPs sent via <b>email</b> (Amazon SES). No SMS.</li>
+      <li>6-digit numeric code, 10-min expiry, 5-attempt limit.</li>
+      <li><b>Purposes:</b> <code>email_verification</code>, <code>withdrawal</code>.</li>
+      <li>Send: <code>POST /auth/send-otp</code> (email verify), <code>POST /auth/withdrawal-otp</code> (withdraw).</li>
+      <li>Verify email: <code>POST /auth/verify-email</code> with <code>{ otp }</code>.</li>
+      <li>Withdraw verify: include <code>otp</code> in <code>POST /wallet/withdraw</code> body.</li>
+      <li><b>Dev helper</b> (non-prod only): <code>GET /auth/dev-otp?email=...&purpose=...</code></li>
+    </ul>
+  </section>
+
+  <!-- ============ AUTH ============ -->
+  <section class="card" id="endpoints-auth">
+    <h2><span class="emoji">🔐</span> Auth</h2>
+    <table>
+      <thead><tr><th>Method</th><th>Path</th><th>Auth</th><th>Body / Notes</th></tr></thead>
+      <tbody>
+        <tr><td><span class="method m-post">POST</span></td><td><code>/auth/register</code></td><td class="auth-no">No</td><td><code>{ email, password, name, referralCode?, captchaToken?, hp_field? }</code></td></tr>
+        <tr><td><span class="method m-post">POST</span></td><td><code>/auth/login</code></td><td class="auth-no">No</td><td><code>{ email, password, captchaToken? }</code> · rate-limited</td></tr>
+        <tr><td><span class="method m-get">GET</span></td><td><code>/auth/me</code></td><td class="auth-yes">JWT</td><td>Returns current user</td></tr>
+        <tr><td><span class="method m-post">POST</span></td><td><code>/auth/send-otp</code></td><td class="auth-yes">JWT</td><td>Sends email-verification OTP</td></tr>
+        <tr><td><span class="method m-post">POST</span></td><td><code>/auth/verify-email</code></td><td class="auth-yes">JWT</td><td><code>{ otp }</code></td></tr>
+        <tr><td><span class="method m-post">POST</span></td><td><code>/auth/withdrawal-otp</code></td><td class="auth-yes">JWT</td><td>Sends withdrawal OTP</td></tr>
+        <tr><td><span class="method m-get">GET</span></td><td><code>/auth/dev-otp</code></td><td class="auth-no">Dev</td><td><code>?email=&purpose=</code> (non-prod only)</td></tr>
+      </tbody>
+    </table>
+
+    <p style="margin-top:14px"><b>Login response:</b></p>
+<pre><code>{
+  "token": "eyJhbGciOiJIUzI1NiIs...",
+  "user": {
+    "id": 1,
+    "email": "user@example.com",
+    "name": "User",
+    "role": "user",
+    "emailVerified": true
+  }
+}</code></pre>
+  </section>
+
+  <!-- ============ WALLET ============ -->
+  <section class="card" id="endpoints-wallet">
+    <h2><span class="emoji">💰</span> Wallet</h2>
+    <table>
+      <thead><tr><th>Method</th><th>Path</th><th>Auth</th><th>Body / Notes</th></tr></thead>
+      <tbody>
+        <tr><td><span class="method m-get">GET</span></td><td><code>/wallet</code></td><td class="auth-yes">JWT</td><td>Returns <code>{ balance, points, ... }</code></td></tr>
+        <tr><td><span class="method m-post">POST</span></td><td><code>/wallet/deposit</code></td><td class="auth-yes">JWT</td><td><code>{ amount, txHash?, method }</code></td></tr>
+        <tr><td><span class="method m-post">POST</span></td><td><code>/wallet/withdraw</code></td><td class="auth-yes">JWT</td><td><code>{ amount, address, otp }</code> — OTP required</td></tr>
+        <tr><td><span class="method m-post">POST</span></td><td><code>/wallet/transfer</code></td><td class="auth-yes">JWT</td><td><code>{ toEmail, amount }</code></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ============ DEPOSIT ============ -->
+  <section class="card" id="endpoints-deposit">
+    <h2><span class="emoji">💵</span> Deposit (USDT TRC-20)</h2>
+    <table>
+      <thead><tr><th>Method</th><th>Path</th><th>Auth</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td><span class="method m-get">GET</span></td><td><code>/deposit/address</code></td><td class="auth-yes">JWT</td><td>User's TRON deposit address</td></tr>
+        <tr><td><span class="method m-post">POST</span></td><td><code>/deposit/tron-address</code></td><td class="auth-yes">JWT</td><td>Generate new address</td></tr>
+        <tr><td><span class="method m-get">GET</span></td><td><code>/deposit/history</code></td><td class="auth-yes">JWT</td><td>Past deposits</td></tr>
+        <tr><td><span class="method m-post">POST</span></td><td><code>/create-wallet</code></td><td class="auth-no">No</td><td>Crypto wallet helper</td></tr>
+        <tr><td><span class="method m-get">GET</span></td><td><code>/balance/:address</code></td><td class="auth-no">No</td><td>On-chain balance lookup</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ============ INVESTMENT ============ -->
+  <section class="card" id="endpoints-investment">
+    <h2><span class="emoji">📈</span> Investment & Signal Trades</h2>
+    <table>
+      <thead><tr><th>Method</th><th>Path</th><th>Auth</th><th>Body / Notes</th></tr></thead>
+      <tbody>
+        <tr><td><span class="method m-get">GET</span></td><td><code>/investment</code></td><td class="auth-yes">JWT</td><td>Current investment state</td></tr>
+        <tr><td><span class="method m-post">POST</span></td><td><code>/investment/start</code></td><td class="auth-yes">JWT</td><td><code>{ amount, slot }</code></td></tr>
+        <tr><td><span class="method m-post">POST</span></td><td><code>/investment/stop</code></td><td class="auth-yes">JWT</td><td>—</td></tr>
+        <tr><td><span class="method m-patch">PATCH</span></td><td><code>/investment/protection</code></td><td class="auth-yes">JWT</td><td><code>{ enabled }</code></td></tr>
+        <tr><td><span class="method m-patch">PATCH</span></td><td><code>/investment/compounding</code></td><td class="auth-yes">JWT</td><td><code>{ enabled }</code></td></tr>
+        <tr><td><span class="method m-get">GET</span></td><td><code>/trades</code></td><td class="auth-yes">JWT</td><td>User trade history</td></tr>
+        <tr><td><span class="method m-get">GET</span></td><td><code>/signal-trades/running</code></td><td class="auth-no">Public</td><td>Live trades feed</td></tr>
+        <tr><td><span class="method m-get">GET</span></td><td><code>/signal-trades/recent</code></td><td class="auth-no">Public</td><td>Recently closed</td></tr>
+        <tr><td><span class="method m-get">GET</span></td><td><code>/public/market-indicators</code></td><td class="auth-no">Public</td><td>Market widget data</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ============ DASHBOARD ============ -->
+  <section class="card" id="endpoints-dashboard">
+    <h2><span class="emoji">📊</span> Dashboard</h2>
+    <table>
+      <thead><tr><th>Method</th><th>Path</th><th>Auth</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td><span class="method m-get">GET</span></td><td><code>/dashboard/summary</code></td><td class="auth-yes">JWT</td><td>Top tiles</td></tr>
+        <tr><td><span class="method m-get">GET</span></td><td><code>/dashboard/equity-chart</code></td><td class="auth-yes">JWT</td><td>Equity time-series</td></tr>
+        <tr><td><span class="method m-get">GET</span></td><td><code>/dashboard/performance</code></td><td class="auth-yes">JWT</td><td>Performance stats</td></tr>
+        <tr><td><span class="method m-get">GET</span></td><td><code>/dashboard/fund-stats</code></td><td class="auth-yes">JWT</td><td>AUM, traders count</td></tr>
+        <tr><td><span class="method m-get">GET</span></td><td><code>/dashboard/monthly-performance</code></td><td class="auth-yes">JWT</td><td>Monthly P/L</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ============ REFERRAL ============ -->
+  <section class="card" id="endpoints-referral">
+    <h2><span class="emoji">👥</span> Referral & Leaderboard</h2>
+    <table>
+      <thead><tr><th>Method</th><th>Path</th><th>Auth</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td><span class="method m-get">GET</span></td><td><code>/referral</code></td><td class="auth-yes">JWT</td><td>Code, stats, earnings</td></tr>
+        <tr><td><span class="method m-get">GET</span></td><td><code>/referral/referred-users</code></td><td class="auth-yes">JWT</td><td>List of referred users</td></tr>
+        <tr><td><span class="method m-get">GET</span></td><td><code>/leaderboard/referrals</code></td><td class="auth-yes">JWT</td><td>Top referrers</td></tr>
+        <tr><td><span class="method m-get">GET</span></td><td><code>/leaderboard/investors/weekly</code></td><td class="auth-yes">JWT</td><td>Top investors this week</td></tr>
+        <tr><td><span class="method m-get">GET</span></td><td><code>/leaderboard/rewards</code></td><td class="auth-yes">JWT</td><td>Reward leaderboard</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ============ TASKS ============ -->
+  <section class="card" id="endpoints-tasks">
+    <h2><span class="emoji">🎯</span> Tasks & Points (Viral Growth)</h2>
+    <table>
+      <thead><tr><th>Method</th><th>Path</th><th>Auth</th><th>Body / Notes</th></tr></thead>
+      <tbody>
+        <tr><td><span class="method m-get">GET</span></td><td><code>/tasks</code></td><td class="auth-yes">JWT</td><td>Available + completed tasks</td></tr>
+        <tr><td><span class="method m-post">POST</span></td><td><code>/tasks/:slug/complete</code></td><td class="auth-yes">JWT</td><td>Auto-verify task completion</td></tr>
+        <tr><td><span class="method m-post">POST</span></td><td><code>/tasks/:slug/proof</code></td><td class="auth-yes">JWT</td><td><code>{ proofUrl, note? }</code> — manual review tasks</td></tr>
+        <tr><td><span class="method m-get">GET</span></td><td><code>/points</code></td><td class="auth-yes">JWT</td><td>Points balance + transactions</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ============ CHAT ============ -->
+  <section class="card" id="endpoints-chat">
+    <h2><span class="emoji">💬</span> Chat & Support</h2>
+    <table>
+      <thead><tr><th>Method</th><th>Path</th><th>Auth</th><th>Body / Notes</th></tr></thead>
+      <tbody>
+        <tr><td><span class="method m-post">POST</span></td><td><code>/chat/session</code></td><td class="auth-yes">JWT</td><td>Start a session</td></tr>
+        <tr><td><span class="method m-get">GET</span></td><td><code>/chat/session/:id/messages</code></td><td class="auth-yes">JWT</td><td>Get messages</td></tr>
+        <tr><td><span class="method m-post">POST</span></td><td><code>/chat/message</code></td><td class="auth-yes">JWT</td><td><code>{ sessionId, content }</code></td></tr>
+        <tr><td><span class="method m-post">POST</span></td><td><code>/chat/bot-message</code></td><td class="auth-yes">JWT</td><td><code>{ sessionId, content }</code></td></tr>
+        <tr><td><span class="method m-post">POST</span></td><td><code>/chat/session/:id/end</code></td><td class="auth-yes">JWT</td><td>End session</td></tr>
+        <tr><td><span class="method m-post">POST</span></td><td><code>/chat/expert</code></td><td class="auth-yes">JWT</td><td><code>{ message }</code> — AI assistant</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ============ NOTIFICATIONS ============ -->
+  <section class="card" id="endpoints-notif">
+    <h2><span class="emoji">🔔</span> Notifications</h2>
+    <table>
+      <thead><tr><th>Method</th><th>Path</th><th>Auth</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td><span class="method m-get">GET</span></td><td><code>/popup</code></td><td class="auth-yes">JWT</td><td>Active popup</td></tr>
+        <tr><td><span class="method m-get">GET</span></td><td><code>/notifications</code></td><td class="auth-yes">JWT</td><td>All notifications</td></tr>
+        <tr><td><span class="method m-patch">PATCH</span></td><td><code>/notifications/:id/read</code></td><td class="auth-yes">JWT</td><td>Mark single read</td></tr>
+        <tr><td><span class="method m-patch">PATCH</span></td><td><code>/notifications/read-all</code></td><td class="auth-yes">JWT</td><td>Mark all read</td></tr>
+        <tr><td><span class="method m-delete">DELETE</span></td><td><code>/notifications/:id</code></td><td class="auth-yes">JWT</td><td>Delete</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ============ TRANSACTIONS ============ -->
+  <section class="card" id="endpoints-tx">
+    <h2><span class="emoji">🧾</span> Transactions & Reports</h2>
+    <table>
+      <thead><tr><th>Method</th><th>Path</th><th>Auth</th><th>Body / Notes</th></tr></thead>
+      <tbody>
+        <tr><td><span class="method m-get">GET</span></td><td><code>/transactions</code></td><td class="auth-yes">JWT</td><td>User transaction history</td></tr>
+        <tr><td><span class="method m-post">POST</span></td><td><code>/reports/generate</code></td><td class="auth-yes">JWT</td><td><code>{ type, fromDate, toDate }</code></td></tr>
+        <tr><td><span class="method m-get">GET</span></td><td><code>/verify/:hashId</code></td><td class="auth-no">Public</td><td>Verify report authenticity</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ============ HEALTH ============ -->
+  <section class="card" id="endpoints-health">
+    <h2><span class="emoji">🏥</span> Health</h2>
+    <table>
+      <thead><tr><th>Method</th><th>Path</th><th>Auth</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td><span class="method m-get">GET</span></td><td><code>/healthz</code></td><td class="auth-no">No</td><td>Returns <code>{ ok: true }</code></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ============ ADMIN ============ -->
+  <section class="card" id="endpoints-admin">
+    <h2><span class="emoji">🛠️</span> Admin <span style="font-size:12px;color:var(--muted);font-weight:400">(role=admin only)</span></h2>
+    <p>These are used by the web admin panel. Skip in mobile unless building an admin app.</p>
+    <table>
+      <thead><tr><th>Method</th><th>Path</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td><span class="method m-get">GET</span></td><td><code>/admin/stats</code></td><td>Platform stats</td></tr>
+        <tr><td><span class="method m-get">GET</span></td><td><code>/admin/users</code></td><td>List users</td></tr>
+        <tr><td><span class="method m-post">POST</span></td><td><code>/admin/users/:id/action</code></td><td>Suspend / activate / delete</td></tr>
+        <tr><td><span class="method m-post">POST</span></td><td><code>/admin/users/:id/balance-adjust</code></td><td>Manual balance change</td></tr>
+        <tr><td><span class="method m-post">POST</span></td><td><code>/admin/users/:id/points</code></td><td>Award/deduct points</td></tr>
+        <tr><td><span class="method m-get">GET</span></td><td><code>/admin/transactions</code></td><td>All transactions</td></tr>
+        <tr><td><span class="method m-post">POST</span></td><td><code>/admin/transactions/manual-credit</code></td><td>Manual credit</td></tr>
+        <tr><td><span class="method m-get">GET</span></td><td><code>/admin/withdrawals</code></td><td>Pending withdrawals</td></tr>
+        <tr><td><span class="method m-post">POST</span></td><td><code>/admin/withdrawals/:id/approve</code></td><td>Approve withdrawal</td></tr>
+        <tr><td><span class="method m-post">POST</span></td><td><code>/admin/withdrawals/:id/reject</code></td><td>Reject withdrawal</td></tr>
+        <tr><td><span class="method m-post">POST</span></td><td><code>/admin/profit</code></td><td>Trigger profit distribution</td></tr>
+        <tr><td><span class="method m-get">GET</span></td><td><code>/admin/profit/history</code></td><td>Distribution history</td></tr>
+        <tr><td><span class="method m-get">GET</span></td><td><code>/admin/settings</code></td><td>Get settings</td></tr>
+        <tr><td><span class="method m-post">POST</span></td><td><code>/admin/settings</code></td><td>Update settings</td></tr>
+        <tr><td><span class="method m-post">POST</span></td><td><code>/admin/broadcast</code></td><td>Broadcast notification</td></tr>
+        <tr><td><span class="method m-get">GET</span></td><td><code>/admin/logs</code></td><td>System logs</td></tr>
+        <tr><td><span class="method m-get">GET</span></td><td><code>/admin/intelligence</code></td><td>Intel dashboard</td></tr>
+        <tr><td><span class="method m-get">GET</span></td><td><code>/admin/system-health</code></td><td>Health check</td></tr>
+        <tr><td><span class="method m-get">GET</span></td><td><code>/admin/activity-logs</code></td><td>Activity feed</td></tr>
+        <tr><td><span class="method m-get">GET</span></td><td><code>/admin/ledger/reconcile</code></td><td>Ledger reconcile</td></tr>
+        <tr><td><span class="method m-get">GET</span></td><td><code>/admin/ledger/accounts</code></td><td>GL accounts</td></tr>
+        <tr><td><span class="method m-get">GET</span></td><td><code>/admin/ledger/journal</code></td><td>Journal entries</td></tr>
+        <tr><td><span class="method m-post">POST</span></td><td><code>/admin/slots</code></td><td>Manage investment slots</td></tr>
+        <tr><td><span class="method m-get">GET</span></td><td><code>/admin/task-proofs</code></td><td>Task proofs queue</td></tr>
+        <tr><td><span class="method m-post">POST</span></td><td><code>/admin/task-proofs/:id/approve</code></td><td>Approve proof</td></tr>
+        <tr><td><span class="method m-post">POST</span></td><td><code>/admin/task-proofs/:id/reject</code></td><td>Reject proof</td></tr>
+        <tr><td><span class="method m-get">GET</span></td><td><code>/admin/fraud/stats</code></td><td>Fraud stats</td></tr>
+        <tr><td><span class="method m-get">GET</span></td><td><code>/admin/fraud/flags</code></td><td>Fraud flags</td></tr>
+        <tr><td><span class="method m-post">POST</span></td><td><code>/admin/fraud/flags/:id/resolve</code></td><td>Resolve flag</td></tr>
+        <tr><td><span class="method m-post">POST</span></td><td><code>/admin/fraud/flags/:id/reopen</code></td><td>Reopen flag</td></tr>
+        <tr><td><span class="method m-get">GET</span></td><td><code>/admin/fraud/users/:userId/events</code></td><td>User fraud events</td></tr>
+        <tr><td><span class="method m-get">GET</span></td><td><code>/admin/fraud/flagged-users</code></td><td>Flagged users</td></tr>
+        <tr><td><span class="method m-get">GET</span></td><td><code>/admin/chats</code></td><td>Support chats</td></tr>
+        <tr><td><span class="method m-get">GET</span></td><td><code>/admin/chats/:id/messages</code></td><td>Chat messages</td></tr>
+        <tr><td><span class="method m-post">POST</span></td><td><code>/admin/chats/:id/reply</code></td><td>Admin reply</td></tr>
+        <tr><td><span class="method m-post">POST</span></td><td><code>/admin/chats/:id/resolve</code></td><td>Resolve chat</td></tr>
+        <tr><td><span class="method m-get">GET</span></td><td><code>/trading-desk/stats</code></td><td>Trading desk stats</td></tr>
+        <tr><td><span class="method m-get">GET</span></td><td><code>/trading-desk/traders</code></td><td>Traders list</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ============ RESPONSES ============ -->
+  <section class="card" id="responses">
+    <h2><span class="emoji">📦</span> Response Format</h2>
+    <p><b>Success:</b></p>
+<pre><code>{ "ok": true, "data": { ... } }</code></pre>
+    <p>(Some endpoints return data flat, e.g. <code>/wallet</code> → <code>{ balance, points }</code>)</p>
+    <p><b>Error:</b></p>
+<pre><code>{ "ok": false, "error": "Error message", "code": "ERR_CODE_OPTIONAL" }</code></pre>
+    <p><b>HTTP status codes:</b></p>
+    <ul class="checklist">
+      <li><code>400</code> — validation error</li>
+      <li><code>401</code> — unauthenticated / token expired → force re-login</li>
+      <li><code>403</code> — forbidden (insufficient role)</li>
+      <li><code>429</code> — rate-limited (login)</li>
+      <li><code>500</code> — server error</li>
+    </ul>
+  </section>
+
+  <!-- ============ MOBILE ============ -->
+  <section class="card" id="mobile">
+    <h2><span class="emoji">📱</span> Mobile Integration Checklist</h2>
+    <ol class="checklist">
+      <li><b>Login</b> → store JWT in secure storage (Keychain / EncryptedSharedPreferences).</li>
+      <li>Attach <code>Authorization: Bearer &lt;token&gt;</code> to <b>every</b> request after login.</li>
+      <li><b>Signup flow:</b>
+        <ul>
+          <li><code>POST /auth/register</code> → save token</li>
+          <li><code>POST /auth/send-otp</code> → user enters 6-digit code from email</li>
+          <li><code>POST /auth/verify-email</code> with <code>{ otp }</code></li>
+        </ul>
+      </li>
+      <li><b>Withdrawal flow:</b>
+        <ul>
+          <li><code>POST /auth/withdrawal-otp</code> → email sent</li>
+          <li><code>POST /wallet/withdraw</code> with <code>{ amount, address, otp }</code></li>
+        </ul>
+      </li>
+      <li><b>Pull-to-refresh dashboard:</b> call <code>/dashboard/summary</code> + <code>/wallet</code>.</li>
+      <li>Handle <code>401</code> globally → clear token → navigate to login.</li>
+    </ol>
+    <div class="alert info">💡 For testing, use the dev OTP helper: <code>GET /auth/dev-otp?email=test@x.com&purpose=email_verification</code> (only works in non-production).</div>
+  </section>
+
+  <p class="footer">© Qorix Markets · Last updated April 21, 2026 · Questions? <a href="mailto:support@qorixmarkets.com">support@qorixmarkets.com</a></p>
+
+  </main>
+</div>
+
+<script>
+  // Copy buttons
+  document.querySelectorAll('.copy-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      navigator.clipboard.writeText(btn.dataset.copy).then(() => {
+        const orig = btn.textContent;
+        btn.textContent = 'Copied!';
+        btn.classList.add('copied');
+        setTimeout(() => { btn.textContent = orig; btn.classList.remove('copied'); }, 1500);
+      });
+    });
+  });
+
+  // Search filter
+  const search = document.getElementById('search');
+  search.addEventListener('input', () => {
+    const q = search.value.toLowerCase().trim();
+    document.querySelectorAll('main section.card').forEach(card => {
+      if (!q) { card.style.display = ''; card.querySelectorAll('tbody tr').forEach(r => r.style.display = ''); return; }
+      const rows = card.querySelectorAll('tbody tr');
+      let anyMatch = card.querySelector('h2').textContent.toLowerCase().includes(q);
+      rows.forEach(r => {
+        const match = r.textContent.toLowerCase().includes(q);
+        r.style.display = match ? '' : 'none';
+        if (match) anyMatch = true;
+      });
+      card.style.display = anyMatch ? '' : 'none';
+    });
+  });
+</script>
+
+</body>
+</html>
