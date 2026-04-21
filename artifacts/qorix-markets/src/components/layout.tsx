@@ -556,14 +556,14 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   {children}
                 </div>
               </div>
-              {/* Hard spacer: guarantees ~180px clear above the bottom nav + chat FAB on mobile,
-                  zero on desktop. Cannot be overridden by any page's own layout. */}
+              {/* Hard spacer: ~120px clearance above the bottom nav on mobile (nav + safe-area + small breathing room),
+                  zero on desktop. Tight enough to not look empty, generous enough that nothing gets cut. */}
               <div
                 aria-hidden
                 className="md:hidden w-full"
                 style={{
                   height:
-                    "calc(72px + env(safe-area-inset-bottom, 0px) + 6rem)",
+                    "calc(72px + env(safe-area-inset-bottom, 0px) + 1.5rem)",
                 }}
               />
             </motion.div>
