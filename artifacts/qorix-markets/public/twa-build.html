@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Qorix Markets — Android App (TWA) Build Guide</title>
+<link rel="icon" href="/qorix-favicon.png?v=4" />
+<style>
+  :root{--bg:#0a0e1a;--panel:#11172a;--panel2:#0d1322;--border:#1f2942;--text:#e6edf7;--muted:#8b96b0;--accent:#3b82f6;--accent2:#60a5fa;--green:#10b981;--orange:#f59e0b;--red:#ef4444;--code:#0b1020}
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  a{color:var(--accent2)}
+  header{position:sticky;top:0;z-index:10;background:rgba(10,14,26,.92);backdrop-filter:blur(8px);border-bottom:1px solid var(--border);padding:14px 24px;display:flex;align-items:center;gap:14px}
+  header h1{margin:0;font-size:18px;font-weight:600}
+  header .badge{font-size:11px;padding:3px 8px;border-radius:6px;background:linear-gradient(135deg,#3b82f6,#a855f7);color:white;font-weight:700}
+  .wrap{max-width:900px;margin:0 auto;padding:24px}
+  .hero{background:linear-gradient(135deg,#1e3a8a 0%,#581c87 100%);border-radius:16px;padding:32px;margin-bottom:24px;border:1px solid var(--border)}
+  .hero h2{margin:0 0 8px;font-size:28px}
+  .hero p{margin:0;color:#cbd5e1;font-size:15px}
+  section.card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:24px;margin-bottom:20px}
+  section.card h2{margin:0 0 6px;font-size:20px;display:flex;align-items:center;gap:10px}
+  section.card .step-num{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#3b82f6,#a855f7);color:white;font-weight:700;font-size:14px}
+  section.card p{color:var(--muted)}
+  pre{background:var(--code);border:1px solid var(--border);border-radius:8px;padding:14px;overflow-x:auto;font-size:13px;color:#cbd5e1;margin:10px 0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;position:relative}
+  .copy-btn{position:absolute;top:8px;right:8px;background:var(--accent);border:0;color:white;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:11px;font-weight:600}
+  .copy-btn:hover{background:var(--accent2)}
+  .copy-btn.copied{background:var(--green)}
+  code{background:var(--code);padding:2px 6px;border-radius:4px;font-size:12px;color:#a5d6ff;font-family:ui-monospace,monospace}
+  .alert{border-radius:8px;padding:12px 14px;margin:12px 0;font-size:13px;border-left:3px solid var(--orange);background:rgba(245,158,11,.08);color:#fde68a}
+  .alert.info{border-color:var(--accent);background:rgba(59,130,246,.08);color:#bfdbfe}
+  .alert.success{border-color:var(--green);background:rgba(16,185,129,.08);color:#a7f3d0}
+  ul,ol{padding-left:22px}
+  ul li,ol li{margin:6px 0}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin:14px 0}
+  .feature{background:var(--panel2);border:1px solid var(--border);border-radius:10px;padding:14px}
+  .feature .icon{font-size:24px;margin-bottom:6px}
+  .feature h3{margin:4px 0;font-size:14px}
+  .feature p{margin:0;font-size:12px;color:var(--muted)}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin:12px 0}
+  th,td{padding:8px 10px;border-bottom:1px solid var(--border);text-align:left}
+  th{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.5px}
+  .btn-primary{display:inline-block;background:linear-gradient(135deg,#3b82f6,#a855f7);color:white;padding:10px 20px;border-radius:8px;font-weight:600;text-decoration:none;margin-top:8px}
+  .btn-primary:hover{opacity:.9}
+  .footer{text-align:center;color:var(--muted);font-size:12px;padding:24px}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Qorix Markets <span style="color:var(--muted);font-weight:400">— Android TWA Build Guide</span></h1>
+  <span class="badge">PREMIUM</span>
+</header>
+
+<div class="wrap">
+
+<div class="hero">
+  <h2>📱 Convert Qorix into a Play Store Android App</h2>
+  <p>Trusted Web Activity (TWA) ke through aapki PWA ek native Android app ban jayegi — full-screen, no URL bar, push notifications, splash screen, Play Store me list. Sab kuch ek-baar set up karo, future updates apne aap web se sync ho jayenge.</p>
+</div>
+
+<section class="card">
+  <h2>✨ Aapko kya milega</h2>
+  <div class="grid">
+    <div class="feature"><div class="icon">🎨</div><h3>Native Splash</h3><p>Custom Q logo splash screen with theme color fade-out</p></div>
+    <div class="feature"><div class="icon">🚀</div><h3>No URL Bar</h3><p>Verified TWA — full-screen experience, looks 100% native</p></div>
+    <div class="feature"><div class="icon">🔔</div><h3>Push Notifications</h3><p>FCM-backed Web Push delivery to Android system tray</p></div>
+    <div class="feature"><div class="icon">⚡</div><h3>Instant Updates</h3><p>Web changes deploy karo — app turant update ho jaata hai</p></div>
+    <div class="feature"><div class="icon">📲</div><h3>Play Store Ready</h3><p>Signed AAB bundle — directly upload to Google Play Console</p></div>
+    <div class="feature"><div class="icon">🔒</div><h3>Domain Verified</h3><p>Digital Asset Links setup — Chrome trusts your origin</p></div>
+  </div>
+</section>
+
+<section class="card">
+  <h2><span class="step-num">1</span> Web side — DONE ✅</h2>
+  <p>Aapki PWA already TWA-ready hai. Maine jo kar diya:</p>
+  <ul>
+    <li>✅ <code>manifest.json</code> with icons, theme color, shortcuts, screenshots</li>
+    <li>✅ Service worker (<code>/sw.js</code>) for offline + caching</li>
+    <li>✅ Maskable icons at 192×192 and 512×512</li>
+    <li>✅ <code>/.well-known/assetlinks.json</code> placeholder created</li>
+    <li>✅ HTTPS enabled (qorixmarkets.com)</li>
+    <li>✅ Bubblewrap config (<code>twa-manifest.json</code>) generated in repo root</li>
+  </ul>
+  <div class="alert">⚠️ The <code>assetlinks.json</code> currently has a placeholder fingerprint. You'll fill in the real SHA256 in Step 4.</div>
+</section>
+
+<section class="card">
+  <h2><span class="step-num">2</span> Install Bubblewrap (one-time)</h2>
+  <p>Apne local computer pe (Mac/Linux/Windows) Node.js 18+ install hona chahiye. Phir terminal me:</p>
+<pre><button class="copy-btn" data-copy="npm install -g @bubblewrap/cli">Copy</button><code>npm install -g @bubblewrap/cli</code></pre>
+  <p>JDK 17 aur Android SDK bhi chahiye. Bubblewrap apne aap install karne ka offer karega first time pe — bas <code>Y</code> dabate jaana.</p>
+  <p>Verify:</p>
+<pre><button class="copy-btn" data-copy="bubblewrap --version">Copy</button><code>bubblewrap --version</code></pre>
+</section>
+
+<section class="card">
+  <h2><span class="step-num">3</span> Build the Android project</h2>
+  <p>Apne Qorix repo ke root folder me jao (jahan <code>twa-manifest.json</code> hai):</p>
+<pre><button class="copy-btn" data-copy="bubblewrap init --manifest=https://qorixmarkets.com/manifest.json">Copy</button><code>bubblewrap init --manifest=https://qorixmarkets.com/manifest.json</code></pre>
+  <p>Ye prompts puchega — main values:</p>
+  <table>
+    <tr><th>Question</th><th>Answer</th></tr>
+    <tr><td>Domain</td><td><code>qorixmarkets.com</code></td></tr>
+    <tr><td>App name</td><td><code>Qorix Markets</code></td></tr>
+    <tr><td>Launcher name</td><td><code>Qorix</code></td></tr>
+    <tr><td>App package ID</td><td><code>com.qorixmarkets.app</code></td></tr>
+    <tr><td>Display mode</td><td><code>standalone</code></td></tr>
+    <tr><td>Status bar color</td><td><code>#0a0f1c</code></td></tr>
+    <tr><td>Splash screen color</td><td><code>#0a0f1c</code></td></tr>
+    <tr><td>Min SDK</td><td><code>21</code> (Android 5.0+)</td></tr>
+    <tr><td>Notifications</td><td><code>Yes</code></td></tr>
+  </table>
+  <p>Phir build:</p>
+<pre><button class="copy-btn" data-copy="bubblewrap build">Copy</button><code>bubblewrap build</code></pre>
+  <p>Bubblewrap aapko keystore banane ke liye puchega — password yaad rakhna (Play Store update ke liye lifelong same chahiye). Output milega:</p>
+  <ul>
+    <li><code>app-release-signed.apk</code> — install on device for testing</li>
+    <li><code>app-release-bundle.aab</code> — Play Store ke liye upload</li>
+  </ul>
+</section>
+
+<section class="card">
+  <h2><span class="step-num">4</span> Get SHA256 fingerprint & update assetlinks.json</h2>
+  <p>Build ke baad fingerprint nikaalo:</p>
+<pre><button class="copy-btn" data-copy="bubblewrap fingerprint">Copy</button><code>bubblewrap fingerprint</code></pre>
+  <p>Output me <code>SHA256 Fingerprint</code> milega (e.g. <code>AB:CD:EF:12:34:56...</code>). Ye copy karo.</p>
+  <p>Ab update karo file: <code>artifacts/qorix-markets/public/.well-known/assetlinks.json</code></p>
+<pre><code>[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.qorixmarkets.app",
+      "sha256_cert_fingerprints": [
+        "PASTE_YOUR_SHA256_HERE"
+      ]
+    }
+  }
+]</code></pre>
+  <p>Phir publish karo apni web app — file live ho jayegi at:</p>
+<pre><button class="copy-btn" data-copy="https://qorixmarkets.com/.well-known/assetlinks.json">Copy</button><code>https://qorixmarkets.com/.well-known/assetlinks.json</code></pre>
+  <p>Verify with Google's tool:</p>
+  <a class="btn-primary" href="https://developers.google.com/digital-asset-links/tools/generator" target="_blank">Open Asset Links Verifier ↗</a>
+</section>
+
+<section class="card">
+  <h2><span class="step-num">5</span> Test on Android device</h2>
+  <ol>
+    <li>Phone me USB debugging on karo (Settings → About → tap Build Number 7 times → enable USB debugging)</li>
+    <li>USB se laptop me connect karo</li>
+    <li>Run: <pre style="margin:6px 0"><button class="copy-btn" data-copy="bubblewrap install">Copy</button><code>bubblewrap install</code></pre></li>
+    <li>App phone pe install ho jayega — open karo</li>
+    <li>✅ <b>No URL bar</b> dikhna chahiye → TWA verified successfully</li>
+    <li>❌ Agar Chrome ka URL bar dikhe → assetlinks.json verify nahi hua. Step 4 dobara check karo.</li>
+  </ol>
+  <div class="alert info">💡 First launch pe Chrome verify karta hai assetlinks.json ko — internet on hona chahiye. Verification cached hoti hai.</div>
+</section>
+
+<section class="card">
+  <h2><span class="step-num">6</span> Play Store par publish karo</h2>
+  <ol>
+    <li>Go to <a href="https://play.google.com/console" target="_blank">Google Play Console</a> (ek baar $25 developer fee dena padta hai)</li>
+    <li>Create app → Qorix Markets</li>
+    <li>App content → fill in privacy policy URL (<code>https://qorixmarkets.com/privacy</code>), data safety, target audience</li>
+    <li>Production → Create new release → upload <code>app-release-bundle.aab</code></li>
+    <li>Store listing:
+      <ul>
+        <li>Short description (80 chars)</li>
+        <li>Full description (4000 chars)</li>
+        <li>App icon (512×512) — already have <code>/icon-512.png</code></li>
+        <li>Feature graphic (1024×500) — design karna hoga</li>
+        <li>Phone screenshots (min 2, recommended 4-8) — phone se app open kar ke screenshots lo</li>
+      </ul>
+    </li>
+    <li>Submit for review (usually 1-3 days approval)</li>
+  </ol>
+  <div class="alert success">🎉 Approval ke baad app Play Store par live ho jayega: <code>https://play.google.com/store/apps/details?id=com.qorixmarkets.app</code></div>
+</section>
+
+<section class="card">
+  <h2>🔄 Future Updates</h2>
+  <p>Web app me changes karo aur publish — TWA app **automatically updated** content dikhayega. APK rebuild sirf tab chahiye jab:</p>
+  <ul>
+    <li>App icon, name, ya theme color badle</li>
+    <li>Bubblewrap version upgrade ho</li>
+    <li>Android target SDK upgrade chahiye</li>
+    <li>New shortcut add karne ho</li>
+  </ul>
+  <p>Tab simply:</p>
+<pre><button class="copy-btn" data-copy="bubblewrap update && bubblewrap build">Copy</button><code>bubblewrap update && bubblewrap build</code></pre>
+  <p>App version code badhao (twa-manifest.json me <code>appVersionCode: 2</code>) aur naya AAB Play Console pe upload kar do.</p>
+</section>
+
+<section class="card">
+  <h2>📲 iOS ke liye?</h2>
+  <p>iOS me official TWA support nahi hai. Options:</p>
+  <ul>
+    <li><b>PWA Add-to-Home (free):</b> users Safari me Share → Add to Home Screen — Qorix already supported hai</li>
+    <li><b>PWABuilder iOS wrapper:</b> <a href="https://www.pwabuilder.com" target="_blank">pwabuilder.com</a> se iOS package generate karo (manual review by Apple)</li>
+    <li><b>React Native / Capacitor wrapper:</b> production-grade native shell — long-term solution</li>
+  </ul>
+  <p>Recommendation: pehle Android TWA launch karo, traction dekhne ke baad iOS native invest karo.</p>
+</section>
+
+<p class="footer">© Qorix Markets · Last updated April 21, 2026 · Need help? <a href="mailto:support@qorixmarkets.com">support@qorixmarkets.com</a></p>
+
+</div>
+
+<script>
+document.querySelectorAll('.copy-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    navigator.clipboard.writeText(btn.dataset.copy).then(() => {
+      const orig = btn.textContent;
+      btn.textContent = 'Copied!';
+      btn.classList.add('copied');
+      setTimeout(() => { btn.textContent = orig; btn.classList.remove('copied'); }, 1500);
+    });
+  });
+});
+</script>
+
+</body>
+</html>

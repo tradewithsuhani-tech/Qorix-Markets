@@ -1,0 +1,62 @@
+{
+  "packageId": "com.qorixmarkets.app",
+  "host": "qorixmarkets.com",
+  "name": "Qorix Markets",
+  "launcherName": "Qorix",
+  "display": "standalone",
+  "themeColor": "#0a0f1c",
+  "themeColorDark": "#0a0f1c",
+  "navigationColor": "#0a0f1c",
+  "navigationColorDark": "#0a0f1c",
+  "navigationDividerColor": "#0a0f1c",
+  "navigationDividerColorDark": "#0a0f1c",
+  "backgroundColor": "#0a0f1c",
+  "enableNotifications": true,
+  "startUrl": "/",
+  "iconUrl": "https://qorixmarkets.com/icon-512.png",
+  "maskableIconUrl": "https://qorixmarkets.com/icon-512.png",
+  "monochromeIconUrl": "https://qorixmarkets.com/icon-512.png",
+  "splashScreenFadeOutDuration": 300,
+  "appVersionName": "1.0.0",
+  "appVersionCode": 1,
+  "shortcuts": [
+    {
+      "name": "Dashboard",
+      "shortName": "Dashboard",
+      "url": "/dashboard",
+      "chosenIconUrl": "https://qorixmarkets.com/icon-192.png"
+    },
+    {
+      "name": "Wallet",
+      "shortName": "Wallet",
+      "url": "/wallet",
+      "chosenIconUrl": "https://qorixmarkets.com/icon-192.png"
+    },
+    {
+      "name": "Trading",
+      "shortName": "Trading",
+      "url": "/dashboard/trading",
+      "chosenIconUrl": "https://qorixmarkets.com/icon-192.png"
+    }
+  ],
+  "generatorApp": "bubblewrap-cli",
+  "webManifestUrl": "https://qorixmarkets.com/manifest.json",
+  "fallbackType": "customtabs",
+  "features": {
+    "locationDelegation": { "enabled": false },
+    "playBilling": { "enabled": false }
+  },
+  "alphaDependencies": { "enabled": false },
+  "enableSiteSettingsShortcut": true,
+  "isChromeOSOnly": false,
+  "isMetaQuest": false,
+  "fullScopeUrl": "https://qorixmarkets.com/",
+  "minSdkVersion": 21,
+  "orientation": "portrait",
+  "fingerprints": [],
+  "additionalTrustedOrigins": [
+    "www.qorixmarkets.com"
+  ],
+  "retainedBundles": [],
+  "appVersion": "1.0.0"
+}
