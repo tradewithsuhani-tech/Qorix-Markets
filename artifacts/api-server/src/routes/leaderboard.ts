@@ -58,52 +58,96 @@ router.get("/leaderboard/referrals", authMiddleware, async (req: AuthRequest, re
   }
 });
 
-// ─── Weekly Top Investors ────────────────────────────────────────────────────
+// ─── Weekly Top Investors (synthetic, rotates hourly) ───────────────────────
+const FIRST_NAMES = [
+  "Aarav","Vihaan","Aditya","Kabir","Reyansh","Arjun","Vivaan","Krishna","Ishaan","Rohan",
+  "Marcus","Lucas","Ethan","Liam","Noah","Oliver","James","Henry","Theo","Owen",
+  "Sofia","Aanya","Diya","Saanvi","Ananya","Kiara","Myra","Riya","Pari","Ira",
+  "Emma","Olivia","Mia","Ava","Isla","Zara","Maya","Layla","Chloe","Lily",
+  "Hiroshi","Yuki","Ren","Kenji","Mei","Aiko","Hana","Sora","Kai","Aki",
+  "Lukas","Anton","Felix","Jonas","Niko","Maks","Andrei","Pavel","Dmitri","Igor",
+];
+const LAST_INITIALS = "ABCDGHJKLMNOPRSTVWZ".split("");
+
+// Tiny seeded PRNG (mulberry32) for deterministic per-hour output
+function mulberry32(seed: number) {
+  let s = seed >>> 0;
+  return () => {
+    s = (s + 0x6D2B79F5) >>> 0;
+    let t = s;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function rankFromFund(amount: number): number | null {
+  if (amount < 10) return null;
+  if (amount <= 1000) return 25000;
+  if (amount <= 5000) return 10000;
+  if (amount <= 15000) return 5000;
+  if (amount <= 35000) return 2000;
+  if (amount <= 50000) return 1000;
+  if (amount <= 75000) return 500;
+  if (amount <= 125000) return 5;
+  return null; // 1–5, computed below with seeded randomness
+}
+
 router.get("/leaderboard/investors/weekly", authMiddleware, async (req: AuthRequest, res) => {
   try {
     const userId = req.userId!;
+    const hourBucket = Math.floor(Date.now() / 3_600_000);
+    const rng = mulberry32(hourBucket);
 
-    const rows = await db.execute(sql`
-      SELECT
-        u.id,
-        u.full_name                         AS "fullName",
-        inv.amount::numeric                 AS "investmentAmount",
-        inv.is_active                       AS "isActive",
-        COALESCE(SUM(t.amount)::numeric, 0) AS "weeklyProfit"
-      FROM users u
-      JOIN investments inv ON inv.user_id = u.id AND inv.is_active = true
-      JOIN transactions t
-        ON  t.user_id    = u.id
-        AND t.type       = 'profit'
-        AND t.status     = 'completed'
-        AND t.created_at >= (NOW() - INTERVAL '7 days')
-      WHERE u.is_admin = false
-      GROUP BY u.id, u.full_name, inv.amount, inv.is_active
-      ORDER BY COALESCE(SUM(t.amount), 0) DESC
-      LIMIT 10
-    `);
+    // Build top 10 synthetic investors — large funds, large weekly profits
+    const used = new Set<string>();
+    const board: Array<{
+      id: number;
+      fullName: string;
+      investmentAmount: number;
+      isActive: boolean;
+      weeklyProfit: number;
+    }> = [];
+    let i = 0;
+    while (board.length < 10 && i < 200) {
+      i++;
+      const first = FIRST_NAMES[Math.floor(rng() * FIRST_NAMES.length)];
+      const init = LAST_INITIALS[Math.floor(rng() * LAST_INITIALS.length)];
+      const name = `${first} ${init}.`;
+      if (used.has(name)) continue;
+      used.add(name);
+      // Funds spread roughly $80k → $300k, descending
+      const fund = Math.round((300_000 - board.length * 22_000 + (rng() - 0.5) * 9_000) / 50) * 50;
+      // Weekly profit roughly 3-6% of fund
+      const profit = Math.round(fund * (0.03 + rng() * 0.03) * 100) / 100;
+      board.push({
+        id: 1_000_000 + board.length,
+        fullName: name,
+        investmentAmount: fund,
+        isActive: true,
+        weeklyProfit: profit,
+      });
+    }
+    board.sort((a, b) => b.weeklyProfit - a.weeklyProfit);
 
-    const myRank = await db.execute(sql`
-      WITH ranked AS (
-        SELECT
-          u.id,
-          RANK() OVER (ORDER BY COALESCE(SUM(t.amount), 0) DESC) AS rank
-        FROM users u
-        JOIN investments inv ON inv.user_id = u.id AND inv.is_active = true
-        JOIN transactions t
-          ON  t.user_id    = u.id
-          AND t.type       = 'profit'
-          AND t.status     = 'completed'
-          AND t.created_at >= (NOW() - INTERVAL '7 days')
-        WHERE u.is_admin = false
-        GROUP BY u.id
-      )
-      SELECT rank FROM ranked WHERE id = ${userId}
+    // Compute caller's fund and tier-based rank
+    const fundRes = await db.execute(sql`
+      SELECT COALESCE(amount::numeric, 0) AS amount, is_active
+      FROM investments WHERE user_id = ${userId} LIMIT 1
     `);
+    const userRow = fundRes.rows[0] as { amount: string; is_active: boolean } | undefined;
+    const userFund = userRow?.is_active ? parseFloat(String(userRow.amount ?? "0")) : 0;
+
+    let myRank: number | null = rankFromFund(userFund);
+    if (userFund > 125_000) {
+      // Personal seed so each user gets a stable 1-5 within the hour
+      const personalRng = mulberry32(hourBucket ^ userId);
+      myRank = 1 + Math.floor(personalRng() * 5);
+    }
 
     return res.json({
-      leaderboard: rows.rows,
-      myRank: myRank.rows[0]?.rank ?? null,
+      leaderboard: board,
+      myRank,
     });
   } catch (err) {
     console.error(err);
@@ -116,7 +160,7 @@ router.get("/leaderboard/rewards", authMiddleware, async (req: AuthRequest, res)
   try {
     const userId = req.userId!;
 
-    const [investmentRes, referralRes, profitRes, weeklyRankRes, referralRankRes] = await Promise.all([
+    const [investmentRes, referralRes, profitRes, referralRankRes] = await Promise.all([
       db.execute(sql`
         SELECT amount::numeric, is_active, total_profit::numeric, started_at
         FROM investments WHERE user_id = ${userId} LIMIT 1
@@ -129,23 +173,6 @@ router.get("/leaderboard/rewards", authMiddleware, async (req: AuthRequest, res)
         SELECT COALESCE(SUM(amount)::numeric, 0) AS total
         FROM transactions
         WHERE user_id = ${userId} AND type = 'profit' AND status = 'completed'
-      `),
-      db.execute(sql`
-        WITH ranked AS (
-          SELECT
-            u.id,
-            RANK() OVER (ORDER BY COALESCE(SUM(t.amount), 0) DESC) AS rank
-          FROM users u
-          JOIN investments inv ON inv.user_id = u.id AND inv.is_active = true
-          JOIN transactions t
-            ON  t.user_id    = u.id
-            AND t.type       = 'profit'
-            AND t.status     = 'completed'
-            AND t.created_at >= (NOW() - INTERVAL '7 days')
-          WHERE u.is_admin = false
-          GROUP BY u.id
-        )
-        SELECT rank FROM ranked WHERE id = ${userId}
       `),
       db.execute(sql`
         WITH ranked AS (
@@ -171,7 +198,12 @@ router.get("/leaderboard/rewards", authMiddleware, async (req: AuthRequest, res)
     } | undefined;
     const referralCount = Number((referralRes.rows[0] as { cnt: number })?.cnt ?? 0);
     const totalProfit = parseFloat(String((profitRes.rows[0] as { total: string })?.total ?? "0"));
-    const weeklyRank = weeklyRankRes.rows[0]?.rank ? Number(weeklyRankRes.rows[0].rank) : undefined;
+    const userFund = inv?.is_active ? parseFloat(String(inv.amount ?? "0")) : 0;
+    let weeklyRank: number | undefined = rankFromFund(userFund) ?? undefined;
+    if (userFund > 125_000) {
+      const personalRng = mulberry32(Math.floor(Date.now() / 3_600_000) ^ userId);
+      weeklyRank = 1 + Math.floor(personalRng() * 5);
+    }
     const referralRank = referralRankRes.rows[0]?.rank ? Number(referralRankRes.rows[0].rank) : undefined;
 
     const daysSinceStart = inv?.started_at
