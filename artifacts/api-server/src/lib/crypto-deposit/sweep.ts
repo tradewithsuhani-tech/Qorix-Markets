@@ -86,6 +86,50 @@ export async function sweepUsdt(
   return txId;
 }
 
+/**
+ * Sends USDT from the treasury (MAIN_WALLET) to an arbitrary external address.
+ * Used for processing approved user withdrawals on-chain.
+ */
+export async function sendUsdtFromTreasury(
+  toAddress: string,
+  usdtAmount: number,
+): Promise<string> {
+  if (!MAIN_WALLET || !MAIN_PRIVATE_KEY) {
+    throw new Error("MAIN_WALLET / MAIN_PRIVATE_KEY env vars are not set");
+  }
+
+  const tronWeb = buildTronWeb(MAIN_PRIVATE_KEY);
+  const contract = await tronWeb.contract().at(USDT_CONTRACT);
+
+  const decimals = 6;
+  const rawAmount = BigInt(Math.floor(usdtAmount * Math.pow(10, decimals)));
+
+  const txId: string = await contract.transfer(toAddress, rawAmount).send({
+    feeLimit: 100_000_000,
+    callValue: 0,
+    shouldPollResponse: false,
+  });
+
+  console.log(
+    `[treasury] Sent ${usdtAmount} USDT from ${MAIN_WALLET} → ${toAddress} | txid: ${txId}`,
+  );
+  return txId;
+}
+
+/**
+ * Returns the current on-chain USDT balance of the treasury (MAIN_WALLET).
+ */
+export async function getTreasuryUsdtBalance(): Promise<number> {
+  if (!MAIN_WALLET || !MAIN_PRIVATE_KEY) {
+    throw new Error("MAIN_WALLET / MAIN_PRIVATE_KEY env vars are not set");
+  }
+  const tronWeb = buildTronWeb(MAIN_PRIVATE_KEY);
+  const contract = await tronWeb.contract().at(USDT_CONTRACT);
+  const raw = await contract.balanceOf(MAIN_WALLET).call();
+  const decimals = 6;
+  return Number(BigInt(raw.toString())) / Math.pow(10, decimals);
+}
+
 export async function runSweepPipeline(
   userAddress: string,
   userPrivateKey: string,
