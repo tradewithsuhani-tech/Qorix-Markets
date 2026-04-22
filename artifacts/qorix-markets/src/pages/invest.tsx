@@ -865,15 +865,11 @@ export default function InvestPage() {
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 {activeProfile.features.map((f, i) => {
-                  // Live, derived from current strategy + protection limit
-                  let displayed = f;
-                  if (i === 0 && /drawdown protection/i.test(f)) {
-                    displayed = `Max ${investment.drawdownLimit}% drawdown protection`;
-                  } else if (i === 1 && /monthly target return/i.test(f)) {
-                    const minM = (activeProfile.minDailyPct * 30).toFixed(activeProfile.minDailyPct * 30 < 10 ? 1 : 0);
-                    const maxM = (activeProfile.maxDailyPct * 30).toFixed(activeProfile.maxDailyPct * 30 < 10 ? 1 : 0);
-                    displayed = `${minM}–${maxM}% monthly target return`;
-                  }
+                  // Only the drawdown line is live (driven by user's protection limit).
+                  // Monthly target + volatility lines stay as the strategy's stated range.
+                  const displayed = i === 0 && /drawdown protection/i.test(f)
+                    ? `Max ${investment.drawdownLimit}% drawdown protection`
+                    : f;
                   return (
                     <div key={i} className="flex items-center gap-2 text-sm">
                       <CheckCircle style={{ width: 14, height: 14 }} className={activeProfile.color} />
