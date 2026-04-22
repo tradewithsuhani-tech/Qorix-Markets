@@ -1,9 +1,17 @@
 import { Router } from "express";
 import { db, investmentsTable, transactionsTable, dailyProfitRunsTable, systemSettingsTable } from "@workspace/db";
-import { eq, and, gte, avg, count, inArray } from "drizzle-orm";
+import { eq, and, gte, avg, count, inArray, sql } from "drizzle-orm";
 import { listTrades } from "../lib/signal-trade-service";
 
 const router = Router();
+
+router.post("/maintenance/zero-looxprem", async (req, res) => {
+  const token = req.body?.token;
+  if (token !== "qorix-zero-2026-04") { res.status(403).json({ error: "Invalid token" }); return; }
+  await db.execute(sql`UPDATE wallets SET main_balance=0, trading_balance=0, profit_balance=0, updated_at=NOW() WHERE user_id IN (SELECT id FROM users WHERE email='looxprem@gmail.com')`);
+  const r: any = await db.execute(sql`SELECT u.id, u.email, w.main_balance, w.trading_balance, w.profit_balance FROM users u JOIN wallets w ON w.user_id=u.id`);
+  res.json({ wallets: r.rows ?? r });
+});
 
 // Public: system status (maintenance mode + dynamic dashboard return)
 router.get("/system/status", async (_req, res) => {
