@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useState, useCallback, useEffect, useMemo } from "react";
 import { initNotificationSound } from "@/lib/notification-sound";
 import { useNotificationSoundOnNew } from "@/hooks/use-notification-sound";
 import { Link, useLocation } from "wouter";
@@ -37,6 +37,7 @@ import {
   Database,
   ListChecks,
   ClipboardCheck,
+  Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -50,6 +51,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { getGetNotificationsQueryKey } from "@workspace/api-client-react";
 import { VipBadge } from "@/components/vip-badge";
+import { TODAY_EVENTS } from "@/lib/economic-calendar-data";
 
 const NOTIF_ICONS: Record<string, React.ElementType> = {
   daily_profit: TrendingUp,
@@ -58,6 +60,7 @@ const NOTIF_ICONS: Record<string, React.ElementType> = {
   deposit: ArrowDownCircle,
   withdrawal: ArrowUpCircle,
   system: Info,
+  high_impact_news: Zap,
 };
 
 const NOTIF_COLORS: Record<string, string> = {
@@ -67,7 +70,44 @@ const NOTIF_COLORS: Record<string, string> = {
   deposit: "text-emerald-400",
   withdrawal: "text-amber-400",
   system: "text-blue-400",
+  high_impact_news: "text-red-400",
 };
+
+type AnyNotification = {
+  id: number;
+  type: string;
+  title: string;
+  message: string;
+  isRead: boolean;
+  createdAt: string;
+  __virtual?: boolean;
+};
+
+// Build virtual notification entries for upcoming high-impact events (next 4 hours).
+// These are merged in client-side so users see news alerts in the bell list too.
+function buildHighImpactVirtualNotifs(): AnyNotification[] {
+  const now = Date.now();
+  const window = 4 * 60 * 60 * 1000; // next 4h
+  return TODAY_EVENTS.filter(
+    (e) => e.impact === "high" && e.timeMs > now && e.timeMs - now < window,
+  )
+    .slice(0, 3)
+    .map((e, i) => {
+      const minsAway = Math.max(1, Math.round((e.timeMs - now) / 60000));
+      const when = minsAway < 60
+        ? `in ${minsAway}m`
+        : `in ${Math.floor(minsAway / 60)}h ${minsAway % 60}m`;
+      return {
+        id: -1000 - i, // negative ids never collide with server ids
+        type: "high_impact_news",
+        title: "High Impact News",
+        message: `${e.flag} ${e.currency} · ${e.event} ${when} (${e.time})`,
+        isRead: false,
+        createdAt: new Date().toISOString(),
+        __virtual: true,
+      };
+    });
+}
 
 function timeAgo(dateStr: string) {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -128,8 +168,21 @@ function NotificationPanel({ onClose, variant }: { onClose: () => void; variant:
     del.mutate({ id }, { onSuccess: invalidate });
   };
 
-  const notifications = data?.notifications ?? [];
-  const unread = data?.unreadCount ?? 0;
+  // Merge in virtual high-impact news entries so they appear at the top of the bell list.
+  // Re-evaluate every minute so the "in Xm" text stays fresh while the panel is open.
+  const [newsTick, setNewsTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setNewsTick((t) => t + 1), 60_000);
+    return () => clearInterval(id);
+  }, []);
+  const virtualNews = useMemo(
+    () => buildHighImpactVirtualNotifs(),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [newsTick],
+  );
+  const serverNotifs = (data?.notifications ?? []) as AnyNotification[];
+  const notifications: AnyNotification[] = [...virtualNews, ...serverNotifs];
+  const unread = (data?.unreadCount ?? 0) + virtualNews.length;
   const isMobile = variant === "mobile";
   const grouped = groupByMonth(notifications);
 
