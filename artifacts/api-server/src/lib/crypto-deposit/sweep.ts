@@ -18,7 +18,7 @@ const MAIN_PRIVATE_KEY = process.env["MAIN_PRIVATE_KEY"] ?? process.env["PLATFOR
 const USDT_CONTRACT = process.env["USDT_CONTRACT"] ?? "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t";
 const TRONGRID_API_KEY = process.env["TRONGRID_API_KEY"] ?? "";
 
-const TRX_GAS_AMOUNT = 30_000_000;
+const TRX_GAS_AMOUNT = 15_000_000;
 const SWEEP_DELAY_MS = 8_000;
 
 function buildTronWeb(privateKey: string): InstanceType<typeof TronWeb> {
