@@ -604,36 +604,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
     <div className="flex h-screen w-full bg-background overflow-hidden text-foreground selection:bg-primary/30">
       {/* Desktop Sidebar */}
       <aside className="hidden md:flex flex-col w-64 border-r border-white/5 glass-nav shrink-0">
-        <div className="px-5 py-4">
+        <div className="p-6 pb-4">
           <div className="flex items-center gap-3">
-            <div
-              className="relative w-12 h-12 rounded-2xl overflow-hidden flex items-center justify-center shrink-0"
-              style={{
-                background:
-                  "radial-gradient(circle at 30% 30%, rgba(59,130,246,0.22), rgba(139,92,246,0.10) 60%, transparent 75%)",
-                boxShadow:
-                  "0 0 18px rgba(0,150,255,0.35), 0 0 0 1px rgba(59,130,246,0.18) inset",
-              }}
-            >
-              <QorixLogo size={44} />
-            </div>
+            <QorixLogo size={36} className="shrink-0" />
             <div className="leading-none">
-              <div className="text-[20px] font-bold tracking-tight leading-none">
+              <div className="text-lg font-bold tracking-tight leading-none">
                 <span className="text-white">Qorix</span>
-                <span
-                  className="ml-0.5"
-                  style={{
-                    background:
-                      "linear-gradient(90deg,#60a5fa 0%,#38bdf8 50%,#818cf8 100%)",
-                    WebkitBackgroundClip: "text",
-                    WebkitTextFillColor: "transparent",
-                    backgroundClip: "text",
-                  }}
-                >
-                  Markets
-                </span>
+                <span className="text-blue-400">Markets</span>
               </div>
-              <div className="text-[10px] text-muted-foreground font-medium tracking-widest uppercase mt-1.5">
+              <div className="text-[10px] text-muted-foreground font-medium tracking-widest uppercase mt-1">
                 Pro Terminal
               </div>
             </div>
@@ -704,32 +683,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
             background: "#050816",
           }}
         >
-          <div className="flex items-center gap-2.5">
-            <div
-              className="relative w-10 h-10 rounded-xl overflow-hidden flex items-center justify-center shrink-0"
-              style={{
-                background:
-                  "radial-gradient(circle at 30% 30%, rgba(59,130,246,0.22), rgba(139,92,246,0.10) 60%, transparent 75%)",
-                boxShadow:
-                  "0 0 12px rgba(0,150,255,0.35), 0 0 0 1px rgba(59,130,246,0.18) inset",
-              }}
-            >
-              <QorixLogo size={36} />
-            </div>
-            <span className="text-[17px] font-bold tracking-tight leading-none">
-              <span className="text-white">Qorix</span>
-              <span
-                className="ml-0.5"
-                style={{
-                  background:
-                    "linear-gradient(90deg,#60a5fa 0%,#38bdf8 50%,#818cf8 100%)",
-                  WebkitBackgroundClip: "text",
-                  WebkitTextFillColor: "transparent",
-                  backgroundClip: "text",
-                }}
-              >
-                Markets
-              </span>
+          <div className="flex items-center gap-2">
+            <QorixLogo size={28} className="shrink-0" />
+            <span className="text-sm font-bold text-white">
+              Qorix<span className="text-blue-400">Markets</span>
             </span>
             {!isAdminArea && <VipBadge tier={vipTier} size="xs" />}
           </div>
