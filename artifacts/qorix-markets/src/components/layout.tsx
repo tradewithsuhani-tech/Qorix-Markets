@@ -275,7 +275,7 @@ function NotificationPanel({ onClose, variant }: { onClose: () => void; variant:
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: -8, scale: 0.97 }}
       transition={{ duration: 0.18, ease: "easeOut" }}
-      className="z-50 rounded-2xl border border-white/10 bg-[#0d1117] shadow-2xl shadow-black/50 overflow-hidden absolute right-0 bottom-full mb-2 w-[20rem] max-w-[calc(100vw-1.5rem)]"
+      className="z-50 rounded-2xl border border-white/10 bg-[#0d1117] shadow-2xl shadow-black/50 overflow-hidden absolute left-0 bottom-full mb-2 w-[20rem] max-w-[calc(100vw-1.5rem)]"
       style={{ backdropFilter: "blur(20px)" }}
     >
       <div className="flex items-center justify-between px-4 py-3 border-b border-white/8">
