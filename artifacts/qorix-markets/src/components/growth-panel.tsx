@@ -89,7 +89,7 @@ function RankMedal({ rank }: { rank: number }) {
 // ---------------------------------------------------------------------------
 const TABS = [
   { id: "weekly", label: "Top Investors", icon: TrendingUp },
-  { id: "rewards", label: "Rewards", icon: Star },
+  { id: "rewards", label: "Promotions", icon: Star },
 ];
 
 // ---------------------------------------------------------------------------
@@ -256,6 +256,23 @@ function RewardsTab({ userId }: { userId: number }) {
 
   return (
     <div className="space-y-3">
+      {/* Intro / explainer */}
+      <div className="px-3.5 py-3 rounded-xl bg-gradient-to-br from-blue-500/[0.08] to-violet-500/[0.05] border border-blue-500/15">
+        <div className="flex items-start gap-2.5">
+          <div className="w-7 h-7 rounded-lg bg-blue-500/15 border border-blue-500/25 flex items-center justify-center shrink-0 mt-0.5">
+            <Star className="w-3.5 h-3.5 text-blue-400" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-xs font-semibold text-white mb-1">How Promotions work</div>
+            <p className="text-[11px] leading-relaxed text-muted-foreground">
+              Trade, invite friends, and stay active to earn{" "}
+              <span className="text-blue-300 font-medium">XP points</span> and unlock{" "}
+              <span className="text-blue-300 font-medium">badges</span>. Each badge is a milestone — collect them all to climb the weekly leaderboard and unlock bonus rewards.
+            </p>
+          </div>
+        </div>
+      </div>
+
       {/* Points card */}
       <div className="px-4 py-3 rounded-xl bg-gradient-to-r from-blue-500/10 to-violet-500/10 border border-blue-500/20">
         <div className="flex items-center justify-between">
@@ -375,7 +392,7 @@ export function GrowthPanel() {
             </div>
             <div>
               <h2 className="text-sm font-bold text-white">Growth & Rankings</h2>
-              <p className="text-[10px] text-muted-foreground">Leaderboards · Rewards</p>
+              <p className="text-[10px] text-muted-foreground">Leaderboards · Promotions</p>
             </div>
           </div>
           <span className="text-[10px] px-2 py-0.5 rounded-full border border-yellow-500/20 text-yellow-400 bg-yellow-500/8">
