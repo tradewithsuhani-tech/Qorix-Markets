@@ -337,8 +337,8 @@ export default function TradeActivityPage() {
             <h1 className="text-2xl font-bold text-white">Trade Activity</h1>
             <p className="text-sm text-white/50">
               {usingPlatformFallback
-                ? "Showing recent platform signal trades — deposit to start participating"
-                : "All your executed signal trades — live MT-style terminal view"}
+                ? "Live signal trades from Qorix Markets — fund your account to start trading"
+                : "Your live trade history — Qorix-grade execution view"}
             </p>
           </div>
           {!usingPlatformFallback && (
@@ -364,8 +364,16 @@ export default function TradeActivityPage() {
         </div>
 
         {usingPlatformFallback && (
-          <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 px-4 py-3 text-xs text-blue-200/90">
-            You have no personal trades yet. Listed below are the platform's recent signal trades for reference. Your own executions will appear here once you fund your trading wallet.
+          <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 px-4 py-3 flex items-start gap-3">
+            <div className="w-8 h-8 rounded-lg bg-blue-500/15 border border-blue-500/30 flex items-center justify-center shrink-0 mt-0.5">
+              <Activity className="w-4 h-4 text-blue-400" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-semibold text-white mb-0.5">Demo view — platform signals</div>
+              <p className="text-xs text-blue-200/80 leading-relaxed">
+                You don't have any trades yet. The list below shows live signal trades being executed on Qorix Markets — fund your trading balance to start placing your own trades.
+              </p>
+            </div>
           </div>
         )}
 
