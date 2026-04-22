@@ -604,15 +604,24 @@ export function Layout({ children }: { children: React.ReactNode }) {
     <div className="flex h-screen w-full bg-background overflow-hidden text-foreground selection:bg-primary/30">
       {/* Desktop Sidebar */}
       <aside className="hidden md:flex flex-col w-64 border-r border-white/5 glass-nav shrink-0">
-        <div className="p-6 pb-4">
+        <div className="p-5 pb-4">
           <div className="flex items-center gap-3">
             <QorixLogo size={44} className="shrink-0" />
             <div className="leading-none">
-              <div className="text-lg font-bold tracking-tight leading-none">
+              <div className="text-[22px] font-extrabold tracking-tight leading-none">
                 <span className="text-white">Qorix</span>
-                <span className="text-blue-400">Markets</span>
+                <span
+                  style={{
+                    background: "linear-gradient(90deg,#38bdf8,#818cf8)",
+                    WebkitBackgroundClip: "text",
+                    WebkitTextFillColor: "transparent",
+                    backgroundClip: "text",
+                  }}
+                >
+                  Markets
+                </span>
               </div>
-              <div className="text-[10px] text-muted-foreground font-medium tracking-widest uppercase mt-1">
+              <div className="text-[10px] text-slate-400 font-semibold tracking-[0.28em] uppercase mt-1.5">
                 Pro Terminal
               </div>
             </div>
