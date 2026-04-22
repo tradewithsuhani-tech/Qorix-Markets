@@ -134,6 +134,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const [referralCode, setReferralCode] = useState("");
+  const [referralLocked, setReferralLocked] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showOtpStep, setShowOtpStep] = useState(false);
   const [pendingVerifyEmail, setPendingVerifyEmail] = useState("");
