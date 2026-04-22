@@ -864,19 +864,26 @@ export default function InvestPage() {
                 <span className="text-sm font-medium text-muted-foreground">Active Strategy Details</span>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                {activeProfile.features.map((f, i) => {
-                  // Only the drawdown line is live (driven by user's protection limit).
-                  // Monthly target + volatility lines stay as the strategy's stated range.
-                  const displayed = i === 0 && /drawdown protection/i.test(f)
-                    ? `Max ${investment.drawdownLimit}% drawdown protection`
-                    : f;
-                  return (
-                    <div key={i} className="flex items-center gap-2 text-sm">
-                      <CheckCircle style={{ width: 14, height: 14 }} className={activeProfile.color} />
-                      <span className="text-muted-foreground">{displayed}</span>
-                    </div>
-                  );
-                })}
+                {(() => {
+                  // Map drawdown limit -> matching strategy tier so the whole
+                  // panel stays consistent when user changes protection limit.
+                  const lim = investment.drawdownLimit;
+                  const tierProfile =
+                    lim <= 3 ? RISK_PROFILES[0]! :
+                    lim <= 5 ? RISK_PROFILES[1]! :
+                    RISK_PROFILES[2]!;
+                  return tierProfile.features.map((f, i) => {
+                    const displayed = i === 0 && /drawdown protection/i.test(f)
+                      ? `Max ${lim}% drawdown protection`
+                      : f;
+                    return (
+                      <div key={i} className="flex items-center gap-2 text-sm">
+                        <CheckCircle style={{ width: 14, height: 14 }} className={tierProfile.color} />
+                        <span className="text-muted-foreground">{displayed}</span>
+                      </div>
+                    );
+                  });
+                })()}
               </div>
             </div>
 
