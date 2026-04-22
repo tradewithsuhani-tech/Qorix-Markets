@@ -159,6 +159,43 @@ export default function LoginPage() {
     return () => { if (autoHideTimer.current) clearTimeout(autoHideTimer.current); };
   }, []);
 
+  // Capture token from Google OAuth callback (?token=...) and bootstrap session
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get("token");
+    const errCode = params.get("error");
+    if (errCode) {
+      const map: Record<string, string> = {
+        google_no_code: "Google did not return a code",
+        google_token_failed: "Token exchange with Google failed",
+        google_no_token: "No access token from Google",
+        google_profile_failed: "Could not fetch Google profile",
+        google_no_email: "Google account has no email",
+        google_create_failed: "Account creation failed",
+        google_callback_error: "Sign-in failed unexpectedly",
+      };
+      toast({ title: "Google sign-in failed", description: map[errCode] || errCode, variant: "destructive" });
+      window.history.replaceState({}, "", window.location.pathname);
+      return;
+    }
+    if (token) {
+      // Strip token from URL and fetch profile
+      window.history.replaceState({}, "", window.location.pathname);
+      fetch(`${import.meta.env.BASE_URL}api/auth/me`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+        .then(async (r) => {
+          if (!r.ok) throw new Error("Failed to load profile");
+          const data = await r.json();
+          setAuthData(token, data.user || data);
+          setLocation(data.user?.isAdmin ? "/admin" : "/dashboard");
+        })
+        .catch((e) => {
+          toast({ title: "Sign-in failed", description: e.message || "Could not load profile", variant: "destructive" });
+        });
+    }
+  }, []);
+
   const loginMutation = useLogin({
     mutation: {
       onSuccess: (data) => {
@@ -423,7 +460,7 @@ export default function LoginPage() {
             </div>
             <button
               type="button"
-              onClick={() => { window.location.href = "/auth/google"; }}
+              onClick={() => { window.location.href = `${import.meta.env.BASE_URL}api/auth/google`; }}
               className="w-full inline-flex items-center justify-center gap-2.5 h-10 rounded-lg bg-white/[0.04] hover:bg-white/[0.07] text-white font-medium text-sm border border-white/10 hover:border-white/20 active:scale-[0.99] transition-all"
             >
               <svg width="16" height="16" viewBox="0 0 48 48" aria-hidden="true">

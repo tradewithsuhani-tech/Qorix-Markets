@@ -1,9 +1,29 @@
 import { Router } from "express";
-import { db, investmentsTable, transactionsTable, dailyProfitRunsTable } from "@workspace/db";
-import { eq, and, gte, avg, count } from "drizzle-orm";
+import { db, investmentsTable, transactionsTable, dailyProfitRunsTable, systemSettingsTable } from "@workspace/db";
+import { eq, and, gte, avg, count, inArray } from "drizzle-orm";
 import { listTrades } from "../lib/signal-trade-service";
 
 const router = Router();
+
+// Public: system status (maintenance mode + dynamic dashboard return)
+router.get("/system/status", async (_req, res) => {
+  const rows = await db
+    .select()
+    .from(systemSettingsTable)
+    .where(inArray(systemSettingsTable.key, [
+      "maintenance_mode",
+      "maintenance_message",
+      "dashboard_return_label",
+    ]));
+  const map = Object.fromEntries(rows.map((r) => [r.key, r.value]));
+  res.json({
+    maintenance: map["maintenance_mode"] === "true",
+    maintenanceMessage:
+      map["maintenance_message"] ||
+      "We are upgrading our platform. Please check back shortly.",
+    dashboardReturnLabel: map["dashboard_return_label"] || "",
+  });
+});
 
 // Public: currently running signal trades — pair + direction only (anti-copy)
 router.get("/signal-trades/running", async (_req, res) => {

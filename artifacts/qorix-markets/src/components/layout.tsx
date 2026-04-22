@@ -513,7 +513,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/trade-activity", label: "Trade Activity", icon: Activity },
     { href: "/transactions", label: "History", icon: History },
     { href: "/referral", label: "Referrals", icon: Users },
-    { href: "/rewards", label: "Rewards", icon: Trophy },
+    { href: "/rewards", label: "Promotions", icon: Trophy },
     { href: "/tasks", label: "Tasks", icon: ListChecks },
     { href: "/settings", label: "Settings", icon: Settings },
   ];

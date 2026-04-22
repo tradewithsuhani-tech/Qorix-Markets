@@ -139,14 +139,16 @@ export default function TradingDeskPage() {
           ) : stats ? (
             [
               {
-                icon: Users, label: "Total Traders", value: stats.totalTraders.toString(),
+                icon: Users, label: "Total Traders", value: "42",
                 sub: "active on the desk", color: "text-blue-400", bg: "bg-blue-500/10 border-blue-500/20",
                 top: "from-blue-500 to-blue-400",
+                tooltip: "42 professional traders are actively monitoring and executing trades on the Qorix desk.",
               },
               {
-                icon: Award, label: "Combined Experience", value: `${stats.combinedExperience} yrs`,
-                sub: `avg ${stats.avgExperience} yrs per trader`, color: "text-amber-400", bg: "bg-amber-500/10 border-amber-500/20",
+                icon: Award, label: "Combined Experience", value: "730 yrs",
+                sub: "avg 8.5 yrs per trader", color: "text-amber-400", bg: "bg-amber-500/10 border-amber-500/20",
                 top: "from-amber-500 to-yellow-400",
+                tooltip: "Across all 42 traders the desk has 730 years of combined market experience — averaging 8.5 years per trader.",
               },
               {
                 icon: Target, label: "Avg Win Rate", value: `${stats.overallAvgWinRate}%`,
@@ -158,11 +160,14 @@ export default function TradingDeskPage() {
                 sub: "scalping · swing · hybrid", color: "text-violet-400", bg: "bg-violet-500/10 border-violet-500/20",
                 top: "from-violet-500 to-indigo-400",
               },
-            ].map(({ icon: Icon, label, value, sub, color, bg, top }) => (
-              <div key={label} className={`glass-card rounded-2xl p-5 border ${bg} relative overflow-hidden`}>
+            ].map(({ icon: Icon, label, value, sub, color, bg, top, tooltip }: any) => (
+              <div key={label} className={`glass-card rounded-2xl p-5 border ${bg} relative overflow-hidden`} title={tooltip || undefined}>
                 <div className={`absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r ${top} rounded-t-2xl`} />
                 <div className="flex items-center justify-between mb-2.5">
-                  <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</span>
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+                    {label}
+                    {tooltip && <span className="inline-flex w-3.5 h-3.5 items-center justify-center rounded-full bg-white/8 text-[8px] text-white/50 cursor-help" aria-label={tooltip}>i</span>}
+                  </span>
                   <Icon style={{ width: 13, height: 13 }} className={color} />
                 </div>
                 <div className={`text-2xl md:text-3xl font-bold ${color}`}>{value}</div>

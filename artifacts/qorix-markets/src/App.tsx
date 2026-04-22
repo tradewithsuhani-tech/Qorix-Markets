@@ -12,7 +12,7 @@ import AdminCommunicationPage from "@/pages/admin-communication";
 import AdminContentPage from "@/pages/admin-content";
 import AdminTestPage from "@/pages/admin-test";
 import { useLocation } from "wouter";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 import Landing from "@/pages/landing";
 import LoginPage from "@/pages/login";
@@ -33,6 +33,8 @@ import AdminTaskProofsPage from "@/pages/admin-task-proofs";
 import AdminSignalTradesPage from "@/pages/admin-signal-trades";
 import SignalHistoryPage from "@/pages/signal-history";
 import SettingsPage from "@/pages/settings";
+import KycPage from "@/pages/kyc";
+import AdminKycPage from "@/pages/admin-kyc";
 import {
   AdminAnalyticsPage,
   AdminLogsPage,
@@ -171,6 +173,8 @@ function Router() {
       <Route path="/admin/content"><ProtectedRoute component={AdminContentPage} adminOnly={true} /></Route>
       <Route path="/admin/test"><ProtectedRoute component={AdminTestPage} adminOnly={true} /></Route>
       <Route path="/settings"><ProtectedRoute component={SettingsPage} /></Route>
+      <Route path="/kyc"><ProtectedRoute component={KycPage} /></Route>
+      <Route path="/admin/kyc"><ProtectedRoute component={AdminKycPage} adminOnly={true} /></Route>
       <Route path="/verify/:hashId" component={VerifyPage} />
       <Route path="/verify" component={VerifyPage} />
       <Route path="/market-insights"><ProtectedRoute component={MarketInsightsPage} /></Route>
@@ -183,19 +187,60 @@ function Router() {
   );
 }
 
+function MaintenanceGate({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
+  const [location] = useLocation();
+  const [state, setState] = useState<{ on: boolean; msg: string }>({ on: false, msg: "" });
+
+  useEffect(() => {
+    let cancelled = false;
+    const fetchStatus = async () => {
+      try {
+        const r = await fetch(`${import.meta.env.BASE_URL}api/system/status`);
+        if (!r.ok) return;
+        const d = await r.json();
+        if (!cancelled) setState({ on: !!d.maintenance, msg: d.maintenanceMessage || "" });
+      } catch { /* ignore */ }
+    };
+    fetchStatus();
+    const id = setInterval(fetchStatus, 60_000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, []);
+
+  // Admins always bypass; admin-login route always allowed (so admins can sign in)
+  const allowedPath = location === "/admin-login";
+  if (state.on && !user?.isAdmin && !allowedPath) {
+    return (
+      <div className="fixed inset-0 z-[9999] bg-black/95 backdrop-blur-md flex items-center justify-center p-6">
+        <div className="max-w-md w-full text-center space-y-6 bg-gradient-to-b from-white/[0.06] to-white/[0.02] border border-white/10 rounded-3xl p-8 shadow-2xl">
+          <div className="mx-auto w-16 h-16 rounded-2xl bg-amber-500/15 border border-amber-400/30 flex items-center justify-center">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold text-white">System Under Maintenance</h1>
+            <p className="mt-3 text-sm text-white/70 leading-relaxed">{state.msg}</p>
+          </div>
+          <div className="text-xs text-white/40">Qorix Markets · Status will refresh automatically</div>
+        </div>
+      </div>
+    );
+  }
+  return <>{children}</>;
+}
+
 function AppContent() {
   const { showSplash, onSplashDone } = useSplash();
   const [location] = useLocation();
   const isAdminArea = location.startsWith("/admin");
 
   return (
-    <>
+    <MaintenanceGate>
       {showSplash && <SplashScreen onDone={onSplashDone} />}
       <Router />
       {!isAdminArea && <HighImpactNotificationBanner />}
       {!isAdminArea && <QorixAssistant />}
       {!isAdminArea && <PWAInstallPrompt />}
-    </>
+    </MaintenanceGate>
   );
 }
 
