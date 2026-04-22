@@ -141,6 +141,8 @@ function Router() {
     <Switch>
       <Route path="/" component={LandingOrRedirect} />
       <Route path="/login"><PublicOnlyRoute component={LoginPage} /></Route>
+      <Route path="/register"><PublicOnlyRoute component={LoginPage} /></Route>
+      <Route path="/signup"><PublicOnlyRoute component={LoginPage} /></Route>
       <Route path="/forgot-password"><PublicOnlyRoute component={ForgotPasswordPage} /></Route>
       <Route path="/admin-login"><PublicOnlyRoute component={AdminLoginPage} adminRedirect={true} /></Route>
       <Route path="/dashboard"><ProtectedRoute component={Dashboard} /></Route>
