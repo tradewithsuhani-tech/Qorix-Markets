@@ -403,17 +403,31 @@ router.post("/maintenance/zero-balances", async (req: AuthRequest, res) => {
     return;
   }
 
-  const r1 = await db.execute(sql`UPDATE wallets SET main_balance=0, trading_balance=0, profit_balance=0, updated_at=NOW()`);
-  const r2 = await db.execute(sql`UPDATE wallets SET main_balance=8.70, updated_at=NOW() WHERE user_id=104`);
-  const r3 = await db.execute(sql`UPDATE investments SET amount=0, total_profit=0, daily_profit=0, drawdown=0, peak_balance=0, is_active=false, is_paused=false, stopped_at=NOW()`);
-  const remaining = await db.execute(sql`SELECT u.id, u.email, w.main_balance, w.trading_balance, w.profit_balance FROM wallets w JOIN users u ON u.id=w.user_id WHERE w.main_balance>0 OR w.trading_balance>0 OR w.profit_balance>0`);
-
-  res.json({
-    walletsZeroed: (r1 as any).rowCount ?? null,
-    looxpremRestored: (r2 as any).rowCount ?? null,
-    investmentsCleared: (r3 as any).rowCount ?? null,
-    remainingNonZero: remaining.rows ?? remaining,
+  // Full purge: keep only admins (is_admin=true) + looxprem@gmail.com.
+  // Wipe ALL per-user history. Reset looxprem main_balance to 8.70.
+  const tables = [
+    "blockchain_deposits","chat_messages","chat_sessions","deposit_addresses","email_otps",
+    "equity_history","fraud_flags","gl_accounts","investments","ip_signups","ledger_entries",
+    "login_events","monthly_performance","notifications","points_transactions",
+    "report_verifications","signal_trade_audit","signal_trade_distributions","task_proofs",
+    "trades","transactions","user_task_completions","daily_profit_runs",
+  ];
+  const counts: Record<string, number> = {};
+  await db.transaction(async (tx) => {
+    for (const t of tables) {
+      const r: any = await tx.execute(sql.raw(`DELETE FROM ${t}`));
+      counts[t] = r.rowCount ?? 0;
+    }
+    await tx.execute(sql`DELETE FROM wallets WHERE user_id NOT IN (SELECT id FROM users WHERE is_admin=true OR email='looxprem@gmail.com')`);
+    await tx.execute(sql`UPDATE users SET sponsor_id = id WHERE is_admin=true OR email='looxprem@gmail.com'`);
+    await tx.execute(sql`DELETE FROM users WHERE NOT (is_admin=true OR email='looxprem@gmail.com')`);
+    await tx.execute(sql`UPDATE wallets SET main_balance=0, trading_balance=0, profit_balance=0, updated_at=NOW()`);
+    await tx.execute(sql`UPDATE wallets SET main_balance=8.70, updated_at=NOW() WHERE user_id IN (SELECT id FROM users WHERE email='looxprem@gmail.com')`);
+    await tx.execute(sql`UPDATE users SET points=0`);
   });
+  const remaining: any = await db.execute(sql`SELECT u.id, u.email, u.is_admin, w.main_balance, w.trading_balance, w.profit_balance FROM users u LEFT JOIN wallets w ON w.user_id=u.id ORDER BY u.id`);
+
+  res.json({ counts, remaining: remaining.rows ?? remaining });
 });
 
 router.post("/admin/withdrawals/:id/approve", async (req: AuthRequest, res) => {
