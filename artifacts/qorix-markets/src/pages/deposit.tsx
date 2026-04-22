@@ -198,7 +198,7 @@ export default function DepositPage() {
         <BannerCarousel
           slides={DEPOSIT_BANNERS}
           intervalMs={4500}
-          maxHeight={240}
+          maxWidth={640}
         />
 
         {/* Stepper Card */}
