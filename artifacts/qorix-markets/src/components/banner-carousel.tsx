@@ -9,10 +9,13 @@ export interface BannerSlide {
 interface BannerCarouselProps {
   slides: BannerSlide[];
   intervalMs?: number;
-  maxHeight?: number;
+  /** Source image aspect ratio (width / height). Defaults to 16/9. */
+  aspectRatio?: number;
+  /** Optional max width cap (px). */
+  maxWidth?: number;
 }
 
-export function BannerCarousel({ slides, intervalMs = 4500, maxHeight = 320 }: BannerCarouselProps) {
+export function BannerCarousel({ slides, intervalMs = 4500, aspectRatio = 1672 / 941, maxWidth }: BannerCarouselProps) {
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);
   const touchStartX = useRef<number | null>(null);
@@ -51,7 +54,8 @@ export function BannerCarousel({ slides, intervalMs = 4500, maxHeight = 320 }: B
 
   return (
     <div
-      className="relative w-full select-none"
+      className="relative w-full mx-auto select-none"
+      style={{ maxWidth: maxWidth ? `${maxWidth}px` : undefined }}
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
       onTouchStart={onTouchStart}
@@ -59,15 +63,14 @@ export function BannerCarousel({ slides, intervalMs = 4500, maxHeight = 320 }: B
       onTouchEnd={onTouchEnd}
     >
       <div
-        className="relative w-full overflow-hidden rounded-2xl"
+        className="relative w-full overflow-hidden rounded-2xl bg-black"
         style={{
-          maxHeight: `${maxHeight}px`,
-          aspectRatio: "16 / 9",
+          aspectRatio: `${aspectRatio}`,
           boxShadow: "0 12px 40px rgba(56,189,248,0.12), 0 0 0 1px rgba(56,189,248,0.16)",
         }}
       >
         <div
-          className="flex h-full transition-transform duration-700 ease-out"
+          className="absolute inset-0 flex transition-transform duration-700 ease-out"
           style={{ transform: `translateX(-${index * 100}%)`, willChange: "transform" }}
         >
           {slides.map((s, i) => (
@@ -83,7 +86,7 @@ export function BannerCarousel({ slides, intervalMs = 4500, maxHeight = 320 }: B
                 src={s.src}
                 alt={s.alt}
                 className="w-full h-full block"
-                style={{ objectFit: "cover", objectPosition: "center" }}
+                style={{ objectFit: "contain", objectPosition: "center", background: "#000" }}
                 loading={i === 0 ? "eager" : "lazy"}
                 decoding="async"
                 draggable={false}

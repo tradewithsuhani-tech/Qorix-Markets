@@ -665,7 +665,7 @@ export default function Landing() {
           <BannerCarousel
             slides={LANDING_BANNERS.map((b) => ({ ...b, onClick: () => setLocation("/login") }))}
             intervalMs={4500}
-            maxHeight={420}
+            maxWidth={900}
           />
         </div>
       </section>
