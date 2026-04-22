@@ -113,7 +113,7 @@ export default function ForgotPasswordPage() {
                     placeholder="Email Address"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="field-input pl-10"
+                    className="field-input field-input-icon-left"
                     required
                   />
                 </div>
@@ -183,7 +183,7 @@ export default function ForgotPasswordPage() {
                     placeholder="New password"
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
-                    className="field-input pl-10 pr-10"
+                    className="field-input field-input-icon-both"
                     required
                     minLength={8}
                   />
