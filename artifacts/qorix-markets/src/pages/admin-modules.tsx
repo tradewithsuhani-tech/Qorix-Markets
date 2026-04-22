@@ -557,11 +557,17 @@ export function AdminTradingPage() {
 export function AdminWalletPage() {
   const [accounts, setAccounts] = useState<any[]>([]);
   const [reconcile, setReconcile] = useState<any>(null);
+  const [stats, setStats] = useState<any>(null);
 
   async function load() {
-    const [acc, rec] = await Promise.all([adminFetch("/admin/ledger/accounts"), adminFetch("/admin/ledger/reconcile")]);
+    const [acc, rec, st] = await Promise.all([
+      adminFetch("/admin/ledger/accounts"),
+      adminFetch("/admin/ledger/reconcile"),
+      adminFetch("/admin/stats"),
+    ]);
     setAccounts(acc);
     setReconcile(rec);
+    setStats(st);
   }
 
   useEffect(() => { load(); }, []);
@@ -571,6 +577,45 @@ export function AdminWalletPage() {
     <Layout>
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
         <ModuleHeader icon={Wallet} title="Wallet Control" subtitle="Track hot wallet, internal balances, system accounts and ledger reconciliation." />
+
+        {/* System Fund Overview */}
+        <div className="glass-card p-6 rounded-2xl border border-primary/30 bg-primary/5">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-bold">System Fund Overview</h2>
+            <div className="text-right">
+              <div className="text-xs text-muted-foreground">Total System Fund</div>
+              <div className="text-3xl font-bold text-primary">${(stats?.totalUserFunds || 0).toFixed(2)}</div>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+            <div className="p-4 rounded-xl bg-black/30 border border-white/10">
+              <div className="text-xs text-muted-foreground">Total Deposit Fund</div>
+              <div className="text-xl font-bold">${(stats?.totalDepositsEver || 0).toFixed(2)}</div>
+              <div className="text-[11px] text-muted-foreground mt-1">Available ${(stats?.totalMainWallet || 0).toFixed(2)}</div>
+            </div>
+            <div className="p-4 rounded-xl bg-black/30 border border-white/10">
+              <div className="text-xs text-muted-foreground">Trading Fund</div>
+              <div className="text-xl font-bold text-blue-400">${(stats?.totalTradingWallet || 0).toFixed(2)}</div>
+              <div className="text-[11px] text-muted-foreground mt-1">Active capital</div>
+            </div>
+            <div className="p-4 rounded-xl bg-black/30 border border-white/10">
+              <div className="text-xs text-muted-foreground">Profit Fund</div>
+              <div className="text-xl font-bold text-emerald-400">${(stats?.totalProfitWallet || 0).toFixed(2)}</div>
+              <div className="text-[11px] text-muted-foreground mt-1">Withdrawable</div>
+            </div>
+            <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30">
+              <div className="text-xs text-muted-foreground">Pending Withdrawal</div>
+              <div className="text-xl font-bold text-amber-400">${(stats?.pendingWithdrawalAmount || 0).toFixed(2)}</div>
+              <div className="text-[11px] text-muted-foreground mt-1">{stats?.pendingWithdrawals || 0} requests</div>
+            </div>
+            <div className="p-4 rounded-xl bg-black/30 border border-white/10">
+              <div className="text-xs text-muted-foreground">Total Withdrawn (lifetime)</div>
+              <div className="text-xl font-bold">${(stats?.totalWithdrawalsEver || 0).toFixed(2)}</div>
+              <div className="text-[11px] text-muted-foreground mt-1">All-time payouts</div>
+            </div>
+          </div>
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="glass-card p-5 rounded-2xl"><div className="text-xs text-muted-foreground">System accounts</div><div className="text-2xl font-bold">{systemAccounts.length}</div></div>
           <div className="glass-card p-5 rounded-2xl"><div className="text-xs text-muted-foreground">Total accounts</div><div className="text-2xl font-bold">{accounts.length}</div></div>
