@@ -131,7 +131,7 @@ channel = "stable-25_05"
 
 [userenv.shared]
 JWT_SECRET = "a4415ee4d9c184b7fdfd60d53a9e11248354917cc36818b61c7d3d8315dec1f242e610daf207f790dc34f346b65f2015"
-PLATFORM_TRON_ADDRESS = "TU8TXrttDwGdHqkpqkobxdTTTJrrpBXGN1"
+PLATFORM_TRON_ADDRESS = "TWjfgDHy2VWqFAbFDD94vcyTR21yG74nNK"
 SMTP_HOST = "smtp.gmail.com"
 SMTP_PORT = "587"
 SMTP_USER = "no-reply@qorixmarkets.com"
