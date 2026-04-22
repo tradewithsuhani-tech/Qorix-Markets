@@ -1,16 +1,18 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { QorixLogo } from "@/components/qorix-logo";
 
 export function SplashScreen({ onDone }: { onDone: () => void }) {
   const [phase, setPhase] = useState<"in" | "hold" | "out">("in");
+  const onDoneRef = useRef(onDone);
+  onDoneRef.current = onDone;
 
   useEffect(() => {
     const t1 = setTimeout(() => setPhase("hold"), 600);
     const t2 = setTimeout(() => setPhase("out"), 1900);
-    const t3 = setTimeout(onDone, 2400);
+    const t3 = setTimeout(() => onDoneRef.current(), 2400);
     return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
-  }, [onDone]);
+  }, []);
 
   return (
     <AnimatePresence>

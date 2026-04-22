@@ -18,27 +18,11 @@ author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "workflow.run"
-args = "Start application"
-
-[[workflows.workflow.tasks]]
-task = "workflow.run"
 args = "Backend API"
 
 [[workflows.workflow.tasks]]
 task = "workflow.run"
 args = "OTP Server"
-
-[[workflows.workflow]]
-name = "Start application"
-author = "agent"
-
-[workflows.workflow.metadata]
-outputType = "webview"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "PORT=21638 BASE_PATH=/ pnpm --filter @workspace/qorix-markets run dev"
-waitForPort = 21638
 
 [[workflows.workflow]]
 name = "Backend API"
