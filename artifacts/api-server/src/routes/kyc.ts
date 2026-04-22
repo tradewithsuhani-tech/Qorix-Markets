@@ -84,12 +84,7 @@ router.post("/kyc/personal", authMiddleware, async (req: AuthRequest, res) => {
       kycPersonalSubmittedAt: new Date(),
     })
     .where(eq(usersTable.id, req.userId!));
-  await createNotification({
-    userId: req.userId!,
-    type: "system",
-    title: "Personal details verified",
-    message: "Lv.1 verification complete.",
-  });
+  await createNotification(req.userId!, "system", "Personal details verified", "Lv.1 verification complete.");
   res.json({ success: true, status: "approved" });
 });
 
@@ -136,12 +131,7 @@ router.post("/kyc/submit", authMiddleware, async (req: AuthRequest, res) => {
       kycRejectionReason: null,
     })
     .where(eq(usersTable.id, req.userId!));
-  await createNotification({
-    userId: req.userId!,
-    type: "system",
-    title: "Identity submitted",
-    message: "Your ID is under review. We'll notify you within 24 hours.",
-  });
+  await createNotification(req.userId!, "system", "Identity submitted", "Your ID is under review. We'll notify you within 24 hours.");
   res.json({ success: true, status: "pending" });
 });
 
@@ -188,12 +178,7 @@ router.post("/kyc/address", authMiddleware, async (req: AuthRequest, res) => {
       kycAddressRejectionReason: null,
     })
     .where(eq(usersTable.id, req.userId!));
-  await createNotification({
-    userId: req.userId!,
-    type: "system",
-    title: "Address submitted",
-    message: "Your address proof is under review.",
-  });
+  await createNotification(req.userId!, "system", "Address submitted", "Your address proof is under review.");
   res.json({ success: true, status: "pending" });
 });
 
@@ -308,17 +293,16 @@ router.post("/admin/kyc/review", authMiddleware, async (req: AuthRequest, res) =
         kycRejectionReason: action === "reject" ? (reason ?? "Document not acceptable") : null,
       };
   await db.update(usersTable).set(set).where(eq(usersTable.id, userId));
-  await createNotification({
+  await createNotification(
     userId,
-    type: "system",
-    title: action === "approve"
+    "system",
+    action === "approve"
       ? (isAddress ? "Address verified" : "KYC approved")
       : (isAddress ? "Address rejected" : "KYC rejected"),
-    message:
-      action === "approve"
-        ? (isAddress ? "Lv.3 verification complete." : "Identity verified — withdrawals enabled.")
-        : `${isAddress ? "Address" : "KYC"} rejected. ${reason ?? "Please re-submit."}`,
-  });
+    action === "approve"
+      ? (isAddress ? "Lv.3 verification complete." : "Identity verified — withdrawals enabled.")
+      : `${isAddress ? "Address" : "KYC"} rejected. ${reason ?? "Please re-submit."}`,
+  );
   res.json({ success: true, status: newStatus });
 });
 
