@@ -605,7 +605,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       {/* Desktop Sidebar */}
       <aside className="hidden md:flex flex-col w-64 border-r border-white/5 glass-nav shrink-0">
         <div className="p-5 pb-4">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             <QorixLogo size={44} className="shrink-0" />
             <div className="leading-none">
               <div className="text-[22px] font-extrabold tracking-tight leading-none">
@@ -692,7 +692,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
             background: "#050816",
           }}
         >
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             <QorixLogo size={32} className="shrink-0" />
             <span className="text-sm font-bold text-white">
               Qorix<span className="text-blue-400">Markets</span>
