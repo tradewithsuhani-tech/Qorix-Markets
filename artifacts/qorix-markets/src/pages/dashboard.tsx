@@ -35,6 +35,7 @@ import {
   AreaChart, Area, BarChart, Bar, Cell, XAxis, YAxis, Tooltip,
   ResponsiveContainer, ReferenceLine, CartesianGrid
 } from "recharts";
+import promoBanner from "@assets/ChatGPT_Image_Apr_22,_2026,_08_43_20_AM_1776827615138.png";
 
 const periodLabel = (days: number) =>
   DAYS_PERIOD_OPTIONS.find((o) => o.value === days)?.label ?? `${days}D`;
@@ -743,6 +744,29 @@ export default function Dashboard() {
             </div>
           </div>
         </div>
+
+        {/* Promo Banner — Zero Trading Fee */}
+        <motion.button
+          onClick={() => navigate("/deposit")}
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.05 }}
+          whileHover={{ scale: 1.005 }}
+          whileTap={{ scale: 0.995 }}
+          className="block w-full rounded-2xl overflow-hidden relative group"
+          style={{
+            boxShadow: "0 8px 32px rgba(56,189,248,0.12), 0 0 0 1px rgba(56,189,248,0.18)",
+          }}
+          aria-label="Zero trading fee — start with just $10"
+        >
+          <img
+            src={promoBanner}
+            alt="Zero Trading Fee — Algo trading starts at just $10"
+            className="w-full h-auto block transition-transform duration-500 group-hover:scale-[1.02]"
+            loading="lazy"
+            decoding="async"
+          />
+        </motion.button>
 
         {/* Investor Psychology Indicators */}
         <motion.div
