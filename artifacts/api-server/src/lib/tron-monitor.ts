@@ -5,6 +5,7 @@ import { logger, errorLogger } from "./logger";
 import { createNotification } from "./notifications";
 import { emitDepositEvent } from "./event-bus";
 import { ensureUserAccounts, postJournalEntry, journalForTransaction } from "./ledger-service";
+import { getAllDepositAddresses } from "./deposit-address-service";
 
 const USDT_CONTRACT = "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t";
 const TRONGRID_BASE = "https://api.trongrid.io";
@@ -189,6 +190,70 @@ async function pollPlatformAddress(): Promise<void> {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Per-user deposit address polling. Each user has a unique TRC20 address
+// stored in `deposit_addresses`. We iterate every address and credit any new
+// inbound USDT transfer to the owning user.
+// ---------------------------------------------------------------------------
+async function pollUserDepositAddresses(): Promise<void> {
+  const records = await getAllDepositAddresses();
+  if (records.length === 0) return;
+
+  for (const rec of records) {
+    let transfers: TRC20Transfer[];
+    try {
+      transfers = await fetchTRC20Transfers(rec.address);
+    } catch (err) {
+      errorLogger.warn({ err: (err as Error).message, address: rec.address }, "TronGrid fetch failed for user deposit address");
+      continue;
+    }
+
+    for (const t of transfers) {
+      if (t.type !== "Transfer") continue;
+      if (t.token_info.address !== USDT_CONTRACT) continue;
+
+      const decimals = t.token_info.decimals ?? 6;
+      const amount = parseFloat(t.value) / Math.pow(10, decimals);
+      if (amount < MIN_AMOUNT_USDT) continue;
+
+      const txHash = t.transaction_id;
+
+      const existing = await db
+        .select({ id: blockchainDepositsTable.id, credited: blockchainDepositsTable.credited })
+        .from(blockchainDepositsTable)
+        .where(eq(blockchainDepositsTable.txHash, txHash))
+        .limit(1);
+
+      if (existing.length > 0) {
+        if (!existing[0]!.credited) {
+          await creditUserDeposit(rec.userId, amount, txHash, existing[0]!.id);
+        }
+        continue;
+      }
+
+      const [inserted] = await db
+        .insert(blockchainDepositsTable)
+        .values({
+          userId: rec.userId,
+          txHash,
+          fromAddress: t.from,
+          toAddress: t.to,
+          amount: amount.toString(),
+          status: "pending",
+          credited: false,
+          blockTimestamp: new Date(t.block_timestamp),
+        })
+        .returning({ id: blockchainDepositsTable.id });
+
+      logger.info(
+        { userId: rec.userId, txHash, amount, from: t.from, depositAddress: rec.address },
+        "New USDT deposit detected on per-user address — auto-crediting",
+      );
+      await creditUserDeposit(rec.userId, amount, txHash, inserted!.id);
+    }
+  }
+}
+
 let monitorTimer: ReturnType<typeof setTimeout> | null = null;
 
 async function runPollCycle(): Promise<void> {
@@ -200,7 +265,11 @@ async function runPollCycle(): Promise<void> {
     if (testModeRows[0]?.value === "true") {
       logger.debug("TronGrid monitor paused — test mode active");
     } else {
-      await pollPlatformAddress();
+      // Poll per-user addresses (primary) and the platform address (legacy).
+      await pollUserDepositAddresses();
+      if (PLATFORM_TRON_ADDRESS) {
+        await pollPlatformAddress();
+      }
     }
   } catch (err) {
     errorLogger.error({ err }, "Error in TronGrid poll cycle");
