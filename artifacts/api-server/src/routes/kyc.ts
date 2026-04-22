@@ -12,20 +12,37 @@ type DocType = (typeof ALLOWED_DOC_TYPES)[number];
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024; // 4MB
 const DATA_URL_RE = /^data:image\/(jpeg|jpg|png|webp);base64,([A-Za-z0-9+/]+=*)$/;
 
-function parseSubmitBody(body: any): { ok: true; data: { documentType: DocType; documentUrl: string } } | { ok: false; error: string } {
-  if (!body || typeof body !== "object") return { ok: false, error: "invalid_body" };
-  const { documentType, documentUrl } = body;
-  if (!ALLOWED_DOC_TYPES.includes(documentType)) return { ok: false, error: "invalid_document_type" };
-  if (typeof documentUrl !== "string") return { ok: false, error: "invalid_document_url" };
-  const m = documentUrl.match(DATA_URL_RE);
+function validateImageDataUrl(value: unknown): { ok: true } | { ok: false; error: string } {
+  if (typeof value !== "string") return { ok: false, error: "invalid_document_url" };
+  const m = value.match(DATA_URL_RE);
   if (!m) return { ok: false, error: "invalid_document_format" };
-  // Estimate decoded byte length: base64 -> bytes
   const b64 = m[2];
   const padding = b64.endsWith("==") ? 2 : b64.endsWith("=") ? 1 : 0;
   const decodedBytes = Math.floor((b64.length * 3) / 4) - padding;
   if (decodedBytes < 1024) return { ok: false, error: "image_too_small" };
   if (decodedBytes > MAX_IMAGE_BYTES) return { ok: false, error: "image_too_large" };
-  return { ok: true, data: { documentType, documentUrl } };
+  return { ok: true };
+}
+
+function parseSubmitBody(body: any):
+  | { ok: true; data: { documentType: DocType; documentUrl: string; documentUrlBack: string | null } }
+  | { ok: false; error: string } {
+  if (!body || typeof body !== "object") return { ok: false, error: "invalid_body" };
+  const { documentType, documentUrl, documentUrlBack } = body;
+  if (!ALLOWED_DOC_TYPES.includes(documentType)) return { ok: false, error: "invalid_document_type" };
+  const front = validateImageDataUrl(documentUrl);
+  if (!front.ok) return front;
+  // Back side: required for ID + license, optional for passport
+  const requiresBack = documentType === "national_id" || documentType === "drivers_license";
+  let back: string | null = null;
+  if (documentUrlBack != null && documentUrlBack !== "") {
+    const v = validateImageDataUrl(documentUrlBack);
+    if (!v.ok) return { ok: false, error: `back_${v.error}` };
+    back = documentUrlBack;
+  } else if (requiresBack) {
+    return { ok: false, error: "back_image_required" };
+  }
+  return { ok: true, data: { documentType, documentUrl, documentUrlBack: back } };
 }
 
 function parseReviewBody(body: any): { ok: true; data: { userId: number; action: "approve" | "reject"; reason?: string } } | { ok: false; error: string } {
@@ -73,6 +90,7 @@ router.post("/kyc/submit", authMiddleware, async (req: AuthRequest, res) => {
     .set({
       kycStatus: "pending",
       kycDocumentUrl: parsed.data.documentUrl,
+      kycDocumentUrlBack: parsed.data.documentUrlBack,
       kycDocumentType: parsed.data.documentType,
       kycSubmittedAt: new Date(),
       kycReviewedAt: null,
@@ -124,15 +142,19 @@ router.get("/admin/kyc/document/:userId", authMiddleware, async (req: AuthReques
 
   const row = (
     await db
-      .select({ documentUrl: usersTable.kycDocumentUrl, documentType: usersTable.kycDocumentType })
+      .select({
+        documentUrl: usersTable.kycDocumentUrl,
+        documentUrlBack: usersTable.kycDocumentUrlBack,
+        documentType: usersTable.kycDocumentType,
+      })
       .from(usersTable)
       .where(eq(usersTable.id, targetId))
       .limit(1)
   )[0];
   if (!row || !row.documentUrl) return res.status(404).json({ error: "not_found" });
-  // Re-validate stored value before returning
   if (!DATA_URL_RE.test(row.documentUrl)) return res.status(422).json({ error: "stored_value_invalid" });
-  res.json({ documentUrl: row.documentUrl, documentType: row.documentType });
+  const back = row.documentUrlBack && DATA_URL_RE.test(row.documentUrlBack) ? row.documentUrlBack : null;
+  res.json({ documentUrl: row.documentUrl, documentUrlBack: back, documentType: row.documentType });
 });
 
 router.post("/admin/kyc/review", authMiddleware, async (req: AuthRequest, res) => {

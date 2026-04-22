@@ -11,6 +11,7 @@ export const usersTable = pgTable("users", {
   adminRole: varchar("admin_role", { length: 30 }).notNull().default("user"),
   kycStatus: varchar("kyc_status", { length: 30 }).notNull().default("not_submitted"),
   kycDocumentUrl: text("kyc_document_url"),
+  kycDocumentUrlBack: text("kyc_document_url_back"),
   kycDocumentType: varchar("kyc_document_type", { length: 30 }),
   kycSubmittedAt: timestamp("kyc_submitted_at"),
   kycReviewedAt: timestamp("kyc_reviewed_at"),

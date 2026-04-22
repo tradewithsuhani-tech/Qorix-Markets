@@ -48,8 +48,12 @@ export default function KycPage() {
   const qc = useQueryClient();
 
   const [docType, setDocType] = useState("passport");
-  const [filePreview, setFilePreview] = useState<string | null>(null);
-  const [fileName, setFileName] = useState<string | null>(null);
+  const [frontPreview, setFrontPreview] = useState<string | null>(null);
+  const [frontName, setFrontName] = useState<string | null>(null);
+  const [backPreview, setBackPreview] = useState<string | null>(null);
+  const [backName, setBackName] = useState<string | null>(null);
+
+  const requiresBack = docType === "national_id" || docType === "drivers_license";
 
   const { data: info, isLoading } = useQuery<KycInfo>({
     queryKey: ["kyc-status"],
@@ -59,23 +63,30 @@ export default function KycPage() {
 
   const submit = useMutation({
     mutationFn: async () => {
-      if (!filePreview) throw new Error("Please choose a document image first");
+      if (!frontPreview) throw new Error("Please upload the front side of the document");
+      if (requiresBack && !backPreview) throw new Error("Please also upload the back side of the document");
       return authFetch("/api/kyc/submit", {
         method: "POST",
-        body: JSON.stringify({ documentType: docType, documentUrl: filePreview }),
+        body: JSON.stringify({
+          documentType: docType,
+          documentUrl: frontPreview,
+          documentUrlBack: backPreview,
+        }),
       });
     },
     onSuccess: () => {
       toast({ title: "KYC submitted", description: "We'll review within 24 hours." });
-      setFilePreview(null);
-      setFileName(null);
+      setFrontPreview(null);
+      setFrontName(null);
+      setBackPreview(null);
+      setBackName(null);
       qc.invalidateQueries({ queryKey: ["kyc-status"] });
     },
     onError: (e: any) =>
       toast({ title: "Submission failed", description: e?.message ?? "Try again", variant: "destructive" }),
   });
 
-  const handleFile = (f: File) => {
+  const handleFile = (f: File, side: "front" | "back") => {
     if (f.size > MAX_BYTES) {
       toast({ title: "File too large", description: "Max 4MB", variant: "destructive" });
       return;
@@ -86,8 +97,13 @@ export default function KycPage() {
     }
     const reader = new FileReader();
     reader.onload = () => {
-      setFilePreview(reader.result as string);
-      setFileName(f.name);
+      if (side === "front") {
+        setFrontPreview(reader.result as string);
+        setFrontName(f.name);
+      } else {
+        setBackPreview(reader.result as string);
+        setBackName(f.name);
+      }
     };
     reader.readAsDataURL(f);
   };
@@ -184,35 +200,69 @@ export default function KycPage() {
               </div>
             </div>
 
-            <div>
-              <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Upload Image</label>
-              <label
-                className="mt-2 flex flex-col items-center justify-center gap-2 px-4 py-8 rounded-xl border-2 border-dashed border-white/15 hover:border-blue-500/40 hover:bg-blue-500/5 cursor-pointer transition-colors"
-              >
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
-                />
-                {filePreview ? (
-                  <>
-                    <img src={filePreview} alt="preview" className="max-h-40 rounded-lg" />
-                    <span className="text-xs text-muted-foreground">{fileName} · click to change</span>
-                  </>
-                ) : (
-                  <>
-                    <Upload className="w-6 h-6 text-muted-foreground" />
-                    <span className="text-sm font-medium">Click to upload</span>
-                    <span className="text-[10px] text-muted-foreground">JPG / PNG · Max 4MB</span>
-                  </>
-                )}
-              </label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* FRONT */}
+              <div>
+                <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider flex items-center gap-1">
+                  Front Side <span className="text-rose-400">*</span>
+                </label>
+                <label className="mt-2 flex flex-col items-center justify-center gap-1.5 px-3 py-6 rounded-xl border-2 border-dashed border-white/15 hover:border-blue-500/40 hover:bg-blue-500/5 cursor-pointer transition-colors min-h-[160px]">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0], "front")}
+                  />
+                  {frontPreview ? (
+                    <>
+                      <img src={frontPreview} alt="front preview" className="max-h-28 rounded-lg" />
+                      <span className="text-[10px] text-muted-foreground truncate max-w-full px-1">{frontName}</span>
+                      <span className="text-[10px] text-blue-400">Click to change</span>
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="w-5 h-5 text-muted-foreground" />
+                      <span className="text-sm font-medium">Upload front</span>
+                      <span className="text-[10px] text-muted-foreground">JPG / PNG · Max 4MB</span>
+                    </>
+                  )}
+                </label>
+              </div>
+
+              {/* BACK */}
+              <div>
+                <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider flex items-center gap-1">
+                  Back Side {requiresBack ? <span className="text-rose-400">*</span> : <span className="text-muted-foreground/60 normal-case">(optional)</span>}
+                </label>
+                <label className="mt-2 flex flex-col items-center justify-center gap-1.5 px-3 py-6 rounded-xl border-2 border-dashed border-white/15 hover:border-blue-500/40 hover:bg-blue-500/5 cursor-pointer transition-colors min-h-[160px]">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0], "back")}
+                  />
+                  {backPreview ? (
+                    <>
+                      <img src={backPreview} alt="back preview" className="max-h-28 rounded-lg" />
+                      <span className="text-[10px] text-muted-foreground truncate max-w-full px-1">{backName}</span>
+                      <span className="text-[10px] text-blue-400">Click to change</span>
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="w-5 h-5 text-muted-foreground" />
+                      <span className="text-sm font-medium">Upload back</span>
+                      <span className="text-[10px] text-muted-foreground">
+                        {requiresBack ? "JPG / PNG · Max 4MB" : "Skip for passport"}
+                      </span>
+                    </>
+                  )}
+                </label>
+              </div>
             </div>
 
             <button
               onClick={() => submit.mutate()}
-              disabled={!filePreview || submit.isPending}
+              disabled={!frontPreview || (requiresBack && !backPreview) || submit.isPending}
               className="w-full py-3 rounded-xl bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-semibold disabled:opacity-50 disabled:cursor-not-allowed hover:brightness-110 transition-all"
             >
               {submit.isPending ? "Submitting…" : "Submit for Review"}
