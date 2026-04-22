@@ -16,6 +16,7 @@ import { useEffect } from "react";
 
 import Landing from "@/pages/landing";
 import LoginPage from "@/pages/login";
+import ForgotPasswordPage from "@/pages/forgot-password";
 import AdminLoginPage from "@/pages/admin-login";
 import Dashboard from "@/pages/dashboard";
 import WalletPage from "@/pages/wallet";
@@ -138,6 +139,7 @@ function Router() {
     <Switch>
       <Route path="/" component={LandingOrRedirect} />
       <Route path="/login"><PublicOnlyRoute component={LoginPage} /></Route>
+      <Route path="/forgot-password"><PublicOnlyRoute component={ForgotPasswordPage} /></Route>
       <Route path="/admin-login"><PublicOnlyRoute component={AdminLoginPage} adminRedirect={true} /></Route>
       <Route path="/dashboard"><ProtectedRoute component={Dashboard} /></Route>
       <Route path="/wallet"><ProtectedRoute component={WalletPage} /></Route>
