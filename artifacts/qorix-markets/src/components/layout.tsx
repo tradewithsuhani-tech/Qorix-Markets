@@ -506,7 +506,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { href: "/wallet", label: "Wallet", icon: Wallet },
     { href: "/deposit", label: "Deposit", icon: ArrowDownCircle },
-    { href: "/invest", label: "Invest", icon: TrendingUp },
+    { href: "/invest", label: "Trade", icon: TrendingUp, featured: true },
     { href: "/analytics", label: "Analytics", icon: BarChart2 },
     { href: "/market-insights", label: "Market Insights", icon: Globe },
     { href: "/trading-desk", label: "Trading Desk", icon: Briefcase },
@@ -683,6 +683,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <div className="flex justify-around items-center px-2 pt-2">
           {primaryNavLinks.map((link) => {
             const isActive = location === link.href;
+            const featured = (link as { featured?: boolean }).featured;
             return (
               <Link
                 key={link.href}
@@ -690,14 +691,14 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 className="relative flex flex-col items-center justify-center w-14 py-1.5"
                 onClick={() => haptic(10)}
               >
-                {isActive && (
+                {isActive && !featured && (
                   <motion.div
                     layoutId="bottom-nav-active"
                     className="absolute inset-0 rounded-xl bg-blue-500/10"
                     transition={{ type: "spring", bounce: 0.25, duration: 0.35 }}
                   />
                 )}
-                {isActive && (
+                {isActive && !featured && (
                   <motion.div
                     layoutId="bottom-nav-indicator"
                     className="absolute -top-0.5 left-1/2 -translate-x-1/2 w-6 h-0.5 rounded-full bg-blue-400"
@@ -705,14 +706,35 @@ export function Layout({ children }: { children: React.ReactNode }) {
                     style={{ boxShadow: "0 0 8px rgba(96,165,250,0.9)" }}
                   />
                 )}
-                <motion.div
-                  className={cn("relative z-10 flex flex-col items-center gap-1 transition-colors duration-200", isActive ? "text-blue-400" : "text-muted-foreground")}
-                  animate={isActive ? { scale: 1.08 } : { scale: 1 }}
-                  transition={{ type: "spring", bounce: 0.4, duration: 0.3 }}
-                >
-                  <link.icon style={{ width: 20, height: 20 }} />
-                  <span className="text-[9px] font-medium leading-none">{link.label}</span>
-                </motion.div>
+                {featured ? (
+                  <motion.div
+                    className="relative z-10 flex flex-col items-center gap-1"
+                    animate={isActive ? { scale: 1.08 } : { scale: 1 }}
+                    transition={{ type: "spring", bounce: 0.4, duration: 0.3 }}
+                  >
+                    <div
+                      className={cn(
+                        "flex items-center justify-center w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-lg",
+                        isActive ? "ring-2 ring-blue-300/60" : "",
+                      )}
+                      style={{ boxShadow: "0 4px 14px rgba(59,130,246,0.45), 0 0 0 1px rgba(255,255,255,0.08) inset" }}
+                    >
+                      <link.icon style={{ width: 18, height: 18 }} strokeWidth={2.75} />
+                    </div>
+                    <span className={cn("text-[10px] font-bold leading-none tracking-wide", isActive ? "text-blue-300" : "text-blue-400")}>
+                      {link.label}
+                    </span>
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    className={cn("relative z-10 flex flex-col items-center gap-1 transition-colors duration-200", isActive ? "text-blue-400" : "text-muted-foreground")}
+                    animate={isActive ? { scale: 1.08 } : { scale: 1 }}
+                    transition={{ type: "spring", bounce: 0.4, duration: 0.3 }}
+                  >
+                    <link.icon style={{ width: 20, height: 20 }} />
+                    <span className="text-[9px] font-medium leading-none">{link.label}</span>
+                  </motion.div>
+                )}
               </Link>
             );
           })}

@@ -682,7 +682,7 @@ export default function InvestPage() {
       >
         {/* Header */}
         <div>
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Investment Center</h1>
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Trade Center</h1>
           <p className="text-muted-foreground text-sm mt-0.5">
             Configure your risk profile and deploy capital into automated strategies.
           </p>
