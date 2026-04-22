@@ -136,10 +136,11 @@ function renderOtpHtml(opts: {
             <h2 style="margin:0;font-size:24px;color:#ffffff;">${purposeLabel}</h2>
             <div style="width:40px;height:3px;background:linear-gradient(90deg,#38BDF8,#7C3AED);margin:10px 0 20px;"></div>
             <p style="color:#9CA3AF;font-size:14px;line-height:1.6;margin:0;">${intro}</p>
-            <div style="margin-top:25px;background:linear-gradient(90deg,#2563EB,#7C3AED);border-radius:14px;padding:22px;text-align:center;box-shadow:0 0 25px rgba(124,58,237,0.4);">
+            <div style="margin-top:25px;background:linear-gradient(90deg,#2563EB,#7C3AED);border-radius:14px;padding:22px 12px;text-align:center;box-shadow:0 0 25px rgba(124,58,237,0.4);">
               <p style="margin:0;font-size:12px;letter-spacing:2px;color:#E0F2FE;">YOUR VERIFICATION CODE</p>
-              <p style="margin:12px 0;font-size:36px;letter-spacing:10px;font-weight:bold;color:#ffffff;font-family:Arial,sans-serif;">${otpSpaced}</p>
-              <p style="margin:0;font-size:12px;color:#E0E7FF;">Expires in 10 minutes</p>
+              <p style="margin:14px 0 6px 0;font-size:30px;letter-spacing:6px;font-weight:bold;color:#ffffff;font-family:'SF Mono','Menlo','Consolas',monospace;white-space:nowrap;">${otp}</p>
+              <p style="margin:0;font-size:11px;color:#E0E7FF;opacity:0.85;">Tap &amp; hold the code to copy</p>
+              <p style="margin:10px 0 0;font-size:12px;color:#E0E7FF;">Expires in 10 minutes</p>
             </div>
             <div style="margin-top:25px;">
               <p style="color:#9CA3AF;font-size:13px;margin:0;line-height:1.6;"><b style="color:#ffffff;">Never share this code</b> with anyone — Qorix staff will never ask for it.</p>
