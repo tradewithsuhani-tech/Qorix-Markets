@@ -25,10 +25,18 @@ import kycRouter from "./kyc";
 
 const router: IRouter = Router();
 
+// IMPORTANT: All routers that DO NOT call `router.use(authMiddleware)` at the
+// router level (i.e. fully-public OR per-route auth) MUST be mounted BEFORE
+// any router that gates the entire router with authMiddleware. Otherwise,
+// requests for public routes (e.g. /auth/google, /kyc per-route auth) will
+// be intercepted by the first auth-gated router they encounter and respond
+// with 401 Unauthorized before ever reaching the intended handler.
 router.use(healthRouter);
 router.use(publicRouter);
 router.use(cryptoDepositRouter);
 router.use(authRouter);
+router.use(googleOauthRouter); // public OAuth — must be before auth-gated routers
+router.use(kycRouter); // per-route authMiddleware — must be before router-level auth gates
 router.use(reportsRouter);
 router.use(walletRouter);
 router.use(transactionsRouter);
@@ -46,7 +54,5 @@ router.use(testModeRouter);
 router.use(tasksRouter);
 router.use(adminTasksRouter);
 router.use(signalTradesRouter);
-router.use(googleOauthRouter);
-router.use(kycRouter);
 
 export default router;
