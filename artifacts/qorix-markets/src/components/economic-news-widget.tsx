@@ -63,37 +63,39 @@ export function ImpactDot({ impact }: { impact: ImpactLevel }) {
   );
 }
 
-function BigCountdown({ targetMs }: { targetMs: number }) {
+function InlineCountdown({ targetMs }: { targetMs: number }) {
   const diff = useCountdown(targetMs);
   if (diff < 0) {
-    return <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider">Released</span>;
+    return (
+      <span className="text-[11px] font-bold text-emerald-400 uppercase tracking-wider">
+        Just Released
+      </span>
+    );
   }
   const totalSec = Math.floor(diff / 1000);
   const h = Math.floor(totalSec / 3600);
   const min = Math.floor((totalSec % 3600) / 60);
   const sec = totalSec % 60;
   const isImminent = diff < 5 * 60 * 1000;
-  const cell = "min-w-[34px] px-1.5 py-1 rounded-md bg-black/40 border border-white/10 text-center";
+  const colorTxt = isImminent ? "text-red-300" : "text-white";
+  const colorSep = isImminent ? "text-red-300/60" : "text-white/30";
   return (
-    <div className={cn("flex items-center gap-1 font-mono tabular-nums", isImminent && "animate-pulse")}>
+    <div
+      className={cn(
+        "inline-flex items-baseline gap-0.5 font-mono tabular-nums leading-none",
+        isImminent && "animate-pulse",
+      )}
+    >
       {h > 0 && (
         <>
-          <div className={cell}>
-            <div className={cn("text-sm font-bold", isImminent ? "text-red-300" : "text-white")}>{String(h).padStart(2, "0")}</div>
-            <div className="text-[8px] text-muted-foreground/70 uppercase tracking-wider leading-none">hr</div>
-          </div>
-          <span className={cn("text-sm font-bold", isImminent ? "text-red-300" : "text-white/40")}>:</span>
+          <span className={cn("text-base font-bold", colorTxt)}>{String(h).padStart(2, "0")}</span>
+          <span className={cn("text-[10px] font-medium ml-0.5 mr-1", colorSep)}>h</span>
         </>
       )}
-      <div className={cell}>
-        <div className={cn("text-sm font-bold", isImminent ? "text-red-300" : "text-white")}>{String(min).padStart(2, "0")}</div>
-        <div className="text-[8px] text-muted-foreground/70 uppercase tracking-wider leading-none">min</div>
-      </div>
-      <span className={cn("text-sm font-bold", isImminent ? "text-red-300" : "text-white/40")}>:</span>
-      <div className={cell}>
-        <div className={cn("text-sm font-bold", isImminent ? "text-red-300" : "text-white")}>{String(sec).padStart(2, "0")}</div>
-        <div className="text-[8px] text-muted-foreground/70 uppercase tracking-wider leading-none">sec</div>
-      </div>
+      <span className={cn("text-base font-bold", colorTxt)}>{String(min).padStart(2, "0")}</span>
+      <span className={cn("text-[10px] font-medium ml-0.5 mr-1", colorSep)}>m</span>
+      <span className={cn("text-base font-bold", colorTxt)}>{String(sec).padStart(2, "0")}</span>
+      <span className={cn("text-[10px] font-medium ml-0.5", colorSep)}>s</span>
     </div>
   );
 }
@@ -131,46 +133,46 @@ export function HighImpactNotificationBanner() {
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: -40, scale: 0.96 }}
           transition={{ type: "spring", bounce: 0.25, duration: 0.55 }}
-          className="fixed left-1/2 -translate-x-1/2 z-[90] w-[calc(100%-1rem)] max-w-md px-2 sm:px-0"
+          className="fixed left-1/2 -translate-x-1/2 z-[90] w-[calc(100%-1rem)] max-w-[420px] px-0"
           style={{
             top: "calc(env(safe-area-inset-top, 0px) + 64px)",
           }}
         >
           <div
-            className="relative overflow-hidden rounded-2xl border border-red-500/40 shadow-2xl shadow-red-500/20"
+            className="relative overflow-hidden rounded-2xl border border-red-500/40 shadow-2xl shadow-red-500/25"
             style={{
               background:
-                "linear-gradient(135deg, rgba(220,38,38,0.20) 0%, rgba(15,23,42,0.92) 55%, rgba(15,23,42,0.95) 100%)",
-              backdropFilter: "blur(16px)",
+                "linear-gradient(135deg, rgba(220,38,38,0.18) 0%, rgba(10,15,30,0.96) 50%, rgba(10,15,30,0.98) 100%)",
+              backdropFilter: "blur(20px)",
             }}
           >
-            {/* animated accent bar */}
+            {/* shimmer accent bar */}
             <motion.div
-              className="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-transparent via-red-400 to-transparent"
+              className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-transparent via-red-400 to-transparent"
               animate={{ x: ["-100%", "100%"] }}
               transition={{ duration: 2.4, repeat: Infinity, ease: "linear" }}
             />
 
-            <div className="px-3.5 py-3 flex items-center gap-3">
+            {/* HEADER ROW: badge + flag + title + close */}
+            <div className="flex items-center gap-2 px-3.5 pt-3 pb-2">
               <div className="relative shrink-0">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-red-500/30 to-red-700/20 border border-red-500/40 flex items-center justify-center">
-                  <Zap className="w-5 h-5 text-red-300 fill-red-400" />
+                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-red-500/30 to-red-700/20 border border-red-500/40 flex items-center justify-center">
+                  <Zap className="w-4 h-4 text-red-300 fill-red-400" />
                 </div>
-                <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-red-500 animate-ping" />
-                <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-red-500" />
+                <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-red-500 animate-ping" />
+                <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-red-500" />
               </div>
 
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1.5 mb-0.5">
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-red-400">High Impact</span>
-                  <span className="text-[10px] text-muted-foreground">·</span>
-                  <span className="text-[10px] text-muted-foreground">{nextEvent.flag} {nextEvent.currency}</span>
-                </div>
-                <div className="text-sm font-semibold text-white truncate leading-tight">{nextEvent.event}</div>
-                <div className="mt-2">
-                  <BigCountdown targetMs={nextEvent.timeMs} />
-                </div>
-              </div>
+              <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-red-400 shrink-0">
+                High Impact
+              </span>
+              <span className="text-white/20 shrink-0">·</span>
+              <span className="text-[11px] text-white/70 shrink-0 flex items-center gap-1">
+                <span>{nextEvent.flag}</span>
+                <span className="font-semibold">{nextEvent.currency}</span>
+              </span>
+
+              <div className="flex-1" />
 
               <button
                 onClick={() =>
@@ -180,11 +182,26 @@ export function HighImpactNotificationBanner() {
                     return next;
                   })
                 }
-                className="self-start p-1 -mr-1 rounded-lg text-muted-foreground hover:text-white hover:bg-white/10 transition"
+                className="shrink-0 p-1 -mr-1 rounded-lg text-muted-foreground hover:text-white hover:bg-white/10 transition"
                 aria-label="Dismiss"
               >
                 <X className="w-4 h-4" />
               </button>
+            </div>
+
+            {/* EVENT NAME */}
+            <div className="px-3.5 pb-2.5">
+              <div className="text-[15px] font-semibold text-white leading-tight truncate">
+                {nextEvent.event}
+              </div>
+            </div>
+
+            {/* COUNTDOWN STRIP */}
+            <div className="flex items-center justify-between gap-3 px-3.5 py-2.5 border-t border-white/[0.06] bg-black/25">
+              <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
+                Releases in
+              </span>
+              <InlineCountdown targetMs={nextEvent.timeMs} />
             </div>
           </div>
         </motion.div>
