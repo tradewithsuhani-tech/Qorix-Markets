@@ -68,6 +68,15 @@ export default defineConfig({
         changeOrigin: true,
         secure: false,
       },
+      // OTP / auth microservice (Google OAuth, forgot-password flow)
+      "/auth": {
+        target: "http://localhost:3001",
+        changeOrigin: true,
+        secure: false,
+      },
+      "/forgot-password": { target: "http://localhost:3001", changeOrigin: true, secure: false },
+      "/verify-reset-otp": { target: "http://localhost:3001", changeOrigin: true, secure: false },
+      "/reset-password": { target: "http://localhost:3001", changeOrigin: true, secure: false },
     },
     fs: {
       strict: true,

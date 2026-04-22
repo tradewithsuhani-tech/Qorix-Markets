@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useState, useEffect, useRef } from "react";
+import { useLocation } from "wouter";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -37,6 +38,35 @@ import {
 
 const periodLabel = (days: number) =>
   DAYS_PERIOD_OPTIONS.find((o) => o.value === days)?.label ?? `${days}D`;
+
+function PointsPill() {
+  const [, navigate] = useLocation();
+  const { data } = useQuery<{ balance: number }>({
+    queryKey: ["/api/points"],
+    queryFn: async () => {
+      let token: string | null = null;
+      try { token = localStorage.getItem("qorix_token"); } catch {}
+      const res = await fetch("/api/points", {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) throw new Error("Failed to load points");
+      return res.json();
+    },
+    refetchInterval: 30_000,
+  });
+  const balance = data?.balance ?? 0;
+  return (
+    <button
+      type="button"
+      onClick={() => navigate("/tasks")}
+      title="Earn more points by completing tasks"
+      className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border bg-amber-500/10 border-amber-500/25 text-amber-300 hover:bg-amber-500/20 hover:border-amber-500/40 transition-all"
+    >
+      <Award style={{ width: 13, height: 13 }} className="text-amber-400" />
+      <span>{balance.toLocaleString()} pts</span>
+    </button>
+  );
+}
 
 function ProfitTicker({ value, prev }: { value: number; prev: number }) {
   const up = value >= prev;
@@ -697,6 +727,8 @@ export default function Dashboard() {
             {summary?.vip && (summary.vip.tier as string) !== "none" && (
               <VipBadge tier={summary.vip.tier as "silver" | "gold" | "platinum"} size="sm" />
             )}
+            <PointsPill />
+
             <button
               onClick={handleDownloadReport}
               disabled={isGeneratingReport || summaryLoading || perfLoading}
