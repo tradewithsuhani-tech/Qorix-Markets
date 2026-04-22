@@ -392,6 +392,8 @@ async function runPollCycle(): Promise<void> {
       }
       // Retry any deposits that were credited but never swept to treasury.
       await retryStuckSweeps();
+      // Sweep any leftover TRX gas at deposit addresses back to treasury.
+      await sweepLeftoverTrx();
     }
   } catch (err) {
     errorLogger.error({ err }, "Error in TronGrid poll cycle");
