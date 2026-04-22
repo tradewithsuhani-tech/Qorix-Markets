@@ -9,7 +9,8 @@ import {
   CheckCircle2, Clock,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
+import { Link } from "wouter";
 import { getGetWalletQueryKey } from "@workspace/api-client-react";
 import { VipBadge } from "@/components/vip-badge";
 import { AddressDisplay, maskAddress } from "@/components/address-display";
@@ -79,6 +80,19 @@ export default function WalletPage() {
   } | null>(null);
 
   const sourceBalance = withdrawSource === "main" ? (wallet?.mainBalance || 0) : (wallet?.profitBalance || 0);
+
+  // KYC status — used to gate the withdrawal button.
+  // If the request is still loading or fails, we optimistically allow the flow
+  // (the backend still enforces KYC at /api/withdrawals).
+  const { data: kycData, isLoading: kycLoading, isError: kycError } = useQuery<any>({
+    queryKey: ["kyc-status"],
+    queryFn: () => apiFetch("/kyc/status"),
+    staleTime: 30_000,
+    retry: 1,
+  });
+  const kycKnown = !kycLoading && !kycError && !!kycData;
+  const kycApproved = !kycKnown || kycData?.kycStatus === "approved";
+  const [showKycPrompt, setShowKycPrompt] = useState(false);
   const resetWithdrawForm = () => {
     setWithdrawAmount(""); setWithdrawAddress(""); setWithdrawOtp("");
     setWithdrawStep("form"); setWithdrawReceipt(null);
@@ -405,11 +419,19 @@ export default function WalletPage() {
                     initial={{ opacity: 0, y: 4 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -4 }}
-                    onClick={() => setWithdrawStep("review")}
-                    disabled={!withdrawAmount || !withdrawAddress || Number(withdrawAmount) <= 0 || Number(withdrawAmount) > sourceBalance}
+                    onClick={() => {
+                      if (!kycApproved) { setShowKycPrompt(true); return; }
+                      setWithdrawStep("review");
+                    }}
+                    disabled={kycApproved && (!withdrawAmount || !withdrawAddress || Number(withdrawAmount) <= 0 || Number(withdrawAmount) > sourceBalance)}
+                    title={!kycApproved ? "Complete KYC to enable withdrawal" : undefined}
                     className="btn btn-success w-full flex items-center justify-center gap-2"
                   >
-                    {Number(withdrawAmount) > sourceBalance ? "Amount exceeds balance" : "Review Withdrawal"}
+                    {!kycApproved
+                      ? "Complete KYC for Withdrawal"
+                      : Number(withdrawAmount) > sourceBalance
+                        ? "Amount exceeds balance"
+                        : "Review Withdrawal"}
                   </motion.button>
                 )}
 
@@ -581,6 +603,65 @@ export default function WalletPage() {
         </motion.div>
 
       </motion.div>
+
+      {/* KYC required popup */}
+      <AnimatePresence>
+        {showKycPrompt && (
+          <motion.div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="kyc-prompt-title"
+            aria-describedby="kyc-prompt-desc"
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            onClick={() => setShowKycPrompt(false)}
+            onKeyDown={(e) => { if (e.key === "Escape") setShowKycPrompt(false); }}
+            tabIndex={-1}
+          >
+            <motion.div
+              onClick={(e) => e.stopPropagation()}
+              initial={{ opacity: 0, scale: 0.95, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 8 }}
+              className="w-full max-w-sm rounded-2xl bg-card border border-white/10 p-5 shadow-2xl"
+            >
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-full bg-amber-500/15 border border-amber-500/30 flex items-center justify-center shrink-0">
+                  <ShieldCheck style={{ width: 18, height: 18 }} className="text-amber-300" />
+                </div>
+                <div className="flex-1">
+                  <h3 id="kyc-prompt-title" className="text-base font-semibold mb-1">KYC Verification Required</h3>
+                  <p id="kyc-prompt-desc" className="text-sm text-muted-foreground">
+                    For your security, please complete KYC verification before making a withdrawal.
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowKycPrompt(false)}
+                  aria-label="Close"
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  <X style={{ width: 16, height: 16 }} />
+                </button>
+              </div>
+              <div className="mt-5 grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => setShowKycPrompt(false)}
+                  className="px-4 py-2.5 rounded-xl bg-white/5 border border-white/10 text-sm hover:bg-white/10 transition-colors"
+                >
+                  Cancel
+                </button>
+                <Link
+                  href="/kyc"
+                  onClick={() => setShowKycPrompt(false)}
+                  className="px-4 py-2.5 rounded-xl bg-emerald-500/15 border border-emerald-500/40 text-sm text-emerald-300 hover:bg-emerald-500/25 transition-colors text-center"
+                >
+                  Complete KYC
+                </Link>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </Layout>
   );
 }
