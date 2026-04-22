@@ -161,6 +161,31 @@ export default function LoginPage() {
     return () => { if (autoHideTimer.current) clearTimeout(autoHideTimer.current); };
   }, []);
 
+  // Auto-fill referral code from URL (?ref=XXX) and switch to Sign Up mode.
+  // The code is locked so users who arrived via a referral link cannot remove it.
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const ref = (params.get("ref") || params.get("referral") || "").trim().toUpperCase();
+      if (ref) {
+        setReferralCode(ref);
+        setReferralLocked(true);
+        setIsLogin(false);
+        try { sessionStorage.setItem("qorix_ref", ref); } catch {}
+      } else {
+        // Fallback: persisted ref from earlier visit (e.g. user opened link, navigated, came back)
+        try {
+          const stored = sessionStorage.getItem("qorix_ref");
+          if (stored) {
+            setReferralCode(stored);
+            setReferralLocked(true);
+            setIsLogin(false);
+          }
+        } catch {}
+      }
+    } catch {}
+  }, []);
+
   // Capture token from Google OAuth callback (?token=...) and bootstrap session
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -436,13 +461,27 @@ export default function LoginPage() {
                   className="overflow-hidden"
                 >
                   <div className="pb-0.5">
-                    <input
-                      type="text"
-                      placeholder="Referral Code (Optional)"
-                      value={referralCode}
-                      onChange={(e) => setReferralCode(e.target.value)}
-                      className="field-input"
-                    />
+                    <div className="relative">
+                      <input
+                        type="text"
+                        placeholder={referralLocked ? "Referral Code (locked)" : "Referral Code (Optional)"}
+                        value={referralCode}
+                        onChange={(e) => { if (!referralLocked) setReferralCode(e.target.value.toUpperCase()); }}
+                        readOnly={referralLocked}
+                        className={`field-input ${referralLocked ? "pr-10 bg-emerald-500/5 border-emerald-500/30 text-emerald-300 cursor-not-allowed" : ""}`}
+                      />
+                      {referralLocked && (
+                        <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-emerald-400" title="Referral code locked from invite link">
+                          <ShieldCheck style={{ width: 16, height: 16 }} />
+                        </span>
+                      )}
+                    </div>
+                    {referralLocked && (
+                      <p className="text-[11px] text-emerald-400/80 mt-1.5 flex items-center gap-1">
+                        <CheckCircle2 style={{ width: 11, height: 11 }} />
+                        Invited by <span className="font-semibold tracking-wide">{referralCode}</span> — locked from your invite link.
+                      </p>
+                    )}
                   </div>
                 </motion.div>
               )}
