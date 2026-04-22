@@ -412,9 +412,6 @@ export default function TradeActivityPage() {
           <div className="flex items-center justify-between border-b border-white/8 pb-3 mb-3">
             <div className="text-sm font-semibold text-white">Trade Summary</div>
           </div>
-          <div className="rounded-xl border border-white/8 bg-white/[0.02] px-4 py-3 mb-3 text-[12px] leading-relaxed text-white/60">
-            All trades shown here are executed by our automated trading system using pooled investor capital.
-          </div>
           <MobileTradeList
             trades={filtered}
             loading={showInitialLoader}
