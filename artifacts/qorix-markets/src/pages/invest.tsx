@@ -864,12 +864,18 @@ export default function InvestPage() {
                 <span className="text-sm font-medium text-muted-foreground">Active Strategy Details</span>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                {activeProfile.features.map((f, i) => (
-                  <div key={i} className="flex items-center gap-2 text-sm">
-                    <CheckCircle style={{ width: 14, height: 14 }} className={activeProfile.color} />
-                    <span className="text-muted-foreground">{f}</span>
-                  </div>
-                ))}
+                {activeProfile.features.map((f, i) => {
+                  // Override the drawdown line with the LIVE protection limit the user set
+                  const displayed = i === 0 && /drawdown protection/i.test(f)
+                    ? `Max ${investment.drawdownLimit}% drawdown protection`
+                    : f;
+                  return (
+                    <div key={i} className="flex items-center gap-2 text-sm">
+                      <CheckCircle style={{ width: 14, height: 14 }} className={activeProfile.color} />
+                      <span className="text-muted-foreground">{displayed}</span>
+                    </div>
+                  );
+                })}
               </div>
             </div>
 
