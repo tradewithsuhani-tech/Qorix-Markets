@@ -2,23 +2,31 @@ import { db, emailOtpsTable, usersTable } from "@workspace/db";
 import { eq, and, gt } from "drizzle-orm";
 import { logger } from "./logger";
 import crypto from "crypto";
-import { SESClient, SendEmailCommand } from "@aws-sdk/client-ses";
+import nodemailer, { type Transporter } from "nodemailer";
 
 // ---------------------------------------------------------------------------
-// Amazon SES client (lazy-initialized; only created if AWS creds are set)
+// SMTP transport (Google Workspace) — lazy-initialized
+// Required env: SES_FROM_EMAIL (sender / SMTP user), SMTP_PASS (App Password)
+// Optional env: SMTP_HOST (default smtp.gmail.com), SMTP_PORT (default 465),
+//               SMTP_USER (defaults to SES_FROM_EMAIL)
 // ---------------------------------------------------------------------------
-let sesClient: SESClient | null = null;
-function getSesClient(): SESClient | null {
-  if (sesClient) return sesClient;
-  const region = process.env.AWS_REGION;
-  const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
-  const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
-  if (!region || !accessKeyId || !secretAccessKey) return null;
-  sesClient = new SESClient({
-    region,
-    credentials: { accessKeyId, secretAccessKey },
+let smtpTransporter: Transporter | null = null;
+function getTransporter(): Transporter | null {
+  if (smtpTransporter) return smtpTransporter;
+  const from = process.env.SES_FROM_EMAIL;
+  const pass = process.env.SMTP_PASS;
+  if (!from || !pass) return null;
+  const user = process.env.SMTP_USER || from;
+  const host = process.env.SMTP_HOST || "smtp.gmail.com";
+  const port = Number(process.env.SMTP_PORT || 465);
+  const secure = port === 465;
+  smtpTransporter = nodemailer.createTransport({
+    host,
+    port,
+    secure,
+    auth: { user, pass },
   });
-  return sesClient;
+  return smtpTransporter;
 }
 
 function generateOtp(length = 6): string {
@@ -36,37 +44,33 @@ function generateOtp(length = 6): string {
 // SES_FROM_EMAIL are not configured (so local/dev flow works without setup).
 // ---------------------------------------------------------------------------
 async function sendEmail(to: string, subject: string, body: string): Promise<void> {
-  const client = getSesClient();
+  const transporter = getTransporter();
   const from = process.env.SES_FROM_EMAIL;
 
-  if (!client || !from) {
-    // Never log message body (contains OTP). Gated debug print only when
-    // explicitly opted in via EMAIL_DEBUG_OTP=1.
+  if (!transporter || !from) {
     if (process.env.NODE_ENV !== "production") {
       if (process.env.EMAIL_DEBUG_OTP === "1") {
         logger.warn({ to, subject, body }, "[email-service] DEV OTP debug (EMAIL_DEBUG_OTP=1)");
       } else {
-        logger.info({ to, subject }, "[email-service] DEV — email would be sent (SES not configured)");
+        logger.info({ to, subject }, "[email-service] DEV — email would be sent (SMTP not configured)");
       }
     } else {
-      logger.warn({ to, subject }, "[email-service] SES not configured — email NOT sent");
+      logger.warn({ to, subject }, "[email-service] SMTP not configured — email NOT sent");
     }
     return;
   }
 
   try {
-    await client.send(new SendEmailCommand({
-      Source: from,
-      Destination: { ToAddresses: [to] },
-      Message: {
-        Subject: { Data: subject, Charset: "UTF-8" },
-        Body: { Text: { Data: body, Charset: "UTF-8" } },
-      },
-    }));
-    logger.info({ to, subject }, "[email-service] email sent via SES");
+    const info = await transporter.sendMail({
+      from: `"Qorix Markets" <${from}>`,
+      to,
+      subject,
+      text: body,
+    });
+    logger.info({ to, subject, messageId: info.messageId }, "[email-service] email sent via SMTP");
   } catch (err) {
-    logger.error({ err, to, subject }, "[email-service] SES send failed");
-    // Don't throw — we still want the OTP saved in DB so user can retry
+    logger.error({ err: (err as Error).message, to, subject }, "[email-service] SMTP send failed");
+    // Don't throw — keep OTP saved in DB so user can retry
   }
 }
 
