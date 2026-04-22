@@ -605,25 +605,22 @@ export function Layout({ children }: { children: React.ReactNode }) {
       {/* Desktop Sidebar */}
       <aside className="hidden md:flex flex-col w-64 border-r border-white/5 glass-nav shrink-0">
         <div className="p-5 pb-4">
-          <div className="flex items-center gap-2">
-            <QorixLogo size={52} className="shrink-0" />
-            <div className="leading-none">
-              <div className="text-[22px] font-extrabold tracking-tight leading-none">
-                <span className="text-white">Qorix</span>
-                <span
-                  style={{
-                    background: "linear-gradient(90deg,#38bdf8,#818cf8)",
-                    WebkitBackgroundClip: "text",
-                    WebkitTextFillColor: "transparent",
-                    backgroundClip: "text",
-                  }}
-                >
-                  Markets
-                </span>
-              </div>
-              <div className="text-[10px] text-slate-400 font-semibold tracking-[0.28em] uppercase mt-1.5">
-                Pro Terminal
-              </div>
+          <div className="leading-none">
+            <div className="text-[22px] font-extrabold tracking-tight leading-none">
+              <span className="text-white">Qorix</span>
+              <span
+                style={{
+                  background: "linear-gradient(90deg,#38bdf8,#818cf8)",
+                  WebkitBackgroundClip: "text",
+                  WebkitTextFillColor: "transparent",
+                  backgroundClip: "text",
+                }}
+              >
+                Markets
+              </span>
+            </div>
+            <div className="text-[10px] text-slate-400 font-semibold tracking-[0.28em] uppercase mt-1.5">
+              Pro Terminal
             </div>
           </div>
         </div>
@@ -693,7 +690,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
           }}
         >
           <div className="flex items-center gap-2">
-            <QorixLogo size={40} className="shrink-0" />
             <span className="text-sm font-bold text-white">
               Qorix<span className="text-blue-400">Markets</span>
             </span>
