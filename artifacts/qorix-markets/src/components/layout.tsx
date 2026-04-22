@@ -677,20 +677,24 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
       {/* Mobile Bottom Nav — pill with notch cutout for floating Trade FAB */}
       <nav
-        className="md:hidden fixed bottom-3 left-3 right-3 z-30 rounded-3xl border border-white/10 shadow-[0_-4px_24px_rgba(0,0,0,0.45)]"
-        style={{
-          paddingBottom: "max(env(safe-area-inset-bottom, 0px), 0.5rem)",
-          background: "rgba(13, 21, 37, 0.92)",
-          backdropFilter: "blur(20px)",
-          WebkitBackdropFilter: "blur(20px)",
-          // Circular cutout at top-center where the Trade FAB sits
-          WebkitMaskImage:
-            "radial-gradient(circle 36px at 50% -2px, transparent 99%, black 100%)",
-          maskImage:
-            "radial-gradient(circle 36px at 50% -2px, transparent 99%, black 100%)",
-        }}
+        className="md:hidden fixed bottom-3 left-3 right-3 z-30"
+        style={{ paddingBottom: "max(env(safe-area-inset-bottom, 0px), 0.5rem)" }}
       >
-        <div className="flex justify-around items-end px-2 pt-2">
+        {/* Background layer with masked notch — separate from buttons so FAB isn't clipped */}
+        <div
+          aria-hidden="true"
+          className="absolute inset-0 rounded-3xl border border-white/10 shadow-[0_-4px_24px_rgba(0,0,0,0.45)] pointer-events-none"
+          style={{
+            background: "rgba(13, 21, 37, 0.92)",
+            backdropFilter: "blur(20px)",
+            WebkitBackdropFilter: "blur(20px)",
+            WebkitMaskImage:
+              "radial-gradient(circle 34px at 50% 0px, transparent 99%, black 100%)",
+            maskImage:
+              "radial-gradient(circle 34px at 50% 0px, transparent 99%, black 100%)",
+          }}
+        />
+        <div className="relative flex justify-around items-end px-2 pt-2">
           {primaryNavLinks.map((link) => {
             const isActive = location === link.href;
             const featured = (link as { featured?: boolean }).featured;
