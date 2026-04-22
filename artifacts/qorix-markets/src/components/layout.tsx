@@ -605,22 +605,27 @@ export function Layout({ children }: { children: React.ReactNode }) {
       {/* Desktop Sidebar */}
       <aside className="hidden md:flex flex-col w-64 border-r border-white/5 glass-nav shrink-0">
         <div className="p-5 pb-4">
-          <div className="leading-none">
-            <div className="text-[22px] font-extrabold tracking-tight leading-none">
-              <span className="text-white">Qorix</span>
-              <span
-                style={{
-                  background: "linear-gradient(90deg,#38bdf8,#818cf8)",
-                  WebkitBackgroundClip: "text",
-                  WebkitTextFillColor: "transparent",
-                  backgroundClip: "text",
-                }}
-              >
-                Markets
-              </span>
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-lg overflow-hidden flex items-center justify-center shrink-0" style={{ boxShadow: "0 0 20px rgba(99,102,241,0.4)" }}>
+              <QorixLogo size={36} />
             </div>
-            <div className="text-[10px] text-slate-400 font-semibold tracking-[0.28em] uppercase mt-1.5">
-              Pro Terminal
+            <div className="leading-none">
+              <div className="text-[22px] font-extrabold tracking-tight leading-none">
+                <span className="text-white">Qorix</span>
+                <span
+                  style={{
+                    background: "linear-gradient(90deg,#38bdf8,#818cf8)",
+                    WebkitBackgroundClip: "text",
+                    WebkitTextFillColor: "transparent",
+                    backgroundClip: "text",
+                  }}
+                >
+                  Markets
+                </span>
+              </div>
+              <div className="text-[10px] text-slate-400 font-semibold tracking-[0.28em] uppercase mt-1.5">
+                Pro Terminal
+              </div>
             </div>
           </div>
         </div>
@@ -690,6 +695,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
           }}
         >
           <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg overflow-hidden flex items-center justify-center" style={{ boxShadow: "0 0 20px rgba(99,102,241,0.4)" }}>
+              <QorixLogo size={32} />
+            </div>
             <span className="text-sm font-bold text-white">
               Qorix<span className="text-blue-400">Markets</span>
             </span>
