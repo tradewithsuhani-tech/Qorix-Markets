@@ -7,7 +7,17 @@ const crypto = require('crypto');
 const nodemailer = require('nodemailer');
 const rateLimit = require('express-rate-limit');
 
+const fs = require('fs');
+const path = require('path');
 const passport = require('./lib/passport');
+
+// Inline brand logo (CID attachment) — used by branded OTP emails
+const LOGO_PATH = path.join(__dirname, 'qorix-logo.png');
+const LOGO_BUFFER = fs.existsSync(LOGO_PATH) ? fs.readFileSync(LOGO_PATH) : null;
+const LOGO_CID = 'qorix-logo@qorixmarkets';
+const LOGO_ATTACHMENT = LOGO_BUFFER
+  ? [{ filename: 'qorix-logo.png', content: LOGO_BUFFER, cid: LOGO_CID, contentType: 'image/png' }]
+  : undefined;
 const googleAuthRouter = require('./routes/google-auth');
 const { authMiddleware } = require('./lib/jwt');
 const users = require('./lib/users');
@@ -105,9 +115,8 @@ const renderQorixEmail = ({ purposeLabel, intro, otp, expiryMinutes }) => {
     <td align="center">
       <table width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#0F172A;border-radius:18px;overflow:hidden;border:1px solid #1F2937;">
         <tr>
-          <td align="center" style="padding:30px 20px;background:linear-gradient(135deg,#0B0F1A,#1E293B);">
-            <div style="width:64px;height:64px;border-radius:50%;background:linear-gradient(135deg,#38BDF8 0%,#7C3AED 100%);text-align:center;line-height:64px;font-size:30px;font-weight:800;color:#ffffff;font-family:Arial,sans-serif;display:inline-block;">Q</div>
-            <p style="margin:10px 0 0;color:#38BDF8;letter-spacing:3px;font-size:12px;font-weight:600;">QORIX MARKETS</p>
+          <td align="center" style="padding:34px 20px 28px 20px;background:linear-gradient(135deg,#0B0F1A,#1E293B);">
+            <img src="cid:qorix-logo@qorixmarkets" alt="Qorix Markets" width="220" style="display:block;width:220px;max-width:80%;height:auto;border:0;outline:none;text-decoration:none;margin:0 auto;" />
           </td>
         </tr>
         <tr>
@@ -216,6 +225,7 @@ app.post('/send-otp', sendOtpLimiter, async (req, res) => {
       subject,
       text,
       html,
+      attachments: LOGO_ATTACHMENT,
     });
 
     return res.json({
@@ -293,6 +303,7 @@ app.post('/forgot-password', sendOtpLimiter, async (req, res) => {
       subject,
       text,
       html,
+      attachments: LOGO_ATTACHMENT,
     });
 
     return res.json({
