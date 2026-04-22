@@ -729,28 +729,28 @@ export function Layout({ children }: { children: React.ReactNode }) {
                       whileTap={{ scale: 0.92 }}
                       transition={{ type: "spring", bounce: 0.4, duration: 0.3 }}
                     >
-                      {/* Outer pulsing glow ring */}
+                      {/* Outer pulsing glow ring (subtle) */}
                       <motion.div
-                        className="absolute inset-0 rounded-full bg-blue-500/40"
-                        animate={{ scale: [1, 1.35, 1], opacity: [0.55, 0, 0.55] }}
-                        transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}
-                        style={{ filter: "blur(6px)" }}
+                        className="absolute inset-0 rounded-full bg-blue-500/25"
+                        animate={{ scale: [1, 1.25, 1], opacity: [0.4, 0, 0.4] }}
+                        transition={{ duration: 2.6, repeat: Infinity, ease: "easeInOut" }}
+                        style={{ filter: "blur(5px)" }}
                       />
-                      {/* Conic gradient ring */}
+                      {/* Subtle brand-blue ring */}
                       <div
-                        className="absolute -inset-[2px] rounded-full"
+                        className="absolute -inset-[1.5px] rounded-full"
                         style={{
-                          background: "conic-gradient(from 180deg at 50% 50%, #60a5fa 0deg, #6366f1 120deg, #a855f7 240deg, #60a5fa 360deg)",
+                          background: "linear-gradient(160deg, #60a5fa 0%, #3b82f6 50%, #1e3a8a 100%)",
                         }}
                       />
-                      {/* Inner button */}
+                      {/* Inner button — brand blue tones */}
                       <div
                         className="relative flex items-center justify-center w-14 h-14 rounded-full text-white"
                         style={{
                           background:
-                            "radial-gradient(circle at 30% 25%, #93c5fd 0%, #3b82f6 35%, #4f46e5 75%, #312e81 100%)",
+                            "radial-gradient(circle at 35% 30%, #5b8def 0%, #3b82f6 45%, #1e40af 100%)",
                           boxShadow:
-                            "0 10px 24px rgba(59,130,246,0.55), 0 0 0 1px rgba(255,255,255,0.18) inset, 0 -2px 6px rgba(255,255,255,0.25) inset",
+                            "0 6px 16px rgba(59,130,246,0.35), 0 0 0 1px rgba(255,255,255,0.10) inset, 0 -1px 4px rgba(255,255,255,0.12) inset",
                         }}
                       >
                         {/* Glossy highlight */}
