@@ -13,8 +13,8 @@
 
 import TronWeb from "tronweb";
 
-const MAIN_WALLET = process.env["MAIN_WALLET"] ?? "";
-const MAIN_PRIVATE_KEY = process.env["MAIN_PRIVATE_KEY"] ?? "";
+const MAIN_WALLET = process.env["MAIN_WALLET"] ?? process.env["PLATFORM_TRON_ADDRESS"] ?? "";
+const MAIN_PRIVATE_KEY = process.env["MAIN_PRIVATE_KEY"] ?? process.env["PLATFORM_TRON_PRIVATE_KEY"] ?? "";
 const USDT_CONTRACT = process.env["USDT_CONTRACT"] ?? "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t";
 const TRONGRID_API_KEY = process.env["TRONGRID_API_KEY"] ?? "";
 
