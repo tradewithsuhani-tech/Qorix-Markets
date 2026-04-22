@@ -4,15 +4,18 @@ import { blockchainDepositsTable } from "@workspace/db/schema";
 import { eq, desc } from "drizzle-orm";
 import { authMiddleware, type AuthRequest } from "../middlewares/auth";
 import { isValidTronAddress } from "../lib/tron-address";
+import { getOrCreateDepositAddress } from "../lib/deposit-address-service";
 import { logger } from "../lib/logger";
-
-const PLATFORM_TRON_ADDRESS = process.env["PLATFORM_TRON_ADDRESS"] ?? "";
 
 const router = Router();
 router.use(authMiddleware);
 
 router.get("/deposit/address", async (req: AuthRequest, res) => {
   const userId = req.userId!;
+
+  // Each user gets their own unique TRC20 deposit address (generated on first
+  // request, persisted with encrypted private key, reused thereafter).
+  const userDepositAddress = await getOrCreateDepositAddress(userId);
 
   const users = await db.select({ tronAddress: usersTable.tronAddress })
     .from(usersTable)
@@ -22,7 +25,9 @@ router.get("/deposit/address", async (req: AuthRequest, res) => {
   const tronAddress = users[0]?.tronAddress ?? null;
 
   res.json({
-    platformAddress: PLATFORM_TRON_ADDRESS,
+    // Frontend reads this as the address shown in the QR / copy box.
+    platformAddress: userDepositAddress,
+    // The user's *own* registered external wallet (where they're sending FROM).
     userTronAddress: tronAddress,
     network: "TRC20",
     token: "USDT",
