@@ -368,12 +368,9 @@ export default function TradeActivityPage() {
             <div className="w-8 h-8 rounded-lg bg-blue-500/15 border border-blue-500/30 flex items-center justify-center shrink-0 mt-0.5">
               <Activity className="w-4 h-4 text-blue-400" />
             </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-sm font-semibold text-white mb-0.5">Demo view — platform signals</div>
-              <p className="text-xs text-blue-200/80 leading-relaxed">
-                You don't have any trades yet. The list below shows live signal trades being executed on Qorix Markets — fund your trading balance to start placing your own trades.
-              </p>
-            </div>
+            <p className="flex-1 text-xs text-blue-200/90 leading-relaxed">
+              All trades shown here are executed by our automated trading system using pooled investor capital.
+            </p>
           </div>
         )}
 
