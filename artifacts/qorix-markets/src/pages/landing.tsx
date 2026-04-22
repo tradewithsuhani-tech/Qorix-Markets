@@ -25,6 +25,7 @@ import {
   Award,
 } from "lucide-react";
 import { useGetMarketIndicators } from "@workspace/api-client-react";
+import heroBanner from "@assets/ChatGPT_Image_Apr_22,_2026,_08_43_24_AM_1776827611442.png";
 import {
   Area,
   AreaChart,
@@ -651,6 +652,39 @@ export default function Landing() {
       </section>
 
       <Ticker />
+
+      <section className="py-8 md:py-10">
+        <div className="max-w-7xl mx-auto px-5 md:px-8">
+          <motion.button
+            onClick={() => setLocation("/login")}
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: "-80px" }}
+            transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+            whileHover={{ scale: 1.01 }}
+            whileTap={{ scale: 0.99 }}
+            className="block w-full rounded-2xl md:rounded-3xl overflow-hidden relative group"
+            style={{
+              boxShadow: "0 20px 60px rgba(56,189,248,0.15), 0 0 0 1px rgba(56,189,248,0.18)",
+            }}
+            aria-label="Start trading with just $10"
+          >
+            <img
+              src={heroBanner}
+              alt="Qorix Markets — Smart Trading. Maximum Growth."
+              className="w-full h-auto block transition-transform duration-700 group-hover:scale-[1.02]"
+              loading="eager"
+              decoding="async"
+            />
+            <div
+              className="absolute inset-0 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+              style={{
+                background: "linear-gradient(120deg, transparent 30%, rgba(56,189,248,0.18) 50%, transparent 70%)",
+              }}
+            />
+          </motion.button>
+        </div>
+      </section>
 
       <section className="py-6">
         <div className="max-w-7xl mx-auto px-5 md:px-8 grid grid-cols-2 md:grid-cols-4 gap-3">
