@@ -88,8 +88,7 @@ function RankMedal({ rank }: { rank: number }) {
 // Tabs
 // ---------------------------------------------------------------------------
 const TABS = [
-  { id: "referrals", label: "Referrals", icon: Users },
-  { id: "weekly", label: "Weekly", icon: TrendingUp },
+  { id: "weekly", label: "Top Investors", icon: TrendingUp },
   { id: "rewards", label: "Rewards", icon: Star },
 ];
 
@@ -361,7 +360,7 @@ function EmptyState({ icon, title, sub }: { icon: string; title: string; sub: st
 // ---------------------------------------------------------------------------
 export function GrowthPanel() {
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState<string>("referrals");
+  const [activeTab, setActiveTab] = useState<string>("weekly");
 
   if (!user) return null;
 

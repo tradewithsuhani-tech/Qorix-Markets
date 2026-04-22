@@ -66,10 +66,17 @@ export function VipBadge({ tier, size = "sm", className }: VipBadgeProps) {
     md: "text-xs px-2.5 py-1 gap-1.5",
   }[size];
 
+  const tooltip = {
+    silver: "Silver tier — $500+ active fund · +5% profit bonus · 1.5% withdrawal fee",
+    gold: "Gold tier — $2,000+ active fund · +10% profit bonus · 1.0% withdrawal fee",
+    platinum: "Platinum tier — $10,000+ active fund · +15% profit bonus · 0.5% withdrawal fee",
+  }[tier];
+
   return (
     <span
+      title={tooltip}
       className={cn(
-        "inline-flex items-center rounded-full font-bold tracking-wide uppercase border shadow-sm",
+        "inline-flex items-center rounded-full font-bold tracking-wide uppercase border shadow-sm cursor-help",
         `bg-gradient-to-r ${cfg.gradient}`,
         cfg.border,
         cfg.text,

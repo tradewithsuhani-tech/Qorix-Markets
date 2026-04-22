@@ -47,7 +47,7 @@ const RISK_PROFILES = [
     barWidth: "20%",
     features: [
       "Max 3% drawdown protection",
-      "0.3–0.6% effective daily rate",
+      "2–5% monthly target return",
       "Low volatility exposure",
     ],
   },
@@ -75,7 +75,7 @@ const RISK_PROFILES = [
     barWidth: "50%",
     features: [
       "Max 5% drawdown protection",
-      "0.5–1.0% effective daily rate",
+      "4–6% monthly target return",
       "Balanced market exposure",
     ],
     recommended: true,
@@ -104,7 +104,7 @@ const RISK_PROFILES = [
     barWidth: "80%",
     features: [
       "Max 10% drawdown protection",
-      "0.75–1.5% effective daily rate",
+      "5–8% monthly target return",
       "High market exposure",
     ],
   },
@@ -779,7 +779,7 @@ export default function InvestPage() {
 
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
                   {[
-                    { label: "Invested Capital", value: <><AnimatedCounter value={investment.amount} prefix="$" /></>, color: "text-white" },
+                    { label: "Trading Fund", value: <><AnimatedCounter value={investment.amount} prefix="$" /></>, color: "text-white" },
                     { label: "Total Profit", value: <><AnimatedCounter value={investment.totalProfit} prefix="$" /></>, color: "text-green-400" },
                     { label: "Today's Profit", value: <><AnimatedCounter value={investment.dailyProfit} prefix="$" /></>, color: "text-emerald-400" },
                     { label: "Drawdown", value: `$${investment.drawdown.toFixed(2)}`, color: "text-orange-400" },

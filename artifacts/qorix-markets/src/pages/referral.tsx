@@ -389,8 +389,8 @@ export default function ReferralPage() {
                 },
                 {
                   n: "04",
-                  title: "You earn 5% monthly",
-                  desc: "On the 25th of each month, 5% of their profits are automatically credited to your profit balance.",
+                  title: "You earn 10% monthly",
+                  desc: "On the 25th of each month, 10% of their profits are automatically credited to your profit balance.",
                   color: "text-emerald-400",
                   dot: "bg-emerald-500",
                 },

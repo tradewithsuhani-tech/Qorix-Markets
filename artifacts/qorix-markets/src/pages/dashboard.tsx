@@ -618,7 +618,7 @@ export default function Dashboard() {
       glow: isPositive ? "rgba(34,197,94,0.1)" : "rgba(239,68,68,0.1)",
     },
     {
-      label: "Active Investment",
+      label: "Active Trading Fund",
       icon: <Zap style={{ width: 16, height: 16 }} className="text-indigo-400" />,
       value: <BigBalanceCounter value={summary?.activeInvestment || 0} className="text-2xl md:text-3xl" />,
       sub: summary?.isTrading ? (
@@ -784,7 +784,7 @@ export default function Dashboard() {
                   marketIndicators != null
                     ? marketIndicators.avgMonthlyReturn > 0
                       ? `${marketIndicators.avgMonthlyReturn.toFixed(1)}%`
-                      : "7–12%"
+                      : "—"
                     : "—",
                 sub: "last 30 days",
                 color: "text-violet-400",

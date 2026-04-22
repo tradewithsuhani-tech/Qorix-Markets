@@ -214,7 +214,7 @@ export default function RewardsPage() {
         {/* Header */}
         <motion.div variants={item}>
           <div className="flex items-center gap-2 mb-0.5">
-            <h1 className="text-2xl md:text-3xl font-bold tracking-tight gradient-text">Rewards Program</h1>
+            <h1 className="text-2xl md:text-3xl font-bold tracking-tight gradient-text">Promotions</h1>
             <span className="text-[10px] font-bold bg-blue-500/20 text-blue-400 border border-blue-500/30 px-1.5 py-0.5 rounded-full uppercase tracking-wider">Partner</span>
           </div>
           <p className="text-muted-foreground text-sm mt-0.5">Grow your network and unlock higher commissions and loyalty rewards.</p>

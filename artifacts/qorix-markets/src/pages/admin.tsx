@@ -4,7 +4,7 @@ import { AnimatedCounter } from "@/components/animated-counter";
 import { motion } from "framer-motion";
 import {
   Users, Activity, Wallet, CheckCircle, XCircle, ArrowUpFromLine, Layers,
-  Server, Cpu, HardDrive, Zap, Bell, Globe, Shield, TrendingUp, MessageCircle, Brain,
+  Server, Cpu, HardDrive, Zap, Bell, Globe, Shield, ShieldCheck, TrendingUp, MessageCircle, Brain,
   ChevronRight, FlaskConical,
 } from "lucide-react";
 import { AddressDisplay } from "@/components/address-display";
@@ -33,6 +33,7 @@ const QUICK_LINKS = [
   { href: "/admin/users", icon: Users, label: "Users", color: "text-blue-400 bg-blue-500/10 border-blue-500/20" },
   { href: "/admin/deposits", icon: ArrowUpFromLine, label: "Deposits", color: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20" },
   { href: "/admin/withdrawals", icon: Wallet, label: "Withdrawals", color: "text-amber-400 bg-amber-500/10 border-amber-500/20" },
+  { href: "/admin/kyc", icon: ShieldCheck, label: "KYC Queue", color: "text-blue-400 bg-blue-500/10 border-blue-500/20" },
   { href: "/admin/intelligence", icon: Brain, label: "Intelligence", color: "text-violet-400 bg-violet-500/10 border-violet-500/20" },
   { href: "/admin/communication", icon: Bell, label: "Communication", color: "text-indigo-400 bg-indigo-500/10 border-indigo-500/20" },
   { href: "/admin/content", icon: Globe, label: "Content", color: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20" },

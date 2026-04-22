@@ -1,7 +1,10 @@
 import { Layout } from "@/components/layout";
 import { useAuth } from "@/hooks/use-auth";
 import { motion } from "framer-motion";
-import { User as UserIcon, Mail, Calendar, Shield, Crown, Copy, CheckCircle2, LogOut, Volume2, VolumeX } from "lucide-react";
+import { User as UserIcon, Mail, Calendar, Shield, Crown, Copy, CheckCircle2, LogOut, Volume2, VolumeX, ShieldCheck, ChevronRight, Clock, XCircle } from "lucide-react";
+import { Link } from "wouter";
+import { useQuery } from "@tanstack/react-query";
+import { authFetch } from "@/lib/auth-fetch";
 import { isSoundEnabled, setSoundEnabled, playNotificationSound } from "@/lib/notification-sound";
 import { format } from "date-fns";
 import { useGetDashboardSummary } from "@workspace/api-client-react";
@@ -31,6 +34,11 @@ export default function SettingsPage() {
   const { toast } = useToast();
   const [copied, setCopied] = useState(false);
   const [soundOn, setSoundOn] = useState(() => isSoundEnabled());
+  const { data: kyc } = useQuery<{ kycStatus: string }>({
+    queryKey: ["kyc-status"],
+    queryFn: () => authFetch("/api/kyc/status"),
+    staleTime: 30000,
+  });
 
   const toggleSound = () => {
     const next = !soundOn;
@@ -145,6 +153,45 @@ export default function SettingsPage() {
               </div>
             ))}
           </div>
+        </motion.div>
+
+        {/* KYC */}
+        <motion.div variants={item}>
+          <Link href="/kyc">
+            <a className="block glass-card rounded-2xl p-4 hover:border-blue-500/30 transition-colors">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-xl bg-blue-500/15 text-blue-400 shrink-0">
+                  <ShieldCheck style={{ width: 18, height: 18 }} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-semibold flex items-center gap-2">
+                    Identity Verification (KYC)
+                    {kyc?.kycStatus === "approved" && (
+                      <span className="text-[10px] inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                        <CheckCircle2 style={{ width: 10, height: 10 }} /> Verified
+                      </span>
+                    )}
+                    {kyc?.kycStatus === "pending" && (
+                      <span className="text-[10px] inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                        <Clock style={{ width: 10, height: 10 }} /> Under Review
+                      </span>
+                    )}
+                    {kyc?.kycStatus === "rejected" && (
+                      <span className="text-[10px] inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/20">
+                        <XCircle style={{ width: 10, height: 10 }} /> Rejected
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-0.5">
+                    {kyc?.kycStatus === "approved"
+                      ? "Withdrawals enabled"
+                      : "Required to enable withdrawals"}
+                  </div>
+                </div>
+                <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
+              </div>
+            </a>
+          </Link>
         </motion.div>
 
         {/* VIP Card */}

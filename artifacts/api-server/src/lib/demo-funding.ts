@@ -11,11 +11,12 @@ export async function getDemoSignupAmount(): Promise<number> {
   return Number.isFinite(v) && v > 0 ? v : DEMO_DEFAULT_AMOUNT;
 }
 
-/** Toggle: when "false", new signups are NOT auto-credited demo funds. Default: true. */
+/** Toggle: when not explicitly enabled, new signups start with $0 balance.
+ *  Production default: OFF (admin can flip on via system_settings if needed). */
 export async function isAutoDemoSignupEnabled(): Promise<boolean> {
   const rows = await db.select().from(systemSettingsTable).where(eq(systemSettingsTable.key, "auto_demo_signup")).limit(1);
-  const v = (rows[0]?.value ?? "true").toLowerCase();
-  return v !== "false" && v !== "0" && v !== "off";
+  const v = (rows[0]?.value ?? "false").toLowerCase();
+  return v === "true" || v === "1" || v === "on";
 }
 
 /**

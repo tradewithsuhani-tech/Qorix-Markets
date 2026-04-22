@@ -402,56 +402,19 @@ export default function TradeActivityPage() {
           <Stat label="Win Rate" value={winRate} tint="blue" />
         </div>
 
-        {/* Open / Pending / Closed tabs (Exness-style, mobile only).
-            Desktop keeps the original MT-style table per product spec — no UX regression.
-            Open & Pending are placeholders until live-position streaming is wired in. */}
-        <div className="sm:hidden flex items-center gap-6 border-b border-white/8 -mx-1 px-1">
-          {(["open", "pending", "closed"] as const).map((t) => {
-            const active = tab === t;
-            const label = t === "open" ? "Open" : t === "pending" ? "Pending" : "Closed";
-            return (
-              <button
-                key={t}
-                onClick={() => setTab(t)}
-                className={cn(
-                  "relative pb-3 pt-1 text-sm font-medium transition-colors",
-                  active ? "text-white" : "text-white/45 hover:text-white/75"
-                )}
-              >
-                {label}
-                {active && (
-                  <motion.span
-                    layoutId="trade-tab-underline"
-                    className="absolute -bottom-px left-0 right-0 h-0.5 bg-white rounded-full"
-                    transition={{ type: "spring", bounce: 0.2, duration: 0.4 }}
-                  />
-                )}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* MOBILE: Exness-style grouped card list (only for Closed; Open/Pending are placeholders) */}
+        {/* Trade Summary (mobile) — replaces Open/Pending/Closed tabs */}
         <div className="sm:hidden">
-          {tab !== "closed" ? (
-            <div className="py-16 text-center rounded-2xl border border-white/8 bg-white/[0.02]">
-              <Activity className="w-9 h-9 mx-auto text-white/20 mb-3" />
-              <div className="text-sm text-white/55">
-                No {tab === "open" ? "open positions" : "pending orders"}
-              </div>
-              <div className="text-xs text-white/30 mt-1">
-                {tab === "open"
-                  ? "Live positions will appear here once a signal trade is open"
-                  : "Pending limit/stop orders will appear here"}
-              </div>
-            </div>
-          ) : (
-            <MobileTradeList
-              trades={filtered}
-              loading={showInitialLoader}
-              showPercent={usingPlatformFallback}
-            />
-          )}
+          <div className="flex items-center justify-between border-b border-white/8 pb-3 mb-3">
+            <div className="text-sm font-semibold text-white">Trade Summary</div>
+          </div>
+          <div className="rounded-xl border border-white/8 bg-white/[0.02] px-4 py-3 mb-3 text-[12px] leading-relaxed text-white/60">
+            All trades shown here are executed by our automated trading system using pooled investor capital.
+          </div>
+          <MobileTradeList
+            trades={filtered}
+            loading={showInitialLoader}
+            showPercent={usingPlatformFallback}
+          />
         </div>
 
         {/* DESKTOP: original MT-style grid table (unchanged) */}
