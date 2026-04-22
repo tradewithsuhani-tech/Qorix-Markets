@@ -82,6 +82,18 @@ async function getAdminStatsData() {
   const totalProfitWallet = parseFloat(String(walletTotalsResult?.profit ?? "0")) || 0;
   const totalUserFunds = totalMainWallet + totalTradingWallet + totalProfitWallet;
 
+  const [depositsEverResult] = await db
+    .select({ total: sum(transactionsTable.amount) })
+    .from(transactionsTable)
+    .where(and(eq(transactionsTable.type, "deposit"), eq(transactionsTable.status, "completed")));
+  const totalDepositsEver = parseFloat(String(depositsEverResult?.total ?? "0")) || 0;
+
+  const [withdrawalsEverResult] = await db
+    .select({ total: sum(transactionsTable.amount) })
+    .from(transactionsTable)
+    .where(and(eq(transactionsTable.type, "withdrawal"), eq(transactionsTable.status, "completed")));
+  const totalWithdrawalsEver = parseFloat(String(withdrawalsEverResult?.total ?? "0")) || 0;
+
   const settingRows = await db
     .select()
     .from(systemSettingsTable)
@@ -104,6 +116,8 @@ async function getAdminStatsData() {
     totalMainWallet,
     totalTradingWallet,
     totalProfitWallet,
+    totalDepositsEver,
+    totalWithdrawalsEver,
     dailyProfitPercent: dailyProfitSetting,
     maxSlots: slotData.maxSlots,
     availableSlots: slotData.availableSlots,
