@@ -689,9 +689,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
             backdropFilter: "blur(20px)",
             WebkitBackdropFilter: "blur(20px)",
             WebkitMaskImage:
-              "radial-gradient(circle 34px at 50% 0px, transparent 99%, black 100%)",
+              "radial-gradient(circle 38px at 50% 4px, transparent 98%, black 100%)",
             maskImage:
-              "radial-gradient(circle 34px at 50% 0px, transparent 99%, black 100%)",
+              "radial-gradient(circle 38px at 50% 4px, transparent 98%, black 100%)",
           }}
         />
         <div className="relative flex justify-around items-end px-2 pt-2">
