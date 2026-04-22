@@ -17,8 +17,16 @@ function getBackendUrl(req: any): string {
   return `${proto}://${host}`;
 }
 
-function getFrontendUrl(): string {
-  return (process.env.FRONTEND_PUBLIC_URL || "https://qorixmarkets.com").replace(/\/$/, "");
+function getFrontendUrl(req: any): string {
+  // Production: explicit env wins.
+  if (process.env.FRONTEND_PUBLIC_URL) return process.env.FRONTEND_PUBLIC_URL.replace(/\/$/, "");
+  // Dev / preview: round-trip back to the same origin the OAuth flow started
+  // on (Replit preview URL, localhost, etc.) so the token actually lands in
+  // the browser tab the user clicked from.
+  const proto = req.headers["x-forwarded-proto"] || req.protocol || "https";
+  const host = req.headers["x-forwarded-host"] || req.headers.host;
+  if (host) return `${proto}://${host}`;
+  return "https://qorixmarkets.com";
 }
 
 function generateReferralCode(): string {
@@ -47,7 +55,7 @@ router.get("/auth/google", (req, res) => {
 
 // Step 2: Google calls back here with auth code
 router.get("/auth/google/callback", async (req, res) => {
-  const frontend = getFrontendUrl();
+  const frontend = getFrontendUrl(req);
   try {
     const code = req.query.code as string | undefined;
     if (!code) {

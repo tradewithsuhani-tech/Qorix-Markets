@@ -459,7 +459,7 @@ export default function TasksPage() {
       <div className="max-w-2xl mx-auto px-4 py-6 space-y-6">
         {/* Header */}
         <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}>
-          <h1 className="text-xl font-bold">Tasks & Rewards</h1>
+          <h1 className="text-xl font-bold">Tasks & Promotions</h1>
           <p className="text-sm text-muted-foreground mt-0.5">Complete tasks to earn points and unlock benefits</p>
         </motion.div>
 
