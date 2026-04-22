@@ -77,25 +77,23 @@ function InlineCountdown({ targetMs }: { targetMs: number }) {
   const min = Math.floor((totalSec % 3600) / 60);
   const sec = totalSec % 60;
   const isImminent = diff < 5 * 60 * 1000;
-  const colorTxt = isImminent ? "text-red-300" : "text-white";
-  const colorSep = isImminent ? "text-red-300/60" : "text-white/30";
   return (
     <div
       className={cn(
-        "inline-flex items-baseline gap-0.5 font-mono tabular-nums leading-none",
-        isImminent && "animate-pulse",
+        "inline-flex items-baseline gap-1 font-mono tabular-nums leading-none text-red-400",
+        isImminent && "animate-pulse text-red-300",
       )}
     >
       {h > 0 && (
         <>
-          <span className={cn("text-base font-bold", colorTxt)}>{String(h).padStart(2, "0")}</span>
-          <span className={cn("text-[10px] font-medium ml-0.5 mr-1", colorSep)}>h</span>
+          <span className="text-base font-bold">{String(h).padStart(2, "0")}</span>
+          <span className="text-xs font-semibold text-red-400/80 mr-1">h</span>
         </>
       )}
-      <span className={cn("text-base font-bold", colorTxt)}>{String(min).padStart(2, "0")}</span>
-      <span className={cn("text-[10px] font-medium ml-0.5 mr-1", colorSep)}>m</span>
-      <span className={cn("text-base font-bold", colorTxt)}>{String(sec).padStart(2, "0")}</span>
-      <span className={cn("text-[10px] font-medium ml-0.5", colorSep)}>s</span>
+      <span className="text-base font-bold">{String(min).padStart(2, "0")}</span>
+      <span className="text-xs font-semibold text-red-400/80 mr-1">m</span>
+      <span className="text-base font-bold">{String(sec).padStart(2, "0")}</span>
+      <span className="text-xs font-semibold text-red-400/80">s</span>
     </div>
   );
 }
