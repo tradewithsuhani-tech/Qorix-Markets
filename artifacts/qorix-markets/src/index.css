@@ -534,7 +534,11 @@
     background: rgba(255,255,255,0.04);
     border: 1px solid rgba(255,255,255,0.10);
     border-radius: 10px;
-    padding: 11px 14px;
+    /* Use longhand so Tailwind utility classes (pl-10, pr-10, etc.) can override. */
+    padding-top: 11px;
+    padding-right: 14px;
+    padding-bottom: 11px;
+    padding-left: 14px;
     color: #fff;
     font-size: 14px;
     transition: border-color 0.18s, box-shadow 0.18s, background 0.18s;
