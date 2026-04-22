@@ -29,19 +29,23 @@ async function apiFetch(path: string, options: RequestInit = {}) {
 // ────────────────────────────────────────────────────────────────────────────
 // Email OTP verification step (shown after successful registration)
 // ────────────────────────────────────────────────────────────────────────────
-function EmailVerifyStep({ onSkip, onVerified }: { onSkip: () => void; onVerified: () => void }) {
+function EmailVerifyStep({
+  email,
+  onVerified,
+}: {
+  email: string;
+  onVerified: (token: string, user: any) => void;
+}) {
   const [otp, setOtp] = useState("");
   const [sending, setSending] = useState(false);
   const [verifying, setVerifying] = useState(false);
-  const [otpSent, setOtpSent] = useState(false);
   const { toast } = useToast();
 
   const sendOtp = async () => {
     setSending(true);
     try {
-      await apiFetch("/auth/send-otp", { method: "POST" });
-      setOtpSent(true);
-      toast({ title: "Verification code sent!", description: "Check your email inbox." });
+      await apiFetch("/auth/resend-verification", { method: "POST", body: JSON.stringify({ email }) });
+      toast({ title: "Verification code sent!", description: `Check ${email} (and your spam folder).` });
     } catch (err: any) {
       toast({ title: "Failed to send code", description: err.message, variant: "destructive" });
     } finally {
@@ -49,15 +53,18 @@ function EmailVerifyStep({ onSkip, onVerified }: { onSkip: () => void; onVerifie
     }
   };
 
-  useEffect(() => { sendOtp(); }, []);
+  // Initial OTP is already sent by the register endpoint — don't double-send.
 
   const handleVerify = async () => {
     if (otp.length < 6) return;
     setVerifying(true);
     try {
-      await apiFetch("/auth/verify-email", { method: "POST", body: JSON.stringify({ otp }) });
+      const data = await apiFetch("/auth/verify-email-public", {
+        method: "POST",
+        body: JSON.stringify({ email, otp }),
+      });
       toast({ title: "Email verified!", description: "You earned 25 bonus points. Welcome aboard!" });
-      onVerified();
+      onVerified(data.token, data.user);
     } catch (err: any) {
       toast({ title: "Verification failed", description: err.message, variant: "destructive" });
     } finally {
@@ -103,21 +110,14 @@ function EmailVerifyStep({ onSkip, onVerified }: { onSkip: () => void; onVerifie
           {verifying ? "Verifying..." : "Verify Email"}
         </button>
 
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-center">
           <button
             type="button"
             onClick={sendOtp}
             disabled={sending}
             className="text-xs text-muted-foreground hover:text-white transition-colors"
           >
-            {sending ? "Sending..." : "Resend code"}
-          </button>
-          <button
-            type="button"
-            onClick={onSkip}
-            className="text-xs text-muted-foreground hover:text-white transition-colors"
-          >
-            Skip for now →
+            {sending ? "Sending..." : "Didn't get the code? Resend"}
           </button>
         </div>
       </div>
@@ -136,6 +136,7 @@ export default function LoginPage() {
   const [referralCode, setReferralCode] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showOtpStep, setShowOtpStep] = useState(false);
+  const [pendingVerifyEmail, setPendingVerifyEmail] = useState("");
   const [captchaToken, setCaptchaToken] = useState("");
   const autoHideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pageLoadTime = useRef<number>(Date.now());
@@ -210,10 +211,16 @@ export default function LoginPage() {
 
   const registerMutation = useRegister({
     mutation: {
-      onSuccess: (data) => {
-        setAuthData(data.token, data.user);
-        // Show email OTP verification step
+      onSuccess: (_data: any) => {
+        // IMPORTANT: do NOT log the user in here. The backend now requires
+        // email OTP verification before issuing an auth token. We just move
+        // to the OTP step using the email the user typed.
+        setPendingVerifyEmail(email);
         setShowOtpStep(true);
+        toast({
+          title: "Check your email",
+          description: `We sent a 6-digit code to ${email}. Enter it to finish creating your account.`,
+        });
       },
       onError: (err: any) => {
         const msg = err.message || "Something went wrong";
@@ -265,8 +272,11 @@ export default function LoginPage() {
           <div className="glass-card rounded-2xl p-7">
             <AnimatePresence mode="wait">
               <EmailVerifyStep
-                onSkip={() => setLocation("/dashboard")}
-                onVerified={() => setLocation("/dashboard")}
+                email={pendingVerifyEmail}
+                onVerified={(token, user) => {
+                  setAuthData(token, user);
+                  setLocation("/dashboard");
+                }}
               />
             </AnimatePresence>
           </div>

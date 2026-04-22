@@ -198,8 +198,96 @@ router.post("/auth/register", async (req, res) => {
     }
   });
 
-  const token = signToken(newUser.id, newUser.isAdmin);
-  res.status(201).json({ token, user: formatUser(newUser) });
+  // IMPORTANT: do NOT issue an auth token here. The user must verify their
+  // email via OTP first (see POST /auth/verify-email-public). Returning a
+  // token here would let users skip verification entirely.
+  res.status(201).json({
+    requiresVerification: true,
+    email: newUser.email,
+    message: "Account created. Please verify your email with the OTP we just sent.",
+  });
+});
+
+// ---------------------------------------------------------------------------
+// POST /auth/verify-email-public — public OTP verify (used immediately after
+// registration, before the user has a session token). On success, issues the
+// auth JWT so the user can be logged in.
+// ---------------------------------------------------------------------------
+router.post("/auth/verify-email-public", async (req, res) => {
+  const { email, otp } = req.body ?? {};
+  if (!email || typeof email !== "string" || !otp || typeof otp !== "string") {
+    res.status(400).json({ error: "Email and OTP are required" });
+    return;
+  }
+
+  const users = await db.select().from(usersTable).where(eq(usersTable.email, email)).limit(1);
+  if (users.length === 0) {
+    // Generic error to avoid email enumeration
+    res.status(400).json({ error: "Invalid or expired code" });
+    return;
+  }
+
+  const user = users[0]!;
+  if (user.isDisabled || (user.isFrozen && !user.isAdmin)) {
+    res.status(403).json({ error: "Account access is restricted" });
+    return;
+  }
+
+  if (user.emailVerified) {
+    // Already verified — just issue the token so they can sign in
+    const token = signToken(user.id, user.isAdmin);
+    res.json({ token, user: formatUser(user), alreadyVerified: true });
+    return;
+  }
+
+  const result = await verifyOtp(user.id, otp, "verify_email");
+  if (!result.valid) {
+    res.status(400).json({ error: result.error ?? "Invalid or expired code" });
+    return;
+  }
+
+  await db
+    .update(usersTable)
+    .set({ emailVerified: true })
+    .where(eq(usersTable.id, user.id));
+
+  // Award one-time points (fire-and-forget)
+  setImmediate(async () => {
+    try {
+      const { awardPoints } = await import("../lib/task-service");
+      await awardPoints(user.id, 25, "task_reward", "Email verification bonus");
+    } catch { /* non-fatal */ }
+  });
+
+  const token = signToken(user.id, user.isAdmin);
+  res.json({ token, user: formatUser({ ...user, emailVerified: true }) });
+});
+
+// ---------------------------------------------------------------------------
+// POST /auth/resend-verification — public OTP resend (no auth required).
+// Always returns generic success to prevent email enumeration.
+// ---------------------------------------------------------------------------
+router.post("/auth/resend-verification", async (req, res) => {
+  const { email } = req.body ?? {};
+  if (!email || typeof email !== "string") {
+    res.status(400).json({ error: "Email is required" });
+    return;
+  }
+
+  const users = await db
+    .select({ id: usersTable.id, email: usersTable.email, emailVerified: usersTable.emailVerified, isDisabled: usersTable.isDisabled })
+    .from(usersTable)
+    .where(eq(usersTable.email, email))
+    .limit(1);
+
+  if (users.length > 0 && !users[0]!.isDisabled && !users[0]!.emailVerified) {
+    setImmediate(async () => {
+      try { await sendOtp(users[0]!.id, users[0]!.email, "verify_email"); } catch { /* non-fatal */ }
+    });
+  }
+
+  // Always generic — don't reveal whether email exists or is verified
+  res.json({ success: true, message: "If an unverified account exists for that email, a new code has been sent." });
 });
 
 // ---------------------------------------------------------------------------
