@@ -888,17 +888,19 @@ export default function Dashboard() {
             className="glass-card p-5 rounded-2xl col-span-1 lg:col-span-2 flex flex-col"
             style={{ minHeight: 340 }}
           >
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h3 className="font-semibold">Equity Curve</h3>
-                <p className="text-xs text-muted-foreground">Portfolio value over time</p>
+            <div className="flex flex-col gap-3 mb-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
+                <h3 className="font-semibold whitespace-nowrap">Equity Curve</h3>
+                <p className="text-xs text-muted-foreground whitespace-nowrap">Portfolio value over time</p>
               </div>
-              <PeriodFilter
-                options={DAYS_PERIOD_OPTIONS}
-                selected={chartDays}
-                onChange={(v) => setChartDays(Number(v))}
-                ariaLabel="Equity curve period"
-              />
+              <div className="-mx-1 overflow-x-auto scrollbar-hide sm:mx-0 sm:overflow-visible">
+                <PeriodFilter
+                  options={DAYS_PERIOD_OPTIONS}
+                  selected={chartDays}
+                  onChange={(v) => setChartDays(Number(v))}
+                  ariaLabel="Equity curve period"
+                />
+              </div>
             </div>
             <div className="flex-1" style={{ minHeight: 260 }}>
               {equityLoading ? (
