@@ -11,7 +11,7 @@
  * ──────────────────────────────────────────────────────
  */
 
-import TronWeb from "tronweb";
+import { TronWeb } from "tronweb";
 
 const MAIN_WALLET = process.env["MAIN_WALLET"] ?? process.env["PLATFORM_TRON_ADDRESS"] ?? "";
 const MAIN_PRIVATE_KEY = process.env["MAIN_PRIVATE_KEY"] ?? process.env["PLATFORM_TRON_PRIVATE_KEY"] ?? "";
