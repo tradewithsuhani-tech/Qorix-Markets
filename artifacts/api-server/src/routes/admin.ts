@@ -311,6 +311,12 @@ router.get("/admin/settings", async (_req: AuthRequest, res) => {
     popupRedirectLink: settings["popup_redirect_link"] ?? "",
     popupMode: settings["popup_mode"] ?? "off",
     adminIpWhitelist: settings["admin_ip_whitelist"] ?? "",
+    // Display-only baselines added on top of real on-platform totals in the
+    // public Fund Transparency widget. NEVER touched by accounting / payouts.
+    baselineTotalAum: Number(settings["baseline_total_aum"] ?? "0") || 0,
+    baselineActiveCapital: Number(settings["baseline_active_capital"] ?? "0") || 0,
+    baselineReserveFund: Number(settings["baseline_reserve_fund"] ?? "0") || 0,
+    baselineActiveInvestors: Number(settings["baseline_active_investors"] ?? "0") || 0,
   });
 });
 
@@ -326,6 +332,10 @@ router.post("/admin/settings", async (req: AuthRequest, res) => {
     popupRedirectLink: "popup_redirect_link",
     popupMode: "popup_mode",
     adminIpWhitelist: "admin_ip_whitelist",
+    baselineTotalAum: "baseline_total_aum",
+    baselineActiveCapital: "baseline_active_capital",
+    baselineReserveFund: "baseline_reserve_fund",
+    baselineActiveInvestors: "baseline_active_investors",
   };
 
   for (const [bodyKey, settingKey] of Object.entries(allowed)) {

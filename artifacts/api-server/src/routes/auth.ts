@@ -169,7 +169,7 @@ router.post("/auth/register", async (req, res) => {
   await db.insert(walletsTable).values({ userId: newUser.id });
   await db.insert(investmentsTable).values({ userId: newUser.id });
 
-  // Auto-credit demo welcome funds (gated by `auto_demo_signup` system setting; default ON)
+  // Auto-credit demo welcome funds (gated by `auto_demo_signup` system setting; default OFF in production)
   try {
     const { seedDemoFunds, isAutoDemoSignupEnabled } = await import("../lib/demo-funding");
     if (await isAutoDemoSignupEnabled()) {

@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, walletsTable, investmentsTable, equityHistoryTable, tradesTable, monthlyPerformanceTable } from "@workspace/db";
+import { db, walletsTable, investmentsTable, equityHistoryTable, tradesTable, monthlyPerformanceTable, systemSettingsTable } from "@workspace/db";
 import { eq, and, gte, desc, sum, count } from "drizzle-orm";
 import { getSlotData } from "./admin";
 import { authMiddleware, type AuthRequest } from "../middlewares/auth";
@@ -179,19 +179,35 @@ router.get("/dashboard/fund-stats", async (req: AuthRequest, res) => {
     .from(investmentsTable)
     .where(eq(investmentsTable.isActive, true));
 
-  const totalAUM = parseFloat(String(aumResult?.total ?? "0")) || 0;
-  const reserveFund = (parseFloat(String(allMainResult?.total ?? "0")) || 0) +
+  const realAUM = parseFloat(String(aumResult?.total ?? "0")) || 0;
+  const realReserve = (parseFloat(String(allMainResult?.total ?? "0")) || 0) +
     (parseFloat(String(allProfitResult?.total ?? "0")) || 0);
-  const activeInvestors = Number(activeCountResult?.count ?? 0);
+  const realActiveInvestors = Number(activeCountResult?.count ?? 0);
+
+  // Public-facing baselines so the platform doesn't show $0 to brand-new
+  // visitors. These are admin-controlled (admin/settings) and added on top of
+  // real on-platform numbers. They never affect any user balance, P&L,
+  // accounting journal or withdrawal logic — display only.
+  const settingRows = await db.select().from(systemSettingsTable);
+  const settings = Object.fromEntries(settingRows.map((r) => [r.key, r.value]));
+  const baselineAUM = Number(settings["baseline_total_aum"] ?? "0") || 0;
+  const baselineActiveCapital = Number(settings["baseline_active_capital"] ?? "0") || 0;
+  const baselineReserve = Number(settings["baseline_reserve_fund"] ?? "0") || 0;
+  const baselineInvestors = Number(settings["baseline_active_investors"] ?? "0") || 0;
+
+  const totalAUM = realAUM + baselineAUM;
+  const activeCapital = realAUM + baselineActiveCapital;
+  const reserveFund = realReserve + baselineReserve;
+  const activeInvestors = realActiveInvestors + baselineInvestors;
   const slotData = await getSlotData();
 
   res.json({
     totalAUM,
-    activeCapital: totalAUM,
+    activeCapital,
     reserveFund,
     activeInvestors,
-    utilizationRate: (totalAUM + reserveFund) > 0
-      ? parseFloat(((totalAUM / (totalAUM + reserveFund)) * 100).toFixed(1))
+    utilizationRate: (activeCapital + reserveFund) > 0
+      ? parseFloat(((activeCapital / (activeCapital + reserveFund)) * 100).toFixed(1))
       : 0,
     maxSlots: slotData.maxSlots,
     availableSlots: slotData.availableSlots,

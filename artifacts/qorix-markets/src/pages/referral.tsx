@@ -139,7 +139,7 @@ export default function ReferralPage() {
           <div className="flex items-start justify-between">
             <div>
               <h1 className="text-2xl md:text-3xl font-bold tracking-tight gradient-text">Partner Dashboard</h1>
-              <p className="text-muted-foreground text-sm mt-0.5">Invite investors, earn 5% of their monthly profits — automatically.</p>
+              <p className="text-muted-foreground text-sm mt-0.5">Invite investors, earn 10% of their monthly profits — automatically.</p>
             </div>
             <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 mt-1">
               <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
@@ -171,7 +171,7 @@ export default function ReferralPage() {
               <div className="glass-card p-5 rounded-2xl relative overflow-hidden col-span-2 lg:col-span-1">
                 <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-violet-500/60 to-purple-500/40" />
                 <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-3">Commission Rate</p>
-                <p className="text-3xl font-bold text-violet-400">5%</p>
+                <p className="text-3xl font-bold text-violet-400">10%</p>
                 <p className="text-xs text-muted-foreground mt-2">Of each referral's monthly profits</p>
               </div>
             </>

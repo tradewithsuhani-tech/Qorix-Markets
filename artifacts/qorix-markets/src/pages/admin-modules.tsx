@@ -29,6 +29,7 @@ import {
   Zap,
   HardDrive,
   CheckCheck,
+  Globe,
 } from "lucide-react";
 import { AddressDisplay } from "@/components/address-display";
 import { useToast } from "@/hooks/use-toast";
@@ -700,6 +701,31 @@ export function AdminSystemPage() {
             <button onClick={sendBroadcast} disabled={!broadcast.title || !broadcast.message} className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 flex items-center justify-center gap-2"><Send className="w-4 h-4" /> Send Broadcast</button>
           </div>
         </div>
+        <div className="glass-card p-6 rounded-2xl space-y-4">
+          <div>
+            <h2 className="text-xl font-bold flex items-center gap-2"><Globe className="w-5 h-5 text-emerald-400" /> Fund Transparency Baselines</h2>
+            <p className="text-xs text-muted-foreground mt-1">Display-only floor values shown publicly on the dashboard's Fund Transparency widget. Real on-platform totals are added on top of these. <span className="text-amber-400">These never affect any user balance, P&amp;L, accounting or withdrawals.</span></p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="text-sm text-muted-foreground">Baseline Total AUM (USD)</label>
+              <input type="number" value={settings?.baselineTotalAum ?? 0} onChange={(e) => setSettings({ ...settings, baselineTotalAum: e.target.value })} onBlur={() => save({ baselineTotalAum: Number(settings?.baselineTotalAum ?? 0) })} className="mt-2 w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm" />
+            </div>
+            <div>
+              <label className="text-sm text-muted-foreground">Baseline Active Capital (USD)</label>
+              <input type="number" value={settings?.baselineActiveCapital ?? 0} onChange={(e) => setSettings({ ...settings, baselineActiveCapital: e.target.value })} onBlur={() => save({ baselineActiveCapital: Number(settings?.baselineActiveCapital ?? 0) })} className="mt-2 w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm" />
+            </div>
+            <div>
+              <label className="text-sm text-muted-foreground">Baseline Reserve Fund (USD)</label>
+              <input type="number" value={settings?.baselineReserveFund ?? 0} onChange={(e) => setSettings({ ...settings, baselineReserveFund: e.target.value })} onBlur={() => save({ baselineReserveFund: Number(settings?.baselineReserveFund ?? 0) })} className="mt-2 w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm" />
+            </div>
+            <div>
+              <label className="text-sm text-muted-foreground">Baseline Active Investors</label>
+              <input type="number" value={settings?.baselineActiveInvestors ?? 0} onChange={(e) => setSettings({ ...settings, baselineActiveInvestors: e.target.value })} onBlur={() => save({ baselineActiveInvestors: Number(settings?.baselineActiveInvestors ?? 0) })} className="mt-2 w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm" />
+            </div>
+          </div>
+        </div>
+
         <div className="glass-card p-6 rounded-2xl">
           <h2 className="text-xl font-bold mb-4 flex items-center gap-2"><Shield className="w-5 h-5 text-blue-400" /> RBAC — Role-Based Access</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
