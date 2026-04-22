@@ -130,6 +130,37 @@ export async function getTreasuryUsdtBalance(): Promise<number> {
   return Number(BigInt(raw.toString())) / Math.pow(10, decimals);
 }
 
+async function sweepRemainingTrx(
+  fromAddress: string,
+  fromPrivateKey: string,
+): Promise<string | null> {
+  if (!MAIN_WALLET) return null;
+  try {
+    const tronWeb = buildTronWeb(fromPrivateKey);
+    const balanceSun: number = await tronWeb.trx.getBalance(fromAddress);
+    // Leave 1 TRX buffer (covers tx bandwidth fee if free bandwidth is exhausted)
+    const buffer = 1_000_000;
+    const sendable = balanceSun - buffer;
+    if (sendable <= 0) {
+      console.log(`[sweep] No leftover TRX to sweep from ${fromAddress} (balance=${balanceSun / 1e6})`);
+      return null;
+    }
+    const tx = await tronWeb.transactionBuilder.sendTrx(MAIN_WALLET, sendable, fromAddress);
+    const signed = await tronWeb.trx.sign(tx, fromPrivateKey);
+    const result = await tronWeb.trx.sendRawTransaction(signed);
+    if (!result.result) {
+      console.error(`[sweep] TRX leftover sweep failed: ${JSON.stringify(result)}`);
+      return null;
+    }
+    const txId: string = result.txid ?? (result as any).transaction?.txID ?? "unknown";
+    console.log(`[sweep] Returned ${sendable / 1e6} TRX leftover → ${MAIN_WALLET} | txid: ${txId}`);
+    return txId;
+  } catch (err) {
+    console.error(`[sweep] sweepRemainingTrx error:`, err);
+    return null;
+  }
+}
+
 export async function runSweepPipeline(
   userAddress: string,
   userPrivateKey: string,
@@ -143,5 +174,10 @@ export async function runSweepPipeline(
   await sleep(SWEEP_DELAY_MS);
 
   const sweepTxId = await sweepUsdt(userAddress, userPrivateKey, usdtAmount);
+
+  // After USDT sweep, return any leftover TRX gas back to treasury
+  await sleep(SWEEP_DELAY_MS);
+  await sweepRemainingTrx(userAddress, userPrivateKey);
+
   return sweepTxId;
 }
