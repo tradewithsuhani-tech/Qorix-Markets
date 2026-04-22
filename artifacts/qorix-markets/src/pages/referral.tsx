@@ -45,44 +45,41 @@ const PLATFORM_BENEFITS = [
   { icon: Globe, label: "USDT (TRC20) settlement", detail: "Stable, borderless, instant" },
 ];
 
+const SHARE_MESSAGE = (code: string) =>
+  `I've been exploring Qorix Markets — a platform focused on automated trading strategies designed to optimize capital growth.\n\nIt removes the need for manual trading and provides a structured approach to portfolio management.\n\nYou can learn more here:\nhttps://qorixmarkets.com\n\n(Use referral code: ${code} if required)`;
+
 const CHANNELS = [
   {
     id: "whatsapp",
     label: "WhatsApp",
     icon: MessageSquare,
     color: "#25D366",
-    getUrl: (link: string, code: string) =>
-      `https://wa.me/?text=${encodeURIComponent(
-        `I've been using Qorix Markets — an automated USDT investment platform that distributes daily profits.\n\nUse my partner code *${code}* or sign up directly:\n${link}\n\nNo manual trading involved. Worth exploring.`
-      )}`,
+    getUrl: (_link: string, code: string) =>
+      `https://wa.me/?text=${encodeURIComponent(SHARE_MESSAGE(code))}`,
   },
   {
     id: "telegram",
     label: "Telegram",
     icon: Send,
     color: "#229ED9",
-    getUrl: (link: string, code: string) =>
-      `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(
-        `Qorix Markets — automated USDT investing with daily profit payouts. Partner code: ${code}`
-      )}`,
+    getUrl: (_link: string, code: string) =>
+      `https://t.me/share/url?url=${encodeURIComponent("https://qorixmarkets.com")}&text=${encodeURIComponent(SHARE_MESSAGE(code))}`,
   },
   {
     id: "twitter",
     label: "X (Twitter)",
     icon: Twitter,
     color: "#E7E9EA",
-    getUrl: (link: string, code: string) =>
-      `https://twitter.com/intent/tweet?text=${encodeURIComponent(
-        `Currently using Qorix Markets for automated USDT investing — daily profits, no manual trading. Partner code: ${code} ${link} #USDT #PassiveIncome`
-      )}`,
+    getUrl: (_link: string, code: string) =>
+      `https://twitter.com/intent/tweet?text=${encodeURIComponent(SHARE_MESSAGE(code))}`,
   },
   {
     id: "facebook",
     label: "Facebook",
     icon: Facebook,
     color: "#1877F2",
-    getUrl: (link: string, _code: string) =>
-      `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(link)}`,
+    getUrl: (_link: string, _code: string) =>
+      `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent("https://qorixmarkets.com")}`,
   },
 ];
 
