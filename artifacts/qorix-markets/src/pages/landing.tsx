@@ -538,7 +538,7 @@ export default function Landing() {
       <header className="sticky top-0 z-50 border-b" style={{ background: "rgba(5,8,20,0.88)", backdropFilter: "blur(24px)", borderColor: "rgba(255,255,255,0.06)" }}>
         <div className="max-w-7xl mx-auto px-5 md:px-8 h-14 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <QorixLogo size={32} />
+            <QorixLogo size={38} />
             <span className="font-black tracking-tight text-[15px] text-white">Qorix<span style={{ background: "linear-gradient(90deg,#38bdf8,#818cf8)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>Markets</span></span>
           </div>
 
