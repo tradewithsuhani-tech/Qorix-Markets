@@ -728,23 +728,19 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </div>
       </main>
 
-      {/* Mobile Bottom Nav — pill with notch cutout for floating Trade FAB */}
+      {/* Mobile Bottom Nav — pill with floating Trade FAB on top */}
       <nav
-        className="md:hidden fixed bottom-3 left-3 right-3 z-30"
+        className="md:hidden fixed bottom-3 left-3 right-3 z-50"
         style={{ paddingBottom: "max(env(safe-area-inset-bottom, 0px), 0.5rem)" }}
       >
-        {/* Background layer with masked notch — separate from buttons so FAB isn't clipped */}
+        {/* Solid background layer — no mask hacks, works on every browser */}
         <div
           aria-hidden="true"
           className="absolute inset-0 rounded-3xl border border-white/10 shadow-[0_-4px_24px_rgba(0,0,0,0.45)] pointer-events-none"
           style={{
-            background: "rgba(13, 21, 37, 0.92)",
+            background: "rgba(13, 21, 37, 0.95)",
             backdropFilter: "blur(20px)",
             WebkitBackdropFilter: "blur(20px)",
-            WebkitMaskImage:
-              "radial-gradient(circle 32px at 50% 0px, transparent 99%, black 100%)",
-            maskImage:
-              "radial-gradient(circle 32px at 50% 0px, transparent 99%, black 100%)",
           }}
         />
         <div className="relative flex justify-around items-end px-2 pt-2">
