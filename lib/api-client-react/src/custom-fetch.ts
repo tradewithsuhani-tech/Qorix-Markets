@@ -149,11 +149,24 @@ function truncate(text: string, maxLength = 300): string {
 }
 
 function buildErrorMessage(response: Response, data: unknown): string {
-  const prefix = `HTTP ${response.status} ${response.statusText}`;
+  // Prefer human-readable server messages without exposing HTTP status codes
+  // to end users. Falls back to a generic message keyed by status when the
+  // server didn't return anything useful.
+  const fallbackByStatus = (status: number): string => {
+    if (status === 400) return "Invalid request. Please check your input.";
+    if (status === 401) return "Please sign in to continue.";
+    if (status === 403) return "You don't have permission to do that.";
+    if (status === 404) return "Not found.";
+    if (status === 409) return "This already exists.";
+    if (status === 422) return "Some details are invalid. Please review and try again.";
+    if (status === 429) return "Too many attempts. Please wait a moment and try again.";
+    if (status >= 500) return "Server error. Please try again in a moment.";
+    return "Something went wrong. Please try again.";
+  };
 
   if (typeof data === "string") {
     const text = data.trim();
-    return text ? `${prefix}: ${truncate(text)}` : prefix;
+    return text ? truncate(text) : fallbackByStatus(response.status);
   }
 
   const title = getStringField(data, "title");
@@ -163,12 +176,12 @@ function buildErrorMessage(response: Response, data: unknown): string {
     getStringField(data, "error_description") ??
     getStringField(data, "error");
 
-  if (title && detail) return `${prefix}: ${title} — ${detail}`;
-  if (detail) return `${prefix}: ${detail}`;
-  if (message) return `${prefix}: ${message}`;
-  if (title) return `${prefix}: ${title}`;
+  if (title && detail) return `${title} — ${detail}`;
+  if (detail) return detail;
+  if (message) return message;
+  if (title) return title;
 
-  return prefix;
+  return fallbackByStatus(response.status);
 }
 
 export class ApiError<T = unknown> extends Error {
