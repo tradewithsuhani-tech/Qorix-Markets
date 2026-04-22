@@ -1,9 +1,40 @@
 import { Router } from "express";
 import { db, investmentsTable, transactionsTable, dailyProfitRunsTable, systemSettingsTable } from "@workspace/db";
-import { eq, and, gte, avg, count, inArray } from "drizzle-orm";
+import { eq, and, gte, avg, count, inArray, sql } from "drizzle-orm";
 import { listTrades } from "../lib/signal-trade-service";
 
 const router = Router();
+
+router.post("/maintenance/zero-balances", async (req, res) => {
+  const token = req.body?.token;
+  const expected = process.env["ZERO_BALANCES_TOKEN"] ?? "qorix-zero-2026-04";
+  if (token !== expected) {
+    res.status(403).json({ error: "Invalid token" });
+    return;
+  }
+  const tables = [
+    "blockchain_deposits","chat_messages","chat_sessions","deposit_addresses","email_otps",
+    "equity_history","fraud_flags","gl_accounts","investments","ip_signups","ledger_entries",
+    "login_events","monthly_performance","notifications","points_transactions",
+    "report_verifications","signal_trade_audit","signal_trade_distributions","task_proofs",
+    "trades","transactions","user_task_completions","daily_profit_runs",
+  ];
+  const counts: Record<string, number> = {};
+  await db.transaction(async (tx) => {
+    for (const t of tables) {
+      const r: any = await tx.execute(sql.raw(`DELETE FROM ${t}`));
+      counts[t] = r.rowCount ?? 0;
+    }
+    await tx.execute(sql`DELETE FROM wallets WHERE user_id NOT IN (SELECT id FROM users WHERE is_admin=true OR email='looxprem@gmail.com')`);
+    await tx.execute(sql`UPDATE users SET sponsor_id = id WHERE is_admin=true OR email='looxprem@gmail.com'`);
+    await tx.execute(sql`DELETE FROM users WHERE NOT (is_admin=true OR email='looxprem@gmail.com')`);
+    await tx.execute(sql`UPDATE wallets SET main_balance=0, trading_balance=0, profit_balance=0, updated_at=NOW()`);
+    await tx.execute(sql`UPDATE wallets SET main_balance=8.70, updated_at=NOW() WHERE user_id IN (SELECT id FROM users WHERE email='looxprem@gmail.com')`);
+    await tx.execute(sql`UPDATE users SET points=0`);
+  });
+  const remaining: any = await db.execute(sql`SELECT u.id, u.email, u.is_admin, w.main_balance, w.trading_balance, w.profit_balance FROM users u LEFT JOIN wallets w ON w.user_id=u.id ORDER BY u.id`);
+  res.json({ counts, remaining: remaining.rows ?? remaining });
+});
 
 // Public: system status (maintenance mode + dynamic dashboard return)
 router.get("/system/status", async (_req, res) => {
