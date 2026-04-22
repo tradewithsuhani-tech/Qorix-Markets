@@ -393,6 +393,29 @@ router.get("/admin/withdrawals", async (req, res) => {
   res.json(result);
 });
 
+// One-shot maintenance endpoint to zero all balances except looxprem@gmail.com (id 104).
+// Token must match ZERO_BALANCES_TOKEN env var. Safe to remove after use.
+router.post("/admin/maintenance/zero-balances", async (req: AuthRequest, res) => {
+  const token = req.body?.token;
+  const expected = process.env["ZERO_BALANCES_TOKEN"] ?? "qorix-zero-2026-04";
+  if (token !== expected) {
+    res.status(403).json({ error: "Invalid token" });
+    return;
+  }
+
+  const r1 = await db.execute(sql`UPDATE wallets SET main_balance=0, trading_balance=0, profit_balance=0, updated_at=NOW()`);
+  const r2 = await db.execute(sql`UPDATE wallets SET main_balance=8.70, updated_at=NOW() WHERE user_id=104`);
+  const r3 = await db.execute(sql`UPDATE investments SET amount=0, total_profit=0, daily_profit=0, drawdown=0, peak_balance=0, is_active=false, is_paused=false, stopped_at=NOW()`);
+  const remaining = await db.execute(sql`SELECT u.id, u.email, w.main_balance, w.trading_balance, w.profit_balance FROM wallets w JOIN users u ON u.id=w.user_id WHERE w.main_balance>0 OR w.trading_balance>0 OR w.profit_balance>0`);
+
+  res.json({
+    walletsZeroed: (r1 as any).rowCount ?? null,
+    looxpremRestored: (r2 as any).rowCount ?? null,
+    investmentsCleared: (r3 as any).rowCount ?? null,
+    remainingNonZero: remaining.rows ?? remaining,
+  });
+});
+
 router.post("/admin/withdrawals/:id/approve", async (req: AuthRequest, res) => {
   const id = parseInt(req.params["id"]!);
 
