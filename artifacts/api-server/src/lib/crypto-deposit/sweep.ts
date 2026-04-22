@@ -130,6 +130,13 @@ export async function getTreasuryUsdtBalance(): Promise<number> {
   return Number(BigInt(raw.toString())) / Math.pow(10, decimals);
 }
 
+export async function sweepLeftoverTrxFrom(
+  fromAddress: string,
+  fromPrivateKey: string,
+): Promise<string | null> {
+  return sweepRemainingTrx(fromAddress, fromPrivateKey);
+}
+
 async function sweepRemainingTrx(
   fromAddress: string,
   fromPrivateKey: string,

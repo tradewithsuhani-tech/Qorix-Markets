@@ -6,7 +6,7 @@ import { createNotification } from "./notifications";
 import { emitDepositEvent } from "./event-bus";
 import { ensureUserAccounts, postJournalEntry, journalForTransaction } from "./ledger-service";
 import { getAllDepositAddresses, decryptDepositPrivateKey } from "./deposit-address-service";
-import { runSweepPipeline } from "./crypto-deposit/sweep";
+import { runSweepPipeline, sweepLeftoverTrxFrom } from "./crypto-deposit/sweep";
 
 const USDT_CONTRACT = "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t";
 const TRONGRID_BASE = "https://api.trongrid.io";
@@ -339,6 +339,38 @@ async function retryStuckSweeps(): Promise<void> {
     logger.info({ depositId: d.id, address: d.toAddress, amount: amt, onchainBal }, "Retrying stuck sweep");
     triggerSweep(d.toAddress, enc, onchainBal, d.id);
     await new Promise((r) => setTimeout(r, 2000));
+  }
+}
+
+// Sweeps any leftover TRX (from past deposits where USDT already swept) back to treasury.
+async function sweepLeftoverTrx(): Promise<void> {
+  const addrs = await getAllDepositAddresses();
+  for (const a of addrs) {
+    try {
+      const url = `${TRONGRID_BASE}/v1/accounts/${a.address}`;
+      const r = await fetch(url, { headers: tronHeaders() });
+      if (!r.ok) continue;
+      const j: any = await r.json();
+      const acc = j?.data?.[0];
+      if (!acc) continue;
+      const trxSun = Number(acc.balance ?? 0);
+      // Only sweep if leftover > 2 TRX (covers fee + buffer; below that not worth it)
+      if (trxSun < 2_000_000) continue;
+      // Skip if address still has USDT (will be handled by sweep pipeline)
+      const tokens = acc.trc20 ?? [];
+      let hasUsdt = false;
+      for (const t of tokens) {
+        const bal = t[USDT_CONTRACT];
+        if (bal != null && Number(BigInt(bal)) >= 1_000_000) { hasUsdt = true; break; }
+      }
+      if (hasUsdt) continue;
+      const pk = decryptDepositPrivateKey(a.privateKeyEnc);
+      const txid = await sweepLeftoverTrxFrom(a.address, pk);
+      if (txid) logger.info({ address: a.address, trx: trxSun / 1e6, txid }, "Swept leftover TRX to treasury");
+      await new Promise((r) => setTimeout(r, 1500));
+    } catch (err) {
+      errorLogger.error({ err, address: a.address }, "Leftover TRX sweep failed");
+    }
   }
 }
 
