@@ -1,6 +1,6 @@
 import { db, walletsTable, transactionsTable, usersTable, systemSettingsTable } from "@workspace/db";
 import { blockchainDepositsTable } from "@workspace/db/schema";
-import { eq, isNotNull } from "drizzle-orm";
+import { eq, isNotNull, or, isNull, sql } from "drizzle-orm";
 import { logger, errorLogger } from "./logger";
 import { createNotification } from "./notifications";
 import { emitDepositEvent } from "./event-bus";
@@ -262,16 +262,16 @@ function triggerSweep(address: string, encryptedPrivateKey: string, amount: numb
     const privateKey = decryptDepositPrivateKey(encryptedPrivateKey);
     (async () => {
       try {
-        await runSweepPipeline(address, privateKey, amount);
-        if (depositId) {
+        const sweepTxId = await runSweepPipeline(address, privateKey, amount);
+        if (depositId && sweepTxId) {
           await db
             .update(blockchainDepositsTable)
-            .set({ swept: true, sweptAt: new Date() })
+            .set({ swept: true, sweptAt: new Date(), sweepTxHash: sweepTxId })
             .where(eq(blockchainDepositsTable.id, depositId));
         }
-        logger.info({ address, amount, depositId }, "Sweep pipeline completed");
+        logger.info({ address, amount, depositId, sweepTxId }, "Sweep pipeline completed");
       } catch (err) {
-        errorLogger.error({ err, address, amount }, "Sweep pipeline failed");
+        errorLogger.error({ err, address, amount, depositId }, "Sweep pipeline failed - leaving swept=false for retry");
       }
     })();
     logger.info({ address, amount }, "Sweep pipeline triggered for deposit address");
@@ -288,7 +288,10 @@ async function retryStuckSweeps(): Promise<void> {
       amount: blockchainDepositsTable.amount,
     })
     .from(blockchainDepositsTable)
-    .where(eq(blockchainDepositsTable.swept, false));
+    .where(or(
+      eq(blockchainDepositsTable.swept, false),
+      sql`${blockchainDepositsTable.sweepTxHash} IS NULL OR ${blockchainDepositsTable.sweepTxHash} = ''`,
+    ));
 
   if (stuck.length === 0) return;
 
