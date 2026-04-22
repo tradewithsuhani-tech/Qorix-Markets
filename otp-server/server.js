@@ -88,36 +88,138 @@ const verifyOtpLimiter = rateLimit({
   message: { success: false, error: 'Too many verification attempts. Try again later.' },
 });
 
+// Premium branded HTML template — matches Qorix Markets dark theme.
+// Uses table layout + inline styles for maximum email-client compatibility.
+const renderQorixEmail = ({ purposeLabel, intro, otp, expiryMinutes }) => {
+  const otpCells = otp
+    .split('')
+    .map(
+      (d, i) =>
+        `<td align="center" style="padding:6px 14px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:36px;font-weight:700;color:#ffffff;line-height:1;${
+          i > 0 ? 'border-left:1px solid rgba(148,163,184,0.25);' : ''
+        }">${d}</td>`,
+    )
+    .join('');
+
+  const iconRow = (svg, body) => `
+    <tr>
+      <td style="padding:10px 0;" valign="top">
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+          <tr>
+            <td width="44" valign="top" style="padding-right:14px;">
+              <div style="width:36px;height:36px;border-radius:50%;background:rgba(56,189,248,0.10);border:1px solid rgba(56,189,248,0.30);text-align:center;line-height:34px;">${svg}</div>
+            </td>
+            <td valign="middle" style="font-size:13px;line-height:1.6;color:#cbd5e1;">${body}</td>
+          </tr>
+        </table>
+      </td>
+    </tr>`;
+
+  const shieldSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#7dd3fc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>`;
+  const lockSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>`;
+  const mailSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#7dd3fc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>`;
+
+  return `<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="x-apple-disable-message-reformatting" />
+    <title>${purposeLabel} — Qorix Markets</title>
+  </head>
+  <body style="margin:0;padding:0;background:#05070d;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#e2e8f0;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#05070d;">
+      <tr>
+        <td align="center" style="padding:32px 16px;">
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:22px;">
+            <tr>
+              <td valign="middle" style="padding-right:12px;">
+                <div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,#38bdf8 0%,#a78bfa 100%);text-align:center;line-height:44px;font-size:22px;font-weight:800;color:#ffffff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">Q</div>
+              </td>
+              <td valign="middle" style="font-size:26px;font-weight:700;color:#ffffff;letter-spacing:1px;line-height:1;">
+                QORIX
+                <div style="font-size:11px;letter-spacing:5px;color:#7dd3fc;font-weight:600;margin-top:4px;">— M A R K E T S —</div>
+              </td>
+            </tr>
+          </table>
+
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;background:#0a1020;border:1px solid rgba(56,189,248,0.15);border-radius:18px;overflow:hidden;">
+            <tr>
+              <td style="padding:36px 40px 8px 40px;">
+                <h1 style="margin:0 0 10px 0;font-size:26px;line-height:1.25;color:#ffffff;font-weight:700;">${purposeLabel}</h1>
+                <div style="height:3px;width:70px;background:linear-gradient(90deg,#38bdf8 0%,#a78bfa 100%);border-radius:2px;margin-bottom:18px;"></div>
+                <p style="margin:0 0 26px 0;color:#cbd5e1;font-size:14px;line-height:1.7;">${intro}</p>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:0 40px 8px 40px;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:linear-gradient(135deg,rgba(59,130,246,0.14) 0%,rgba(139,92,246,0.14) 100%);border:1px solid rgba(99,102,241,0.30);border-radius:14px;">
+                  <tr>
+                    <td align="center" style="padding:18px 12px 6px 12px;font-size:11px;letter-spacing:3px;color:#7dd3fc;text-transform:uppercase;font-weight:600;">Your verification code</td>
+                  </tr>
+                  <tr>
+                    <td align="center" style="padding:6px 12px 4px 12px;">
+                      <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>${otpCells}</tr></table>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td align="center" style="padding:4px 12px 18px 12px;font-size:12px;color:#94a3b8;">Expires in ${expiryMinutes} minutes</td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:24px 40px 4px 40px;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                  ${iconRow(shieldSvg, `<strong style="color:#ffffff;">Never share this code</strong> with anyone — Qorix staff will never ask for it.`)}
+                  ${iconRow(lockSvg, `If you did not initiate this request, please secure your account and contact support immediately.`)}
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:8px 40px;"><div style="height:1px;background:rgba(148,163,184,0.14);"></div></td>
+            </tr>
+            <tr>
+              <td style="padding:4px 40px 28px 40px;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                  ${iconRow(mailSvg, `This is an automated message from Qorix Markets. If you did not request this code, you can safely ignore this email — no action is needed.<br/><br/>Need help? Reach us at <a href="mailto:support@qorixmarkets.com" style="color:#7dd3fc;text-decoration:none;">support@qorixmarkets.com</a>`)}
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td align="center" style="padding:0 40px 26px 40px;font-size:12px;color:#64748b;line-height:1.6;">
+                © ${new Date().getFullYear()} Qorix Markets. All rights reserved.<br/>
+                <a href="https://qorixmarkets.com" style="color:#7dd3fc;text-decoration:none;">qorixmarkets.com</a>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`;
+};
+
 const buildOtpEmail = (otp) => ({
-  subject: 'Your OTP Code',
-  text: `Your OTP is: ${otp}\n\nThis code is valid for 5 minutes.\nDo not share it with anyone.`,
-  html: `
-    <div style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto;padding:24px;background:#f7f9fc;border-radius:12px">
-      <h2 style="color:#1a73e8;margin:0 0 16px">Your OTP Code</h2>
-      <p style="font-size:14px;color:#444;margin:0 0 20px">Use the code below to verify your email address.</p>
-      <div style="font-size:36px;letter-spacing:8px;font-weight:700;color:#111;background:#fff;padding:18px;border-radius:8px;text-align:center;border:1px solid #e0e4ea">
-        ${otp}
-      </div>
-      <p style="font-size:13px;color:#666;margin:20px 0 0">This code expires in <strong>5 minutes</strong>.</p>
-      <p style="font-size:12px;color:#999;margin:8px 0 0">If you didn't request this, please ignore this email.</p>
-    </div>
-  `,
+  subject: 'Qorix Markets — Email Verification Code',
+  text: `Your Qorix Markets verification code is: ${otp}\n\nThis code expires in 5 minutes. Do not share it with anyone.\n\nIf you did not request this, you can safely ignore this email.\n\n— Qorix Markets\nhttps://qorixmarkets.com`,
+  html: renderQorixEmail({
+    purposeLabel: 'Email Verification',
+    intro: 'Welcome to Qorix Markets. Use the code below to verify your email and finish creating your account.',
+    otp,
+    expiryMinutes: 5,
+  }),
 });
 
 const buildResetEmail = (otp) => ({
-  subject: 'Password Reset Request',
-  text: `Your password reset code is: ${otp}\n\nThis code is valid for 5 minutes.\nIf you didn't request a password reset, please ignore this email and your password will remain unchanged.`,
-  html: `
-    <div style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto;padding:24px;background:#f7f9fc;border-radius:12px">
-      <h2 style="color:#d93025;margin:0 0 16px">🔐 Password Reset Request</h2>
-      <p style="font-size:14px;color:#444;margin:0 0 20px">Use the code below to reset your password.</p>
-      <div style="font-size:36px;letter-spacing:8px;font-weight:700;color:#111;background:#fff;padding:18px;border-radius:8px;text-align:center;border:1px solid #e0e4ea">
-        ${otp}
-      </div>
-      <p style="font-size:13px;color:#666;margin:20px 0 0">This code expires in <strong>5 minutes</strong>.</p>
-      <p style="font-size:12px;color:#d93025;margin:12px 0 0;font-weight:600">⚠️ If you didn't request a password reset, please ignore this email — your password will remain unchanged.</p>
-    </div>
-  `,
+  subject: 'Qorix Markets — Password Reset Code',
+  text: `Your Qorix Markets password reset code is: ${otp}\n\nThis code expires in 5 minutes. Do not share it with anyone.\n\nIf you didn't request a password reset, please ignore this email — your password will remain unchanged.\n\n— Qorix Markets\nhttps://qorixmarkets.com`,
+  html: renderQorixEmail({
+    purposeLabel: 'Password Reset Request',
+    intro: 'You requested to reset your Qorix Markets password. Use the code below to set a new password and regain access to your account.',
+    otp,
+    expiryMinutes: 5,
+  }),
 });
 
 const isStrongPassword = (pw) =>
