@@ -67,9 +67,9 @@ export function VipBadge({ tier, size = "sm", className }: VipBadgeProps) {
   }[size];
 
   const tooltip = {
-    silver: "Silver tier — $500+ active fund · +5% profit bonus · 1.5% withdrawal fee",
-    gold: "Gold tier — $2,000+ active fund · +10% profit bonus · 1.0% withdrawal fee",
-    platinum: "Platinum tier — $10,000+ active fund · +15% profit bonus · 0.5% withdrawal fee",
+    silver: "Silver tier — $500+ active fund · +0.2% profit bonus · 1.5% withdrawal fee",
+    gold: "Gold tier — $2,000+ active fund · +0.35% profit bonus · 1.0% withdrawal fee",
+    platinum: "Platinum tier — $10,000+ active fund · +0.5% profit bonus · 0.5% withdrawal fee",
   }[tier];
 
   return (
@@ -100,10 +100,12 @@ export function VipCard({ vip, investmentAmount = 0 }: VipCardProps) {
   const cfg = TIER_CONFIG[tier];
 
   const tiers: Array<{ tier: VipTier; label: string; min: number; profitBonus: number; fee: number }> = [
-    { tier: "silver",   label: "Silver",   min: 500,   profitBonus: 5,  fee: 1.5 },
-    { tier: "gold",     label: "Gold",     min: 2000,  profitBonus: 10, fee: 1.0 },
-    { tier: "platinum", label: "Platinum", min: 10000, profitBonus: 15, fee: 0.5 },
+    { tier: "silver",   label: "Silver",   min: 500,   profitBonus: 0.2,  fee: 1.5 },
+    { tier: "gold",     label: "Gold",     min: 2000,  profitBonus: 0.35, fee: 1.0 },
+    { tier: "platinum", label: "Platinum", min: 10000, profitBonus: 0.5,  fee: 0.5 },
   ];
+
+  const currentBonus = tiers.find((t) => t.tier === tier)?.profitBonus;
 
   const progressToNext = vip.nextTier
     ? Math.min(100, (investmentAmount / vip.nextTier.minAmount) * 100)
@@ -129,7 +131,7 @@ export function VipCard({ vip, investmentAmount = 0 }: VipCardProps) {
         <div className="bg-black/20 rounded-xl p-3 border border-white/5">
           <div className="text-xs text-muted-foreground mb-1">Profit Bonus</div>
           <div className={cn("text-lg font-bold", cfg.text)}>
-            {tier === "none" ? "—" : `+${(vip.profitBonus * 100).toFixed(0)}%`}
+            {tier === "none" || currentBonus === undefined ? "—" : `+${currentBonus}%`}
           </div>
         </div>
         <div className="bg-black/20 rounded-xl p-3 border border-white/5">
@@ -142,19 +144,36 @@ export function VipCard({ vip, investmentAmount = 0 }: VipCardProps) {
 
       {vip.nextTier && (
         <div className="mb-4">
-          <div className="flex items-center justify-between mb-1.5">
+          <div className="flex items-center justify-between mb-2">
             <span className="text-xs text-muted-foreground">
-              Progress to <span className={TIER_CONFIG[(vip.nextTier.tier as VipTier)].text}>{vip.nextTier.label}</span>
+              Progress to{" "}
+              <span className={cn("font-semibold", TIER_CONFIG[(vip.nextTier.tier as VipTier)].text)}>
+                {vip.nextTier.label}
+              </span>
             </span>
-            <span className="text-xs font-medium text-white">
+            <span className="text-xs font-bold text-white">
               ${vip.nextTier.amountNeeded.toLocaleString()} more
             </span>
           </div>
-          <div className="h-1.5 rounded-full bg-black/30 overflow-hidden">
+          <div className="relative h-3 rounded-full bg-black/40 overflow-hidden border border-white/10 shadow-inner">
             <div
-              className="h-full rounded-full transition-all duration-700"
-              style={{ width: `${progressToNext}%`, backgroundColor: cfg.progressColor }}
+              className="absolute inset-y-0 left-0 rounded-full transition-all duration-700"
+              style={{
+                width: `${progressToNext}%`,
+                background: `linear-gradient(90deg, #60a5fa 0%, #3b82f6 60%, ${TIER_CONFIG[(vip.nextTier.tier as VipTier)].progressColor} 100%)`,
+                boxShadow: `0 0 12px ${TIER_CONFIG[(vip.nextTier.tier as VipTier)].progressColor}99, 0 0 4px #60a5fa`,
+              }}
             />
+            <div
+              className="absolute inset-y-0 left-0 rounded-full pointer-events-none"
+              style={{
+                width: `${progressToNext}%`,
+                background: "linear-gradient(180deg, rgba(255,255,255,0.35) 0%, rgba(255,255,255,0) 50%)",
+              }}
+            />
+          </div>
+          <div className="mt-1 text-[10px] text-muted-foreground/80 text-right">
+            {progressToNext.toFixed(0)}% complete
           </div>
         </div>
       )}
@@ -180,7 +199,7 @@ export function VipCard({ vip, investmentAmount = 0 }: VipCardProps) {
                 <span className="text-muted-foreground/60">(${t.min.toLocaleString()}+)</span>
               </div>
               <div className="flex items-center gap-3">
-                <span>+{t.profitBonus}% profit</span>
+                <span>+{t.profitBonus}% bonus</span>
                 <span>{t.fee}% fee</span>
               </div>
             </div>
