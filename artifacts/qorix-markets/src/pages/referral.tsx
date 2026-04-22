@@ -90,8 +90,8 @@ const MESSAGE_TEMPLATES = [
   {
     id: "casual",
     label: "Casual",
-    buildText: (code: string, link: string) =>
-      `Hey! I've been investing on Qorix Markets and earning daily profits from automated USDT trading. Really straightforward — you just deposit and the platform handles everything.\n\nJoin with my code: ${code}\nOr use my link: ${link}`,
+    buildText: (code: string, _link: string) =>
+      `I've been exploring Qorix Markets — a platform focused on automated trading strategies designed to optimize capital growth.\n\nIt removes the need for manual trading and provides a structured approach to portfolio management.\n\nYou can learn more here:\nhttps://qorixmarkets.com\n\n(Use referral code: ${code} if required)`,
   },
   {
     id: "professional",
