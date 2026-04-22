@@ -143,6 +143,15 @@ export default function AdminPage() {
           </div>
           <div className="glass-card p-5 rounded-xl border-primary/20">
             <h3 className="text-sm font-medium text-muted-foreground mb-2 flex items-center gap-2">
+              <Wallet className="w-4 h-4" /> Total Wallet Funds
+            </h3>
+            <div className="text-2xl font-bold"><AnimatedCounter value={(stats as any)?.totalUserFunds || 0} prefix="$" /></div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Main ${((stats as any)?.totalMainWallet || 0).toFixed(2)} · Trading ${((stats as any)?.totalTradingWallet || 0).toFixed(2)} · Profit ${((stats as any)?.totalProfitWallet || 0).toFixed(2)}
+            </p>
+          </div>
+          <div className="glass-card p-5 rounded-xl border-primary/20">
+            <h3 className="text-sm font-medium text-muted-foreground mb-2 flex items-center gap-2">
               <Activity className="w-4 h-4" /> Profit Paid Out
             </h3>
             <div className="text-2xl font-bold profit-text"><AnimatedCounter value={stats?.totalProfitPaid || 0} prefix="$" /></div>
