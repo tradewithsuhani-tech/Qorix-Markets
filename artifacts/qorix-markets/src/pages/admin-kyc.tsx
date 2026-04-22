@@ -1,6 +1,6 @@
 import { Layout } from "@/components/layout";
 import { motion } from "framer-motion";
-import { Shield, CheckCircle2, XCircle, Clock, Eye, X } from "lucide-react";
+import { Shield, CheckCircle2, XCircle, Clock, Eye, X, IdCard, Home } from "lucide-react";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { authFetch } from "@/lib/auth-fetch";
@@ -16,28 +16,50 @@ interface KycUser {
   kycSubmittedAt: string | null;
   kycReviewedAt: string | null;
   kycRejectionReason: string | null;
+  kycAddressStatus?: string;
+  kycAddressSubmittedAt?: string | null;
+  kycAddressRejectionReason?: string | null;
 }
 
-const TABS = [
+interface DocResp {
+  documentUrl: string | null;
+  documentUrlBack: string | null;
+  documentType: string | null;
+  addressDocUrl: string | null;
+  addressLine1: string | null;
+  addressCity: string | null;
+  addressState: string | null;
+  addressCountry: string | null;
+  addressPostalCode: string | null;
+  phoneNumber: string | null;
+  dateOfBirth: string | null;
+}
+
+const STATUS_TABS = [
   { id: "pending", label: "Pending", icon: Clock },
   { id: "approved", label: "Approved", icon: CheckCircle2 },
   { id: "rejected", label: "Rejected", icon: XCircle },
+];
+const KIND_TABS = [
+  { id: "identity", label: "Identity (Lv.2)", icon: IdCard },
+  { id: "address", label: "Address (Lv.3)", icon: Home },
 ];
 
 export default function AdminKycPage() {
   const { toast } = useToast();
   const qc = useQueryClient();
+  const [kind, setKind] = useState<"identity" | "address">("identity");
   const [tab, setTab] = useState("pending");
   const [viewing, setViewing] = useState<KycUser | null>(null);
   const [rejectReason, setRejectReason] = useState("");
 
   const { data, isLoading } = useQuery<{ users: KycUser[] }>({
-    queryKey: ["admin-kyc-queue", tab],
-    queryFn: () => authFetch(`/api/admin/kyc/queue?status=${tab}`),
+    queryKey: ["admin-kyc-queue", kind, tab],
+    queryFn: () => authFetch(`/api/admin/kyc/queue?status=${tab}&kind=${kind}`),
     refetchInterval: 20000,
   });
 
-  const { data: doc, isLoading: docLoading } = useQuery<{ documentUrl: string; documentType: string | null }>({
+  const { data: doc, isLoading: docLoading } = useQuery<DocResp>({
     queryKey: ["admin-kyc-doc", viewing?.id],
     queryFn: () => authFetch(`/api/admin/kyc/document/${viewing!.id}`),
     enabled: !!viewing,
@@ -49,7 +71,7 @@ export default function AdminKycPage() {
     mutationFn: ({ userId, action, reason }: { userId: number; action: "approve" | "reject"; reason?: string }) =>
       authFetch("/api/admin/kyc/review", {
         method: "POST",
-        body: JSON.stringify({ userId, action, reason }),
+        body: JSON.stringify({ userId, action, reason, kind }),
       }),
     onSuccess: (_d, vars) => {
       toast({
@@ -65,6 +87,11 @@ export default function AdminKycPage() {
   });
 
   const users = data?.users ?? [];
+  const isAddress = kind === "address";
+
+  const currentStatus = (u: KycUser) => (isAddress ? u.kycAddressStatus : u.kycStatus) ?? "pending";
+  const currentSubmittedAt = (u: KycUser) =>
+    isAddress ? u.kycAddressSubmittedAt : u.kycSubmittedAt;
 
   return (
     <Layout>
@@ -79,30 +106,52 @@ export default function AdminKycPage() {
           <h1 className="text-2xl md:text-3xl font-bold tracking-tight gradient-text">KYC Review Queue</h1>
         </div>
 
-        <div className="flex gap-1 bg-white/[0.03] rounded-xl p-1 w-fit">
-          {TABS.map((t) => {
-            const Icon = t.icon;
-            const active = tab === t.id;
-            return (
-              <button
-                key={t.id}
-                onClick={() => setTab(t.id)}
-                className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                  active ? "bg-white/10 text-white" : "text-muted-foreground hover:text-white"
-                }`}
-              >
-                <Icon className="w-3 h-3" />
-                {t.label}
-              </button>
-            );
-          })}
+        <div className="flex flex-wrap gap-2">
+          <div className="flex gap-1 bg-white/[0.03] rounded-xl p-1">
+            {KIND_TABS.map((k) => {
+              const Icon = k.icon;
+              const active = kind === k.id;
+              return (
+                <button
+                  key={k.id}
+                  onClick={() => setKind(k.id as "identity" | "address")}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                    active ? "bg-blue-500/20 text-blue-300" : "text-muted-foreground hover:text-white"
+                  }`}
+                >
+                  <Icon className="w-3 h-3" />
+                  {k.label}
+                </button>
+              );
+            })}
+          </div>
+          <div className="flex gap-1 bg-white/[0.03] rounded-xl p-1">
+            {STATUS_TABS.map((t) => {
+              const Icon = t.icon;
+              const active = tab === t.id;
+              return (
+                <button
+                  key={t.id}
+                  onClick={() => setTab(t.id)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                    active ? "bg-white/10 text-white" : "text-muted-foreground hover:text-white"
+                  }`}
+                >
+                  <Icon className="w-3 h-3" />
+                  {t.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         <div className="glass-card rounded-2xl overflow-hidden">
           {isLoading ? (
             <div className="p-8 text-center text-muted-foreground text-sm">Loading…</div>
           ) : users.length === 0 ? (
-            <div className="p-8 text-center text-muted-foreground text-sm">No {tab} submissions.</div>
+            <div className="p-8 text-center text-muted-foreground text-sm">
+              No {tab} {kind} submissions.
+            </div>
           ) : (
             <div className="divide-y divide-white/5">
               {users.map((u) => (
@@ -114,8 +163,8 @@ export default function AdminKycPage() {
                     <div className="font-medium text-sm truncate">{u.fullName}</div>
                     <div className="text-xs text-muted-foreground truncate">{u.email}</div>
                     <div className="text-[10px] text-muted-foreground/70 mt-0.5">
-                      {u.kycDocumentType ?? "—"} ·{" "}
-                      {u.kycSubmittedAt ? format(new Date(u.kycSubmittedAt), "MMM d, p") : "—"}
+                      {isAddress ? "Address proof" : (u.kycDocumentType ?? "—")} ·{" "}
+                      {currentSubmittedAt(u) ? format(new Date(currentSubmittedAt(u)!), "MMM d, p") : "—"}
                     </div>
                   </div>
                   <button
@@ -134,7 +183,10 @@ export default function AdminKycPage() {
 
       {/* Modal */}
       {viewing && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto" onClick={() => setViewing(null)}>
+        <div
+          className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto"
+          onClick={() => setViewing(null)}
+        >
           <div
             className="glass-card rounded-2xl p-5 max-w-2xl w-full space-y-4 my-8"
             onClick={(e) => e.stopPropagation()}
@@ -150,27 +202,62 @@ export default function AdminKycPage() {
             </div>
 
             <div className="text-xs text-muted-foreground">
-              <span className="font-semibold text-white">{viewing.kycDocumentType ?? "—"}</span> · submitted{" "}
-              {viewing.kycSubmittedAt ? format(new Date(viewing.kycSubmittedAt), "PPP p") : "—"}
+              {isAddress ? (
+                <>
+                  <span className="font-semibold text-white">Address proof</span> · submitted{" "}
+                  {viewing.kycAddressSubmittedAt
+                    ? format(new Date(viewing.kycAddressSubmittedAt), "PPP p")
+                    : "—"}
+                </>
+              ) : (
+                <>
+                  <span className="font-semibold text-white">{viewing.kycDocumentType ?? "—"}</span> · submitted{" "}
+                  {viewing.kycSubmittedAt ? format(new Date(viewing.kycSubmittedAt), "PPP p") : "—"}
+                </>
+              )}
             </div>
 
             {docLoading ? (
               <div className="p-8 text-center text-muted-foreground text-sm bg-white/5 rounded-xl">
                 Loading document…
               </div>
-            ) : doc?.documentUrl ? (
-              <img
-                src={doc.documentUrl}
-                alt="document"
-                className="w-full max-h-96 object-contain rounded-xl bg-black/30"
-              />
+            ) : isAddress ? (
+              <div className="space-y-3">
+                {doc?.addressLine1 && (
+                  <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-3 text-xs space-y-1">
+                    <div><span className="text-muted-foreground">Address: </span>{doc.addressLine1}</div>
+                    <div><span className="text-muted-foreground">City/State: </span>{doc.addressCity}, {doc.addressState}</div>
+                    <div><span className="text-muted-foreground">Country/Zip: </span>{doc.addressCountry} — {doc.addressPostalCode}</div>
+                  </div>
+                )}
+                {doc?.addressDocUrl ? (
+                  <img src={doc.addressDocUrl} alt="address proof" className="w-full max-h-96 object-contain rounded-xl bg-black/30" />
+                ) : (
+                  <div className="p-8 text-center text-muted-foreground text-sm bg-white/5 rounded-xl">No proof uploaded</div>
+                )}
+              </div>
             ) : (
-              <div className="p-8 text-center text-muted-foreground text-sm bg-white/5 rounded-xl">
-                No document available
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {doc?.documentUrl ? (
+                  <div>
+                    <div className="text-[10px] text-muted-foreground mb-1">Front</div>
+                    <img src={doc.documentUrl} alt="front" className="w-full max-h-64 object-contain rounded-xl bg-black/30" />
+                  </div>
+                ) : (
+                  <div className="p-6 text-center text-muted-foreground text-xs bg-white/5 rounded-xl">No front</div>
+                )}
+                {doc?.documentUrlBack ? (
+                  <div>
+                    <div className="text-[10px] text-muted-foreground mb-1">Back</div>
+                    <img src={doc.documentUrlBack} alt="back" className="w-full max-h-64 object-contain rounded-xl bg-black/30" />
+                  </div>
+                ) : (
+                  <div className="p-6 text-center text-muted-foreground text-xs bg-white/5 rounded-xl">No back</div>
+                )}
               </div>
             )}
 
-            {viewing.kycStatus === "pending" && (
+            {currentStatus(viewing) === "pending" && (
               <>
                 <div>
                   <label className="text-xs text-muted-foreground font-medium uppercase tracking-wider">
