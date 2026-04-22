@@ -200,7 +200,7 @@ export default function WalletPage() {
                 <div className="text-2xl md:text-3xl font-bold text-white">
                   <AnimatedCounter value={wallet?.tradingBalance || 0} prefix="$" />
                 </div>
-                <p className="text-xs text-muted-foreground mt-2">Allocated to active investments</p>
+                <p className="text-xs text-muted-foreground mt-2">Allocated to active Trading</p>
               </>
             )}
           </div>
@@ -236,7 +236,7 @@ export default function WalletPage() {
               </div>
               <div>
                 <div className="font-semibold text-sm">Transfer to Trading</div>
-                <div className="text-xs text-muted-foreground">Fund your investment balance</div>
+                <div className="text-xs text-muted-foreground">Fund your Trading balance</div>
               </div>
             </div>
             <div className="space-y-3">
