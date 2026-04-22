@@ -707,24 +707,59 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   />
                 )}
                 {featured ? (
-                  <motion.div
-                    className="relative z-10 flex flex-col items-center gap-1"
-                    animate={isActive ? { scale: 1.08 } : { scale: 1 }}
-                    transition={{ type: "spring", bounce: 0.4, duration: 0.3 }}
-                  >
-                    <div
-                      className={cn(
-                        "flex items-center justify-center w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-lg",
-                        isActive ? "ring-2 ring-blue-300/60" : "",
-                      )}
-                      style={{ boxShadow: "0 4px 14px rgba(59,130,246,0.45), 0 0 0 1px rgba(255,255,255,0.08) inset" }}
+                  <div className="relative z-10 flex flex-col items-center" style={{ marginTop: "-26px" }}>
+                    {/* Floating FAB-style Trade button */}
+                    <motion.div
+                      className="relative"
+                      animate={isActive ? { scale: 1.05 } : { scale: 1 }}
+                      whileTap={{ scale: 0.92 }}
+                      transition={{ type: "spring", bounce: 0.4, duration: 0.3 }}
                     >
-                      <link.icon style={{ width: 18, height: 18 }} strokeWidth={2.75} />
-                    </div>
-                    <span className={cn("text-[10px] font-bold leading-none tracking-wide", isActive ? "text-blue-300" : "text-blue-400")}>
+                      {/* Outer pulsing glow ring */}
+                      <motion.div
+                        className="absolute inset-0 rounded-full bg-blue-500/40"
+                        animate={{ scale: [1, 1.35, 1], opacity: [0.55, 0, 0.55] }}
+                        transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}
+                        style={{ filter: "blur(6px)" }}
+                      />
+                      {/* Conic gradient ring */}
+                      <div
+                        className="absolute -inset-[2px] rounded-full"
+                        style={{
+                          background: "conic-gradient(from 180deg at 50% 50%, #60a5fa 0deg, #6366f1 120deg, #a855f7 240deg, #60a5fa 360deg)",
+                        }}
+                      />
+                      {/* Inner button */}
+                      <div
+                        className="relative flex items-center justify-center w-14 h-14 rounded-full text-white"
+                        style={{
+                          background:
+                            "radial-gradient(circle at 30% 25%, #93c5fd 0%, #3b82f6 35%, #4f46e5 75%, #312e81 100%)",
+                          boxShadow:
+                            "0 10px 24px rgba(59,130,246,0.55), 0 0 0 1px rgba(255,255,255,0.18) inset, 0 -2px 6px rgba(255,255,255,0.25) inset",
+                        }}
+                      >
+                        {/* Glossy highlight */}
+                        <div
+                          className="absolute inset-x-2 top-1.5 h-3 rounded-full opacity-60 pointer-events-none"
+                          style={{
+                            background: "linear-gradient(180deg, rgba(255,255,255,0.55), rgba(255,255,255,0))",
+                            filter: "blur(2px)",
+                          }}
+                        />
+                        <link.icon style={{ width: 24, height: 24, position: "relative" }} strokeWidth={2.75} />
+                      </div>
+                    </motion.div>
+                    <span
+                      className={cn(
+                        "mt-1 text-[10px] font-extrabold leading-none tracking-[0.08em] uppercase",
+                        isActive ? "text-blue-200" : "text-blue-300",
+                      )}
+                      style={{ textShadow: "0 0 8px rgba(96,165,250,0.6)" }}
+                    >
                       {link.label}
                     </span>
-                  </motion.div>
+                  </div>
                 ) : (
                   <motion.div
                     className={cn("relative z-10 flex flex-col items-center gap-1 transition-colors duration-200", isActive ? "text-blue-400" : "text-muted-foreground")}
