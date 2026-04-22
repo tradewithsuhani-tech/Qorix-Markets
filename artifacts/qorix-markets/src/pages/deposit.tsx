@@ -23,6 +23,13 @@ import {
 import { Layout } from "@/components/layout";
 import { cn } from "@/lib/utils";
 import QRCode from "qrcode";
+import { BannerCarousel } from "@/components/banner-carousel";
+
+const DEPOSIT_BANNERS = [
+  { src: `${import.meta.env.BASE_URL}promo/banner-4-automate.png`, alt: "Automate. Invest. Grow. — Trade Smarter, Not Harder" },
+  { src: `${import.meta.env.BASE_URL}promo/banner-5-smart-algo.png`, alt: "Smart Algo. Real Growth. — Start Trading with Just $10" },
+  { src: `${import.meta.env.BASE_URL}promo/banner-6-zero-fee.png`, alt: "Zero Trading Fee — Algo Trading Starts at Just $10" },
+];
 
 const BASE_URL = import.meta.env.BASE_URL ?? "/";
 
@@ -186,6 +193,13 @@ export default function DepositPage() {
             Send USDT via TRC20. Deposits are detected automatically and credited to your balance.
           </p>
         </div>
+
+        {/* Promo Banners — auto-scrolling carousel */}
+        <BannerCarousel
+          slides={DEPOSIT_BANNERS}
+          intervalMs={4500}
+          maxHeight={240}
+        />
 
         {/* Stepper Card */}
         <motion.div

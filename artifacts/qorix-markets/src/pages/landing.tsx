@@ -39,7 +39,13 @@ import {
   YAxis,
 } from "recharts";
 
-const heroBanner = `${import.meta.env.BASE_URL}promo/banner-hero.png`;
+import { BannerCarousel } from "@/components/banner-carousel";
+
+const LANDING_BANNERS = [
+  { src: `${import.meta.env.BASE_URL}promo/banner-1-manual-trading.png`, alt: "Manual Trading Is Breaking You — Trade Smart with Qorix" },
+  { src: `${import.meta.env.BASE_URL}promo/banner-2-tired.png`, alt: "Tired of Manual Trading — You Deserve Better" },
+  { src: `${import.meta.env.BASE_URL}promo/banner-3-freedom.png`, alt: "Your Gateway to Financial Freedom — Start with $10" },
+];
 
 const MONTHLY_RETURNS = [
   { month: "Jul", return: 7.2, drawdown: 2.1 },
@@ -656,27 +662,11 @@ export default function Landing() {
 
       <section className="py-8 md:py-10">
         <div className="max-w-7xl mx-auto px-5 md:px-8">
-          <button
-            type="button"
-            onClick={() => setLocation("/login")}
-            className="block w-full rounded-2xl md:rounded-3xl overflow-hidden relative cursor-pointer transition-transform hover:scale-[1.005]"
-            style={{
-              boxShadow: "0 20px 60px rgba(56,189,248,0.15), 0 0 0 1px rgba(56,189,248,0.18)",
-              padding: 0,
-              border: "none",
-              background: "transparent",
-            }}
-            aria-label="Start trading with just $10"
-          >
-            <img
-              src={heroBanner}
-              alt="Qorix Markets — Smart Trading. Maximum Growth."
-              className="w-full block"
-              style={{ maxHeight: "420px", objectFit: "cover", objectPosition: "center" }}
-              loading="lazy"
-              decoding="async"
-            />
-          </button>
+          <BannerCarousel
+            slides={LANDING_BANNERS.map((b) => ({ ...b, onClick: () => setLocation("/login") }))}
+            intervalMs={4500}
+            maxHeight={420}
+          />
         </div>
       </section>
 
