@@ -747,28 +747,27 @@ export default function Dashboard() {
         </div>
 
         {/* Promo Banner — Zero Trading Fee */}
-        <motion.button
+        <button
+          type="button"
           onClick={() => navigate("/deposit")}
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 0.05 }}
-          whileHover={{ scale: 1.005 }}
-          whileTap={{ scale: 0.995 }}
-          className="block w-full rounded-2xl overflow-hidden relative group"
+          className="block w-full rounded-2xl overflow-hidden relative cursor-pointer transition-transform hover:scale-[1.005]"
           style={{
             boxShadow: "0 8px 32px rgba(56,189,248,0.12), 0 0 0 1px rgba(56,189,248,0.18)",
+            padding: 0,
+            border: "none",
+            background: "transparent",
           }}
           aria-label="Zero trading fee — start with just $10"
         >
           <img
             src={promoBanner}
             alt="Zero Trading Fee — Algo trading starts at just $10"
-            className="w-full block transition-transform duration-500 group-hover:scale-[1.02]"
+            className="w-full block"
             style={{ maxHeight: "260px", objectFit: "cover", objectPosition: "center" }}
             loading="lazy"
             decoding="async"
           />
-        </motion.button>
+        </button>
 
         {/* Investor Psychology Indicators */}
         <motion.div
