@@ -16,6 +16,7 @@ import { eq, sum, count, and, desc, sql } from "drizzle-orm";
 import { authMiddleware, adminMiddleware, type AuthRequest } from "../middlewares/auth";
 import { SetDailyProfitBody } from "@workspace/api-zod";
 import { transferProfitToMain } from "../lib/profit-service";
+import { sendUsdtFromTreasury, getTreasuryUsdtBalance } from "../lib/crypto-deposit/sweep";
 import { emitProfitDistribution } from "../lib/event-bus";
 import { transactionLogger, profitLogger, errorLogger } from "../lib/logger";
 import {
@@ -394,32 +395,85 @@ router.get("/admin/withdrawals", async (req, res) => {
 
 router.post("/admin/withdrawals/:id/approve", async (req: AuthRequest, res) => {
   const id = parseInt(req.params["id"]!);
+
+  // Lock row by setting status=processing first to prevent double-approve
+  const [pending] = await db
+    .update(transactionsTable)
+    .set({ status: "processing" })
+    .where(and(
+      eq(transactionsTable.id, id),
+      eq(transactionsTable.type, "withdrawal"),
+      eq(transactionsTable.status, "pending"),
+    ))
+    .returning();
+
+  if (!pending) {
+    res.status(404).json({ error: "Withdrawal not found or already processed" });
+    return;
+  }
+
+  const netAmount = parseFloat(pending.amount as string);
+  const toAddress = pending.walletAddress ?? "";
+
+  if (!toAddress) {
+    await db.update(transactionsTable).set({ status: "pending" }).where(eq(transactionsTable.id, id));
+    res.status(400).json({ error: "No destination wallet address on this withdrawal" });
+    return;
+  }
+
+  // Verify treasury has enough USDT before broadcasting
+  try {
+    const balance = await getTreasuryUsdtBalance();
+    if (balance < netAmount) {
+      await db.update(transactionsTable).set({ status: "pending" }).where(eq(transactionsTable.id, id));
+      res.status(400).json({
+        error: "Insufficient treasury balance",
+        message: `Treasury has $${balance.toFixed(2)} USDT but withdrawal needs $${netAmount.toFixed(2)}. Top up treasury wallet first.`,
+      });
+      return;
+    }
+  } catch (err: any) {
+    errorLogger.error({ err: err?.message, id }, "Treasury balance check failed");
+    await db.update(transactionsTable).set({ status: "pending" }).where(eq(transactionsTable.id, id));
+    res.status(500).json({ error: "Treasury check failed", message: err?.message ?? "Unknown error" });
+    return;
+  }
+
+  // Broadcast on-chain USDT transfer
+  let txHash: string;
+  try {
+    txHash = await sendUsdtFromTreasury(toAddress, netAmount);
+  } catch (err: any) {
+    errorLogger.error({ err: err?.message, id, toAddress, netAmount }, "On-chain USDT transfer failed");
+    await db.update(transactionsTable).set({ status: "pending" }).where(eq(transactionsTable.id, id));
+    res.status(500).json({
+      error: "Blockchain transfer failed",
+      message: err?.message ?? "Unable to broadcast transaction. Withdrawal returned to pending.",
+    });
+    return;
+  }
+
+  // Mark completed with txhash
   const [updated] = await db
     .update(transactionsTable)
     .set({
       status: "completed",
-      description: sql`COALESCE(${transactionsTable.description}, '') || ' · Approved — sent to your payment partner (arrives within 30 min to 3 working days)'`,
+      description: sql`COALESCE(${transactionsTable.description}, '') || ' · Sent on-chain · tx: ' || ${txHash}`,
     })
-    .where(and(eq(transactionsTable.id, id), eq(transactionsTable.type, "withdrawal")))
+    .where(eq(transactionsTable.id, id))
     .returning();
-
-  if (!updated) {
-    res.status(404).json({ error: "Withdrawal not found" });
-    return;
-  }
 
   const user = await db
     .select()
     .from(usersTable)
-    .where(eq(usersTable.id, updated.userId))
+    .where(eq(usersTable.id, updated!.userId))
     .limit(1);
 
-  const netAmount = parseFloat(updated.amount as string);
   await db.insert(notificationsTable).values({
-    userId: updated.userId,
+    userId: updated!.userId,
     type: "withdrawal",
-    title: "Withdrawal Approved",
-    message: `Your withdrawal of $${netAmount.toFixed(2)} has been approved and sent to our payment partner. Funds will arrive at ${(updated.walletAddress ?? "").slice(0, 8)}…${(updated.walletAddress ?? "").slice(-4)} within 30 minutes to 3 working days.`,
+    title: "Withdrawal Sent",
+    message: `Your withdrawal of $${netAmount.toFixed(2)} USDT has been sent to ${toAddress.slice(0, 8)}…${toAddress.slice(-4)}. Tx: ${txHash.slice(0, 12)}…`,
   });
 
   transactionLogger.info(
