@@ -116,6 +116,50 @@ function renderOtpHtml(opts: {
     .map((l) => `<p style="margin:0 0 10px 0;color:#94a3b8;font-size:13px;line-height:1.6;">${l}</p>`)
     .join("");
 
+  // OTP digits separated by thin vertical dividers (like the design mockup)
+  const otpCells = otp
+    .split("")
+    .map(
+      (d, i) =>
+        `<td align="center" style="padding:6px 14px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:36px;font-weight:700;color:#ffffff;line-height:1;${
+          i > 0 ? "border-left:1px solid rgba(148,163,184,0.25);" : ""
+        }">${d}</td>`,
+    )
+    .join("");
+
+  // Icon row helper — small circular badge + body text
+  const iconRow = (svg: string, body: string) => `
+    <tr>
+      <td style="padding:10px 0;" valign="top">
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+          <tr>
+            <td width="44" valign="top" style="padding-right:14px;">
+              <div style="width:36px;height:36px;border-radius:50%;background:rgba(56,189,248,0.10);border:1px solid rgba(56,189,248,0.30);text-align:center;line-height:34px;">
+                ${svg}
+              </div>
+            </td>
+            <td valign="middle" style="font-size:13px;line-height:1.6;color:#cbd5e1;">${body}</td>
+          </tr>
+        </table>
+      </td>
+    </tr>`;
+
+  // Inline SVGs render in most modern email clients (Gmail web/app, Apple Mail, Outlook 365 web)
+  const shieldSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#7dd3fc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>`;
+  const lockSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>`;
+  const mailSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#7dd3fc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>`;
+
+  // Social icons (small circular outlined chips with inline SVG)
+  const socialIcon = (href: string, svg: string, label: string) => `
+    <td style="padding:0 6px;">
+      <a href="${href}" style="text-decoration:none;display:inline-block;" aria-label="${label}">
+        <div style="width:34px;height:34px;border-radius:50%;border:1px solid rgba(148,163,184,0.30);text-align:center;line-height:32px;background:rgba(148,163,184,0.05);">${svg}</div>
+      </a>
+    </td>`;
+  const xSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="#cbd5e1" style="vertical-align:middle;"><path d="M18.244 2H21.5l-7.51 8.58L23 22h-6.94l-5.43-7.1L4.4 22H1.14l8.04-9.18L1 2h7.1l4.91 6.49L18.244 2zm-2.43 18h1.93L7.27 4H5.21l10.604 16z"/></svg>`;
+  const tgSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="#7dd3fc" style="vertical-align:middle;"><path d="M9.78 18.65l.28-4.23 7.68-6.92c.34-.31-.07-.46-.52-.19L7.74 13.3 3.64 12c-.88-.25-.89-.86.2-1.3l15.97-6.16c.73-.33 1.43.18 1.15 1.3l-2.72 12.81c-.19.91-.74 1.13-1.5.71L12.6 16.3l-1.99 1.93c-.23.23-.42.42-.83.42z"/></svg>`;
+  const ytSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="#cbd5e1" style="vertical-align:middle;"><path d="M23.5 6.2a3 3 0 0 0-2.1-2.1C19.5 3.5 12 3.5 12 3.5s-7.5 0-9.4.6A3 3 0 0 0 .5 6.2 31.3 31.3 0 0 0 0 12a31.3 31.3 0 0 0 .5 5.8 3 3 0 0 0 2.1 2.1c1.9.6 9.4.6 9.4.6s7.5 0 9.4-.6a3 3 0 0 0 2.1-2.1c.4-1.9.5-3.8.5-5.8a31.3 31.3 0 0 0-.5-5.8zM9.6 15.6V8.4l6.2 3.6-6.2 3.6z"/></svg>`;
+
   return `<!DOCTYPE html>
 <html lang="en">
   <head>
@@ -128,55 +172,107 @@ function renderOtpHtml(opts: {
     <div style="display:none;max-height:0;overflow:hidden;font-size:1px;line-height:1px;color:#05070d;">${preheader}</div>
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#05070d;">
       <tr>
-        <td align="center" style="padding:36px 16px;">
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:560px;background:linear-gradient(180deg,#0b1220 0%,#070b14 100%);border:1px solid rgba(56,189,248,0.18);border-radius:18px;box-shadow:0 12px 40px rgba(56,189,248,0.10),0 0 0 1px rgba(56,189,248,0.08);overflow:hidden;">
+        <td align="center" style="padding:32px 16px;">
+
+          <!-- Brand header (logo + wordmark inline) -->
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:22px;">
             <tr>
-              <td style="padding:28px 32px 8px 32px;text-align:center;background:linear-gradient(135deg,rgba(56,189,248,0.10) 0%,rgba(139,92,246,0.10) 100%);">
-                <img src="cid:${LOGO_CID}" alt="Qorix Markets" width="56" height="56" style="display:inline-block;width:56px;height:56px;border:0;outline:none;text-decoration:none;" />
-                <div style="margin-top:10px;font-size:13px;letter-spacing:3px;color:#7dd3fc;text-transform:uppercase;font-weight:600;">QORIX&nbsp;MARKETS</div>
+              <td valign="middle" style="padding-right:12px;">
+                <img src="cid:${LOGO_CID}" alt="Qorix" width="44" height="44" style="display:block;width:44px;height:44px;border:0;outline:none;text-decoration:none;" />
+              </td>
+              <td valign="middle" style="font-size:26px;font-weight:700;color:#ffffff;letter-spacing:1px;line-height:1;">
+                QORIX
+                <div style="font-size:11px;letter-spacing:5px;color:#7dd3fc;font-weight:600;margin-top:4px;">— M A R K E T S —</div>
               </td>
             </tr>
+          </table>
+
+          <!-- Main card -->
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;background:#0a1020;border:1px solid rgba(56,189,248,0.15);border-radius:18px;overflow:hidden;">
             <tr>
-              <td style="padding:30px 36px 8px 36px;">
-                <h1 style="margin:0 0 12px 0;font-size:22px;line-height:1.3;color:#ffffff;font-weight:700;">${purposeLabel}</h1>
-                <p style="margin:0 0 22px 0;color:#cbd5e1;font-size:14px;line-height:1.6;">${intro}</p>
+              <td style="padding:36px 40px 8px 40px;">
+                <h1 style="margin:0 0 10px 0;font-size:26px;line-height:1.25;color:#ffffff;font-weight:700;">${purposeLabel}</h1>
+                <div style="height:3px;width:70px;background:linear-gradient(90deg,#38bdf8 0%,#a78bfa 100%);border-radius:2px;margin-bottom:18px;"></div>
+                <p style="margin:0 0 26px 0;color:#cbd5e1;font-size:14px;line-height:1.7;">${intro}</p>
               </td>
             </tr>
+
+            <!-- OTP block -->
             <tr>
-              <td style="padding:0 36px 8px 36px;">
-                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:linear-gradient(135deg,rgba(59,130,246,0.18) 0%,rgba(139,92,246,0.18) 100%);border:1px solid rgba(59,130,246,0.35);border-radius:14px;">
+              <td style="padding:0 40px 8px 40px;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:linear-gradient(135deg,rgba(59,130,246,0.14) 0%,rgba(139,92,246,0.14) 100%);border:1px solid rgba(99,102,241,0.30);border-radius:14px;">
                   <tr>
-                    <td align="center" style="padding:22px 16px;">
-                      <div style="font-size:11px;letter-spacing:2px;color:#93c5fd;text-transform:uppercase;font-weight:600;margin-bottom:8px;">Your verification code</div>
-                      <div style="font-size:38px;font-weight:800;letter-spacing:8px;color:#ffffff;font-family:'SF Mono','Menlo','Consolas',monospace;line-height:1.1;">${otpSpaced}</div>
-                      <div style="margin-top:10px;font-size:12px;color:#94a3b8;">Expires in 10 minutes</div>
+                    <td align="center" style="padding:18px 12px 6px 12px;font-size:11px;letter-spacing:3px;color:#7dd3fc;text-transform:uppercase;font-weight:600;">
+                      Your verification code
+                    </td>
+                  </tr>
+                  <tr>
+                    <td align="center" style="padding:6px 12px 4px 12px;">
+                      <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                        <tr>${otpCells}</tr>
+                      </table>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td align="center" style="padding:4px 12px 18px 12px;font-size:12px;color:#94a3b8;">
+                      Expires in 10 minutes
                     </td>
                   </tr>
                 </table>
               </td>
             </tr>
+
+            <!-- Icon notes -->
             <tr>
-              <td style="padding:22px 36px 8px 36px;">
-                ${noteHtml}
+              <td style="padding:24px 40px 4px 40px;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                  ${iconRow(shieldSvg, `<strong style="color:#ffffff;">Never share this code</strong> with anyone — Qorix staff will never ask for it.`)}
+                  ${iconRow(lockSvg, `If you did not initiate this request, please secure your account and contact support immediately.`)}
+                </table>
               </td>
             </tr>
+
+            <!-- Divider -->
             <tr>
-              <td style="padding:18px 36px 28px 36px;">
-                <div style="border-top:1px solid rgba(148,163,184,0.14);padding-top:18px;">
-                  <p style="margin:0 0 6px 0;font-size:12px;color:#64748b;line-height:1.6;">
-                    This is an automated message from Qorix Markets. If you did not request this code, you can safely ignore this email — no action is needed.
-                  </p>
-                  <p style="margin:0;font-size:12px;color:#64748b;line-height:1.6;">
-                    Need help? Reach us at <a href="mailto:support@qorixmarkets.com" style="color:#7dd3fc;text-decoration:none;">support@qorixmarkets.com</a>
-                  </p>
-                </div>
+              <td style="padding:8px 40px;">
+                <div style="height:1px;background:rgba(148,163,184,0.14);"></div>
+              </td>
+            </tr>
+
+            <!-- Footer note with mail icon -->
+            <tr>
+              <td style="padding:4px 40px 28px 40px;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                  ${iconRow(
+                    mailSvg,
+                    `This is an automated message from Qorix Markets. If you did not request this code, you can safely ignore this email — no action is needed.<br/><br/>Need help? Reach us at <a href="mailto:support@qorixmarkets.com" style="color:#7dd3fc;text-decoration:none;">support@qorixmarkets.com</a>`,
+                  )}
+                </table>
+              </td>
+            </tr>
+
+            <!-- Social icons -->
+            <tr>
+              <td align="center" style="padding:6px 40px 18px 40px;">
+                <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                  <tr>
+                    ${socialIcon("https://x.com/qorixmarkets", xSvg, "X")}
+                    ${socialIcon("https://t.me/qorixmarkets", tgSvg, "Telegram")}
+                    ${socialIcon("https://youtube.com/@qorixmarkets", ytSvg, "YouTube")}
+                  </tr>
+                </table>
+              </td>
+            </tr>
+
+            <!-- Copyright -->
+            <tr>
+              <td align="center" style="padding:0 40px 26px 40px;font-size:12px;color:#64748b;line-height:1.6;">
+                © ${new Date().getFullYear()} Qorix Markets. All rights reserved.<br/>
+                <a href="https://qorixmarkets.com" style="color:#7dd3fc;text-decoration:none;">qorixmarkets.com</a>
               </td>
             </tr>
           </table>
-          <div style="margin-top:18px;font-size:11px;color:#475569;line-height:1.6;">
-            © ${new Date().getFullYear()} Qorix Markets. All rights reserved.<br/>
-            <a href="https://qorixmarkets.com" style="color:#475569;text-decoration:none;">qorixmarkets.com</a>
-          </div>
+
         </td>
       </tr>
     </table>
