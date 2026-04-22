@@ -756,7 +756,6 @@ export default function Dashboard() {
         <BannerCarousel
           slides={DASHBOARD_BANNERS.map((b) => ({ ...b, onClick: () => navigate("/deposit") }))}
           intervalMs={4500}
-          maxWidth={720}
         />
 
         {/* Investor Psychology Indicators */}
