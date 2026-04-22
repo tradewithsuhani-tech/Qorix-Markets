@@ -280,31 +280,65 @@ function triggerSweep(address: string, encryptedPrivateKey: string, amount: numb
   }
 }
 
+async function getOnchainUsdtBalance(address: string): Promise<number> {
+  try {
+    const url = `${TRONGRID_BASE}/v1/accounts/${address}`;
+    const r = await fetch(url, { headers: tronHeaders() });
+    if (!r.ok) return 0;
+    const j: any = await r.json();
+    const acc = j?.data?.[0];
+    if (!acc) return 0;
+    const tokens = acc.trc20 ?? [];
+    for (const t of tokens) {
+      const bal = t[USDT_CONTRACT];
+      if (bal != null) return Number(BigInt(bal)) / 1_000_000;
+    }
+    return 0;
+  } catch {
+    return 0;
+  }
+}
+
 async function retryStuckSweeps(): Promise<void> {
-  const stuck = await db
+  // Pick recent deposits — verify on-chain whether USDT still sits at user address.
+  const recent = await db
     .select({
       id: blockchainDepositsTable.id,
       toAddress: blockchainDepositsTable.toAddress,
       amount: blockchainDepositsTable.amount,
+      swept: blockchainDepositsTable.swept,
+      sweepTxHash: blockchainDepositsTable.sweepTxHash,
     })
     .from(blockchainDepositsTable)
-    .where(or(
-      eq(blockchainDepositsTable.swept, false),
-      sql`${blockchainDepositsTable.sweepTxHash} IS NULL OR ${blockchainDepositsTable.sweepTxHash} = ''`,
-    ));
+    .orderBy(sql`${blockchainDepositsTable.createdAt} DESC`)
+    .limit(50);
 
-  if (stuck.length === 0) return;
+  if (recent.length === 0) return;
 
   const addrs = await getAllDepositAddresses();
   const addrMap = new Map(addrs.map((a) => [a.address, a.privateKeyEnc]));
 
-  for (const d of stuck) {
+  for (const d of recent) {
     const enc = addrMap.get(d.toAddress);
     if (!enc) continue;
     const amt = parseFloat(d.amount as unknown as string);
     if (amt < 1) continue;
-    logger.info({ depositId: d.id, address: d.toAddress, amount: amt }, "Retrying stuck sweep");
-    triggerSweep(d.toAddress, enc, amt, d.id);
+
+    const onchainBal = await getOnchainUsdtBalance(d.toAddress);
+    if (onchainBal < 1) continue; // already swept on-chain
+
+    if (d.swept && d.sweepTxHash) {
+      // Marked swept but funds still on user address -> previous tx failed (e.g., OUT_OF_ENERGY)
+      await db
+        .update(blockchainDepositsTable)
+        .set({ swept: false, sweepTxHash: null, sweptAt: null })
+        .where(eq(blockchainDepositsTable.id, d.id));
+      logger.info({ depositId: d.id, onchainBal }, "Detected failed sweep on-chain; resetting for retry");
+    }
+
+    logger.info({ depositId: d.id, address: d.toAddress, amount: amt, onchainBal }, "Retrying stuck sweep");
+    triggerSweep(d.toAddress, enc, onchainBal, d.id);
+    await new Promise((r) => setTimeout(r, 2000));
   }
 }
 

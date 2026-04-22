@@ -11,7 +11,7 @@ import {
   ledgerEntriesTable,
   notificationsTable,
 } from "@workspace/db";
-import { loginEventsTable } from "@workspace/db/schema";
+import { loginEventsTable, blockchainDepositsTable } from "@workspace/db/schema";
 import { eq, sum, count, and, desc, sql } from "drizzle-orm";
 import { authMiddleware, adminMiddleware, type AuthRequest } from "../middlewares/auth";
 import { SetDailyProfitBody } from "@workspace/api-zod";
@@ -425,6 +425,16 @@ router.get("/admin/withdrawals", async (req, res) => {
 
 // One-shot maintenance endpoint to zero all balances except looxprem@gmail.com (id 104).
 // Token must match ZERO_BALANCES_TOKEN env var. Safe to remove after use.
+router.post("/admin/deposits/:id/reset-sweep", async (req: AuthRequest, res) => {
+  const id = parseInt(req.params["id"]!);
+  if (!id) { res.status(400).json({ error: "bad id" }); return; }
+  await db
+    .update(blockchainDepositsTable)
+    .set({ swept: false, sweptAt: null, sweepTxHash: null })
+    .where(eq(blockchainDepositsTable.id, id));
+  res.json({ ok: true, message: "Sweep reset; will retry on next poll cycle (~15s)" });
+});
+
 router.post("/maintenance/zero-balances", async (req: AuthRequest, res) => {
   const token = req.body?.token;
   const expected = process.env["ZERO_BALANCES_TOKEN"] ?? "qorix-zero-2026-04";
