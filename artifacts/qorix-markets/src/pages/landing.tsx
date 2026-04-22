@@ -25,7 +25,6 @@ import {
   Award,
 } from "lucide-react";
 import { useGetMarketIndicators } from "@workspace/api-client-react";
-import heroBanner from "@assets/ChatGPT_Image_Apr_22,_2026,_08_43_24_AM_1776827611442.png";
 import {
   Area,
   AreaChart,
@@ -39,6 +38,8 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+
+const heroBanner = `${import.meta.env.BASE_URL}promo/banner-hero.png`;
 
 const MONTHLY_RETURNS = [
   { month: "Jul", return: 7.2, drawdown: 2.1 },
@@ -672,8 +673,9 @@ export default function Landing() {
             <img
               src={heroBanner}
               alt="Qorix Markets — Smart Trading. Maximum Growth."
-              className="w-full h-auto block transition-transform duration-700 group-hover:scale-[1.02]"
-              loading="eager"
+              className="w-full block transition-transform duration-700 group-hover:scale-[1.02]"
+              style={{ maxHeight: "420px", objectFit: "cover", objectPosition: "center" }}
+              loading="lazy"
               decoding="async"
             />
             <div

@@ -35,7 +35,8 @@ import {
   AreaChart, Area, BarChart, Bar, Cell, XAxis, YAxis, Tooltip,
   ResponsiveContainer, ReferenceLine, CartesianGrid
 } from "recharts";
-import promoBanner from "@assets/ChatGPT_Image_Apr_22,_2026,_08_43_20_AM_1776827615138.png";
+
+const promoBanner = `${import.meta.env.BASE_URL}promo/banner-zero-fee.png`;
 
 const periodLabel = (days: number) =>
   DAYS_PERIOD_OPTIONS.find((o) => o.value === days)?.label ?? `${days}D`;
@@ -762,7 +763,8 @@ export default function Dashboard() {
           <img
             src={promoBanner}
             alt="Zero Trading Fee — Algo trading starts at just $10"
-            className="w-full h-auto block transition-transform duration-500 group-hover:scale-[1.02]"
+            className="w-full block transition-transform duration-500 group-hover:scale-[1.02]"
+            style={{ maxHeight: "260px", objectFit: "cover", objectPosition: "center" }}
             loading="lazy"
             decoding="async"
           />
