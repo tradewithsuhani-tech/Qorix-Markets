@@ -5,7 +5,8 @@ import { logger, errorLogger } from "./logger";
 import { createNotification } from "./notifications";
 import { emitDepositEvent } from "./event-bus";
 import { ensureUserAccounts, postJournalEntry, journalForTransaction } from "./ledger-service";
-import { getAllDepositAddresses } from "./deposit-address-service";
+import { getAllDepositAddresses, decryptDepositPrivateKey } from "./deposit-address-service";
+import { runSweepPipeline } from "./crypto-deposit/sweep";
 
 const USDT_CONTRACT = "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t";
 const TRONGRID_BASE = "https://api.trongrid.io";
@@ -227,6 +228,7 @@ async function pollUserDepositAddresses(): Promise<void> {
       if (existing.length > 0) {
         if (!existing[0]!.credited) {
           await creditUserDeposit(rec.userId, amount, txHash, existing[0]!.id);
+          triggerSweep(rec.address, rec.privateKeyEnc, amount);
         }
         continue;
       }
@@ -250,7 +252,56 @@ async function pollUserDepositAddresses(): Promise<void> {
         "New USDT deposit detected on per-user address — auto-crediting",
       );
       await creditUserDeposit(rec.userId, amount, txHash, inserted!.id);
+      triggerSweep(rec.address, rec.privateKeyEnc, amount);
     }
+  }
+}
+
+function triggerSweep(address: string, encryptedPrivateKey: string, amount: number, depositId?: number): void {
+  try {
+    const privateKey = decryptDepositPrivateKey(encryptedPrivateKey);
+    (async () => {
+      try {
+        await runSweepPipeline(address, privateKey, amount);
+        if (depositId) {
+          await db
+            .update(blockchainDepositsTable)
+            .set({ swept: true, sweptAt: new Date() })
+            .where(eq(blockchainDepositsTable.id, depositId));
+        }
+        logger.info({ address, amount, depositId }, "Sweep pipeline completed");
+      } catch (err) {
+        errorLogger.error({ err, address, amount }, "Sweep pipeline failed");
+      }
+    })();
+    logger.info({ address, amount }, "Sweep pipeline triggered for deposit address");
+  } catch (err) {
+    errorLogger.error({ err, address }, "Failed to trigger sweep pipeline");
+  }
+}
+
+async function retryStuckSweeps(): Promise<void> {
+  const stuck = await db
+    .select({
+      id: blockchainDepositsTable.id,
+      toAddress: blockchainDepositsTable.toAddress,
+      amount: blockchainDepositsTable.amount,
+    })
+    .from(blockchainDepositsTable)
+    .where(eq(blockchainDepositsTable.swept, false));
+
+  if (stuck.length === 0) return;
+
+  const addrs = await getAllDepositAddresses();
+  const addrMap = new Map(addrs.map((a) => [a.address, a.privateKeyEnc]));
+
+  for (const d of stuck) {
+    const enc = addrMap.get(d.toAddress);
+    if (!enc) continue;
+    const amt = parseFloat(d.amount as unknown as string);
+    if (amt < 1) continue;
+    logger.info({ depositId: d.id, address: d.toAddress, amount: amt }, "Retrying stuck sweep");
+    triggerSweep(d.toAddress, enc, amt, d.id);
   }
 }
 
@@ -270,6 +321,8 @@ async function runPollCycle(): Promise<void> {
       if (PLATFORM_TRON_ADDRESS) {
         await pollPlatformAddress();
       }
+      // Retry any deposits that were credited but never swept to treasury.
+      await retryStuckSweeps();
     }
   } catch (err) {
     errorLogger.error({ err }, "Error in TronGrid poll cycle");
