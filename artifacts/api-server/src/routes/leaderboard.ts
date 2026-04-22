@@ -60,14 +60,29 @@ router.get("/leaderboard/referrals", authMiddleware, async (req: AuthRequest, re
 
 // ─── Weekly Top Investors (synthetic, rotates hourly) ───────────────────────
 const FIRST_NAMES = [
-  "Aarav","Vihaan","Aditya","Kabir","Reyansh","Arjun","Vivaan","Krishna","Ishaan","Rohan",
-  "Marcus","Lucas","Ethan","Liam","Noah","Oliver","James","Henry","Theo","Owen",
-  "Sofia","Aanya","Diya","Saanvi","Ananya","Kiara","Myra","Riya","Pari","Ira",
-  "Emma","Olivia","Mia","Ava","Isla","Zara","Maya","Layla","Chloe","Lily",
-  "Hiroshi","Yuki","Ren","Kenji","Mei","Aiko","Hana","Sora","Kai","Aki",
-  "Lukas","Anton","Felix","Jonas","Niko","Maks","Andrei","Pavel","Dmitri","Igor",
+  "Rakesh","Aarav","Vihaan","Aditya","Kabir","Reyansh","Arjun","Vivaan","Krishna","Ishaan",
+  "Rohan","Aryan","Sai","Dhruv","Karan","Yash","Manish","Rohit","Suresh","Ramesh",
+  "Mahesh","Naveen","Pranav","Tanmay","Gaurav","Vikram","Nikhil","Ankit","Harsh","Akash",
+  "Aanya","Diya","Saanvi","Ananya","Kiara","Myra","Riya","Pari","Ira","Anika",
+  "Priya","Pooja","Neha","Kavya","Shruti","Aditi","Sneha","Meera","Divya","Nisha",
+  "Sanjay","Deepak","Amit","Rajesh","Vishal","Siddharth","Aryan","Varun","Kunal","Tushar",
 ];
-const LAST_INITIALS = "ABCDGHJKLMNOPRSTVWZ".split("");
+const ID_PREFIXES = ["Qa","Qb","Qx","Qm","Qz","Qr","Qn","Qp","Qk","Qt"];
+
+function maskName(name: string, rng: () => number): string {
+  if (name.length <= 4) return name;
+  const visibleStart = Math.max(2, Math.min(4, Math.floor(name.length / 2) - 1));
+  const visibleEnd = name.length <= 6 ? 1 : 2;
+  const stars = "*".repeat(Math.max(2, name.length - visibleStart - visibleEnd));
+  return name.slice(0, visibleStart) + stars + name.slice(name.length - visibleEnd);
+}
+
+function makePublicId(rng: () => number): string {
+  const prefix = ID_PREFIXES[Math.floor(rng() * ID_PREFIXES.length)];
+  const digits = String(Math.floor(rng() * 9000) + 1000); // 4 digits
+  const tail = String(Math.floor(rng() * 9) + 1);
+  return `${prefix}${digits.slice(0, 3)}**${tail}`;
+}
 
 // Tiny seeded PRNG (mulberry32) for deterministic per-hour output
 function mulberry32(seed: number) {
@@ -100,29 +115,34 @@ router.get("/leaderboard/investors/weekly", authMiddleware, async (req: AuthRequ
     const rng = mulberry32(hourBucket);
 
     // Build top 10 synthetic investors — large funds, large weekly profits
-    const used = new Set<string>();
+    const usedNames = new Set<string>();
+    const usedIds = new Set<string>();
     const board: Array<{
       id: number;
       fullName: string;
+      publicId: string;
       investmentAmount: number;
       isActive: boolean;
       weeklyProfit: number;
     }> = [];
     let i = 0;
-    while (board.length < 10 && i < 200) {
+    while (board.length < 10 && i < 400) {
       i++;
       const first = FIRST_NAMES[Math.floor(rng() * FIRST_NAMES.length)];
-      const init = LAST_INITIALS[Math.floor(rng() * LAST_INITIALS.length)];
-      const name = `${first} ${init}.`;
-      if (used.has(name)) continue;
-      used.add(name);
+      if (usedNames.has(first)) continue;
+      usedNames.add(first);
+      const masked = maskName(first, rng);
+      let pid = makePublicId(rng);
+      while (usedIds.has(pid)) pid = makePublicId(rng);
+      usedIds.add(pid);
       // Funds spread roughly $80k → $300k, descending
       const fund = Math.round((300_000 - board.length * 22_000 + (rng() - 0.5) * 9_000) / 50) * 50;
       // Weekly profit roughly 3-6% of fund
       const profit = Math.round(fund * (0.03 + rng() * 0.03) * 100) / 100;
       board.push({
         id: 1_000_000 + board.length,
-        fullName: name,
+        fullName: masked,
+        publicId: pid,
         investmentAmount: fund,
         isActive: true,
         weeklyProfit: profit,

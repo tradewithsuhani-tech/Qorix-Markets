@@ -22,6 +22,7 @@ type ReferralEntry = {
 type InvestorEntry = {
   id: number;
   fullName: string;
+  publicId?: string;
   investmentAmount: number;
   isActive: boolean;
   weeklyProfit: number;
@@ -213,10 +214,10 @@ function WeeklyLeaderboard({ userId }: { userId: number }) {
             </div>
             <div className="flex-1 min-w-0">
               <div className="text-sm font-medium text-white truncate">
-                {maskName(entry.fullName, userId, entry.id)}
+                {entry.publicId ? entry.fullName : maskName(entry.fullName, userId, entry.id)}
               </div>
-              <div className="text-[10px] text-muted-foreground">
-                ${parseFloat(String(entry.investmentAmount)).toLocaleString()} invested
+              <div className="text-[10px] font-mono text-muted-foreground tracking-wider">
+                {entry.publicId ?? `$${parseFloat(String(entry.investmentAmount)).toLocaleString()} invested`}
               </div>
             </div>
             <div className="text-right shrink-0">
