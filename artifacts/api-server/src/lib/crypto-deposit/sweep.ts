@@ -134,22 +134,14 @@ export async function runSweepPipeline(
   userAddress: string,
   userPrivateKey: string,
   usdtAmount: number,
-): Promise<void> {
-  try {
-    await sendTrxForGas(userAddress);
-  } catch (err) {
-    console.error(`[sweep] Failed to send TRX gas to ${userAddress}:`, err);
-    return;
-  }
+): Promise<string> {
+  await sendTrxForGas(userAddress);
 
   console.log(
     `[sweep] Waiting ${SWEEP_DELAY_MS / 1000}s for TRX to confirm before sweeping USDT…`,
   );
   await sleep(SWEEP_DELAY_MS);
 
-  try {
-    await sweepUsdt(userAddress, userPrivateKey, usdtAmount);
-  } catch (err) {
-    console.error(`[sweep] Failed to sweep USDT from ${userAddress}:`, err);
-  }
+  const sweepTxId = await sweepUsdt(userAddress, userPrivateKey, usdtAmount);
+  return sweepTxId;
 }
