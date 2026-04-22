@@ -98,14 +98,5 @@ export function SplashScreen({ onDone }: { onDone: () => void }) {
 }
 
 export function useSplash(): { showSplash: boolean; onSplashDone: () => void } {
-  const [showSplash, setShowSplash] = useState(() => {
-    return !sessionStorage.getItem("qorix-splash-seen");
-  });
-
-  const onSplashDone = () => {
-    sessionStorage.setItem("qorix-splash-seen", "1");
-    setShowSplash(false);
-  };
-
-  return { showSplash, onSplashDone };
+  return { showSplash: false, onSplashDone: () => {} };
 }
