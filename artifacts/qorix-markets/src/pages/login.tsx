@@ -476,12 +476,6 @@ export default function LoginPage() {
                         </span>
                       )}
                     </div>
-                    {referralLocked && (
-                      <p className="text-[11px] text-emerald-400/80 mt-1.5 flex items-center gap-1">
-                        <CheckCircle2 style={{ width: 11, height: 11 }} />
-                        Invited by <span className="font-semibold tracking-wide">{referralCode}</span> — locked from your invite link.
-                      </p>
-                    )}
                   </div>
                 </motion.div>
               )}
