@@ -36,7 +36,13 @@ import {
   ResponsiveContainer, ReferenceLine, CartesianGrid
 } from "recharts";
 
-const promoBanner = `${import.meta.env.BASE_URL}promo/banner-zero-fee.png`;
+import { BannerCarousel } from "@/components/banner-carousel";
+
+const DASHBOARD_BANNERS = [
+  { src: `${import.meta.env.BASE_URL}promo/banner-1-manual-trading.png`, alt: "Manual Trading Is Breaking You — Trade Smart with Qorix" },
+  { src: `${import.meta.env.BASE_URL}promo/banner-2-tired.png`, alt: "Tired of Manual Trading — You Deserve Better" },
+  { src: `${import.meta.env.BASE_URL}promo/banner-3-freedom.png`, alt: "Your Gateway to Financial Freedom — Start with $10" },
+];
 
 const periodLabel = (days: number) =>
   DAYS_PERIOD_OPTIONS.find((o) => o.value === days)?.label ?? `${days}D`;
@@ -746,28 +752,12 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Promo Banner — Zero Trading Fee */}
-        <button
-          type="button"
-          onClick={() => navigate("/deposit")}
-          className="block w-full rounded-2xl overflow-hidden relative cursor-pointer transition-transform hover:scale-[1.005]"
-          style={{
-            boxShadow: "0 8px 32px rgba(56,189,248,0.12), 0 0 0 1px rgba(56,189,248,0.18)",
-            padding: 0,
-            border: "none",
-            background: "transparent",
-          }}
-          aria-label="Zero trading fee — start with just $10"
-        >
-          <img
-            src={promoBanner}
-            alt="Zero Trading Fee — Algo trading starts at just $10"
-            className="w-full block"
-            style={{ maxHeight: "260px", objectFit: "cover", objectPosition: "center" }}
-            loading="lazy"
-            decoding="async"
-          />
-        </button>
+        {/* Promo Banners — auto-scrolling carousel */}
+        <BannerCarousel
+          slides={DASHBOARD_BANNERS.map((b) => ({ ...b, onClick: () => navigate("/deposit") }))}
+          intervalMs={4500}
+          maxHeight={260}
+        />
 
         {/* Investor Psychology Indicators */}
         <motion.div
