@@ -1508,17 +1508,16 @@ export default function DemoDashboard() {
             </div>
             <div className="flex-1" style={{ minHeight: 180 }}>
               {pnlHistoryLoading ? (
-                <div className="w-full h-full flex items-end gap-1 pb-2">
-                  {Array.from({ length: 15 }).map((_, i) => (
-                    <div key={i} className="flex-1 animate-pulse rounded" style={{
-                      height: `${30 + (i * 5) % 50}%`,
-                      background: i % 3 === 0 ? 'rgba(239,68,68,0.2)' : 'rgba(34,197,94,0.2)'
-                    }} />
-                  ))}
-                </div>
+                <div className="w-full h-full animate-pulse rounded-xl bg-emerald-500/5" />
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={drawdownData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+                  <AreaChart data={drawdownData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="pnlGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="rgba(34,197,94,0.55)" />
+                        <stop offset="100%" stopColor="rgba(34,197,94,0.02)" />
+                      </linearGradient>
+                    </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
                     <XAxis
                       dataKey="date"
@@ -1536,19 +1535,19 @@ export default function DemoDashboard() {
                     />
                     <Tooltip
                       content={<DrawdownTooltip />}
-                      cursor={{ fill: "rgba(148,163,184,0.08)" }}
+                      cursor={{ stroke: "rgba(148,163,184,0.25)", strokeDasharray: "3 3" }}
                       wrapperStyle={{ outline: "none" }}
                     />
-                    <ReferenceLine y={0} stroke="rgba(255,255,255,0.1)" strokeDasharray="4 2" />
-                    <Bar dataKey="value" radius={[3, 3, 0, 0]}>
-                      {drawdownData.map((entry, index) => (
-                        <Cell
-                          key={index}
-                          fill={entry.up ? "rgba(34,197,94,0.75)" : "rgba(239,68,68,0.75)"}
-                        />
-                      ))}
-                    </Bar>
-                  </BarChart>
+                    <Area
+                      type="monotone"
+                      dataKey="value"
+                      stroke="rgba(34,197,94,0.95)"
+                      strokeWidth={2}
+                      fill="url(#pnlGradient)"
+                      dot={{ r: 2.5, fill: "rgba(34,197,94,1)", stroke: "rgba(15,23,42,0.9)", strokeWidth: 1 }}
+                      activeDot={{ r: 4, fill: "rgba(34,197,94,1)", stroke: "rgba(15,23,42,0.9)", strokeWidth: 2 }}
+                    />
+                  </AreaChart>
                 </ResponsiveContainer>
               )}
             </div>
