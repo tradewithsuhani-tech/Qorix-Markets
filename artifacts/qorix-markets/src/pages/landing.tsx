@@ -244,7 +244,81 @@ function StickyNav({ navigate }: { navigate: (p: string) => void }) {
   );
 }
 
+/* XAUUSD rotating live trade — cycle of 15 trades: 12 TP + 3 SL (SL random positions) */
+function useXauusdLiveTrade() {
+  const [tick, setTick] = useState(0);
+
+  // 15-trade cycle: positions of SL trades randomized per cycle, 12 TP + 3 SL
+  const cycleRef = useRef<{ sl: Set<number>; cycleId: number }>({ sl: new Set(), cycleId: -1 });
+
+  useEffect(() => {
+    const id = setInterval(() => setTick((t) => t + 1), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  // 6s per trade: 4s RUNNING + 2s CLOSED
+  const TRADE_SEC = 6;
+  const RUN_SEC = 4;
+  const tradeIdx = Math.floor(tick / TRADE_SEC);
+  const phaseSec = tick % TRADE_SEC;
+  const cycleIdx = Math.floor(tradeIdx / 15);
+  const inCycle = tradeIdx % 15;
+
+  // Reshuffle SL positions each new cycle (deterministic per cycleIdx so SSR/CSR match)
+  if (cycleRef.current.cycleId !== cycleIdx) {
+    const sl = new Set<number>();
+    let seed = cycleIdx * 9301 + 49297;
+    while (sl.size < 3) {
+      seed = (seed * 9301 + 49297) % 233280;
+      sl.add(seed % 15);
+    }
+    cycleRef.current = { sl, cycleId: cycleIdx };
+  }
+
+  const isSL = cycleRef.current.sl.has(inCycle);
+  const isClosed = phaseSec >= RUN_SEC;
+
+  // Per-trade deterministic values
+  const tradeSeed = (tradeIdx * 2654435761) >>> 0;
+  const entry = 2340 + ((tradeSeed % 4500) / 100); // 2340 - 2385
+  const tpPnl = 4 + ((tradeSeed >> 4) % 900) / 100; // $4.00 - $13.00
+  const slPnl = 1.5 + ((tradeSeed >> 7) % 250) / 100; // $1.50 - $4.00
+  const runMin = 1 + ((tradeSeed >> 11) % 30); // 1 - 30 min display
+
+  const pnl = isSL ? -slPnl : tpPnl;
+
+  return {
+    pair: "XAUUSD",
+    side: "BUY" as const,
+    entry: entry.toFixed(2),
+    runningMin: runMin,
+    isClosed,
+    isSL,
+    pnl,
+  };
+}
+
 function HeroDashboardMock() {
+  const trade = useXauusdLiveTrade();
+  const pnlText = `${trade.pnl >= 0 ? "+" : "-"}$${Math.abs(trade.pnl).toFixed(2)}`;
+  const pnlColor = trade.pnl >= 0 ? "text-emerald-400" : "text-red-400";
+  const stripBg = trade.isClosed
+    ? trade.isSL
+      ? "bg-red-500/[0.06] border-red-500/20"
+      : "bg-emerald-500/[0.08] border-emerald-500/25"
+    : "bg-emerald-500/[0.06] border-emerald-500/20";
+  const iconBg = trade.isClosed && trade.isSL
+    ? "bg-red-500/20"
+    : "bg-emerald-500/20";
+  const iconColor = trade.isClosed && trade.isSL
+    ? "text-red-400"
+    : "text-emerald-400";
+  const subText = trade.isClosed
+    ? trade.isSL
+      ? `Closed · SL hit · ${pnlText}`
+      : `Closed · TP hit · ${pnlText}`
+    : `Entry $${trade.entry} · running ${trade.runningMin}m`;
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 40, scale: 0.96 }}
@@ -328,17 +402,28 @@ function HeroDashboardMock() {
             ))}
           </div>
 
-          {/* Live trade strip */}
-          <div className="rounded-xl bg-emerald-500/[0.06] border border-emerald-500/20 px-3 py-2.5 flex items-center gap-2.5">
-            <div className="shrink-0 w-7 h-7 rounded-lg bg-emerald-500/20 flex items-center justify-center">
-              <Activity size={13} className="text-emerald-400" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-xs font-semibold text-white truncate">BTC/USDT · LONG · Managed by Qorix system</div>
-              <div className="text-[10px] text-slate-400">Entry $94,212 · running</div>
-            </div>
-            <div className="text-emerald-400 text-sm font-bold shrink-0">+$8.42</div>
-          </div>
+          {/* Live trade strip — XAUUSD BUY rotating */}
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={`${trade.entry}-${trade.isClosed ? "c" : "r"}`}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.3 }}
+              className={`rounded-xl border px-3 py-2.5 flex items-center gap-2.5 ${stripBg}`}
+            >
+              <div className={`shrink-0 w-7 h-7 rounded-lg flex items-center justify-center ${iconBg}`}>
+                <Activity size={13} className={iconColor} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-xs font-semibold text-white truncate">
+                  {trade.pair} · BUY · Managed by Qorix system
+                </div>
+                <div className="text-[10px] text-slate-400">{subText}</div>
+              </div>
+              <div className={`text-sm font-bold shrink-0 tabular-nums ${pnlColor}`}>{pnlText}</div>
+            </motion.div>
+          </AnimatePresence>
         </div>
       </div>
 
