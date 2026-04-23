@@ -507,7 +507,8 @@ router.get("/dashboard/performance", async (req: AuthRequest, res) => {
     synthWinRate < 70 ||
     synthWinRate > 95 ||
     synthMaxDrawdown < 2.0 ||
-    synthMaxDrawdown > 3.06;
+    synthMaxDrawdown > 3.06 ||
+    synthRiskScore === "High";
   if (w && (storedDay !== today || synthOutOfRange)) {
     const winJitter = (hashSeed(`${req.userId}:${today}:winrate`) - 0.5) * 3; // ±1.5
     const ddJitter = (hashSeed(`${req.userId}:${today}:drawdown`) - 0.5) * 1; // ±0.5
@@ -518,9 +519,10 @@ router.get("/dashboard/performance", async (req: AuthRequest, res) => {
     synthMaxDrawdown = Math.max(2.0, Math.min(3.06, 3.06 - ratio * 1.06 + ddJitter * 0.3));
     // Avg Return per trade ∈ [0.80%, 2.50%], scales with daily P&L pct.
     synthAvgReturn = Math.max(0.8, Math.min(2.5, 0.8 + ratio * 1.7 + arJitter));
-    // Risk Score: stronger P&L performance → safer score.
-    // ratio ≥ 0.50 → Low, ≥ 0.20 → Medium, else High.
-    synthRiskScore = ratio >= 0.5 ? "Low" : ratio >= 0.2 ? "Medium" : "High";
+    // Risk Score: investor-friendly — NEVER show "High" (would scare users).
+    // Strong P&L → "Low", weak/zero P&L → at worst "Medium".
+    // ratio ≥ 0.30 → Low, else Medium. (No High branch.)
+    synthRiskScore = ratio >= 0.3 ? "Low" : "Medium";
     await db
       .update(walletsTable)
       .set({
@@ -548,8 +550,10 @@ router.get("/dashboard/performance", async (req: AuthRequest, res) => {
   // Risk Score is now driven by the synthetic, P&L-tied value persisted on
   // the wallet row above. Falls back to investment.riskLevel if no wallet.
   const riskLevel = investment?.riskLevel ?? "low";
-  const fallbackRiskScore = riskLevel === "high" ? "High" : riskLevel === "medium" ? "Medium" : "Low";
-  const riskScore = w ? synthRiskScore : fallbackRiskScore;
+  // Investor-safety rule: NEVER expose "High" — clamp anything risky to Medium.
+  const fallbackRiskScore = riskLevel === "medium" ? "Medium" : "Low";
+  const computed = w ? synthRiskScore : fallbackRiskScore;
+  const riskScore = computed === "High" ? "Medium" : computed;
 
   const equityRecords = await db.select().from(equityHistoryTable)
     .where(eq(equityHistoryTable.userId, req.userId!))
