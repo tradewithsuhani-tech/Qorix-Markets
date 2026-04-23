@@ -733,7 +733,13 @@ export default function Dashboard() {
           <span className="live-dot" style={{ width: 6, height: 6 }} />
           <span className="text-xs text-green-400 font-medium">Trading Active</span>
         </div>
-      ) : <span className="text-xs text-muted-foreground">Not active</span>,
+      ) : (
+        <div className="flex items-center gap-1.5">
+          <span className="live-dot" style={{ width: 6, height: 6, background: "#34d399", boxShadow: "0 0 6px #10b981" }} />
+          <span className="text-xs font-medium text-emerald-400">Ready to grow</span>
+          <span className="text-[10px] font-semibold text-emerald-400/70 tabular-nums">· +0.50%/day potential</span>
+        </div>
+      ),
       accent: "indigo",
       glow: "rgba(99,102,241,0.1)",
     },
