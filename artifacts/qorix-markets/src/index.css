@@ -494,6 +494,28 @@
     }
   }
 
+  /* Live profit feed — flash newest tick with green glow */
+  .live-tick-flash {
+    animation: live-tick-flash 700ms ease-out;
+    text-shadow: 0 0 14px rgba(16, 185, 129, 0.55);
+  }
+  @keyframes live-tick-flash {
+    0% {
+      transform: translateY(8px) scale(0.92);
+      opacity: 0;
+      filter: brightness(1.6);
+    }
+    35% {
+      opacity: 1;
+      filter: brightness(1.4);
+    }
+    100% {
+      transform: translateY(0) scale(1);
+      opacity: 1;
+      filter: brightness(1);
+    }
+  }
+
   /* Premium "LIVE" pill — pulsing border glow + soft shimmer */
   .live-pill {
     position: relative;
