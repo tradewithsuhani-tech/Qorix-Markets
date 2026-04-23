@@ -1,5 +1,6 @@
 import { Layout } from "@/components/layout";
 import { Link } from "wouter";
+import { DemoDashboardBody } from "@/pages/demo-dashboard";
 import {
   useGetInvestment,
   useGetDashboardSummary,
@@ -848,6 +849,10 @@ export default function PortfolioPage() {
   return (
     <Layout>
       <PortfolioInner />
+      {/* Demo dashboard sections appended below — user will tell us which to remove. */}
+      <div className="px-4 md:px-8 py-6 md:py-8 max-w-7xl mx-auto border-t border-white/10 mt-8">
+        <DemoDashboardBody />
+      </div>
     </Layout>
   );
 }

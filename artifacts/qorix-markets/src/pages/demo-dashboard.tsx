@@ -530,7 +530,7 @@ function CapitalProtectionWidget({
   );
 }
 
-export default function DemoDashboard() {
+export function DemoDashboardBody() {
   const [, navigate] = useLocation();
   const [chartDays, setChartDays] = useState(30);
   const [returnsDays, setReturnsDays] = useState(30);
@@ -878,7 +878,7 @@ export default function DemoDashboard() {
   ];
 
   return (
-    <Layout>
+    <>
       <AdminPopup />
       <motion.div
         initial={{ opacity: 0, y: 12 }}
@@ -1807,6 +1807,14 @@ export default function DemoDashboard() {
         </motion.div>
 
       </motion.div>
+    </>
+  );
+}
+
+export default function DemoDashboard() {
+  return (
+    <Layout>
+      <DemoDashboardBody />
     </Layout>
   );
 }
