@@ -204,33 +204,6 @@ export function PromoBonusBanner() {
               <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-400/30 text-[10px] font-extrabold uppercase tracking-[0.18em]">
                 <Sparkles className="w-3 h-3" /> Limited · One-time per user
               </span>
-              {/* DESKTOP BIG COUNTDOWN — prominent but clean */}
-              <div
-                className={
-                  "inline-flex items-center gap-2 px-3 py-1 rounded-lg border shadow-sm " +
-                  (urgent
-                    ? "bg-red-500/15 border-red-400/50 animate-pulse"
-                    : "bg-black/50 border-amber-400/50")
-                }
-              >
-                <Timer className={"w-3.5 h-3.5 " + (urgent ? "text-red-300" : "text-amber-300")} />
-                <span
-                  className={
-                    "text-[10px] font-bold uppercase tracking-[0.15em] " +
-                    (urgent ? "text-red-300" : "text-amber-300/90")
-                  }
-                >
-                  Ends in
-                </span>
-                <span
-                  className={
-                    "text-lg font-black tabular-nums leading-none drop-shadow " +
-                    (urgent ? "text-red-200" : "text-amber-100")
-                  }
-                >
-                  {formatMs(msLeft)}
-                </span>
-              </div>
             </div>
             <h3 className="text-base md:text-lg font-extrabold leading-tight">
               <span className="bg-gradient-to-r from-amber-200 via-yellow-100 to-amber-300 bg-clip-text text-transparent">
@@ -258,29 +231,64 @@ export function PromoBonusBanner() {
               />
             </div>
 
-            {/* Code box */}
-            <div className="mt-3 inline-flex items-stretch rounded-xl border border-amber-300/40 bg-black/40 overflow-hidden">
-              <div className="px-3 py-2 flex items-center gap-2">
-                <BadgePercent className="w-4 h-4 text-amber-300 shrink-0" />
-                <span className="font-mono text-sm md:text-base font-bold tracking-[0.15em] text-amber-100">
-                  {offer.code}
-                </span>
-              </div>
-              <button
-                onClick={handleCopy}
-                className="px-3 border-l border-amber-300/30 bg-amber-500/10 hover:bg-amber-500/20 text-amber-200 text-xs font-semibold transition-colors flex items-center gap-1.5"
-                aria-label="Copy promo code"
-              >
-                {copied ? (
-                  <>
-                    <Check className="w-3.5 h-3.5" /> Copied
-                  </>
-                ) : (
-                  <>
+            {/* Code box + countdown timer — side-by-side */}
+            <div className="mt-3 flex flex-wrap items-stretch gap-2">
+              <div className="inline-flex items-stretch rounded-xl border border-amber-300/40 bg-black/40 overflow-hidden">
+                <div className="px-3 py-2 flex items-center gap-2">
+                  <BadgePercent className="w-4 h-4 text-amber-300 shrink-0" />
+                  <span className="font-mono text-sm md:text-base font-bold tracking-[0.15em] text-amber-100">
+                    {offer.code}
+                  </span>
+                </div>
+                <button
+                  onClick={handleCopy}
+                  className="px-3 border-l border-amber-300/30 bg-amber-500/10 hover:bg-amber-500/20 text-amber-200 text-xs font-semibold transition-colors flex items-center gap-1.5"
+                  aria-label="Copy promo code"
+                >
+                  {copied ? (
+                    <>
+                      <Check className="w-3.5 h-3.5" /> Copied
+                    </>
+                  ) : (
+                    <>
                     <Copy className="w-3.5 h-3.5" /> Copy
                   </>
                 )}
               </button>
+              </div>
+
+              {/* Countdown pill — lives right next to the code */}
+              <div
+                className={
+                  "inline-flex items-center gap-2 rounded-xl border px-3 py-2 shadow-sm " +
+                  (urgent
+                    ? "bg-red-500/15 border-red-400/50 animate-pulse"
+                    : "bg-black/40 border-amber-300/40")
+                }
+                aria-label="Offer countdown"
+              >
+                <Timer
+                  className={"w-4 h-4 shrink-0 " + (urgent ? "text-red-300" : "text-amber-300")}
+                />
+                <div className="flex flex-col leading-none">
+                  <span
+                    className={
+                      "text-[9px] font-bold uppercase tracking-[0.18em] " +
+                      (urgent ? "text-red-300" : "text-amber-300/90")
+                    }
+                  >
+                    Ends in
+                  </span>
+                  <span
+                    className={
+                      "mt-0.5 text-base md:text-lg font-black tabular-nums " +
+                      (urgent ? "text-red-200" : "text-amber-100")
+                    }
+                  >
+                    {formatMs(msLeft)}
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
 
