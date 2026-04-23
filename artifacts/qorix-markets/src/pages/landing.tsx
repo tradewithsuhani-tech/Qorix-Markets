@@ -282,12 +282,12 @@ function HeroDashboardMock() {
                 $<CountUp value={12847.32} decimals={2} />
               </div>
               <div className="text-xs text-emerald-400 font-semibold mt-1 flex items-center gap-1">
-                <TrendingUp size={12} /> +$284.45 today (+2.3%)
+                <TrendingUp size={12} /> +$102.78 today (+0.8%)
               </div>
             </div>
             <div className="text-right">
               <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-1">Today</div>
-              <div className="text-lg font-bold text-emerald-400">+2.3%</div>
+              <div className="text-lg font-bold text-emerald-400">+0.8%</div>
             </div>
           </div>
 
@@ -745,10 +745,10 @@ export default function Landing() {
                   <div className="space-y-3">
                     <div className="text-xs uppercase tracking-wider text-slate-500 px-1">Live Desk</div>
                     {[
-                      { p: "BTC/USDT", side: "LONG", pnl: "+$8.42", c: "text-emerald-400" },
-                      { p: "ETH/USDT", side: "LONG", pnl: "+$3.21", c: "text-emerald-400" },
-                      { p: "SOL/USDT", side: "SHORT", pnl: "+$1.84", c: "text-emerald-400" },
-                      { p: "BNB/USDT", side: "LONG", pnl: "-$0.62", c: "text-red-400" },
+                      { p: "BTC/USDT", side: "LONG", pnl: "+$84.20", c: "text-emerald-400" },
+                      { p: "ETH/USDT", side: "LONG", pnl: "+$32.10", c: "text-emerald-400" },
+                      { p: "SOL/USDT", side: "SHORT", pnl: "+$18.40", c: "text-emerald-400" },
+                      { p: "BNB/USDT", side: "LONG", pnl: "-$6.20", c: "text-red-400" },
                     ].map((t) => (
                       <div key={t.p} className="rounded-xl bg-white/[0.03] border border-white/[0.05] px-3 py-2.5 flex items-center justify-between">
                         <div>
