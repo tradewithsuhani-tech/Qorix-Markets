@@ -14,6 +14,7 @@ import { AdminPopup } from "@/components/admin-popup";
 import { PeriodFilter, DAYS_PERIOD_OPTIONS } from "@/components/period-filter";
 import { GrowthPanel } from "@/components/growth-panel";
 import { IdleBalanceBanner } from "@/components/idle-balance-banner";
+import { MissedTradeBanner } from "@/components/missed-trade-banner";
 import { UpdatedAgo } from "@/components/updated-ago";
 import { VipBadge, VipCard } from "@/components/vip-badge";
 import { AnimatedCounter, BigBalanceCounter } from "@/components/animated-counter";
@@ -1265,6 +1266,9 @@ export function DemoDashboardBody({
         {!hideFomoTicker && conversion?.fomoMessages && conversion.fomoMessages.length > 0 && (
           <FomoTicker messages={conversion.fomoMessages} />
         )}
+
+        {/* Missed-trade FOMO banner (main screen alert, not a popup) */}
+        <MissedTradeBanner />
 
         {/* Investment CTA + Trust block — only for users who haven't activated trading */}
         {conversion?.demoModeEnabled !== false && !investment?.isActive && (
