@@ -1802,6 +1802,7 @@ export function DemoDashboardBody({
             ))}
           </div>
         </motion.div>
+        )}
 
         {/* Growth & Leaderboard Panel */}
         {!hideGrowthPanel && (
