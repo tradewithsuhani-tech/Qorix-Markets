@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Link } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Gift, Copy, Check, ArrowRight, Sparkles, BadgePercent, Timer } from "lucide-react";
+import { Gift, Copy, Check, ArrowRight, Sparkles, BadgePercent, Timer, X } from "lucide-react";
 import { authFetch } from "@/lib/auth-fetch";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
@@ -50,8 +50,44 @@ export function PromoBonusBanner() {
   const [copied, setCopied] = useState(false);
   const [now, setNow] = useState(() => Date.now());
 
-  // Banner stays pinned until an admin/user explicitly removes it —
-  // dismissal is intentionally disabled.
+  // Per-user per-day dismissal cap: banner shows max 2 times per calendar day.
+  // Each X click increments the daily counter in localStorage; once the
+  // counter hits 2, the banner stays hidden for the rest of that day.
+  const todayKey = useMemo(() => {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `promoBanner:dismissed:${user?.id ?? "anon"}:${y}-${m}-${day}`;
+  }, [user?.id]);
+
+  const [dismissCount, setDismissCount] = useState<number>(() => {
+    if (typeof window === "undefined") return 0;
+    try {
+      return parseInt(localStorage.getItem(todayKey) ?? "0", 10) || 0;
+    } catch {
+      return 0;
+    }
+  });
+
+  // Re-read the counter whenever the day-key changes (e.g. after midnight
+  // the key changes, so we reset the in-memory count from storage).
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      setDismissCount(parseInt(localStorage.getItem(todayKey) ?? "0", 10) || 0);
+    } catch {
+      setDismissCount(0);
+    }
+  }, [todayKey]);
+
+  const handleDismiss = () => {
+    const next = dismissCount + 1;
+    setDismissCount(next);
+    try {
+      localStorage.setItem(todayKey, String(next));
+    } catch {}
+  };
 
   const { data: offer } = useQuery<OfferResponse>({
     queryKey: ["promo-offer"],
@@ -128,6 +164,8 @@ export function PromoBonusBanner() {
   if (!offer) return null;
   if (offer.alreadyRedeemed) return null;
   if (!offer.active) return null;
+  // Respect the 2-per-day dismissal cap.
+  if (dismissCount >= 2) return null;
 
   // Progress for the 10-minute active window
   const totalActiveMs = offer.expiresAt - offer.windowStart;
@@ -160,6 +198,15 @@ export function PromoBonusBanner() {
           }}
         />
         <div className="absolute top-0 inset-x-0 h-[2px] bg-gradient-to-r from-transparent via-amber-300 to-transparent" />
+
+        {/* Close / dismiss — daily cap 2 */}
+        <button
+          onClick={handleDismiss}
+          aria-label="Dismiss offer"
+          className="absolute top-2 right-2 z-20 w-7 h-7 rounded-full bg-black/50 hover:bg-black/70 border border-amber-300/30 hover:border-amber-300/60 text-amber-200/80 hover:text-amber-100 flex items-center justify-center transition-colors"
+        >
+          <X className="w-3.5 h-3.5" />
+        </button>
         <div className="absolute -top-24 -right-16 w-72 h-72 bg-amber-500/20 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute -bottom-20 -left-16 w-60 h-60 bg-yellow-500/15 rounded-full blur-3xl pointer-events-none" />
 
