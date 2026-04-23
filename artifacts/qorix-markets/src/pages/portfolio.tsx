@@ -32,6 +32,7 @@ import {
   Zap,
   CircleDot,
   Square,
+  AlertTriangle,
 } from "lucide-react";
 import { AnimatedCounter, BigBalanceCounter } from "@/components/animated-counter";
 import { UpdatedAgo } from "@/components/updated-ago";
@@ -561,10 +562,10 @@ function PortfolioInner() {
       },
     },
   });
-  const handleStopTrading = () => {
-    if (window.confirm("Stop trading? Your active position will be closed and capital returned to your balance.")) {
-      stopMutation.mutate({});
-    }
+  const [showStopConfirm, setShowStopConfirm] = useState(false);
+  const handleStopTrading = () => setShowStopConfirm(true);
+  const confirmStopTrading = () => {
+    stopMutation.mutate({}, { onSettled: () => setShowStopConfirm(false) });
   };
   const { data: equity, dataUpdatedAt: equityUpdatedAt } = useGetEquityChart(
     { days: 30 },
@@ -993,6 +994,81 @@ function PortfolioInner() {
         </div>
       </div>
 
+      {/* Stop Trading Confirmation Modal */}
+      {showStopConfirm && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200"
+          onClick={() => !stopMutation.isPending && setShowStopConfirm(false)}
+        >
+          <div
+            className="relative w-full max-w-md overflow-hidden rounded-2xl border border-red-500/30 bg-gradient-to-br from-[#121826] via-[#0d1320] to-[#0a0f1a] shadow-[0_20px_60px_-10px_rgba(239,68,68,0.35),0_1px_0_rgba(255,255,255,0.06)_inset] animate-in zoom-in-95 slide-in-from-bottom-2 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* shimmer top edge */}
+            <div className="absolute top-0 inset-x-0 h-[2px] bg-gradient-to-r from-transparent via-red-400/70 to-transparent" />
+            {/* radial glow */}
+            <div className="absolute -top-16 -right-16 w-48 h-48 bg-red-500/20 rounded-full blur-3xl pointer-events-none" />
+
+            <div className="relative p-6 md:p-7">
+              <div className="flex items-start gap-4">
+                <div className="shrink-0 w-12 h-12 rounded-xl bg-gradient-to-br from-red-500/25 to-rose-500/15 border border-red-400/40 flex items-center justify-center shadow-lg shadow-red-500/20">
+                  <AlertTriangle className="w-6 h-6 text-red-300" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-lg font-bold text-white">Stop Trading?</h3>
+                  <p className="mt-1 text-sm text-muted-foreground leading-relaxed">
+                    Your active position will be closed and your capital returned to your wallet balance. This action cannot be undone.
+                  </p>
+                </div>
+              </div>
+
+              {investment && (
+                <div className="mt-5 grid grid-cols-2 gap-3">
+                  <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
+                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Capital returning</div>
+                    <div className="mt-1 text-base font-bold text-white tabular-nums">
+                      ${fmtMoney(Number(investment.principal || 0))}
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-emerald-400/20 bg-emerald-500/[0.06] p-3">
+                    <div className="text-[10px] uppercase tracking-wider text-emerald-300/80 font-semibold">Profit earned</div>
+                    <div className="mt-1 text-base font-bold text-emerald-300 tabular-nums">
+                      ${fmtMoney(Number(investment.totalProfit || 0))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="mt-6 flex items-center justify-end gap-3">
+                <button
+                  onClick={() => setShowStopConfirm(false)}
+                  disabled={stopMutation.isPending}
+                  className="px-5 py-2.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 text-sm font-semibold text-white transition-all disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmStopTrading}
+                  disabled={stopMutation.isPending}
+                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-red-500 to-rose-500 hover:from-red-400 hover:to-rose-400 border border-red-400/50 text-sm font-bold text-white transition-all shadow-lg shadow-red-500/30 disabled:opacity-60 inline-flex items-center gap-2"
+                >
+                  {stopMutation.isPending ? (
+                    <>
+                      <span className="w-3.5 h-3.5 rounded-full border-2 border-white/40 border-t-white animate-spin" />
+                      Stopping...
+                    </>
+                  ) : (
+                    <>
+                      <Square className="w-3.5 h-3.5" />
+                      Yes, Stop Trading
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
