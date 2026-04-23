@@ -175,9 +175,12 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 const DrawdownTooltip = ({ active, payload, label }: any) => {
   if (!active || !payload?.length) return null;
   return (
-    <div className="glass-card rounded-xl px-3 py-2.5 text-xs border border-white/10 shadow-xl">
-      <p className="text-muted-foreground mb-1">{label}</p>
-      <p className="font-semibold text-red-400">
+    <div
+      className="rounded-xl px-3.5 py-2.5 text-xs border border-white/10 shadow-2xl"
+      style={{ background: "rgba(15, 23, 42, 0.96)" }}
+    >
+      <p className="text-slate-300 mb-1">{label}</p>
+      <p className="font-semibold text-emerald-400">
         P&L: {Number(payload[0]?.value) >= 0 ? "+" : ""}${Number(payload[0]?.value).toFixed(2)}
       </p>
     </div>
