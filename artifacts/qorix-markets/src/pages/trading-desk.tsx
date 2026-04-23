@@ -139,26 +139,28 @@ export default function TradingDeskPage() {
           ) : stats ? (
             [
               {
-                icon: Users, label: "Total Traders", value: "42",
+                icon: Users, label: "Total Traders", value: `${stats.totalTraders}`,
                 sub: "active on the desk", color: "text-blue-400", bg: "bg-blue-500/10 border-blue-500/20",
                 top: "from-blue-500 to-blue-400",
-                tooltip: "42 professional traders are actively monitoring and executing trades on the Qorix desk.",
+                tooltip: `${stats.totalTraders} professional traders are actively monitoring and executing trades on the Qorix desk 24/7.`,
               },
               {
-                icon: Award, label: "Combined Experience", value: "730 yrs",
-                sub: "avg 8.5 yrs per trader", color: "text-amber-400", bg: "bg-amber-500/10 border-amber-500/20",
+                icon: Award, label: "Combined Experience", value: `${stats.combinedExperience} yrs`,
+                sub: `avg ${stats.avgExperience} yrs per trader`, color: "text-amber-400", bg: "bg-amber-500/10 border-amber-500/20",
                 top: "from-amber-500 to-yellow-400",
-                tooltip: "Across all 42 traders the desk has 730 years of combined market experience — averaging 8.5 years per trader.",
+                tooltip: `Across all ${stats.totalTraders} traders the desk has ${stats.combinedExperience} years of combined market experience — averaging ${stats.avgExperience} years per trader.`,
               },
               {
                 icon: Target, label: "Avg Win Rate", value: `${stats.overallAvgWinRate}%`,
                 sub: "across all strategies", color: "text-emerald-400", bg: "bg-emerald-500/10 border-emerald-500/20",
                 top: "from-emerald-500 to-green-400",
+                tooltip: `${stats.overallAvgWinRate}% of trades close profitably — measured across every active strategy on the desk.`,
               },
               {
                 icon: Activity, label: "Strategies", value: `${stats.strategies.length}`,
                 sub: "scalping · swing · hybrid", color: "text-violet-400", bg: "bg-violet-500/10 border-violet-500/20",
                 top: "from-violet-500 to-indigo-400",
+                tooltip: "Three independent strategies run in parallel — scalping (high-frequency micro-trades), swing (multi-day trend positions) and hybrid (algorithmic + arbitrage).",
               },
             ].map(({ icon: Icon, label, value, sub, color, bg, top, tooltip }: any) => (
               <div key={label} className={`glass-card rounded-2xl p-5 border ${bg} relative overflow-hidden`} title={tooltip || undefined}>
