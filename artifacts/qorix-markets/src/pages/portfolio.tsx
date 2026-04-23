@@ -675,38 +675,84 @@ function PortfolioInner() {
           </span>
         </div>
 
-        <div className="relative grid grid-cols-1 sm:grid-cols-3 gap-6 sm:gap-4">
-          {/* Total Invested */}
-          <div className="sm:border-r sm:border-white/8 sm:pr-4">
-            <div className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground/80 font-semibold flex items-center gap-1.5">
-              <Wallet className="w-3 h-3" /> Total Invested
+        <div className="relative grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4">
+          {/* Total Invested — premium tile */}
+          <div className="group relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-white/[0.04] via-white/[0.02] to-transparent p-4 md:p-5 transition-all hover:border-blue-400/25 hover:shadow-[0_8px_24px_-12px_rgba(59,130,246,0.4)]">
+            <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-blue-400/40 to-transparent" />
+            <div
+              className="pointer-events-none absolute -top-12 -right-12 w-32 h-32 rounded-full opacity-40 group-hover:opacity-60 transition-opacity"
+              style={{ background: "radial-gradient(circle, rgba(59,130,246,0.18) 0%, transparent 70%)" }}
+            />
+            <div className="relative flex items-center gap-2 mb-3">
+              <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-blue-500/15 border border-blue-400/25 shadow-[0_0_12px_-4px_rgba(59,130,246,0.5)]">
+                <Wallet className="w-3.5 h-3.5 text-blue-300" />
+              </div>
+              <div className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground/90 font-semibold">
+                Total Invested
+              </div>
             </div>
-            <div className="mt-2 text-3xl md:text-[2.1rem] font-extrabold text-white tabular-nums leading-none">
+            <div className="relative text-3xl md:text-[2.1rem] font-extrabold text-white tabular-nums leading-none">
               $<BigBalanceCounter value={investedAmount} className="inline" />
             </div>
-            <div className="mt-1.5 text-[11px] text-muted-foreground">Principal capital</div>
+            <div className="relative mt-2 text-[11px] text-muted-foreground/90 flex items-center gap-1.5">
+              <span className="inline-block w-1 h-1 rounded-full bg-blue-400/60" />
+              Principal capital
+            </div>
           </div>
 
-          {/* Current Value */}
-          <div className="sm:border-r sm:border-white/8 sm:pr-4">
-            <div className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground/80 font-semibold flex items-center gap-1.5">
-              <TrendingUp className="w-3 h-3" /> Current Value
+          {/* Current Value — premium tile */}
+          <div className="group relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-white/[0.04] via-white/[0.02] to-transparent p-4 md:p-5 transition-all hover:border-cyan-400/25 hover:shadow-[0_8px_24px_-12px_rgba(34,211,238,0.4)]">
+            <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyan-400/40 to-transparent" />
+            <div
+              className="pointer-events-none absolute -top-12 -right-12 w-32 h-32 rounded-full opacity-40 group-hover:opacity-60 transition-opacity"
+              style={{ background: "radial-gradient(circle, rgba(34,211,238,0.16) 0%, transparent 70%)" }}
+            />
+            <div className="relative flex items-center gap-2 mb-3">
+              <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-cyan-500/15 border border-cyan-400/25 shadow-[0_0_12px_-4px_rgba(34,211,238,0.5)]">
+                <TrendingUp className="w-3.5 h-3.5 text-cyan-300" />
+              </div>
+              <div className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground/90 font-semibold">
+                Current Value
+              </div>
             </div>
-            <div className="mt-2 text-3xl md:text-[2.1rem] font-extrabold text-white tabular-nums leading-none">
+            <div className="relative text-3xl md:text-[2.1rem] font-extrabold text-white tabular-nums leading-none">
               $<BigBalanceCounter value={currentEquity} className="inline" />
             </div>
-            <div className="mt-1.5 text-[11px] text-muted-foreground">Mark-to-market equity</div>
+            <div className="relative mt-2 text-[11px] text-muted-foreground/90 flex items-center gap-1.5">
+              <span className="inline-block w-1 h-1 rounded-full bg-cyan-400/60" />
+              Mark-to-market equity
+            </div>
           </div>
 
-          {/* Profit */}
-          <div>
-            <div className="text-[10px] uppercase tracking-[0.12em] text-emerald-300/90 font-semibold flex items-center gap-1.5">
-              <Sparkles className="w-3 h-3" /> Net Profit
+          {/* Net Profit — HERO premium tile with stronger glow */}
+          <div className="group relative overflow-hidden rounded-2xl border border-emerald-400/35 bg-gradient-to-br from-emerald-500/[0.10] via-emerald-500/[0.04] to-transparent p-4 md:p-5 shadow-[0_8px_28px_-12px_rgba(16,185,129,0.45)] transition-all hover:border-emerald-400/55 hover:shadow-[0_10px_36px_-10px_rgba(16,185,129,0.6)]">
+            <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-emerald-400/70 to-transparent" />
+            <div
+              className="pointer-events-none absolute -top-16 -right-16 w-40 h-40 rounded-full opacity-60 group-hover:opacity-80 transition-opacity"
+              style={{ background: "radial-gradient(circle, rgba(16,185,129,0.30) 0%, transparent 70%)" }}
+            />
+            <div
+              className="pointer-events-none absolute -bottom-10 -left-10 w-28 h-28 rounded-full opacity-40"
+              style={{ background: "radial-gradient(circle, rgba(34,197,94,0.20) 0%, transparent 70%)" }}
+            />
+            <div className="relative flex items-center justify-between gap-2 mb-3">
+              <div className="flex items-center gap-2">
+                <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-emerald-500/20 border border-emerald-400/40 shadow-[0_0_16px_-2px_rgba(16,185,129,0.7)]">
+                  <Sparkles className="w-3.5 h-3.5 text-emerald-200" />
+                </div>
+                <div className="text-[10px] uppercase tracking-[0.14em] text-emerald-300/95 font-semibold">
+                  Net Profit
+                </div>
+              </div>
+              <span className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider text-emerald-300 bg-emerald-500/15 border border-emerald-400/30 px-1.5 py-0.5 rounded">
+                <span className="inline-block w-1 h-1 rounded-full bg-emerald-300 animate-pulse" />
+                Live
+              </span>
             </div>
-            <div className="mt-2 text-3xl md:text-[2.1rem] font-extrabold tabular-nums leading-none bg-gradient-to-r from-emerald-300 to-green-400 bg-clip-text text-transparent drop-shadow-[0_0_18px_rgba(16,185,129,0.35)]">
+            <div className="relative text-3xl md:text-[2.1rem] font-extrabold tabular-nums leading-none bg-gradient-to-r from-emerald-200 via-emerald-300 to-green-400 bg-clip-text text-transparent drop-shadow-[0_0_22px_rgba(16,185,129,0.45)]">
               +<AnimatedCounter value={totalProfit} prefix="$" />
             </div>
-            <div className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/25 px-1.5 py-0.5 rounded-md">
+            <div className="relative mt-2 inline-flex items-center gap-1 text-[11px] font-bold text-emerald-300 bg-emerald-500/15 border border-emerald-400/35 px-2 py-0.5 rounded-md shadow-[0_0_12px_-4px_rgba(16,185,129,0.6)]">
               <ArrowUpRight className="w-3 h-3" />
               +{profitPct.toFixed(2)}% ROI
             </div>
