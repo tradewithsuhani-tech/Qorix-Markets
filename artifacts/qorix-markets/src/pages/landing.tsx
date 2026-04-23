@@ -490,7 +490,7 @@ export default function Landing() {
 
             <FadeIn delay={0.2}>
               <p className="text-lg sm:text-xl text-slate-400 leading-relaxed mb-8 max-w-xl">
-                Let our 24/7 trading desk grow your USDT with hard risk limits, transparent execution, and monthly payouts. Start with just <span className="text-white font-semibold">$10</span> — no experience needed.
+                Let our 24/7 trading desk grow your portfolio with hard risk limits, transparent execution, and monthly payouts. Start with just <span className="text-white font-semibold">$10</span> — no experience needed.
               </p>
             </FadeIn>
 
