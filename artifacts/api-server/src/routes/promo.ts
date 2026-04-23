@@ -76,6 +76,14 @@ async function fetchUserRedemption(userId: number) {
   return rows[0] ?? null;
 }
 
+/** Only "redeemed" or "credited" rows count as an actual used promo.
+ *  Legacy "issued" rows (from the old per-user-code scheme) are ignored so
+ *  the new rotating-window banner still shows for those users. */
+function hasUsedPromo(row: { status: string } | null): boolean {
+  if (!row) return false;
+  return row.status === "redeemed" || row.status === "credited";
+}
+
 /**
  * GET /api/promo/offer
  * Returns the current system-wide offer (if active) plus this user's
@@ -86,12 +94,14 @@ router.get("/promo/offer", async (req: AuthRequest, res) => {
   const userId = req.userId!;
   try {
     const redemption = await fetchUserRedemption(userId);
+    const used = hasUsedPromo(redemption);
     const offer = getCurrentOffer();
 
     res.json({
-      // User state — if already redeemed/credited, banner stays hidden forever
-      alreadyRedeemed: !!redemption,
-      redemption: redemption
+      // User state — if already redeemed/credited, banner stays hidden forever.
+      // Legacy "issued" rows do NOT count (they're relics of the old lazy scheme).
+      alreadyRedeemed: used,
+      redemption: used && redemption
         ? {
             code: redemption.code,
             status: redemption.status,
@@ -103,7 +113,7 @@ router.get("/promo/offer", async (req: AuthRequest, res) => {
         : null,
 
       // Current system offer
-      active: offer.isActive && !redemption,
+      active: offer.isActive && !used,
       code: offer.code,
       bonusPercent: offer.bonusPercent,
       windowStart: offer.windowStart,       // ms epoch — when this offer started
@@ -134,10 +144,10 @@ router.post("/promo/redeem", async (req: AuthRequest, res) => {
   }
 
   const existing = await fetchUserRedemption(userId);
-  if (existing) {
+  if (hasUsedPromo(existing)) {
     res.status(409).json({
       error: "You have already redeemed a promo code",
-      status: existing.status,
+      status: existing!.status,
     });
     return;
   }
