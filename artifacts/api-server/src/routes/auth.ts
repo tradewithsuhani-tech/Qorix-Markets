@@ -1,7 +1,7 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
 import { db, usersTable, walletsTable, investmentsTable, systemSettingsTable, ipSignupsTable } from "@workspace/db";
-import { eq, and, gte, count } from "drizzle-orm";
+import { eq, and, gte, count, sql } from "drizzle-orm";
 import { authMiddleware, signToken, type AuthRequest } from "../middlewares/auth";
 import { RegisterBody, LoginBody } from "@workspace/api-zod";
 import { trackLoginEvent, runFraudChecks } from "../lib/fraud-service";
@@ -182,6 +182,20 @@ router.post("/auth/register", async (req, res) => {
 
   // Track IP signup
   await db.insert(ipSignupsTable).values({ ipAddress: ip, userId: newUser.id });
+
+  // Bump the public "Active Investors" counter by +1 on real signup
+  // (counter also auto-increments 5–25 every 30 min via /api/public/market-indicators).
+  try {
+    await db.execute(sql`
+      INSERT INTO system_settings (key, value, updated_at)
+      VALUES ('active_investors_count', '1', NOW())
+      ON CONFLICT (key) DO UPDATE
+      SET value = (COALESCE(NULLIF(system_settings.value, '')::int, 0) + 1)::text,
+          updated_at = NOW()
+    `);
+  } catch (e) {
+    console.error("[INVESTORS] Failed to bump counter on signup", e);
+  }
 
   // Fire-and-forget: track event and run fraud checks
   setImmediate(async () => {
