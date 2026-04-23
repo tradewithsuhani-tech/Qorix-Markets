@@ -24,6 +24,7 @@ import DemoDashboard from "@/pages/demo-dashboard";
 import WalletPage from "@/pages/wallet";
 import DepositPage from "@/pages/deposit";
 import InvestPage from "@/pages/invest";
+import PortfolioPage from "@/pages/portfolio";
 import TransactionsPage from "@/pages/transactions";
 import ReferralPage from "@/pages/referral";
 import RewardsPage from "@/pages/rewards";
@@ -152,6 +153,7 @@ function Router() {
       <Route path="/wallet"><ProtectedRoute component={WalletPage} /></Route>
       <Route path="/deposit"><ProtectedRoute component={DepositPage} /></Route>
       <Route path="/invest"><ProtectedRoute component={InvestPage} /></Route>
+      <Route path="/portfolio"><ProtectedRoute component={PortfolioPage} /></Route>
       <Route path="/transactions"><ProtectedRoute component={TransactionsPage} /></Route>
       <Route path="/referral"><ProtectedRoute component={ReferralPage} /></Route>
       <Route path="/rewards"><ProtectedRoute component={RewardsPage} /></Route>
