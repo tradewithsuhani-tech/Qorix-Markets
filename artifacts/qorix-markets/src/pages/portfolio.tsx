@@ -1229,51 +1229,62 @@ function RecentTradeAttribution() {
 
 export default function PortfolioPage() {
   const { data: summary } = useGetDashboardSummary({ query: { refetchInterval: 60000 } });
+  const { data: investment, isLoading: invLoading } = useGetInvestment({
+    query: { refetchInterval: 10000 },
+  });
+  const investedAmount = investment?.amount ?? 0;
+  const isActive = !!investment?.isActive;
+  const isLocked = !invLoading && (investedAmount <= 0 || !isActive);
+
   return (
     <Layout>
       <PortfolioInner />
-      <div className="px-4 md:px-8 pt-2 max-w-7xl mx-auto">
-        <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-          <div>
-            <h2 className="text-lg md:text-xl font-bold text-white flex items-center gap-2">
-              <span className="bg-gradient-to-r from-white to-emerald-200 bg-clip-text text-transparent">
-                Performance Insights
+      {!isLocked && (
+        <>
+          <div className="px-4 md:px-8 pt-2 max-w-7xl mx-auto">
+            <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+              <div>
+                <h2 className="text-lg md:text-xl font-bold text-white flex items-center gap-2">
+                  <span className="bg-gradient-to-r from-white to-emerald-200 bg-clip-text text-transparent">
+                    Performance Insights
+                  </span>
+                </h2>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Equity curve, daily P&amp;L, rolling returns &amp; key metrics
+                </p>
+              </div>
+              <span className="inline-flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-emerald-300 bg-emerald-500/10 border border-emerald-500/25 px-2.5 py-1 rounded-full font-bold">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                Live Data
               </span>
-            </h2>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Equity curve, daily P&amp;L, rolling returns &amp; key metrics
-            </p>
+            </div>
           </div>
-          <span className="inline-flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-emerald-300 bg-emerald-500/10 border border-emerald-500/25 px-2.5 py-1 rounded-full font-bold">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            Live Data
-          </span>
-        </div>
-      </div>
-      <div className="portfolio-insights px-4 md:px-8 pb-2 max-w-7xl mx-auto">
-        <DemoDashboardBody
-          hideHeader
-          hideFomoTicker
-          hideMarketIndicators
-          hideGrowthPanel
-          hideFundTransparency
-          hideLiveTrades
-          hidePrimaryStatCards
-          swapEquityWithRolling
-        />
-      </div>
-      {summary?.vip && (
-        <div className="px-4 md:px-8 pb-2 max-w-7xl mx-auto">
-          <div className="flex items-center gap-2 mb-3">
-            <h2 className="text-base font-semibold">VIP Membership</h2>
-            <div className="h-px flex-1 bg-gradient-to-r from-white/10 to-transparent" />
+          <div className="portfolio-insights px-4 md:px-8 pb-2 max-w-7xl mx-auto">
+            <DemoDashboardBody
+              hideHeader
+              hideFomoTicker
+              hideMarketIndicators
+              hideGrowthPanel
+              hideFundTransparency
+              hideLiveTrades
+              hidePrimaryStatCards
+              swapEquityWithRolling
+            />
           </div>
-          <VipCard vip={summary.vip as VipInfo} investmentAmount={summary.activeInvestment ?? 0} />
-        </div>
+          {summary?.vip && (
+            <div className="px-4 md:px-8 pb-2 max-w-7xl mx-auto">
+              <div className="flex items-center gap-2 mb-3">
+                <h2 className="text-base font-semibold">VIP Membership</h2>
+                <div className="h-px flex-1 bg-gradient-to-r from-white/10 to-transparent" />
+              </div>
+              <VipCard vip={summary.vip as VipInfo} investmentAmount={summary.activeInvestment ?? 0} />
+            </div>
+          )}
+          <div className="px-4 md:px-8 pb-8 max-w-7xl mx-auto">
+            <RecentTradeAttribution />
+          </div>
+        </>
       )}
-      <div className="px-4 md:px-8 pb-8 max-w-7xl mx-auto">
-        <RecentTradeAttribution />
-      </div>
     </Layout>
   );
 }
