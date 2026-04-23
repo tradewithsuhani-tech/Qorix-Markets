@@ -1491,9 +1491,12 @@ export function DemoDashboardBody({
         </div>
         )}
 
-        {/* Equity Chart + Trades */}
+        {/* Equity Chart + Trades — Equity Curve is a personal/portfolio chart,
+            so hide it for users without an active trading fund. Live Trades
+            stays visible (company-wide signal stream). */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-5">
-          {/* Equity Curve (or Rolling Returns when swapped) */}
+          {/* Equity Curve (or Rolling Returns when swapped) — active users only */}
+          {investment?.isActive && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -1503,14 +1506,15 @@ export function DemoDashboardBody({
           >
             {swapEquityWithRolling ? rollingReturnsBody : equityCurveBody}
           </motion.div>
+          )}
 
-          {/* Recent Trades Feed */}
+          {/* Recent Trades Feed — when equity is hidden, trades spans full width */}
           {!hideLiveTrades && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.3, duration: 0.4 }}
-            className="glass-card p-5 rounded-2xl flex flex-col"
+            className={`glass-card p-5 rounded-2xl flex flex-col ${!investment?.isActive ? "lg:col-span-3" : ""}`}
             style={{ minHeight: 340 }}
           >
             <div className="flex items-center justify-between mb-4">
@@ -1651,7 +1655,8 @@ export function DemoDashboardBody({
           )}
         </div>
 
-        {/* Drawdown Chart + Rolling Returns */}
+        {/* Drawdown Chart + Rolling Returns — personal portfolio data, active users only */}
+        {investment?.isActive && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-5">
           {/* Daily P&L / Drawdown Chart */}
           <motion.div
@@ -1750,8 +1755,10 @@ export function DemoDashboardBody({
             </div>
           </motion.div>
         </div>
+        )}
 
-        {/* Performance Metrics */}
+        {/* Performance Metrics — personal portfolio metrics, active users only */}
+        {investment?.isActive && (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
