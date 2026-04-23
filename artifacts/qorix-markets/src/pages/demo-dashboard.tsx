@@ -530,7 +530,21 @@ function CapitalProtectionWidget({
   );
 }
 
-export function DemoDashboardBody() {
+export interface DemoDashboardBodyProps {
+  hideHeader?: boolean;
+  hideFomoTicker?: boolean;
+  hideMarketIndicators?: boolean;
+  hideGrowthPanel?: boolean;
+  hideFundTransparency?: boolean;
+}
+
+export function DemoDashboardBody({
+  hideHeader = false,
+  hideFomoTicker = false,
+  hideMarketIndicators = false,
+  hideGrowthPanel = false,
+  hideFundTransparency = false,
+}: DemoDashboardBodyProps = {}) {
   const [, navigate] = useLocation();
   const [chartDays, setChartDays] = useState(30);
   const [returnsDays, setReturnsDays] = useState(30);
@@ -886,6 +900,29 @@ export function DemoDashboardBody() {
         transition={{ duration: 0.4, ease: "easeOut" }}
         className="space-y-5 md:space-y-6"
       >
+        {/* Header */}
+        {!hideHeader && (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h1 className="text-2xl md:text-3xl font-bold tracking-tight gradient-text">Overview</h1>
+            <p className="text-muted-foreground text-sm mt-0.5">Portfolio performance dashboard</p>
+          </div>
+          <div className="flex items-center gap-2.5">
+            {summary?.riskLevel && <RiskBadge score={perf?.riskScore ?? "Low"} />}
+            {/* VIP, Points pill, and Download Report removed from demo dashboard — not relevant in demo. */}
+            <MarketsStatusPill />
+            <InsightRotatorPill
+              insights={[
+                { icon: Trophy, label: "Win Rate 87%", color: "text-amber-300", bg: "bg-amber-500/10", border: "border-amber-500/25" },
+                { icon: Flame, label: "Streak 7d", color: "text-orange-300", bg: "bg-orange-500/10", border: "border-orange-500/25" },
+                { icon: Gauge, label: "Avg Daily +0.42%", color: "text-emerald-300", bg: "bg-emerald-500/10", border: "border-emerald-500/25" },
+                { icon: Sparkles, label: "Top 5% Earner", color: "text-fuchsia-300", bg: "bg-fuchsia-500/10", border: "border-fuchsia-500/25" },
+              ]}
+            />
+          </div>
+        </div>
+        )}
+
         {/* Promo Banners — hidden per request */}
         {false && (
           <BannerCarousel
@@ -1034,6 +1071,11 @@ export function DemoDashboardBody() {
           </motion.div>
         )}
 
+        {/* Live Activity FOMO Ticker */}
+        {!hideFomoTicker && conversion?.fomoMessages && conversion.fomoMessages.length > 0 && (
+          <FomoTicker messages={conversion.fomoMessages} />
+        )}
+
         {/* Investment CTA + Trust block — only for users who haven't activated trading */}
         {conversion?.demoModeEnabled !== false && !investment?.isActive && (
           <motion.div
@@ -1103,6 +1145,75 @@ export function DemoDashboardBody() {
           </motion.div>
         )}
 
+        {/* Investor Psychology Indicators */}
+        {!hideMarketIndicators && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.1 }}
+          className="grid grid-cols-2 md:grid-cols-4 gap-3"
+        >
+          {(
+            [
+              {
+                icon: Users,
+                label: "Active Investors",
+                value: marketIndicators?.activeInvestors ?? 0,
+                decimals: 0,
+                suffix: "",
+                sub: undefined as string | undefined,
+                color: "text-blue-400",
+                bg: "bg-blue-500/5 border-blue-500/15",
+              },
+              {
+                icon: UserCheck,
+                label: "Earning Now",
+                value: marketIndicators?.usersEarningNow ?? 0,
+                decimals: 0,
+                suffix: "",
+                sub: "users",
+                color: "text-emerald-400",
+                bg: "bg-emerald-500/5 border-emerald-500/15",
+              },
+              {
+                icon: Banknote,
+                label: "Withdrawals (24h)",
+                value: marketIndicators?.withdrawals24h ?? 0,
+                decimals: 0,
+                suffix: "",
+                sub: "processed",
+                color: "text-amber-400",
+                bg: "bg-amber-500/5 border-amber-500/15",
+              },
+              {
+                icon: TrendingUp,
+                label: "Avg Monthly Return",
+                value: marketIndicators?.avgMonthlyReturn ?? 0,
+                decimals: 1,
+                suffix: "%",
+                sub: "net of fees · 30d avg",
+                color: "text-violet-400",
+                bg: "bg-violet-500/5 border-violet-500/15",
+              },
+          ]).map(({ icon: Icon, label, value, decimals, suffix, sub, color, bg }) => (
+            <div key={label} className={`glass-card rounded-xl px-4 py-3 border ${bg} flex items-center gap-3`}>
+              <div className={`shrink-0 w-8 h-8 rounded-lg bg-white/5 border border-white/8 flex items-center justify-center`}>
+                <Icon style={{ width: 14, height: 14 }} className={color} />
+              </div>
+              <div className="min-w-0">
+                <div className={`text-base font-bold ${color} tabular-nums leading-tight`}>
+                  {marketIndicators == null ? (
+                    "—"
+                  ) : (
+                    <AnimatedCounter value={value} decimals={decimals} suffix={suffix} />
+                  )}
+                  {sub ? <span className="text-xs font-normal text-muted-foreground ml-1">{sub}</span> : null}
+                </div>
+                <div className="text-[11px] text-muted-foreground truncate">{label}</div>
+              </div>
+            </div>
+          ))}
+        </motion.div>
 
         {/* Limited Slots Banner */}
         {fundStats && fundStats.maxSlots > 0 && (
@@ -1654,10 +1765,67 @@ export function DemoDashboardBody() {
           </div>
         </motion.div>
 
+        {/* Growth & Leaderboard Panel */}
+        {!hideGrowthPanel && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.53, duration: 0.4 }}
+        >
+          <div className="flex items-center gap-2 mb-3">
+            <h2 className="text-base font-semibold">Growth & Rankings</h2>
+            <div className="h-px flex-1 bg-gradient-to-r from-white/10 to-transparent" />
+          </div>
+          <GrowthPanel />
+        </motion.div>
+        )}
+
         <IdleBalanceBanner
           balance={summary?.totalBalance ?? 0}
           isActive={!!investment?.isActive}
         />
+
+        {/* Fund Transparency */}
+        {!hideFundTransparency && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.58, duration: 0.4 }}
+        >
+          <div className="flex items-baseline justify-between gap-2 mb-1">
+            <h2 className="text-base font-semibold">Fund Transparency</h2>
+            <span className="text-[10px] text-muted-foreground border border-white/10 px-2 py-0.5 rounded-full">Public</span>
+          </div>
+          <div className="mb-3 flex items-center gap-2">
+            <span className="text-xl sm:text-[22px] font-extrabold bg-gradient-to-r from-emerald-300 to-green-400 bg-clip-text text-transparent">
+              $1M+ Managed Capital
+            </span>
+            <div className="h-px flex-1 bg-gradient-to-r from-emerald-400/30 to-transparent" />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4">
+            {fundCards.map((card, i) => (
+              <motion.div
+                key={card.label}
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.6 + i * 0.07, duration: 0.35 }}
+                className="glass-card-glow p-4 md:p-5 rounded-2xl space-y-2"
+              >
+                <div className="flex items-center justify-between text-muted-foreground">
+                  <span className="text-xs font-medium uppercase tracking-wider">{card.label}</span>
+                  {card.icon}
+                </div>
+                {fundLoading ? (
+                  <Skeleton className="h-7 w-28" />
+                ) : (
+                  <div className={`text-xl md:text-2xl font-bold ${card.color}`}>{card.value}</div>
+                )}
+                {!fundLoading && <div className="text-xs text-muted-foreground">{card.sub}</div>}
+              </motion.div>
+            ))}
+          </div>
+        </motion.div>
+        )}
 
       </motion.div>
     </>
