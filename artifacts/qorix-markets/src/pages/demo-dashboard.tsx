@@ -1693,8 +1693,7 @@ export function DemoDashboardBody({
         </div>
 
         {/* Drawdown Chart + Rolling Returns — personal portfolio data, locked for inactive users */}
-        <div className={isPortfolioLocked ? "relative" : ""}>
-          {isPortfolioLocked && lockOverlay}
+        <div>
           <div className={`grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-5 ${lockBlurClass}`}>
           {/* Daily P&L / Drawdown Chart */}
           <motion.div
@@ -1796,8 +1795,7 @@ export function DemoDashboardBody({
         </div>
 
         {/* Performance Metrics — personal portfolio metrics, locked for inactive users */}
-        <div className={isPortfolioLocked ? "relative" : ""}>
-          {isPortfolioLocked && lockOverlay}
+        <div>
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
