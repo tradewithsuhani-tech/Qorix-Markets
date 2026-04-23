@@ -626,7 +626,8 @@ export function AdminWalletPage() {
           </div>
         </div>
         <div className="glass-card rounded-2xl overflow-hidden">
-          <table className="w-full text-sm">
+         <div className="overflow-x-auto">
+          <table className="w-full text-sm min-w-[480px]">
             <thead className="bg-white/5 text-muted-foreground"><tr><th className="text-left p-4">Account</th><th className="text-left p-4">Type</th><th className="text-left p-4">Normal</th><th className="text-left p-4">Scope</th></tr></thead>
             <tbody className="divide-y divide-white/5">{accounts.map((a) => (
               <tr key={a.id} className="hover:bg-white/[0.03]">

@@ -890,16 +890,16 @@ export default function Dashboard() {
 
               <div className="grid grid-cols-3 gap-2">
                 {[
-                  { name: "Low Risk", returns: "2–5% monthly", bg: "bg-emerald-500/5 border-emerald-500/20", text: "text-emerald-300" },
-                  { name: "Balanced", returns: "4–6% monthly", bg: "bg-blue-500/5 border-blue-500/20", text: "text-blue-300" },
-                  { name: "Growth", returns: "5–8% monthly", bg: "bg-violet-500/5 border-violet-500/20", text: "text-violet-300" },
+                  { name: "Low", returns: "2–5%/mo", bg: "bg-emerald-500/5 border-emerald-500/20", text: "text-emerald-300" },
+                  { name: "Balanced", returns: "4–6%/mo", bg: "bg-blue-500/5 border-blue-500/20", text: "text-blue-300" },
+                  { name: "Growth", returns: "5–8%/mo", bg: "bg-violet-500/5 border-violet-500/20", text: "text-violet-300" },
                 ].map((mode) => (
                   <div
                     key={mode.name}
-                    className={`rounded-xl border p-3 text-center ${mode.bg}`}
+                    className={`rounded-xl border p-2.5 sm:p-3 text-center ${mode.bg} min-w-0`}
                   >
-                    <div className={`text-xs font-semibold ${mode.text} mb-1`}>{mode.name}</div>
-                    <div className="text-[11px] text-muted-foreground tabular-nums">{mode.returns}</div>
+                    <div className={`text-xs font-semibold ${mode.text} mb-1 truncate`}>{mode.name}</div>
+                    <div className="text-[11px] text-muted-foreground tabular-nums whitespace-nowrap">{mode.returns}</div>
                   </div>
                 ))}
               </div>
