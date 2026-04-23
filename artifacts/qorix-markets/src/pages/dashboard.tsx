@@ -679,7 +679,7 @@ export default function Dashboard() {
     {
       label: "Total Equity",
       icon: <Wallet style={{ width: 16, height: 16 }} className="text-blue-400" />,
-      value: <BigBalanceCounter value={summary?.totalBalance || 0} className="text-2xl md:text-3xl" />,
+      value: <BigBalanceCounter value={fundStats?.totalAUM ?? summary?.totalBalance ?? 0} className="text-2xl md:text-3xl" />,
       sub: (
         <span className="text-xs text-muted-foreground">
           Profit: <span className="text-green-400 font-medium">${(summary?.profitBalance || 0).toFixed(2)}</span>
