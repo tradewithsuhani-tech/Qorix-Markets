@@ -589,7 +589,7 @@ function PortfolioInner() {
 
   // Locked state — either user hasn't invested yet, or trading is stopped.
   // In both cases: data shows zero, all features locked, single CTA to start trading.
-  if (!invLoading && (investedAmount <= 0 || !isActive)) {
+  if (false && !invLoading && (investedAmount <= 0 || !isActive)) {
     const hasStoppedInvestment = investedAmount > 0 && !isActive;
     return (
       <div className="px-4 md:px-8 py-6 md:py-8 max-w-7xl mx-auto">
