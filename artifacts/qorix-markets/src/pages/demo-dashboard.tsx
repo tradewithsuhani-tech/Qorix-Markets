@@ -1727,26 +1727,6 @@ export default function DemoDashboard() {
           </div>
         </motion.div>
 
-        {/* Capital Protection Status */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.5, duration: 0.4 }}
-        >
-          <div className="flex items-center gap-2 mb-3">
-            <h2 className="text-base font-semibold">Capital Protection</h2>
-            <div className="h-px flex-1 bg-gradient-to-r from-white/10 to-transparent" />
-          </div>
-          <CapitalProtectionWidget
-            investment={investment ?? null}
-            isLoading={investLoading}
-            pendingLimit={pendingLimit}
-            setPendingLimit={setPendingLimit}
-            onSave={(limit) => protectionMutation.mutate({ data: { drawdownLimit: limit } })}
-            isSaving={protectionMutation.isPending}
-          />
-        </motion.div>
-
         {/* VIP Membership */}
         {summary?.vip && (
           <motion.div
