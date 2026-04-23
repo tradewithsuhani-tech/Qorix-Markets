@@ -172,29 +172,11 @@ export function PromoBonusBanner() {
                 <Gift className="w-7 h-7 text-amber-200" strokeWidth={2} />
               </div>
             </div>
-            {/* Mobile: countdown sits next to the icon */}
+            {/* Mobile: only the Live Offer badge (timer lives near the code) */}
             <div className="flex flex-col gap-1.5 lg:hidden">
               <span className="inline-flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-[0.18em] px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-400/30">
                 <Sparkles className="w-3 h-3" /> Live Offer
               </span>
-              <div
-                className={
-                  "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border " +
-                  (urgent
-                    ? "bg-red-500/15 border-red-400/40 animate-pulse"
-                    : "bg-black/50 border-amber-400/40")
-                }
-              >
-                <Timer className={"w-3.5 h-3.5 " + (urgent ? "text-red-300" : "text-amber-300")} />
-                <span
-                  className={
-                    "text-base font-black tabular-nums leading-none " +
-                    (urgent ? "text-red-200" : "text-amber-100")
-                  }
-                >
-                  {formatMs(msLeft)}
-                </span>
-              </div>
             </div>
           </div>
 
