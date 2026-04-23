@@ -6,6 +6,7 @@ import {
   useGetInvestment,
   useGetMonthlyPerformance,
   useGenerateReport,
+  useGetDashboardSummary,
 } from "@workspace/api-client-react";
 import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
@@ -27,6 +28,10 @@ import {
   CheckCheck,
   Loader2,
   ExternalLink,
+  Lock,
+  Crown,
+  Sparkles,
+  ArrowUpRight,
 } from "lucide-react";
 import {
   Chart as ChartJS,
@@ -293,6 +298,126 @@ export default function AnalyticsPage() {
   ];
 
   const loading = equityLoading;
+
+  // Premium gate — Analytics is for large fund investors only
+  const { data: summary } = useGetDashboardSummary({ query: { refetchInterval: 30000 } });
+  const ANALYTICS_MIN_FUND = 10000;
+  const investorFund = Math.max(
+    Number(summary?.totalBalance ?? 0),
+    Number(summary?.activeInvestment ?? 0),
+    Number(investment?.amount ?? 0),
+  );
+  const hasAccess = investorFund >= ANALYTICS_MIN_FUND;
+  const progressPct = Math.min(100, (investorFund / ANALYTICS_MIN_FUND) * 100);
+
+  if (!hasAccess) {
+    return (
+      <Layout>
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4 }}
+          className="flex items-center justify-center min-h-[70vh] p-4"
+        >
+          <div className="relative w-full max-w-2xl overflow-hidden rounded-3xl border border-amber-400/30 bg-gradient-to-br from-[#1a1408] via-[#0d1320] to-[#070b14] shadow-[0_20px_60px_-10px_rgba(245,158,11,0.25),0_1px_0_rgba(255,255,255,0.06)_inset]">
+            {/* Shimmer top edge */}
+            <div className="absolute top-0 inset-x-0 h-[2px] bg-gradient-to-r from-transparent via-amber-300/80 to-transparent" />
+            {/* Radial glows */}
+            <div className="absolute -top-24 -right-24 w-72 h-72 bg-amber-500/15 rounded-full blur-3xl pointer-events-none" />
+            <div className="absolute -bottom-24 -left-24 w-72 h-72 bg-yellow-500/10 rounded-full blur-3xl pointer-events-none" />
+
+            <div className="relative p-8 md:p-10 text-center">
+              {/* Premium crown badge */}
+              <div className="inline-flex flex-col items-center gap-3 mb-6">
+                <div className="relative">
+                  <div className="absolute inset-0 bg-amber-400/30 blur-2xl rounded-full animate-pulse" />
+                  <div className="relative w-20 h-20 rounded-2xl bg-gradient-to-br from-amber-400/25 via-yellow-500/15 to-orange-500/20 border border-amber-300/50 flex items-center justify-center shadow-[0_0_40px_rgba(245,158,11,0.4)]">
+                    <Crown className="w-10 h-10 text-amber-300" strokeWidth={1.5} />
+                    <Lock className="w-4 h-4 text-amber-200 absolute bottom-2 right-2 bg-[#1a1408] rounded-full p-0.5 border border-amber-400/50" />
+                  </div>
+                </div>
+                <span className="text-[10px] font-extrabold uppercase tracking-[0.2em] px-3 py-1 rounded-full bg-amber-500/15 text-amber-300 border border-amber-400/30 inline-flex items-center gap-1.5">
+                  <Sparkles className="w-3 h-3" /> Premium Tier
+                </span>
+              </div>
+
+              <h1 className="text-2xl md:text-3xl font-extrabold bg-gradient-to-r from-amber-200 via-yellow-200 to-amber-300 bg-clip-text text-transparent">
+                Advanced Analytics Suite
+              </h1>
+              <p className="mt-3 text-sm md:text-base text-muted-foreground leading-relaxed max-w-lg mx-auto">
+                Institutional-grade analytics including monthly performance reports, verified on-chain attestations, rolling returns, drawdown analysis, and risk-adjusted metrics.
+              </p>
+              <p className="mt-4 text-amber-200/90 text-sm font-semibold">
+                Exclusively available for investors with a fund of{" "}
+                <span className="text-amber-300 font-bold">${ANALYTICS_MIN_FUND.toLocaleString()}+</span>
+              </p>
+
+              {/* Feature list */}
+              <div className="mt-7 grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-left max-w-md mx-auto">
+                {[
+                  "Monthly verified performance reports",
+                  "On-chain report attestations",
+                  "Rolling returns & drawdown analytics",
+                  "Risk-adjusted Sharpe & Sortino ratios",
+                ].map((f) => (
+                  <div
+                    key={f}
+                    className="flex items-center gap-2 text-xs text-white/80 rounded-lg px-3 py-2 bg-white/[0.03] border border-white/10"
+                  >
+                    <CheckCheck className="w-3.5 h-3.5 text-amber-300 shrink-0" />
+                    <span>{f}</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Progress */}
+              <div className="mt-7 max-w-md mx-auto">
+                <div className="flex items-center justify-between text-xs mb-1.5">
+                  <span className="text-muted-foreground">Your fund</span>
+                  <span className="font-bold text-white tabular-nums">
+                    ${investorFund.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                    <span className="text-muted-foreground"> / ${ANALYTICS_MIN_FUND.toLocaleString()}</span>
+                  </span>
+                </div>
+                <div className="h-2 rounded-full bg-white/[0.06] border border-white/10 overflow-hidden">
+                  <motion.div
+                    initial={{ width: 0 }}
+                    animate={{ width: `${progressPct}%` }}
+                    transition={{ duration: 0.8, ease: "easeOut" }}
+                    className="h-full bg-gradient-to-r from-amber-400 via-yellow-300 to-amber-400 shadow-[0_0_12px_rgba(245,158,11,0.6)]"
+                  />
+                </div>
+                <p className="mt-2 text-[11px] text-muted-foreground">
+                  Add{" "}
+                  <span className="text-amber-300 font-semibold">
+                    ${Math.max(0, ANALYTICS_MIN_FUND - investorFund).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                  </span>{" "}
+                  more to unlock
+                </p>
+              </div>
+
+              {/* CTAs */}
+              <div className="mt-7 flex flex-col sm:flex-row items-center justify-center gap-3">
+                <Link
+                  href="/deposit"
+                  className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-black text-sm font-bold shadow-lg shadow-amber-500/30 transition-all"
+                >
+                  <ArrowUpRight className="w-4 h-4" />
+                  Deposit & Unlock
+                </Link>
+                <Link
+                  href="/invest"
+                  className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/15 text-white text-sm font-semibold transition-all"
+                >
+                  Explore Plans
+                </Link>
+              </div>
+            </div>
+          </div>
+        </motion.div>
+      </Layout>
+    );
+  }
 
   return (
     <Layout>
