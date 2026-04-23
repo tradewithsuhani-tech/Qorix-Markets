@@ -1214,6 +1214,7 @@ export function DemoDashboardBody({
             </div>
           ))}
         </motion.div>
+        )}
 
         {/* Limited Slots Banner */}
         {fundStats && fundStats.maxSlots > 0 && (
