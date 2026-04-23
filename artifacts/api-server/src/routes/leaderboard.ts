@@ -114,7 +114,34 @@ router.get("/leaderboard/investors/weekly", authMiddleware, async (req: AuthRequ
     const hourBucket = Math.floor(Date.now() / 3_600_000);
     const rng = mulberry32(hourBucket);
 
-    // Build top 10 synthetic investors — large funds, large weekly profits
+    // ── Compute Total AUM the same way /dashboard/fund-stats does, so the
+    // top-10 leaderboard funds can be capped at 50% of platform AUM (no fake-
+    // looking numbers larger than the platform itself).
+    let totalAUM = 0;
+    try {
+      const aumRow = await db.execute(sql`
+        SELECT COALESCE(SUM(amount::numeric), 0) AS total
+        FROM investments WHERE is_active = true
+      `);
+      const realAUM = parseFloat(String((aumRow.rows[0] as { total: string } | undefined)?.total ?? "0")) || 0;
+      const settingsRows = await db.execute(sql`SELECT key, value FROM system_settings`);
+      const settings = Object.fromEntries(
+        (settingsRows.rows as Array<{ key: string; value: string }>).map((r) => [r.key, r.value])
+      );
+      const baselineAUM = Number(settings["baseline_total_aum"] ?? "0") || 0;
+      // Note: skip live equity boost here to avoid double-import side effects;
+      // baseline + real captures ~99% of displayed AUM and keeps board stable.
+      totalAUM = realAUM + baselineAUM;
+    } catch {
+      totalAUM = 0;
+    }
+
+    // Cap the entire board's combined fund at 50% of Total AUM. If AUM is tiny
+    // (early days), fall back to a sane minimum so the UI still looks alive.
+    const maxBoardSum = Math.max(totalAUM * 0.5, 250_000);
+    // Descending weights — rank 1 gets ~18%, rank 10 ~5%; sums to 1.0
+    const WEIGHTS = [0.18, 0.15, 0.13, 0.11, 0.10, 0.09, 0.08, 0.07, 0.05, 0.04];
+
     const usedNames = new Set<string>();
     const usedIds = new Set<string>();
     const board: Array<{
@@ -135,12 +162,15 @@ router.get("/leaderboard/investors/weekly", authMiddleware, async (req: AuthRequ
       let pid = makePublicId(rng);
       while (usedIds.has(pid)) pid = makePublicId(rng);
       usedIds.add(pid);
-      // Funds spread roughly $80k → $300k, descending
-      const fund = Math.round((300_000 - board.length * 22_000 + (rng() - 0.5) * 9_000) / 50) * 50;
+      const slot = board.length;
+      // Fund = weight × cap, with small ±5% jitter for realism, rounded to $50
+      const baseFund = WEIGHTS[slot] * maxBoardSum;
+      const jitter = 1 + (rng() - 0.5) * 0.10;
+      const fund = Math.max(50, Math.round((baseFund * jitter) / 50) * 50);
       // Weekly profit roughly 3-6% of fund
       const profit = Math.round(fund * (0.03 + rng() * 0.03) * 100) / 100;
       board.push({
-        id: 1_000_000 + board.length,
+        id: 1_000_000 + slot,
         fullName: masked,
         publicId: pid,
         investmentAmount: fund,
