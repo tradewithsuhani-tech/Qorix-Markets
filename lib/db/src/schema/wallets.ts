@@ -36,6 +36,7 @@ export const walletsTable = pgTable("wallets", {
   synthWinRate: numeric("synth_win_rate", { precision: 5, scale: 2 }).notNull().default("0"),
   synthMaxDrawdown: numeric("synth_max_drawdown", { precision: 5, scale: 2 }).notNull().default("0"),
   synthAvgReturn: numeric("synth_avg_return", { precision: 5, scale: 2 }).notNull().default("0"),
+  synthRiskScore: varchar("synth_risk_score", { length: 10 }).notNull().default("Low"),
   synthMetricsDay: varchar("synth_metrics_day", { length: 10 }).notNull().default(""),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

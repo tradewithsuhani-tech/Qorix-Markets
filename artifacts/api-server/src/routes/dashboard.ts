@@ -486,6 +486,7 @@ router.get("/dashboard/performance", async (req: AuthRequest, res) => {
   let synthWinRate = w ? parseFloat((w.synthWinRate ?? "0") as string) : 0;
   let synthMaxDrawdown = w ? parseFloat((w.synthMaxDrawdown ?? "0") as string) : 0;
   let synthAvgReturn = w ? parseFloat((w.synthAvgReturn ?? "0") as string) : 0;
+  let synthRiskScore = (w?.synthRiskScore ?? "Low") as string;
   const storedDay = (w?.synthMetricsDay ?? "") as string;
 
   if (w && storedDay !== today) {
@@ -496,12 +497,16 @@ router.get("/dashboard/performance", async (req: AuthRequest, res) => {
     synthMaxDrawdown = Math.max(3, Math.min(12, 12 - ratio * 9 + ddJitter));
     // Avg Return per trade ∈ [0.80%, 2.50%], scales with daily P&L pct.
     synthAvgReturn = Math.max(0.8, Math.min(2.5, 0.8 + ratio * 1.7 + arJitter));
+    // Risk Score: stronger P&L performance → safer score.
+    // ratio ≥ 0.50 → Low, ≥ 0.20 → Medium, else High.
+    synthRiskScore = ratio >= 0.5 ? "Low" : ratio >= 0.2 ? "Medium" : "High";
     await db
       .update(walletsTable)
       .set({
         synthWinRate: synthWinRate.toFixed(2),
         synthMaxDrawdown: synthMaxDrawdown.toFixed(2),
         synthAvgReturn: synthAvgReturn.toFixed(2),
+        synthRiskScore,
         synthMetricsDay: today,
       })
       .where(eq(walletsTable.userId, req.userId!));
@@ -519,8 +524,11 @@ router.get("/dashboard/performance", async (req: AuthRequest, res) => {
   const investment = inv[0];
 
   const drawdown = investment ? parseFloat(investment.drawdown as string) : 0;
+  // Risk Score is now driven by the synthetic, P&L-tied value persisted on
+  // the wallet row above. Falls back to investment.riskLevel if no wallet.
   const riskLevel = investment?.riskLevel ?? "low";
-  const riskScore = riskLevel === "high" ? "High" : riskLevel === "medium" ? "Medium" : "Low";
+  const fallbackRiskScore = riskLevel === "high" ? "High" : riskLevel === "medium" ? "Medium" : "Low";
+  const riskScore = w ? synthRiskScore : fallbackRiskScore;
 
   const equityRecords = await db.select().from(equityHistoryTable)
     .where(eq(equityHistoryTable.userId, req.userId!))
