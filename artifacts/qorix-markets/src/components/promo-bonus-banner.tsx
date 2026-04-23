@@ -260,7 +260,7 @@ export function PromoBonusBanner() {
               {/* Countdown pill — lives right next to the code */}
               <div
                 className={
-                  "inline-flex items-center gap-2 rounded-xl border px-3 py-2 shadow-sm " +
+                  "inline-flex items-center gap-2.5 rounded-xl border px-3.5 py-2 shadow-sm " +
                   (urgent
                     ? "bg-red-500/15 border-red-400/50 animate-pulse"
                     : "bg-black/40 border-amber-300/40")
@@ -268,7 +268,7 @@ export function PromoBonusBanner() {
                 aria-label="Offer countdown"
               >
                 <Timer
-                  className={"w-4 h-4 shrink-0 " + (urgent ? "text-red-300" : "text-amber-300")}
+                  className={"w-5 h-5 shrink-0 " + (urgent ? "text-red-300" : "text-amber-300")}
                 />
                 <div className="flex flex-col leading-none">
                   <span
@@ -281,7 +281,7 @@ export function PromoBonusBanner() {
                   </span>
                   <span
                     className={
-                      "mt-0.5 text-base md:text-lg font-black tabular-nums " +
+                      "mt-1 text-2xl md:text-3xl font-black tabular-nums tracking-tight drop-shadow-[0_2px_8px_rgba(253,224,71,0.35)] " +
                       (urgent ? "text-red-200" : "text-amber-100")
                     }
                   >
