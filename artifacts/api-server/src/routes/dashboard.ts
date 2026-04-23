@@ -104,6 +104,7 @@ router.get("/dashboard/summary", async (req: AuthRequest, res) => {
     try { return JSON.parse((wallet?.dailyPnlChunks as string) ?? "[]"); } catch { return []; }
   })();
   let dailyPnlIncrementsDone = wallet?.dailyPnlIncrementsDone ?? 0;
+  let totalProfitBoost = parseFloat((wallet?.totalProfitBoost as string) ?? "0");
 
   let nextChunkAt: number | null = null;
   let marketOpensAt: number | null = null;
@@ -130,17 +131,21 @@ router.get("/dashboard/summary", async (req: AuthRequest, res) => {
       const msSinceMidnight = nowDate.getTime() - utcMidnight;
       const expected = Math.min(DAILY_PNL_INCREMENTS, Math.floor(msSinceMidnight / DAILY_PNL_WINDOW_MS) + 1);
       if (dailyPnlIncrementsDone < expected) {
-        let pctSum = dailyPnlPct;
+        // Sum only the freshly-dispensed chunks → exact $ delta to add to
+        // both Daily P&L and Total Profit so they stay perfectly in sync.
+        let newChunksPct = 0;
         for (let i = dailyPnlIncrementsDone; i < expected; i++) {
-          pctSum += dailyPnlChunks[i] ?? 0;
+          newChunksPct += dailyPnlChunks[i] ?? 0;
         }
-        dailyPnlPct = +pctSum.toFixed(4);
-        dailyPnlAmount = +(totalBalance * dailyPnlPct / 100).toFixed(2);
+        const deltaAmount = +(totalBalance * newChunksPct / 100).toFixed(2);
+        dailyPnlPct = +(dailyPnlPct + newChunksPct).toFixed(4);
+        dailyPnlAmount = +(dailyPnlAmount + deltaAmount).toFixed(2);
+        totalProfitBoost = +(totalProfitBoost + deltaAmount).toFixed(2);
         dailyPnlIncrementsDone = expected;
-      } else {
-        // Keep amount in sync with current totalBalance even between bumps.
-        dailyPnlAmount = +(totalBalance * dailyPnlPct / 100).toFixed(2);
       }
+      // Daily P&L amount is monotonic and tied to the actual deltas added —
+      // do NOT recompute from totalBalance between bumps (would desync from
+      // Total Profit and oscillate as balance fluctuates).
       // Countdown to the next 4hr bump (null once all 4 are done for the day).
       if (dailyPnlIncrementsDone < DAILY_PNL_INCREMENTS) {
         nextChunkAt = utcMidnight + dailyPnlIncrementsDone * DAILY_PNL_WINDOW_MS;
@@ -155,13 +160,15 @@ router.get("/dashboard/summary", async (req: AuthRequest, res) => {
           dailyPnlTargetPct: dailyPnlTargetPct.toFixed(4),
           dailyPnlChunks: JSON.stringify(dailyPnlChunks),
           dailyPnlIncrementsDone,
+          totalProfitBoost: totalProfitBoost.toFixed(2),
         })
         .where(eq(walletsTable.userId, req.userId!));
     }
   }
 
   const dailyProfit = dailyPnlAmount;
-  const totalProfit = inv ? parseFloat(inv.totalProfit as string) : 0;
+  const realTotalProfit = inv ? parseFloat(inv.totalProfit as string) : 0;
+  const totalProfit = realTotalProfit + totalProfitBoost;
   const realInvestment = inv ? parseFloat(inv.amount as string) : 0;
 
   // Catch-up the per-user Active Trading Fund display boost (+$100–$1000 / 30min).

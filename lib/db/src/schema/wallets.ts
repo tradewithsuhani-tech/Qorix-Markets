@@ -26,6 +26,10 @@ export const walletsTable = pgTable("wallets", {
   // display-only — never affects real investments or accounting.
   tradingFundBoost: numeric("trading_fund_boost", { precision: 18, scale: 2 }).notNull().default("0"),
   tradingFundLastAt: bigint("trading_fund_last_at", { mode: "number" }).notNull().default(0),
+  // Per-user "Total Profit" display boost: monotonic accumulator that tracks
+  // every Daily P&L chunk ever dispensed, so Total Profit grows by exactly
+  // the same dollar delta as Daily P&L. Display-only.
+  totalProfitBoost: numeric("total_profit_boost", { precision: 18, scale: 2 }).notNull().default("0"),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
