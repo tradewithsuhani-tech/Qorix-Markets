@@ -696,28 +696,28 @@ function PortfolioInner() {
                 <span>Auto-Compound</span>
                 {/* iOS-style toggle pill */}
                 <span
-                  className={`relative inline-flex items-center h-6 w-11 rounded-full transition-colors duration-300 border ${
+                  className={`relative inline-flex items-center h-6 w-14 rounded-full transition-colors duration-300 border ${
                     on
                       ? "bg-gradient-to-r from-emerald-500 to-green-500 border-emerald-300/60 shadow-[0_0_12px_rgba(16,185,129,0.55)]"
                       : "bg-white/[0.06] border-white/15"
                   }`}
                 >
                   <span
-                    className={`absolute top-0.5 left-0.5 w-[18px] h-[18px] rounded-full shadow-md transition-all duration-300 ${
-                      on
-                        ? "translate-x-5 bg-gradient-to-br from-emerald-300 to-green-500 shadow-emerald-900/50"
-                        : "translate-x-0 bg-gradient-to-br from-red-400 to-rose-600 shadow-red-900/50"
-                    } ${compoundMutation.isPending ? "scale-75 opacity-80" : ""}`}
-                  />
-                  <span
                     className={`absolute inset-0 flex items-center ${
-                      on ? "justify-start pl-1.5" : "justify-end pr-1.5"
+                      on ? "justify-start pl-2" : "justify-end pr-2"
                     } text-[9px] font-extrabold tracking-wider ${
-                      on ? "text-white/90" : "text-muted-foreground/70"
+                      on ? "text-white/90" : "text-muted-foreground/80"
                     }`}
                   >
                     {compoundMutation.isPending ? "" : on ? "ON" : "OFF"}
                   </span>
+                  <span
+                    className={`absolute top-0.5 left-0.5 w-[18px] h-[18px] rounded-full shadow-md transition-all duration-300 ${
+                      on
+                        ? "translate-x-[32px] bg-gradient-to-br from-emerald-300 to-green-500 shadow-emerald-900/50"
+                        : "translate-x-0 bg-gradient-to-br from-red-400 to-rose-600 shadow-red-900/50"
+                    } ${compoundMutation.isPending ? "scale-75 opacity-80" : ""}`}
+                  />
                 </span>
               </button>
             );
