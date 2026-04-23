@@ -615,6 +615,12 @@ export default function Dashboard() {
   const dailyPct = summary?.dailyProfitPercent || 0;
   const dailyPL = +(totalEquityValue * (dailyPct / 100)).toFixed(2);
   const isPositive = dailyPL >= 0;
+  // Total Profit scales with Total Equity using the same profit-to-equity ratio
+  // as the underlying user, so all three cards (Equity, Daily P&L, Total Profit)
+  // grow together consistently.
+  const equityScale =
+    (summary?.totalBalance ?? 0) > 0 ? totalEquityValue / (summary?.totalBalance ?? 1) : 1;
+  const totalProfitDisplay = +((summary?.totalProfit ?? 0) * equityScale).toFixed(2);
 
   const prevProfit = prevProfitRef.current;
   useEffect(() => {
@@ -726,10 +732,11 @@ export default function Dashboard() {
     },
     {
       label: "Total Profit",
+      // synced with Total Equity — scales proportionally to fund size
       icon: <Activity style={{ width: 16, height: 16 }} className="text-emerald-400" />,
       value: (
         <span className="text-2xl md:text-3xl font-bold profit-text">
-          +<AnimatedCounter value={summary?.totalProfit || 0} prefix="$" />
+          +<AnimatedCounter value={totalProfitDisplay} prefix="$" />
         </span>
       ),
       sub: <span className="text-xs text-muted-foreground">All time earnings</span>,
@@ -1614,7 +1621,7 @@ export default function Dashboard() {
                 <span className="text-xs text-muted-foreground uppercase tracking-wider font-medium">Live Profit</span>
                 <div className="flex items-center gap-2">
                   <span className="live-dot" style={{ width: 6, height: 6 }} />
-                  <ProfitTicker value={summary?.totalProfit || 0} prev={prevProfit} />
+                  <ProfitTicker value={totalProfitDisplay} prev={prevProfit} />
                 </div>
               </div>
               <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
