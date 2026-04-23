@@ -536,6 +536,7 @@ export interface DemoDashboardBodyProps {
   hideMarketIndicators?: boolean;
   hideGrowthPanel?: boolean;
   hideFundTransparency?: boolean;
+  hideLiveTrades?: boolean;
 }
 
 export function DemoDashboardBody({
@@ -544,6 +545,7 @@ export function DemoDashboardBody({
   hideMarketIndicators = false,
   hideGrowthPanel = false,
   hideFundTransparency = false,
+  hideLiveTrades = false,
 }: DemoDashboardBodyProps = {}) {
   const [, navigate] = useLocation();
   const [chartDays, setChartDays] = useState(30);
@@ -1380,6 +1382,7 @@ export function DemoDashboardBody({
           </motion.div>
 
           {/* Recent Trades Feed */}
+          {!hideLiveTrades && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -1522,6 +1525,7 @@ export function DemoDashboardBody({
               )}
             </div>
           </motion.div>
+          )}
         </div>
 
         {/* Drawdown Chart + Rolling Returns */}

@@ -857,6 +857,7 @@ export default function PortfolioPage() {
           hideMarketIndicators
           hideGrowthPanel
           hideFundTransparency
+          hideLiveTrades
         />
       </div>
     </Layout>
