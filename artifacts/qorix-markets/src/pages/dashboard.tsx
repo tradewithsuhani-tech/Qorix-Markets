@@ -731,7 +731,7 @@ export default function Dashboard() {
       sub: summary?.isTrading ? (
         <div className="flex items-center gap-1.5">
           <span className="live-dot" style={{ width: 6, height: 6 }} />
-          <span className="text-xs text-green-400 font-medium">Trading Active</span>
+          <span className="text-xs text-green-400 font-medium">Trading Live</span>
         </div>
       ) : (
         <div className="flex items-center gap-1.5">
