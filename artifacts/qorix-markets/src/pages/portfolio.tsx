@@ -3,9 +3,12 @@ import { Link } from "wouter";
 import {
   useGetInvestment,
   useGetDashboardSummary,
+  useGetDashboardPerformance,
   useGetEquityChart,
   useGetTrades,
 } from "@workspace/api-client-react";
+import { useQuery } from "@tanstack/react-query";
+import { authFetch } from "@/lib/auth-fetch";
 import {
   PieChart,
   TrendingUp,
@@ -23,6 +26,9 @@ import { useEffect, useRef, useState } from "react";
 import {
   AreaChart,
   Area,
+  BarChart,
+  Bar,
+  Cell,
   ResponsiveContainer,
   Tooltip as RTooltip,
   XAxis,
@@ -288,6 +294,202 @@ function NextTradeStatus({ enabled }: { enabled: boolean }) {
   );
 }
 
+/**
+ * PerformanceBlock — single professional "story" panel that combines:
+ *   • Equity curve (30D, area chart)
+ *   • 4 stat tiles: Win Rate / Max Drawdown / Total Trades / Avg Return
+ *   • Daily P&L history (last 14 days, color-coded bars)
+ * Pulls from existing /dashboard/performance + /dashboard/pnl-history endpoints.
+ */
+function PerformanceBlock({
+  equityPoints,
+  todayPnl,
+}: {
+  equityPoints: Array<{ date: string; equity: number }>;
+  todayPnl: number;
+}) {
+  const { data: perf, isLoading: perfLoading } = useGetDashboardPerformance({
+    query: { refetchInterval: 30000 },
+  });
+  const { data: pnlHistory } = useQuery<Array<{ date: string; percent: number; amount: number }>>({
+    queryKey: ["dashboard-pnl-history", 14],
+    queryFn: () => authFetch(`/api/dashboard/pnl-history?days=14`),
+    refetchInterval: 30000,
+  });
+
+  const winRate = perf?.winRate ?? 0;
+  const maxDrawdown = perf?.maxDrawdown ?? 0;
+  const totalTrades = perf?.totalTrades ?? 0;
+  const avgReturn = perf?.avgReturn ?? 0;
+
+  const pnlBars = (pnlHistory ?? []).map((d) => ({
+    date: d.date,
+    amount: Number(d.amount) || 0,
+    pct: Number(d.percent) || 0,
+  }));
+
+  return (
+    <div className="rounded-2xl border border-white/10 bg-[#0d1525] p-5 md:p-6">
+      <div className="flex items-center justify-between mb-5 flex-wrap gap-2">
+        <div>
+          <h3 className="text-base md:text-lg font-bold text-white flex items-center gap-2">
+            <TrendingUp className="w-4 h-4 text-emerald-400" /> Performance
+          </h3>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Last 30 days · institutional-grade metrics
+          </p>
+        </div>
+        <span className="text-[10px] uppercase tracking-wider px-2 py-1 rounded-md bg-white/5 text-muted-foreground">
+          Live
+        </span>
+      </div>
+
+      {/* 4 stat tiles */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 md:gap-3 mb-5">
+        <StatTile
+          label="🎯 Win Rate"
+          value={perfLoading ? "—" : `${winRate.toFixed(1)}%`}
+          accent="emerald"
+        />
+        <StatTile
+          label="🔻 Max Drawdown"
+          value={perfLoading ? "—" : `-${maxDrawdown.toFixed(2)}%`}
+          accent="amber"
+        />
+        <StatTile
+          label="📊 Total Trades"
+          value={perfLoading ? "—" : totalTrades.toLocaleString()}
+          accent="blue"
+        />
+        <StatTile
+          label="📈 Avg Return"
+          value={perfLoading ? "—" : `+${avgReturn.toFixed(2)}%`}
+          accent="emerald"
+        />
+      </div>
+
+      {/* Equity curve */}
+      <div className="rounded-xl border border-white/8 bg-[#0a1020] p-4 mb-4">
+        <div className="flex items-center justify-between mb-2">
+          <div>
+            <div className="text-xs font-semibold text-white">📈 Equity Curve · 30D</div>
+            <div className="text-[10px] text-muted-foreground mt-0.5">
+              Mark-to-market portfolio value
+            </div>
+          </div>
+          <div className="text-right">
+            <div className="text-[10px] text-muted-foreground">Today</div>
+            <div className="text-xs font-bold text-emerald-400 tabular-nums">
+              +${fmtMoney(todayPnl)}
+            </div>
+          </div>
+        </div>
+        <div className="h-[180px] w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={equityPoints}>
+              <defs>
+                <linearGradient id="perfEqGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#10b981" stopOpacity={0.4} />
+                  <stop offset="100%" stopColor="#10b981" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <XAxis dataKey="date" hide />
+              <YAxis hide domain={["dataMin", "dataMax"]} />
+              <RTooltip
+                contentStyle={{
+                  background: "#0a1020",
+                  border: "1px solid rgba(255,255,255,0.1)",
+                  borderRadius: 8,
+                  fontSize: 12,
+                }}
+                labelStyle={{ color: "#94a3b8" }}
+                formatter={(v: any) => [`$${Number(v).toLocaleString()}`, "Equity"]}
+              />
+              <Area
+                type="monotone"
+                dataKey="equity"
+                stroke="#10b981"
+                strokeWidth={2}
+                fill="url(#perfEqGrad)"
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* Daily P&L history (last 14 days) */}
+      <div className="rounded-xl border border-white/8 bg-[#0a1020] p-4">
+        <div className="flex items-center justify-between mb-2">
+          <div>
+            <div className="text-xs font-semibold text-white">📅 Daily Profit History</div>
+            <div className="text-[10px] text-muted-foreground mt-0.5">Last 14 days</div>
+          </div>
+          <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
+            <span className="flex items-center gap-1">
+              <span className="w-2 h-2 rounded-sm bg-emerald-500" /> Profit
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="w-2 h-2 rounded-sm bg-rose-500" /> Loss
+            </span>
+          </div>
+        </div>
+        <div className="h-[110px] w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={pnlBars} barCategoryGap="20%">
+              <XAxis dataKey="date" hide />
+              <YAxis hide />
+              <RTooltip
+                contentStyle={{
+                  background: "#0a1020",
+                  border: "1px solid rgba(255,255,255,0.1)",
+                  borderRadius: 8,
+                  fontSize: 12,
+                }}
+                labelStyle={{ color: "#94a3b8" }}
+                formatter={(v: any, _name: any, p: any) => [
+                  `$${Number(v).toFixed(2)} (${p?.payload?.pct?.toFixed?.(2) ?? "0.00"}%)`,
+                  "P&L",
+                ]}
+              />
+              <Bar dataKey="amount" radius={[3, 3, 0, 0]}>
+                {pnlBars.map((d, i) => (
+                  <Cell key={i} fill={d.amount >= 0 ? "#10b981" : "#f43f5e"} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StatTile({
+  label,
+  value,
+  accent,
+}: {
+  label: string;
+  value: string;
+  accent: "emerald" | "amber" | "blue";
+}) {
+  const accentMap = {
+    emerald: "text-emerald-400",
+    amber: "text-amber-400",
+    blue: "text-blue-400",
+  } as const;
+  return (
+    <div className="rounded-xl border border-white/8 bg-[#0a1020] px-3 py-3">
+      <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
+        {label}
+      </div>
+      <div className={`mt-1 text-lg md:text-xl font-bold tabular-nums ${accentMap[accent]}`}>
+        {value}
+      </div>
+    </div>
+  );
+}
+
 function daysBetween(iso?: string | null): number {
   if (!iso) return 0;
   const ms = Date.now() - new Date(iso).getTime();
@@ -461,57 +663,12 @@ function PortfolioInner() {
         <NextTradeStatus enabled={isActive} />
       </div>
 
-      {/* Equity sparkline + Investment meta */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-2 rounded-2xl border border-white/10 bg-[#0d1525] p-5">
-          <div className="flex items-center justify-between mb-3">
-            <div>
-              <h3 className="text-base font-semibold text-white">Equity Curve · 30D</h3>
-              <p className="text-xs text-muted-foreground mt-0.5">Mark-to-market portfolio value</p>
-            </div>
-            {summary?.dailyProfitLoss !== undefined && (
-              <div className="text-right">
-                <div className="text-xs text-muted-foreground">Today</div>
-                <div className="text-sm font-bold text-emerald-400">
-                  +${fmtMoney(summary.dailyProfitLoss ?? 0)}
-                </div>
-              </div>
-            )}
-          </div>
-          <div className="h-[220px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={equity?.points ?? []}>
-                <defs>
-                  <linearGradient id="portEqGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#10b981" stopOpacity={0.35} />
-                    <stop offset="100%" stopColor="#10b981" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <XAxis dataKey="date" hide />
-                <YAxis hide domain={["dataMin", "dataMax"]} />
-                <RTooltip
-                  contentStyle={{
-                    background: "#0a1020",
-                    border: "1px solid rgba(255,255,255,0.1)",
-                    borderRadius: 8,
-                    fontSize: 12,
-                  }}
-                  labelStyle={{ color: "#94a3b8" }}
-                  formatter={(v: any) => [`$${Number(v).toLocaleString()}`, "Equity"]}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="equity"
-                  stroke="#10b981"
-                  strokeWidth={2}
-                  fill="url(#portEqGrad)"
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
+      {/* PERFORMANCE BLOCK — equity curve + 4 stat tiles + 14d daily P&L bars */}
+      <PerformanceBlock equityPoints={equity?.points ?? []} todayPnl={summary?.dailyProfitLoss ?? 0} />
 
-        <div className="rounded-2xl border border-white/10 bg-[#0d1525] p-5 space-y-4">
+      {/* Investment Setup */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="lg:col-span-3 rounded-2xl border border-white/10 bg-[#0d1525] p-5 space-y-4">
           <h3 className="text-base font-semibold text-white">Investment Setup</h3>
 
           <div className="flex items-center justify-between py-2 border-b border-white/5">
