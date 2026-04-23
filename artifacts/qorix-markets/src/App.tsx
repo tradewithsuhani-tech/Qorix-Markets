@@ -1,6 +1,7 @@
 import { Switch, Route, Router as WouterRouter } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
+import { SiteActivityToaster } from "@/components/site-activity-toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
@@ -258,6 +259,7 @@ function App() {
           </AuthProvider>
         </WouterRouter>
         <Toaster />
+        <SiteActivityToaster />
       </TooltipProvider>
     </QueryClientProvider>
   );

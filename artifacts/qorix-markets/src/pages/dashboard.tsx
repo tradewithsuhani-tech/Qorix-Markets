@@ -13,6 +13,7 @@ import { Layout } from "@/components/layout";
 import { AdminPopup } from "@/components/admin-popup";
 import { PeriodFilter, DAYS_PERIOD_OPTIONS } from "@/components/period-filter";
 import { GrowthPanel } from "@/components/growth-panel";
+import { IdleBalanceBanner } from "@/components/idle-balance-banner";
 import { VipBadge, VipCard } from "@/components/vip-badge";
 import { MarketsStatusPill, InsightRotatorPill } from "@/components/header-status-pills";
 import { AnimatedCounter, BigBalanceCounter } from "@/components/animated-counter";
@@ -1738,6 +1739,11 @@ export default function Dashboard() {
           </div>
           <GrowthPanel />
         </motion.div>
+
+        <IdleBalanceBanner
+          balance={summary?.totalBalance ?? 0}
+          isActive={!!investment?.isActive}
+        />
 
         {/* Fund Transparency */}
         <motion.div
