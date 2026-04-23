@@ -619,8 +619,11 @@ export default function DemoDashboard() {
   const trades = Array.isArray(tradesData?.trades) ? tradesData.trades : [];
   const equityArr = Array.isArray(equity) ? equity : [];
 
-  const dailyPL = summary?.dailyProfitLoss || 0;
+  // Daily P&L is now derived from Total Equity (= Total AUM) × today's % rate,
+  // so the displayed $ amount always ties to the equity card and the % shown.
+  const totalEquityValue = fundStats?.totalAUM ?? summary?.totalBalance ?? 0;
   const dailyPct = summary?.dailyProfitPercent || 0;
+  const dailyPL = +(totalEquityValue * (dailyPct / 100)).toFixed(2);
   const isPositive = dailyPL >= 0;
   const dailyPnlMeta = (summary as any)?.dailyPnl as
     | { marketClosed?: boolean; marketOpensAt?: number | null; nextChunkAt?: number | null }
