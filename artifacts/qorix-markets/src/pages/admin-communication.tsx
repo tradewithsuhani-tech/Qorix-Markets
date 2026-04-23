@@ -355,8 +355,8 @@ export default function AdminCommunicationPage() {
               </button>
             ))}
           </div>
-          {selectedTemplate && (
-            <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-3 pt-2 border-t border-white/8">
+          {(
+            <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-3 pt-2 border-t border-white/8 mt-4">
               <div className="flex items-center gap-2 mb-1">
                 <FileText className="w-4 h-4 text-violet-400" />
                 <span className="font-semibold text-sm text-violet-300">Edit Template & Send</span>
