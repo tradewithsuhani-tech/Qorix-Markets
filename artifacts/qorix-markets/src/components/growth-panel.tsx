@@ -90,7 +90,6 @@ function RankMedal({ rank }: { rank: number }) {
 // ---------------------------------------------------------------------------
 const TABS = [
   { id: "weekly", label: "Top Investors", icon: TrendingUp },
-  { id: "rewards", label: "Promotions", icon: Star },
 ];
 
 // ---------------------------------------------------------------------------
