@@ -466,22 +466,42 @@ router.get("/dashboard/performance", async (req: AuthRequest, res) => {
   const winningTrades = allTrades.filter(t => parseFloat(t.profit as string) > 0).length;
   const realWinRate = totalTrades > 0 ? (winningTrades / totalTrades) * 100 : 0;
 
-  // Synthetic Win Rate in [70, 95] driven by today's Daily P&L performance:
-  // higher pct within the [0.40%, 0.60%] band → higher win rate. Adds a small
-  // deterministic per-day jitter so the number breathes without flickering.
+  // Synthetic Performance Metrics — computed once per UTC day from today's
+  // Daily P&L pct and persisted on the wallet row, so refresh = stable value.
+  // Win Rate ∈ [70, 95]% (higher pct → higher win rate)
+  // Max Drawdown ∈ [3, 12]% (higher pct → lower drawdown, inverse)
   const wRows = await db.select().from(walletsTable).where(eq(walletsTable.userId, req.userId!)).limit(1);
   const w = wRows[0];
   const dailyPct = w ? parseFloat((w.dailyPnlPct ?? "0") as string) : 0;
   const ratio = Math.max(0, Math.min(1, (dailyPct - 0.4) / 0.2));
   const today = new Date().toISOString().slice(0, 10);
-  let h = 2166136261 >>> 0;
-  const seed = `${req.userId}:${today}:winrate`;
-  for (let i = 0; i < seed.length; i++) {
-    h = Math.imul(h ^ seed.charCodeAt(i), 16777619);
+
+  const hashSeed = (s: string) => {
+    let h = 2166136261 >>> 0;
+    for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);
+    h ^= h >>> 13; h = Math.imul(h, 1540483477) >>> 0; h ^= h >>> 15;
+    return ((h >>> 0) / 0xffffffff);
+  };
+
+  let synthWinRate = w ? parseFloat((w.synthWinRate ?? "0") as string) : 0;
+  let synthMaxDrawdown = w ? parseFloat((w.synthMaxDrawdown ?? "0") as string) : 0;
+  const storedDay = (w?.synthMetricsDay ?? "") as string;
+
+  if (w && storedDay !== today) {
+    const winJitter = (hashSeed(`${req.userId}:${today}:winrate`) - 0.5) * 3; // ±1.5
+    const ddJitter = (hashSeed(`${req.userId}:${today}:drawdown`) - 0.5) * 1; // ±0.5
+    synthWinRate = Math.max(70, Math.min(95, 70 + ratio * 25 + winJitter));
+    synthMaxDrawdown = Math.max(3, Math.min(12, 12 - ratio * 9 + ddJitter));
+    await db
+      .update(walletsTable)
+      .set({
+        synthWinRate: synthWinRate.toFixed(2),
+        synthMaxDrawdown: synthMaxDrawdown.toFixed(2),
+        synthMetricsDay: today,
+      })
+      .where(eq(walletsTable.userId, req.userId!));
   }
-  h ^= h >>> 13; h = Math.imul(h, 1540483477) >>> 0; h ^= h >>> 15;
-  const jitter = (((h >>> 0) / 0xffffffff) - 0.5) * 3; // ±1.5
-  const synthWinRate = Math.max(70, Math.min(95, 70 + ratio * 25 + jitter));
+
   const winRate = Math.max(realWinRate, synthWinRate);
 
   const avgReturn = totalTrades > 0
@@ -501,16 +521,21 @@ router.get("/dashboard/performance", async (req: AuthRequest, res) => {
     .orderBy(desc(equityHistoryTable.date))
     .limit(30);
 
-  let maxDrawdownPct = 0;
+  let realMaxDrawdownPct = 0;
   if (equityRecords.length > 1) {
     const equities = equityRecords.map(r => parseFloat(r.equity as string)).reverse();
     let peak = equities[0]!;
     for (const e of equities) {
       if (e > peak) peak = e;
       const dd = peak > 0 ? ((peak - e) / peak) * 100 : 0;
-      if (dd > maxDrawdownPct) maxDrawdownPct = dd;
+      if (dd > realMaxDrawdownPct) realMaxDrawdownPct = dd;
     }
   }
+  // Use the synthetic value when it's lower than the real one (better look)
+  // and when synthetic is non-zero (i.e. wallet exists). Real never increases.
+  const maxDrawdownPct = synthMaxDrawdown > 0
+    ? Math.min(synthMaxDrawdown, realMaxDrawdownPct || synthMaxDrawdown)
+    : realMaxDrawdownPct;
 
   const rollingReturns: { period: string; return: number }[] = [];
   const periods = [{ label: "7D", days: 7 }, { label: "30D", days: 30 }, { label: "90D", days: 90 }];
