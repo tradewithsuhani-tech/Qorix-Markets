@@ -679,31 +679,47 @@ function PortfolioInner() {
           >
             Manage <ArrowUpRight className="w-3.5 h-3.5" />
           </Link>
-          {isActive && (
-            <button
-              onClick={() =>
-                compoundMutation.mutate({ data: { autoCompound: !investment?.autoCompound } })
-              }
-              disabled={compoundMutation.isPending}
-              className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border text-sm font-semibold transition-all shadow-lg disabled:opacity-50 ${
-                investment?.autoCompound
-                  ? "bg-gradient-to-r from-violet-500/25 to-purple-500/20 hover:from-violet-500/35 hover:to-purple-500/30 border-violet-400/40 text-violet-100 shadow-violet-500/20"
-                  : "bg-gradient-to-r from-white/[0.04] to-white/[0.02] hover:from-white/[0.08] hover:to-white/[0.04] border-white/15 text-muted-foreground shadow-black/10"
-              }`}
-            >
-              <Repeat className="w-3.5 h-3.5" />
-              Auto-Compound
-              <span
-                className={`ml-1 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${
-                  investment?.autoCompound
-                    ? "bg-violet-400/20 text-violet-100 border border-violet-300/40"
-                    : "bg-white/5 text-muted-foreground border border-white/10"
+          {isActive && (() => {
+            const on = !!investment?.autoCompound;
+            return (
+              <button
+                onClick={() => compoundMutation.mutate({ data: { autoCompound: !on } })}
+                disabled={compoundMutation.isPending}
+                title={on ? "Profits auto-reinvest daily" : "Click to enable auto-reinvest"}
+                className={`group inline-flex items-center gap-2.5 pl-3 pr-1.5 py-1.5 rounded-xl border text-sm font-semibold transition-all shadow-lg disabled:opacity-60 ${
+                  on
+                    ? "bg-gradient-to-r from-violet-500/25 via-fuchsia-500/15 to-purple-500/20 hover:from-violet-500/35 hover:to-purple-500/30 border-violet-400/40 text-violet-50 shadow-violet-500/25"
+                    : "bg-gradient-to-r from-white/[0.04] to-white/[0.02] hover:from-white/[0.08] hover:to-white/[0.04] border-white/15 text-muted-foreground shadow-black/10"
                 }`}
               >
-                {compoundMutation.isPending ? "…" : investment?.autoCompound ? "ON" : "OFF"}
-              </span>
-            </button>
-          )}
+                <Repeat className={`w-3.5 h-3.5 transition-transform ${on ? "text-violet-200" : ""} group-hover:rotate-180 duration-500`} />
+                <span>Auto-Compound</span>
+                {/* iOS-style toggle pill */}
+                <span
+                  className={`relative inline-flex items-center h-6 w-11 rounded-full transition-colors duration-300 border ${
+                    on
+                      ? "bg-gradient-to-r from-violet-500 to-fuchsia-500 border-violet-300/60 shadow-[0_0_12px_rgba(167,139,250,0.55)]"
+                      : "bg-white/[0.06] border-white/15"
+                  }`}
+                >
+                  <span
+                    className={`absolute top-0.5 left-0.5 w-[18px] h-[18px] rounded-full bg-white shadow-md transition-all duration-300 ${
+                      on ? "translate-x-5" : "translate-x-0"
+                    } ${compoundMutation.isPending ? "scale-75 opacity-80" : ""}`}
+                  />
+                  <span
+                    className={`absolute inset-0 flex items-center ${
+                      on ? "justify-start pl-1.5" : "justify-end pr-1.5"
+                    } text-[9px] font-extrabold tracking-wider ${
+                      on ? "text-white/90" : "text-muted-foreground/70"
+                    }`}
+                  >
+                    {compoundMutation.isPending ? "" : on ? "ON" : "OFF"}
+                  </span>
+                </span>
+              </button>
+            );
+          })()}
           {isActive && (
             <button
               onClick={handleStopTrading}
