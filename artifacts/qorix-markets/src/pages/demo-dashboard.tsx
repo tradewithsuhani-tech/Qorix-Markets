@@ -1758,10 +1758,15 @@ export default function DemoDashboard() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.58, duration: 0.4 }}
         >
-          <div className="flex items-center gap-2 mb-3">
+          <div className="flex items-baseline justify-between gap-2 mb-1">
             <h2 className="text-base font-semibold">Fund Transparency</h2>
-            <div className="h-px flex-1 bg-gradient-to-r from-white/10 to-transparent" />
             <span className="text-[10px] text-muted-foreground border border-white/10 px-2 py-0.5 rounded-full">Public</span>
+          </div>
+          <div className="mb-3 flex items-center gap-2">
+            <span className="text-xl sm:text-[22px] font-extrabold bg-gradient-to-r from-emerald-300 to-green-400 bg-clip-text text-transparent">
+              $1M+ Managed Capital
+            </span>
+            <div className="h-px flex-1 bg-gradient-to-r from-emerald-400/30 to-transparent" />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4">
             {fundCards.map((card, i) => (
