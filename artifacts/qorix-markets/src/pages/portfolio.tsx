@@ -851,7 +851,13 @@ export default function PortfolioPage() {
       <PortfolioInner />
       {/* Demo dashboard sections appended below — user will tell us which to remove. */}
       <div className="px-4 md:px-8 py-6 md:py-8 max-w-7xl mx-auto border-t border-white/10 mt-8">
-        <DemoDashboardBody />
+        <DemoDashboardBody
+          hideHeader
+          hideFomoTicker
+          hideMarketIndicators
+          hideGrowthPanel
+          hideFundTransparency
+        />
       </div>
     </Layout>
   );
