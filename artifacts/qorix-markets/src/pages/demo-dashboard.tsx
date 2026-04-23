@@ -1748,63 +1748,10 @@ export function DemoDashboardBody() {
           </div>
         </motion.div>
 
-        {/* Growth & Leaderboard Panel */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.53, duration: 0.4 }}
-        >
-          <div className="flex items-center gap-2 mb-3">
-            <h2 className="text-base font-semibold">Growth & Rankings</h2>
-            <div className="h-px flex-1 bg-gradient-to-r from-white/10 to-transparent" />
-          </div>
-          <GrowthPanel />
-        </motion.div>
-
         <IdleBalanceBanner
           balance={summary?.totalBalance ?? 0}
           isActive={!!investment?.isActive}
         />
-
-        {/* Fund Transparency */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.58, duration: 0.4 }}
-        >
-          <div className="flex items-baseline justify-between gap-2 mb-1">
-            <h2 className="text-base font-semibold">Fund Transparency</h2>
-            <span className="text-[10px] text-muted-foreground border border-white/10 px-2 py-0.5 rounded-full">Public</span>
-          </div>
-          <div className="mb-3 flex items-center gap-2">
-            <span className="text-xl sm:text-[22px] font-extrabold bg-gradient-to-r from-emerald-300 to-green-400 bg-clip-text text-transparent">
-              $1M+ Managed Capital
-            </span>
-            <div className="h-px flex-1 bg-gradient-to-r from-emerald-400/30 to-transparent" />
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4">
-            {fundCards.map((card, i) => (
-              <motion.div
-                key={card.label}
-                initial={{ opacity: 0, y: 16 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.6 + i * 0.07, duration: 0.35 }}
-                className="glass-card-glow p-4 md:p-5 rounded-2xl space-y-2"
-              >
-                <div className="flex items-center justify-between text-muted-foreground">
-                  <span className="text-xs font-medium uppercase tracking-wider">{card.label}</span>
-                  {card.icon}
-                </div>
-                {fundLoading ? (
-                  <Skeleton className="h-7 w-28" />
-                ) : (
-                  <div className={`text-xl md:text-2xl font-bold ${card.color}`}>{card.value}</div>
-                )}
-                {!fundLoading && <div className="text-xs text-muted-foreground">{card.sub}</div>}
-              </motion.div>
-            ))}
-          </div>
-        </motion.div>
 
       </motion.div>
     </>
