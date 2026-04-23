@@ -317,6 +317,7 @@ router.get("/admin/settings", async (_req: AuthRequest, res) => {
     baselineActiveCapital: Number(settings["baseline_active_capital"] ?? "0") || 0,
     baselineReserveFund: Number(settings["baseline_reserve_fund"] ?? "0") || 0,
     baselineActiveInvestors: Number(settings["baseline_active_investors"] ?? "0") || 0,
+    baselineTotalProfit: Number(settings["baseline_total_profit"] ?? "0") || 0,
     // Conversion / demo mode (display only)
     baselineUsersEarningNow: Number(settings["baseline_users_earning_now"] ?? "0") || 0,
     baselineWithdrawals24h: Number(settings["baseline_withdrawals_24h"] ?? "0") || 0,
@@ -344,6 +345,7 @@ router.post("/admin/settings", async (req: AuthRequest, res) => {
     baselineActiveCapital: "baseline_active_capital",
     baselineReserveFund: "baseline_reserve_fund",
     baselineActiveInvestors: "baseline_active_investors",
+    baselineTotalProfit: "baseline_total_profit",
     baselineUsersEarningNow: "baseline_users_earning_now",
     baselineWithdrawals24h: "baseline_withdrawals_24h",
     baselineAvgMonthlyReturn: "baseline_avg_monthly_return",

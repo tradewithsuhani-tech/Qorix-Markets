@@ -609,6 +609,7 @@ router.get("/dashboard/fund-stats", async (req: AuthRequest, res) => {
   const baselineActiveCapital = Number(settings["baseline_active_capital"] ?? "0") || 0;
   const baselineReserve = Number(settings["baseline_reserve_fund"] ?? "0") || 0;
   const baselineInvestors = Number(settings["baseline_active_investors"] ?? "0") || 0;
+  const baselineTotalProfit = Number(settings["baseline_total_profit"] ?? "0") || 0;
 
   // Layer the persisted, monotonic Total Equity boost (+$100–$500 every 10 min)
   // on top of real AUM + admin baseline so the displayed equity always trends up.
@@ -637,6 +638,9 @@ router.get("/dashboard/fund-stats", async (req: AuthRequest, res) => {
     maxSlots: slotData.maxSlots,
     availableSlots: slotData.availableSlots,
     isFull: slotData.isFull,
+    // Baseline floor for the user-facing "Total Profit" card. Frontend adds
+    // scaled real per-user profit on top so the displayed number always grows.
+    totalProfitBaseline: baselineTotalProfit,
   });
 });
 
