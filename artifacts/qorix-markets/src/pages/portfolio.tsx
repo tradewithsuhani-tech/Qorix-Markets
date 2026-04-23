@@ -164,42 +164,56 @@ function PortfolioInner() {
         </Link>
       </div>
 
-      {/* Hero stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
-        <div className="rounded-2xl border border-white/10 bg-[#0d1525] p-5">
-          <div className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
-            Invested Capital
-          </div>
-          <div className="mt-2 text-2xl md:text-3xl font-bold text-white">
-            $<BigBalanceCounter value={investedAmount} className="inline" />
-          </div>
-          <div className="text-xs text-muted-foreground mt-1">
+      {/* HERO — money-first block. Investor ko first 3 sec me trust + dopamine. */}
+      <div className="relative overflow-hidden rounded-2xl border border-emerald-500/25 bg-gradient-to-br from-emerald-500/10 via-[#0d1525] to-[#0a1020] p-5 md:p-7">
+        {/* Subtle radial glow */}
+        <div
+          className="pointer-events-none absolute -top-20 -right-20 w-72 h-72 rounded-full opacity-40"
+          style={{ background: "radial-gradient(circle, rgba(16,185,129,0.25) 0%, transparent 70%)" }}
+        />
+
+        <div className="relative flex items-center justify-between flex-wrap gap-3 mb-4">
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/35 text-[11px] font-bold uppercase tracking-wider text-emerald-300">
+            <span className="live-dot inline-block w-1.5 h-1.5 rounded-full" />
+            {isActive ? "Trading Active" : "Earning Live"}
+          </span>
+          <span className="text-[11px] text-muted-foreground">
             Started {daysRunning}d ago · {riskSafe.charAt(0).toUpperCase() + riskSafe.slice(1)} risk
-          </div>
+          </span>
         </div>
 
-        <div className="rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/8 to-[#0d1525] p-5">
-          <div className="text-[11px] uppercase tracking-wider text-emerald-400/80 font-medium">
-            Current Equity
+        <div className="relative grid grid-cols-1 sm:grid-cols-3 gap-5 sm:gap-4">
+          {/* Total Invested */}
+          <div>
+            <div className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium flex items-center gap-1.5">
+              💰 Total Invested
+            </div>
+            <div className="mt-1.5 text-2xl md:text-3xl font-bold text-white tabular-nums">
+              $<BigBalanceCounter value={investedAmount} className="inline" />
+            </div>
           </div>
-          <div className="mt-2 text-2xl md:text-3xl font-bold text-white">
-            $<BigBalanceCounter value={currentEquity} className="inline" />
-          </div>
-          <div className="text-xs text-emerald-400 mt-1 flex items-center gap-1">
-            <TrendingUp className="w-3 h-3" />
-            Live mark-to-market
-          </div>
-        </div>
 
-        <div className="rounded-2xl border border-white/10 bg-[#0d1525] p-5">
-          <div className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
-            Total Profit
+          {/* Current Value */}
+          <div>
+            <div className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium flex items-center gap-1.5">
+              📈 Current Value
+            </div>
+            <div className="mt-1.5 text-2xl md:text-3xl font-bold text-white tabular-nums">
+              $<BigBalanceCounter value={currentEquity} className="inline" />
+            </div>
           </div>
-          <div className="mt-2 text-2xl md:text-3xl font-bold profit-text">
-            +<AnimatedCounter value={totalProfit} prefix="$" />
-          </div>
-          <div className="text-xs text-emerald-400 mt-1 tabular-nums">
-            +{profitPct.toFixed(2)}% all-time
+
+          {/* Profit */}
+          <div>
+            <div className="text-[11px] uppercase tracking-wider text-emerald-300/80 font-medium flex items-center gap-1.5">
+              🟢 Profit
+            </div>
+            <div className="mt-1.5 text-2xl md:text-3xl font-bold profit-text tabular-nums">
+              +<AnimatedCounter value={totalProfit} prefix="$" />
+              <span className="text-base md:text-lg text-emerald-400/90 font-semibold ml-1.5">
+                (+{profitPct.toFixed(2)}%)
+              </span>
+            </div>
           </div>
         </div>
       </div>
