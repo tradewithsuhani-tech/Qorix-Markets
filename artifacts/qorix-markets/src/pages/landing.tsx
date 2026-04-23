@@ -1000,10 +1000,11 @@ export default function Landing() {
                     <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
                   </button>
                   <button
-                    onClick={() => navigate("/login")}
-                    className="inline-flex items-center gap-2 px-6 py-4 rounded-2xl text-base font-semibold text-white hover:bg-white/5 transition-all"
+                    onClick={() => navigate("/register")}
+                    className="inline-flex items-center gap-2 px-6 py-4 rounded-2xl text-base font-semibold text-white border border-white/20 hover:bg-white/5 hover:border-white/30 transition-all"
                   >
-                    Already have an account? Sign in
+                    Open a free account
+                    <ChevronRight size={16} />
                   </button>
                 </div>
 
