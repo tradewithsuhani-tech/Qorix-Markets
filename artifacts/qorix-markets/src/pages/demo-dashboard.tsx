@@ -885,19 +885,7 @@ export default function DemoDashboard() {
           </div>
           <div className="flex items-center gap-2.5">
             {summary?.riskLevel && <RiskBadge score={perf?.riskScore ?? "Low"} />}
-            {summary?.vip && (summary.vip.tier as string) !== "none" && (
-              <VipBadge tier={summary.vip.tier as "silver" | "gold" | "platinum"} size="sm" />
-            )}
-            <PointsPill />
-
-            <button
-              onClick={handleDownloadReport}
-              disabled={isGeneratingReport || summaryLoading || perfLoading}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all duration-150 bg-blue-500/10 border-blue-500/25 text-blue-400 hover:bg-blue-500/20 hover:border-blue-500/40 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <FileDown style={{ width: 12, height: 12 }} />
-              {isGeneratingReport ? "Generating…" : "Download Report"}
-            </button>
+            {/* VIP, Points pill, and Download Report removed from demo dashboard — not relevant in demo. */}
             <MarketsStatusPill />
             <InsightRotatorPill
               insights={[
