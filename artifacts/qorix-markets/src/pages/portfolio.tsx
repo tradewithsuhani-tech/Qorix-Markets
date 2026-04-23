@@ -1011,6 +1011,7 @@ export default function PortfolioPage() {
           hideFundTransparency
           hideLiveTrades
           hidePrimaryStatCards
+          swapEquityWithRolling
         />
       </div>
       <div className="px-4 md:px-8 pb-8 max-w-7xl mx-auto">
