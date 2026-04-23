@@ -848,11 +848,13 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Promo Banners — auto-scrolling carousel */}
-        <BannerCarousel
-          slides={DASHBOARD_BANNERS.map((b) => ({ ...b, onClick: () => navigate("/deposit") }))}
-          intervalMs={4500}
-        />
+        {/* Promo Banners — hidden per request */}
+        {false && (
+          <BannerCarousel
+            slides={DASHBOARD_BANNERS.map((b) => ({ ...b, onClick: () => navigate("/deposit") }))}
+            intervalMs={4500}
+          />
+        )}
 
         {/* Demo Mode Hero — shown to users who haven't activated live trading */}
         {conversion?.demoModeEnabled !== false && !investment?.isActive && (
