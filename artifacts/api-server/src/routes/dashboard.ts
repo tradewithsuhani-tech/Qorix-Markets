@@ -497,14 +497,16 @@ router.get("/dashboard/performance", async (req: AuthRequest, res) => {
     synthAvgReturn > 2.5 ||
     synthWinRate < 70 ||
     synthWinRate > 95 ||
-    synthMaxDrawdown < 3 ||
-    synthMaxDrawdown > 12;
+    synthMaxDrawdown < 2.0 ||
+    synthMaxDrawdown > 3.06;
   if (w && (storedDay !== today || synthOutOfRange)) {
     const winJitter = (hashSeed(`${req.userId}:${today}:winrate`) - 0.5) * 3; // ±1.5
     const ddJitter = (hashSeed(`${req.userId}:${today}:drawdown`) - 0.5) * 1; // ±0.5
     const arJitter = (hashSeed(`${req.userId}:${today}:avgreturn`) - 0.5) * 0.3; // ±0.15
     synthWinRate = Math.max(70, Math.min(95, 70 + ratio * 25 + winJitter));
-    synthMaxDrawdown = Math.max(3, Math.min(12, 12 - ratio * 9 + ddJitter));
+    // Max Drawdown ∈ [2.00%, 3.06%] — capped at 3.06% (institutional risk ceiling).
+    // Stronger P&L (higher ratio) → lower drawdown. Small ±0.5 jitter for natural feel.
+    synthMaxDrawdown = Math.max(2.0, Math.min(3.06, 3.06 - ratio * 1.06 + ddJitter * 0.3));
     // Avg Return per trade ∈ [0.80%, 2.50%], scales with daily P&L pct.
     synthAvgReturn = Math.max(0.8, Math.min(2.5, 0.8 + ratio * 1.7 + arJitter));
     // Risk Score: stronger P&L performance → safer score.
@@ -557,9 +559,12 @@ router.get("/dashboard/performance", async (req: AuthRequest, res) => {
   }
   // Use the synthetic value when it's lower than the real one (better look)
   // and when synthetic is non-zero (i.e. wallet exists). Real never increases.
-  const maxDrawdownPct = synthMaxDrawdown > 0
+  // Hard ceiling 3.06% — never show anything higher, even if real equity drawdown
+  // exceeded it. Synthetic value is preferred when present.
+  const rawMaxDrawdown = synthMaxDrawdown > 0
     ? Math.min(synthMaxDrawdown, realMaxDrawdownPct || synthMaxDrawdown)
     : realMaxDrawdownPct;
+  const maxDrawdownPct = Math.min(rawMaxDrawdown, 3.06);
 
   const rollingReturns: { period: string; return: number }[] = [];
   const periods = [{ label: "7D", days: 7 }, { label: "30D", days: 30 }, { label: "90D", days: 90 }];
