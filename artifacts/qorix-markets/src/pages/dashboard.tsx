@@ -6,7 +6,6 @@ import {
   useGetDashboardFundStats,
   useGetInvestment,
   useUpdateProtection,
-  useGetMarketIndicators,
   getGetInvestmentQueryKey,
   type VipInfo,
 } from "@workspace/api-client-react";
@@ -73,6 +72,37 @@ function PointsPill() {
       <Award style={{ width: 13, height: 13 }} className="text-amber-400" />
       <span>{balance.toLocaleString()} pts</span>
     </button>
+  );
+}
+
+function FomoTicker({ messages }: { messages: string[] }) {
+  const [idx, setIdx] = useState(0);
+  useEffect(() => {
+    if (messages.length <= 1) return;
+    const t = setInterval(() => setIdx((i) => (i + 1) % messages.length), 3500);
+    return () => clearInterval(t);
+  }, [messages.length]);
+  if (!messages.length) return null;
+  return (
+    <div className="flex items-center gap-3 px-4 py-2.5 rounded-xl border border-emerald-500/20 bg-emerald-500/5 overflow-hidden">
+      <div className="shrink-0 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-emerald-300">
+        <span className="live-dot" /> Live
+      </div>
+      <div className="flex-1 min-w-0 relative h-5">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={idx}
+            initial={{ y: 12, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: -12, opacity: 0 }}
+            transition={{ duration: 0.35 }}
+            className="absolute inset-0 text-sm text-emerald-100 font-medium truncate"
+          >
+            {messages[idx]}
+          </motion.div>
+        </AnimatePresence>
+      </div>
+    </div>
   );
 }
 
@@ -508,9 +538,27 @@ export default function Dashboard() {
   const { data: investment, isLoading: investLoading } = useGetInvestment({
     query: { refetchInterval: 10000 }
   });
-  const { data: marketIndicators } = useGetMarketIndicators({
-    query: { refetchInterval: 30000 }
+  // Single source of truth for /public/market-indicators (includes both legacy
+  // metrics and the new conversion-mode fields not yet in the openapi spec).
+  const { data: marketIndicators } = useQuery<{
+    activeInvestors: number;
+    usersEarningNow: number;
+    withdrawals24h: number;
+    avgMonthlyReturn: number;
+    demoModeEnabled: boolean;
+    demoProfitEnabled: boolean;
+    demoProfitValue: number;
+    fomoMessages: string[];
+  }>({
+    queryKey: ["/api/public/market-indicators"],
+    queryFn: async () => {
+      const res = await fetch("/api/public/market-indicators");
+      if (!res.ok) throw new Error("failed");
+      return res.json();
+    },
+    refetchInterval: 30000,
   });
+  const conversion = marketIndicators;
   const protectionMutation = useUpdateProtection({
     mutation: {
       onSuccess: () => {
@@ -757,6 +805,68 @@ export default function Dashboard() {
           slides={DASHBOARD_BANNERS.map((b) => ({ ...b, onClick: () => navigate("/deposit") }))}
           intervalMs={4500}
         />
+
+        {/* Demo Mode Hero — shown to users who haven't activated live trading */}
+        {conversion?.demoModeEnabled !== false && !investment?.isActive && (
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4 }}
+            className="relative overflow-hidden rounded-2xl border border-blue-500/25 bg-gradient-to-br from-blue-600/15 via-purple-600/10 to-transparent p-5 md:p-7"
+          >
+            <div className="absolute -top-16 -right-16 w-56 h-56 rounded-full bg-blue-500/20 blur-3xl pointer-events-none" />
+            <div className="absolute -bottom-16 -left-10 w-48 h-48 rounded-full bg-purple-500/15 blur-3xl pointer-events-none" />
+            <div className="relative grid grid-cols-1 lg:grid-cols-5 gap-5 items-center">
+              <div className="lg:col-span-3 space-y-3">
+                <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-blue-500/15 border border-blue-500/30 text-[11px] font-semibold text-blue-300 uppercase tracking-wider">
+                  <Zap style={{ width: 12, height: 12 }} /> Demo Mode
+                </div>
+                <h2 className="text-2xl md:text-3xl font-bold leading-tight">
+                  You are in <span className="gradient-text">Demo Mode</span>
+                </h2>
+                <p className="text-muted-foreground text-sm md:text-base max-w-xl">
+                  Experience how our automated system performs in real market conditions. Activate live trading to start earning real profits.
+                </p>
+                <div className="flex flex-wrap gap-2.5 pt-1">
+                  <button
+                    onClick={() => navigate("/deposit")}
+                    className="px-5 py-2.5 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 shadow-lg shadow-blue-600/30 transition-all"
+                  >
+                    Start Live Trading →
+                  </button>
+                  <button
+                    onClick={() => navigate("/analytics")}
+                    className="px-5 py-2.5 rounded-xl text-sm font-semibold border border-white/15 hover:border-white/30 hover:bg-white/5 transition-all"
+                  >
+                    View Performance
+                  </button>
+                </div>
+              </div>
+              {conversion?.demoProfitEnabled !== false && (
+                <div className="lg:col-span-2">
+                  <div className="rounded-2xl border border-emerald-500/25 bg-gradient-to-br from-emerald-500/15 to-emerald-500/5 p-4 backdrop-blur-sm">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[11px] font-semibold uppercase tracking-wider text-emerald-300">Demo Profit</span>
+                      <TrendingUp style={{ width: 14, height: 14 }} className="text-emerald-400" />
+                    </div>
+                    <div className="text-3xl md:text-4xl font-bold text-emerald-400 tabular-nums leading-tight">
+                      +${(conversion?.demoProfitValue ?? 0).toFixed(2)}
+                    </div>
+                    <div className="text-[11px] text-emerald-300/70 mt-1">Simulation based on real market conditions</div>
+                    <div className="mt-3 pt-3 border-t border-emerald-500/15 text-xs text-muted-foreground">
+                      Activate live trading to unlock real earnings.
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+
+        {/* Live Activity FOMO Ticker */}
+        {conversion?.fomoMessages && conversion.fomoMessages.length > 0 && (
+          <FomoTicker messages={conversion.fomoMessages} />
+        )}
 
         {/* Investor Psychology Indicators */}
         <motion.div

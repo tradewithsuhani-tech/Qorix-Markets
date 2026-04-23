@@ -61,7 +61,7 @@ router.get("/public/market-indicators", async (_req, res) => {
     .from(investmentsTable)
     .where(eq(investmentsTable.isActive, true));
 
-  const activeInvestors = Number(activeInvResult?.count ?? 0);
+  const realActiveInvestors = Number(activeInvResult?.count ?? 0);
 
   const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
   const [withdrawals24hResult] = await db
@@ -75,7 +75,7 @@ router.get("/public/market-indicators", async (_req, res) => {
       ),
     );
 
-  const withdrawals24h = Number(withdrawals24hResult?.count ?? 0);
+  const realWithdrawals24h = Number(withdrawals24hResult?.count ?? 0);
 
   const since30d = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
   const [avgResult] = await db
@@ -84,13 +84,44 @@ router.get("/public/market-indicators", async (_req, res) => {
     .where(gte(dailyProfitRunsTable.createdAt, since30d));
 
   const dailyAvg = parseFloat(String(avgResult?.avg ?? "0")) || 0;
-  const avgMonthlyReturn = parseFloat((dailyAvg * 30).toFixed(2));
+  const realAvgMonthlyReturn = parseFloat((dailyAvg * 30).toFixed(2));
+
+  // Layer admin-controlled baselines so brand-new platforms never show 0
+  const baselineRows = await db
+    .select()
+    .from(systemSettingsTable)
+    .where(inArray(systemSettingsTable.key, [
+      "baseline_active_investors",
+      "baseline_users_earning_now",
+      "baseline_withdrawals_24h",
+      "baseline_avg_monthly_return",
+      "demo_mode_enabled",
+      "demo_profit_value",
+      "demo_profit_enabled",
+      "fomo_messages",
+    ]));
+  const settings = Object.fromEntries(baselineRows.map((r) => [r.key, r.value]));
+
+  const baseInvestors = Number(settings["baseline_active_investors"] ?? "0") || 0;
+  const baseEarning = Number(settings["baseline_users_earning_now"] ?? "0") || 0;
+  const baseWithdrawals = Number(settings["baseline_withdrawals_24h"] ?? "0") || 0;
+  const baseAvgReturn = Number(settings["baseline_avg_monthly_return"] ?? "0") || 0;
+
+  let fomoMessages: string[] = [];
+  try {
+    const parsed = JSON.parse(settings["fomo_messages"] ?? "[]");
+    if (Array.isArray(parsed)) fomoMessages = parsed.filter((s) => typeof s === "string");
+  } catch {}
 
   res.json({
-    activeInvestors,
-    usersEarningNow: activeInvestors,
-    withdrawals24h,
-    avgMonthlyReturn,
+    activeInvestors: realActiveInvestors + baseInvestors,
+    usersEarningNow: realActiveInvestors + baseEarning,
+    withdrawals24h: realWithdrawals24h + baseWithdrawals,
+    avgMonthlyReturn: realAvgMonthlyReturn > 0 ? realAvgMonthlyReturn : baseAvgReturn,
+    demoModeEnabled: settings["demo_mode_enabled"] !== "false",
+    demoProfitEnabled: settings["demo_profit_enabled"] !== "false",
+    demoProfitValue: Number(settings["demo_profit_value"] ?? "0") || 0,
+    fomoMessages,
   });
 });
 

@@ -723,6 +723,45 @@ export function AdminSystemPage() {
               <label className="text-sm text-muted-foreground">Baseline Active Investors</label>
               <input type="number" value={settings?.baselineActiveInvestors ?? 0} onChange={(e) => setSettings({ ...settings, baselineActiveInvestors: e.target.value })} onBlur={() => save({ baselineActiveInvestors: Number(settings?.baselineActiveInvestors ?? 0) })} className="mt-2 w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm" />
             </div>
+            <div>
+              <label className="text-sm text-muted-foreground">Baseline Users Earning Now</label>
+              <input type="number" value={settings?.baselineUsersEarningNow ?? 0} onChange={(e) => setSettings({ ...settings, baselineUsersEarningNow: e.target.value })} onBlur={() => save({ baselineUsersEarningNow: Number(settings?.baselineUsersEarningNow ?? 0) })} className="mt-2 w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm" />
+            </div>
+            <div>
+              <label className="text-sm text-muted-foreground">Baseline Withdrawals (24h)</label>
+              <input type="number" value={settings?.baselineWithdrawals24h ?? 0} onChange={(e) => setSettings({ ...settings, baselineWithdrawals24h: e.target.value })} onBlur={() => save({ baselineWithdrawals24h: Number(settings?.baselineWithdrawals24h ?? 0) })} className="mt-2 w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm" />
+            </div>
+            <div>
+              <label className="text-sm text-muted-foreground">Baseline Avg Monthly Return (%)</label>
+              <input type="number" step="0.1" value={settings?.baselineAvgMonthlyReturn ?? 0} onChange={(e) => setSettings({ ...settings, baselineAvgMonthlyReturn: e.target.value })} onBlur={() => save({ baselineAvgMonthlyReturn: Number(settings?.baselineAvgMonthlyReturn ?? 0) })} className="mt-2 w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm" />
+            </div>
+          </div>
+        </div>
+
+        <div className="glass-card p-6 rounded-2xl space-y-4">
+          <div>
+            <h2 className="text-xl font-bold flex items-center gap-2"><Zap className="w-5 h-5 text-blue-400" /> Conversion / Demo Mode</h2>
+            <p className="text-xs text-muted-foreground mt-1">Controls the demo hero, demo profit card, and live activity ticker shown to users who haven't activated live trading. <span className="text-amber-400">Display-only — never affects balances or accounting.</span></p>
+          </div>
+          <ToggleRow icon={Zap} label="Show Demo Mode hero on dashboard" value={settings?.demoModeEnabled ?? true} onToggle={(v) => { setSettings({ ...settings, demoModeEnabled: v }); save({ demoModeEnabled: v }); }} />
+          <ToggleRow icon={Zap} label="Show Demo Profit card" value={settings?.demoProfitEnabled ?? true} onToggle={(v) => { setSettings({ ...settings, demoProfitEnabled: v }); save({ demoProfitEnabled: v }); }} />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="text-sm text-muted-foreground">Demo Profit Value (USD)</label>
+              <input type="number" step="0.01" value={settings?.demoProfitValue ?? 0} onChange={(e) => setSettings({ ...settings, demoProfitValue: e.target.value })} onBlur={() => save({ demoProfitValue: Number(settings?.demoProfitValue ?? 0) })} className="mt-2 w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm" />
+            </div>
+          </div>
+          <div>
+            <label className="text-sm text-muted-foreground">FOMO Ticker Messages (one per line)</label>
+            <textarea
+              rows={6}
+              value={(() => { try { return (JSON.parse(settings?.fomoMessages ?? "[]") as string[]).join("\n"); } catch { return ""; } })()}
+              onChange={(e) => setSettings({ ...settings, fomoMessages: JSON.stringify(e.target.value.split("\n").map((s) => s.trim()).filter(Boolean)) })}
+              onBlur={() => save({ fomoMessages: settings?.fomoMessages ?? "[]" })}
+              placeholder={"+3 investors joined today\n$2,140 invested in last 24h\nStrategy capacity 72% filled"}
+              className="mt-2 w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm font-mono resize-none"
+            />
+            <p className="text-[11px] text-muted-foreground mt-1.5">Rotates every 3.5s on the user dashboard.</p>
           </div>
         </div>
 
