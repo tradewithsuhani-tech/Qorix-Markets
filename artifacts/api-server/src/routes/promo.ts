@@ -17,8 +17,11 @@ router.use(authMiddleware);
  * from the window index — no DB write needed per window. A user can
  * redeem at most ONE offer for life.
  * ───────────────────────────────────────────────────────────────── */
-const WINDOW_MS = 30 * 60 * 1000; // 30 minutes
-const ACTIVE_MS = 10 * 60 * 1000; // 10-minute redemption window
+const WINDOW_MS = 30 * 60 * 1000; // 30 minutes — each window defines one offer
+// The offer is REDEEMABLE for the entire window so users always see a live offer.
+// Timer counts down to when the NEW offer rotates in. The UI flips to an "urgent"
+// style in the last 60 seconds automatically.
+const ACTIVE_MS = WINDOW_MS;
 const OFFER_SECRET =
   process.env["PROMO_SECRET"] ||
   process.env["JWT_SECRET"] ||
