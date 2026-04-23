@@ -485,18 +485,23 @@ router.get("/dashboard/performance", async (req: AuthRequest, res) => {
 
   let synthWinRate = w ? parseFloat((w.synthWinRate ?? "0") as string) : 0;
   let synthMaxDrawdown = w ? parseFloat((w.synthMaxDrawdown ?? "0") as string) : 0;
+  let synthAvgReturn = w ? parseFloat((w.synthAvgReturn ?? "0") as string) : 0;
   const storedDay = (w?.synthMetricsDay ?? "") as string;
 
   if (w && storedDay !== today) {
     const winJitter = (hashSeed(`${req.userId}:${today}:winrate`) - 0.5) * 3; // ±1.5
     const ddJitter = (hashSeed(`${req.userId}:${today}:drawdown`) - 0.5) * 1; // ±0.5
+    const arJitter = (hashSeed(`${req.userId}:${today}:avgreturn`) - 0.5) * 0.3; // ±0.15
     synthWinRate = Math.max(70, Math.min(95, 70 + ratio * 25 + winJitter));
     synthMaxDrawdown = Math.max(3, Math.min(12, 12 - ratio * 9 + ddJitter));
+    // Avg Return per trade ∈ [0.80%, 2.50%], scales with daily P&L pct.
+    synthAvgReturn = Math.max(0.8, Math.min(2.5, 0.8 + ratio * 1.7 + arJitter));
     await db
       .update(walletsTable)
       .set({
         synthWinRate: synthWinRate.toFixed(2),
         synthMaxDrawdown: synthMaxDrawdown.toFixed(2),
+        synthAvgReturn: synthAvgReturn.toFixed(2),
         synthMetricsDay: today,
       })
       .where(eq(walletsTable.userId, req.userId!));
@@ -504,9 +509,10 @@ router.get("/dashboard/performance", async (req: AuthRequest, res) => {
 
   const winRate = Math.max(realWinRate, synthWinRate);
 
-  const avgReturn = totalTrades > 0
+  const realAvgReturn = totalTrades > 0
     ? allTrades.reduce((acc, t) => acc + parseFloat(t.profitPercent as string), 0) / totalTrades
     : 0;
+  const avgReturn = Math.max(realAvgReturn, synthAvgReturn);
 
   const inv = await db.select().from(investmentsTable)
     .where(eq(investmentsTable.userId, req.userId!)).limit(1);
