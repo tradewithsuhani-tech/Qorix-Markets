@@ -664,9 +664,6 @@ function PortfolioInner() {
         <NextTradeStatus enabled={isActive} />
       </div>
 
-      {/* PERFORMANCE BLOCK — equity curve + 4 stat tiles + 14d daily P&L bars */}
-      <PerformanceBlock equityPoints={equity?.points ?? []} todayPnl={summary?.dailyProfitLoss ?? 0} />
-
       {/* Investment Setup */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-3 rounded-2xl border border-white/10 bg-[#0d1525] p-5 space-y-4">
