@@ -1,5 +1,5 @@
 import { db, walletsTable, transactionsTable, usersTable, systemSettingsTable } from "@workspace/db";
-import { blockchainDepositsTable } from "@workspace/db/schema";
+import { blockchainDepositsTable, promoRedemptionsTable } from "@workspace/db/schema";
 import { eq, isNotNull, or, isNull, sql } from "drizzle-orm";
 import { logger, errorLogger } from "./logger";
 import { createNotification } from "./notifications";
@@ -99,6 +99,71 @@ async function creditUserDeposit(
       .update(blockchainDepositsTable)
       .set({ status: "confirmed", credited: true, creditedAt: new Date() })
       .where(eq(blockchainDepositsTable.id, depositId));
+
+    // --- 5% promo-code bonus (one-per-user, credited on first qualifying deposit) ---
+    const promoRows = await tx
+      .select()
+      .from(promoRedemptionsTable)
+      .where(eq(promoRedemptionsTable.userId, userId))
+      .limit(1);
+    const promo = promoRows[0];
+    if (promo && promo.status === "redeemed") {
+      const bonusPct = Number(promo.bonusPercent ?? 5);
+      const bonus = +(amount * (bonusPct / 100)).toFixed(8);
+      if (bonus > 0) {
+        // Atomic SQL increment avoids stale-read race with the deposit update above.
+        await tx
+          .update(walletsTable)
+          .set({
+            mainBalance: sql`${walletsTable.mainBalance} + ${bonus.toString()}`,
+            updatedAt: new Date(),
+          })
+          .where(eq(walletsTable.userId, userId));
+
+        const [bonusTxn] = await tx
+          .insert(transactionsTable)
+          .values({
+            userId,
+            type: "bonus",
+            amount: bonus.toString(),
+            status: "completed",
+            description: `Promo ${promo.code} — ${bonusPct}% deposit bonus`,
+          })
+          .returning();
+
+        await postJournalEntry(
+          journalForTransaction(bonusTxn!.id),
+          [
+            {
+              accountCode: "platform:usdt_pool",
+              entryType: "debit",
+              amount: bonus,
+              description: `Promo ${promo.code} bonus funded from platform pool`,
+            },
+            {
+              accountCode: `user:${userId}:main`,
+              entryType: "credit",
+              amount: bonus,
+              description: `Promo ${promo.code} ${bonusPct}% deposit bonus credited`,
+            },
+          ],
+          bonusTxn!.id,
+          tx,
+        );
+
+        await tx
+          .update(promoRedemptionsTable)
+          .set({
+            status: "credited",
+            creditedAt: new Date(),
+            depositId,
+            bonusAmount: bonus.toString(),
+          })
+          .where(eq(promoRedemptionsTable.userId, userId));
+
+        logger.info({ userId, code: promo.code, bonus, depositId }, "Promo bonus credited");
+      }
+    }
   });
 
   await createNotification(

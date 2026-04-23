@@ -22,6 +22,7 @@ import adminTasksRouter from "./admin-tasks";
 import signalTradesRouter from "./signal-trades";
 import googleOauthRouter from "./google-oauth";
 import kycRouter from "./kyc";
+import promoRouter from "./promo";
 
 const router: IRouter = Router();
 
@@ -54,5 +55,6 @@ router.use(testModeRouter);
 router.use(tasksRouter);
 router.use(adminTasksRouter);
 router.use(signalTradesRouter);
+router.use(promoRouter);
 
 export default router;
