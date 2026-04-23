@@ -560,8 +560,8 @@ function WeeklyLeaderboard({ userId }: { userId: number }) {
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: idx * 0.025 }}
                     className={cn(
-                      "relative grid grid-cols-[36px_minmax(0,1fr)_auto_auto] sm:grid-cols-[44px_minmax(0,1.6fr)_minmax(0,1.2fr)_minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1fr)] gap-2 sm:gap-2 px-2.5 sm:px-3 items-center transition-colors",
-                      isTop3 ? "py-3 sm:py-4" : "py-2 sm:py-2.5",
+                      "relative grid grid-cols-[32px_minmax(0,1fr)_auto] sm:grid-cols-[44px_minmax(0,1.6fr)_minmax(0,1.2fr)_minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1fr)] gap-2.5 sm:gap-2 px-2.5 sm:px-3 items-center transition-colors",
+                      isTop3 ? "py-3 sm:py-4" : "py-2.5 sm:py-2.5",
                       isMine
                         ? "bg-blue-500/8 hover:bg-blue-500/12"
                         : top
@@ -632,22 +632,48 @@ function WeeklyLeaderboard({ userId }: { userId: number }) {
                       ${tradingFund.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                     </div>
 
-                    {/* P&L */}
+                    {/* Mobile: stacked P&L + Payout in one right-aligned column */}
+                    <div className="sm:hidden flex flex-col items-end gap-0.5 tabular-nums whitespace-nowrap">
+                      <div className="flex items-baseline gap-1">
+                        <span className="text-[8.5px] font-semibold uppercase tracking-wider text-emerald-400/60">P&amp;L</span>
+                        <span className={cn(
+                          "text-emerald-400 font-bold leading-none",
+                          rank === 1 ? "text-[14px] font-black drop-shadow-[0_1px_8px_rgba(52,211,153,0.4)]"
+                            : isTop3 ? "text-[13px] font-extrabold"
+                            : "text-[12px]",
+                        )}>
+                          +${profit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                      <div className="flex items-baseline gap-1">
+                        <span className="text-[8.5px] font-semibold uppercase tracking-wider text-amber-300/60">Payout</span>
+                        <span className={cn(
+                          "text-amber-300 font-semibold leading-none",
+                          rank === 1 ? "text-[12px] font-extrabold text-amber-200"
+                            : isTop3 ? "text-[12px] font-bold"
+                            : "text-[11px]",
+                        )}>
+                          ${payout.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Desktop P&L */}
                     <div className={cn(
-                      "text-right tabular-nums text-emerald-400 whitespace-nowrap",
-                      rank === 1 ? "text-[13px] sm:text-[17px] font-black drop-shadow-[0_1px_8px_rgba(52,211,153,0.4)]"
-                        : isTop3 ? "text-[12px] sm:text-[16px] font-extrabold"
-                        : "text-[11px] sm:text-[13px] font-bold",
+                      "hidden sm:block text-right tabular-nums text-emerald-400 whitespace-nowrap",
+                      rank === 1 ? "text-[17px] font-black drop-shadow-[0_1px_8px_rgba(52,211,153,0.4)]"
+                        : isTop3 ? "text-[16px] font-extrabold"
+                        : "text-[13px] font-bold",
                     )}>
                       +${profit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </div>
 
-                    {/* Payout */}
+                    {/* Desktop Payout */}
                     <div className={cn(
-                      "text-right tabular-nums whitespace-nowrap",
-                      rank === 1 ? "text-[13px] sm:text-[16px] font-extrabold text-amber-200 drop-shadow-[0_1px_8px_rgba(250,204,21,0.4)]"
-                        : isTop3 ? "text-[12px] sm:text-[15px] font-bold text-amber-300"
-                        : "text-[11px] sm:text-[12px] font-semibold text-amber-300",
+                      "hidden sm:block text-right tabular-nums whitespace-nowrap",
+                      rank === 1 ? "text-[16px] font-extrabold text-amber-200 drop-shadow-[0_1px_8px_rgba(250,204,21,0.4)]"
+                        : isTop3 ? "text-[15px] font-bold text-amber-300"
+                        : "text-[12px] font-semibold text-amber-300",
                     )}>
                       ${payout.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </div>
