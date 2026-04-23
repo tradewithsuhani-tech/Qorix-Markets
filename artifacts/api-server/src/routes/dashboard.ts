@@ -15,10 +15,12 @@ const USER_EQUITY_WINDOW_MS = 10 * 60 * 1000;
 const USER_EQUITY_BUMP_MIN = 100;
 const USER_EQUITY_BUMP_MAX = 500;
 
-// Per-user "Active Trading Fund" display boost: random $100–$1000 every 30 min.
+// Per-user "Active Trading Fund" display: always 80–90% of current Total Equity.
+// The exact percentage is re-rolled every 30 min and persisted, so the card
+// fluctuates within the band without ever exceeding total equity.
 const TRADING_FUND_WINDOW_MS = 30 * 60 * 1000;
-const TRADING_FUND_BUMP_MIN = 100;
-const TRADING_FUND_BUMP_MAX = 1000;
+const TRADING_FUND_PCT_MIN = 80;
+const TRADING_FUND_PCT_MAX = 90;
 
 // Per-user synthetic "Daily P&L" display values (display-only, never real).
 //   - One target % per UTC weekday, picked in [DAILY_PNL_MIN_PCT, MAX].
@@ -171,15 +173,18 @@ router.get("/dashboard/summary", async (req: AuthRequest, res) => {
   const totalProfit = realTotalProfit + totalProfitBoost;
   const realInvestment = inv ? parseFloat(inv.amount as string) : 0;
 
-  // Catch-up the per-user Active Trading Fund display boost (+$100–$1000 / 30min).
-  // First-touch seed: random $500–$2000 so the card never shows $0.
-  let tradingFundBoost = parseFloat((wallet?.tradingFundBoost as string) ?? "0");
+  // Active Trading Fund = currentTotalEquity * percentage, where percentage
+  // is re-rolled within [80%, 90%] every 30 min and persisted. We re-use the
+  // existing wallets.trading_fund_boost column to store the percentage (80–90)
+  // and trading_fund_last_at as the next re-roll cadence timer.
+  let tradingFundPct = parseFloat((wallet?.tradingFundBoost as string) ?? "0");
   let tradingFundLastAt = Number(wallet?.tradingFundLastAt ?? 0);
   if (wallet) {
     const now = Date.now();
     let dirty = false;
-    if (tradingFundBoost <= 0) {
-      tradingFundBoost = 500 + Math.floor(Math.random() * 1501); // 500–2000
+    // Force into the [80, 90] band on first touch or after any drift.
+    if (tradingFundPct < TRADING_FUND_PCT_MIN || tradingFundPct > TRADING_FUND_PCT_MAX) {
+      tradingFundPct = +(TRADING_FUND_PCT_MIN + Math.random() * (TRADING_FUND_PCT_MAX - TRADING_FUND_PCT_MIN)).toFixed(2);
       dirty = true;
     }
     if (!tradingFundLastAt) {
@@ -188,11 +193,8 @@ router.get("/dashboard/summary", async (req: AuthRequest, res) => {
     }
     const tfWindows = Math.floor((now - tradingFundLastAt) / TRADING_FUND_WINDOW_MS);
     if (tfWindows > 0) {
-      let added = 0;
-      for (let i = 0; i < tfWindows; i++) {
-        added += TRADING_FUND_BUMP_MIN + Math.floor(Math.random() * (TRADING_FUND_BUMP_MAX - TRADING_FUND_BUMP_MIN + 1));
-      }
-      tradingFundBoost += added;
+      // Re-roll the percentage once per elapsed 30-min window (latest wins).
+      tradingFundPct = +(TRADING_FUND_PCT_MIN + Math.random() * (TRADING_FUND_PCT_MAX - TRADING_FUND_PCT_MIN)).toFixed(2);
       tradingFundLastAt = tradingFundLastAt + tfWindows * TRADING_FUND_WINDOW_MS;
       dirty = true;
     }
@@ -200,13 +202,15 @@ router.get("/dashboard/summary", async (req: AuthRequest, res) => {
       await db
         .update(walletsTable)
         .set({
-          tradingFundBoost: tradingFundBoost.toFixed(2),
+          tradingFundBoost: tradingFundPct.toFixed(2),
           tradingFundLastAt,
         })
         .where(eq(walletsTable.userId, req.userId!));
     }
   }
-  const investmentAmount = realInvestment + tradingFundBoost;
+  // Apply the percentage to the live displayed Total Equity (not real wallet
+  // alone) so Active Trading Fund grows with it and never exceeds it.
+  const investmentAmount = +(totalBalance * tradingFundPct / 100).toFixed(2);
 
   const dailyProfitPercent = investmentAmount > 0 ? (dailyProfit / investmentAmount) * 100 : 0;
 
