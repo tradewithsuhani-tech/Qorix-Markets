@@ -317,6 +317,14 @@ router.get("/admin/settings", async (_req: AuthRequest, res) => {
     baselineActiveCapital: Number(settings["baseline_active_capital"] ?? "0") || 0,
     baselineReserveFund: Number(settings["baseline_reserve_fund"] ?? "0") || 0,
     baselineActiveInvestors: Number(settings["baseline_active_investors"] ?? "0") || 0,
+    // Conversion / demo mode (display only)
+    baselineUsersEarningNow: Number(settings["baseline_users_earning_now"] ?? "0") || 0,
+    baselineWithdrawals24h: Number(settings["baseline_withdrawals_24h"] ?? "0") || 0,
+    baselineAvgMonthlyReturn: Number(settings["baseline_avg_monthly_return"] ?? "0") || 0,
+    demoModeEnabled: settings["demo_mode_enabled"] !== "false",
+    demoProfitEnabled: settings["demo_profit_enabled"] !== "false",
+    demoProfitValue: Number(settings["demo_profit_value"] ?? "0") || 0,
+    fomoMessages: settings["fomo_messages"] ?? "[]",
   });
 });
 
@@ -336,6 +344,13 @@ router.post("/admin/settings", async (req: AuthRequest, res) => {
     baselineActiveCapital: "baseline_active_capital",
     baselineReserveFund: "baseline_reserve_fund",
     baselineActiveInvestors: "baseline_active_investors",
+    baselineUsersEarningNow: "baseline_users_earning_now",
+    baselineWithdrawals24h: "baseline_withdrawals_24h",
+    baselineAvgMonthlyReturn: "baseline_avg_monthly_return",
+    demoModeEnabled: "demo_mode_enabled",
+    demoProfitEnabled: "demo_profit_enabled",
+    demoProfitValue: "demo_profit_value",
+    fomoMessages: "fomo_messages",
   };
 
   for (const [bodyKey, settingKey] of Object.entries(allowed)) {
