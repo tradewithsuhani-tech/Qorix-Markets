@@ -235,6 +235,18 @@ function CountUp({
   return <motion.span className={className}>{rounded}</motion.span>;
 }
 
+const PODIUM_BG: Record<1 | 2 | 3, string> = {
+  1: "bg-[radial-gradient(120%_120%_at_50%_-10%,rgba(250,204,21,0.18),rgba(2,6,23,0)_55%),linear-gradient(to_bottom,rgba(15,23,42,0.95),rgba(2,6,23,0.95))]",
+  2: "bg-[radial-gradient(120%_120%_at_50%_-10%,rgba(203,213,225,0.14),rgba(2,6,23,0)_55%),linear-gradient(to_bottom,rgba(15,23,42,0.95),rgba(2,6,23,0.95))]",
+  3: "bg-[radial-gradient(120%_120%_at_50%_-10%,rgba(217,119,6,0.16),rgba(2,6,23,0)_55%),linear-gradient(to_bottom,rgba(15,23,42,0.95),rgba(2,6,23,0.95))]",
+};
+
+const AVATAR_FILL: Record<1 | 2 | 3, string> = {
+  1: "bg-[linear-gradient(135deg,#fde047,#f59e0b_55%,#b45309)]",
+  2: "bg-[linear-gradient(135deg,#f1f5f9,#cbd5e1_55%,#64748b)]",
+  3: "bg-[linear-gradient(135deg,#fbbf24,#d97706_55%,#7c2d12)]",
+};
+
 function PodiumCard({
   entry,
   rank,
@@ -256,51 +268,103 @@ function PodiumCard({
       initial={{ opacity: 0, y: 24 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: rank === 1 ? 0 : 0.1, duration: 0.5, ease: "easeOut" }}
+      whileHover={{ y: -3 }}
       className={cn(
-        "relative rounded-2xl border bg-gradient-to-b from-white/[0.05] to-white/[0.01] border-white/10 backdrop-blur-sm flex flex-col items-center text-center overflow-hidden",
+        "relative rounded-2xl border border-white/10 flex flex-col items-center text-center overflow-hidden",
+        PODIUM_BG[rank],
         s.glow,
-        big ? "px-3 py-5 sm:px-4 sm:py-6" : "px-3 py-4 sm:px-3.5 sm:py-5",
-        big && "sm:scale-105 sm:-translate-y-2",
+        big ? "px-3 pt-7 pb-4 sm:px-4 sm:pt-8 sm:pb-5" : "px-3 pt-6 pb-4 sm:px-3.5",
+        big && "sm:scale-[1.04] sm:-translate-y-2",
         isMine && "ring-2 ring-blue-400/60",
       )}
     >
-      {/* animated glow halo */}
+      {/* huge faded rank watermark */}
+      <span
+        aria-hidden
+        className={cn(
+          "pointer-events-none absolute -bottom-4 right-2 font-black leading-none select-none opacity-[0.06] text-white",
+          big ? "text-[120px]" : "text-[96px]",
+        )}
+      >
+        {rank}
+      </span>
+
+      {/* top glow */}
       <motion.div
         aria-hidden
-        animate={{ opacity: [0.35, 0.7, 0.35] }}
-        transition={{ duration: rank === 1 ? 2.4 : 3.2, repeat: Infinity, ease: "easeInOut" }}
+        animate={{ opacity: [0.35, 0.65, 0.35] }}
+        transition={{ duration: rank === 1 ? 2.6 : 3.4, repeat: Infinity, ease: "easeInOut" }}
         className={cn(
-          "pointer-events-none absolute -top-12 left-1/2 -translate-x-1/2 rounded-full blur-3xl",
-          rank === 1 ? "w-40 h-40 bg-yellow-400/25" : rank === 2 ? "w-28 h-28 bg-slate-300/20" : "w-28 h-28 bg-amber-500/20",
+          "pointer-events-none absolute -top-14 left-1/2 -translate-x-1/2 rounded-full blur-3xl",
+          rank === 1 ? "w-44 h-44 bg-yellow-400/25" : rank === 2 ? "w-32 h-32 bg-slate-300/20" : "w-32 h-32 bg-amber-500/22",
         )}
       />
 
-      {/* medal pill */}
-      <div className={cn("relative z-10 flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[10px] font-bold tracking-widest mb-3", s.badgeBg, s.badgeText)}>
-        <span className="text-sm leading-none">{s.medalEmoji}</span>
+      {/* sparkles for #1 */}
+      {rank === 1 && (
+        <>
+          <motion.span
+            aria-hidden
+            animate={{ opacity: [0, 1, 0], y: [0, -4, 0] }}
+            transition={{ duration: 2.4, repeat: Infinity, delay: 0.2 }}
+            className="absolute top-3 left-3 text-yellow-300 text-xs"
+          >
+            ✦
+          </motion.span>
+          <motion.span
+            aria-hidden
+            animate={{ opacity: [0, 1, 0], y: [0, -3, 0] }}
+            transition={{ duration: 2.6, repeat: Infinity, delay: 0.9 }}
+            className="absolute top-5 right-3 text-amber-300 text-[10px]"
+          >
+            ✦
+          </motion.span>
+        </>
+      )}
+
+      {/* medal pill — floating, with crown for #1 */}
+      <div className={cn("relative z-10 flex items-center gap-1 px-2.5 py-0.5 rounded-full border text-[9px] font-extrabold tracking-[0.2em] mb-3 backdrop-blur-sm", s.badgeBg, s.badgeText)}>
+        <s.Icon className={cn("w-3 h-3", s.iconColor)} />
         <span>{s.medalLabel}</span>
       </div>
 
-      {/* avatar with neon ring */}
+      {/* avatar — gradient fill + glossy shine */}
       <motion.div
-        animate={rank === 1 ? { scale: [1, 1.04, 1] } : {}}
-        transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}
+        animate={rank === 1 ? { scale: [1, 1.035, 1] } : {}}
+        transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
         className={cn(
-          "relative z-10 rounded-full p-[2px] bg-gradient-to-br",
+          "relative z-10 rounded-full p-[2px] bg-gradient-to-br shadow-[0_8px_24px_-6px_rgba(0,0,0,0.6)]",
           s.ringGrad,
-          big ? "w-20 h-20" : "w-14 h-14",
+          big ? "w-[72px] h-[72px]" : "w-14 h-14",
         )}
       >
-        <div className="w-full h-full rounded-full bg-slate-950 flex items-center justify-center">
-          <span className={cn("font-black text-white", big ? "text-3xl" : "text-xl")}>{initial}</span>
+        <div className={cn("relative w-full h-full rounded-full overflow-hidden flex items-center justify-center", AVATAR_FILL[rank])}>
+          <span
+            className={cn(
+              "relative z-10 font-black text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)]",
+              big ? "text-[28px]" : "text-xl",
+            )}
+          >
+            {initial}
+          </span>
+          {/* glossy highlight */}
+          <span aria-hidden className="absolute inset-0 bg-[radial-gradient(60%_45%_at_30%_25%,rgba(255,255,255,0.55),transparent_70%)] mix-blend-overlay pointer-events-none" />
         </div>
-        <div className={cn("absolute -bottom-1 -right-1 rounded-full bg-slate-950 p-1 ring-2 ring-slate-950", big ? "w-8 h-8 flex items-center justify-center" : "w-6 h-6 flex items-center justify-center")}>
-          <s.Icon className={cn(s.iconColor, big ? "w-4 h-4" : "w-3 h-3")} />
-        </div>
+        {/* crown above #1 avatar */}
+        {rank === 1 && (
+          <motion.div
+            initial={{ y: 4, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ delay: 0.35, type: "spring", stiffness: 240 }}
+            className="absolute -top-3 left-1/2 -translate-x-1/2"
+          >
+            <Crown className="w-5 h-5 text-yellow-300 drop-shadow-[0_0_8px_rgba(250,204,21,0.7)] fill-yellow-400/30" />
+          </motion.div>
+        )}
       </motion.div>
 
       {/* name */}
-      <div className={cn("relative z-10 mt-3 font-bold text-white truncate max-w-full px-1", big ? "text-base" : "text-sm")}>
+      <div className={cn("relative z-10 mt-3 font-bold text-white truncate max-w-full px-1", big ? "text-[15px]" : "text-sm")}>
         {displayName}
         {isMine && (
           <span className="ml-1.5 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-300 border border-blue-500/25 align-middle">
@@ -308,36 +372,39 @@ function PodiumCard({
           </span>
         )}
       </div>
-      <div className="relative z-10 text-[10px] font-mono text-muted-foreground tracking-wider truncate max-w-full px-1">
+      <div className="relative z-10 text-[10px] font-mono text-slate-500 tracking-wider truncate max-w-full px-1 mt-0.5">
         {entry.publicId ?? `$${parseFloat(String(entry.investmentAmount)).toLocaleString()}`}
       </div>
 
-      {/* profit — neon green count-up */}
+      {/* divider */}
+      <div className="relative z-10 my-2.5 h-px w-10 bg-gradient-to-r from-transparent via-white/15 to-transparent" />
+
+      {/* profit — count-up */}
       <motion.div
         animate={{
           textShadow: [
-            "0 0 14px rgba(52,211,153,0.45)",
-            "0 0 26px rgba(52,211,153,0.85)",
-            "0 0 14px rgba(52,211,153,0.45)",
+            "0 0 12px rgba(52,211,153,0.4)",
+            "0 0 22px rgba(52,211,153,0.8)",
+            "0 0 12px rgba(52,211,153,0.4)",
           ],
         }}
-        transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
+        transition={{ duration: 2.6, repeat: Infinity, ease: "easeInOut" }}
         className={cn(
-          "relative z-10 mt-3 font-black tabular-nums text-emerald-400",
-          big ? "text-2xl sm:text-3xl" : "text-lg sm:text-xl",
+          "relative z-10 font-black tabular-nums text-emerald-400 leading-none",
+          big ? "text-[26px] sm:text-[30px]" : "text-lg sm:text-xl",
         )}
       >
         <CountUp value={profit} prefix="+$" duration={big ? 1.8 : 1.4} />
       </motion.div>
 
-      {/* live profit pulse label */}
-      <div className="relative z-10 mt-1 flex items-center gap-1.5">
+      {/* tiny live indicator */}
+      <div className="relative z-10 mt-2 inline-flex items-center gap-1">
         <span className="relative flex h-1.5 w-1.5">
           <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75 animate-ping" />
           <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400" />
         </span>
-        <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-300/90">
-          Live profit
+        <span className="text-[9px] font-bold uppercase tracking-[0.18em] text-emerald-300/80">
+          Live · 7d
         </span>
       </div>
     </motion.div>
