@@ -1239,27 +1239,8 @@ export default function PortfolioPage() {
   return (
     <Layout>
       <PortfolioInner />
-      <div className="relative">
-        {isLocked && (
-          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center pointer-events-none">
-            <div className="pointer-events-auto rounded-2xl border border-amber-500/30 bg-[#0d1525]/90 backdrop-blur-md px-6 py-5 text-center shadow-2xl shadow-black/60 max-w-md mx-4">
-              <div className="mx-auto w-12 h-12 rounded-xl bg-amber-500/15 border border-amber-500/40 flex items-center justify-center mb-3">
-                <Lock className="w-6 h-6 text-amber-400" />
-              </div>
-              <h3 className="text-base md:text-lg font-bold text-white">Performance Insights Locked</h3>
-              <p className="text-xs md:text-sm text-muted-foreground mt-1.5">
-                Start trading to unlock your live equity curve, daily P&amp;L, rolling returns and performance metrics.
-              </p>
-              <Link
-                href="/invest"
-                className="inline-flex items-center gap-1.5 mt-3 px-4 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-bold transition-all"
-              >
-                <Sparkles className="w-3.5 h-3.5" /> Start Trading <ArrowUpRight className="w-3.5 h-3.5" />
-              </Link>
-            </div>
-          </div>
-        )}
-        <div className={isLocked ? "blur-md select-none pointer-events-none" : ""} aria-hidden={isLocked}>
+      <div>
+        <div>
           <div className="px-4 md:px-8 pt-2 max-w-7xl mx-auto">
             <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
               <div>
