@@ -161,6 +161,178 @@ function ReferralLeaderboard({ userId }: { userId: number }) {
 }
 
 // ---------------------------------------------------------------------------
+// Top-3 Podium
+// ---------------------------------------------------------------------------
+type PodiumStyle = {
+  ringGrad: string;
+  glow: string;
+  badgeBg: string;
+  badgeText: string;
+  medalEmoji: string;
+  medalLabel: string;
+  Icon: React.ElementType;
+  iconColor: string;
+};
+
+const PODIUM_STYLES: Record<1 | 2 | 3, PodiumStyle> = {
+  1: {
+    ringGrad: "from-yellow-300 via-amber-400 to-yellow-600",
+    glow: "shadow-[0_0_60px_-10px_rgba(250,204,21,0.6)]",
+    badgeBg: "bg-yellow-400/20 border-yellow-400/40",
+    badgeText: "text-yellow-300",
+    medalEmoji: "🥇",
+    medalLabel: "GOLD",
+    Icon: Crown,
+    iconColor: "text-yellow-300",
+  },
+  2: {
+    ringGrad: "from-slate-200 via-slate-300 to-slate-500",
+    glow: "shadow-[0_0_36px_-12px_rgba(203,213,225,0.5)]",
+    badgeBg: "bg-slate-300/15 border-slate-300/30",
+    badgeText: "text-slate-200",
+    medalEmoji: "🥈",
+    medalLabel: "SILVER",
+    Icon: Trophy,
+    iconColor: "text-slate-200",
+  },
+  3: {
+    ringGrad: "from-amber-500 via-orange-600 to-amber-800",
+    glow: "shadow-[0_0_36px_-12px_rgba(217,119,6,0.5)]",
+    badgeBg: "bg-amber-600/15 border-amber-600/30",
+    badgeText: "text-amber-400",
+    medalEmoji: "🥉",
+    medalLabel: "BRONZE",
+    Icon: Medal,
+    iconColor: "text-amber-400",
+  },
+};
+
+function PodiumCard({
+  entry,
+  rank,
+  isMine,
+  big,
+}: {
+  entry: InvestorEntry;
+  rank: 1 | 2 | 3;
+  isMine: boolean;
+  big?: boolean;
+}) {
+  const s = PODIUM_STYLES[rank];
+  const displayName = entry.publicId ? entry.fullName : (entry.fullName?.split(" ")[0] ?? "Trader");
+  const initial = (displayName?.trim()?.[0] ?? "T").toUpperCase();
+  const profit = parseFloat(String(entry.weeklyProfit));
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 24 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: rank === 1 ? 0 : 0.1, duration: 0.5, ease: "easeOut" }}
+      className={cn(
+        "relative rounded-2xl border bg-gradient-to-b from-white/[0.05] to-white/[0.01] border-white/10 backdrop-blur-sm flex flex-col items-center text-center overflow-hidden",
+        s.glow,
+        big ? "px-3 py-5 sm:px-4 sm:py-6" : "px-3 py-4 sm:px-3.5 sm:py-5",
+        big && "sm:scale-105 sm:-translate-y-2",
+        isMine && "ring-2 ring-blue-400/60",
+      )}
+    >
+      {/* animated glow halo */}
+      <motion.div
+        aria-hidden
+        animate={{ opacity: [0.35, 0.7, 0.35] }}
+        transition={{ duration: rank === 1 ? 2.4 : 3.2, repeat: Infinity, ease: "easeInOut" }}
+        className={cn(
+          "pointer-events-none absolute -top-12 left-1/2 -translate-x-1/2 rounded-full blur-3xl",
+          rank === 1 ? "w-40 h-40 bg-yellow-400/25" : rank === 2 ? "w-28 h-28 bg-slate-300/20" : "w-28 h-28 bg-amber-500/20",
+        )}
+      />
+
+      {/* medal pill */}
+      <div className={cn("relative z-10 flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[10px] font-bold tracking-widest mb-3", s.badgeBg, s.badgeText)}>
+        <span className="text-sm leading-none">{s.medalEmoji}</span>
+        <span>{s.medalLabel}</span>
+      </div>
+
+      {/* avatar with neon ring */}
+      <motion.div
+        animate={rank === 1 ? { scale: [1, 1.04, 1] } : {}}
+        transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}
+        className={cn(
+          "relative z-10 rounded-full p-[2px] bg-gradient-to-br",
+          s.ringGrad,
+          big ? "w-20 h-20" : "w-14 h-14",
+        )}
+      >
+        <div className="w-full h-full rounded-full bg-slate-950 flex items-center justify-center">
+          <span className={cn("font-black text-white", big ? "text-3xl" : "text-xl")}>{initial}</span>
+        </div>
+        <div className={cn("absolute -bottom-1 -right-1 rounded-full bg-slate-950 p-1 ring-2 ring-slate-950", big ? "w-8 h-8 flex items-center justify-center" : "w-6 h-6 flex items-center justify-center")}>
+          <s.Icon className={cn(s.iconColor, big ? "w-4 h-4" : "w-3 h-3")} />
+        </div>
+      </motion.div>
+
+      {/* name */}
+      <div className={cn("relative z-10 mt-3 font-bold text-white truncate max-w-full px-1", big ? "text-base" : "text-sm")}>
+        {displayName}
+        {isMine && (
+          <span className="ml-1.5 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-300 border border-blue-500/25 align-middle">
+            You
+          </span>
+        )}
+      </div>
+      <div className="relative z-10 text-[10px] font-mono text-muted-foreground tracking-wider truncate max-w-full px-1">
+        {entry.publicId ?? `$${parseFloat(String(entry.investmentAmount)).toLocaleString()}`}
+      </div>
+
+      {/* profit — neon green, big */}
+      <motion.div
+        animate={{ opacity: [0.92, 1, 0.92] }}
+        transition={{ duration: 2.6, repeat: Infinity, ease: "easeInOut" }}
+        className={cn(
+          "relative z-10 mt-3 font-black tabular-nums text-emerald-400 [text-shadow:0_0_18px_rgba(52,211,153,0.55)]",
+          big ? "text-2xl sm:text-3xl" : "text-lg sm:text-xl",
+        )}
+      >
+        +${profit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+      </motion.div>
+      <div className="relative z-10 text-[10px] text-muted-foreground uppercase tracking-widest mt-0.5">this week</div>
+    </motion.div>
+  );
+}
+
+function PodiumTop3({ entries, userId }: { entries: InvestorEntry[]; userId: number }) {
+  const [first, second, third] = entries;
+  return (
+    <div className="mb-4 grid grid-cols-3 gap-2 sm:gap-3 items-end">
+      {/* #2 left */}
+      <div>
+        {second ? (
+          <PodiumCard entry={second} rank={2} isMine={second.id === userId} />
+        ) : (
+          <div className="h-full" />
+        )}
+      </div>
+      {/* #1 center, big */}
+      <div>
+        {first ? (
+          <PodiumCard entry={first} rank={1} isMine={first.id === userId} big />
+        ) : (
+          <div className="h-full" />
+        )}
+      </div>
+      {/* #3 right */}
+      <div>
+        {third ? (
+          <PodiumCard entry={third} rank={3} isMine={third.id === userId} />
+        ) : (
+          <div className="h-full" />
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Weekly investors tab
 // ---------------------------------------------------------------------------
 function WeeklyLeaderboard({ userId }: { userId: number }) {
@@ -195,91 +367,57 @@ function WeeklyLeaderboard({ userId }: { userId: number }) {
           sub="Profits are counted Monday–Sunday"
         />
       ) : (
-        list.map((entry, i) => {
-          const rank = i + 1;
-          const isTop3 = rank <= 3;
-          const isMine = entry.id === userId;
-          const displayName = entry.publicId ? entry.fullName : maskName(entry.fullName, userId, entry.id);
-          const initial = (displayName?.trim()?.[0] ?? "T").toUpperCase();
-          const profit = parseFloat(String(entry.weeklyProfit));
-          const rankAccent = rank === 1
-            ? "from-yellow-400/25 via-amber-500/10 to-transparent border-yellow-400/30 shadow-[0_0_24px_-8px_rgba(250,204,21,0.4)]"
-            : rank === 2
-            ? "from-slate-200/20 via-slate-400/8 to-transparent border-slate-300/25 shadow-[0_0_18px_-10px_rgba(203,213,225,0.35)]"
-            : rank === 3
-            ? "from-amber-600/20 via-orange-700/8 to-transparent border-amber-600/25 shadow-[0_0_18px_-10px_rgba(217,119,6,0.35)]"
-            : "";
-          const avatarGrad = rank === 1
-            ? "from-yellow-400 to-amber-600"
-            : rank === 2
-            ? "from-slate-200 to-slate-400"
-            : rank === 3
-            ? "from-amber-500 to-orange-700"
-            : "from-blue-500/80 to-indigo-600/80";
-
-          return (
-            <motion.div
-              key={entry.id}
-              initial={{ opacity: 0, x: -8 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: i * 0.04 }}
-              whileHover={{ scale: 1.01 }}
-              className={cn(
-                "relative flex items-center gap-3 rounded-xl border transition-all overflow-hidden",
-                isTop3 ? "px-3.5 py-3.5" : "px-3 py-2.5",
-                isMine
-                  ? "bg-blue-500/10 border-blue-500/30 shadow-[0_0_20px_-8px_rgba(59,130,246,0.45)]"
-                  : isTop3
-                  ? `bg-gradient-to-r ${rankAccent}`
-                  : "bg-white/[0.025] border-white/6 hover:bg-white/[0.05]"
-              )}
-            >
-              <div className="w-7 flex items-center justify-center shrink-0">
-                <RankMedal rank={rank} />
-              </div>
-              <div
+        <>
+          {list.length >= 1 && <PodiumTop3 entries={list.slice(0, 3)} userId={userId} />}
+          {list.slice(3).map((entry, idx) => {
+            const rank = idx + 4;
+            const isMine = entry.id === userId;
+            const displayName = entry.publicId ? entry.fullName : maskName(entry.fullName, userId, entry.id);
+            const initial = (displayName?.trim()?.[0] ?? "T").toUpperCase();
+            const profit = parseFloat(String(entry.weeklyProfit));
+            return (
+              <motion.div
+                key={entry.id}
+                initial={{ opacity: 0, x: -8 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: idx * 0.04 }}
+                whileHover={{ scale: 1.01 }}
                 className={cn(
-                  "shrink-0 rounded-full bg-gradient-to-br flex items-center justify-center font-extrabold text-slate-900 ring-2 ring-white/10",
-                  avatarGrad,
-                  isTop3 ? "w-10 h-10 text-base" : "w-8 h-8 text-sm"
+                  "relative flex items-center gap-3 px-3 py-2.5 rounded-xl border transition-all",
+                  isMine
+                    ? "bg-blue-500/10 border-blue-500/30 shadow-[0_0_20px_-8px_rgba(59,130,246,0.45)]"
+                    : "bg-white/[0.025] border-white/6 hover:bg-white/[0.05]"
                 )}
               >
-                {initial}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1.5">
-                  <span className={cn("font-bold text-white truncate", isTop3 ? "text-base" : "text-sm")}>
-                    {displayName}
-                  </span>
-                  {rank === 1 && (
-                    <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-yellow-400/15 text-yellow-300 border border-yellow-400/25">
-                      Top
-                    </span>
-                  )}
-                  {isMine && (
-                    <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-300 border border-blue-500/25">
-                      You
-                    </span>
-                  )}
+                <div className="w-7 flex items-center justify-center shrink-0">
+                  <span className="text-muted-foreground text-xs font-bold">#{rank}</span>
                 </div>
-                <div className="text-[10px] font-mono text-muted-foreground tracking-wider truncate">
-                  {entry.publicId ?? `$${parseFloat(String(entry.investmentAmount)).toLocaleString()} invested`}
+                <div className="shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-blue-500/80 to-indigo-600/80 flex items-center justify-center font-extrabold text-slate-900 text-sm ring-2 ring-white/10">
+                  {initial}
                 </div>
-              </div>
-              <div className="text-right shrink-0">
-                <div
-                  className={cn(
-                    "font-extrabold text-emerald-400 tabular-nums",
-                    isTop3 ? "text-lg" : "text-sm"
-                  )}
-                >
-                  +${profit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-bold text-white text-sm truncate">{displayName}</span>
+                    {isMine && (
+                      <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-300 border border-blue-500/25">
+                        You
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-[10px] font-mono text-muted-foreground tracking-wider truncate">
+                    {entry.publicId ?? `$${parseFloat(String(entry.investmentAmount)).toLocaleString()} invested`}
+                  </div>
                 </div>
-                <div className="text-[10px] text-muted-foreground uppercase tracking-wider">this week</div>
-              </div>
-            </motion.div>
-          );
-        })
+                <div className="text-right shrink-0">
+                  <div className="font-extrabold text-emerald-400 tabular-nums text-sm">
+                    +${profit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </div>
+                  <div className="text-[10px] text-muted-foreground uppercase tracking-wider">this week</div>
+                </div>
+              </motion.div>
+            );
+          })}
+        </>
       )}
     </div>
   );
