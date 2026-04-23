@@ -244,6 +244,31 @@ function StickyNav({ navigate }: { navigate: (p: string) => void }) {
   );
 }
 
+/* Live XAU/USD spot price — refreshes every 60s from gold-api.com */
+function useXauSpotPrice() {
+  const [price, setPrice] = useState<number | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    const fetchPrice = async () => {
+      try {
+        const res = await fetch("https://api.gold-api.com/price/XAU");
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!cancelled && typeof data.price === "number") setPrice(data.price);
+      } catch {
+        /* silent fail — UI shows fallback */
+      }
+    };
+    fetchPrice();
+    const id = setInterval(fetchPrice, 60_000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, []);
+  return price;
+}
+
 /* XAUUSD rotating live trade — cycle of 15 trades: 12 TP + 3 SL (SL random positions) */
 function useXauusdLiveTrade() {
   const [tick, setTick] = useState(0);
@@ -298,6 +323,7 @@ function useXauusdLiveTrade() {
 
 function HeroDashboardMock() {
   const trade = useXauusdLiveTrade();
+  const xauPrice = useXauSpotPrice();
   const pnlText = `${trade.pnl >= 0 ? "+" : "-"}$${Math.abs(trade.pnl).toFixed(2)}`;
   const pnlColor = trade.pnl >= 0 ? "text-emerald-400" : "text-red-400";
   const stripBg = trade.isClosed
@@ -311,11 +337,16 @@ function HeroDashboardMock() {
   const iconColor = trade.isClosed && trade.isSL
     ? "text-red-400"
     : "text-emerald-400";
+  const priceLabel = xauPrice
+    ? `$${xauPrice.toFixed(2)}`
+    : null;
   const subText = trade.isClosed
     ? trade.isSL
       ? `Closed · SL hit · ${pnlText}`
       : `Closed · TP hit · ${pnlText}`
-    : `Position open · running ${trade.runningMin}m`;
+    : priceLabel
+      ? `Entry ${priceLabel} · running ${trade.runningMin}m`
+      : `Position open · running ${trade.runningMin}m`;
 
   return (
     <motion.div
