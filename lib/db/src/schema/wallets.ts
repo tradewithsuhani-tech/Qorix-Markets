@@ -22,6 +22,10 @@ export const walletsTable = pgTable("wallets", {
   dailyPnlTargetPct: numeric("daily_pnl_target_pct", { precision: 6, scale: 4 }).notNull().default("0"),
   dailyPnlChunks: text("daily_pnl_chunks").notNull().default("[]"),
   dailyPnlIncrementsDone: integer("daily_pnl_increments_done").notNull().default(0),
+  // Per-user "Active Trading Fund" display boost: random $100–$1000 every 30 min,
+  // display-only — never affects real investments or accounting.
+  tradingFundBoost: numeric("trading_fund_boost", { precision: 18, scale: 2 }).notNull().default("0"),
+  tradingFundLastAt: bigint("trading_fund_last_at", { mode: "number" }).notNull().default(0),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
