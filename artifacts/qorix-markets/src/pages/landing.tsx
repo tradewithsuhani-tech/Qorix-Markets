@@ -256,9 +256,9 @@ function useXauusdLiveTrade() {
     return () => clearInterval(id);
   }, []);
 
-  // 6s per trade: 4s RUNNING + 2s CLOSED
-  const TRADE_SEC = 6;
-  const RUN_SEC = 4;
+  // 30s per trade: 22s RUNNING + 8s CLOSED — slower, calmer pace
+  const TRADE_SEC = 30;
+  const RUN_SEC = 22;
   const tradeIdx = Math.floor(tick / TRADE_SEC);
   const phaseSec = tick % TRADE_SEC;
   const cycleIdx = Math.floor(tradeIdx / 15);
@@ -278,9 +278,8 @@ function useXauusdLiveTrade() {
   const isSL = cycleRef.current.sl.has(inCycle);
   const isClosed = phaseSec >= RUN_SEC;
 
-  // Per-trade deterministic values
+  // Per-trade deterministic values (no fake price — real-time XAU needs API)
   const tradeSeed = (tradeIdx * 2654435761) >>> 0;
-  const entry = 2340 + ((tradeSeed % 4500) / 100); // 2340 - 2385
   const tpPnl = 4 + ((tradeSeed >> 4) % 900) / 100; // $4.00 - $13.00
   const slPnl = 1.5 + ((tradeSeed >> 7) % 250) / 100; // $1.50 - $4.00
   const runMin = 1 + ((tradeSeed >> 11) % 30); // 1 - 30 min display
@@ -290,7 +289,6 @@ function useXauusdLiveTrade() {
   return {
     pair: "XAUUSD",
     side: "BUY" as const,
-    entry: entry.toFixed(2),
     runningMin: runMin,
     isClosed,
     isSL,
@@ -317,7 +315,7 @@ function HeroDashboardMock() {
     ? trade.isSL
       ? `Closed · SL hit · ${pnlText}`
       : `Closed · TP hit · ${pnlText}`
-    : `Entry $${trade.entry} · running ${trade.runningMin}m`;
+    : `Position open · running ${trade.runningMin}m`;
 
   return (
     <motion.div
