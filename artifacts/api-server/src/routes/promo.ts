@@ -222,4 +222,32 @@ router.post("/promo/redeem", async (req: AuthRequest, res) => {
   }
 });
 
+/**
+ * DELETE /api/promo/redemption
+ * Cancels a pending (status="redeemed") redemption so the user can apply a
+ * different code or simply walk away. Does NOT touch credited rows — once
+ * the bonus has actually been paid out it cannot be reversed from here.
+ */
+router.delete("/promo/redemption", async (req: AuthRequest, res) => {
+  const userId = req.userId!;
+  try {
+    const existing = await fetchUserRedemption(userId);
+    if (!existing) {
+      res.json({ success: true, cleared: false });
+      return;
+    }
+    if (existing.status === "credited") {
+      res.status(409).json({ error: "Bonus already credited — cannot remove." });
+      return;
+    }
+    await db
+      .delete(promoRedemptionsTable)
+      .where(eq(promoRedemptionsTable.userId, userId));
+    res.json({ success: true, cleared: true });
+  } catch (err: any) {
+    logger.error({ err, userId }, "Failed to clear promo redemption");
+    res.status(500).json({ error: "Failed to clear redemption" });
+  }
+});
+
 export default router;

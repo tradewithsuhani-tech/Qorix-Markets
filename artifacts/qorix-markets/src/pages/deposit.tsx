@@ -28,7 +28,7 @@ import { PromoBonusBanner } from "@/components/promo-bonus-banner";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { authFetch } from "@/lib/auth-fetch";
 import { useToast } from "@/hooks/use-toast";
-import { BadgePercent, Gift, Sparkles, ClipboardPaste } from "lucide-react";
+import { BadgePercent, Gift, Sparkles, ClipboardPaste, X } from "lucide-react";
 
 const DEPOSIT_BANNERS = [
   { src: `${import.meta.env.BASE_URL}promo/banner-4-automate.png`, alt: "Automate. Invest. Grow. — Trade Smarter, Not Harder" },
@@ -149,6 +149,36 @@ export default function DepositPage() {
       });
     },
   });
+
+  const clearPromo = useMutation({
+    mutationFn: () =>
+      authFetch<{ success: boolean }>("/api/promo/redemption", { method: "DELETE" }),
+    onSuccess: () => {
+      setPromoInput("");
+      refetchPromo();
+    },
+    onError: (err: any) => {
+      toast({
+        title: "Could not remove promo",
+        description: err?.message ?? "Try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Auto-clear any pending (uncredited) promo redemption when the user
+  // navigates away from the deposit page — so coming back shows a fresh
+  // offer instead of a stale "applied" indicator.
+  useEffect(() => {
+    return () => {
+      const status = promoOffer?.redemption?.status;
+      if (status === "redeemed") {
+        // Fire-and-forget; user is already leaving.
+        authFetch("/api/promo/redemption", { method: "DELETE" }).catch(() => {});
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [promoOffer?.redemption?.status]);
 
   const { data: historyData, isLoading: historyLoading, refetch } = useGetBlockchainDepositHistory(
     { limit: 20 },
@@ -354,7 +384,21 @@ export default function DepositPage() {
                             </div>
                           </div>
                         </div>
-                        <BadgePercent className="w-4 h-4 text-emerald-400" />
+                        <div className="flex items-center gap-1.5">
+                          <BadgePercent className="w-4 h-4 text-emerald-400" />
+                          {promoOffer.redemption?.status === "redeemed" && (
+                            <button
+                              type="button"
+                              onClick={() => clearPromo.mutate()}
+                              disabled={clearPromo.isPending}
+                              className="text-emerald-400/70 hover:text-emerald-300 hover:bg-emerald-500/10 rounded p-1 transition disabled:opacity-50"
+                              aria-label="Remove promo code"
+                              title="Remove promo code"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
                       </div>
                     ) : (
                       <div className="flex gap-2">
