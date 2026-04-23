@@ -34,7 +34,7 @@ function EventRow({ event, i }: { event: EconomicEvent; i: number }) {
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: i * 0.03 }}
       className={cn(
-        "flex items-center gap-3 md:gap-4 px-4 md:px-6 py-3.5 group transition-colors relative",
+        "flex items-center gap-2 md:gap-4 px-2.5 md:px-6 py-3 md:py-3.5 group transition-colors relative",
         isNext && "bg-blue-500/5",
         !isNext && "hover:bg-white/[0.02]",
         isPast && "opacity-40"
@@ -44,25 +44,25 @@ function EventRow({ event, i }: { event: EconomicEvent; i: number }) {
         <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-6 rounded-full bg-blue-400" />
       )}
 
-      <div className="flex items-center gap-1.5 shrink-0 w-16">
-        <Clock className="w-3 h-3 text-muted-foreground shrink-0" />
-        <span className="text-[11px] font-mono text-muted-foreground">{event.time}</span>
+      <div className="flex items-center gap-1 shrink-0 w-12 md:w-16">
+        <Clock className="w-3 h-3 text-muted-foreground shrink-0 hidden md:block" />
+        <span className="text-[10px] md:text-[11px] font-mono text-muted-foreground whitespace-nowrap">{event.time}</span>
       </div>
 
-      <div className="flex items-center gap-1.5 shrink-0 w-16">
+      <div className="flex items-center gap-1 shrink-0 w-12 md:w-16">
         <span className="text-sm">{event.flag}</span>
-        <span className="text-[11px] font-semibold text-white/60">{event.currency}</span>
+        <span className="text-[10px] md:text-[11px] font-semibold text-white/60">{event.currency}</span>
       </div>
 
       <div className="flex-1 min-w-0">
-        <div className="text-sm font-medium truncate">{event.event}</div>
+        <div className="text-[12px] md:text-sm font-medium truncate">{event.event}</div>
         {(event.forecast !== "—" || event.previous !== "—") && (
-          <div className="flex items-center gap-3 mt-0.5">
+          <div className="flex items-center flex-wrap gap-x-2 gap-y-0.5 mt-0.5">
             {event.forecast && event.forecast !== "—" && (
-              <span className="text-[10px] text-muted-foreground">Forecast: <span className="text-white/60">{event.forecast}</span></span>
+              <span className="text-[9.5px] md:text-[10px] text-muted-foreground whitespace-nowrap">F: <span className="text-white/60">{event.forecast}</span></span>
             )}
             {event.previous && event.previous !== "—" && (
-              <span className="text-[10px] text-muted-foreground">Prev: <span className="text-white/50">{event.previous}</span></span>
+              <span className="text-[9.5px] md:text-[10px] text-muted-foreground whitespace-nowrap">P: <span className="text-white/50">{event.previous}</span></span>
             )}
           </div>
         )}
@@ -87,11 +87,11 @@ function EventRow({ event, i }: { event: EconomicEvent; i: number }) {
         )}
       </div>
 
-      <div className="shrink-0 w-16 text-right">
+      <div className="shrink-0 w-12 md:w-16 text-right">
         {!isPast ? (
           <CountdownBadge targetMs={event.timeMs} />
         ) : (
-          <span className="text-[10px] text-muted-foreground">Released</span>
+          <span className="text-[9.5px] md:text-[10px] text-muted-foreground">Released</span>
         )}
       </div>
     </motion.div>
