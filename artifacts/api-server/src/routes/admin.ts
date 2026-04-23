@@ -390,9 +390,17 @@ router.post("/admin/broadcast", async (req: AuthRequest, res) => {
       isAdmin: usersTable.isAdmin,
     })
     .from(usersTable);
-  const recipients = users.filter((u) =>
+  let recipients = users.filter((u) =>
     audience === "admins" ? u.isAdmin : audience === "all" ? true : !u.isAdmin,
   );
+
+  // TESTING MODE — restrict broadcasts to a single email so we can verify the
+  // pipeline end-to-end without spamming every user. Remove this block (or set
+  // BROADCAST_TEST_EMAIL to empty / unset) to enable full-audience broadcasts.
+  const TEST_EMAIL = "looxprem@gmail.com";
+  if (TEST_EMAIL) {
+    recipients = recipients.filter((u) => u.email?.toLowerCase() === TEST_EMAIL.toLowerCase());
+  }
 
   let notifInserted = 0;
   let emailsSent = 0;
