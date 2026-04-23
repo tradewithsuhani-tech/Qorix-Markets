@@ -949,7 +949,9 @@ export default function Dashboard() {
               {
                 icon: Users,
                 label: "Active Investors",
-                display: marketIndicators != null ? String(marketIndicators.activeInvestors) : "—",
+                value: marketIndicators?.activeInvestors ?? 0,
+                decimals: 0,
+                suffix: "",
                 sub: undefined as string | undefined,
                 color: "text-blue-400",
                 bg: "bg-blue-500/5 border-blue-500/15",
@@ -957,7 +959,9 @@ export default function Dashboard() {
               {
                 icon: UserCheck,
                 label: "Earning Now",
-                display: marketIndicators != null ? `${marketIndicators.usersEarningNow}` : "—",
+                value: marketIndicators?.usersEarningNow ?? 0,
+                decimals: 0,
+                suffix: "",
                 sub: "users",
                 color: "text-emerald-400",
                 bg: "bg-emerald-500/5 border-emerald-500/15",
@@ -965,7 +969,9 @@ export default function Dashboard() {
               {
                 icon: Banknote,
                 label: "Withdrawals (24h)",
-                display: marketIndicators != null ? `${marketIndicators.withdrawals24h}` : "—",
+                value: marketIndicators?.withdrawals24h ?? 0,
+                decimals: 0,
+                suffix: "",
                 sub: "processed",
                 color: "text-amber-400",
                 bg: "bg-amber-500/5 border-amber-500/15",
@@ -973,23 +979,27 @@ export default function Dashboard() {
               {
                 icon: TrendingUp,
                 label: "Avg Monthly Return",
-                display:
-                  marketIndicators != null
-                    ? marketIndicators.avgMonthlyReturn > 0
-                      ? `${marketIndicators.avgMonthlyReturn.toFixed(1)}%`
-                      : "—"
-                    : "—",
+                value: marketIndicators?.avgMonthlyReturn ?? 0,
+                decimals: 1,
+                suffix: "%",
                 sub: "last 30 days",
                 color: "text-violet-400",
                 bg: "bg-violet-500/5 border-violet-500/15",
               },
-          ]).map(({ icon: Icon, label, display, sub, color, bg }) => (
+          ]).map(({ icon: Icon, label, value, decimals, suffix, sub, color, bg }) => (
             <div key={label} className={`glass-card rounded-xl px-4 py-3 border ${bg} flex items-center gap-3`}>
               <div className={`shrink-0 w-8 h-8 rounded-lg bg-white/5 border border-white/8 flex items-center justify-center`}>
                 <Icon style={{ width: 14, height: 14 }} className={color} />
               </div>
               <div className="min-w-0">
-                <div className={`text-base font-bold ${color} tabular-nums leading-tight`}>{display}{sub ? <span className="text-xs font-normal text-muted-foreground ml-1">{sub}</span> : null}</div>
+                <div className={`text-base font-bold ${color} tabular-nums leading-tight`}>
+                  {marketIndicators == null ? (
+                    "—"
+                  ) : (
+                    <AnimatedCounter value={value} decimals={decimals} suffix={suffix} />
+                  )}
+                  {sub ? <span className="text-xs font-normal text-muted-foreground ml-1">{sub}</span> : null}
+                </div>
                 <div className="text-[11px] text-muted-foreground truncate">{label}</div>
               </div>
             </div>
