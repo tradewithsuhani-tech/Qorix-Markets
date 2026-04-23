@@ -583,8 +583,9 @@ export function GrowthPanel() {
               <p className="text-[10px] text-muted-foreground">Leaderboards · Promotions</p>
             </div>
           </div>
-          <span className="text-[10px] px-2 py-0.5 rounded-full border border-yellow-500/20 text-yellow-400 bg-yellow-500/8">
-            Live
+          <span className="live-pill inline-flex items-center gap-1.5 text-[11px] font-bold tracking-[0.14em] px-2.5 py-1 rounded-full border border-yellow-400/40 text-yellow-300 bg-gradient-to-r from-yellow-500/15 via-amber-500/12 to-yellow-500/15">
+            <span className="live-pill-dot" />
+            <span className="live-pill-text">LIVE</span>
           </span>
         </div>
 
