@@ -174,36 +174,42 @@ type TopRankStyle = {
   iconColor: string;
 };
 
-const TOP_RANK: Record<1 | 2 | 3, TopRankStyle> = {
+const TOP_RANK: Record<1 | 2 | 3, TopRankStyle & { accentBar: string; glow: string }> = {
   1: {
     ringGrad: "from-yellow-300 via-amber-400 to-yellow-600",
     avatarFill: "bg-[linear-gradient(135deg,#fde047,#f59e0b_55%,#b45309)]",
-    rowBg: "bg-[linear-gradient(to_right,rgba(250,204,21,0.10),rgba(250,204,21,0.02))]",
-    border: "border-yellow-400/25",
-    badgeBg: "bg-yellow-400/15 border-yellow-400/35",
-    badgeText: "text-yellow-300",
+    rowBg: "bg-[linear-gradient(to_right,rgba(250,204,21,0.22),rgba(250,204,21,0.06)_55%,transparent)]",
+    border: "border-yellow-400/40",
+    badgeBg: "bg-yellow-400/25 border-yellow-300/60 shadow-[0_0_14px_rgba(250,204,21,0.45)]",
+    badgeText: "text-yellow-200",
     Icon: Crown,
-    iconColor: "text-yellow-300",
+    iconColor: "text-yellow-200",
+    accentBar: "bg-gradient-to-b from-yellow-300 via-amber-400 to-yellow-600",
+    glow: "shadow-[inset_4px_0_0_rgba(250,204,21,0.85),0_0_22px_-8px_rgba(250,204,21,0.55)]",
   },
   2: {
     ringGrad: "from-slate-100 via-slate-300 to-slate-500",
     avatarFill: "bg-[linear-gradient(135deg,#f8fafc,#cbd5e1_55%,#64748b)]",
-    rowBg: "bg-[linear-gradient(to_right,rgba(203,213,225,0.08),rgba(203,213,225,0.015))]",
-    border: "border-slate-300/20",
-    badgeBg: "bg-slate-300/12 border-slate-300/25",
-    badgeText: "text-slate-200",
+    rowBg: "bg-[linear-gradient(to_right,rgba(203,213,225,0.18),rgba(203,213,225,0.04)_55%,transparent)]",
+    border: "border-slate-300/35",
+    badgeBg: "bg-slate-200/22 border-slate-100/50 shadow-[0_0_12px_rgba(226,232,240,0.35)]",
+    badgeText: "text-white",
     Icon: Trophy,
-    iconColor: "text-slate-200",
+    iconColor: "text-white",
+    accentBar: "bg-gradient-to-b from-slate-100 via-slate-300 to-slate-500",
+    glow: "shadow-[inset_4px_0_0_rgba(226,232,240,0.85),0_0_18px_-8px_rgba(226,232,240,0.45)]",
   },
   3: {
     ringGrad: "from-cyan-100 via-sky-300 to-slate-400",
     avatarFill: "bg-[linear-gradient(135deg,#ecfeff,#7dd3fc_55%,#475569)]",
-    rowBg: "bg-[linear-gradient(to_right,rgba(125,211,252,0.08),rgba(125,211,252,0.015))]",
-    border: "border-sky-300/20",
-    badgeBg: "bg-sky-300/12 border-sky-300/25",
-    badgeText: "text-sky-200",
+    rowBg: "bg-[linear-gradient(to_right,rgba(125,211,252,0.18),rgba(125,211,252,0.04)_55%,transparent)]",
+    border: "border-sky-300/35",
+    badgeBg: "bg-sky-300/22 border-sky-200/55 shadow-[0_0_12px_rgba(125,211,252,0.4)]",
+    badgeText: "text-sky-100",
     Icon: Medal,
-    iconColor: "text-sky-200",
+    iconColor: "text-sky-100",
+    accentBar: "bg-gradient-to-b from-cyan-200 via-sky-300 to-slate-400",
+    glow: "shadow-[inset_4px_0_0_rgba(125,211,252,0.85),0_0_18px_-8px_rgba(125,211,252,0.45)]",
   },
 };
 
@@ -333,20 +339,20 @@ function WeeklyLeaderboard({ userId }: { userId: number }) {
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: idx * 0.025 }}
                     className={cn(
-                      "grid grid-cols-[44px_minmax(0,1.6fr)_minmax(0,1.2fr)_minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1fr)] gap-2 px-3 items-center transition-colors",
-                      isTop3 ? "py-3" : "py-2.5",
+                      "relative grid grid-cols-[44px_minmax(0,1.6fr)_minmax(0,1.2fr)_minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1fr)] gap-2 px-3 items-center transition-colors",
+                      isTop3 ? "py-4" : "py-2.5",
                       isMine
                         ? "bg-blue-500/8 hover:bg-blue-500/12"
                         : top
-                        ? cn(top.rowBg, "hover:brightness-125")
+                        ? cn(top.rowBg, top.glow, "hover:brightness-125")
                         : "hover:bg-white/[0.03]",
                     )}
                   >
                     {/* Rank — medal icon for top 3, # for rest */}
                     <div className="flex items-center justify-center">
                       {top ? (
-                        <div className={cn("flex items-center justify-center w-7 h-7 rounded-full border", top.badgeBg)}>
-                          <top.Icon className={cn("w-3.5 h-3.5", top.iconColor)} />
+                        <div className={cn("flex items-center justify-center rounded-full border-2", top.badgeBg, rank === 1 ? "w-10 h-10" : "w-9 h-9")}>
+                          <top.Icon className={cn(rank === 1 ? "w-5 h-5" : "w-4 h-4", top.iconColor)} />
                         </div>
                       ) : (
                         <span className="text-xs font-semibold text-slate-500 tabular-nums">#{rank}</span>
@@ -354,12 +360,13 @@ function WeeklyLeaderboard({ userId }: { userId: number }) {
                     </div>
 
                     {/* Name (avatar + name) */}
-                    <div className="flex items-center gap-2 min-w-0">
+                    <div className="flex items-center gap-2.5 min-w-0">
                       <div
                         className={cn(
-                          "shrink-0 rounded-full overflow-hidden flex items-center justify-center font-bold text-white ring-1 ring-white/10",
+                          "shrink-0 rounded-full overflow-hidden flex items-center justify-center font-bold text-white",
                           top ? top.avatarFill : "bg-gradient-to-br from-blue-500/80 to-indigo-600/80",
-                          isTop3 ? "w-8 h-8 text-sm" : "w-7 h-7 text-xs",
+                          top ? "ring-2 ring-white/25" : "ring-1 ring-white/10",
+                          rank === 1 ? "w-11 h-11 text-base" : isTop3 ? "w-10 h-10 text-sm" : "w-7 h-7 text-xs",
                         )}
                       >
                         {initial}
@@ -368,7 +375,9 @@ function WeeklyLeaderboard({ userId }: { userId: number }) {
                         <span
                           className={cn(
                             "truncate text-white",
-                            isTop3 ? "text-[14px] font-extrabold" : "text-[13px] font-semibold",
+                            rank === 1 ? "text-[17px] font-black tracking-tight drop-shadow-[0_1px_8px_rgba(250,204,21,0.35)]"
+                              : isTop3 ? "text-[15px] font-extrabold"
+                              : "text-[13px] font-semibold",
                           )}
                         >
                           {displayName}
@@ -388,8 +397,10 @@ function WeeklyLeaderboard({ userId }: { userId: number }) {
 
                     {/* Trading Fund */}
                     <div className={cn(
-                      "text-right tabular-nums text-slate-300",
-                      isTop3 ? "text-[13px] font-bold" : "text-[12px] font-semibold",
+                      "text-right tabular-nums",
+                      rank === 1 ? "text-[16px] font-extrabold text-white"
+                        : isTop3 ? "text-[15px] font-bold text-slate-100"
+                        : "text-[12px] font-semibold text-slate-300",
                     )}>
                       ${tradingFund.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                     </div>
@@ -397,15 +408,19 @@ function WeeklyLeaderboard({ userId }: { userId: number }) {
                     {/* P&L */}
                     <div className={cn(
                       "text-right tabular-nums text-emerald-400",
-                      isTop3 ? "text-[14px] font-extrabold" : "text-[13px] font-bold",
+                      rank === 1 ? "text-[17px] font-black drop-shadow-[0_1px_8px_rgba(52,211,153,0.4)]"
+                        : isTop3 ? "text-[16px] font-extrabold"
+                        : "text-[13px] font-bold",
                     )}>
                       +${profit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </div>
 
                     {/* Payout */}
                     <div className={cn(
-                      "text-right tabular-nums text-amber-300",
-                      isTop3 ? "text-[13px] font-bold" : "text-[12px] font-semibold",
+                      "text-right tabular-nums",
+                      rank === 1 ? "text-[16px] font-extrabold text-amber-200 drop-shadow-[0_1px_8px_rgba(250,204,21,0.4)]"
+                        : isTop3 ? "text-[15px] font-bold text-amber-300"
+                        : "text-[12px] font-semibold text-amber-300",
                     )}>
                       ${payout.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </div>
