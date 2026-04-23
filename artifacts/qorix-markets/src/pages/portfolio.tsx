@@ -1029,6 +1029,7 @@ function RecentTradeAttribution() {
 }
 
 export default function PortfolioPage() {
+  const { data: summary } = useGetDashboardSummary({ query: { refetchInterval: 60000 } });
   return (
     <Layout>
       <PortfolioInner />
