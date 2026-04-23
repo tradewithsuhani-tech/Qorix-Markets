@@ -142,10 +142,10 @@ function RiskMeter({ score }: { score: number }) {
   );
 }
 
-function ExpectedReturns({ profile, amount }: { profile: typeof RISK_PROFILES[0]; amount: number }) {
+function ExpectedReturns({ profile, amount, drawdownLimit }: { profile: typeof RISK_PROFILES[0]; amount: number; drawdownLimit: number }) {
   const monthlyMin = (amount * profile.monthlyMinPct) / 100;
   const monthlyMax = (amount * profile.monthlyMaxPct) / 100;
-  const protection = (amount * profile.drawdownLimit) / 100;
+  const protection = (amount * drawdownLimit) / 100;
 
   return (
     <motion.div
@@ -1109,9 +1109,10 @@ export default function InvestPage() {
                 <AnimatePresence mode="wait">
                   {numAmount > 0 ? (
                     <ExpectedReturns
-                      key={`${selectedProfile.id}-${numAmount}`}
+                      key={`${selectedProfile.id}-${numAmount}-${pendingLimit ?? selectedProfile.drawdownLimit}`}
                       profile={selectedProfile}
                       amount={numAmount}
+                      drawdownLimit={pendingLimit ?? (RISK_DEFAULT_DRAWDOWN[riskLevel.toLowerCase()] ?? selectedProfile.drawdownLimit)}
                     />
                   ) : (
                     <motion.div
@@ -1137,7 +1138,7 @@ export default function InvestPage() {
                     { label: "Strategy", value: selectedProfile.label },
                     { label: "Daily Rate", value: `${selectedProfile.minDailyPct}–${selectedProfile.maxDailyPct}%`, highlight: true },
                     { label: "Risk Level", value: selectedProfile.volatility },
-                    { label: "Drawdown Limit", value: `${selectedProfile.drawdownLimit}%` },
+                    { label: "Drawdown Limit", value: `${pendingLimit ?? (RISK_DEFAULT_DRAWDOWN[riskLevel.toLowerCase()] ?? selectedProfile.drawdownLimit)}%` },
                     { label: "Compounding", value: "Configurable post-start" },
                   ].map(({ label, value, highlight }) => (
                     <div key={label} className="flex justify-between items-center py-1 border-b border-white/[0.04] last:border-0">
