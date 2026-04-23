@@ -929,7 +929,7 @@ export function DemoDashboardBody({
           />
         </div>
       </div>
-      <div className="flex-1" style={{ minHeight: 260 }}>
+      <div className="flex-1" style={{ height: 260, minHeight: 260 }}>
         {equityLoading ? (
           <div className="w-full h-full flex items-end gap-1 pb-2">
             {Array.from({ length: 20 }).map((_, i) => (
