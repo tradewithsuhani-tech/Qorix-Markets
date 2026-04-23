@@ -23,7 +23,7 @@ import {
   ArrowUpRight, ArrowDownRight, Wallet, Activity, Clock, TrendingUp,
   TrendingDown, Zap, Target, ShieldCheck, BarChart2, Layers,
   RefreshCw, Globe, PieChart, Award, Shield, AlertTriangle, CheckCircle, FileDown,
-  Users, UserCheck, Banknote, X
+  Users, UserCheck, Banknote, X, Sparkles
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useState, useEffect, useRef } from "react";
@@ -102,6 +102,39 @@ function FomoTicker({ messages }: { messages: string[] }) {
           </motion.div>
         </AnimatePresence>
       </div>
+    </div>
+  );
+}
+
+function DemoProfitTicker({ base }: { base: number }) {
+  const [value, setValue] = useState(base);
+  useEffect(() => {
+    setValue(base);
+    const id = setInterval(() => {
+      setValue((v) => v + Math.random() * 4 + 0.5);
+    }, 2200);
+    return () => clearInterval(id);
+  }, [base]);
+  return (
+    <div className="relative h-[68px] md:h-20 flex items-center justify-center">
+      <AnimatePresence mode="popLayout">
+        <motion.div
+          key={value.toFixed(2)}
+          initial={{ y: 18, opacity: 0, filter: "blur(4px)" }}
+          animate={{ y: 0, opacity: 1, filter: "blur(0px)" }}
+          exit={{ y: -18, opacity: 0, filter: "blur(4px)" }}
+          transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+          className="absolute text-5xl md:text-6xl font-black tabular-nums leading-none"
+          style={{
+            background: "linear-gradient(135deg, #34d399 0%, #10b981 50%, #06b6d4 100%)",
+            WebkitBackgroundClip: "text",
+            WebkitTextFillColor: "transparent",
+            filter: "drop-shadow(0 0 24px rgba(16,185,129,0.45))",
+          }}
+        >
+          +${value.toFixed(2)}
+        </motion.div>
+      </AnimatePresence>
     </div>
   );
 }
@@ -812,54 +845,137 @@ export default function Dashboard() {
           <motion.div
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4 }}
-            className="relative overflow-hidden rounded-2xl border border-blue-500/25 bg-gradient-to-br from-blue-600/15 via-purple-600/10 to-transparent p-5 md:p-7"
+            transition={{ duration: 0.5 }}
+            className="relative overflow-hidden rounded-2xl md:rounded-3xl border border-blue-500/30 p-6 md:p-10"
+            style={{
+              background:
+                "linear-gradient(135deg, rgba(20,28,68,0.65) 0%, rgba(40,22,82,0.55) 50%, rgba(15,15,45,0.65) 100%)",
+            }}
           >
-            <div className="absolute -top-16 -right-16 w-56 h-56 rounded-full bg-blue-500/20 blur-3xl pointer-events-none" />
-            <div className="absolute -bottom-16 -left-10 w-48 h-48 rounded-full bg-purple-500/15 blur-3xl pointer-events-none" />
-            <div className="relative grid grid-cols-1 lg:grid-cols-5 gap-5 items-center">
-              <div className="lg:col-span-3 space-y-3">
-                <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-blue-500/15 border border-blue-500/30 text-[11px] font-semibold text-blue-300 uppercase tracking-wider">
-                  <Zap style={{ width: 12, height: 12 }} /> Demo Mode
-                </div>
-                <h2 className="text-2xl md:text-3xl font-bold leading-tight">
-                  You are in <span className="gradient-text">Demo Mode</span>
-                </h2>
-                <p className="text-muted-foreground text-sm md:text-base max-w-xl">
-                  Experience how our automated system performs in real market conditions. Activate live trading to start earning real profits.
-                </p>
-                <div className="flex flex-wrap gap-2.5 pt-1">
-                  <button
-                    onClick={() => navigate("/deposit")}
-                    className="px-5 py-2.5 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 shadow-lg shadow-blue-600/30 transition-all"
-                  >
-                    Start Live Trading →
-                  </button>
-                  <button
-                    onClick={() => navigate("/analytics")}
-                    className="px-5 py-2.5 rounded-xl text-sm font-semibold border border-white/15 hover:border-white/30 hover:bg-white/5 transition-all"
-                  >
-                    View Performance
-                  </button>
-                </div>
-              </div>
+            {/* Animated glow blobs */}
+            <motion.div
+              className="absolute -top-24 -right-20 w-72 h-72 rounded-full pointer-events-none"
+              style={{
+                background: "radial-gradient(circle, rgba(59,130,246,0.45) 0%, transparent 70%)",
+                filter: "blur(40px)",
+              }}
+              animate={{ scale: [1, 1.18, 1], opacity: [0.5, 0.75, 0.5] }}
+              transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
+            />
+            <motion.div
+              className="absolute -bottom-24 -left-20 w-72 h-72 rounded-full pointer-events-none"
+              style={{
+                background: "radial-gradient(circle, rgba(168,85,247,0.45) 0%, transparent 70%)",
+                filter: "blur(40px)",
+              }}
+              animate={{ scale: [1.1, 1, 1.1], opacity: [0.5, 0.75, 0.5] }}
+              transition={{ duration: 6, repeat: Infinity, ease: "easeInOut", delay: 1 }}
+            />
+            {/* Subtle grid */}
+            <div
+              className="absolute inset-0 opacity-[0.04] pointer-events-none"
+              style={{
+                backgroundImage:
+                  "linear-gradient(rgba(255,255,255,0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.5) 1px, transparent 1px)",
+                backgroundSize: "32px 32px",
+                maskImage: "radial-gradient(ellipse at center, black 30%, transparent 80%)",
+              }}
+            />
+
+            <div className="relative flex flex-col items-center text-center gap-5 md:gap-6">
+              {/* 1. Glowing DEMO MODE badge */}
+              <motion.div
+                animate={{
+                  boxShadow: [
+                    "0 0 18px rgba(59,130,246,0.45), 0 0 32px rgba(59,130,246,0.25)",
+                    "0 0 28px rgba(168,85,247,0.65), 0 0 50px rgba(168,85,247,0.35)",
+                    "0 0 18px rgba(59,130,246,0.45), 0 0 32px rgba(59,130,246,0.25)",
+                  ],
+                }}
+                transition={{ duration: 2.6, repeat: Infinity, ease: "easeInOut" }}
+                className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-gradient-to-r from-blue-500/20 to-purple-500/20 border border-blue-400/40"
+              >
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-400" />
+                </span>
+                <span
+                  className="text-[11px] font-bold uppercase tracking-[0.22em]"
+                  style={{
+                    background: "linear-gradient(90deg, #93c5fd, #c4b5fd, #f0abfc)",
+                    WebkitBackgroundClip: "text",
+                    WebkitTextFillColor: "transparent",
+                  }}
+                >
+                  Demo Mode
+                </span>
+              </motion.div>
+
+              {/* 2. Dynamic profit ticker */}
               {conversion?.demoProfitEnabled !== false && (
-                <div className="lg:col-span-2">
-                  <div className="rounded-2xl border border-emerald-500/25 bg-gradient-to-br from-emerald-500/15 to-emerald-500/5 p-4 backdrop-blur-sm">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-[11px] font-semibold uppercase tracking-wider text-emerald-300">Demo Profit</span>
-                      <TrendingUp style={{ width: 14, height: 14 }} className="text-emerald-400" />
-                    </div>
-                    <div className="text-3xl md:text-4xl font-bold text-emerald-400 tabular-nums leading-tight">
-                      +${(conversion?.demoProfitValue ?? 0).toFixed(2)}
-                    </div>
-                    <div className="text-[11px] text-emerald-300/70 mt-1">Simulation based on real market conditions</div>
-                    <div className="mt-3 pt-3 border-t border-emerald-500/15 text-xs text-muted-foreground">
-                      Activate live trading to unlock real earnings.
-                    </div>
+                <div className="space-y-2">
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-emerald-300/70">
+                    Your simulated profit
+                  </div>
+                  <DemoProfitTicker base={conversion?.demoProfitValue ?? 28.45} />
+                  {/* 3. Subtitle */}
+                  <div className="text-xs text-slate-400 flex items-center justify-center gap-1.5">
+                    <Sparkles style={{ width: 11, height: 11 }} className="text-emerald-400/70" />
+                    Based on real market simulation
                   </div>
                 </div>
               )}
+
+              {/* 4. Urgency line */}
+              <p className="text-base md:text-lg text-white/90 max-w-md leading-snug">
+                Activate live trading to start earning{" "}
+                <span
+                  className="font-bold"
+                  style={{
+                    background: "linear-gradient(90deg, #60a5fa, #c084fc, #f472b6)",
+                    WebkitBackgroundClip: "text",
+                    WebkitTextFillColor: "transparent",
+                  }}
+                >
+                  real profits
+                </span>
+              </p>
+
+              {/* 5. Powerful CTA with animated glow */}
+              <motion.button
+                onClick={() => navigate("/deposit")}
+                whileHover={{ scale: 1.04 }}
+                whileTap={{ scale: 0.97 }}
+                animate={{
+                  boxShadow: [
+                    "0 0 30px rgba(59,130,246,0.55), 0 0 0px rgba(168,85,247,0.4)",
+                    "0 0 50px rgba(168,85,247,0.75), 0 0 80px rgba(236,72,153,0.4)",
+                    "0 0 30px rgba(59,130,246,0.55), 0 0 0px rgba(168,85,247,0.4)",
+                  ],
+                }}
+                transition={{ boxShadow: { duration: 2.5, repeat: Infinity, ease: "easeInOut" } }}
+                className="group relative inline-flex items-center gap-2.5 px-8 md:px-10 py-4 md:py-5 rounded-2xl text-base md:text-lg font-bold text-white bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 hover:from-blue-500 hover:via-purple-500 hover:to-pink-500 transition-colors"
+              >
+                <Zap style={{ width: 18, height: 18 }} />
+                Start Live Trading
+                <ArrowUpRight
+                  style={{ width: 18, height: 18 }}
+                  className="group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform"
+                />
+              </motion.button>
+
+              {/* 6. Trust line */}
+              <div className="flex items-center gap-3 text-xs text-slate-400">
+                <div className="flex items-center gap-1.5">
+                  <CheckCircle style={{ width: 12, height: 12 }} className="text-emerald-400" />
+                  Start from $10
+                </div>
+                <span className="text-slate-600">•</span>
+                <div className="flex items-center gap-1.5">
+                  <CheckCircle style={{ width: 12, height: 12 }} className="text-emerald-400" />
+                  Withdraw anytime
+                </div>
+              </div>
             </div>
           </motion.div>
         )}

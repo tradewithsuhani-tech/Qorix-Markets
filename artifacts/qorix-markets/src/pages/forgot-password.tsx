@@ -17,8 +17,13 @@ export default function ForgotPasswordPage() {
   const [showPwd, setShowPwd] = useState(false);
   const [pending, setPending] = useState(false);
 
-  async function postJson(url: string, body: Record<string, unknown>) {
-    const res = await fetch(url, {
+  // OTP cached after step 2 — backend rotates and returns a fresh code we
+  // submit silently in step 3 so users don't have to re-enter it.
+  const [verifiedOtp, setVerifiedOtp] = useState<string>("");
+
+  const API_BASE = `${import.meta.env.BASE_URL.replace(/\/$/, "")}/api`;
+  async function postJson(path: string, body: Record<string, unknown>) {
+    const res = await fetch(`${API_BASE}${path}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -31,7 +36,7 @@ export default function ForgotPasswordPage() {
     e.preventDefault();
     if (!email) return;
     setPending(true);
-    const { ok, data } = await postJson("/forgot-password", { email });
+    const { ok, data } = await postJson("/auth/forgot-password", { email });
     setPending(false);
     if (!ok) {
       toast({ title: "Failed", description: data.error ?? "Could not send code" });
@@ -43,14 +48,15 @@ export default function ForgotPasswordPage() {
 
   async function handleVerifyOtp(e: React.FormEvent) {
     e.preventDefault();
-    if (otp.length < 4) return;
+    if (otp.length < 6) return;
     setPending(true);
-    const { ok, data } = await postJson("/verify-reset-otp", { email, otp });
+    const { ok, data } = await postJson("/auth/verify-reset-otp", { email, otp });
     setPending(false);
     if (!ok) {
       toast({ title: "Invalid code", description: data.error ?? "Try again" });
       return;
     }
+    if (data?.otp) setVerifiedOtp(data.otp);
     setStep("password");
   }
 
@@ -61,7 +67,11 @@ export default function ForgotPasswordPage() {
       return;
     }
     setPending(true);
-    const { ok, data } = await postJson("/reset-password", { email, otp, newPassword });
+    const { ok, data } = await postJson("/auth/reset-password", {
+      email,
+      otp: verifiedOtp || otp,
+      newPassword,
+    });
     setPending(false);
     if (!ok) {
       toast({ title: "Reset failed", description: data.error ?? "Try again" });
