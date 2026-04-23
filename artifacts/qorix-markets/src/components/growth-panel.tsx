@@ -256,9 +256,102 @@ function WeeklyLeaderboard({ userId }: { userId: number }) {
   if (isLoading) return <LeaderboardSkeleton />;
 
   const list = data?.leaderboard ?? [];
+  // Aggregate FOMO stat — total weekly profit earned by the top investors.
+  const topPool = list.slice(0, 10).reduce(
+    (sum, e) => sum + (parseFloat(String(e.weeklyProfit)) || 0),
+    0,
+  );
+  // Find the user's own profit for this week (if they're on the board).
+  const myEntry = list.find((e) => e.id === userId);
+  const myProfit = myEntry ? parseFloat(String(myEntry.weeklyProfit)) || 0 : 0;
+  const fmtAbbr = (n: number) =>
+    n >= 1_000_000
+      ? `$${(n / 1_000_000).toFixed(n >= 10_000_000 ? 0 : 1)}M`
+      : n >= 1_000
+      ? `$${(n / 1_000).toFixed(n >= 10_000 ? 0 : 1)}K`
+      : `$${n.toFixed(0)}`;
 
   return (
     <div className="space-y-2">
+      {/* FOMO headline — total earned by top investors this week */}
+      {list.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: -6 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4 }}
+          className="relative mb-3 overflow-hidden rounded-2xl border border-emerald-400/25 bg-[radial-gradient(120%_140%_at_50%_0%,rgba(16,185,129,0.18),transparent_60%),linear-gradient(to_bottom,rgba(6,78,59,0.45),rgba(2,6,23,0.85))] px-4 py-3 sm:px-5 sm:py-4"
+        >
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-emerald-300/60 to-transparent" />
+          <div className="flex items-center gap-3">
+            <div className="shrink-0 flex items-center justify-center w-9 h-9 rounded-full bg-emerald-500/15 border border-emerald-400/40">
+              <Flame className="w-4.5 h-4.5 text-emerald-300" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="text-[10.5px] font-semibold uppercase tracking-wider text-emerald-300/80">
+                This week so far
+              </div>
+              <div className="text-[15px] sm:text-[16px] font-extrabold text-white leading-tight">
+                Top investors made{" "}
+                <span className="bg-gradient-to-r from-emerald-300 to-green-400 bg-clip-text text-transparent">
+                  {fmtAbbr(topPool)}+
+                </span>
+                <span className="hidden sm:inline text-white/70 font-semibold"> · join them today</span>
+              </div>
+            </div>
+          </div>
+        </motion.div>
+      )}
+
+      {/* Personal FOMO — Your Position card */}
+      <motion.div
+        initial={{ opacity: 0, y: -4 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 0.05 }}
+        className={cn(
+          "relative mb-3 overflow-hidden rounded-2xl border px-4 py-3.5 flex items-center justify-between gap-3",
+          data?.myRank
+            ? "border-blue-400/30 bg-[linear-gradient(to_right,rgba(59,130,246,0.18),rgba(99,102,241,0.06)_60%,transparent)]"
+            : "border-rose-400/30 bg-[linear-gradient(to_right,rgba(244,63,94,0.18),rgba(244,63,94,0.04)_60%,transparent)]",
+        )}
+      >
+        <div>
+          <div className="text-[10.5px] font-semibold uppercase tracking-wider text-white/60">
+            Your Position
+          </div>
+          <div className="mt-1 flex items-baseline gap-4">
+            <div>
+              <div className="text-[10px] uppercase tracking-wider text-white/45">Rank</div>
+              <div className={cn(
+                "text-[20px] font-black tabular-nums leading-none",
+                data?.myRank ? "text-blue-300" : "text-rose-300",
+              )}>
+                {data?.myRank ? `#${data.myRank}` : "#—"}
+              </div>
+            </div>
+            <div>
+              <div className="text-[10px] uppercase tracking-wider text-white/45">Profit</div>
+              <div className={cn(
+                "text-[20px] font-black tabular-nums leading-none",
+                myProfit > 0 ? "text-emerald-400" : "text-rose-300",
+              )}>
+                {myProfit > 0
+                  ? `+$${myProfit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                  : "$0"}
+              </div>
+            </div>
+          </div>
+        </div>
+        {!data?.myRank && (
+          <a
+            href="/invest"
+            className="shrink-0 inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-rose-500 to-orange-500 hover:from-rose-400 hover:to-orange-400 shadow-[0_4px_14px_-4px_rgba(244,63,94,0.55)] transition-all"
+          >
+            Join Now
+            <ChevronRight className="w-3.5 h-3.5" />
+          </a>
+        )}
+      </motion.div>
+
       {/* CTA — clean premium */}
       <motion.div
         initial={{ opacity: 0, y: -8 }}
