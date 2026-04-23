@@ -529,8 +529,8 @@ function WeeklyLeaderboard({ userId }: { userId: number }) {
       ) : (
         <>
           <div className="rounded-xl border border-white/8 overflow-hidden bg-slate-950/30">
-            {/* table header */}
-            <div className="grid grid-cols-[44px_minmax(0,1.6fr)_minmax(0,1.2fr)_minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1fr)] gap-2 px-3 py-2 bg-white/[0.03] border-b border-white/8 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+            {/* table header — hidden on mobile, visible sm+ */}
+            <div className="hidden sm:grid grid-cols-[44px_minmax(0,1.6fr)_minmax(0,1.2fr)_minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1fr)] gap-2 px-3 py-2 bg-white/[0.03] border-b border-white/8 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
               <div>Rank</div>
               <div>Name</div>
               <div>User ID</div>
@@ -560,8 +560,8 @@ function WeeklyLeaderboard({ userId }: { userId: number }) {
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: idx * 0.025 }}
                     className={cn(
-                      "relative grid grid-cols-[44px_minmax(0,1.6fr)_minmax(0,1.2fr)_minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1fr)] gap-2 px-3 items-center transition-colors",
-                      isTop3 ? "py-4" : "py-2.5",
+                      "relative grid grid-cols-[36px_minmax(0,1fr)_auto_auto] sm:grid-cols-[44px_minmax(0,1.6fr)_minmax(0,1.2fr)_minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1fr)] gap-2 sm:gap-2 px-2.5 sm:px-3 items-center transition-colors",
+                      isTop3 ? "py-3 sm:py-4" : "py-2 sm:py-2.5",
                       isMine
                         ? "bg-blue-500/8 hover:bg-blue-500/12"
                         : top
@@ -592,33 +592,39 @@ function WeeklyLeaderboard({ userId }: { userId: number }) {
                       >
                         {initial}
                       </div>
-                      <div className="min-w-0 flex items-center gap-1.5">
-                        <span
-                          className={cn(
-                            "truncate text-white",
-                            rank === 1 ? "text-[17px] font-black tracking-tight drop-shadow-[0_1px_8px_rgba(250,204,21,0.35)]"
-                              : isTop3 ? "text-[15px] font-extrabold"
-                              : "text-[13px] font-semibold",
-                          )}
-                        >
-                          {displayName}
-                        </span>
-                        {isMine && (
-                          <span className="text-[8px] font-bold uppercase tracking-wider px-1 py-[1px] rounded bg-blue-500/15 text-blue-300 border border-blue-500/25 shrink-0">
-                            You
+                      <div className="min-w-0 flex flex-col">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span
+                            className={cn(
+                              "truncate text-white",
+                              rank === 1 ? "text-[15px] sm:text-[17px] font-black tracking-tight drop-shadow-[0_1px_8px_rgba(250,204,21,0.35)]"
+                                : isTop3 ? "text-[13px] sm:text-[15px] font-extrabold"
+                                : "text-[12px] sm:text-[13px] font-semibold",
+                            )}
+                          >
+                            {displayName}
                           </span>
-                        )}
+                          {isMine && (
+                            <span className="text-[8px] font-bold uppercase tracking-wider px-1 py-[1px] rounded bg-blue-500/15 text-blue-300 border border-blue-500/25 shrink-0">
+                              You
+                            </span>
+                          )}
+                        </div>
+                        {/* Mobile-only: Trading Fund as subtitle */}
+                        <div className="sm:hidden text-[10px] tabular-nums text-slate-400 mt-0.5">
+                          Fund <span className="text-slate-200 font-semibold">${tradingFund.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                        </div>
                       </div>
                     </div>
 
-                    {/* User ID */}
-                    <div className="text-[11px] font-mono text-slate-500 tracking-wider truncate">
+                    {/* User ID — desktop only */}
+                    <div className="hidden sm:block text-[11px] font-mono text-slate-500 tracking-wider truncate">
                       {userIdDisplay}
                     </div>
 
-                    {/* Trading Fund */}
+                    {/* Trading Fund — desktop only (mobile shows under name) */}
                     <div className={cn(
-                      "text-right tabular-nums",
+                      "hidden sm:block text-right tabular-nums",
                       rank === 1 ? "text-[16px] font-extrabold text-white"
                         : isTop3 ? "text-[15px] font-bold text-slate-100"
                         : "text-[12px] font-semibold text-slate-300",
@@ -628,20 +634,20 @@ function WeeklyLeaderboard({ userId }: { userId: number }) {
 
                     {/* P&L */}
                     <div className={cn(
-                      "text-right tabular-nums text-emerald-400",
-                      rank === 1 ? "text-[17px] font-black drop-shadow-[0_1px_8px_rgba(52,211,153,0.4)]"
-                        : isTop3 ? "text-[16px] font-extrabold"
-                        : "text-[13px] font-bold",
+                      "text-right tabular-nums text-emerald-400 whitespace-nowrap",
+                      rank === 1 ? "text-[13px] sm:text-[17px] font-black drop-shadow-[0_1px_8px_rgba(52,211,153,0.4)]"
+                        : isTop3 ? "text-[12px] sm:text-[16px] font-extrabold"
+                        : "text-[11px] sm:text-[13px] font-bold",
                     )}>
                       +${profit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </div>
 
                     {/* Payout */}
                     <div className={cn(
-                      "text-right tabular-nums",
-                      rank === 1 ? "text-[16px] font-extrabold text-amber-200 drop-shadow-[0_1px_8px_rgba(250,204,21,0.4)]"
-                        : isTop3 ? "text-[15px] font-bold text-amber-300"
-                        : "text-[12px] font-semibold text-amber-300",
+                      "text-right tabular-nums whitespace-nowrap",
+                      rank === 1 ? "text-[13px] sm:text-[16px] font-extrabold text-amber-200 drop-shadow-[0_1px_8px_rgba(250,204,21,0.4)]"
+                        : isTop3 ? "text-[12px] sm:text-[15px] font-bold text-amber-300"
+                        : "text-[11px] sm:text-[12px] font-semibold text-amber-300",
                     )}>
                       ${payout.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </div>
