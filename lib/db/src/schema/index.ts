@@ -18,3 +18,4 @@ export * from "./blockchain-deposits";
 export * from "./email-otps";
 export * from "./tasks";
 export * from "./signal-trades";
+export * from "./pnl-history";
