@@ -28,7 +28,7 @@ import { PromoBonusBanner } from "@/components/promo-bonus-banner";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { authFetch } from "@/lib/auth-fetch";
 import { useToast } from "@/hooks/use-toast";
-import { BadgePercent, Gift, Sparkles } from "lucide-react";
+import { BadgePercent, Gift, Sparkles, ClipboardPaste } from "lucide-react";
 
 const DEPOSIT_BANNERS = [
   { src: `${import.meta.env.BASE_URL}promo/banner-4-automate.png`, alt: "Automate. Invest. Grow. — Trade Smarter, Not Harder" },
@@ -358,14 +358,39 @@ export default function DepositPage() {
                       </div>
                     ) : (
                       <div className="flex gap-2">
-                        <input
-                          type="text"
-                          value={promoInput}
-                          onChange={(e) => setPromoInput(e.target.value.toUpperCase())}
-                          className="field-input flex-1 font-mono tracking-wider uppercase"
-                          placeholder={promoOffer?.code ? `Try ${promoOffer.code}` : "Enter code"}
-                          maxLength={20}
-                        />
+                        <div className="relative flex-1">
+                          <input
+                            type="text"
+                            value={promoInput}
+                            onChange={(e) => setPromoInput(e.target.value.toUpperCase())}
+                            className="field-input w-full font-mono tracking-wider uppercase pr-10"
+                            placeholder={promoOffer?.code ? `Try ${promoOffer.code}` : "Enter code"}
+                            maxLength={20}
+                          />
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              try {
+                                const text = await navigator.clipboard.readText();
+                                if (text) {
+                                  setPromoInput(text.trim().toUpperCase());
+                                  toast({ title: "Pasted", description: "Promo code pasted from clipboard." });
+                                }
+                              } catch {
+                                toast({
+                                  title: "Paste blocked",
+                                  description: "Please paste manually (Ctrl/Cmd+V).",
+                                  variant: "destructive",
+                                });
+                              }
+                            }}
+                            className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-purple-300/70 hover:text-purple-300 hover:bg-purple-500/15 transition-all"
+                            title="Paste from clipboard"
+                            aria-label="Paste from clipboard"
+                          >
+                            <ClipboardPaste className="w-4 h-4" />
+                          </button>
+                        </div>
                         <button
                           onClick={() => {
                             const code = promoInput.trim() || promoOffer?.code || "";
