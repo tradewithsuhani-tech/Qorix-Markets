@@ -7,8 +7,12 @@ import {
   useGetDashboardPerformance,
   useGetEquityChart,
   useGetTrades,
+  useStopInvestment,
+  getGetInvestmentQueryKey,
+  getGetDashboardSummaryQueryKey,
   type VipInfo,
 } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { VipCard } from "@/components/vip-badge";
 import { useQuery } from "@tanstack/react-query";
 import { authFetch } from "@/lib/auth-fetch";
@@ -26,6 +30,7 @@ import {
   Gauge,
   Zap,
   CircleDot,
+  Square,
 } from "lucide-react";
 import { AnimatedCounter, BigBalanceCounter } from "@/components/animated-counter";
 import { UpdatedAgo } from "@/components/updated-ago";
@@ -535,10 +540,24 @@ function fmtMoney(n: number) {
 }
 
 function PortfolioInner() {
+  const queryClient = useQueryClient();
   const { data: investment, isLoading: invLoading } = useGetInvestment({
     query: { refetchInterval: 10000 },
   });
   const { data: summary } = useGetDashboardSummary({ query: { refetchInterval: 5000 } });
+  const stopMutation = useStopInvestment({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getGetInvestmentQueryKey() });
+        queryClient.invalidateQueries({ queryKey: getGetDashboardSummaryQueryKey() });
+      },
+    },
+  });
+  const handleStopTrading = () => {
+    if (window.confirm("Stop trading? Your active position will be closed and capital returned to your balance.")) {
+      stopMutation.mutate({});
+    }
+  };
   const { data: equity, dataUpdatedAt: equityUpdatedAt } = useGetEquityChart(
     { days: 30 },
     { query: { refetchInterval: 15000 } },
@@ -651,6 +670,16 @@ function PortfolioInner() {
           >
             Manage <ArrowUpRight className="w-3.5 h-3.5" />
           </Link>
+          {isActive && (
+            <button
+              onClick={handleStopTrading}
+              disabled={stopMutation.isPending}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-red-500/15 to-rose-500/10 hover:from-red-500/25 hover:to-rose-500/20 border border-red-500/30 text-red-200 text-sm font-semibold transition-all shadow-lg shadow-red-500/10 disabled:opacity-50"
+            >
+              <Square className="w-3.5 h-3.5" />
+              {stopMutation.isPending ? "Stopping..." : "Stop Trading"}
+            </button>
+          )}
         </div>
       </div>
 
