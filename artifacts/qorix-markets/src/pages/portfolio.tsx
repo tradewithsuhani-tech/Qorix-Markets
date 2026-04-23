@@ -8,6 +8,7 @@ import {
   useGetEquityChart,
   useGetTrades,
   useStopInvestment,
+  useToggleCompounding,
   getGetInvestmentQueryKey,
   getGetDashboardSummaryQueryKey,
   type VipInfo,
@@ -553,6 +554,13 @@ function PortfolioInner() {
       },
     },
   });
+  const compoundMutation = useToggleCompounding({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getGetInvestmentQueryKey() });
+      },
+    },
+  });
   const handleStopTrading = () => {
     if (window.confirm("Stop trading? Your active position will be closed and capital returned to your balance.")) {
       stopMutation.mutate({});
@@ -670,6 +678,31 @@ function PortfolioInner() {
           >
             Manage <ArrowUpRight className="w-3.5 h-3.5" />
           </Link>
+          {isActive && (
+            <button
+              onClick={() =>
+                compoundMutation.mutate({ data: { autoCompound: !investment?.autoCompound } })
+              }
+              disabled={compoundMutation.isPending}
+              className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border text-sm font-semibold transition-all shadow-lg disabled:opacity-50 ${
+                investment?.autoCompound
+                  ? "bg-gradient-to-r from-violet-500/25 to-purple-500/20 hover:from-violet-500/35 hover:to-purple-500/30 border-violet-400/40 text-violet-100 shadow-violet-500/20"
+                  : "bg-gradient-to-r from-white/[0.04] to-white/[0.02] hover:from-white/[0.08] hover:to-white/[0.04] border-white/15 text-muted-foreground shadow-black/10"
+              }`}
+            >
+              <Repeat className="w-3.5 h-3.5" />
+              Auto-Compound
+              <span
+                className={`ml-1 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${
+                  investment?.autoCompound
+                    ? "bg-violet-400/20 text-violet-100 border border-violet-300/40"
+                    : "bg-white/5 text-muted-foreground border border-white/10"
+                }`}
+              >
+                {compoundMutation.isPending ? "…" : investment?.autoCompound ? "ON" : "OFF"}
+              </span>
+            </button>
+          )}
           {isActive && (
             <button
               onClick={handleStopTrading}
