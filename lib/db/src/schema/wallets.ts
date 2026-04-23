@@ -30,6 +30,12 @@ export const walletsTable = pgTable("wallets", {
   // every Daily P&L chunk ever dispensed, so Total Profit grows by exactly
   // the same dollar delta as Daily P&L. Display-only.
   totalProfitBoost: numeric("total_profit_boost", { precision: 18, scale: 2 }).notNull().default("0"),
+  // Per-user synthetic Performance Metrics (display-only). Recomputed once
+  // per UTC day inside /dashboard/performance and persisted so subsequent
+  // calls return a stable value. Win rate ∈ [70,95]%, max drawdown ∈ [3,12]%.
+  synthWinRate: numeric("synth_win_rate", { precision: 5, scale: 2 }).notNull().default("0"),
+  synthMaxDrawdown: numeric("synth_max_drawdown", { precision: 5, scale: 2 }).notNull().default("0"),
+  synthMetricsDay: varchar("synth_metrics_day", { length: 10 }).notNull().default(""),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
