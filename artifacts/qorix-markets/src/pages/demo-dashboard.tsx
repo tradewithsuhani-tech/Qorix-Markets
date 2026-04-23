@@ -548,7 +548,7 @@ export default function DemoDashboard() {
   );
   const { data: returnsEquity, isLoading: returnsLoading } = useGetEquityChart(
     { days: returnsDays },
-    { query: { refetchInterval: 30000 } }
+    { query: { refetchInterval: 5000 } }
   );
   const { data: pnlHistory, isLoading: pnlHistoryLoading } = useQuery<Array<{ date: string; percent: number; amount: number }>>({
     queryKey: ["dashboard-pnl-history", pnlDays],
