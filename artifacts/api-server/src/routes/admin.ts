@@ -25,6 +25,7 @@ import {
   journalForSystem,
   runReconciliation,
 } from "../lib/ledger-service";
+import { sendEmail } from "../lib/email-service";
 
 const router = Router();
 router.use("/admin", authMiddleware);
@@ -370,26 +371,104 @@ router.post("/admin/settings", async (req: AuthRequest, res) => {
 });
 
 router.post("/admin/broadcast", async (req: AuthRequest, res) => {
-  const { title, message, audience = "all" } = req.body as { title?: string; message?: string; audience?: string };
+  const { title, message, audience = "all", channel = "notification" } = req.body as {
+    title?: string;
+    message?: string;
+    audience?: string;
+    channel?: "notification" | "email" | "both";
+  };
   if (!title || !message) {
     res.status(400).json({ error: "Title and message are required" });
     return;
   }
 
-  const users = await db.select({ id: usersTable.id, isAdmin: usersTable.isAdmin }).from(usersTable);
-  const recipients = users.filter((u) => audience === "admins" ? u.isAdmin : !u.isAdmin || audience === "all");
-  if (recipients.length > 0) {
-    await db.insert(notificationsTable).values(recipients.map((u) => ({
-      userId: u.id,
-      type: "system",
-      title,
-      message,
-    })));
+  const users = await db
+    .select({
+      id: usersTable.id,
+      email: usersTable.email,
+      name: usersTable.name,
+      isAdmin: usersTable.isAdmin,
+    })
+    .from(usersTable);
+  const recipients = users.filter((u) =>
+    audience === "admins" ? u.isAdmin : audience === "all" ? true : !u.isAdmin,
+  );
+
+  let notifInserted = 0;
+  let emailsSent = 0;
+  let emailsFailed = 0;
+
+  // In-app notification
+  if ((channel === "notification" || channel === "both") && recipients.length > 0) {
+    await db.insert(notificationsTable).values(
+      recipients.map((u) => ({
+        userId: u.id,
+        type: "system",
+        title: title!,
+        message: message!,
+      })),
+    );
+    notifInserted = recipients.length;
   }
 
-  transactionLogger.info({ event: "admin_broadcast", adminId: req.userId, audience, recipients: recipients.length }, "Admin broadcast sent");
-  res.json({ success: true, recipients: recipients.length });
+  // Email broadcast — send sequentially with a small batch delay to stay
+  // well within SES throughput limits. Plain-text + lightweight HTML wrapper.
+  if (channel === "email" || channel === "both") {
+    const html = `
+<!DOCTYPE html>
+<html><body style="margin:0;padding:24px;background:#0b1220;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#e2e8f0;">
+  <div style="max-width:560px;margin:0 auto;background:#0f172a;border:1px solid #1e293b;border-radius:14px;padding:28px;">
+    <div style="font-size:18px;font-weight:700;color:#60a5fa;margin-bottom:4px;">Qorix Markets</div>
+    <h2 style="font-size:22px;margin:14px 0 12px;color:#f1f5f9;">${escapeHtml(title!)}</h2>
+    <div style="font-size:15px;line-height:1.6;color:#cbd5e1;white-space:pre-wrap;">${escapeHtml(message!)}</div>
+    <div style="margin-top:24px;padding-top:16px;border-top:1px solid #1e293b;font-size:12px;color:#64748b;">
+      You're receiving this because you have an account at Qorix Markets.
+    </div>
+  </div>
+</body></html>`.trim();
+
+    for (const u of recipients) {
+      if (!u.email) continue;
+      try {
+        await sendEmail(u.email, title!, message!, html);
+        emailsSent++;
+      } catch (err: any) {
+        emailsFailed++;
+        errorLogger.error({ err, to: u.email }, "Admin email broadcast — send failed");
+      }
+    }
+  }
+
+  transactionLogger.info(
+    {
+      event: "admin_broadcast",
+      adminId: req.userId,
+      audience,
+      channel,
+      recipients: recipients.length,
+      notifInserted,
+      emailsSent,
+      emailsFailed,
+    },
+    "Admin broadcast sent",
+  );
+  res.json({
+    success: true,
+    recipients: recipients.length,
+    notifInserted,
+    emailsSent,
+    emailsFailed,
+  });
 });
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
 
 router.get("/admin/logs", async (_req: AuthRequest, res) => {
   const [loginEvents, journalEntries] = await Promise.all([
