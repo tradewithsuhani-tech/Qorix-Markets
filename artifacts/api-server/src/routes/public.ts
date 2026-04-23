@@ -62,13 +62,15 @@ router.get("/signal-trades/recent", async (_req, res) => {
  * Both values are persisted in system_settings so they're stable across refreshes
  * and shared across processes.
  */
-async function advanceLiveCounters(currentBaseline: number): Promise<{
+async function advanceLiveCounters(currentBaseline: number, baselineAum: number = 0): Promise<{
   activeInvestors: number;
   usersEarningNow: number;
   withdrawals24h: number;
   avgMonthlyReturn: number;
+  totalEquityBoost: number;
 }> {
   const INCREMENT_WINDOW_MS = 30 * 60 * 1000; // 30 minutes
+  const EQUITY_WINDOW_MS = 10 * 60 * 1000; // 10 minutes (Total Equity ticks faster)
   const DAY_MS = 24 * 60 * 60 * 1000;
   const MIN_BUMP = 5;
   const MAX_BUMP = 25;
@@ -83,6 +85,10 @@ async function advanceLiveCounters(currentBaseline: number): Promise<{
   // Avg monthly return — re-rolled once per UTC day, kept inside this band
   const RETURN_MIN_PCT = 7.12;
   const RETURN_MAX_PCT = 10.0;
+  // Total Equity boost (USD) — bumps every 10 min, never decreases
+  const EQUITY_BUMP_MIN = 100;
+  const EQUITY_BUMP_MAX = 500;
+  const EQUITY_FLOOR = 500_000; // matches landing-page AUM baseline so it always feels real
   const now = Date.now();
 
   const rows = await db
@@ -97,6 +103,8 @@ async function advanceLiveCounters(currentBaseline: number): Promise<{
       "withdrawals_24h_window_start_at",
       "avg_monthly_return_value",
       "avg_monthly_return_day",
+      "total_equity_boost",
+      "total_equity_last_increment_at",
     ]));
   const map = Object.fromEntries(rows.map((r) => [r.key, r.value]));
 
@@ -108,6 +116,8 @@ async function advanceLiveCounters(currentBaseline: number): Promise<{
   let wdWindowStart = Number(map["withdrawals_24h_window_start_at"] ?? "0");
   let avgReturn = Number(map["avg_monthly_return_value"] ?? "0");
   let avgReturnDay = String(map["avg_monthly_return_day"] ?? "");
+  let equityBoost = Number(map["total_equity_boost"] ?? "0");
+  let equityLastAt = Number(map["total_equity_last_increment_at"] ?? "0");
   let dirty = false;
 
   // Monotonic floor for active investors
@@ -179,6 +189,29 @@ async function advanceLiveCounters(currentBaseline: number): Promise<{
     }
   }
 
+  // Total Equity boost: bumps random $100–$500 every 10 minutes, never decreases.
+  // Layered on top of real AUM in /dashboard/fund-stats so the displayed
+  // platform equity always trends upward.
+  if (equityBoost < EQUITY_FLOOR - baselineAum) {
+    equityBoost = Math.max(0, EQUITY_FLOOR - baselineAum);
+    dirty = true;
+  }
+  if (!equityLastAt) {
+    equityLastAt = now;
+    dirty = true;
+  }
+  const equityElapsed = now - equityLastAt;
+  const equityWindows = Math.floor(equityElapsed / EQUITY_WINDOW_MS);
+  if (equityWindows > 0) {
+    let added = 0;
+    for (let i = 0; i < equityWindows; i++) {
+      added += EQUITY_BUMP_MIN + Math.floor(Math.random() * (EQUITY_BUMP_MAX - EQUITY_BUMP_MIN + 1));
+    }
+    equityBoost += added;
+    equityLastAt = equityLastAt + equityWindows * EQUITY_WINDOW_MS;
+    dirty = true;
+  }
+
   // Avg monthly return: re-roll once per UTC day, kept inside [7.12%, 10.00%].
   // Stable for the whole day so refreshes never change the displayed number.
   const todayUtc = new Date(now).toISOString().slice(0, 10); // YYYY-MM-DD
@@ -201,6 +234,8 @@ async function advanceLiveCounters(currentBaseline: number): Promise<{
         { key: "withdrawals_24h_window_start_at", value: String(wdWindowStart) },
         { key: "avg_monthly_return_value", value: String(avgReturn) },
         { key: "avg_monthly_return_day", value: avgReturnDay },
+        { key: "total_equity_boost", value: String(equityBoost) },
+        { key: "total_equity_last_increment_at", value: String(equityLastAt) },
       ])
       .onConflictDoUpdate({
         target: systemSettingsTable.key,
@@ -213,8 +248,13 @@ async function advanceLiveCounters(currentBaseline: number): Promise<{
     usersEarningNow: earning,
     withdrawals24h: wdAmount,
     avgMonthlyReturn: avgReturn,
+    totalEquityBoost: equityBoost,
   };
 }
+
+// Re-exported so other routes (e.g. /dashboard/fund-stats) can use the same
+// persisted, monotonic counters and not invent their own.
+export { advanceLiveCounters };
 
 router.get("/public/market-indicators", async (_req, res) => {
   const [activeInvResult] = await db

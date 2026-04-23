@@ -195,10 +195,15 @@ router.get("/dashboard/fund-stats", async (req: AuthRequest, res) => {
   const baselineReserve = Number(settings["baseline_reserve_fund"] ?? "0") || 0;
   const baselineInvestors = Number(settings["baseline_active_investors"] ?? "0") || 0;
 
-  const totalAUM = realAUM + baselineAUM;
-  const activeCapital = realAUM + baselineActiveCapital;
+  // Layer the persisted, monotonic Total Equity boost (+$100–$500 every 10 min)
+  // on top of real AUM + admin baseline so the displayed equity always trends up.
+  const { advanceLiveCounters } = await import("./public");
+  const live = await advanceLiveCounters(realActiveInvestors + baselineInvestors, baselineAUM);
+
+  const totalAUM = realAUM + baselineAUM + live.totalEquityBoost;
+  const activeCapital = realAUM + baselineActiveCapital + live.totalEquityBoost;
   const reserveFund = realReserve + baselineReserve;
-  const activeInvestors = realActiveInvestors + baselineInvestors;
+  const activeInvestors = Math.max(realActiveInvestors + baselineInvestors, live.activeInvestors);
   const slotData = await getSlotData();
 
   res.json({
