@@ -12,6 +12,9 @@ const DEFAULT_SETTINGS: Record<string, string> = {
   baseline_active_capital: "264000",
   baseline_reserve_fund: "513000",
   baseline_active_investors: "124",
+  // Total Profit baseline floor — shown on user dashboard "Total Profit" card.
+  // Real per-user profit is scaled and added on top so the number always grows.
+  baseline_total_profit: "264600.66",
 
   // Market indicators baselines (added on top of real numbers, shown on dashboard).
   // Keep these consistent with baseline_total_aum / baseline_active_investors so

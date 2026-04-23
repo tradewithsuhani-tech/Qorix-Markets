@@ -727,6 +727,10 @@ export function AdminSystemPage() {
               <input type="number" value={settings?.baselineActiveInvestors ?? 0} onChange={(e) => setSettings({ ...settings, baselineActiveInvestors: e.target.value })} onBlur={() => save({ baselineActiveInvestors: Number(settings?.baselineActiveInvestors ?? 0) })} className="mt-2 w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm" />
             </div>
             <div>
+              <label className="text-sm text-muted-foreground">Baseline Total Profit (USD)</label>
+              <input type="number" step="0.01" value={settings?.baselineTotalProfit ?? 0} onChange={(e) => setSettings({ ...settings, baselineTotalProfit: e.target.value })} onBlur={() => save({ baselineTotalProfit: Number(settings?.baselineTotalProfit ?? 0) })} className="mt-2 w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm" />
+            </div>
+            <div>
               <label className="text-sm text-muted-foreground">Baseline Users Earning Now</label>
               <input type="number" value={settings?.baselineUsersEarningNow ?? 0} onChange={(e) => setSettings({ ...settings, baselineUsersEarningNow: e.target.value })} onBlur={() => save({ baselineUsersEarningNow: Number(settings?.baselineUsersEarningNow ?? 0) })} className="mt-2 w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm" />
             </div>
