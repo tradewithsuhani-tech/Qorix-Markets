@@ -214,6 +214,94 @@ const TOP_RANK: Record<1 | 2 | 3, TopRankStyle & { accentBar: string; glow: stri
 };
 
 /**
+ * "Next update in MM:SS" ticking countdown shown beneath the leaderboard CTA.
+ * Loops every 5 minutes and triggers an actual refetch on rollover so the
+ * urgency is real, not theatre.
+ */
+function NextUpdateCountdown({ onRollover }: { onRollover?: () => void }) {
+  const CYCLE = 5 * 60; // seconds
+  const [remaining, setRemaining] = useState(CYCLE);
+  useEffect(() => {
+    const t = setInterval(() => {
+      setRemaining((r) => {
+        if (r <= 1) {
+          onRollover?.();
+          return CYCLE;
+        }
+        return r - 1;
+      });
+    }, 1000);
+    return () => clearInterval(t);
+  }, [onRollover]);
+  const m = Math.floor(remaining / 60).toString().padStart(2, "0");
+  const s = (remaining % 60).toString().padStart(2, "0");
+  return (
+    <div className="mt-3 flex items-center justify-center gap-1.5 text-[10.5px] font-semibold text-emerald-300/80">
+      <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+      Next update in <span className="tabular-nums text-emerald-300">{m}:{s}</span>
+    </div>
+  );
+}
+
+/**
+ * Floating "Rahul just earned $320" toast that pops in/out at the top-right of
+ * the leaderboard tab. Adds a real-action heartbeat so the board doesn't feel
+ * static. Names + amounts are randomised on each cycle.
+ */
+const ACTIVITY_NAMES = [
+  "Rahul", "Priya", "Arjun", "Vikram", "Anjali",
+  "Karthik", "Sneha", "Rohan", "Aditya", "Neha",
+  "Kabir", "Ishaan", "Meera", "Riya", "Aryan",
+];
+function FloatingActivityToast() {
+  const [item, setItem] = useState<{ name: string; amount: number; key: number } | null>(null);
+  useEffect(() => {
+    let mounted = true;
+    let showTimer: ReturnType<typeof setTimeout>;
+    let hideTimer: ReturnType<typeof setTimeout>;
+    const cycle = () => {
+      if (!mounted) return;
+      const name = ACTIVITY_NAMES[Math.floor(Math.random() * ACTIVITY_NAMES.length)];
+      const amount = Math.floor(80 + Math.random() * 620);
+      setItem({ name, amount, key: Date.now() });
+      hideTimer = setTimeout(() => {
+        if (!mounted) return;
+        setItem(null);
+        showTimer = setTimeout(cycle, 2200 + Math.random() * 1800);
+      }, 3200);
+    };
+    showTimer = setTimeout(cycle, 1200);
+    return () => {
+      mounted = false;
+      clearTimeout(showTimer);
+      clearTimeout(hideTimer);
+    };
+  }, []);
+  return (
+    <div className="pointer-events-none absolute right-1 -top-1 z-20 sm:right-2 sm:-top-2">
+      <AnimatePresence>
+        {item && (
+          <motion.div
+            key={item.key}
+            initial={{ opacity: 0, x: 24, y: -4, scale: 0.92 }}
+            animate={{ opacity: 1, x: 0, y: 0, scale: 1 }}
+            exit={{ opacity: 0, x: 16, scale: 0.94 }}
+            transition={{ duration: 0.35, ease: "easeOut" }}
+            className="flex items-center gap-2 px-3 py-1.5 rounded-full border border-emerald-400/35 bg-slate-950/85 backdrop-blur-md shadow-[0_6px_20px_-6px_rgba(16,185,129,0.55)]"
+          >
+            <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="text-[11px] font-semibold text-white whitespace-nowrap">
+              {item.name} just earned{" "}
+              <span className="text-emerald-400 font-bold tabular-nums">+${item.amount}</span>
+            </span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+/**
  * Tiny "updated Xs ago / just now" text that ticks every second so the LIVE
  * pill above it actually feels alive instead of being a static badge.
  */
@@ -271,7 +359,7 @@ function CountUp({
 // Weekly investors tab
 // ---------------------------------------------------------------------------
 function WeeklyLeaderboard({ userId }: { userId: number }) {
-  const { data, isLoading } = useQuery<{ leaderboard: InvestorEntry[]; myRank: number | null }>({
+  const { data, isLoading, refetch } = useQuery<{ leaderboard: InvestorEntry[]; myRank: number | null }>({
     queryKey: ["leaderboard-weekly"],
     queryFn: () => authFetch("/api/leaderboard/investors/weekly"),
     refetchInterval: 60000,
@@ -286,18 +374,19 @@ function WeeklyLeaderboard({ userId }: { userId: number }) {
     (sum, e) => sum + (parseFloat(String(e.weeklyProfit)) || 0),
     0,
   );
+  // Top-1 profit drives the loss-aversion "you're missing $X" line.
+  const top1Profit = list[0]
+    ? parseFloat(String(list[0].weeklyProfit)) || 0
+    : 0;
   // Find the user's own profit for this week (if they're on the board).
   const myEntry = list.find((e) => e.id === userId);
   const myProfit = myEntry ? parseFloat(String(myEntry.weeklyProfit)) || 0 : 0;
-  const fmtAbbr = (n: number) =>
-    n >= 1_000_000
-      ? `$${(n / 1_000_000).toFixed(n >= 10_000_000 ? 0 : 1)}M`
-      : n >= 1_000
-      ? `$${(n / 1_000).toFixed(n >= 10_000 ? 0 : 1)}K`
-      : `$${n.toFixed(0)}`;
+  const isActive = !!data?.myRank;
+  const missingAmount = Math.max(0, top1Profit - myProfit);
 
   return (
-    <div className="space-y-2">
+    <div className="relative space-y-2">
+      <FloatingActivityToast />
       {/* FOMO headline — total earned by top investors this week */}
       {list.length > 0 && (
         <motion.div
@@ -330,99 +419,101 @@ function WeeklyLeaderboard({ userId }: { userId: number }) {
         </motion.div>
       )}
 
-      {/* Personal FOMO — Your Position card */}
+      {/* Personal FOMO — Your Position card with Top #1 comparison */}
       <motion.div
         initial={{ opacity: 0, y: -4 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, delay: 0.05 }}
         className={cn(
-          "relative mb-3 overflow-hidden rounded-2xl border px-4 py-3.5 flex items-center justify-between gap-3",
-          data?.myRank
+          "relative mb-3 overflow-hidden rounded-2xl border px-4 py-3.5",
+          isActive
             ? "border-blue-400/30 bg-[linear-gradient(to_right,rgba(59,130,246,0.18),rgba(99,102,241,0.06)_60%,transparent)]"
             : "border-rose-400/30 bg-[linear-gradient(to_right,rgba(244,63,94,0.18),rgba(244,63,94,0.04)_60%,transparent)]",
         )}
       >
-        <div>
-          <div className="text-[10.5px] font-semibold uppercase tracking-wider text-white/60">
-            Your Position
+        <div className="text-[10.5px] font-semibold uppercase tracking-wider text-white/60">
+          Your Position
+        </div>
+        <div className="mt-1.5 grid grid-cols-3 gap-3">
+          <div>
+            <div className="text-[10px] uppercase tracking-wider text-white/45">Rank</div>
+            <div className={cn(
+              "text-[19px] font-black tabular-nums leading-none mt-0.5",
+              isActive ? "text-blue-300" : "text-rose-300",
+            )}>
+              {data?.myRank ? `#${data.myRank}` : "#—"}
+            </div>
           </div>
-          <div className="mt-1 flex items-baseline gap-4">
-            <div>
-              <div className="text-[10px] uppercase tracking-wider text-white/45">Rank</div>
-              <div className={cn(
-                "text-[20px] font-black tabular-nums leading-none",
-                data?.myRank ? "text-blue-300" : "text-rose-300",
-              )}>
-                {data?.myRank ? `#${data.myRank}` : "#—"}
+          <div>
+            <div className="text-[10px] uppercase tracking-wider text-white/45">Your profit</div>
+            {myProfit > 0 ? (
+              <CountUp
+                value={myProfit}
+                prefix="+$"
+                className="text-[19px] font-black tabular-nums leading-none mt-0.5 text-emerald-400 inline-block"
+              />
+            ) : (
+              <div className="text-[19px] font-black tabular-nums leading-none mt-0.5 text-rose-300">
+                $0
               </div>
-            </div>
-            <div>
-              <div className="text-[10px] uppercase tracking-wider text-white/45">Profit</div>
-              {myProfit > 0 ? (
-                <CountUp
-                  value={myProfit}
-                  prefix="+$"
-                  className="text-[20px] font-black tabular-nums leading-none text-emerald-400"
-                />
-              ) : (
-                <div className="text-[20px] font-black tabular-nums leading-none text-rose-300">
-                  $0
-                </div>
-              )}
-            </div>
+            )}
+          </div>
+          <div>
+            <div className="text-[10px] uppercase tracking-wider text-yellow-300/70">Top #1 profit</div>
+            {top1Profit > 0 ? (
+              <CountUp
+                value={top1Profit}
+                prefix="$"
+                className="text-[19px] font-black tabular-nums leading-none mt-0.5 bg-gradient-to-r from-yellow-300 to-amber-400 bg-clip-text text-transparent inline-block"
+              />
+            ) : (
+              <div className="text-[19px] font-black tabular-nums leading-none mt-0.5 text-white/40">
+                —
+              </div>
+            )}
           </div>
         </div>
-        {!data?.myRank && (
-          <a
-            href="/invest"
-            className="shrink-0 inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-rose-500 to-orange-500 hover:from-rose-400 hover:to-orange-400 shadow-[0_4px_14px_-4px_rgba(244,63,94,0.55)] transition-all"
-          >
-            Join Now
-            <ChevronRight className="w-3.5 h-3.5" />
-          </a>
+        {!isActive && missingAmount > 0 && (
+          <div className="mt-2.5 pt-2.5 border-t border-rose-400/20 flex items-center gap-2">
+            <Flame className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+            <div className="text-[12.5px] font-bold text-rose-200 leading-tight">
+              You're missing{" "}
+              <span className="text-rose-300">
+                ${missingAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>{" "}
+              <span className="text-rose-200/80 font-semibold">opportunity this week</span>
+            </div>
+          </div>
         )}
       </motion.div>
 
-      {/* CTA — clean premium */}
+      {/* Single primary CTA — "Start Earning Now" */}
       <motion.div
         initial={{ opacity: 0, y: -8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, ease: "easeOut" }}
-        className="relative mb-5 overflow-hidden rounded-2xl border border-white/10 bg-[radial-gradient(120%_140%_at_50%_0%,rgba(250,204,21,0.10),transparent_60%),linear-gradient(to_bottom,rgba(15,23,42,0.95),rgba(2,6,23,0.95))] px-5 py-5 sm:px-6 sm:py-6 text-center"
+        className="relative mb-4 overflow-hidden rounded-2xl border border-emerald-400/20 bg-[radial-gradient(120%_140%_at_50%_0%,rgba(16,185,129,0.14),transparent_60%),linear-gradient(to_bottom,rgba(15,23,42,0.95),rgba(2,6,23,0.95))] px-5 py-5 sm:px-6 sm:py-6 text-center"
       >
-        {/* soft top accent line */}
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-yellow-300/40 to-transparent" />
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-emerald-300/50 to-transparent" />
 
-        {/* headline */}
         <div className="text-base sm:text-lg font-bold text-white tracking-tight leading-snug">
-          Next top investor could be{" "}
-          <span className="bg-gradient-to-r from-yellow-300 to-amber-400 bg-clip-text text-transparent">
-            you
+          You're just one step away from{" "}
+          <span className="bg-gradient-to-r from-emerald-300 to-green-400 bg-clip-text text-transparent">
+            top investors
           </span>
         </div>
 
-        {/* gradient button */}
         <a
           href="/invest"
-          className="group relative mt-4 inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl font-semibold text-sm text-white bg-gradient-to-r from-blue-500 to-purple-600 shadow-[0_6px_20px_-6px_rgba(99,102,241,0.6)] hover:shadow-[0_8px_24px_-4px_rgba(99,102,241,0.85)] hover:-translate-y-0.5 active:translate-y-0 transition-all"
+          className="group relative mt-4 inline-flex items-center justify-center gap-2 px-7 py-3 rounded-xl font-bold text-sm text-white bg-gradient-to-r from-emerald-500 to-green-500 shadow-[0_8px_24px_-6px_rgba(16,185,129,0.7)] hover:shadow-[0_10px_28px_-4px_rgba(16,185,129,0.95)] hover:-translate-y-0.5 active:translate-y-0 transition-all"
           data-testid="link-leaderboard-cta-start-trading"
         >
-          Start Trading
+          Start Earning Now
           <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
         </a>
-      </motion.div>
 
-      {data?.myRank ? (
-        <div className="flex items-center justify-between mb-3 px-3 py-2 rounded-xl bg-blue-500/8 border border-blue-500/15">
-          <span className="text-xs text-blue-300">Your weekly rank</span>
-          <span className="text-sm font-bold text-blue-400">#{data.myRank}</span>
-        </div>
-      ) : (
-        <div className="flex items-center gap-2 mb-3 px-3 py-2 rounded-xl bg-white/3 border border-white/8">
-          <Zap className="w-3 h-3 text-amber-400" />
-          <span className="text-xs text-muted-foreground">Start trading to enter top investors list</span>
-        </div>
-      )}
+        <NextUpdateCountdown onRollover={() => refetch()} />
+      </motion.div>
       {list.length === 0 ? (
         <EmptyState
           icon="📈"
