@@ -271,37 +271,34 @@ function PodiumCard({
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 12 }}
+      initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: rank === 1 ? 0 : 0.08, duration: 0.4, ease: "easeOut" }}
-      whileHover={{ y: -2 }}
+      transition={{ delay: rank === 1 ? 0 : 0.06, duration: 0.35, ease: "easeOut" }}
       className={cn(
-        "relative rounded-2xl border flex flex-col items-center text-center backdrop-blur-md",
+        "relative rounded-xl border flex flex-col items-center text-center px-2.5 py-3",
         PODIUM_BG[rank],
         PODIUM_BORDER[rank],
-        big ? "px-3 pt-5 pb-4 sm:px-4 sm:pt-6 sm:pb-5" : "px-3 pt-4 pb-4",
-        big && "sm:-translate-y-1",
         isMine && "ring-1 ring-blue-400/50",
       )}
     >
-      {/* medal pill */}
+      {/* rank chip top-right */}
       <div
         className={cn(
-          "flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border text-[9px] font-bold tracking-[0.18em] mb-3",
+          "absolute top-2 right-2 flex items-center gap-0.5 px-1.5 py-[1px] rounded-md text-[8px] font-bold tracking-wider",
           s.badgeBg,
           s.badgeText,
         )}
       >
-        <s.Icon className={cn("w-2.5 h-2.5", s.iconColor)} />
-        <span>{s.medalLabel}</span>
+        <s.Icon className={cn("w-2 h-2", s.iconColor)} />
+        <span>#{rank}</span>
       </div>
 
-      {/* avatar — gradient fill, subtle ring, no animation */}
+      {/* avatar — compact gradient fill */}
       <div
         className={cn(
-          "relative rounded-full p-[1.5px] bg-gradient-to-br shadow-[0_4px_14px_-4px_rgba(0,0,0,0.5)]",
+          "relative rounded-full p-[1.5px] bg-gradient-to-br shadow-[0_2px_8px_-2px_rgba(0,0,0,0.5)]",
           s.ringGrad,
-          big ? "w-[68px] h-[68px]" : "w-14 h-14",
+          big ? "w-12 h-12" : "w-10 h-10",
         )}
       >
         <div
@@ -312,54 +309,43 @@ function PodiumCard({
         >
           <span
             className={cn(
-              "relative z-10 font-black text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.45)]",
-              big ? "text-[26px]" : "text-xl",
+              "relative z-10 font-bold text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.4)]",
+              big ? "text-lg" : "text-base",
             )}
           >
             {initial}
           </span>
           <span
             aria-hidden
-            className="absolute inset-0 bg-[radial-gradient(60%_45%_at_30%_25%,rgba(255,255,255,0.4),transparent_70%)] mix-blend-overlay pointer-events-none"
+            className="absolute inset-0 bg-[radial-gradient(60%_45%_at_30%_25%,rgba(255,255,255,0.35),transparent_70%)] mix-blend-overlay pointer-events-none"
           />
         </div>
       </div>
 
       {/* name */}
-      <div className={cn("mt-3 font-bold text-white truncate max-w-full px-1", big ? "text-[15px]" : "text-sm")}>
+      <div className="mt-2 text-[12px] font-semibold text-white truncate max-w-full">
         {displayName}
         {isMine && (
-          <span className="ml-1.5 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-300 border border-blue-500/25 align-middle">
+          <span className="ml-1 text-[8px] font-bold uppercase tracking-wider px-1 py-[1px] rounded bg-blue-500/15 text-blue-300 border border-blue-500/25 align-middle">
             You
           </span>
         )}
       </div>
-      <div className="text-[10px] font-mono text-slate-500 tracking-wider truncate max-w-full px-1 mt-0.5">
+      <div className="text-[9px] font-mono text-slate-500 tracking-wider truncate max-w-full mt-0.5">
         {entry.publicId ?? `$${parseFloat(String(entry.investmentAmount)).toLocaleString()}`}
       </div>
-
-      {/* divider */}
-      <div className="my-2.5 h-px w-10 bg-white/10" />
 
       {/* profit */}
       <div
         className={cn(
-          "font-extrabold tabular-nums text-emerald-400 leading-none",
-          big ? "text-[24px] sm:text-[28px]" : "text-lg sm:text-xl",
+          "mt-2 font-bold tabular-nums text-emerald-400 leading-none",
+          big ? "text-[15px]" : "text-[14px]",
         )}
       >
-        <CountUp value={profit} prefix="+$" duration={big ? 1.6 : 1.3} />
+        <CountUp value={profit} prefix="+$" duration={big ? 1.4 : 1.2} />
       </div>
-
-      {/* tiny live indicator */}
-      <div className="mt-2 inline-flex items-center gap-1">
-        <span className="relative flex h-1 w-1">
-          <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-60 animate-ping" />
-          <span className="relative inline-flex h-1 w-1 rounded-full bg-emerald-400" />
-        </span>
-        <span className="text-[9px] font-semibold uppercase tracking-[0.18em] text-slate-500">
-          7d profit
-        </span>
+      <div className="mt-1 text-[8px] font-medium uppercase tracking-[0.16em] text-slate-500">
+        7d profit
       </div>
     </motion.div>
   );
