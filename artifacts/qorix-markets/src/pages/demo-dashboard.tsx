@@ -537,6 +537,7 @@ export interface DemoDashboardBodyProps {
   hideGrowthPanel?: boolean;
   hideFundTransparency?: boolean;
   hideLiveTrades?: boolean;
+  hidePrimaryStatCards?: boolean;
 }
 
 export function DemoDashboardBody({
@@ -546,6 +547,7 @@ export function DemoDashboardBody({
   hideGrowthPanel = false,
   hideFundTransparency = false,
   hideLiveTrades = false,
+  hidePrimaryStatCards = false,
 }: DemoDashboardBodyProps = {}) {
   const [, navigate] = useLocation();
   const [chartDays, setChartDays] = useState(30);
@@ -1265,6 +1267,7 @@ export function DemoDashboardBody({
         )}
 
         {/* Primary Stat Cards */}
+        {!hidePrimaryStatCards && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
           {statCards.map((card, i) => (
             <motion.div
@@ -1292,6 +1295,7 @@ export function DemoDashboardBody({
             </motion.div>
           ))}
         </div>
+        )}
 
         {/* Equity Chart + Trades */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-5">
