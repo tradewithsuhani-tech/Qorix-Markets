@@ -449,54 +449,87 @@ function WeeklyLeaderboard({ userId }: { userId: number }) {
       ) : (
         <>
           {list.length >= 1 && <PodiumTop3 entries={list.slice(0, 3)} userId={userId} />}
-          {list.slice(3).map((entry, idx) => {
-            const rank = idx + 4;
-            const isMine = entry.id === userId;
-            const displayName = entry.publicId ? entry.fullName : maskName(entry.fullName, userId, entry.id);
-            const initial = (displayName?.trim()?.[0] ?? "T").toUpperCase();
-            const profit = parseFloat(String(entry.weeklyProfit));
-            return (
-              <motion.div
-                key={entry.id}
-                initial={{ opacity: 0, x: -8 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: idx * 0.04 }}
-                whileHover={{ scale: 1.01 }}
-                className={cn(
-                  "relative flex items-center gap-3 px-3 py-2.5 rounded-xl border transition-all",
-                  isMine
-                    ? "bg-blue-500/10 border-blue-500/30 shadow-[0_0_20px_-8px_rgba(59,130,246,0.45)]"
-                    : "bg-white/[0.025] border-white/6 hover:bg-white/[0.05]"
-                )}
-              >
-                <div className="w-7 flex items-center justify-center shrink-0">
-                  <span className="text-muted-foreground text-xs font-bold">#{rank}</span>
-                </div>
-                <div className="shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-blue-500/80 to-indigo-600/80 flex items-center justify-center font-extrabold text-slate-900 text-sm ring-2 ring-white/10">
-                  {initial}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-bold text-white text-sm truncate">{displayName}</span>
-                    {isMine && (
-                      <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-300 border border-blue-500/25">
-                        You
-                      </span>
-                    )}
-                  </div>
-                  <div className="text-[10px] font-mono text-muted-foreground tracking-wider truncate">
-                    {entry.publicId ?? `$${parseFloat(String(entry.investmentAmount)).toLocaleString()} invested`}
-                  </div>
-                </div>
-                <div className="text-right shrink-0">
-                  <div className="font-extrabold text-emerald-400 tabular-nums text-sm">
-                    +${profit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </div>
-                  <div className="text-[10px] text-muted-foreground uppercase tracking-wider">this week</div>
-                </div>
-              </motion.div>
-            );
-          })}
+
+          {list.length > 3 && (
+            <div className="mt-2 rounded-xl border border-white/8 overflow-hidden bg-slate-950/30">
+              {/* table header */}
+              <div className="grid grid-cols-[40px_minmax(0,1.6fr)_minmax(0,1.2fr)_minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1fr)] gap-2 px-3 py-2 bg-white/[0.03] border-b border-white/8 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                <div>Rank</div>
+                <div>Name</div>
+                <div>User ID</div>
+                <div className="text-right">Trading Fund</div>
+                <div className="text-right">P&amp;L</div>
+                <div className="text-right">Payout</div>
+              </div>
+
+              {/* table rows */}
+              <div className="divide-y divide-white/5">
+                {list.slice(3).map((entry, idx) => {
+                  const rank = idx + 4;
+                  const isMine = entry.id === userId;
+                  const displayName = entry.publicId ? entry.fullName : maskName(entry.fullName, userId, entry.id);
+                  const initial = (displayName?.trim()?.[0] ?? "T").toUpperCase();
+                  const profit = parseFloat(String(entry.weeklyProfit));
+                  const tradingFund = parseFloat(String(entry.investmentAmount));
+                  const payout = profit * 0.7;
+                  const userIdDisplay = entry.publicId ?? `Q${String(entry.id).padStart(4, "0")}**${String(entry.id).slice(-1)}`;
+
+                  return (
+                    <motion.div
+                      key={entry.id}
+                      initial={{ opacity: 0, y: 4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: idx * 0.025 }}
+                      className={cn(
+                        "grid grid-cols-[40px_minmax(0,1.6fr)_minmax(0,1.2fr)_minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1fr)] gap-2 px-3 py-2.5 items-center transition-colors",
+                        isMine
+                          ? "bg-blue-500/8 hover:bg-blue-500/12"
+                          : "hover:bg-white/[0.03]",
+                      )}
+                    >
+                      {/* Rank */}
+                      <div className="text-xs font-bold text-slate-400 tabular-nums">#{rank}</div>
+
+                      {/* Name (avatar + name) */}
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="shrink-0 w-7 h-7 rounded-full bg-gradient-to-br from-blue-500/80 to-indigo-600/80 flex items-center justify-center font-bold text-white text-xs ring-1 ring-white/10">
+                          {initial}
+                        </div>
+                        <div className="min-w-0 flex items-center gap-1.5">
+                          <span className="font-semibold text-white text-[13px] truncate">{displayName}</span>
+                          {isMine && (
+                            <span className="text-[8px] font-bold uppercase tracking-wider px-1 py-[1px] rounded bg-blue-500/15 text-blue-300 border border-blue-500/25 shrink-0">
+                              You
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* User ID */}
+                      <div className="text-[11px] font-mono text-slate-500 tracking-wider truncate">
+                        {userIdDisplay}
+                      </div>
+
+                      {/* Trading Fund */}
+                      <div className="text-right text-[12px] font-semibold text-slate-300 tabular-nums">
+                        ${tradingFund.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                      </div>
+
+                      {/* P&L */}
+                      <div className="text-right text-[13px] font-bold text-emerald-400 tabular-nums">
+                        +${profit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </div>
+
+                      {/* Payout */}
+                      <div className="text-right text-[12px] font-semibold text-amber-300 tabular-nums">
+                        ${payout.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </div>
+                    </motion.div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </>
       )}
     </div>
