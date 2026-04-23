@@ -733,9 +733,11 @@ export default function DemoDashboard() {
             {marketClosed ? null : isPositive ? <ArrowUpRight style={{ width: 12, height: 12 }} /> : <ArrowDownRight style={{ width: 12, height: 12 }} />}
             {marketClosed ? "0.00% today" : `${isPositive ? "+" : ""}${dailyPct.toFixed(2)}% today`}
           </span>
-          <span className={`text-[10px] ${marketClosed ? "text-amber-400" : "text-muted-foreground"}`}>
-            {pnlSubLabel}
-          </span>
+          {marketClosed && marketOpensAt ? (
+            <span className="text-[10px] text-amber-400">
+              Market closed · Opens in {formatCountdown(marketOpensAt - pnlNowTick)}
+            </span>
+          ) : null}
         </div>
       ),
       accent: marketClosed ? "amber" : isPositive ? "green" : "red",
