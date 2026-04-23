@@ -868,6 +868,75 @@ export default function Dashboard() {
           <FomoTicker messages={conversion.fomoMessages} />
         )}
 
+        {/* Investment CTA + Trust block — only for users who haven't activated trading */}
+        {conversion?.demoModeEnabled !== false && !investment?.isActive && (
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.1 }}
+            className="grid grid-cols-1 lg:grid-cols-5 gap-4"
+          >
+            {/* Activate Trading CTA */}
+            <div className="lg:col-span-3 rounded-2xl border border-blue-500/25 bg-gradient-to-br from-[#0d1117] via-[#0d1117] to-blue-950/30 p-5 md:p-6 space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-[11px] font-semibold uppercase tracking-wider text-blue-300 mb-1">Start Trading</div>
+                  <h3 className="text-xl md:text-2xl font-bold leading-tight">Start from <span className="gradient-text">$10</span></h3>
+                </div>
+                <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold border bg-emerald-500/10 border-emerald-500/25 text-emerald-300">
+                  <CheckCircle style={{ width: 11, height: 11 }} /> No lock-in
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { name: "Low Risk", returns: "2–5% monthly", bg: "bg-emerald-500/5 border-emerald-500/20", text: "text-emerald-300" },
+                  { name: "Balanced", returns: "4–6% monthly", bg: "bg-blue-500/5 border-blue-500/20", text: "text-blue-300" },
+                  { name: "Growth", returns: "5–8% monthly", bg: "bg-violet-500/5 border-violet-500/20", text: "text-violet-300" },
+                ].map((mode) => (
+                  <div
+                    key={mode.name}
+                    className={`rounded-xl border p-3 text-center ${mode.bg}`}
+                  >
+                    <div className={`text-xs font-semibold ${mode.text} mb-1`}>{mode.name}</div>
+                    <div className="text-[11px] text-muted-foreground tabular-nums">{mode.returns}</div>
+                  </div>
+                ))}
+              </div>
+
+              <button
+                onClick={() => navigate("/deposit")}
+                className="w-full px-5 py-3 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 shadow-lg shadow-blue-600/30 transition-all"
+              >
+                Activate Trading →
+              </button>
+              <div className="text-[11px] text-muted-foreground text-center">Start small. Scale anytime. Withdraw with one click.</div>
+            </div>
+
+            {/* Trust Block */}
+            <div className="lg:col-span-2 rounded-2xl border border-white/10 bg-white/[0.02] p-5 space-y-3">
+              <div className="flex items-center gap-2">
+                <ShieldCheck style={{ width: 16, height: 16 }} className="text-emerald-400" />
+                <h3 className="font-semibold">Why Qorix</h3>
+              </div>
+              <ul className="space-y-2.5">
+                {[
+                  "Fully automated execution",
+                  "No manual trading required",
+                  "Risk-managed strategies",
+                  "Transparent dashboard",
+                  "Withdraw anytime",
+                ].map((item) => (
+                  <li key={item} className="flex items-start gap-2.5 text-sm">
+                    <CheckCircle style={{ width: 14, height: 14 }} className="text-emerald-400 shrink-0 mt-0.5" />
+                    <span className="text-muted-foreground">{item}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </motion.div>
+        )}
+
         {/* Investor Psychology Indicators */}
         <motion.div
           initial={{ opacity: 0, y: 10 }}
@@ -1014,8 +1083,19 @@ export default function Dashboard() {
           >
             <div className="flex flex-col gap-3 mb-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="min-w-0">
-                <h3 className="font-semibold whitespace-nowrap">Equity Curve</h3>
-                <p className="text-xs text-muted-foreground whitespace-nowrap">Portfolio value over time</p>
+                <h3 className="font-semibold whitespace-nowrap flex items-center gap-2">
+                  Equity Curve
+                  {!investment?.isActive && conversion?.demoModeEnabled !== false && (
+                    <span className="text-[9px] px-1.5 py-0.5 rounded font-bold bg-blue-500/15 text-blue-300 border border-blue-500/25 uppercase tracking-wider">
+                      Demo
+                    </span>
+                  )}
+                </h3>
+                <p className="text-xs text-muted-foreground whitespace-nowrap">
+                  {!investment?.isActive && conversion?.demoModeEnabled !== false
+                    ? "Demo Performance (Simulation)"
+                    : "Portfolio value over time"}
+                </p>
               </div>
               <div className="-mx-1 overflow-x-auto scrollbar-hide sm:mx-0 sm:overflow-visible">
                 <PeriodFilter
@@ -1213,7 +1293,7 @@ export default function Dashboard() {
                           </span>
                           RUNNING
                         </div>
-                        <div className="text-[10px] text-muted-foreground mt-0.5">Result on close</div>
+                        <div className="text-[10px] text-muted-foreground mt-0.5">Managed by Qorix system</div>
                       </div>
                     </motion.div>
                   );
