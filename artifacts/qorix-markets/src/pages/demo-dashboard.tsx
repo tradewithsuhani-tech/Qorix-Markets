@@ -541,6 +541,7 @@ export interface DemoDashboardBodyProps {
   hideLiveTrades?: boolean;
   hidePrimaryStatCards?: boolean;
   swapEquityWithRolling?: boolean;
+  hideEquityCurve?: boolean;
 }
 
 export function DemoDashboardBody({
@@ -552,6 +553,7 @@ export function DemoDashboardBody({
   hideLiveTrades = false,
   hidePrimaryStatCards = false,
   swapEquityWithRolling = false,
+  hideEquityCurve = false,
 }: DemoDashboardBodyProps = {}) {
   const [, navigate] = useLocation();
   const [chartDays, setChartDays] = useState(30);
@@ -1764,6 +1766,7 @@ export function DemoDashboardBody({
           </motion.div>
 
           {/* Rolling Returns (or Equity Curve when swapped) */}
+          {!(swapEquityWithRolling && hideEquityCurve) && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -1790,6 +1793,7 @@ export function DemoDashboardBody({
               </div>
             </div>
           </motion.div>
+          )}
           </div>
         </div>
 
