@@ -20,6 +20,10 @@ import {
   Sparkles,
   ArrowUpRight,
   Lock,
+  Wallet,
+  Gauge,
+  Zap,
+  CircleDot,
 } from "lucide-react";
 import { AnimatedCounter, BigBalanceCounter } from "@/components/animated-counter";
 import { UpdatedAgo } from "@/components/updated-ago";
@@ -583,8 +587,10 @@ function PortfolioInner() {
       {/* Header */}
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-2xl md:text-3xl font-bold text-white flex items-center gap-2">
-            Portfolio
+          <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2.5">
+            <span className="bg-gradient-to-r from-white via-white to-emerald-200 bg-clip-text text-transparent">
+              Portfolio
+            </span>
             {isActive && (
               <span className="live-pill live-pill--green text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md">
                 <span className="live-dot inline-block w-1.5 h-1.5 rounded-full mr-1" />
@@ -592,67 +598,90 @@ function PortfolioInner() {
               </span>
             )}
           </h1>
-          <p className="text-sm text-muted-foreground mt-1">
+          <p className="text-sm text-muted-foreground mt-1.5 flex items-center gap-1.5">
+            <span className="inline-block w-1 h-1 rounded-full bg-emerald-400 animate-pulse" />
             Live performance · <UpdatedAgo timestamp={equityUpdatedAt} />
           </p>
         </div>
         <Link
           href="/invest"
-          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-500/15 hover:bg-blue-500/25 border border-blue-500/30 text-blue-300 text-sm font-medium transition-all"
+          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-blue-500/20 to-indigo-500/15 hover:from-blue-500/30 hover:to-indigo-500/25 border border-blue-500/30 text-blue-200 text-sm font-medium transition-all shadow-lg shadow-blue-500/10"
         >
           Manage <ArrowUpRight className="w-3.5 h-3.5" />
         </Link>
       </div>
 
-      {/* HERO — money-first block. Investor ko first 3 sec me trust + dopamine. */}
-      <div className="relative overflow-hidden rounded-2xl border border-emerald-500/25 bg-gradient-to-br from-emerald-500/10 via-[#0d1525] to-[#0a1020] p-5 md:p-7">
-        {/* Subtle radial glow */}
+      {/* HERO — premium money-first block with multi-layer glow + shimmer top edge */}
+      <div className="relative overflow-hidden rounded-3xl border border-emerald-500/30 bg-gradient-to-br from-emerald-500/[0.12] via-[#0c1422] to-[#070b14] p-6 md:p-8 shadow-[0_8px_32px_-8px_rgba(16,185,129,0.25),0_1px_0_rgba(255,255,255,0.06)_inset]">
+        {/* Animated shimmer top edge */}
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-emerald-400/60 to-transparent" />
+        {/* Radial glows — top right + bottom left */}
         <div
-          className="pointer-events-none absolute -top-20 -right-20 w-72 h-72 rounded-full opacity-40"
-          style={{ background: "radial-gradient(circle, rgba(16,185,129,0.25) 0%, transparent 70%)" }}
+          className="pointer-events-none absolute -top-24 -right-24 w-80 h-80 rounded-full opacity-50"
+          style={{ background: "radial-gradient(circle, rgba(16,185,129,0.30) 0%, transparent 70%)" }}
+        />
+        <div
+          className="pointer-events-none absolute -bottom-32 -left-20 w-72 h-72 rounded-full opacity-30"
+          style={{ background: "radial-gradient(circle, rgba(59,130,246,0.20) 0%, transparent 70%)" }}
+        />
+        {/* Faint grid texture */}
+        <div
+          className="pointer-events-none absolute inset-0 opacity-[0.04]"
+          style={{
+            backgroundImage:
+              "linear-gradient(rgba(255,255,255,1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,1) 1px, transparent 1px)",
+            backgroundSize: "32px 32px",
+          }}
         />
 
-        <div className="relative flex items-center justify-between flex-wrap gap-3 mb-4">
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/35 text-[11px] font-bold uppercase tracking-wider text-emerald-300">
+        <div className="relative flex items-center justify-between flex-wrap gap-3 mb-5">
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/40 text-[11px] font-bold uppercase tracking-wider text-emerald-300 shadow-[0_0_16px_-4px_rgba(16,185,129,0.5)]">
             <span className="live-dot inline-block w-1.5 h-1.5 rounded-full" />
             {isActive ? "Trading Active" : "Earning Live"}
           </span>
-          <span className="text-[11px] text-muted-foreground">
-            Started {daysRunning}d ago · {riskSafe.charAt(0).toUpperCase() + riskSafe.slice(1)} risk
+          <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground px-2.5 py-1 rounded-full bg-white/[0.03] border border-white/10">
+            <CalendarDays className="w-3 h-3" />
+            Started {daysRunning}d ago
+            <span className="opacity-40">·</span>
+            <Shield className="w-3 h-3 text-emerald-400/80" />
+            {riskSafe.charAt(0).toUpperCase() + riskSafe.slice(1)} Risk
           </span>
         </div>
 
-        <div className="relative grid grid-cols-1 sm:grid-cols-3 gap-5 sm:gap-4">
+        <div className="relative grid grid-cols-1 sm:grid-cols-3 gap-6 sm:gap-4">
           {/* Total Invested */}
-          <div>
-            <div className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium flex items-center gap-1.5">
-              💰 Total Invested
+          <div className="sm:border-r sm:border-white/8 sm:pr-4">
+            <div className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground/80 font-semibold flex items-center gap-1.5">
+              <Wallet className="w-3 h-3" /> Total Invested
             </div>
-            <div className="mt-1.5 text-2xl md:text-3xl font-bold text-white tabular-nums">
+            <div className="mt-2 text-3xl md:text-[2.1rem] font-extrabold text-white tabular-nums leading-none">
               $<BigBalanceCounter value={investedAmount} className="inline" />
             </div>
+            <div className="mt-1.5 text-[11px] text-muted-foreground">Principal capital</div>
           </div>
 
           {/* Current Value */}
-          <div>
-            <div className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium flex items-center gap-1.5">
-              📈 Current Value
+          <div className="sm:border-r sm:border-white/8 sm:pr-4">
+            <div className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground/80 font-semibold flex items-center gap-1.5">
+              <TrendingUp className="w-3 h-3" /> Current Value
             </div>
-            <div className="mt-1.5 text-2xl md:text-3xl font-bold text-white tabular-nums">
+            <div className="mt-2 text-3xl md:text-[2.1rem] font-extrabold text-white tabular-nums leading-none">
               $<BigBalanceCounter value={currentEquity} className="inline" />
             </div>
+            <div className="mt-1.5 text-[11px] text-muted-foreground">Mark-to-market equity</div>
           </div>
 
           {/* Profit */}
           <div>
-            <div className="text-[11px] uppercase tracking-wider text-emerald-300/80 font-medium flex items-center gap-1.5">
-              🟢 Profit
+            <div className="text-[10px] uppercase tracking-[0.12em] text-emerald-300/90 font-semibold flex items-center gap-1.5">
+              <Sparkles className="w-3 h-3" /> Net Profit
             </div>
-            <div className="mt-1.5 text-2xl md:text-3xl font-bold profit-text tabular-nums">
+            <div className="mt-2 text-3xl md:text-[2.1rem] font-extrabold tabular-nums leading-none bg-gradient-to-r from-emerald-300 to-green-400 bg-clip-text text-transparent drop-shadow-[0_0_18px_rgba(16,185,129,0.35)]">
               +<AnimatedCounter value={totalProfit} prefix="$" />
-              <span className="text-base md:text-lg text-emerald-400/90 font-semibold ml-1.5">
-                (+{profitPct.toFixed(2)}%)
-              </span>
+            </div>
+            <div className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/25 px-1.5 py-0.5 rounded-md">
+              <ArrowUpRight className="w-3 h-3" />
+              +{profitPct.toFixed(2)}% ROI
             </div>
           </div>
         </div>
@@ -664,67 +693,88 @@ function PortfolioInner() {
         <NextTradeStatus enabled={isActive} />
       </div>
 
-      {/* Investment Setup */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-3 rounded-2xl border border-white/10 bg-[#0d1525] p-5 space-y-4">
-          <h3 className="text-base font-semibold text-white">Investment Setup</h3>
+      {/* Investment Setup — premium metric tile grid */}
+      <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-[#0e1828] via-[#0a1322] to-[#070b14] p-5 md:p-6">
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/15 to-transparent" />
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-base font-semibold text-white flex items-center gap-2">
+            <Gauge className="w-4 h-4 text-blue-400" /> Investment Setup
+          </h3>
+          <span className="text-[10px] uppercase tracking-wider text-muted-foreground border border-white/10 px-2 py-0.5 rounded-full">
+            Configuration
+          </span>
+        </div>
 
-          <div className="flex items-center justify-between py-2 border-b border-white/5">
-            <span className="text-xs text-muted-foreground flex items-center gap-1.5">
-              <Shield className="w-3.5 h-3.5" /> Risk Level
-            </span>
-            <span className="text-xs font-semibold text-white capitalize">
-              {investment?.riskLevel ?? "low"}
-            </span>
-          </div>
-
-          <div className="flex items-center justify-between py-2 border-b border-white/5">
-            <span className="text-xs text-muted-foreground flex items-center gap-1.5">
-              <Shield className="w-3.5 h-3.5" /> Drawdown Limit
-            </span>
-            <span className="text-xs font-semibold text-amber-400 tabular-nums">
-              {investment?.drawdownLimit?.toFixed?.(2) ?? "0.00"}%
-            </span>
-          </div>
-
-          <div className="flex items-center justify-between py-2 border-b border-white/5">
-            <span className="text-xs text-muted-foreground flex items-center gap-1.5">
-              <Repeat className="w-3.5 h-3.5" /> Auto-Compound
-            </span>
-            <span
-              className={`text-xs font-semibold ${
-                investment?.autoCompound ? "text-emerald-400" : "text-muted-foreground"
-              }`}
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+          {[
+            {
+              icon: Shield,
+              label: "Risk Level",
+              value: (investment?.riskLevel ?? "low").toString().charAt(0).toUpperCase() + (investment?.riskLevel ?? "low").toString().slice(1),
+              color: "text-emerald-400",
+              bg: "from-emerald-500/10 to-emerald-500/5",
+              border: "border-emerald-500/20",
+              iconBg: "bg-emerald-500/15",
+            },
+            {
+              icon: Gauge,
+              label: "Drawdown Limit",
+              value: `${investment?.drawdownLimit?.toFixed?.(2) ?? "0.00"}%`,
+              color: "text-amber-400",
+              bg: "from-amber-500/10 to-amber-500/5",
+              border: "border-amber-500/20",
+              iconBg: "bg-amber-500/15",
+            },
+            {
+              icon: Repeat,
+              label: "Auto-Compound",
+              value: investment?.autoCompound ? "Enabled" : "Disabled",
+              color: investment?.autoCompound ? "text-emerald-400" : "text-muted-foreground",
+              bg: investment?.autoCompound ? "from-emerald-500/10 to-emerald-500/5" : "from-white/5 to-white/[0.02]",
+              border: investment?.autoCompound ? "border-emerald-500/20" : "border-white/10",
+              iconBg: investment?.autoCompound ? "bg-emerald-500/15" : "bg-white/5",
+            },
+            {
+              icon: CalendarDays,
+              label: "Days Running",
+              value: `${daysRunning}d`,
+              color: "text-blue-300",
+              bg: "from-blue-500/10 to-blue-500/5",
+              border: "border-blue-500/20",
+              iconBg: "bg-blue-500/15",
+            },
+            {
+              icon: isActive ? Zap : CircleDot,
+              label: "Status",
+              value: isActive ? "Active" : "Paused",
+              color: isActive ? "text-emerald-400" : "text-amber-400",
+              bg: isActive ? "from-emerald-500/10 to-emerald-500/5" : "from-amber-500/10 to-amber-500/5",
+              border: isActive ? "border-emerald-500/20" : "border-amber-500/20",
+              iconBg: isActive ? "bg-emerald-500/15" : "bg-amber-500/15",
+            },
+          ].map((tile) => (
+            <div
+              key={tile.label}
+              className={`relative overflow-hidden rounded-xl border ${tile.border} bg-gradient-to-br ${tile.bg} p-3.5 transition-all hover:border-white/20 hover:-translate-y-0.5 duration-200`}
             >
-              {investment?.autoCompound ? "Enabled" : "Disabled"}
-            </span>
-          </div>
-
-          <div className="flex items-center justify-between py-2 border-b border-white/5">
-            <span className="text-xs text-muted-foreground flex items-center gap-1.5">
-              <CalendarDays className="w-3.5 h-3.5" /> Days Running
-            </span>
-            <span className="text-xs font-semibold text-white tabular-nums">{daysRunning}d</span>
-          </div>
-
-          <div className="flex items-center justify-between py-2">
-            <span className="text-xs text-muted-foreground flex items-center gap-1.5">
-              <TrendingUp className="w-3.5 h-3.5" /> Status
-            </span>
-            <span
-              className={`text-xs font-semibold ${
-                isActive ? "text-emerald-400" : "text-amber-400"
-              }`}
-            >
-              {isActive ? "Active" : "Paused"}
-            </span>
-          </div>
+              <div className={`w-7 h-7 rounded-lg ${tile.iconBg} flex items-center justify-center mb-2`}>
+                <tile.icon className={`w-3.5 h-3.5 ${tile.color}`} />
+              </div>
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium mb-0.5">
+                {tile.label}
+              </div>
+              <div className={`text-sm md:text-base font-bold tabular-nums ${tile.color}`}>
+                {tile.value}
+              </div>
+            </div>
+          ))}
         </div>
       </div>
 
-      {/* Asset Allocation */}
-      <div className="rounded-2xl border border-white/10 bg-[#0d1525] p-5">
-        <div className="flex items-center justify-between mb-4">
+      {/* Asset Allocation — premium */}
+      <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-[#0e1828] via-[#0a1322] to-[#070b14] p-5 md:p-6">
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-blue-400/30 to-transparent" />
+        <div className="flex items-center justify-between mb-5 flex-wrap gap-2">
           <div>
             <h3 className="text-base font-semibold text-white flex items-center gap-2">
               <PieChart className="w-4 h-4 text-blue-400" /> Asset Allocation
@@ -733,33 +783,57 @@ function PortfolioInner() {
               Auto-balanced by your <span className="text-white capitalize">{riskSafe}</span> risk strategy
             </p>
           </div>
+          <span className="inline-flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-emerald-300 bg-emerald-500/10 border border-emerald-500/25 px-2 py-1 rounded-full font-semibold">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            Diversified
+          </span>
         </div>
 
-        {/* Stacked bar */}
-        <div className="flex h-3 w-full overflow-hidden rounded-full border border-white/10">
-          {allocation.map((a) => (
-            <div
-              key={a.label}
-              style={{ width: `${a.pct}%`, background: a.color }}
-              title={`${a.label} ${a.pct}%`}
-            />
-          ))}
+        {/* Premium stacked bar with glow + segment dividers */}
+        <div className="relative">
+          <div className="flex h-3.5 w-full overflow-hidden rounded-full border border-white/15 shadow-inner">
+            {allocation.map((a, i) => (
+              <div
+                key={a.label}
+                style={{
+                  width: `${a.pct}%`,
+                  background: `linear-gradient(180deg, ${a.color} 0%, ${a.color}cc 100%)`,
+                  boxShadow: `inset 0 1px 0 rgba(255,255,255,0.25), 0 0 12px -2px ${a.color}80`,
+                  borderRight: i < allocation.length - 1 ? "1px solid rgba(0,0,0,0.35)" : undefined,
+                }}
+                title={`${a.label} ${a.pct}%`}
+              />
+            ))}
+          </div>
+          {/* Subtle highlight overlay */}
+          <div className="pointer-events-none absolute inset-0 rounded-full bg-gradient-to-b from-white/10 to-transparent" />
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-5">
           {allocation.map((a) => {
             const dollarValue = (currentEquity * a.pct) / 100;
             return (
-              <div key={a.label} className="rounded-xl bg-white/3 border border-white/8 px-3 py-2.5">
-                <div className="flex items-center gap-2 mb-1">
-                  <span
-                    className="w-2.5 h-2.5 rounded-full shrink-0"
-                    style={{ background: a.color }}
-                  />
-                  <span className="text-xs font-medium text-white truncate">{a.label}</span>
+              <div
+                key={a.label}
+                className="group relative overflow-hidden rounded-xl border border-white/10 bg-gradient-to-br from-white/[0.04] to-white/[0.01] p-3.5 transition-all hover:border-white/20 hover:-translate-y-0.5 duration-200"
+                style={{ boxShadow: `0 1px 0 rgba(255,255,255,0.04) inset` }}
+              >
+                {/* Color accent strip */}
+                <div
+                  className="absolute left-0 top-0 bottom-0 w-1"
+                  style={{ background: `linear-gradient(180deg, ${a.color}, ${a.color}66)`, boxShadow: `0 0 12px ${a.color}80` }}
+                />
+                <div className="flex items-center justify-between mb-1.5 pl-1.5">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span
+                      className="w-2 h-2 rounded-full shrink-0"
+                      style={{ background: a.color, boxShadow: `0 0 8px ${a.color}` }}
+                    />
+                    <span className="text-[11px] font-medium text-white/90 truncate">{a.label}</span>
+                  </div>
+                  <span className="text-[10px] font-bold text-muted-foreground tabular-nums">{a.pct}%</span>
                 </div>
-                <div className="text-sm font-bold text-white tabular-nums">{a.pct}%</div>
-                <div className="text-[11px] text-muted-foreground tabular-nums">
+                <div className="pl-1.5 text-base font-bold text-white tabular-nums leading-tight">
                   ${fmtMoney(dollarValue)}
                 </div>
               </div>
@@ -779,8 +853,9 @@ function RecentTradeAttribution() {
   );
   const trades = tradesData?.trades ?? [];
   return (
-    <div className="rounded-2xl border border-white/10 bg-[#0d1525] p-5">
-      <div className="flex items-center justify-between mb-3">
+    <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-[#0e1828] via-[#0a1322] to-[#070b14] p-5 md:p-6">
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-emerald-400/30 to-transparent" />
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
         <div>
           <h3 className="text-base font-semibold text-white flex items-center gap-2">
             <Activity className="w-4 h-4 text-emerald-400" /> Recent Trade Attribution
@@ -791,52 +866,79 @@ function RecentTradeAttribution() {
         </div>
         <Link
           href="/trade-activity"
-          className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1"
+          className="inline-flex items-center gap-1 text-xs text-blue-300 hover:text-blue-200 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/25 px-3 py-1.5 rounded-lg transition-all"
         >
           View all <ArrowUpRight className="w-3 h-3" />
         </Link>
       </div>
 
       {trades.length === 0 ? (
-        <div className="py-8 text-center text-sm text-muted-foreground">
-          No closed trades yet — your portfolio is warming up.
+        <div className="py-10 text-center">
+          <div className="mx-auto w-12 h-12 rounded-xl bg-white/[0.03] border border-white/10 flex items-center justify-center mb-3">
+            <Activity className="w-5 h-5 text-muted-foreground" />
+          </div>
+          <div className="text-sm text-muted-foreground">
+            No closed trades yet — your portfolio is warming up.
+          </div>
         </div>
       ) : (
-        <div className="divide-y divide-white/5">
+        <div className="space-y-2">
           {trades.map((t: any) => {
             const profit = parseFloat(String(t.profit ?? 0));
             const profitPctNum = parseFloat(String(t.profitPercent ?? 0));
             const isWin = profit >= 0;
             return (
-              <div key={t.id} className="flex items-center justify-between py-3">
-                <div className="flex items-center gap-3 min-w-0">
+              <div
+                key={t.id}
+                className={`relative overflow-hidden flex items-center justify-between p-3 rounded-xl border transition-all hover:-translate-y-0.5 duration-200 ${
+                  isWin
+                    ? "bg-gradient-to-r from-emerald-500/[0.06] to-transparent border-emerald-500/15 hover:border-emerald-500/30"
+                    : "bg-gradient-to-r from-red-500/[0.06] to-transparent border-red-500/15 hover:border-red-500/30"
+                }`}
+              >
+                <div
+                  className={`absolute left-0 top-0 bottom-0 w-1 ${
+                    isWin ? "bg-emerald-400" : "bg-red-400"
+                  }`}
+                  style={{ boxShadow: isWin ? "0 0 12px #34d39988" : "0 0 12px #f8717188" }}
+                />
+                <div className="flex items-center gap-3 min-w-0 pl-2">
                   <div
-                    className={`w-8 h-8 rounded-lg flex items-center justify-center text-[10px] font-bold shrink-0 ${
+                    className={`w-9 h-9 rounded-lg flex items-center justify-center text-[10px] font-bold shrink-0 ${
                       t.side === "BUY"
-                        ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                        : "bg-red-500/10 text-red-400 border border-red-500/20"
+                        ? "bg-emerald-500/15 text-emerald-300 border border-emerald-500/30"
+                        : "bg-red-500/15 text-red-300 border border-red-500/30"
                     }`}
                   >
                     {t.side}
                   </div>
                   <div className="min-w-0">
-                    <div className="text-sm font-semibold text-white">{t.symbol}</div>
-                    <div className="text-[11px] text-muted-foreground">
-                      Entry {t.entryPrice} → Exit {t.exitPrice}
+                    <div className="text-sm font-bold text-white">{t.symbol}</div>
+                    <div className="text-[11px] text-muted-foreground tabular-nums">
+                      Entry <span className="text-white/80">{t.entryPrice}</span>
+                      <span className="opacity-40 mx-1">→</span>
+                      Exit <span className="text-white/80">{t.exitPrice}</span>
                     </div>
                   </div>
                 </div>
                 <div className="text-right">
                   <div
-                    className={`text-sm font-bold tabular-nums ${
-                      isWin ? "text-emerald-400" : "text-red-400"
+                    className={`text-sm md:text-base font-extrabold tabular-nums ${
+                      isWin ? "text-emerald-300" : "text-red-300"
                     }`}
+                    style={{
+                      textShadow: isWin
+                        ? "0 0 16px rgba(52,211,153,0.35)"
+                        : "0 0 16px rgba(248,113,113,0.35)",
+                    }}
                   >
                     {isWin ? "+" : ""}${fmtMoney(Math.abs(profit))}
                   </div>
                   <div
-                    className={`text-[11px] tabular-nums ${
-                      isWin ? "text-emerald-400/70" : "text-red-400/70"
+                    className={`inline-flex items-center gap-0.5 text-[10px] font-semibold tabular-nums px-1.5 py-0.5 rounded mt-0.5 ${
+                      isWin
+                        ? "text-emerald-400 bg-emerald-500/10 border border-emerald-500/20"
+                        : "text-red-400 bg-red-500/10 border border-red-500/20"
                     }`}
                   >
                     {isWin ? "+" : ""}{profitPctNum.toFixed(2)}%
