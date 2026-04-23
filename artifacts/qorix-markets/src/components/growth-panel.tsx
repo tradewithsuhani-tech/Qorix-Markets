@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
-import { motion, AnimatePresence } from "framer-motion";
-import { useState } from "react";
+import { motion, AnimatePresence, animate, useMotionValue, useTransform } from "framer-motion";
+import { useEffect, useRef, useState } from "react";
 import {
   Trophy, Star, Users, TrendingUp, Crown, Flame,
   Rocket, Diamond, Globe, Award, ChevronRight, Zap, Medal
@@ -207,6 +207,34 @@ const PODIUM_STYLES: Record<1 | 2 | 3, PodiumStyle> = {
   },
 };
 
+function CountUp({
+  value,
+  prefix = "",
+  duration = 1.4,
+  className,
+}: {
+  value: number;
+  prefix?: string;
+  duration?: number;
+  className?: string;
+}) {
+  const mv = useMotionValue(0);
+  const rounded = useTransform(mv, (v) =>
+    `${prefix}${v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  );
+  const prev = useRef(0);
+  useEffect(() => {
+    const controls = animate(mv, value, {
+      duration,
+      ease: "easeOut",
+      from: prev.current,
+    });
+    prev.current = value;
+    return () => controls.stop();
+  }, [value, duration, mv]);
+  return <motion.span className={className}>{rounded}</motion.span>;
+}
+
 function PodiumCard({
   entry,
   rank,
@@ -284,18 +312,34 @@ function PodiumCard({
         {entry.publicId ?? `$${parseFloat(String(entry.investmentAmount)).toLocaleString()}`}
       </div>
 
-      {/* profit — neon green, big */}
+      {/* profit — neon green count-up */}
       <motion.div
-        animate={{ opacity: [0.92, 1, 0.92] }}
-        transition={{ duration: 2.6, repeat: Infinity, ease: "easeInOut" }}
+        animate={{
+          textShadow: [
+            "0 0 14px rgba(52,211,153,0.45)",
+            "0 0 26px rgba(52,211,153,0.85)",
+            "0 0 14px rgba(52,211,153,0.45)",
+          ],
+        }}
+        transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
         className={cn(
-          "relative z-10 mt-3 font-black tabular-nums text-emerald-400 [text-shadow:0_0_18px_rgba(52,211,153,0.55)]",
+          "relative z-10 mt-3 font-black tabular-nums text-emerald-400",
           big ? "text-2xl sm:text-3xl" : "text-lg sm:text-xl",
         )}
       >
-        +${profit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+        <CountUp value={profit} prefix="+$" duration={big ? 1.8 : 1.4} />
       </motion.div>
-      <div className="relative z-10 text-[10px] text-muted-foreground uppercase tracking-widest mt-0.5">this week</div>
+
+      {/* live profit pulse label */}
+      <div className="relative z-10 mt-1 flex items-center gap-1.5">
+        <span className="relative flex h-1.5 w-1.5">
+          <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75 animate-ping" />
+          <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400" />
+        </span>
+        <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-300/90">
+          Live profit
+        </span>
+      </div>
     </motion.div>
   );
 }
