@@ -475,10 +475,11 @@ function buildBroadcastHtml(title: string, message: string): string {
 
   // Body: escape → linkify → bullet rendering → newline preservation.
   const escaped = escapeHtml(message);
-  const linkified = escaped.replace(
-    /(https?:\/\/[^\s<]+)/g,
-    '<a href="$1" style="color:#7DD3FC;text-decoration:none;border-bottom:1px solid rgba(125,211,252,0.4);word-break:break-all;">$1</a>',
-  );
+  const linkified = escaped.replace(/(https?:\/\/[^\s<]+)/g, (full) => {
+    // Shorter display text so long URLs don't break across lines on mobile.
+    const display = full.replace(/^https?:\/\//, "").replace(/\/$/, "");
+    return `<a href="${full}" style="color:#7DD3FC;text-decoration:none;border-bottom:1px solid rgba(125,211,252,0.4);white-space:nowrap;">${display}</a>`;
+  });
   const bodyHtml = linkified.replace(/\n/g, "<br/>");
 
   // Subtle preheader (shows in inbox preview after subject line).
