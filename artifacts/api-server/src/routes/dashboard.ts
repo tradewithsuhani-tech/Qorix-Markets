@@ -15,6 +15,35 @@ const USER_EQUITY_WINDOW_MS = 10 * 60 * 1000;
 const USER_EQUITY_BUMP_MIN = 100;
 const USER_EQUITY_BUMP_MAX = 500;
 
+// Per-user synthetic "Daily P&L" display values (display-only, never real).
+//   - One target % per UTC weekday, picked in [DAILY_PNL_MIN_PCT, MAX].
+//   - Released as 4 chunks every 4 hours so the card grows during the day.
+//   - Sat/Sun (UTC) = market closed: state freezes, frontend shows countdown.
+const DAILY_PNL_WINDOW_MS = 4 * 60 * 60 * 1000;
+const DAILY_PNL_INCREMENTS = 4;
+const DAILY_PNL_MIN_PCT = 0.4;
+const DAILY_PNL_MAX_PCT = 0.6;
+
+function isWeekendUtc(d: Date): boolean {
+  const day = d.getUTCDay();
+  return day === 0 || day === 6;
+}
+
+function nextMondayMidnightUtc(now: Date): Date {
+  const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const day = d.getUTCDay();
+  const daysUntilMon = day === 0 ? 1 : day === 6 ? 2 : (8 - day) % 7 || 7;
+  d.setUTCDate(d.getUTCDate() + daysUntilMon);
+  return d;
+}
+
+function generateDailyChunks(targetPct: number): number[] {
+  // 4 random positive weights, scaled so they sum to targetPct (≈0.4–0.6%).
+  const weights = Array.from({ length: DAILY_PNL_INCREMENTS }, () => 0.5 + Math.random());
+  const sumW = weights.reduce((a, b) => a + b, 0);
+  return weights.map((w) => +((w / sumW) * targetPct).toFixed(4));
+}
+
 router.get("/dashboard/summary", async (req: AuthRequest, res) => {
   const wallets = await db.select().from(walletsTable).where(eq(walletsTable.userId, req.userId!)).limit(1);
   const invs = await db.select().from(investmentsTable).where(eq(investmentsTable.userId, req.userId!)).limit(1);
@@ -56,7 +85,77 @@ router.get("/dashboard/summary", async (req: AuthRequest, res) => {
   }
 
   const totalBalance = mainBalance + tradingBalance + profitBalance + demoEquityBoost;
-  const dailyProfit = inv ? parseFloat(inv.dailyProfit as string) : 0;
+
+  // Synthetic Daily P&L state (per UTC weekday). Frozen on Sat/Sun.
+  const nowDate = new Date();
+  const todayUtc = nowDate.toISOString().slice(0, 10);
+  const weekend = isWeekendUtc(nowDate);
+
+  let dailyPnlAmount = parseFloat((wallet?.dailyPnlAmount as string) ?? "0");
+  let dailyPnlPct = parseFloat((wallet?.dailyPnlPct as string) ?? "0");
+  let dailyPnlDay = (wallet?.dailyPnlDay as string) ?? "";
+  let dailyPnlTargetPct = parseFloat((wallet?.dailyPnlTargetPct as string) ?? "0");
+  let dailyPnlChunks: number[] = (() => {
+    try { return JSON.parse((wallet?.dailyPnlChunks as string) ?? "[]"); } catch { return []; }
+  })();
+  let dailyPnlIncrementsDone = wallet?.dailyPnlIncrementsDone ?? 0;
+
+  let nextChunkAt: number | null = null;
+  let marketOpensAt: number | null = null;
+
+  if (wallet) {
+    if (weekend) {
+      // Market closed — freeze, expose countdown to next Monday 00:00 UTC.
+      marketOpensAt = nextMondayMidnightUtc(nowDate).getTime();
+      // Reset visible P&L to 0 for weekend display.
+      dailyPnlAmount = 0;
+      dailyPnlPct = 0;
+    } else {
+      // New UTC weekday → roll fresh target + chunk plan.
+      if (dailyPnlDay !== todayUtc || dailyPnlChunks.length !== DAILY_PNL_INCREMENTS) {
+        dailyPnlTargetPct = +(DAILY_PNL_MIN_PCT + Math.random() * (DAILY_PNL_MAX_PCT - DAILY_PNL_MIN_PCT)).toFixed(4);
+        dailyPnlChunks = generateDailyChunks(dailyPnlTargetPct);
+        dailyPnlDay = todayUtc;
+        dailyPnlIncrementsDone = 0;
+        dailyPnlAmount = 0;
+        dailyPnlPct = 0;
+      }
+      // How many 4hr windows have elapsed since UTC midnight (1..4).
+      const utcMidnight = Date.UTC(nowDate.getUTCFullYear(), nowDate.getUTCMonth(), nowDate.getUTCDate());
+      const msSinceMidnight = nowDate.getTime() - utcMidnight;
+      const expected = Math.min(DAILY_PNL_INCREMENTS, Math.floor(msSinceMidnight / DAILY_PNL_WINDOW_MS) + 1);
+      if (dailyPnlIncrementsDone < expected) {
+        let pctSum = dailyPnlPct;
+        for (let i = dailyPnlIncrementsDone; i < expected; i++) {
+          pctSum += dailyPnlChunks[i] ?? 0;
+        }
+        dailyPnlPct = +pctSum.toFixed(4);
+        dailyPnlAmount = +(totalBalance * dailyPnlPct / 100).toFixed(2);
+        dailyPnlIncrementsDone = expected;
+      } else {
+        // Keep amount in sync with current totalBalance even between bumps.
+        dailyPnlAmount = +(totalBalance * dailyPnlPct / 100).toFixed(2);
+      }
+      // Countdown to the next 4hr bump (null once all 4 are done for the day).
+      if (dailyPnlIncrementsDone < DAILY_PNL_INCREMENTS) {
+        nextChunkAt = utcMidnight + dailyPnlIncrementsDone * DAILY_PNL_WINDOW_MS;
+      }
+
+      await db
+        .update(walletsTable)
+        .set({
+          dailyPnlAmount: dailyPnlAmount.toFixed(2),
+          dailyPnlPct: dailyPnlPct.toFixed(4),
+          dailyPnlDay,
+          dailyPnlTargetPct: dailyPnlTargetPct.toFixed(4),
+          dailyPnlChunks: JSON.stringify(dailyPnlChunks),
+          dailyPnlIncrementsDone,
+        })
+        .where(eq(walletsTable.userId, req.userId!));
+    }
+  }
+
+  const dailyProfit = dailyPnlAmount;
   const totalProfit = inv ? parseFloat(inv.totalProfit as string) : 0;
   const investmentAmount = inv ? parseFloat(inv.amount as string) : 0;
 
@@ -74,7 +173,17 @@ router.get("/dashboard/summary", async (req: AuthRequest, res) => {
   res.json({
     totalBalance,
     dailyProfitLoss: dailyProfit,
-    dailyProfitPercent,
+    dailyProfitPercent: dailyPnlPct,
+    dailyPnl: {
+      amount: dailyPnlAmount,
+      percent: dailyPnlPct,
+      targetPercent: dailyPnlTargetPct,
+      incrementsDone: dailyPnlIncrementsDone,
+      incrementsTotal: DAILY_PNL_INCREMENTS,
+      nextChunkAt,
+      marketClosed: weekend,
+      marketOpensAt,
+    },
     activeInvestment: investmentAmount,
     totalProfit,
     profitBalance,

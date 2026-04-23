@@ -1,4 +1,4 @@
-import { pgTable, serial, integer, numeric, timestamp, bigint } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, numeric, timestamp, bigint, varchar, text } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -13,6 +13,15 @@ export const walletsTable = pgTable("wallets", {
   // Auto-grows by random $100–$500 every 10 min via /api/dashboard/summary.
   demoEquityBoost: numeric("demo_equity_boost", { precision: 18, scale: 2 }).notNull().default("0"),
   demoEquityLastAt: bigint("demo_equity_last_at", { mode: "number" }).notNull().default(0),
+  // Per-user synthetic Daily P&L state (display-only). Daily target picked
+  // once per UTC weekday between 0.40%–0.60%, split into 4 random chunks
+  // released every 4 hours. Sat/Sun = market closed (no advance).
+  dailyPnlAmount: numeric("daily_pnl_amount", { precision: 18, scale: 2 }).notNull().default("0"),
+  dailyPnlPct: numeric("daily_pnl_pct", { precision: 6, scale: 4 }).notNull().default("0"),
+  dailyPnlDay: varchar("daily_pnl_day", { length: 10 }).notNull().default(""),
+  dailyPnlTargetPct: numeric("daily_pnl_target_pct", { precision: 6, scale: 4 }).notNull().default("0"),
+  dailyPnlChunks: text("daily_pnl_chunks").notNull().default("[]"),
+  dailyPnlIncrementsDone: integer("daily_pnl_increments_done").notNull().default(0),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
