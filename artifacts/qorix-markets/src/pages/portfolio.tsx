@@ -984,7 +984,25 @@ export default function PortfolioPage() {
   return (
     <Layout>
       <PortfolioInner />
-      <div className="px-4 md:px-8 py-6 md:py-8 max-w-7xl mx-auto border-t border-white/10 mt-8">
+      <div className="px-4 md:px-8 pt-2 max-w-7xl mx-auto">
+        <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+          <div>
+            <h2 className="text-lg md:text-xl font-bold text-white flex items-center gap-2">
+              <span className="bg-gradient-to-r from-white to-emerald-200 bg-clip-text text-transparent">
+                Performance Insights
+              </span>
+            </h2>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Equity curve, daily P&amp;L, rolling returns &amp; key metrics
+            </p>
+          </div>
+          <span className="inline-flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-emerald-300 bg-emerald-500/10 border border-emerald-500/25 px-2.5 py-1 rounded-full font-bold">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            Live Data
+          </span>
+        </div>
+      </div>
+      <div className="portfolio-insights px-4 md:px-8 pb-2 max-w-7xl mx-auto">
         <DemoDashboardBody
           hideHeader
           hideFomoTicker
