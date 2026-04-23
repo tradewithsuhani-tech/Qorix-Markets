@@ -822,27 +822,6 @@ export function GrowthPanel() {
           </div>
         </div>
 
-        {/* Tabs */}
-        <div className="flex gap-1 mt-4 bg-white/[0.03] rounded-xl p-1">
-          {TABS.map((tab) => {
-            const Icon = tab.icon;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={cn(
-                  "flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-medium transition-all",
-                  activeTab === tab.id
-                    ? "bg-white/10 text-white shadow-sm"
-                    : "text-muted-foreground hover:text-white"
-                )}
-              >
-                <Icon style={{ width: 12, height: 12 }} />
-                {tab.label}
-              </button>
-            );
-          })}
-        </div>
       </div>
 
       {/* Tab content */}
