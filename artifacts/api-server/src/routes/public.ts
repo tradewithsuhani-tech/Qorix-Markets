@@ -56,17 +56,22 @@ router.get("/signal-trades/recent", async (_req, res) => {
 });
 
 /**
- * Auto-incrementing "Active Investors" counter.
- * - Increases by random(5–25) every 30 minutes
- * - Persisted in system_settings so it survives restarts and is shared across requests
- * - Monotonic: never decreases (so refresh / new signup never lowers the displayed number)
- * - On real signup, an extra +1 is added (see auth.ts) to feel organic
+ * Pair: { activeInvestors, usersEarningNow }
+ * - activeInvestors: monotonic counter that bumps 5–25 every 30 min
+ * - usersEarningNow: monotonic, always 80–95% of activeInvestors (re-rolled per window)
+ * Both values are persisted in system_settings so they're stable across refreshes
+ * and shared across processes.
  */
-async function advanceActiveInvestorsCounter(currentBaseline: number): Promise<number> {
+async function advanceLiveCounters(currentBaseline: number): Promise<{
+  activeInvestors: number;
+  usersEarningNow: number;
+}> {
   const INCREMENT_WINDOW_MS = 30 * 60 * 1000; // 30 minutes
   const MIN_BUMP = 5;
   const MAX_BUMP = 25;
   const FLOOR = 124; // matches landing-page fallback so the number always feels real
+  const EARNING_MIN_PCT = 80;
+  const EARNING_MAX_PCT = 95;
   const now = Date.now();
 
   const rows = await db
@@ -75,14 +80,16 @@ async function advanceActiveInvestorsCounter(currentBaseline: number): Promise<n
     .where(inArray(systemSettingsTable.key, [
       "active_investors_count",
       "active_investors_last_increment_at",
+      "users_earning_now_count",
     ]));
   const map = Object.fromEntries(rows.map((r) => [r.key, r.value]));
 
   let count = Number(map["active_investors_count"] ?? "0");
   let lastAt = Number(map["active_investors_last_increment_at"] ?? "0");
+  let earning = Number(map["users_earning_now_count"] ?? "0");
   let dirty = false;
 
-  // Monotonic floor: never below current baseline + hardcoded floor
+  // Monotonic floor for active investors
   const minimum = Math.max(FLOOR, currentBaseline);
   if (count < minimum) {
     count = minimum;
@@ -93,6 +100,7 @@ async function advanceActiveInvestorsCounter(currentBaseline: number): Promise<n
     dirty = true;
   }
 
+  // Catch up any missed 30-min windows (each window adds 5–25 to investors)
   const elapsed = now - lastAt;
   const windows = Math.floor(elapsed / INCREMENT_WINDOW_MS);
   if (windows > 0) {
@@ -105,12 +113,27 @@ async function advanceActiveInvestorsCounter(currentBaseline: number): Promise<n
     dirty = true;
   }
 
+  // Earning-now stays at 80–95% of active investors. Pick a fresh percentage
+  // (within band) and use max() to enforce monotonic growth.
+  const pct = EARNING_MIN_PCT + Math.random() * (EARNING_MAX_PCT - EARNING_MIN_PCT);
+  const targetEarning = Math.floor(count * (pct / 100));
+  if (targetEarning > earning) {
+    earning = targetEarning;
+    dirty = true;
+  }
+  // Hard guard: never report more earning users than total investors
+  if (earning > count) {
+    earning = Math.floor(count * 0.9);
+    dirty = true;
+  }
+
   if (dirty) {
     await db
       .insert(systemSettingsTable)
       .values([
         { key: "active_investors_count", value: String(count) },
         { key: "active_investors_last_increment_at", value: String(lastAt) },
+        { key: "users_earning_now_count", value: String(earning) },
       ])
       .onConflictDoUpdate({
         target: systemSettingsTable.key,
@@ -118,7 +141,7 @@ async function advanceActiveInvestorsCounter(currentBaseline: number): Promise<n
       });
   }
 
-  return count;
+  return { activeInvestors: count, usersEarningNow: earning };
 }
 
 router.get("/public/market-indicators", async (_req, res) => {
@@ -179,15 +202,14 @@ router.get("/public/market-indicators", async (_req, res) => {
     if (Array.isArray(parsed)) fomoMessages = parsed.filter((s) => typeof s === "string");
   } catch {}
 
-  // Monotonic, auto-incrementing investor counter (5–25 every 30 min).
-  // Seeded from real + admin baseline so the displayed number is always coherent.
-  const activeInvestors = await advanceActiveInvestorsCounter(
-    realActiveInvestors + baseInvestors,
-  );
+  // Monotonic, auto-incrementing live counters (persisted in DB).
+  // - activeInvestors: bumps 5–25 every 30 min, seeded from real + admin baseline
+  // - usersEarningNow: 80–95% of activeInvestors, monotonic
+  const live = await advanceLiveCounters(realActiveInvestors + baseInvestors);
 
   res.json({
-    activeInvestors,
-    usersEarningNow: realActiveInvestors + baseEarning,
+    activeInvestors: live.activeInvestors,
+    usersEarningNow: Math.max(live.usersEarningNow, realActiveInvestors + baseEarning),
     withdrawals24h: realWithdrawals24h + baseWithdrawals,
     avgMonthlyReturn: realAvgMonthlyReturn > 0 ? realAvgMonthlyReturn : baseAvgReturn,
     demoModeEnabled: settings["demo_mode_enabled"] !== "false",
