@@ -462,9 +462,9 @@ router.get("/dashboard/performance", async (req: AuthRequest, res) => {
     .where(eq(tradesTable.userId, req.userId!))
     .orderBy(desc(tradesTable.executedAt));
 
-  const totalTrades = allTrades.length;
+  const realTotalTrades = allTrades.length;
   const winningTrades = allTrades.filter(t => parseFloat(t.profit as string) > 0).length;
-  const realWinRate = totalTrades > 0 ? (winningTrades / totalTrades) * 100 : 0;
+  const realWinRate = realTotalTrades > 0 ? (winningTrades / realTotalTrades) * 100 : 0;
 
   // Synthetic Performance Metrics — computed once per UTC day from today's
   // Daily P&L pct and persisted on the wallet row, so refresh = stable value.
@@ -526,8 +526,8 @@ router.get("/dashboard/performance", async (req: AuthRequest, res) => {
 
   const winRate = Math.max(realWinRate, synthWinRate);
 
-  const realAvgReturn = totalTrades > 0
-    ? allTrades.reduce((acc, t) => acc + parseFloat(t.profitPercent as string), 0) / totalTrades
+  const realAvgReturn = realTotalTrades > 0
+    ? allTrades.reduce((acc, t) => acc + parseFloat(t.profitPercent as string), 0) / realTotalTrades
     : 0;
   const avgReturn = Math.max(realAvgReturn, synthAvgReturn);
 
@@ -578,6 +578,17 @@ router.get("/dashboard/performance", async (req: AuthRequest, res) => {
       rollingReturns.push({ period: label, return: 0 });
     }
   }
+
+  // Synthetic Total Trades — institutional baseline 283, grows 4-10 per fund
+  // update (one equity-history row = one fund update). Deterministic per-day
+  // hash so refresh shows the same number; only ticks up when fund updates.
+  const SYNTH_TRADES_BASELINE = 283;
+  const synthTradesAdded = equityRecords.reduce((acc, r) => {
+    const h = hashSeed(`${req.userId}:${r.date}:trades`);
+    return acc + Math.floor(4 + h * 7); // 4..10 inclusive
+  }, 0);
+  const synthTotalTrades = SYNTH_TRADES_BASELINE + synthTradesAdded;
+  const totalTrades = Math.max(realTotalTrades, synthTotalTrades);
 
   res.json({
     winRate: parseFloat(winRate.toFixed(1)),
