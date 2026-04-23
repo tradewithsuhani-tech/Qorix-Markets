@@ -65,10 +65,10 @@ export function BigBalanceCounter({
   const [intPart, decPart] = formatted.split(".");
 
   return (
-    <span className={`number-scroll inline-flex items-end gap-0.5 ${className}`}>
-      <span className="text-muted-foreground text-lg font-medium mb-0.5">{prefix}</span>
-      <span className="font-bold tracking-tight">{intPart}</span>
-      <span className="text-muted-foreground text-xl font-medium mb-0.5">.{decPart}</span>
+    <span className={`number-scroll inline-flex items-end gap-0.5 max-w-full ${className}`}>
+      <span className="text-muted-foreground font-medium mb-0.5" style={{ fontSize: "0.65em" }}>{prefix}</span>
+      <span className="font-bold tracking-tight truncate">{intPart}</span>
+      <span className="text-muted-foreground font-medium mb-0.5" style={{ fontSize: "0.55em" }}>.{decPart}</span>
     </span>
   );
 }
