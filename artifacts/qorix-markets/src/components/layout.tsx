@@ -557,6 +557,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   const userLinks = [
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { href: "/demo-dashboard", label: "Demo Dashboard", icon: LayoutDashboard },
     { href: "/wallet", label: "Wallet", icon: Wallet },
     { href: "/invest", label: "Trade", icon: TrendingUp, featured: true },
     { href: "/deposit", label: "Deposit", icon: ArrowDownCircle },

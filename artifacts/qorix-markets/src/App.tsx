@@ -19,6 +19,7 @@ import LoginPage from "@/pages/login";
 import ForgotPasswordPage from "@/pages/forgot-password";
 import AdminLoginPage from "@/pages/admin-login";
 import Dashboard from "@/pages/dashboard";
+import DemoDashboard from "@/pages/demo-dashboard";
 import WalletPage from "@/pages/wallet";
 import DepositPage from "@/pages/deposit";
 import InvestPage from "@/pages/invest";
@@ -146,6 +147,7 @@ function Router() {
       <Route path="/forgot-password"><PublicOnlyRoute component={ForgotPasswordPage} /></Route>
       <Route path="/admin-login"><PublicOnlyRoute component={AdminLoginPage} adminRedirect={true} /></Route>
       <Route path="/dashboard"><ProtectedRoute component={Dashboard} /></Route>
+      <Route path="/demo-dashboard"><ProtectedRoute component={DemoDashboard} /></Route>
       <Route path="/wallet"><ProtectedRoute component={WalletPage} /></Route>
       <Route path="/deposit"><ProtectedRoute component={DepositPage} /></Route>
       <Route path="/invest"><ProtectedRoute component={InvestPage} /></Route>
