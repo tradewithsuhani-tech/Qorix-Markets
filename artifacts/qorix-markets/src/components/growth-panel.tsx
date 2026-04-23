@@ -393,99 +393,33 @@ function WeeklyLeaderboard({ userId }: { userId: number }) {
 
   return (
     <div className="space-y-2">
-      {/* CTA — premium gradient-bordered, animated */}
+      {/* CTA — clean premium */}
       <motion.div
-        initial={{ opacity: 0, y: -10 }}
+        initial={{ opacity: 0, y: -8 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, ease: "easeOut" }}
-        className="relative mb-5 rounded-2xl p-[1.5px] bg-[conic-gradient(from_var(--a,0deg),rgba(250,204,21,0.6),rgba(168,85,247,0.55),rgba(59,130,246,0.6),rgba(52,211,153,0.55),rgba(250,204,21,0.6))] [animation:spin-border_8s_linear_infinite]"
-        style={{
-          // @ts-expect-error custom prop for the gradient
-          "--a": "0deg",
-        }}
+        transition={{ duration: 0.4, ease: "easeOut" }}
+        className="relative mb-5 overflow-hidden rounded-2xl border border-white/10 bg-[radial-gradient(120%_140%_at_50%_0%,rgba(250,204,21,0.10),transparent_60%),linear-gradient(to_bottom,rgba(15,23,42,0.95),rgba(2,6,23,0.95))] px-5 py-5 sm:px-6 sm:py-6 text-center"
       >
-        <style>{`@keyframes spin-border { to { --a: 360deg; } } @property --a { syntax: '<angle>'; inherits: false; initial-value: 0deg; }`}</style>
-        <div className="relative overflow-hidden rounded-[14px] bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 px-5 py-5 sm:px-6 sm:py-6 text-center">
-          {/* radial accent glow */}
-          <motion.div
-            aria-hidden
-            animate={{ opacity: [0.35, 0.65, 0.35] }}
-            transition={{ duration: 3.4, repeat: Infinity, ease: "easeInOut" }}
-            className="pointer-events-none absolute -top-24 left-1/2 -translate-x-1/2 w-72 h-40 rounded-full blur-3xl bg-[radial-gradient(closest-side,rgba(250,204,21,0.35),rgba(168,85,247,0.25),transparent)]"
-          />
-          {/* shimmer sweep */}
-          <motion.div
-            aria-hidden
-            initial={{ x: "-120%" }}
-            animate={{ x: "220%" }}
-            transition={{ duration: 3.6, repeat: Infinity, ease: "easeInOut", repeatDelay: 1.4 }}
-            className="pointer-events-none absolute inset-y-0 w-1/3 -skew-x-12 bg-gradient-to-r from-transparent via-white/[0.07] to-transparent"
-          />
+        {/* soft top accent line */}
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-yellow-300/40 to-transparent" />
 
-          {/* trophy crest */}
-          <motion.div
-            initial={{ scale: 0.6, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ delay: 0.15, type: "spring", stiffness: 220, damping: 16 }}
-            className="relative z-10 mx-auto mb-3 flex items-center justify-center"
-          >
-            <div className="relative w-12 h-12 rounded-2xl bg-gradient-to-br from-yellow-300 via-amber-400 to-yellow-600 p-[2px] shadow-[0_0_28px_-6px_rgba(250,204,21,0.7)]">
-              <div className="w-full h-full rounded-[14px] bg-slate-950 flex items-center justify-center">
-                <Trophy className="w-6 h-6 text-yellow-300 drop-shadow-[0_0_8px_rgba(250,204,21,0.6)]" />
-              </div>
-              <motion.span
-                animate={{ opacity: [0.4, 1, 0.4], scale: [0.95, 1.1, 0.95] }}
-                transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}
-                className="absolute -inset-1 rounded-2xl bg-yellow-400/20 blur-md -z-10"
-              />
-            </div>
-          </motion.div>
-
-          {/* eyebrow */}
-          <div className="relative z-10 inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/[0.04] border border-white/10 text-[9px] font-bold uppercase tracking-[0.18em] text-yellow-300/90">
-            <span className="relative flex h-1.5 w-1.5">
-              <span className="absolute inline-flex h-full w-full rounded-full bg-yellow-400 opacity-75 animate-ping" />
-              <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-yellow-400" />
-            </span>
-            Weekly Hall of Fame
-          </div>
-
-          {/* headline */}
-          <div className="relative z-10 mt-3 text-lg sm:text-xl font-black text-white tracking-tight leading-tight">
-            Next top investor could be{" "}
-            <span className="bg-gradient-to-r from-yellow-300 via-amber-300 to-emerald-300 bg-clip-text text-transparent">
-              you
-            </span>
-          </div>
-          <p className="relative z-10 mt-1.5 text-[11px] sm:text-xs text-slate-400 max-w-xs mx-auto leading-relaxed">
-            Activate a strategy today and climb the weekly leaderboard. Top traders earn premium rewards.
-          </p>
-
-          {/* gradient button with shimmer */}
-          <a
-            href="/invest"
-            className="group relative z-10 mt-4 inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-bold text-sm text-white overflow-hidden bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-600 shadow-[0_8px_24px_-6px_rgba(99,102,241,0.55),0_0_0_1px_rgba(255,255,255,0.08)_inset] hover:shadow-[0_10px_32px_-4px_rgba(99,102,241,0.85),0_0_0_1px_rgba(255,255,255,0.12)_inset] hover:scale-[1.04] active:scale-[0.98] transition-all"
-            data-testid="link-leaderboard-cta-start-trading"
-          >
-            <motion.span
-              aria-hidden
-              initial={{ x: "-150%" }}
-              animate={{ x: "180%" }}
-              transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut", repeatDelay: 1.2 }}
-              className="absolute inset-y-0 w-1/2 -skew-x-12 bg-gradient-to-r from-transparent via-white/30 to-transparent"
-            />
-            <Rocket className="relative z-10 w-4 h-4 group-hover:-translate-y-0.5 group-hover:rotate-[-8deg] transition-transform" />
-            <span className="relative z-10 tracking-wide">Start Trading</span>
-            <ChevronRight className="relative z-10 w-4 h-4 group-hover:translate-x-1 transition-transform" />
-          </a>
-
-          {/* trust strip */}
-          <div className="relative z-10 mt-3.5 flex items-center justify-center gap-3 sm:gap-4 text-[10px] uppercase tracking-widest text-slate-500">
-            <span className="flex items-center gap-1"><Zap className="w-3 h-3 text-emerald-400" /> Instant start</span>
-            <span className="w-px h-3 bg-white/10" />
-            <span className="flex items-center gap-1"><Diamond className="w-3 h-3 text-blue-400" /> $10 minimum</span>
-          </div>
+        {/* headline */}
+        <div className="text-base sm:text-lg font-bold text-white tracking-tight leading-snug">
+          Next top investor could be{" "}
+          <span className="bg-gradient-to-r from-yellow-300 to-amber-400 bg-clip-text text-transparent">
+            you
+          </span>
         </div>
+
+        {/* gradient button */}
+        <a
+          href="/invest"
+          className="group relative mt-4 inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl font-semibold text-sm text-white bg-gradient-to-r from-blue-500 to-purple-600 shadow-[0_6px_20px_-6px_rgba(99,102,241,0.6)] hover:shadow-[0_8px_24px_-4px_rgba(99,102,241,0.85)] hover:-translate-y-0.5 active:translate-y-0 transition-all"
+          data-testid="link-leaderboard-cta-start-trading"
+        >
+          Start Trading
+          <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+        </a>
       </motion.div>
 
       {data?.myRank ? (
