@@ -723,7 +723,7 @@ export function GrowthPanel() {
             </div>
           </div>
           <div className="flex flex-col items-end gap-0.5">
-            <span className="live-pill inline-flex items-center gap-1.5 text-[11px] font-bold tracking-[0.14em] px-2.5 py-1 rounded-full border border-yellow-400/40 text-yellow-300 bg-gradient-to-r from-yellow-500/15 via-amber-500/12 to-yellow-500/15">
+            <span className="live-pill live-pill--green inline-flex items-center gap-1.5 text-[11px] font-bold tracking-[0.14em] px-2.5 py-1 rounded-full border border-emerald-400/50 text-emerald-300 bg-gradient-to-r from-emerald-500/15 via-green-500/12 to-emerald-500/15">
               <span className="live-pill-dot" />
               <span className="live-pill-text">LIVE</span>
             </span>
