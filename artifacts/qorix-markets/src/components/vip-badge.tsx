@@ -67,9 +67,9 @@ export function VipBadge({ tier, size = "sm", className }: VipBadgeProps) {
   }[size];
 
   const tooltip = {
-    silver: "Silver tier — $500+ active fund · +0.2% profit bonus · 1.5% withdrawal fee",
-    gold: "Gold tier — $2,000+ active fund · +0.35% profit bonus · 1.0% withdrawal fee",
-    platinum: "Platinum tier — $10,000+ active fund · +0.5% profit bonus · 0.5% withdrawal fee",
+    silver: "Silver — Lower withdrawal fee (entry tier)",
+    gold: "Gold — Better returns + reduced fees",
+    platinum: "Platinum — Maximum benefits, lowest fees",
   }[tier];
 
   return (
