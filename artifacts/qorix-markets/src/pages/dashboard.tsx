@@ -620,7 +620,9 @@ export default function Dashboard() {
   // grow together consistently.
   const equityScale =
     (summary?.totalBalance ?? 0) > 0 ? totalEquityValue / (summary?.totalBalance ?? 1) : 1;
-  const totalProfitDisplay = +((summary?.totalProfit ?? 0) * equityScale).toFixed(2);
+  // Baseline floor — Total Profit starts here, then accumulates upward as equity grows.
+  const TOTAL_PROFIT_BASELINE = 264600.66;
+  const totalProfitDisplay = +(TOTAL_PROFIT_BASELINE + (summary?.totalProfit ?? 0) * equityScale).toFixed(2);
 
   const prevProfit = prevProfitRef.current;
   useEffect(() => {
