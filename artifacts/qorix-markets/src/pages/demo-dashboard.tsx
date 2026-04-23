@@ -912,8 +912,8 @@ export default function DemoDashboard() {
           />
         )}
 
-        {/* Demo Mode Hero — shown to users who haven't activated live trading */}
-        {conversion?.demoModeEnabled !== false && !investment?.isActive && (
+        {/* Demo Mode Hero — hidden per request */}
+        {false && conversion?.demoModeEnabled !== false && !investment?.isActive && (
           <motion.div
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
