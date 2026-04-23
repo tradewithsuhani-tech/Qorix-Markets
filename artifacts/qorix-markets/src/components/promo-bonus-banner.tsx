@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Link } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Gift, Copy, Check, ArrowRight, X, Sparkles, BadgePercent, Timer } from "lucide-react";
+import { Gift, Copy, Check, ArrowRight, Sparkles, BadgePercent, Timer } from "lucide-react";
 import { authFetch } from "@/lib/auth-fetch";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
@@ -25,8 +25,6 @@ interface OfferResponse {
   nextOfferAt: number; // ms epoch — next new offer window
   serverTime: number;  // for clock-skew correction
 }
-
-const DISMISS_KEY = "qrx_promo_bonus_dismissed_window";
 
 function formatMs(ms: number): string {
   if (ms <= 0) return "0:00";
@@ -52,11 +50,8 @@ export function PromoBonusBanner() {
   const [copied, setCopied] = useState(false);
   const [now, setNow] = useState(() => Date.now());
 
-  // Dismissed for the current window only — reappears next window.
-  const [dismissedWindow, setDismissedWindow] = useState<number>(() => {
-    if (typeof window === "undefined") return 0;
-    return Number(localStorage.getItem(DISMISS_KEY) ?? 0);
-  });
+  // Banner stays pinned until an admin/user explicitly removes it —
+  // dismissal is intentionally disabled.
 
   const { data: offer } = useQuery<OfferResponse>({
     queryKey: ["promo-offer"],
@@ -122,23 +117,17 @@ export function PromoBonusBanner() {
     } catch {}
   };
 
-  const handleDismiss = () => {
-    if (!offer) return;
-    try { localStorage.setItem(DISMISS_KEY, String(offer.windowStart)); } catch {}
-    setDismissedWindow(offer.windowStart);
-  };
-
   const msLeft = useMemo(() => {
     if (!offer) return 0;
     const skew = offer.serverTime - Date.now();
     return Math.max(0, offer.expiresAt - now - skew);
   }, [offer, now]);
 
-  // Hide in all these cases:
+  // Hide only if offer failed to load or user has actually redeemed.
+  // Banner is pinned — no per-window dismiss, no auto-hide.
   if (!offer) return null;
   if (offer.alreadyRedeemed) return null;
   if (!offer.active) return null;
-  if (dismissedWindow === offer.windowStart) return null;
 
   // Progress for the 10-minute active window
   const totalActiveMs = offer.expiresAt - offer.windowStart;
@@ -173,14 +162,6 @@ export function PromoBonusBanner() {
         <div className="absolute top-0 inset-x-0 h-[2px] bg-gradient-to-r from-transparent via-amber-300 to-transparent" />
         <div className="absolute -top-24 -right-16 w-72 h-72 bg-amber-500/20 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute -bottom-20 -left-16 w-60 h-60 bg-yellow-500/15 rounded-full blur-3xl pointer-events-none" />
-
-        <button
-          onClick={handleDismiss}
-          aria-label="Dismiss"
-          className="absolute top-2.5 right-2.5 z-10 w-7 h-7 rounded-lg flex items-center justify-center text-white/50 hover:text-white hover:bg-white/10 transition"
-        >
-          <X className="w-3.5 h-3.5" />
-        </button>
 
         <div className="relative px-4 sm:px-5 py-4 sm:py-5 flex flex-col lg:flex-row lg:items-center gap-4">
           {/* Icon */}
