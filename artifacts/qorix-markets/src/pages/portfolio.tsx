@@ -688,18 +688,18 @@ function PortfolioInner() {
                 title={on ? "Profits auto-reinvest daily" : "Click to enable auto-reinvest"}
                 className={`group inline-flex items-center gap-2.5 pl-3 pr-1.5 py-1.5 rounded-xl border text-sm font-semibold transition-all shadow-lg disabled:opacity-60 ${
                   on
-                    ? "bg-gradient-to-r from-violet-500/25 via-fuchsia-500/15 to-purple-500/20 hover:from-violet-500/35 hover:to-purple-500/30 border-violet-400/40 text-violet-50 shadow-violet-500/25"
-                    : "bg-gradient-to-r from-white/[0.04] to-white/[0.02] hover:from-white/[0.08] hover:to-white/[0.04] border-white/15 text-muted-foreground shadow-black/10"
+                    ? "bg-gradient-to-r from-emerald-500/25 via-green-500/15 to-emerald-500/20 hover:from-emerald-500/35 hover:to-emerald-500/30 border-emerald-400/40 text-emerald-50 shadow-emerald-500/25"
+                    : "bg-gradient-to-r from-red-500/15 to-rose-500/10 hover:from-red-500/25 hover:to-rose-500/20 border-red-500/30 text-red-200 shadow-red-500/15"
                 }`}
               >
-                <Repeat className={`w-3.5 h-3.5 transition-transform ${on ? "text-violet-200" : ""} group-hover:rotate-180 duration-500`} />
+                <Repeat className={`w-3.5 h-3.5 transition-transform ${on ? "text-emerald-200" : "text-red-300"} group-hover:rotate-180 duration-500`} />
                 <span>Auto-Compound</span>
                 {/* iOS-style toggle pill */}
                 <span
                   className={`relative inline-flex items-center h-6 w-11 rounded-full transition-colors duration-300 border ${
                     on
-                      ? "bg-gradient-to-r from-violet-500 to-fuchsia-500 border-violet-300/60 shadow-[0_0_12px_rgba(167,139,250,0.55)]"
-                      : "bg-white/[0.06] border-white/15"
+                      ? "bg-gradient-to-r from-emerald-500 to-green-500 border-emerald-300/60 shadow-[0_0_12px_rgba(16,185,129,0.55)]"
+                      : "bg-gradient-to-r from-red-500/80 to-rose-500/80 border-red-400/50 shadow-[0_0_10px_rgba(239,68,68,0.35)]"
                   }`}
                 >
                   <span
