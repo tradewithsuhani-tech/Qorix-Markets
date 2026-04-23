@@ -194,8 +194,7 @@ export function PromoBonusBanner() {
             </h3>
             <p className="mt-0.5 text-xs md:text-[13px] text-white/65 leading-snug">
               Apply this code on your next USDT deposit. Bonus credits to your{" "}
-              <span className="text-amber-200 font-semibold">Trading Balance</span>{" "}
-              (non-withdrawable — grows your fund; only profits are withdrawable).{" "}
+              <span className="text-amber-200 font-semibold">Trading Balance</span>.{" "}
               <span className="text-white/40">T&amp;C apply.</span>
             </p>
 
