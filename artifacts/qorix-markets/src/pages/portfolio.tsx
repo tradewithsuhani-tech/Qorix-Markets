@@ -147,6 +147,147 @@ function LiveProfitFeed({ enabled }: { enabled: boolean }) {
   );
 }
 
+/**
+ * NextTradeStatus — cycling status pill that simulates the trade engine
+ * working in background. Phases:
+ *   1) Scanning markets…       (~6s, 4-bar wave animation)
+ *   2) Signal detected…        (~3s, pulsing yellow → green)
+ *   3) Next trade in MM:SS     (countdown from ~1:30 → 00:00)
+ * Then loops. Pure UX — gives anticipation without lying about engine state.
+ */
+function NextTradeStatus({ enabled }: { enabled: boolean }) {
+  type Phase = "scanning" | "signal" | "countdown";
+  const [phase, setPhase] = useState<Phase>("scanning");
+  const [countdown, setCountdown] = useState<number>(90); // seconds
+
+  useEffect(() => {
+    if (!enabled) return;
+    let timers: ReturnType<typeof setTimeout>[] = [];
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+
+    const runCycle = () => {
+      setPhase("scanning");
+      timers.push(
+        setTimeout(() => {
+          setPhase("signal");
+          timers.push(
+            setTimeout(() => {
+              const startSeconds = 75 + Math.floor(Math.random() * 45); // 1:15–2:00
+              setCountdown(startSeconds);
+              setPhase("countdown");
+              intervalId = setInterval(() => {
+                setCountdown((s) => {
+                  if (s <= 1) {
+                    if (intervalId) clearInterval(intervalId);
+                    timers.push(setTimeout(runCycle, 600));
+                    return 0;
+                  }
+                  return s - 1;
+                });
+              }, 1000);
+            }, 3000),
+          );
+        }, 6000),
+      );
+    };
+    runCycle();
+
+    return () => {
+      timers.forEach(clearTimeout);
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [enabled]);
+
+  const mm = String(Math.floor(countdown / 60)).padStart(2, "0");
+  const ss = String(countdown % 60).padStart(2, "0");
+
+  return (
+    <div className="rounded-2xl border border-white/10 bg-[#0d1525] p-5">
+      <div className="flex items-center justify-between mb-3">
+        <span className="text-[11px] uppercase tracking-wider font-bold text-muted-foreground">
+          Next Trade Status
+        </span>
+        <span className="text-[10px] text-muted-foreground">Auto-trading engine</span>
+      </div>
+
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        {phase === "scanning" && (
+          <div className="flex items-center gap-3">
+            <div className="flex items-end gap-[3px] h-6">
+              {[0, 1, 2, 3].map((i) => (
+                <span
+                  key={i}
+                  className="w-[3px] rounded-full bg-blue-400 scan-bar"
+                  style={{ animationDelay: `${i * 0.15}s` }}
+                />
+              ))}
+            </div>
+            <div>
+              <div className="text-base md:text-lg font-bold text-white">
+                Scanning markets<span className="dots-anim" />
+              </div>
+              <div className="text-xs text-muted-foreground">
+                Analyzing 87 instruments across FX · Gold · Indices
+              </div>
+            </div>
+          </div>
+        )}
+
+        {phase === "signal" && (
+          <div className="flex items-center gap-3">
+            <span className="relative flex h-3 w-3">
+              <span className="absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75 animate-ping" />
+              <span className="relative inline-flex rounded-full h-3 w-3 bg-amber-400" />
+            </span>
+            <div>
+              <div className="text-base md:text-lg font-bold text-amber-300">
+                Signal detected<span className="dots-anim" />
+              </div>
+              <div className="text-xs text-muted-foreground">
+                Confirming entry · risk-checked · queueing execution
+              </div>
+            </div>
+          </div>
+        )}
+
+        {phase === "countdown" && (
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center">
+              <Activity className="w-5 h-5 text-emerald-400" />
+            </div>
+            <div>
+              <div className="text-base md:text-lg font-bold text-white">
+                Next trade in{" "}
+                <span className="text-emerald-400 tabular-nums">
+                  {mm}:{ss}
+                </span>
+              </div>
+              <div className="text-xs text-muted-foreground">
+                Holding for optimal entry window
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Phase indicator */}
+        <div className="flex items-center gap-1.5">
+          {(["scanning", "signal", "countdown"] as Phase[]).map((p) => (
+            <span
+              key={p}
+              className={
+                "h-1.5 rounded-full transition-all duration-500 " +
+                (p === phase
+                  ? "w-6 bg-emerald-400"
+                  : "w-1.5 bg-white/15")
+              }
+            />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function daysBetween(iso?: string | null): number {
   if (!iso) return 0;
   const ms = Date.now() - new Date(iso).getTime();
@@ -314,8 +455,11 @@ function PortfolioInner() {
         </div>
       </div>
 
-      {/* LIVE PROFIT FEED — addictive incrementing ticker */}
-      <LiveProfitFeed enabled={isActive} />
+      {/* LIVE PROFIT FEED + NEXT TRADE STATUS — addictive engagement strip */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <LiveProfitFeed enabled={isActive} />
+        <NextTradeStatus enabled={isActive} />
+      </div>
 
       {/* Equity sparkline + Investment meta */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
