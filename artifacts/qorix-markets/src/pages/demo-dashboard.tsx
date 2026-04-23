@@ -929,15 +929,19 @@ export function DemoDashboardBody({
           />
         </div>
       </div>
-      <div className="flex-1" style={{ height: 260, minHeight: 260 }}>
+      <div className="w-full" style={{ height: 260 }}>
         {equityLoading ? (
           <div className="w-full h-full flex items-end gap-1 pb-2">
             {Array.from({ length: 20 }).map((_, i) => (
               <div key={i} className="flex-1 bg-white/5 rounded-t animate-pulse" style={{ height: `${30 + (i * 3) % 60}%` }} />
             ))}
           </div>
+        ) : chartData.length < 2 ? (
+          <div className="w-full h-full flex items-center justify-center text-xs text-muted-foreground">
+            Building your equity curve…
+          </div>
         ) : (
-          <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveContainer width="100%" height={260}>
             <AreaChart data={chartData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
               <defs>
                 <linearGradient id="equityGrad" x1="0" y1="0" x2="0" y2="1">
