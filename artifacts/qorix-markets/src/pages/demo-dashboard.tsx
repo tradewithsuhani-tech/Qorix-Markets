@@ -1083,6 +1083,42 @@ export function DemoDashboardBody({
     </>
   );
 
+  // Lock overlay reused on personal portfolio sections (Equity Curve,
+  // Drawdown/Daily P&L + Rolling Returns grid, Performance Metrics) when
+  // the user does not have an active trading fund. The underlying section
+  // still renders (so layout/data stays intact) but is blurred behind a
+  // teaser CTA inviting the user to activate trading.
+  const lockOverlay = (
+    <div className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none px-4">
+      <div className="pointer-events-auto max-w-sm w-full text-center rounded-2xl border border-amber-400/30 bg-gradient-to-br from-[#1a1408]/95 via-[#0d1320]/95 to-[#070b14]/95 shadow-[0_20px_60px_-10px_rgba(245,158,11,0.35)] p-5 backdrop-blur-sm">
+        <div className="mx-auto w-12 h-12 rounded-2xl bg-amber-500/15 border border-amber-400/40 flex items-center justify-center mb-2.5">
+          <Lock className="w-5 h-5 text-amber-300" />
+        </div>
+        <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-300 mb-1">
+          Locked
+        </div>
+        <h3 className="text-sm md:text-base font-bold text-white mb-1.5">
+          Activate Trading to Unlock
+        </h3>
+        <p className="text-[11px] md:text-xs text-muted-foreground leading-relaxed mb-3">
+          This personal analytics view goes live the moment your Trading Fund activates.
+        </p>
+        <Link
+          href="/invest"
+          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-green-500 hover:from-emerald-400 hover:to-green-400 text-black font-semibold text-xs transition-all shadow-lg shadow-emerald-500/30"
+        >
+          <Sparkles className="w-3 h-3" />
+          Start Trading
+          <ArrowUpRight className="w-3 h-3" />
+        </Link>
+      </div>
+    </div>
+  );
+  const lockBlurClass = !investment?.isActive
+    ? "pointer-events-none select-none blur-[3px] opacity-70"
+    : "";
+  const isPortfolioLocked = !investment?.isActive;
+
   return (
     <>
       <AdminPopup />
@@ -1495,26 +1531,27 @@ export function DemoDashboardBody({
             so hide it for users without an active trading fund. Live Trades
             stays visible (company-wide signal stream). */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-5">
-          {/* Equity Curve (or Rolling Returns when swapped) — active users only */}
-          {investment?.isActive && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.22, duration: 0.4 }}
-            className={`glass-card p-5 rounded-2xl col-span-1 flex flex-col ${swapEquityWithRolling && hideLiveTrades ? "lg:col-span-3" : "lg:col-span-2"}`}
-            style={{ minHeight: swapEquityWithRolling && hideLiveTrades ? 460 : 340 }}
-          >
-            {swapEquityWithRolling ? rollingReturnsBody : equityCurveBody}
-          </motion.div>
-          )}
+          {/* Equity Curve (or Rolling Returns when swapped) — locked for inactive users */}
+          <div className={`col-span-1 ${swapEquityWithRolling && hideLiveTrades ? "lg:col-span-3" : "lg:col-span-2"} ${isPortfolioLocked ? "relative" : ""}`}>
+            {isPortfolioLocked && lockOverlay}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.22, duration: 0.4 }}
+              className={`glass-card p-5 rounded-2xl flex flex-col w-full ${lockBlurClass}`}
+              style={{ minHeight: swapEquityWithRolling && hideLiveTrades ? 460 : 340 }}
+            >
+              {swapEquityWithRolling ? rollingReturnsBody : equityCurveBody}
+            </motion.div>
+          </div>
 
-          {/* Recent Trades Feed — when equity is hidden, trades spans full width */}
+          {/* Recent Trades Feed — company-wide, always visible */}
           {!hideLiveTrades && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.3, duration: 0.4 }}
-            className={`glass-card p-5 rounded-2xl flex flex-col ${!investment?.isActive ? "lg:col-span-3" : ""}`}
+            className="glass-card p-5 rounded-2xl flex flex-col"
             style={{ minHeight: 340 }}
           >
             <div className="flex items-center justify-between mb-4">
@@ -1655,9 +1692,10 @@ export function DemoDashboardBody({
           )}
         </div>
 
-        {/* Drawdown Chart + Rolling Returns — personal portfolio data, active users only */}
-        {investment?.isActive && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-5">
+        {/* Drawdown Chart + Rolling Returns — personal portfolio data, locked for inactive users */}
+        <div className={isPortfolioLocked ? "relative" : ""}>
+          {isPortfolioLocked && lockOverlay}
+          <div className={`grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-5 ${lockBlurClass}`}>
           {/* Daily P&L / Drawdown Chart */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -1754,15 +1792,17 @@ export function DemoDashboardBody({
               </div>
             </div>
           </motion.div>
+          </div>
         </div>
-        )}
 
-        {/* Performance Metrics — personal portfolio metrics, active users only */}
-        {investment?.isActive && (
+        {/* Performance Metrics — personal portfolio metrics, locked for inactive users */}
+        <div className={isPortfolioLocked ? "relative" : ""}>
+          {isPortfolioLocked && lockOverlay}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.45, duration: 0.4 }}
+          className={lockBlurClass}
         >
           <div className="flex items-center gap-2 mb-3">
             <h2 className="text-base font-semibold">Performance Metrics</h2>
@@ -1802,7 +1842,7 @@ export function DemoDashboardBody({
             ))}
           </div>
         </motion.div>
-        )}
+        </div>
 
         {/* Growth & Leaderboard Panel */}
         {!hideGrowthPanel && (
