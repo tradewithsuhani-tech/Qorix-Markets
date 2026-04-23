@@ -111,11 +111,12 @@ async function creditUserDeposit(
       const bonusPct = Number(promo.bonusPercent ?? 5);
       const bonus = +(amount * (bonusPct / 100)).toFixed(8);
       if (bonus > 0) {
-        // Atomic SQL increment avoids stale-read race with the deposit update above.
+        // Bonus goes to TRADING balance (non-withdrawable; only usable for trading
+        // and realized as profit, which IS withdrawable). Atomic SQL increment.
         await tx
           .update(walletsTable)
           .set({
-            mainBalance: sql`${walletsTable.mainBalance} + ${bonus.toString()}`,
+            tradingBalance: sql`${walletsTable.tradingBalance} + ${bonus.toString()}`,
             updatedAt: new Date(),
           })
           .where(eq(walletsTable.userId, userId));
@@ -127,7 +128,7 @@ async function creditUserDeposit(
             type: "bonus",
             amount: bonus.toString(),
             status: "completed",
-            description: `Promo ${promo.code} — ${bonusPct}% deposit bonus`,
+            description: `Promo ${promo.code} — ${bonusPct}% trading bonus (non-withdrawable)`,
           })
           .returning();
 
@@ -141,10 +142,10 @@ async function creditUserDeposit(
               description: `Promo ${promo.code} bonus funded from platform pool`,
             },
             {
-              accountCode: `user:${userId}:main`,
+              accountCode: `user:${userId}:trading`,
               entryType: "credit",
               amount: bonus,
-              description: `Promo ${promo.code} ${bonusPct}% deposit bonus credited`,
+              description: `Promo ${promo.code} ${bonusPct}% trading bonus (non-withdrawable)`,
             },
           ],
           bonusTxn!.id,
