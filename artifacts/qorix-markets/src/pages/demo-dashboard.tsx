@@ -1490,8 +1490,8 @@ export function DemoDashboardBody({
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.22, duration: 0.4 }}
-            className="glass-card p-5 rounded-2xl col-span-1 lg:col-span-2 flex flex-col"
-            style={{ minHeight: 340 }}
+            className={`glass-card p-5 rounded-2xl col-span-1 flex flex-col ${swapEquityWithRolling && hideLiveTrades ? "lg:col-span-3" : "lg:col-span-2"}`}
+            style={{ minHeight: swapEquityWithRolling && hideLiveTrades ? 460 : 340 }}
           >
             {swapEquityWithRolling ? rollingReturnsBody : equityCurveBody}
           </motion.div>
