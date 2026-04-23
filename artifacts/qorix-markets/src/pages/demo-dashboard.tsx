@@ -28,7 +28,7 @@ import {
   ArrowUpRight, ArrowDownRight, Wallet, Activity, Clock, TrendingUp,
   TrendingDown, Zap, Target, ShieldCheck, BarChart2, Layers,
   RefreshCw, Globe, PieChart, Award, Shield, AlertTriangle, CheckCircle, FileDown,
-  Users, UserCheck, Banknote, X, Sparkles, Trophy, Flame, Gauge
+  Users, UserCheck, Banknote, X, Sparkles, Trophy, Flame, Gauge, Lock
 } from "lucide-react";
 import { MarketsStatusPill, InsightRotatorPill } from "@/components/header-status-pills";
 import { Skeleton } from "@/components/ui/skeleton";
