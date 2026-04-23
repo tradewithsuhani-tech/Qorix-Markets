@@ -765,8 +765,9 @@ export default function DemoDashboard() {
     },
     {
       label: "Active Trading Fund",
+      // synced with Active Capital (Fund Transparency) — same value across both cards
       icon: <Zap style={{ width: 16, height: 16 }} className="text-indigo-400" />,
-      value: <BigBalanceCounter value={summary?.activeInvestment || 0} className="text-2xl md:text-3xl" />,
+      value: <BigBalanceCounter value={fundStats?.activeCapital ?? summary?.activeInvestment ?? 0} className="text-2xl md:text-3xl" />,
       sub: summary?.isTrading ? (
         <div className="flex items-center gap-1.5">
           <span className="live-dot" style={{ width: 6, height: 6 }} />
