@@ -239,7 +239,10 @@ router.get("/dashboard/summary", async (req: AuthRequest, res) => {
   }
   const daysUntilPayout = Math.ceil((nextPayout.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 
-  const vipInfo = getVipInfo(investmentAmount);
+  // VIP tier is based ONLY on the actual active invested amount, not on
+  // total wallet balance. If the user has no active investment, tier = none.
+  const vipInvestmentAmount = inv?.isActive ? realInvestment : 0;
+  const vipInfo = getVipInfo(vipInvestmentAmount);
 
   res.json({
     totalBalance,

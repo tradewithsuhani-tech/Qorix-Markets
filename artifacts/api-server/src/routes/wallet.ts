@@ -190,11 +190,13 @@ router.post("/wallet/withdraw", async (req: AuthRequest, res) => {
   }
 
   const invRows = await db
-    .select({ amount: investmentsTable.amount })
+    .select({ amount: investmentsTable.amount, isActive: investmentsTable.isActive })
     .from(investmentsTable)
     .where(eq(investmentsTable.userId, req.userId!))
     .limit(1);
-  const investmentAmount = invRows[0] ? parseFloat(invRows[0].amount as string) : 0;
+  // VIP tier for withdrawal fee is based on ACTIVE investment only.
+  const investmentAmount =
+    invRows[0] && invRows[0].isActive ? parseFloat(invRows[0].amount as string) : 0;
   const vipInfo = getVipInfo(investmentAmount);
   const grossFee = parseFloat((amount * vipInfo.withdrawalFee).toFixed(8));
 
