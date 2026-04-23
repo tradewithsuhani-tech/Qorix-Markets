@@ -301,90 +301,119 @@ function WeeklyLeaderboard({ userId }: { userId: number }) {
         />
       ) : (
         <>
-          {list.map((entry, idx) => {
-            const rank = idx + 1;
-            const isTop3 = rank <= 3;
-            const top = isTop3 ? TOP_RANK[rank as 1 | 2 | 3] : null;
-            const isMine = entry.id === userId;
-            const displayName = entry.publicId ? entry.fullName : maskName(entry.fullName, userId, entry.id);
-            const initial = (displayName?.trim()?.[0] ?? "T").toUpperCase();
-            const profit = parseFloat(String(entry.weeklyProfit));
+          <div className="rounded-xl border border-white/8 overflow-hidden bg-slate-950/30">
+            {/* table header */}
+            <div className="grid grid-cols-[44px_minmax(0,1.6fr)_minmax(0,1.2fr)_minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1fr)] gap-2 px-3 py-2 bg-white/[0.03] border-b border-white/8 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+              <div>Rank</div>
+              <div>Name</div>
+              <div>User ID</div>
+              <div className="text-right">Trading Fund</div>
+              <div className="text-right">P&amp;L</div>
+              <div className="text-right">Payout</div>
+            </div>
 
-            return (
-              <motion.div
-                key={entry.id}
-                initial={{ opacity: 0, x: -6 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: idx * 0.03 }}
-                className={cn(
-                  "relative flex items-center gap-3 rounded-xl border transition-colors",
-                  isTop3 ? "px-3 py-3" : "px-3 py-2.5",
-                  isMine
-                    ? "bg-blue-500/10 border-blue-500/30"
-                    : top
-                    ? cn(top.rowBg, top.border)
-                    : "bg-white/[0.025] border-white/6 hover:bg-white/[0.05]",
-                )}
-              >
-                {/* Rank slot — medal icon for top 3, # for rest */}
-                <div className="w-8 flex items-center justify-center shrink-0">
-                  {top ? (
-                    <div className={cn("flex items-center justify-center w-7 h-7 rounded-full border", top.badgeBg)}>
-                      <top.Icon className={cn("w-3.5 h-3.5", top.iconColor)} />
-                    </div>
-                  ) : (
-                    <span className="text-xs font-semibold text-slate-500 tabular-nums">#{rank}</span>
-                  )}
-                </div>
+            {/* table rows */}
+            <div className="divide-y divide-white/5">
+              {list.map((entry, idx) => {
+                const rank = idx + 1;
+                const isTop3 = rank <= 3;
+                const top = isTop3 ? TOP_RANK[rank as 1 | 2 | 3] : null;
+                const isMine = entry.id === userId;
+                const displayName = entry.publicId ? entry.fullName : maskName(entry.fullName, userId, entry.id);
+                const initial = (displayName?.trim()?.[0] ?? "T").toUpperCase();
+                const profit = parseFloat(String(entry.weeklyProfit));
+                const tradingFund = parseFloat(String(entry.investmentAmount));
+                const payout = profit * 0.7;
+                const userIdDisplay = entry.publicId ?? `Q${String(entry.id).padStart(4, "0")}**${String(entry.id).slice(-1)}`;
 
-                {/* Avatar */}
-                <div
-                  className={cn(
-                    "shrink-0 rounded-full overflow-hidden flex items-center justify-center font-bold text-white ring-1 ring-white/10",
-                    top ? top.avatarFill : "bg-gradient-to-br from-blue-500/80 to-indigo-600/80",
-                    isTop3 ? "w-9 h-9 text-sm" : "text-xs w-8 h-8",
-                  )}
-                >
-                  {initial}
-                </div>
-
-                {/* Name + ID */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <span
-                      className={cn(
-                        "truncate text-white",
-                        isTop3 ? "text-[15px] font-extrabold" : "text-sm font-semibold",
-                      )}
-                    >
-                      {displayName}
-                    </span>
-                    {isMine && (
-                      <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-300 border border-blue-500/25 shrink-0">
-                        You
-                      </span>
-                    )}
-                  </div>
-                  <div className="text-[10px] font-mono text-slate-500 tracking-wider truncate">
-                    {entry.publicId ?? `$${parseFloat(String(entry.investmentAmount)).toLocaleString()} invested`}
-                  </div>
-                </div>
-
-                {/* Profit */}
-                <div className="text-right shrink-0">
-                  <div
+                return (
+                  <motion.div
+                    key={entry.id}
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: idx * 0.025 }}
                     className={cn(
-                      "tabular-nums text-emerald-400",
-                      isTop3 ? "text-base font-extrabold" : "text-sm font-bold",
+                      "grid grid-cols-[44px_minmax(0,1.6fr)_minmax(0,1.2fr)_minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1fr)] gap-2 px-3 items-center transition-colors",
+                      isTop3 ? "py-3" : "py-2.5",
+                      isMine
+                        ? "bg-blue-500/8 hover:bg-blue-500/12"
+                        : top
+                        ? cn(top.rowBg, "hover:brightness-125")
+                        : "hover:bg-white/[0.03]",
                     )}
                   >
-                    +${profit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </div>
-                  <div className="text-[9px] uppercase tracking-widest text-slate-500">7d profit</div>
-                </div>
-              </motion.div>
-            );
-          })}
+                    {/* Rank — medal icon for top 3, # for rest */}
+                    <div className="flex items-center justify-center">
+                      {top ? (
+                        <div className={cn("flex items-center justify-center w-7 h-7 rounded-full border", top.badgeBg)}>
+                          <top.Icon className={cn("w-3.5 h-3.5", top.iconColor)} />
+                        </div>
+                      ) : (
+                        <span className="text-xs font-semibold text-slate-500 tabular-nums">#{rank}</span>
+                      )}
+                    </div>
+
+                    {/* Name (avatar + name) */}
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div
+                        className={cn(
+                          "shrink-0 rounded-full overflow-hidden flex items-center justify-center font-bold text-white ring-1 ring-white/10",
+                          top ? top.avatarFill : "bg-gradient-to-br from-blue-500/80 to-indigo-600/80",
+                          isTop3 ? "w-8 h-8 text-sm" : "w-7 h-7 text-xs",
+                        )}
+                      >
+                        {initial}
+                      </div>
+                      <div className="min-w-0 flex items-center gap-1.5">
+                        <span
+                          className={cn(
+                            "truncate text-white",
+                            isTop3 ? "text-[14px] font-extrabold" : "text-[13px] font-semibold",
+                          )}
+                        >
+                          {displayName}
+                        </span>
+                        {isMine && (
+                          <span className="text-[8px] font-bold uppercase tracking-wider px-1 py-[1px] rounded bg-blue-500/15 text-blue-300 border border-blue-500/25 shrink-0">
+                            You
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* User ID */}
+                    <div className="text-[11px] font-mono text-slate-500 tracking-wider truncate">
+                      {userIdDisplay}
+                    </div>
+
+                    {/* Trading Fund */}
+                    <div className={cn(
+                      "text-right tabular-nums text-slate-300",
+                      isTop3 ? "text-[13px] font-bold" : "text-[12px] font-semibold",
+                    )}>
+                      ${tradingFund.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                    </div>
+
+                    {/* P&L */}
+                    <div className={cn(
+                      "text-right tabular-nums text-emerald-400",
+                      isTop3 ? "text-[14px] font-extrabold" : "text-[13px] font-bold",
+                    )}>
+                      +${profit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </div>
+
+                    {/* Payout */}
+                    <div className={cn(
+                      "text-right tabular-nums text-amber-300",
+                      isTop3 ? "text-[13px] font-bold" : "text-[12px] font-semibold",
+                    )}>
+                      ${payout.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </div>
+          </div>
         </>
       )}
     </div>
