@@ -429,6 +429,97 @@ router.post("/auth/withdrawal-otp", authMiddleware, async (req: AuthRequest, res
 });
 
 // ---------------------------------------------------------------------------
+// PUBLIC password-reset flow
+// POST /auth/forgot-password   { email }
+// POST /auth/verify-reset-otp  { email, otp }
+// POST /auth/reset-password    { email, otp, newPassword }
+// All endpoints intentionally return generic responses to prevent email
+// enumeration. The OTP is delivered via the same SMTP pipeline as email
+// verification (lib/email-service).
+// ---------------------------------------------------------------------------
+const forgotLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many reset requests. Try again later." },
+});
+
+router.post("/auth/forgot-password", forgotLimiter, async (req, res) => {
+  const { email } = req.body ?? {};
+  if (!email || typeof email !== "string") {
+    res.status(400).json({ error: "Email is required" });
+    return;
+  }
+  const normalizedEmail = email.toLowerCase().trim();
+  const users = await db
+    .select({ id: usersTable.id, email: usersTable.email, isDisabled: usersTable.isDisabled })
+    .from(usersTable)
+    .where(eq(usersTable.email, normalizedEmail))
+    .limit(1);
+
+  if (users.length > 0 && !users[0]!.isDisabled) {
+    setImmediate(async () => {
+      try {
+        await sendOtp(users[0]!.id, users[0]!.email, "verify_email");
+      } catch { /* non-fatal — keep generic response */ }
+    });
+  }
+  // Always generic — never reveal whether email exists.
+  res.json({ success: true, message: "If an account exists for that email, a reset code has been sent." });
+});
+
+router.post("/auth/verify-reset-otp", async (req, res) => {
+  const { email, otp } = req.body ?? {};
+  if (!email || typeof email !== "string" || !otp || typeof otp !== "string") {
+    res.status(400).json({ error: "Email and OTP are required" });
+    return;
+  }
+  const normalizedEmail = email.toLowerCase().trim();
+  const users = await db.select({ id: usersTable.id }).from(usersTable).where(eq(usersTable.email, normalizedEmail)).limit(1);
+  if (users.length === 0) {
+    res.status(400).json({ error: "Invalid or expired code" });
+    return;
+  }
+  const result = await verifyOtp(users[0]!.id, otp, "verify_email");
+  if (!result.valid) {
+    res.status(400).json({ error: result.error ?? "Invalid or expired code" });
+    return;
+  }
+  // Re-issue a fresh OTP that the user must present in the reset step. We
+  // store it back so the next call (reset-password) can validate it without
+  // re-prompting the user. Reuses the same row pattern (5-min window).
+  const fresh = await sendOtp(users[0]!.id, normalizedEmail, "verify_email");
+  res.json({ success: true, otp: fresh.otp });
+});
+
+router.post("/auth/reset-password", forgotLimiter, async (req, res) => {
+  const { email, otp, newPassword } = req.body ?? {};
+  if (!email || typeof email !== "string" || !otp || typeof otp !== "string") {
+    res.status(400).json({ error: "Email and OTP are required" });
+    return;
+  }
+  if (typeof newPassword !== "string" || newPassword.length < 8 || newPassword.length > 128) {
+    res.status(400).json({ error: "Password must be 8-128 characters long" });
+    return;
+  }
+  const normalizedEmail = email.toLowerCase().trim();
+  const users = await db.select({ id: usersTable.id }).from(usersTable).where(eq(usersTable.email, normalizedEmail)).limit(1);
+  if (users.length === 0) {
+    res.status(400).json({ error: "Invalid or expired code" });
+    return;
+  }
+  const result = await verifyOtp(users[0]!.id, otp, "verify_email");
+  if (!result.valid) {
+    res.status(400).json({ error: result.error ?? "Invalid or expired code" });
+    return;
+  }
+  const passwordHash = await bcrypt.hash(newPassword, 12);
+  await db.update(usersTable).set({ passwordHash }).where(eq(usersTable.id, users[0]!.id));
+  res.json({ success: true, message: "Password reset successfully" });
+});
+
+// ---------------------------------------------------------------------------
 // GET /auth/dev-otp — DEV ONLY: retrieve latest OTP for testing
 // ---------------------------------------------------------------------------
 router.get("/auth/dev-otp", async (req, res) => {
