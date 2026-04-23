@@ -116,7 +116,6 @@ const EMAIL_TEMPLATES = [
       "✔ Withdraw anytime\n\n" +
       "👉 Don't miss the next trade.\n\n" +
       "Start now and be part of the next profit.\n\n" +
-      "👉 Activate Trading Now: https://qorixmarkets.com/\n\n" +
       "Qorix Markets\n" +
       "AI-Powered Trading System",
   },
