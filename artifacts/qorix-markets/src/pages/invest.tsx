@@ -143,10 +143,8 @@ function RiskMeter({ score }: { score: number }) {
 }
 
 function ExpectedReturns({ profile, amount }: { profile: typeof RISK_PROFILES[0]; amount: number }) {
-  const dailyMin = (amount * profile.minDailyPct) / 100;
-  const dailyMax = (amount * profile.maxDailyPct) / 100;
-  const monthlyMin = dailyMin * 30;
-  const monthlyMax = dailyMax * 30;
+  const monthlyMin = (amount * profile.monthlyMinPct) / 100;
+  const monthlyMax = (amount * profile.monthlyMaxPct) / 100;
   const protection = (amount * profile.drawdownLimit) / 100;
 
   return (
@@ -157,22 +155,18 @@ function ExpectedReturns({ profile, amount }: { profile: typeof RISK_PROFILES[0]
       transition={{ duration: 0.2 }}
       className="space-y-3"
     >
-      <div className="grid grid-cols-2 gap-3">
-        <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
-          <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Daily Est.</div>
-          <div className="font-bold text-green-400 text-sm">
-            +${dailyMin.toFixed(2)} – ${dailyMax.toFixed(2)}
-          </div>
-          <div className="text-[10px] text-muted-foreground mt-0.5">
-            {profile.minDailyPct}–{profile.maxDailyPct}% rate
-          </div>
+      <div className="p-3.5 rounded-xl bg-gradient-to-br from-emerald-500/[0.08] to-emerald-500/[0.02] border border-emerald-500/20">
+        <div className="flex items-center justify-between mb-1.5">
+          <div className="text-[10px] text-emerald-300/90 uppercase tracking-wider font-semibold">Monthly Target Return</div>
+          <span className="text-[10px] font-bold text-emerald-300 bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 rounded-full">
+            {profile.monthlyMinPct}–{profile.monthlyMaxPct}% / month
+          </span>
         </div>
-        <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
-          <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Monthly Est.</div>
-          <div className="font-bold text-emerald-400 text-sm">
-            +${monthlyMin.toFixed(2)} – ${monthlyMax.toFixed(2)}
-          </div>
-          <div className="text-[10px] text-muted-foreground mt-0.5">30-day projection</div>
+        <div className="font-bold text-emerald-300 text-base tabular-nums">
+          +${monthlyMin.toFixed(2)} – ${monthlyMax.toFixed(2)}
+        </div>
+        <div className="text-[10px] text-muted-foreground mt-0.5">
+          Tier-based projection · auto-distributed monthly
         </div>
       </div>
       <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.06] flex items-center justify-between">

@@ -334,8 +334,13 @@ function PerformanceBlock({
   }));
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-[#0d1525] p-5 md:p-6">
-      <div className="flex items-center justify-between mb-5 flex-wrap gap-2">
+    <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-[#0e1828] via-[#0a1322] to-[#070b14] p-5 md:p-6">
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-emerald-400/40 to-transparent" />
+      <div
+        className="pointer-events-none absolute -top-20 -right-20 w-64 h-64 rounded-full opacity-25"
+        style={{ background: "radial-gradient(circle, rgba(16,185,129,0.3) 0%, transparent 70%)" }}
+      />
+      <div className="relative flex items-center justify-between mb-5 flex-wrap gap-2">
         <div>
           <h3 className="text-base md:text-lg font-bold text-white flex items-center gap-2">
             <TrendingUp className="w-4 h-4 text-emerald-400" /> Performance
@@ -344,13 +349,14 @@ function PerformanceBlock({
             Last 30 days · institutional-grade metrics
           </p>
         </div>
-        <span className="text-[10px] uppercase tracking-wider px-2 py-1 rounded-md bg-white/5 text-muted-foreground">
+        <span className="inline-flex items-center gap-1.5 text-[10px] uppercase tracking-wider px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 font-bold">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
           Live
         </span>
       </div>
 
       {/* 4 stat tiles */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 md:gap-3 mb-5">
+      <div className="relative grid grid-cols-2 md:grid-cols-4 gap-2.5 md:gap-3 mb-5">
         <StatTile
           label="🎯 Win Rate"
           value={perfLoading ? "—" : `${winRate.toFixed(1)}%`}
@@ -374,7 +380,7 @@ function PerformanceBlock({
       </div>
 
       {/* Equity curve */}
-      <div className="rounded-xl border border-white/8 bg-[#0a1020] p-4 mb-4">
+      <div className="relative rounded-xl border border-white/10 bg-gradient-to-br from-[#0a1424] to-[#070b14] p-4 mb-4 shadow-[0_1px_0_rgba(255,255,255,0.04)_inset]">
         <div className="flex items-center justify-between mb-2">
           <div>
             <div className="text-xs font-semibold text-white">📈 Equity Curve · 30D</div>
@@ -383,8 +389,8 @@ function PerformanceBlock({
             </div>
           </div>
           <div className="text-right">
-            <div className="text-[10px] text-muted-foreground">Today</div>
-            <div className="text-xs font-bold text-emerald-400 tabular-nums">
+            <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Today</div>
+            <div className="text-sm font-extrabold text-emerald-300 tabular-nums drop-shadow-[0_0_10px_rgba(16,185,129,0.4)]">
               +${fmtMoney(todayPnl)}
             </div>
           </div>
@@ -423,7 +429,7 @@ function PerformanceBlock({
       </div>
 
       {/* Daily P&L history (last 14 days) */}
-      <div className="rounded-xl border border-white/8 bg-[#0a1020] p-4">
+      <div className="rounded-xl border border-white/10 bg-gradient-to-br from-[#0a1424] to-[#070b14] p-4 shadow-[0_1px_0_rgba(255,255,255,0.04)_inset]">
         <div className="flex items-center justify-between mb-2">
           <div>
             <div className="text-xs font-semibold text-white">📅 Daily Profit History</div>
@@ -431,10 +437,10 @@ function PerformanceBlock({
           </div>
           <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
             <span className="flex items-center gap-1">
-              <span className="w-2 h-2 rounded-sm bg-emerald-500" /> Profit
+              <span className="w-2 h-2 rounded-sm bg-emerald-500 shadow-[0_0_6px_#10b981]" /> Profit
             </span>
             <span className="flex items-center gap-1">
-              <span className="w-2 h-2 rounded-sm bg-rose-500" /> Loss
+              <span className="w-2 h-2 rounded-sm bg-rose-500 shadow-[0_0_6px_#f43f5e]" /> Loss
             </span>
           </div>
         </div>
@@ -478,17 +484,38 @@ function StatTile({
   value: string;
   accent: "emerald" | "amber" | "blue";
 }) {
-  const accentMap = {
-    emerald: "text-emerald-400",
-    amber: "text-amber-400",
-    blue: "text-blue-400",
+  const config = {
+    emerald: {
+      text: "text-emerald-300",
+      bg: "from-emerald-500/[0.08] to-emerald-500/[0.02]",
+      border: "border-emerald-500/20",
+      glow: "rgba(16,185,129,0.35)",
+    },
+    amber: {
+      text: "text-amber-300",
+      bg: "from-amber-500/[0.08] to-amber-500/[0.02]",
+      border: "border-amber-500/20",
+      glow: "rgba(251,191,36,0.35)",
+    },
+    blue: {
+      text: "text-blue-300",
+      bg: "from-blue-500/[0.08] to-blue-500/[0.02]",
+      border: "border-blue-500/20",
+      glow: "rgba(59,130,246,0.35)",
+    },
   } as const;
+  const c = config[accent];
   return (
-    <div className="rounded-xl border border-white/8 bg-[#0a1020] px-3 py-3">
-      <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
+    <div
+      className={`relative overflow-hidden rounded-xl border ${c.border} bg-gradient-to-br ${c.bg} px-3.5 py-3 transition-all hover:-translate-y-0.5 duration-200`}
+    >
+      <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
         {label}
       </div>
-      <div className={`mt-1 text-lg md:text-xl font-bold tabular-nums ${accentMap[accent]}`}>
+      <div
+        className={`mt-1 text-lg md:text-xl font-extrabold tabular-nums ${c.text}`}
+        style={{ textShadow: `0 0 14px ${c.glow}` }}
+      >
         {value}
       </div>
     </div>
@@ -692,6 +719,9 @@ function PortfolioInner() {
         <LiveProfitFeed enabled={isActive} />
         <NextTradeStatus enabled={isActive} />
       </div>
+
+      {/* PERFORMANCE BLOCK — equity curve + 4 stat tiles + 14d daily P&L bars */}
+      <PerformanceBlock equityPoints={equity?.points ?? []} todayPnl={summary?.dailyProfitLoss ?? 0} />
 
       {/* Investment Setup — premium metric tile grid */}
       <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-[#0e1828] via-[#0a1322] to-[#070b14] p-5 md:p-6">
@@ -957,19 +987,7 @@ export default function PortfolioPage() {
   return (
     <Layout>
       <PortfolioInner />
-      {/* Demo dashboard sections appended below — user will tell us which to remove. */}
-      <div className="px-4 md:px-8 py-6 md:py-8 max-w-7xl mx-auto border-t border-white/10 mt-8">
-        <DemoDashboardBody
-          hideHeader
-          hideFomoTicker
-          hideMarketIndicators
-          hideGrowthPanel
-          hideFundTransparency
-          hideLiveTrades
-          hidePrimaryStatCards
-        />
-      </div>
-      {/* Recent Trade Attribution moved to bottom per request */}
+      {/* Recent Trade Attribution at bottom */}
       <div className="px-4 md:px-8 pb-8 max-w-7xl mx-auto">
         <RecentTradeAttribution />
       </div>
