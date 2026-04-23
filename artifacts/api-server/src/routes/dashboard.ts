@@ -15,6 +15,11 @@ const USER_EQUITY_WINDOW_MS = 10 * 60 * 1000;
 const USER_EQUITY_BUMP_MIN = 100;
 const USER_EQUITY_BUMP_MAX = 500;
 
+// Per-user "Active Trading Fund" display boost: random $100–$1000 every 30 min.
+const TRADING_FUND_WINDOW_MS = 30 * 60 * 1000;
+const TRADING_FUND_BUMP_MIN = 100;
+const TRADING_FUND_BUMP_MAX = 1000;
+
 // Per-user synthetic "Daily P&L" display values (display-only, never real).
 //   - One target % per UTC weekday, picked in [DAILY_PNL_MIN_PCT, MAX].
 //   - Released as 4 chunks every 4 hours so the card grows during the day.
@@ -157,7 +162,37 @@ router.get("/dashboard/summary", async (req: AuthRequest, res) => {
 
   const dailyProfit = dailyPnlAmount;
   const totalProfit = inv ? parseFloat(inv.totalProfit as string) : 0;
-  const investmentAmount = inv ? parseFloat(inv.amount as string) : 0;
+  const realInvestment = inv ? parseFloat(inv.amount as string) : 0;
+
+  // Catch-up the per-user Active Trading Fund display boost (+$100–$1000 / 30min).
+  let tradingFundBoost = parseFloat((wallet?.tradingFundBoost as string) ?? "0");
+  let tradingFundLastAt = Number(wallet?.tradingFundLastAt ?? 0);
+  if (wallet) {
+    const now = Date.now();
+    if (!tradingFundLastAt) tradingFundLastAt = now;
+    const tfWindows = Math.floor((now - tradingFundLastAt) / TRADING_FUND_WINDOW_MS);
+    if (tfWindows > 0) {
+      let added = 0;
+      for (let i = 0; i < tfWindows; i++) {
+        added += TRADING_FUND_BUMP_MIN + Math.floor(Math.random() * (TRADING_FUND_BUMP_MAX - TRADING_FUND_BUMP_MIN + 1));
+      }
+      tradingFundBoost += added;
+      tradingFundLastAt = tradingFundLastAt + tfWindows * TRADING_FUND_WINDOW_MS;
+      await db
+        .update(walletsTable)
+        .set({
+          tradingFundBoost: tradingFundBoost.toFixed(2),
+          tradingFundLastAt,
+        })
+        .where(eq(walletsTable.userId, req.userId!));
+    } else if (!wallet.tradingFundLastAt) {
+      await db
+        .update(walletsTable)
+        .set({ tradingFundLastAt })
+        .where(eq(walletsTable.userId, req.userId!));
+    }
+  }
+  const investmentAmount = realInvestment + tradingFundBoost;
 
   const dailyProfitPercent = investmentAmount > 0 ? (dailyProfit / investmentAmount) * 100 : 0;
 
