@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { db, walletsTable, investmentsTable, equityHistoryTable, tradesTable, monthlyPerformanceTable, systemSettingsTable } from "@workspace/db";
-import { eq, and, gte, desc, sum, count } from "drizzle-orm";
+import { db, walletsTable, investmentsTable, equityHistoryTable, tradesTable, monthlyPerformanceTable, systemSettingsTable, pnlHistoryTable } from "@workspace/db";
+import { eq, and, gte, desc, sum, count, sql } from "drizzle-orm";
 import { getSlotData } from "./admin";
 import { authMiddleware, type AuthRequest } from "../middlewares/auth";
 import { getVipInfo } from "../lib/vip";
@@ -165,6 +165,24 @@ router.get("/dashboard/summary", async (req: AuthRequest, res) => {
           totalProfitBoost: totalProfitBoost.toFixed(2),
         })
         .where(eq(walletsTable.userId, req.userId!));
+
+      // Upsert today's row in pnl_history so the chart's right-most candle
+      // always tracks the live Daily P&L value for the current UTC day.
+      await db
+        .insert(pnlHistoryTable)
+        .values({
+          userId: req.userId!,
+          date: dailyPnlDay,
+          percent: dailyPnlPct.toFixed(4),
+          amount: dailyPnlAmount.toFixed(2),
+        })
+        .onConflictDoUpdate({
+          target: [pnlHistoryTable.userId, pnlHistoryTable.date],
+          set: {
+            percent: dailyPnlPct.toFixed(4),
+            amount: dailyPnlAmount.toFixed(2),
+          },
+        });
     }
   }
 
@@ -349,6 +367,94 @@ router.get("/dashboard/equity-chart", async (req: AuthRequest, res) => {
   }
 
   res.json(points);
+});
+
+router.get("/dashboard/pnl-history", async (req: AuthRequest, res) => {
+  const rawDays = parseInt(req.query["days"] as string) || 30;
+  const days = Math.max(1, Math.min(3650, rawDays));
+  const userId = req.userId!;
+
+  // Make sure today's row exists so the chart's right edge always matches the
+  // live Daily P&L card, even if /dashboard/summary hasn't been called yet.
+  const todayWallets = await db.select().from(walletsTable).where(eq(walletsTable.userId, userId)).limit(1);
+  const todayWallet = todayWallets[0];
+  if (todayWallet && todayWallet.dailyPnlDay && todayWallet.dailyPnlAmount != null) {
+    await db
+      .insert(pnlHistoryTable)
+      .values({
+        userId,
+        date: todayWallet.dailyPnlDay,
+        percent: (todayWallet.dailyPnlPct ?? "0") as string,
+        amount: (todayWallet.dailyPnlAmount ?? "0") as string,
+      })
+      .onConflictDoUpdate({
+        target: [pnlHistoryTable.userId, pnlHistoryTable.date],
+        set: {
+          percent: (todayWallet.dailyPnlPct ?? "0") as string,
+          amount: (todayWallet.dailyPnlAmount ?? "0") as string,
+        },
+      });
+  }
+
+  // Pull real history rows for the requested window.
+  const since = new Date();
+  since.setUTCDate(since.getUTCDate() - days + 1);
+  const sinceStr = since.toISOString().slice(0, 10);
+  const records = await db
+    .select()
+    .from(pnlHistoryTable)
+    .where(and(eq(pnlHistoryTable.userId, userId), gte(pnlHistoryTable.date, sinceStr)))
+    .orderBy(pnlHistoryTable.date);
+  const realByDate = new Map<string, { percent: number; amount: number }>();
+  for (const r of records) {
+    realByDate.set(r.date, {
+      percent: parseFloat(r.percent as string),
+      amount: parseFloat(r.amount as string),
+    });
+  }
+
+  // Need the live wallet boost so synthesized days project meaningful $ values.
+  const wallets = await db.select().from(walletsTable).where(eq(walletsTable.userId, userId)).limit(1);
+  const wallet = wallets[0];
+  const realBalance = wallet
+    ? parseFloat(wallet.mainBalance as string) + parseFloat(wallet.tradingBalance as string) + parseFloat(wallet.profitBalance as string)
+    : 0;
+  const equityBoost = wallet ? parseFloat(wallet.demoEquityBoost as string) : 0;
+  const equityForToday = Math.max(realBalance + equityBoost, 1);
+
+  // Deterministic per-user-per-day RNG so synthesized history is stable.
+  const rand = (seedStr: string) => {
+    let h = 2166136261 >>> 0;
+    for (let i = 0; i < seedStr.length; i++) {
+      h = Math.imul(h ^ seedStr.charCodeAt(i), 16777619);
+    }
+    h ^= h >>> 13; h = Math.imul(h, 1540483477) >>> 0; h ^= h >>> 15;
+    return ((h >>> 0) / 0xffffffff);
+  };
+
+  const out: Array<{ date: string; percent: number; amount: number }> = [];
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date();
+    d.setUTCDate(d.getUTCDate() - i);
+    const dateStr = d.toISOString().slice(0, 10);
+    const dow = d.getUTCDay();
+    const isWeekend = dow === 0 || dow === 6;
+    const real = realByDate.get(dateStr);
+    if (real) {
+      out.push({ date: dateStr, percent: real.percent, amount: real.amount });
+    } else if (isWeekend) {
+      // Market closed — no P&L on weekends.
+      out.push({ date: dateStr, percent: 0, amount: 0 });
+    } else {
+      // Synthetic prior day inside the [0.40%, 0.60%] band, deterministic.
+      const r = rand(`${userId}:${dateStr}`);
+      const pct = +(0.4 + r * 0.2).toFixed(4);
+      const amt = +(equityForToday * pct / 100).toFixed(2);
+      out.push({ date: dateStr, percent: pct, amount: amt });
+    }
+  }
+
+  res.json(out);
 });
 
 router.get("/dashboard/performance", async (req: AuthRequest, res) => {

@@ -17,6 +17,7 @@ import { VipBadge, VipCard } from "@/components/vip-badge";
 import { AnimatedCounter, BigBalanceCounter } from "@/components/animated-counter";
 import { useAuth } from "@/hooks/use-auth";
 import { generateMonthlyReport } from "@/lib/report-generator";
+import { authFetch } from "@/lib/auth-fetch";
 import { motion, AnimatePresence } from "framer-motion";
 import { format } from "date-fns";
 import {
@@ -527,6 +528,7 @@ export default function DemoDashboard() {
   const [, navigate] = useLocation();
   const [chartDays, setChartDays] = useState(30);
   const [returnsDays, setReturnsDays] = useState(30);
+  const [pnlDays, setPnlDays] = useState(30);
   const [pendingLimit, setPendingLimit] = useState<number | null>(null);
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
   const prevProfitRef = useRef(0);
@@ -545,6 +547,11 @@ export default function DemoDashboard() {
     { days: returnsDays },
     { query: { refetchInterval: 30000 } }
   );
+  const { data: pnlHistory, isLoading: pnlHistoryLoading } = useQuery<Array<{ date: string; percent: number; amount: number }>>({
+    queryKey: ["dashboard-pnl-history", pnlDays],
+    queryFn: () => authFetch(`/api/dashboard/pnl-history?days=${pnlDays}`),
+    refetchInterval: 15000,
+  });
   const { data: tradesData, isLoading: tradesLoading } = useQuery<{ trades: Array<{ id: number; pair: string; direction: string; createdAt: string }> }>({
     queryKey: ["signal-trades-running"],
     queryFn: async () => {
@@ -653,10 +660,19 @@ export default function DemoDashboard() {
     profit: e.profit,
   }));
 
-  const drawdownData = equityArr.map((e) => ({
-    date: format(new Date(e.date), "MMM dd"),
-    value: e.profit,
-  }));
+  // Daily P&L bar chart: each bar = that day's P&L $ amount; color is up
+  // (green) if today's percent > previous day's percent, otherwise down (red).
+  // Sourced from /dashboard/pnl-history so it always matches the Daily P&L card.
+  const pnlArr = Array.isArray(pnlHistory) ? pnlHistory : [];
+  const drawdownData = pnlArr.map((p, i) => {
+    const prevPct = i > 0 ? pnlArr[i - 1]!.percent : p.percent;
+    return {
+      date: format(new Date(p.date + "T00:00:00Z"), pnlDays <= 1 ? "HH:mm" : "MMM dd"),
+      value: p.amount,
+      percent: p.percent,
+      up: p.percent >= prevPct,
+    };
+  });
 
   const handleDownloadReport = async () => {
     if (!user || !summary || !perf) {
@@ -1476,17 +1492,22 @@ export default function DemoDashboard() {
             className="glass-card p-5 rounded-2xl flex flex-col"
             style={{ minHeight: 240 }}
           >
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center justify-between mb-4 gap-2">
               <div>
                 <h3 className="font-semibold">Daily P&L</h3>
-                <p className="text-xs text-muted-foreground">Drawdown analysis</p>
+                <p className="text-xs text-muted-foreground">Per-day P&L history</p>
               </div>
-              <div className="text-xs text-muted-foreground bg-white/5 border border-white/5 px-2.5 py-1 rounded-full">
-                {periodLabel(chartDays)}
+              <div className="-mx-1 overflow-x-auto scrollbar-hide sm:mx-0 sm:overflow-visible">
+                <PeriodFilter
+                  options={DAYS_PERIOD_OPTIONS}
+                  selected={pnlDays}
+                  onChange={(v) => setPnlDays(Number(v))}
+                  ariaLabel="Daily P&L period"
+                />
               </div>
             </div>
             <div className="flex-1" style={{ minHeight: 180 }}>
-              {equityLoading ? (
+              {pnlHistoryLoading ? (
                 <div className="w-full h-full flex items-end gap-1 pb-2">
                   {Array.from({ length: 15 }).map((_, i) => (
                     <div key={i} className="flex-1 animate-pulse rounded" style={{
@@ -1523,7 +1544,7 @@ export default function DemoDashboard() {
                       {drawdownData.map((entry, index) => (
                         <Cell
                           key={index}
-                          fill={entry.value >= 0 ? "rgba(34,197,94,0.7)" : "rgba(239,68,68,0.7)"}
+                          fill={entry.up ? "rgba(34,197,94,0.75)" : "rgba(239,68,68,0.75)"}
                         />
                       ))}
                     </Bar>
