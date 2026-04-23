@@ -768,76 +768,85 @@ function PortfolioInner() {
         </div>
       </div>
 
-      {/* Recent trade attribution */}
-      <div className="rounded-2xl border border-white/10 bg-[#0d1525] p-5">
-        <div className="flex items-center justify-between mb-3">
-          <div>
-            <h3 className="text-base font-semibold text-white flex items-center gap-2">
-              <Activity className="w-4 h-4 text-emerald-400" /> Recent Trade Attribution
-            </h3>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Last 5 closed trades contributing to portfolio P&amp;L
-            </p>
-          </div>
-          <Link
-            href="/trade-activity"
-            className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1"
-          >
-            View all <ArrowUpRight className="w-3 h-3" />
-          </Link>
-        </div>
+    </div>
+  );
+}
 
-        {trades.length === 0 ? (
-          <div className="py-8 text-center text-sm text-muted-foreground">
-            No closed trades yet — your portfolio is warming up.
-          </div>
-        ) : (
-          <div className="divide-y divide-white/5">
-            {trades.map((t: any) => {
-              const profit = parseFloat(String(t.profit ?? 0));
-              const profitPctNum = parseFloat(String(t.profitPercent ?? 0));
-              const isWin = profit >= 0;
-              return (
-                <div key={t.id} className="flex items-center justify-between py-3">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div
-                      className={`w-8 h-8 rounded-lg flex items-center justify-center text-[10px] font-bold shrink-0 ${
-                        t.side === "BUY"
-                          ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                          : "bg-red-500/10 text-red-400 border border-red-500/20"
-                      }`}
-                    >
-                      {t.side}
-                    </div>
-                    <div className="min-w-0">
-                      <div className="text-sm font-semibold text-white">{t.symbol}</div>
-                      <div className="text-[11px] text-muted-foreground">
-                        Entry {t.entryPrice} → Exit {t.exitPrice}
-                      </div>
-                    </div>
+function RecentTradeAttribution() {
+  const { data: tradesData } = useGetTrades(
+    { limit: 5 },
+    { query: { refetchInterval: 15000 } },
+  );
+  const trades = tradesData?.trades ?? [];
+  return (
+    <div className="rounded-2xl border border-white/10 bg-[#0d1525] p-5">
+      <div className="flex items-center justify-between mb-3">
+        <div>
+          <h3 className="text-base font-semibold text-white flex items-center gap-2">
+            <Activity className="w-4 h-4 text-emerald-400" /> Recent Trade Attribution
+          </h3>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Last 5 closed trades contributing to portfolio P&amp;L
+          </p>
+        </div>
+        <Link
+          href="/trade-activity"
+          className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1"
+        >
+          View all <ArrowUpRight className="w-3 h-3" />
+        </Link>
+      </div>
+
+      {trades.length === 0 ? (
+        <div className="py-8 text-center text-sm text-muted-foreground">
+          No closed trades yet — your portfolio is warming up.
+        </div>
+      ) : (
+        <div className="divide-y divide-white/5">
+          {trades.map((t: any) => {
+            const profit = parseFloat(String(t.profit ?? 0));
+            const profitPctNum = parseFloat(String(t.profitPercent ?? 0));
+            const isWin = profit >= 0;
+            return (
+              <div key={t.id} className="flex items-center justify-between py-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div
+                    className={`w-8 h-8 rounded-lg flex items-center justify-center text-[10px] font-bold shrink-0 ${
+                      t.side === "BUY"
+                        ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                        : "bg-red-500/10 text-red-400 border border-red-500/20"
+                    }`}
+                  >
+                    {t.side}
                   </div>
-                  <div className="text-right">
-                    <div
-                      className={`text-sm font-bold tabular-nums ${
-                        isWin ? "text-emerald-400" : "text-red-400"
-                      }`}
-                    >
-                      {isWin ? "+" : ""}${fmtMoney(Math.abs(profit))}
-                    </div>
-                    <div
-                      className={`text-[11px] tabular-nums ${
-                        isWin ? "text-emerald-400/70" : "text-red-400/70"
-                      }`}
-                    >
-                      {isWin ? "+" : ""}{profitPctNum.toFixed(2)}%
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold text-white">{t.symbol}</div>
+                    <div className="text-[11px] text-muted-foreground">
+                      Entry {t.entryPrice} → Exit {t.exitPrice}
                     </div>
                   </div>
                 </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
+                <div className="text-right">
+                  <div
+                    className={`text-sm font-bold tabular-nums ${
+                      isWin ? "text-emerald-400" : "text-red-400"
+                    }`}
+                  >
+                    {isWin ? "+" : ""}${fmtMoney(Math.abs(profit))}
+                  </div>
+                  <div
+                    className={`text-[11px] tabular-nums ${
+                      isWin ? "text-emerald-400/70" : "text-red-400/70"
+                    }`}
+                  >
+                    {isWin ? "+" : ""}{profitPctNum.toFixed(2)}%
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -856,6 +865,10 @@ export default function PortfolioPage() {
           hideFundTransparency
           hideLiveTrades
         />
+      </div>
+      {/* Recent Trade Attribution moved to bottom per request */}
+      <div className="px-4 md:px-8 pb-8 max-w-7xl mx-auto">
+        <RecentTradeAttribution />
       </div>
     </Layout>
   );
