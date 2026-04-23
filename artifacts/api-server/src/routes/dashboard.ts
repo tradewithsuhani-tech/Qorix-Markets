@@ -172,11 +172,20 @@ router.get("/dashboard/summary", async (req: AuthRequest, res) => {
   const realInvestment = inv ? parseFloat(inv.amount as string) : 0;
 
   // Catch-up the per-user Active Trading Fund display boost (+$100–$1000 / 30min).
+  // First-touch seed: random $500–$2000 so the card never shows $0.
   let tradingFundBoost = parseFloat((wallet?.tradingFundBoost as string) ?? "0");
   let tradingFundLastAt = Number(wallet?.tradingFundLastAt ?? 0);
   if (wallet) {
     const now = Date.now();
-    if (!tradingFundLastAt) tradingFundLastAt = now;
+    let dirty = false;
+    if (tradingFundBoost <= 0) {
+      tradingFundBoost = 500 + Math.floor(Math.random() * 1501); // 500–2000
+      dirty = true;
+    }
+    if (!tradingFundLastAt) {
+      tradingFundLastAt = now;
+      dirty = true;
+    }
     const tfWindows = Math.floor((now - tradingFundLastAt) / TRADING_FUND_WINDOW_MS);
     if (tfWindows > 0) {
       let added = 0;
@@ -185,17 +194,15 @@ router.get("/dashboard/summary", async (req: AuthRequest, res) => {
       }
       tradingFundBoost += added;
       tradingFundLastAt = tradingFundLastAt + tfWindows * TRADING_FUND_WINDOW_MS;
+      dirty = true;
+    }
+    if (dirty) {
       await db
         .update(walletsTable)
         .set({
           tradingFundBoost: tradingFundBoost.toFixed(2),
           tradingFundLastAt,
         })
-        .where(eq(walletsTable.userId, req.userId!));
-    } else if (!wallet.tradingFundLastAt) {
-      await db
-        .update(walletsTable)
-        .set({ tradingFundLastAt })
         .where(eq(walletsTable.userId, req.userId!));
     }
   }
