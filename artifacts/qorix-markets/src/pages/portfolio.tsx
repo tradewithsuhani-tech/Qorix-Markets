@@ -987,7 +987,17 @@ export default function PortfolioPage() {
   return (
     <Layout>
       <PortfolioInner />
-      {/* Recent Trade Attribution at bottom */}
+      <div className="px-4 md:px-8 py-6 md:py-8 max-w-7xl mx-auto border-t border-white/10 mt-8">
+        <DemoDashboardBody
+          hideHeader
+          hideFomoTicker
+          hideMarketIndicators
+          hideGrowthPanel
+          hideFundTransparency
+          hideLiveTrades
+          hidePrimaryStatCards
+        />
+      </div>
       <div className="px-4 md:px-8 pb-8 max-w-7xl mx-auto">
         <RecentTradeAttribution />
       </div>
