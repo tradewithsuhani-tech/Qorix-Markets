@@ -52,7 +52,7 @@ function generateOtp(length = 6): string {
 // Send an email via Amazon SES. Falls back to a dev log when AWS creds or
 // SES_FROM_EMAIL are not configured (so local/dev flow works without setup).
 // ---------------------------------------------------------------------------
-async function sendEmail(
+export async function sendEmail(
   to: string,
   subject: string,
   text: string,
