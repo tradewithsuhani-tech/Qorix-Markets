@@ -632,12 +632,20 @@ function PortfolioInner() {
             Live performance · <UpdatedAgo timestamp={equityUpdatedAt} />
           </p>
         </div>
-        <Link
-          href="/invest"
-          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-blue-500/20 to-indigo-500/15 hover:from-blue-500/30 hover:to-indigo-500/25 border border-blue-500/30 text-blue-200 text-sm font-medium transition-all shadow-lg shadow-blue-500/10"
-        >
-          Manage <ArrowUpRight className="w-3.5 h-3.5" />
-        </Link>
+        <div className="flex items-center gap-2 flex-wrap">
+          <Link
+            href="/deposit"
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500/25 to-green-500/20 hover:from-emerald-500/40 hover:to-green-500/35 border border-emerald-400/40 text-emerald-100 text-sm font-semibold transition-all shadow-lg shadow-emerald-500/20"
+          >
+            <Wallet className="w-3.5 h-3.5" /> Deposit
+          </Link>
+          <Link
+            href="/invest"
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-blue-500/20 to-indigo-500/15 hover:from-blue-500/30 hover:to-indigo-500/25 border border-blue-500/30 text-blue-200 text-sm font-medium transition-all shadow-lg shadow-blue-500/10"
+          >
+            Manage <ArrowUpRight className="w-3.5 h-3.5" />
+          </Link>
+        </div>
       </div>
 
       {/* HERO — premium money-first block with multi-layer glow + shimmer top edge */}
