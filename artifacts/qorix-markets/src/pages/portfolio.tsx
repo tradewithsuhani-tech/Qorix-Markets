@@ -720,9 +720,6 @@ function PortfolioInner() {
         <NextTradeStatus enabled={isActive} />
       </div>
 
-      {/* PERFORMANCE BLOCK — equity curve + 4 stat tiles + 14d daily P&L bars */}
-      <PerformanceBlock equityPoints={equity?.points ?? []} todayPnl={summary?.dailyProfitLoss ?? 0} />
-
       {/* Investment Setup — premium metric tile grid */}
       <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-[#0e1828] via-[#0a1322] to-[#070b14] p-5 md:p-6">
         <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/15 to-transparent" />
