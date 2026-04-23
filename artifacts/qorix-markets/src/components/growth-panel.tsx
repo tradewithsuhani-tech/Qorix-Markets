@@ -195,38 +195,91 @@ function WeeklyLeaderboard({ userId }: { userId: number }) {
           sub="Profits are counted Monday–Sunday"
         />
       ) : (
-        list.map((entry, i) => (
-          <motion.div
-            key={entry.id}
-            initial={{ opacity: 0, x: -8 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: i * 0.05 }}
-            className={cn(
-              "flex items-center gap-3 px-3 py-2.5 rounded-xl border transition-colors",
-              entry.id === userId
-                ? "bg-blue-500/8 border-blue-500/20"
-                : "bg-white/[0.025] border-white/6 hover:bg-white/[0.04]"
-            )}
-          >
-            <div className="w-7 flex items-center justify-center shrink-0">
-              <RankMedal rank={i + 1} />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-sm font-medium text-white truncate">
-                {entry.publicId ? entry.fullName : maskName(entry.fullName, userId, entry.id)}
+        list.map((entry, i) => {
+          const rank = i + 1;
+          const isTop3 = rank <= 3;
+          const isMine = entry.id === userId;
+          const displayName = entry.publicId ? entry.fullName : maskName(entry.fullName, userId, entry.id);
+          const initial = (displayName?.trim()?.[0] ?? "T").toUpperCase();
+          const profit = parseFloat(String(entry.weeklyProfit));
+          const rankAccent = rank === 1
+            ? "from-yellow-400/25 via-amber-500/10 to-transparent border-yellow-400/30 shadow-[0_0_24px_-8px_rgba(250,204,21,0.4)]"
+            : rank === 2
+            ? "from-slate-200/20 via-slate-400/8 to-transparent border-slate-300/25 shadow-[0_0_18px_-10px_rgba(203,213,225,0.35)]"
+            : rank === 3
+            ? "from-amber-600/20 via-orange-700/8 to-transparent border-amber-600/25 shadow-[0_0_18px_-10px_rgba(217,119,6,0.35)]"
+            : "";
+          const avatarGrad = rank === 1
+            ? "from-yellow-400 to-amber-600"
+            : rank === 2
+            ? "from-slate-200 to-slate-400"
+            : rank === 3
+            ? "from-amber-500 to-orange-700"
+            : "from-blue-500/80 to-indigo-600/80";
+
+          return (
+            <motion.div
+              key={entry.id}
+              initial={{ opacity: 0, x: -8 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: i * 0.04 }}
+              whileHover={{ scale: 1.01 }}
+              className={cn(
+                "relative flex items-center gap-3 rounded-xl border transition-all overflow-hidden",
+                isTop3 ? "px-3.5 py-3.5" : "px-3 py-2.5",
+                isMine
+                  ? "bg-blue-500/10 border-blue-500/30 shadow-[0_0_20px_-8px_rgba(59,130,246,0.45)]"
+                  : isTop3
+                  ? `bg-gradient-to-r ${rankAccent}`
+                  : "bg-white/[0.025] border-white/6 hover:bg-white/[0.05]"
+              )}
+            >
+              <div className="w-7 flex items-center justify-center shrink-0">
+                <RankMedal rank={rank} />
               </div>
-              <div className="text-[10px] font-mono text-muted-foreground tracking-wider">
-                {entry.publicId ?? `$${parseFloat(String(entry.investmentAmount)).toLocaleString()} invested`}
+              <div
+                className={cn(
+                  "shrink-0 rounded-full bg-gradient-to-br flex items-center justify-center font-extrabold text-slate-900 ring-2 ring-white/10",
+                  avatarGrad,
+                  isTop3 ? "w-10 h-10 text-base" : "w-8 h-8 text-sm"
+                )}
+              >
+                {initial}
               </div>
-            </div>
-            <div className="text-right shrink-0">
-              <div className="text-xs font-bold text-emerald-400">
-                +${parseFloat(String(entry.weeklyProfit)).toFixed(2)}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <span className={cn("font-bold text-white truncate", isTop3 ? "text-base" : "text-sm")}>
+                    {displayName}
+                  </span>
+                  {rank === 1 && (
+                    <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-yellow-400/15 text-yellow-300 border border-yellow-400/25">
+                      Top
+                    </span>
+                  )}
+                  {isMine && (
+                    <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-300 border border-blue-500/25">
+                      You
+                    </span>
+                  )}
+                </div>
+                <div className="text-[10px] font-mono text-muted-foreground tracking-wider truncate">
+                  {entry.publicId ?? `$${parseFloat(String(entry.investmentAmount)).toLocaleString()} invested`}
+                </div>
               </div>
-              <div className="text-[10px] text-muted-foreground">this week</div>
-            </div>
-          </motion.div>
-        ))
+              <div className="text-right shrink-0">
+                <div
+                  className={cn(
+                    "font-extrabold text-emerald-400 tabular-nums",
+                    isTop3 ? "text-lg" : "text-sm"
+                  )}
+                >
+                  +${profit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </div>
+                <div className="text-[10px] text-muted-foreground uppercase tracking-wider">this week</div>
+              </div>
+            </motion.div>
+          );
+        })
       )}
     </div>
   );
