@@ -638,6 +638,7 @@ export function AdminWalletPage() {
               </tr>
             ))}</tbody>
           </table>
+         </div>
         </div>
       </motion.div>
     </Layout>

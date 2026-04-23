@@ -491,6 +491,7 @@ function CapitalProtectionWidget({
 }
 
 export default function Dashboard() {
+  const [, navigate] = useLocation();
   const [chartDays, setChartDays] = useState(30);
   const [returnsDays, setReturnsDays] = useState(30);
   const [pendingLimit, setPendingLimit] = useState<number | null>(null);
