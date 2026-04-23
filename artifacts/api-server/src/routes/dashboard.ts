@@ -8,17 +8,54 @@ import { getVipInfo } from "../lib/vip";
 const router = Router();
 router.use(authMiddleware);
 
+// Per-user "Total Equity" display boost: random $100–$500 every 10 min,
+// persisted in wallets.demo_equity_boost. Display-only — never affects real
+// balances, withdrawals, profit distribution or any accounting.
+const USER_EQUITY_WINDOW_MS = 10 * 60 * 1000;
+const USER_EQUITY_BUMP_MIN = 100;
+const USER_EQUITY_BUMP_MAX = 500;
+
 router.get("/dashboard/summary", async (req: AuthRequest, res) => {
   const wallets = await db.select().from(walletsTable).where(eq(walletsTable.userId, req.userId!)).limit(1);
   const invs = await db.select().from(investmentsTable).where(eq(investmentsTable.userId, req.userId!)).limit(1);
 
-  const wallet = wallets[0] ?? { mainBalance: "0", tradingBalance: "0", profitBalance: "0" };
+  const wallet = wallets[0];
   const inv = invs[0];
 
-  const mainBalance = parseFloat(wallet.mainBalance as string);
-  const tradingBalance = parseFloat(wallet.tradingBalance as string);
-  const profitBalance = parseFloat(wallet.profitBalance as string);
-  const totalBalance = mainBalance + tradingBalance + profitBalance;
+  const mainBalance = parseFloat((wallet?.mainBalance as string) ?? "0");
+  const tradingBalance = parseFloat((wallet?.tradingBalance as string) ?? "0");
+  const profitBalance = parseFloat((wallet?.profitBalance as string) ?? "0");
+
+  // Catch-up the per-user demo equity boost on every summary fetch.
+  let demoEquityBoost = parseFloat((wallet?.demoEquityBoost as string) ?? "0");
+  let demoEquityLastAt = Number(wallet?.demoEquityLastAt ?? 0);
+  if (wallet) {
+    const now = Date.now();
+    if (!demoEquityLastAt) demoEquityLastAt = now;
+    const windows = Math.floor((now - demoEquityLastAt) / USER_EQUITY_WINDOW_MS);
+    if (windows > 0) {
+      let added = 0;
+      for (let i = 0; i < windows; i++) {
+        added += USER_EQUITY_BUMP_MIN + Math.floor(Math.random() * (USER_EQUITY_BUMP_MAX - USER_EQUITY_BUMP_MIN + 1));
+      }
+      demoEquityBoost += added;
+      demoEquityLastAt = demoEquityLastAt + windows * USER_EQUITY_WINDOW_MS;
+      await db
+        .update(walletsTable)
+        .set({
+          demoEquityBoost: demoEquityBoost.toFixed(2),
+          demoEquityLastAt,
+        })
+        .where(eq(walletsTable.userId, req.userId!));
+    } else if (!wallet.demoEquityLastAt) {
+      await db
+        .update(walletsTable)
+        .set({ demoEquityLastAt })
+        .where(eq(walletsTable.userId, req.userId!));
+    }
+  }
+
+  const totalBalance = mainBalance + tradingBalance + profitBalance + demoEquityBoost;
   const dailyProfit = inv ? parseFloat(inv.dailyProfit as string) : 0;
   const totalProfit = inv ? parseFloat(inv.totalProfit as string) : 0;
   const investmentAmount = inv ? parseFloat(inv.amount as string) : 0;
