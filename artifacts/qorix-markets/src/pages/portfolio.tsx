@@ -703,8 +703,10 @@ function PortfolioInner() {
                   }`}
                 >
                   <span
-                    className={`absolute top-0.5 left-0.5 w-[18px] h-[18px] rounded-full bg-white shadow-md transition-all duration-300 ${
-                      on ? "translate-x-5" : "translate-x-0"
+                    className={`absolute top-0.5 left-0.5 w-[18px] h-[18px] rounded-full shadow-md transition-all duration-300 ${
+                      on
+                        ? "translate-x-5 bg-gradient-to-br from-emerald-300 to-green-500 shadow-emerald-900/50"
+                        : "translate-x-0 bg-gradient-to-br from-red-400 to-rose-600 shadow-red-900/50"
                     } ${compoundMutation.isPending ? "scale-75 opacity-80" : ""}`}
                   />
                   <span
