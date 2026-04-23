@@ -538,6 +538,7 @@ export interface DemoDashboardBodyProps {
   hideFundTransparency?: boolean;
   hideLiveTrades?: boolean;
   hidePrimaryStatCards?: boolean;
+  swapEquityWithRolling?: boolean;
 }
 
 export function DemoDashboardBody({
@@ -548,6 +549,7 @@ export function DemoDashboardBody({
   hideFundTransparency = false,
   hideLiveTrades = false,
   hidePrimaryStatCards = false,
+  swapEquityWithRolling = false,
 }: DemoDashboardBodyProps = {}) {
   const [, navigate] = useLocation();
   const [chartDays, setChartDays] = useState(30);
@@ -894,6 +896,190 @@ export function DemoDashboardBody({
       color: "text-emerald-400",
     },
   ];
+
+  const equityCurveBody = (
+    <>
+      <div className="flex flex-col gap-3 mb-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <h3 className="font-semibold whitespace-nowrap flex items-center gap-2">
+            Equity Curve
+            <span className="text-[9px] px-1.5 py-0.5 rounded font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-400/30 uppercase tracking-wider inline-flex items-center gap-1">
+              <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              Live
+            </span>
+          </h3>
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="text-xs text-muted-foreground whitespace-nowrap">
+              Live Performance
+            </p>
+            <span className="text-muted-foreground/40">·</span>
+            <UpdatedAgo timestamp={equityUpdatedAt} />
+          </div>
+        </div>
+        <div className="-mx-1 overflow-x-auto scrollbar-hide sm:mx-0 sm:overflow-visible">
+          <PeriodFilter
+            options={DAYS_PERIOD_OPTIONS}
+            selected={chartDays}
+            onChange={(v) => setChartDays(Number(v))}
+            ariaLabel="Equity curve period"
+          />
+        </div>
+      </div>
+      <div className="flex-1" style={{ minHeight: 260 }}>
+        {equityLoading ? (
+          <div className="w-full h-full flex items-end gap-1 pb-2">
+            {Array.from({ length: 20 }).map((_, i) => (
+              <div key={i} className="flex-1 bg-white/5 rounded-t animate-pulse" style={{ height: `${30 + (i * 3) % 60}%` }} />
+            ))}
+          </div>
+        ) : (
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={chartData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+              <defs>
+                <linearGradient id="equityGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="rgba(96,165,250,0.35)" />
+                  <stop offset="100%" stopColor="rgba(96,165,250,0.00)" />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
+              <XAxis
+                dataKey="date"
+                tick={{ fill: "#64748b", fontSize: 11 }}
+                axisLine={false}
+                tickLine={false}
+                interval="preserveStartEnd"
+              />
+              <YAxis
+                tick={{ fill: "#64748b", fontSize: 11 }}
+                axisLine={false}
+                tickLine={false}
+                tickFormatter={v => `$${Number(v).toLocaleString()}`}
+                width={70}
+              />
+              <Tooltip
+                content={<CustomTooltip />}
+                cursor={{ stroke: "rgba(148,163,184,0.25)", strokeWidth: 1 }}
+                wrapperStyle={{ outline: "none" }}
+              />
+              <Area
+                type="monotone"
+                dataKey="equity"
+                name="Equity"
+                stroke="rgba(96,165,250,1)"
+                strokeWidth={2}
+                fill="url(#equityGrad)"
+                dot={false}
+                activeDot={{ r: 5, fill: "rgba(96,165,250,1)", strokeWidth: 0 }}
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        )}
+      </div>
+    </>
+  );
+
+  const rollingReturnsBody = (
+    <>
+      <div className="flex items-start justify-between mb-3 gap-3 flex-wrap">
+        <div>
+          <h3 className="font-semibold">Rolling Returns</h3>
+          <p className="text-xs text-muted-foreground">Cumulative return over selected period</p>
+        </div>
+        <PeriodFilter
+          options={DAYS_PERIOD_OPTIONS}
+          selected={returnsDays}
+          onChange={(v) => setReturnsDays(Number(v))}
+          ariaLabel="Rolling returns period"
+        />
+      </div>
+
+      {(() => {
+        const rawArr = Array.isArray(returnsEquity) ? (returnsEquity as Array<{ date: string; equity: number }>) : [];
+        const arr = [...rawArr].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+        const base = arr.length > 0 ? Number(arr[0].equity) || 0 : 0;
+        const series = arr.map(p => ({
+          date: format(new Date(p.date), "MMM dd"),
+          ret: base > 0 ? ((Number(p.equity) - base) / base) * 100 : 0,
+        }));
+        const last = series.length > 0 ? series[series.length - 1].ret : 0;
+        const isPos = last >= 0;
+        const stroke = isPos ? "rgba(34,197,94,1)" : "rgba(239,68,68,1)";
+        const gradTop = isPos ? "rgba(34,197,94,0.32)" : "rgba(239,68,68,0.32)";
+
+        return (
+          <>
+            <div className="flex items-baseline gap-2 mb-2">
+              <span className={`text-2xl font-bold tabular-nums ${isPos ? "profit-text" : "loss-text"}`}>
+                {isPos ? "+" : ""}{last.toFixed(2)}%
+              </span>
+              <span className="text-xs text-muted-foreground">
+                over {periodLabel(returnsDays)}
+              </span>
+            </div>
+            <div className="flex-1" style={{ minHeight: 160 }}>
+              {returnsLoading ? (
+                <div className="w-full h-full flex items-end gap-1 pb-2">
+                  {Array.from({ length: 20 }).map((_, i) => (
+                    <div key={i} className="flex-1 bg-white/5 rounded-t animate-pulse" style={{ height: `${30 + (i * 3) % 60}%` }} />
+                  ))}
+                </div>
+              ) : series.length < 2 ? (
+                <div className="w-full h-full flex items-center justify-center text-xs text-muted-foreground">
+                  Not enough data for this period yet
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={series} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="returnsGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor={gradTop} />
+                        <stop offset="100%" stopColor="rgba(0,0,0,0)" />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
+                    <XAxis
+                      dataKey="date"
+                      tick={{ fill: "#64748b", fontSize: 10 }}
+                      axisLine={false}
+                      tickLine={false}
+                      interval="preserveStartEnd"
+                    />
+                    <YAxis
+                      tick={{ fill: "#64748b", fontSize: 10 }}
+                      axisLine={false}
+                      tickLine={false}
+                      tickFormatter={v => `${Number(v).toFixed(1)}%`}
+                      width={48}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        background: "rgba(15,23,42,0.95)",
+                        border: "1px solid rgba(255,255,255,0.1)",
+                        borderRadius: 8,
+                        fontSize: 12,
+                      }}
+                      formatter={(v: any) => [`${Number(v).toFixed(2)}%`, "Return"]}
+                    />
+                    <ReferenceLine y={0} stroke="rgba(255,255,255,0.15)" strokeDasharray="4 2" />
+                    <Area
+                      type="monotone"
+                      dataKey="ret"
+                      name="Return"
+                      stroke={stroke}
+                      strokeWidth={2}
+                      fill="url(#returnsGrad)"
+                      dot={false}
+                      activeDot={{ r: 4, fill: stroke, strokeWidth: 0 }}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+          </>
+        );
+      })()}
+    </>
+  );
 
   return (
     <>
@@ -1299,7 +1485,7 @@ export function DemoDashboardBody({
 
         {/* Equity Chart + Trades */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-5">
-          {/* Equity Curve */}
+          {/* Equity Curve (or Rolling Returns when swapped) */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -1307,82 +1493,7 @@ export function DemoDashboardBody({
             className="glass-card p-5 rounded-2xl col-span-1 lg:col-span-2 flex flex-col"
             style={{ minHeight: 340 }}
           >
-            <div className="flex flex-col gap-3 mb-4 sm:flex-row sm:items-center sm:justify-between">
-              <div className="min-w-0">
-                <h3 className="font-semibold whitespace-nowrap flex items-center gap-2">
-                  Equity Curve
-                  <span className="text-[9px] px-1.5 py-0.5 rounded font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-400/30 uppercase tracking-wider inline-flex items-center gap-1">
-                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                    Live
-                  </span>
-                </h3>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <p className="text-xs text-muted-foreground whitespace-nowrap">
-                    Live Performance
-                  </p>
-                  <span className="text-muted-foreground/40">·</span>
-                  <UpdatedAgo timestamp={equityUpdatedAt} />
-                </div>
-              </div>
-              <div className="-mx-1 overflow-x-auto scrollbar-hide sm:mx-0 sm:overflow-visible">
-                <PeriodFilter
-                  options={DAYS_PERIOD_OPTIONS}
-                  selected={chartDays}
-                  onChange={(v) => setChartDays(Number(v))}
-                  ariaLabel="Equity curve period"
-                />
-              </div>
-            </div>
-            <div className="flex-1" style={{ minHeight: 260 }}>
-              {equityLoading ? (
-                <div className="w-full h-full flex items-end gap-1 pb-2">
-                  {Array.from({ length: 20 }).map((_, i) => (
-                    <div key={i} className="flex-1 bg-white/5 rounded-t animate-pulse" style={{ height: `${30 + (i * 3) % 60}%` }} />
-                  ))}
-                </div>
-              ) : (
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={chartData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id="equityGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="rgba(96,165,250,0.35)" />
-                        <stop offset="100%" stopColor="rgba(96,165,250,0.00)" />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
-                    <XAxis
-                      dataKey="date"
-                      tick={{ fill: "#64748b", fontSize: 11 }}
-                      axisLine={false}
-                      tickLine={false}
-                      interval="preserveStartEnd"
-                    />
-                    <YAxis
-                      tick={{ fill: "#64748b", fontSize: 11 }}
-                      axisLine={false}
-                      tickLine={false}
-                      tickFormatter={v => `$${Number(v).toLocaleString()}`}
-                      width={70}
-                    />
-                    <Tooltip
-                      content={<CustomTooltip />}
-                      cursor={{ stroke: "rgba(148,163,184,0.25)", strokeWidth: 1 }}
-                      wrapperStyle={{ outline: "none" }}
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="equity"
-                      name="Equity"
-                      stroke="rgba(96,165,250,1)"
-                      strokeWidth={2}
-                      fill="url(#equityGrad)"
-                      dot={false}
-                      activeDot={{ r: 5, fill: "rgba(96,165,250,1)", strokeWidth: 0 }}
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-              )}
-            </div>
+            {swapEquityWithRolling ? rollingReturnsBody : equityCurveBody}
           </motion.div>
 
           {/* Recent Trades Feed */}
@@ -1603,7 +1714,7 @@ export function DemoDashboardBody({
             </div>
           </motion.div>
 
-          {/* Rolling Returns — line chart */}
+          {/* Rolling Returns (or Equity Curve when swapped) */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -1611,104 +1722,7 @@ export function DemoDashboardBody({
             className="glass-card p-5 rounded-2xl flex flex-col"
             style={{ minHeight: 240 }}
           >
-            <div className="flex items-start justify-between mb-3 gap-3 flex-wrap">
-              <div>
-                <h3 className="font-semibold">Rolling Returns</h3>
-                <p className="text-xs text-muted-foreground">Cumulative return over selected period</p>
-              </div>
-              <PeriodFilter
-                options={DAYS_PERIOD_OPTIONS}
-                selected={returnsDays}
-                onChange={(v) => setReturnsDays(Number(v))}
-                ariaLabel="Rolling returns period"
-              />
-            </div>
-
-            {(() => {
-              const rawArr = Array.isArray(returnsEquity) ? (returnsEquity as Array<{ date: string; equity: number }>) : [];
-              const arr = [...rawArr].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-              const base = arr.length > 0 ? Number(arr[0].equity) || 0 : 0;
-              const series = arr.map(p => ({
-                date: format(new Date(p.date), "MMM dd"),
-                ret: base > 0 ? ((Number(p.equity) - base) / base) * 100 : 0,
-              }));
-              const last = series.length > 0 ? series[series.length - 1].ret : 0;
-              const isPos = last >= 0;
-              const stroke = isPos ? "rgba(34,197,94,1)" : "rgba(239,68,68,1)";
-              const gradTop = isPos ? "rgba(34,197,94,0.32)" : "rgba(239,68,68,0.32)";
-
-              return (
-                <>
-                  <div className="flex items-baseline gap-2 mb-2">
-                    <span className={`text-2xl font-bold tabular-nums ${isPos ? "profit-text" : "loss-text"}`}>
-                      {isPos ? "+" : ""}{last.toFixed(2)}%
-                    </span>
-                    <span className="text-xs text-muted-foreground">
-                      over {periodLabel(returnsDays)}
-                    </span>
-                  </div>
-                  <div className="flex-1" style={{ minHeight: 160 }}>
-                    {returnsLoading ? (
-                      <div className="w-full h-full flex items-end gap-1 pb-2">
-                        {Array.from({ length: 20 }).map((_, i) => (
-                          <div key={i} className="flex-1 bg-white/5 rounded-t animate-pulse" style={{ height: `${30 + (i * 3) % 60}%` }} />
-                        ))}
-                      </div>
-                    ) : series.length < 2 ? (
-                      <div className="w-full h-full flex items-center justify-center text-xs text-muted-foreground">
-                        Not enough data for this period yet
-                      </div>
-                    ) : (
-                      <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart data={series} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
-                          <defs>
-                            <linearGradient id="returnsGrad" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="0%" stopColor={gradTop} />
-                              <stop offset="100%" stopColor="rgba(0,0,0,0)" />
-                            </linearGradient>
-                          </defs>
-                          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
-                          <XAxis
-                            dataKey="date"
-                            tick={{ fill: "#64748b", fontSize: 10 }}
-                            axisLine={false}
-                            tickLine={false}
-                            interval="preserveStartEnd"
-                          />
-                          <YAxis
-                            tick={{ fill: "#64748b", fontSize: 10 }}
-                            axisLine={false}
-                            tickLine={false}
-                            tickFormatter={v => `${Number(v).toFixed(1)}%`}
-                            width={48}
-                          />
-                          <Tooltip
-                            contentStyle={{
-                              background: "rgba(15,23,42,0.95)",
-                              border: "1px solid rgba(255,255,255,0.1)",
-                              borderRadius: 8,
-                              fontSize: 12,
-                            }}
-                            formatter={(v: any) => [`${Number(v).toFixed(2)}%`, "Return"]}
-                          />
-                          <ReferenceLine y={0} stroke="rgba(255,255,255,0.15)" strokeDasharray="4 2" />
-                          <Area
-                            type="monotone"
-                            dataKey="ret"
-                            name="Return"
-                            stroke={stroke}
-                            strokeWidth={2}
-                            fill="url(#returnsGrad)"
-                            dot={false}
-                            activeDot={{ r: 4, fill: stroke, strokeWidth: 0 }}
-                          />
-                        </AreaChart>
-                      </ResponsiveContainer>
-                    )}
-                  </div>
-                </>
-              );
-            })()}
+            {swapEquityWithRolling ? equityCurveBody : rollingReturnsBody}
 
             {/* Live Profit Ticker */}
             <div className="mt-5 pt-4 border-t border-white/5">
