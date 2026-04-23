@@ -1239,7 +1239,7 @@ export default function PortfolioPage() {
   return (
     <Layout>
       <PortfolioInner />
-      <div className={isLocked ? "relative" : ""}>
+      <div className="relative">
         {isLocked && (
           <div className="absolute inset-0 z-20 flex flex-col items-center justify-center pointer-events-none">
             <div className="pointer-events-auto rounded-2xl border border-amber-500/30 bg-[#0d1525]/90 backdrop-blur-md px-6 py-5 text-center shadow-2xl shadow-black/60 max-w-md mx-4">
@@ -1248,7 +1248,7 @@ export default function PortfolioPage() {
               </div>
               <h3 className="text-base md:text-lg font-bold text-white">Performance Insights Locked</h3>
               <p className="text-xs md:text-sm text-muted-foreground mt-1.5">
-                Start trading to unlock your live equity curve, daily P&amp;L, rolling returns and VIP membership.
+                Start trading to unlock your live equity curve, daily P&amp;L, rolling returns and performance metrics.
               </p>
               <Link
                 href="/invest"
@@ -1290,19 +1290,19 @@ export default function PortfolioPage() {
               swapEquityWithRolling
             />
           </div>
-          {summary?.vip && (
-            <div className="px-4 md:px-8 pb-2 max-w-7xl mx-auto">
-              <div className="flex items-center gap-2 mb-3">
-                <h2 className="text-base font-semibold">VIP Membership</h2>
-                <div className="h-px flex-1 bg-gradient-to-r from-white/10 to-transparent" />
-              </div>
-              <VipCard vip={summary.vip as VipInfo} investmentAmount={summary.activeInvestment ?? 0} />
-            </div>
-          )}
-          <div className="px-4 md:px-8 pb-8 max-w-7xl mx-auto">
-            <RecentTradeAttribution />
-          </div>
         </div>
+      </div>
+      {summary?.vip && (
+        <div className="px-4 md:px-8 pb-2 max-w-7xl mx-auto">
+          <div className="flex items-center gap-2 mb-3">
+            <h2 className="text-base font-semibold">VIP Membership</h2>
+            <div className="h-px flex-1 bg-gradient-to-r from-white/10 to-transparent" />
+          </div>
+          <VipCard vip={summary.vip as VipInfo} investmentAmount={summary.activeInvestment ?? 0} />
+        </div>
+      )}
+      <div className="px-4 md:px-8 pb-8 max-w-7xl mx-auto">
+        <RecentTradeAttribution />
       </div>
     </Layout>
   );
