@@ -24,8 +24,9 @@ import {
   ArrowUpRight, ArrowDownRight, Wallet, Activity, Clock, TrendingUp,
   TrendingDown, Zap, Target, ShieldCheck, BarChart2, Layers,
   RefreshCw, Globe, PieChart, Award, Shield, AlertTriangle, CheckCircle, FileDown,
-  Users, UserCheck, Banknote, X, Sparkles
+  Users, UserCheck, Banknote, X, Sparkles, Trophy, Flame, Gauge
 } from "lucide-react";
+import { MarketsStatusPill, InsightRotatorPill } from "@/components/header-status-pills";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
@@ -897,10 +898,15 @@ export default function DemoDashboard() {
               <FileDown style={{ width: 12, height: 12 }} />
               {isGeneratingReport ? "Generating…" : "Download Report"}
             </button>
-            <div className="flex items-center gap-2 text-sm bg-green-500/5 border border-green-500/15 rounded-full px-3 py-1.5">
-              <span className="live-dot" />
-              <span className="text-green-400 font-medium text-xs">Live · 5s</span>
-            </div>
+            <MarketsStatusPill />
+            <InsightRotatorPill
+              insights={[
+                { icon: Trophy, label: "Win Rate 87%", color: "text-amber-300", bg: "bg-amber-500/10", border: "border-amber-500/25" },
+                { icon: Flame, label: "Streak 7d", color: "text-orange-300", bg: "bg-orange-500/10", border: "border-orange-500/25" },
+                { icon: Gauge, label: "Avg Daily +0.42%", color: "text-emerald-300", bg: "bg-emerald-500/10", border: "border-emerald-500/25" },
+                { icon: Sparkles, label: "Top 5% Earner", color: "text-fuchsia-300", bg: "bg-fuchsia-500/10", border: "border-fuchsia-500/25" },
+              ]}
+            />
           </div>
         </div>
 
