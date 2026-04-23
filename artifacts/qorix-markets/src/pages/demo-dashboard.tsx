@@ -1491,46 +1491,6 @@ export function DemoDashboardBody({
         </div>
         )}
 
-        {/* ── Locked analytics section: shows blurred preview when trading is inactive ── */}
-        <div className="relative">
-          {!investment?.isActive && (
-            <>
-              {/* Blur + no-click layer sits over the charts */}
-              <div className="absolute inset-0 z-20 pointer-events-auto rounded-2xl bg-gradient-to-b from-[#0a1020]/30 via-[#0d1525]/55 to-[#0a1020]/75 backdrop-blur-[6px]" />
-              {/* Centered teaser card */}
-              <div className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none px-4">
-                <div className="pointer-events-auto max-w-md w-full text-center rounded-2xl border border-amber-400/30 bg-gradient-to-br from-[#1a1408]/95 via-[#0d1320]/95 to-[#070b14]/95 shadow-[0_20px_60px_-10px_rgba(245,158,11,0.35)] p-6 md:p-7 backdrop-blur-sm">
-                  <div className="mx-auto w-14 h-14 rounded-2xl bg-amber-500/15 border border-amber-400/40 flex items-center justify-center mb-3">
-                    <Lock className="w-6 h-6 text-amber-300" />
-                  </div>
-                  <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-300 mb-1.5">
-                    Live Analytics Locked
-                  </div>
-                  <h3 className="text-lg md:text-xl font-bold text-white mb-2">
-                    Activate Trading to Unlock
-                  </h3>
-                  <p className="text-xs md:text-sm text-muted-foreground leading-relaxed mb-4">
-                    Equity Curve, Rolling Returns, Daily P&amp;L and Performance Metrics go live the moment your Trading Fund activates.
-                  </p>
-                  <Link
-                    href="/invest"
-                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-green-500 hover:from-emerald-400 hover:to-green-400 text-black font-semibold text-sm transition-all shadow-lg shadow-emerald-500/30"
-                  >
-                    <Sparkles className="w-3.5 h-3.5" />
-                    Start Trading
-                    <ArrowUpRight className="w-3.5 h-3.5" />
-                  </Link>
-                </div>
-              </div>
-            </>
-          )}
-          <div
-            className={
-              !investment?.isActive
-                ? "space-y-4 md:space-y-5 pointer-events-none select-none blur-[2px] opacity-70"
-                : "space-y-4 md:space-y-5"
-            }
-          >
         {/* Equity Chart + Trades */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-5">
           {/* Equity Curve (or Rolling Returns when swapped) */}
@@ -1835,9 +1795,6 @@ export function DemoDashboardBody({
             ))}
           </div>
         </motion.div>
-          </div>
-        </div>
-        {/* ── end locked analytics section ── */}
 
         {/* Growth & Leaderboard Panel */}
         {!hideGrowthPanel && (
