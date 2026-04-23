@@ -1,70 +1,106 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Link } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Gift, Copy, Check, ArrowRight, X, Sparkles, BadgePercent } from "lucide-react";
+import { Gift, Copy, Check, ArrowRight, X, Sparkles, BadgePercent, Timer } from "lucide-react";
 import { authFetch } from "@/lib/auth-fetch";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 
-interface PromoOffer {
+interface OfferResponse {
+  alreadyRedeemed: boolean;
+  redemption: {
+    code: string;
+    status: "redeemed" | "credited";
+    bonusPercent: number;
+    bonusAmount: number | null;
+    redeemedAt: string | null;
+    creditedAt: string | null;
+  } | null;
+  active: boolean;
   code: string;
-  status: "issued" | "redeemed" | "credited";
   bonusPercent: number;
-  redeemedAt: string | null;
-  creditedAt: string | null;
-  bonusAmount: number | null;
-  available: boolean;
+  windowStart: number;
+  expiresAt: number;   // ms epoch — offer redemption cutoff
+  nextOfferAt: number; // ms epoch — next new offer window
+  serverTime: number;  // for clock-skew correction
 }
 
-const REAPPEAR_MS = 30 * 60 * 1000; // 30 minutes
-const DISMISS_KEY = "qrx_promo_bonus_hide_until";
+const DISMISS_KEY = "qrx_promo_bonus_dismissed_window";
+
+function formatMs(ms: number): string {
+  if (ms <= 0) return "0:00";
+  const s = Math.floor(ms / 1000);
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  return `${m}:${r.toString().padStart(2, "0")}`;
+}
 
 /**
- * Persistent 5% deposit-bonus promo banner on the dashboard.
- * - Shows every 30 minutes if the user hasn't redeemed yet
- * - One-time-use code per user (backend enforced)
- * - "Copy" button copies the code; "Deposit & Apply" locks redemption and
- *   navigates to /deposit. Bonus credits on next confirmed on-chain deposit.
+ * Rotating 5–10% deposit-bonus promo banner on the dashboard.
+ * - Every 30-minute window the backend produces a NEW system-wide offer
+ *   (new code + new bonus % between 2% and 10%).
+ * - Each offer is REDEEMABLE for only the first 10 minutes of its window
+ *   (live countdown shown). After that, banner hides until the next window.
+ * - Any user can redeem at most ONE offer for life; bonus credits to the
+ *   TRADING balance (non-withdrawable) on their next confirmed deposit.
  */
 export function PromoBonusBanner() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const [copied, setCopied] = useState(false);
-  const [hidden, setHidden] = useState<boolean>(() => {
-    if (typeof window === "undefined") return false;
-    return Number(localStorage.getItem(DISMISS_KEY) ?? 0) > Date.now();
+  const [now, setNow] = useState(() => Date.now());
+
+  // Dismissed for the current window only — reappears next window.
+  const [dismissedWindow, setDismissedWindow] = useState<number>(() => {
+    if (typeof window === "undefined") return 0;
+    return Number(localStorage.getItem(DISMISS_KEY) ?? 0);
   });
 
-  // Re-show after 30 min
-  useEffect(() => {
-    if (!hidden) return;
-    const until = Number(localStorage.getItem(DISMISS_KEY) ?? 0);
-    const delay = Math.max(0, until - Date.now());
-    const t = setTimeout(() => setHidden(false), delay + 250);
-    return () => clearTimeout(t);
-  }, [hidden]);
-
-  const { data: offer } = useQuery<PromoOffer>({
+  const { data: offer } = useQuery<OfferResponse>({
     queryKey: ["promo-offer"],
-    queryFn: () => authFetch<PromoOffer>("/api/promo/offer"),
-    refetchInterval: 60000,
+    queryFn: () => authFetch<OfferResponse>("/api/promo/offer"),
+    refetchInterval: 30000,
     retry: false,
-    enabled: !!user, // Skip network call for guests
+    enabled: !!user,
   });
+
+  // Tick the countdown every second while an active offer is visible.
+  useEffect(() => {
+    if (!offer?.active) return;
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [offer?.active]);
+
+  // When the current window ends, refetch to pick up the next window's offer.
+  useEffect(() => {
+    if (!offer) return;
+    // Use serverTime to neutralize clock skew
+    const skew = offer.serverTime - Date.now();
+    const msUntilEnd = offer.expiresAt - Date.now() - skew;
+    const msUntilNext = offer.nextOfferAt - Date.now() - skew;
+    const delays = [msUntilEnd + 500, msUntilNext + 500].filter((d) => d > 0 && d < 35 * 60 * 1000);
+    const timers = delays.map((d) =>
+      setTimeout(() => queryClient.invalidateQueries({ queryKey: ["promo-offer"] }), d),
+    );
+    return () => timers.forEach(clearTimeout);
+  }, [offer, queryClient]);
 
   const redeemMut = useMutation({
     mutationFn: (code: string) =>
-      authFetch<{ success: boolean; message: string }>("/api/promo/redeem", {
-        method: "POST",
-        body: JSON.stringify({ code }),
-      }),
-    onSuccess: () => {
+      authFetch<{ success: boolean; message: string; bonusPercent: number }>(
+        "/api/promo/redeem",
+        {
+          method: "POST",
+          body: JSON.stringify({ code }),
+        },
+      ),
+    onSuccess: (res) => {
       toast({
-        title: "Promo locked in",
+        title: `${res.bonusPercent}% bonus locked in`,
         description:
-          "Your 5% bonus will be added to your Trading Balance on your next confirmed deposit. Bonus is non-withdrawable — only realized profits can be withdrawn.",
+          "Your bonus will be added to your Trading Balance on your next confirmed deposit. Bonus is non-withdrawable — only realized profits can be withdrawn.",
       });
       queryClient.invalidateQueries({ queryKey: ["promo-offer"] });
     },
@@ -87,17 +123,35 @@ export function PromoBonusBanner() {
   };
 
   const handleDismiss = () => {
-    const until = Date.now() + REAPPEAR_MS;
-    try { localStorage.setItem(DISMISS_KEY, String(until)); } catch {}
-    setHidden(true);
+    if (!offer) return;
+    try { localStorage.setItem(DISMISS_KEY, String(offer.windowStart)); } catch {}
+    setDismissedWindow(offer.windowStart);
   };
 
-  // Hide if: no offer yet, dismissed, or already used
-  if (!offer || hidden || !offer.available) return null;
+  const msLeft = useMemo(() => {
+    if (!offer) return 0;
+    const skew = offer.serverTime - Date.now();
+    return Math.max(0, offer.expiresAt - now - skew);
+  }, [offer, now]);
+
+  // Hide in all these cases:
+  if (!offer) return null;
+  if (offer.alreadyRedeemed) return null;
+  if (!offer.active) return null;
+  if (dismissedWindow === offer.windowStart) return null;
+
+  // Progress for the 10-minute active window
+  const totalActiveMs = offer.expiresAt - offer.windowStart;
+  const progressPct = Math.max(0, Math.min(100, (msLeft / totalActiveMs) * 100));
+  const bonusStr = Number.isInteger(offer.bonusPercent)
+    ? `${offer.bonusPercent}`
+    : offer.bonusPercent.toFixed(1);
+  const urgent = msLeft < 60_000;
 
   return (
-    <AnimatePresence>
+    <AnimatePresence mode="wait">
       <motion.div
+        key={offer.windowStart}
         initial={{ opacity: 0, y: -8, scale: 0.98 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: -8, scale: 0.98 }}
@@ -129,7 +183,7 @@ export function PromoBonusBanner() {
         </button>
 
         <div className="relative px-4 sm:px-5 py-4 sm:py-5 flex flex-col lg:flex-row lg:items-center gap-4">
-          {/* Icon + badge */}
+          {/* Icon + timer pill */}
           <div className="shrink-0 flex items-center gap-3">
             <div className="relative">
               <div className="absolute inset-0 bg-amber-400/40 blur-xl rounded-full animate-pulse" />
@@ -137,27 +191,67 @@ export function PromoBonusBanner() {
                 <Gift className="w-7 h-7 text-amber-200" strokeWidth={2} />
               </div>
             </div>
-            <span className="lg:hidden inline-flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-[0.18em] px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-400/30">
-              <Sparkles className="w-3 h-3" /> Limited Offer
-            </span>
+            <div className="flex flex-col gap-1.5 lg:hidden">
+              <span className="inline-flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-[0.18em] px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-400/30">
+                <Sparkles className="w-3 h-3" /> Live Offer
+              </span>
+              <span
+                className={
+                  "inline-flex items-center gap-1 text-[11px] font-bold tabular-nums px-2 py-0.5 rounded-full border " +
+                  (urgent
+                    ? "bg-red-500/15 text-red-300 border-red-400/40 animate-pulse"
+                    : "bg-black/40 text-amber-200 border-amber-400/30")
+                }
+              >
+                <Timer className="w-3 h-3" />
+                {formatMs(msLeft)}
+              </span>
+            </div>
           </div>
 
           {/* Message + code */}
           <div className="min-w-0 flex-1">
-            <div className="hidden lg:inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-400/30 text-[10px] font-extrabold uppercase tracking-[0.18em] mb-1.5">
-              <Sparkles className="w-3 h-3" /> Limited Offer · One-time use
+            <div className="hidden lg:flex items-center gap-2 mb-1.5">
+              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-400/30 text-[10px] font-extrabold uppercase tracking-[0.18em]">
+                <Sparkles className="w-3 h-3" /> Limited · One-time per user
+              </span>
+              <span
+                className={
+                  "inline-flex items-center gap-1 text-[11px] font-bold tabular-nums px-2 py-0.5 rounded-full border " +
+                  (urgent
+                    ? "bg-red-500/15 text-red-300 border-red-400/40 animate-pulse"
+                    : "bg-black/40 text-amber-200 border-amber-400/30")
+                }
+              >
+                <Timer className="w-3 h-3" />
+                Ends in {formatMs(msLeft)}
+              </span>
             </div>
             <h3 className="text-base md:text-lg font-extrabold leading-tight">
               <span className="bg-gradient-to-r from-amber-200 via-yellow-100 to-amber-300 bg-clip-text text-transparent">
-                Deposit now & get {offer.bonusPercent}% extra bonus
+                Deposit now & get {bonusStr}% extra bonus
               </span>
             </h3>
             <p className="mt-0.5 text-xs md:text-[13px] text-white/65 leading-snug">
-              Apply your personal code on the next USDT deposit. Bonus credits to your{" "}
-              <span className="text-amber-200 font-semibold">Trading Balance</span> (non-withdrawable
-              — grows your fund, profits are withdrawable).{" "}
+              Apply this code on your next USDT deposit. Bonus credits to your{" "}
+              <span className="text-amber-200 font-semibold">Trading Balance</span>{" "}
+              (non-withdrawable — grows your fund; only profits are withdrawable).{" "}
               <span className="text-white/40">T&amp;C apply.</span>
             </p>
+
+            {/* Countdown bar */}
+            <div className="mt-2 h-1 w-full bg-black/40 rounded-full overflow-hidden">
+              <motion.div
+                className={
+                  "h-full " +
+                  (urgent
+                    ? "bg-gradient-to-r from-red-400 to-orange-400"
+                    : "bg-gradient-to-r from-amber-400 to-yellow-300")
+                }
+                animate={{ width: `${progressPct}%` }}
+                transition={{ duration: 0.8, ease: "linear" }}
+              />
+            </div>
 
             {/* Code box */}
             <div className="mt-3 inline-flex items-stretch rounded-xl border border-amber-300/40 bg-black/40 overflow-hidden">
@@ -190,7 +284,7 @@ export function PromoBonusBanner() {
             <Link
               href="/deposit"
               onClick={() => {
-                if (offer.status === "issued" && !redeemMut.isPending) {
+                if (!offer.alreadyRedeemed && !redeemMut.isPending) {
                   redeemMut.mutate(offer.code);
                 }
               }}
