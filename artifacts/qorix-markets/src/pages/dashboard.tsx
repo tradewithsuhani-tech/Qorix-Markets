@@ -982,7 +982,7 @@ export default function Dashboard() {
                 value: marketIndicators?.avgMonthlyReturn ?? 0,
                 decimals: 1,
                 suffix: "%",
-                sub: "last 30 days",
+                sub: "net of fees · 30d avg",
                 color: "text-violet-400",
                 bg: "bg-violet-500/5 border-violet-500/15",
               },

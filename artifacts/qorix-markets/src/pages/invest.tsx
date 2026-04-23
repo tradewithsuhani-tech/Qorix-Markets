@@ -32,6 +32,8 @@ const RISK_PROFILES = [
     multiplier: 0.6,
     minDailyPct: 0.3,
     maxDailyPct: 0.6,
+    monthlyMinPct: 2,
+    monthlyMaxPct: 5,
     drawdownLimit: 3,
     volatility: "Low",
     score: 2,
@@ -60,6 +62,8 @@ const RISK_PROFILES = [
     multiplier: 1.0,
     minDailyPct: 0.5,
     maxDailyPct: 1.0,
+    monthlyMinPct: 4,
+    monthlyMaxPct: 6,
     drawdownLimit: 5,
     volatility: "Medium",
     score: 5,
@@ -89,6 +93,8 @@ const RISK_PROFILES = [
     multiplier: 1.5,
     minDailyPct: 0.75,
     maxDailyPct: 1.5,
+    monthlyMinPct: 5,
+    monthlyMaxPct: 8,
     drawdownLimit: 10,
     volatility: "High",
     score: 8,
@@ -945,7 +951,7 @@ export default function InvestPage() {
                             <div className="text-xs text-muted-foreground mb-2">{profile.description}</div>
                             <div className="flex flex-wrap items-center gap-2">
                               <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${profile.badgeColor}`}>
-                                {profile.minDailyPct}–{profile.maxDailyPct}% daily
+                                {profile.monthlyMinPct}–{profile.monthlyMaxPct}% monthly target
                               </span>
                               <span className="text-xs text-muted-foreground">
                                 {profile.drawdownLimit}% max drawdown
