@@ -1531,14 +1531,13 @@ export function DemoDashboardBody({
             so hide it for users without an active trading fund. Live Trades
             stays visible (company-wide signal stream). */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-5">
-          {/* Equity Curve (or Rolling Returns when swapped) — locked for inactive users */}
-          <div className={`col-span-1 ${swapEquityWithRolling && hideLiveTrades ? "lg:col-span-3" : "lg:col-span-2"} ${isPortfolioLocked ? "relative" : ""}`}>
-            {isPortfolioLocked && lockOverlay}
+          {/* Equity Curve (or Rolling Returns when swapped) */}
+          <div className={`col-span-1 ${swapEquityWithRolling && hideLiveTrades ? "lg:col-span-3" : "lg:col-span-2"}`}>
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.22, duration: 0.4 }}
-              className={`glass-card p-5 rounded-2xl flex flex-col w-full ${lockBlurClass}`}
+              className="glass-card p-5 rounded-2xl flex flex-col w-full"
               style={{ minHeight: swapEquityWithRolling && hideLiveTrades ? 460 : 340 }}
             >
               {swapEquityWithRolling ? rollingReturnsBody : equityCurveBody}
@@ -1692,9 +1691,9 @@ export function DemoDashboardBody({
           )}
         </div>
 
-        {/* Drawdown Chart + Rolling Returns — personal portfolio data, locked for inactive users */}
+        {/* Drawdown Chart + Rolling Returns */}
         <div>
-          <div className={`grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-5 ${lockBlurClass}`}>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-5">
           {/* Daily P&L / Drawdown Chart */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -1794,13 +1793,12 @@ export function DemoDashboardBody({
           </div>
         </div>
 
-        {/* Performance Metrics — personal portfolio metrics, locked for inactive users */}
+        {/* Performance Metrics */}
         <div>
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.45, duration: 0.4 }}
-          className={lockBlurClass}
         >
           <div className="flex items-center gap-2 mb-3">
             <h2 className="text-base font-semibold">Performance Metrics</h2>
