@@ -466,61 +466,213 @@ function escapeHtml(s: string): string {
     .replace(/'/g, "&#39;");
 }
 
-// Premium branded broadcast email — dark Qorix theme, gradient header, CTA button.
-// Auto-detects URLs in body and converts them to clickable links. Auto-bolds the
-// subject as the hero heading and converts plain-text bullets/checks into rich HTML.
+// High-end branded broadcast email — institutional dark theme, gradient hero,
+// trust badges, stat grid, feature pills, premium CTA, footer with social.
+// Email-client safe: table-based layout, inline CSS, web-safe fallback fonts.
 function buildBroadcastHtml(title: string, message: string): string {
   const safeTitle = escapeHtml(title);
   const year = new Date().getFullYear();
 
-  // Convert message to HTML: escape, then linkify URLs, then preserve line breaks.
+  // Body: escape → linkify → bullet rendering → newline preservation.
   const escaped = escapeHtml(message);
   const linkified = escaped.replace(
     /(https?:\/\/[^\s<]+)/g,
-    '<a href="$1" style="color:#60a5fa;text-decoration:underline;word-break:break-all;">$1</a>',
+    '<a href="$1" style="color:#7DD3FC;text-decoration:none;border-bottom:1px solid rgba(125,211,252,0.4);word-break:break-all;">$1</a>',
   );
   const bodyHtml = linkified.replace(/\n/g, "<br/>");
 
-  return `<!DOCTYPE html>
-<html>
+  // Subtle preheader (shows in inbox preview after subject line).
+  const preheader = escapeHtml(message.replace(/\s+/g, " ").slice(0, 110));
+
+  return `<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
 <head>
-<meta charset="UTF-8">
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <meta name="x-apple-disable-message-reformatting" />
+<meta name="color-scheme" content="dark light" />
+<meta name="supported-color-schemes" content="dark light" />
 <title>${safeTitle} — Qorix Markets</title>
+<!--[if mso]><style type="text/css">body,table,td,a{font-family:Arial,Helvetica,sans-serif !important;}</style><![endif]-->
 </head>
-<body style="margin:0;padding:0;background:#0B0F1A;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;">
-<div style="display:none;max-height:0;overflow:hidden;font-size:1px;line-height:1px;color:#0B0F1A;">${safeTitle}</div>
-<table width="100%" cellpadding="0" cellspacing="0" style="background:#0B0F1A;padding:20px;">
+<body style="margin:0;padding:0;background:#05070D;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;">
+<div style="display:none;max-height:0;overflow:hidden;font-size:1px;line-height:1px;color:#05070D;opacity:0;">${preheader}</div>
+<div style="display:none;max-height:0;overflow:hidden;">&#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847;</div>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#05070D;padding:32px 16px;">
   <tr>
     <td align="center">
-      <table width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#0F172A;border-radius:18px;overflow:hidden;border:1px solid #1F2937;">
+
+      <!-- TOP RAIL — wordmark + dot -->
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;margin-bottom:12px;">
         <tr>
-          <td align="center" style="padding:34px 20px 24px 20px;background:linear-gradient(135deg,#0B0F1A 0%,#1E293B 60%,#312E81 100%);">
-            <div style="font-size:11px;letter-spacing:4px;color:#A5B4FC;font-weight:600;margin-bottom:8px;">QORIX MARKETS</div>
-            <div style="font-size:22px;font-weight:700;color:#ffffff;line-height:1.3;">AI-Powered Trading System</div>
-            <div style="width:48px;height:3px;background:linear-gradient(90deg,#38BDF8,#7C3AED);margin:14px auto 0;border-radius:2px;"></div>
+          <td align="left" style="padding:0 4px 14px;font-size:13px;letter-spacing:6px;color:#64748B;font-weight:600;">
+            <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#22D3EE;margin-right:10px;vertical-align:middle;box-shadow:0 0 12px #22D3EE;"></span>QORIX&nbsp;MARKETS
           </td>
-        </tr>
-        <tr>
-          <td style="padding:32px 30px 12px;color:#ffffff;">
-            <h2 style="margin:0 0 18px;font-size:20px;color:#ffffff;line-height:1.4;font-weight:700;">${safeTitle}</h2>
-            <div style="font-size:15px;line-height:1.7;color:#cbd5e1;">${bodyHtml}</div>
-          </td>
-        </tr>
-        <tr>
-          <td align="center" style="padding:8px 30px 30px;">
-            <a href="https://qorixmarkets.com/" style="display:inline-block;padding:14px 36px;background:linear-gradient(90deg,#2563EB,#7C3AED);color:#ffffff;text-decoration:none;font-weight:700;font-size:15px;border-radius:12px;box-shadow:0 0 25px rgba(124,58,237,0.35);">⚡ Activate Trading Now</a>
-          </td>
-        </tr>
-        <tr>
-          <td align="center" style="padding:18px 20px;border-top:1px solid #1F2937;color:#6B7280;font-size:12px;line-height:1.6;">
-            <p style="margin:4px 0;">© ${year} Qorix Markets. All rights reserved.</p>
-            <p style="margin:4px 0;"><a href="https://qorixmarkets.com" style="color:#38BDF8;text-decoration:none;">qorixmarkets.com</a> · <a href="mailto:support@qorixmarkets.com" style="color:#38BDF8;text-decoration:none;">support@qorixmarkets.com</a></p>
-            <p style="margin:8px 0 0;color:#475569;font-size:11px;">You're receiving this because you have an account at Qorix Markets.</p>
+          <td align="right" style="padding:0 4px 14px;font-size:11px;color:#475569;letter-spacing:1px;text-transform:uppercase;">
+            Institutional · Live
           </td>
         </tr>
       </table>
+
+      <!-- MAIN CARD -->
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;background:#0A0F1C;border:1px solid rgba(99,102,241,0.18);border-radius:24px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,0.6);">
+
+        <!-- HERO -->
+        <tr>
+          <td style="padding:0;background:#0A0F1C;background-image:linear-gradient(135deg,#0A0F1C 0%,#111B36 40%,#1E1B4B 75%,#3B1763 100%);">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td align="center" style="padding:48px 32px 36px;">
+                  <!-- Trust badge -->
+                  <div style="display:inline-block;padding:7px 16px;border-radius:999px;background:rgba(34,211,238,0.12);border:1px solid rgba(34,211,238,0.35);font-size:11px;letter-spacing:2px;color:#67E8F9;font-weight:700;text-transform:uppercase;margin-bottom:24px;">
+                    ⚡ AI-Powered Trading System
+                  </div>
+                  <!-- Hero title -->
+                  <div style="font-size:30px;line-height:1.2;font-weight:800;color:#FFFFFF;letter-spacing:-0.5px;max-width:440px;margin:0 auto;">
+                    ${safeTitle}
+                  </div>
+                  <!-- Gradient divider -->
+                  <div style="width:64px;height:3px;background:linear-gradient(90deg,#22D3EE 0%,#A78BFA 50%,#F472B6 100%);margin:24px auto 0;border-radius:999px;"></div>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- STAT STRIP -->
+        <tr>
+          <td style="padding:0;background:#0A0F1C;border-bottom:1px solid rgba(255,255,255,0.05);">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td align="center" width="33%" style="padding:18px 8px;">
+                  <div style="font-size:18px;font-weight:800;color:#FFFFFF;">$8.4M+</div>
+                  <div style="font-size:10px;letter-spacing:1.5px;color:#64748B;text-transform:uppercase;margin-top:2px;font-weight:600;">Vol. Today</div>
+                </td>
+                <td align="center" width="34%" style="padding:18px 8px;border-left:1px solid rgba(255,255,255,0.05);border-right:1px solid rgba(255,255,255,0.05);">
+                  <div style="font-size:18px;font-weight:800;color:#34D399;">+2.3%</div>
+                  <div style="font-size:10px;letter-spacing:1.5px;color:#64748B;text-transform:uppercase;margin-top:2px;font-weight:600;">Last Trade</div>
+                </td>
+                <td align="center" width="33%" style="padding:18px 8px;">
+                  <div style="font-size:18px;font-weight:800;color:#FFFFFF;">12,400+</div>
+                  <div style="font-size:10px;letter-spacing:1.5px;color:#64748B;text-transform:uppercase;margin-top:2px;font-weight:600;">Active Traders</div>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- BODY -->
+        <tr>
+          <td style="padding:36px 36px 8px;color:#CBD5E1;font-size:15.5px;line-height:1.75;">
+            <div style="color:#E2E8F0;">${bodyHtml}</div>
+          </td>
+        </tr>
+
+        <!-- CTA -->
+        <tr>
+          <td align="center" style="padding:24px 32px 8px;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto;">
+              <tr>
+                <td align="center" style="border-radius:14px;background:linear-gradient(135deg,#22D3EE 0%,#6366F1 50%,#A855F7 100%);box-shadow:0 12px 40px rgba(99,102,241,0.45);">
+                  <a href="https://qorixmarkets.com/" target="_blank" style="display:inline-block;padding:16px 42px;color:#FFFFFF;text-decoration:none;font-weight:700;font-size:15px;letter-spacing:0.3px;border-radius:14px;">
+                    Activate Trading Now&nbsp;&nbsp;→
+                  </a>
+                </td>
+              </tr>
+            </table>
+            <div style="margin-top:14px;font-size:11.5px;color:#64748B;letter-spacing:0.5px;">
+              Start from as low as <span style="color:#E2E8F0;font-weight:600;">$10</span> · Withdraw anytime
+            </div>
+          </td>
+        </tr>
+
+        <!-- FEATURE GRID -->
+        <tr>
+          <td style="padding:32px 28px 8px;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td width="50%" valign="top" style="padding:8px;">
+                  <div style="background:rgba(255,255,255,0.025);border:1px solid rgba(255,255,255,0.06);border-radius:14px;padding:16px 18px;">
+                    <div style="font-size:18px;line-height:1;margin-bottom:6px;">🤖</div>
+                    <div style="font-size:13px;font-weight:700;color:#FFFFFF;margin-bottom:3px;">Fully Automated</div>
+                    <div style="font-size:11.5px;color:#94A3B8;line-height:1.5;">AI executes trades 24/7</div>
+                  </div>
+                </td>
+                <td width="50%" valign="top" style="padding:8px;">
+                  <div style="background:rgba(255,255,255,0.025);border:1px solid rgba(255,255,255,0.06);border-radius:14px;padding:16px 18px;">
+                    <div style="font-size:18px;line-height:1;margin-bottom:6px;">🛡️</div>
+                    <div style="font-size:13px;font-weight:700;color:#FFFFFF;margin-bottom:3px;">Risk-Managed</div>
+                    <div style="font-size:11.5px;color:#94A3B8;line-height:1.5;">Built-in stop-loss logic</div>
+                  </div>
+                </td>
+              </tr>
+              <tr>
+                <td width="50%" valign="top" style="padding:8px;">
+                  <div style="background:rgba(255,255,255,0.025);border:1px solid rgba(255,255,255,0.06);border-radius:14px;padding:16px 18px;">
+                    <div style="font-size:18px;line-height:1;margin-bottom:6px;">⚡</div>
+                    <div style="font-size:13px;font-weight:700;color:#FFFFFF;margin-bottom:3px;">No Missed Entries</div>
+                    <div style="font-size:11.5px;color:#94A3B8;line-height:1.5;">Zero emotion, zero delay</div>
+                  </div>
+                </td>
+                <td width="50%" valign="top" style="padding:8px;">
+                  <div style="background:rgba(255,255,255,0.025);border:1px solid rgba(255,255,255,0.06);border-radius:14px;padding:16px 18px;">
+                    <div style="font-size:18px;line-height:1;margin-bottom:6px;">💎</div>
+                    <div style="font-size:13px;font-weight:700;color:#FFFFFF;margin-bottom:3px;">Withdraw Anytime</div>
+                    <div style="font-size:11.5px;color:#94A3B8;line-height:1.5;">Funds always in your control</div>
+                  </div>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- TRUST STRIP -->
+        <tr>
+          <td style="padding:24px 36px 32px;">
+            <div style="background:linear-gradient(90deg,rgba(34,211,238,0.06) 0%,rgba(168,85,247,0.06) 100%);border:1px solid rgba(255,255,255,0.06);border-radius:14px;padding:14px 18px;text-align:center;">
+              <span style="display:inline-block;color:#67E8F9;font-size:11px;letter-spacing:2px;font-weight:700;text-transform:uppercase;margin-right:14px;">SSL · 256-bit</span>
+              <span style="display:inline-block;color:#A78BFA;font-size:11px;letter-spacing:2px;font-weight:700;text-transform:uppercase;margin-right:14px;">USDT · TRC20</span>
+              <span style="display:inline-block;color:#F472B6;font-size:11px;letter-spacing:2px;font-weight:700;text-transform:uppercase;">24/7 · Support</span>
+            </div>
+          </td>
+        </tr>
+
+        <!-- FOOTER -->
+        <tr>
+          <td style="padding:24px 32px 32px;background:#06090F;border-top:1px solid rgba(255,255,255,0.05);">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td align="center" style="padding-bottom:14px;">
+                  <div style="font-size:13px;letter-spacing:5px;color:#94A3B8;font-weight:700;">QORIX&nbsp;MARKETS</div>
+                  <div style="font-size:11px;color:#475569;margin-top:4px;letter-spacing:0.5px;">AI-Powered Trading · Built for Performance</div>
+                </td>
+              </tr>
+              <tr>
+                <td align="center" style="padding:8px 0;">
+                  <a href="https://qorixmarkets.com" style="color:#7DD3FC;text-decoration:none;font-size:12px;font-weight:600;margin:0 10px;">Website</a>
+                  <span style="color:#334155;">·</span>
+                  <a href="mailto:support@qorixmarkets.com" style="color:#7DD3FC;text-decoration:none;font-size:12px;font-weight:600;margin:0 10px;">Support</a>
+                  <span style="color:#334155;">·</span>
+                  <a href="https://qorixmarkets.com/promotions" style="color:#7DD3FC;text-decoration:none;font-size:12px;font-weight:600;margin:0 10px;">Promotions</a>
+                </td>
+              </tr>
+              <tr>
+                <td align="center" style="padding-top:14px;border-top:1px solid rgba(255,255,255,0.04);margin-top:14px;">
+                  <div style="font-size:11px;color:#475569;line-height:1.7;padding-top:14px;">
+                    © ${year} Qorix Markets. All rights reserved.<br/>
+                    Trading involves risk. Past performance does not guarantee future results.<br/>
+                    <span style="color:#334155;">You're receiving this because you have an account at Qorix Markets.</span>
+                  </div>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+
+      <!-- Spacer -->
+      <div style="height:24px;line-height:24px;font-size:1px;">&nbsp;</div>
     </td>
   </tr>
 </table>
