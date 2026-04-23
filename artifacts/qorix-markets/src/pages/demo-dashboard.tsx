@@ -612,6 +612,35 @@ export default function DemoDashboard() {
   const dailyPL = summary?.dailyProfitLoss || 0;
   const dailyPct = summary?.dailyProfitPercent || 0;
   const isPositive = dailyPL >= 0;
+  const dailyPnlMeta = (summary as any)?.dailyPnl as
+    | { marketClosed?: boolean; marketOpensAt?: number | null; nextChunkAt?: number | null }
+    | undefined;
+  const marketClosed = !!dailyPnlMeta?.marketClosed;
+  const marketOpensAt = dailyPnlMeta?.marketOpensAt ?? null;
+  const nextChunkAt = dailyPnlMeta?.nextChunkAt ?? null;
+
+  const [pnlNowTick, setPnlNowTick] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setPnlNowTick(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  const formatCountdown = (ms: number) => {
+    if (ms <= 0) return "0s";
+    const s = Math.floor(ms / 1000);
+    const d = Math.floor(s / 86400);
+    const h = Math.floor((s % 86400) / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const sec = s % 60;
+    if (d > 0) return `${d}d ${h}h ${m}m`;
+    if (h > 0) return `${h}h ${m}m ${sec}s`;
+    if (m > 0) return `${m}m ${sec}s`;
+    return `${sec}s`;
+  };
+  const pnlSubLabel = marketClosed && marketOpensAt
+    ? `Market closed · Opens in ${formatCountdown(marketOpensAt - pnlNowTick)}`
+    : nextChunkAt
+      ? `Next update in ${formatCountdown(nextChunkAt - pnlNowTick)}`
+      : "All updates done for today";
 
   const prevProfit = prevProfitRef.current;
   useEffect(() => {
@@ -699,13 +728,18 @@ export default function DemoDashboard() {
         </span>
       ),
       sub: (
-        <span className={`text-xs font-medium flex items-center gap-1 ${isPositive ? "profit-text" : "loss-text"}`}>
-          {isPositive ? <ArrowUpRight style={{ width: 12, height: 12 }} /> : <ArrowDownRight style={{ width: 12, height: 12 }} />}
-          {isPositive ? "+" : ""}{dailyPct.toFixed(2)}% today
-        </span>
+        <div className="flex flex-col gap-0.5">
+          <span className={`text-xs font-medium flex items-center gap-1 ${marketClosed ? "text-muted-foreground" : isPositive ? "profit-text" : "loss-text"}`}>
+            {marketClosed ? null : isPositive ? <ArrowUpRight style={{ width: 12, height: 12 }} /> : <ArrowDownRight style={{ width: 12, height: 12 }} />}
+            {marketClosed ? "0.00% today" : `${isPositive ? "+" : ""}${dailyPct.toFixed(2)}% today`}
+          </span>
+          <span className={`text-[10px] ${marketClosed ? "text-amber-400" : "text-muted-foreground"}`}>
+            {pnlSubLabel}
+          </span>
+        </div>
       ),
-      accent: isPositive ? "green" : "red",
-      glow: isPositive ? "rgba(34,197,94,0.1)" : "rgba(239,68,68,0.1)",
+      accent: marketClosed ? "amber" : isPositive ? "green" : "red",
+      glow: marketClosed ? "rgba(245,158,11,0.1)" : isPositive ? "rgba(34,197,94,0.1)" : "rgba(239,68,68,0.1)",
     },
     {
       label: "Active Trading Fund",
