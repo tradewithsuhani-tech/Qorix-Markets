@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { AnimatedCounter, BigBalanceCounter } from "@/components/animated-counter";
 import { UpdatedAgo } from "@/components/updated-ago";
+import { useEffect, useRef, useState } from "react";
 import {
   AreaChart,
   Area,
@@ -50,6 +51,101 @@ const ALLOCATION_BY_RISK: Record<RiskKey, { label: string; pct: number; color: s
     { label: "Indices", pct: 15, color: "#8b5cf6" },
   ],
 };
+
+/**
+ * LiveProfitFeed — addictive ticker that emits small +$ increments every
+ * ~1.6–2.6s. Shows last 3 ticks (latest = brightest, with green flash),
+ * older ones fade out. Caption: "Live market execution in progress".
+ *
+ * Pure visual UX — no DB writes. Increments are deterministic per session
+ * with mild randomness so it feels "alive" but never goes backward.
+ */
+function LiveProfitFeed({ enabled }: { enabled: boolean }) {
+  const [ticks, setTicks] = useState<{ id: number; value: number }[]>([]);
+  const idRef = useRef(0);
+  const cumRef = useRef(0);
+
+  useEffect(() => {
+    if (!enabled) return;
+    let cancelled = false;
+
+    const schedule = () => {
+      if (cancelled) return;
+      // Each tick = 0.18 .. 0.55 USD increment, displayed as the new cumulative
+      // micro-batch profit so the eye sees +$2.14 → +$2.48 → +$2.91 style growth.
+      const step = 0.18 + Math.random() * 0.37;
+      cumRef.current += step;
+      // Reset every ~$3.50 so it loops believably (one "execution batch closes")
+      if (cumRef.current > 3.5) cumRef.current = step;
+      const nextValue = cumRef.current;
+
+      idRef.current += 1;
+      const newTick = { id: idRef.current, value: nextValue };
+
+      setTicks((prev) => [newTick, ...prev].slice(0, 3));
+
+      const delay = 1600 + Math.random() * 1000;
+      setTimeout(schedule, delay);
+    };
+
+    const initialDelay = setTimeout(schedule, 500);
+    return () => {
+      cancelled = true;
+      clearTimeout(initialDelay);
+    };
+  }, [enabled]);
+
+  return (
+    <div className="rounded-2xl border border-emerald-500/20 bg-[#0d1525] p-5 overflow-hidden">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <span className="live-dot inline-block w-2 h-2 rounded-full" />
+          <span className="text-[11px] uppercase tracking-wider font-bold text-emerald-300">
+            Live Profit Feed
+          </span>
+        </div>
+        <span className="text-[10px] text-muted-foreground tabular-nums">
+          per execution · auto-refreshing
+        </span>
+      </div>
+
+      {/* Ticker row — latest tick on left, fades right */}
+      <div className="flex items-end gap-3 sm:gap-5 min-h-[52px]">
+        {ticks.length === 0 ? (
+          <div className="text-2xl md:text-3xl font-bold text-emerald-400/40 tabular-nums">
+            +$0.00…
+          </div>
+        ) : (
+          ticks.map((t, i) => (
+            <div
+              key={t.id}
+              className={
+                "tabular-nums font-bold transition-all duration-500 " +
+                (i === 0
+                  ? "text-2xl md:text-3xl text-emerald-400 live-tick-flash"
+                  : i === 1
+                  ? "text-xl md:text-2xl text-emerald-400/60"
+                  : "text-base md:text-lg text-emerald-400/30")
+              }
+            >
+              +${t.value.toFixed(2)}…
+            </div>
+          ))
+        )}
+      </div>
+
+      <div className="mt-3 pt-3 border-t border-white/5 flex items-center gap-2">
+        <span className="relative flex h-1.5 w-1.5">
+          <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75 animate-ping" />
+          <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-400" />
+        </span>
+        <span className="text-xs text-muted-foreground">
+          Live market execution in progress
+        </span>
+      </div>
+    </div>
+  );
+}
 
 function daysBetween(iso?: string | null): number {
   if (!iso) return 0;
@@ -217,6 +313,9 @@ function PortfolioInner() {
           </div>
         </div>
       </div>
+
+      {/* LIVE PROFIT FEED — addictive incrementing ticker */}
+      <LiveProfitFeed enabled={isActive} />
 
       {/* Equity sparkline + Investment meta */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
