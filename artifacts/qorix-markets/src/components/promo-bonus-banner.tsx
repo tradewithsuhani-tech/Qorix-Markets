@@ -182,75 +182,74 @@ export function PromoBonusBanner() {
           <X className="w-3.5 h-3.5" />
         </button>
 
-        <div className="relative px-4 sm:px-5 py-4 sm:py-5 flex flex-col gap-4">
-          {/* Top row: Big Bonus % + Big Countdown — user's focus anchors */}
-          <div className="flex items-stretch gap-3">
-            {/* BIG BONUS % */}
-            <div className="relative flex-1 rounded-2xl border border-amber-300/50 bg-gradient-to-br from-amber-500/15 via-yellow-500/10 to-orange-500/15 p-3 sm:p-4 overflow-hidden">
-              <div className="absolute inset-0 bg-amber-400/10 blur-2xl" />
-              <div className="relative flex items-center gap-3">
-                <div className="relative shrink-0">
-                  <div className="absolute inset-0 bg-amber-400/50 blur-xl rounded-full animate-pulse" />
-                  <div className="relative w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-gradient-to-br from-amber-300/40 via-yellow-400/30 to-orange-500/35 border border-amber-300/70 flex items-center justify-center shadow-[0_0_30px_rgba(245,158,11,0.6)]">
-                    <Gift className="w-5 h-5 sm:w-6 sm:h-6 text-amber-100" strokeWidth={2.2} />
-                  </div>
-                </div>
-                <div className="min-w-0">
-                  <div className="text-[9px] sm:text-[10px] font-extrabold uppercase tracking-[0.2em] text-amber-300/90 leading-none mb-1">
-                    Extra Bonus
-                  </div>
-                  <div className="flex items-baseline gap-0.5 leading-none">
-                    <span className="text-[44px] sm:text-[56px] font-black tabular-nums bg-gradient-to-b from-amber-100 via-yellow-200 to-amber-400 bg-clip-text text-transparent drop-shadow-[0_2px_8px_rgba(253,224,71,0.4)]">
-                      {bonusStr}
-                    </span>
-                    <span className="text-2xl sm:text-3xl font-black bg-gradient-to-b from-amber-200 to-amber-400 bg-clip-text text-transparent">
-                      %
-                    </span>
-                  </div>
-                </div>
+        <div className="relative px-4 sm:px-5 py-4 sm:py-5 flex flex-col lg:flex-row lg:items-center gap-4">
+          {/* Icon */}
+          <div className="shrink-0 flex items-center gap-3">
+            <div className="relative">
+              <div className="absolute inset-0 bg-amber-400/40 blur-xl rounded-full animate-pulse" />
+              <div className="relative w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-300/30 via-yellow-400/20 to-orange-500/25 border border-amber-300/60 flex items-center justify-center shadow-[0_0_30px_rgba(245,158,11,0.5)]">
+                <Gift className="w-7 h-7 text-amber-200" strokeWidth={2} />
               </div>
             </div>
-
-            {/* BIG COUNTDOWN TIMER */}
-            <div
-              className={
-                "relative shrink-0 rounded-2xl border p-3 sm:p-4 flex flex-col items-center justify-center min-w-[110px] sm:min-w-[140px] overflow-hidden " +
-                (urgent
-                  ? "border-red-400/60 bg-gradient-to-br from-red-500/20 via-red-600/15 to-orange-500/20"
-                  : "border-amber-300/40 bg-gradient-to-br from-black/60 to-amber-950/40")
-              }
-            >
-              {urgent && (
-                <div className="absolute inset-0 bg-red-500/10 animate-pulse" />
-              )}
+            {/* Mobile: countdown sits next to the icon */}
+            <div className="flex flex-col gap-1.5 lg:hidden">
+              <span className="inline-flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-[0.18em] px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-400/30">
+                <Sparkles className="w-3 h-3" /> Live Offer
+              </span>
               <div
                 className={
-                  "relative flex items-center gap-1 text-[9px] sm:text-[10px] font-extrabold uppercase tracking-[0.2em] leading-none mb-1.5 " +
-                  (urgent ? "text-red-300" : "text-amber-300/90")
-                }
-              >
-                <Timer className="w-3 h-3" />
-                Ends in
-              </div>
-              <div
-                className={
-                  "relative text-3xl sm:text-4xl font-black tabular-nums leading-none " +
+                  "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border " +
                   (urgent
-                    ? "text-red-200 drop-shadow-[0_2px_10px_rgba(248,113,113,0.5)]"
-                    : "text-amber-100 drop-shadow-[0_2px_8px_rgba(253,224,71,0.4)]")
+                    ? "bg-red-500/15 border-red-400/40 animate-pulse"
+                    : "bg-black/50 border-amber-400/40")
                 }
               >
-                {formatMs(msLeft)}
+                <Timer className={"w-3.5 h-3.5 " + (urgent ? "text-red-300" : "text-amber-300")} />
+                <span
+                  className={
+                    "text-base font-black tabular-nums leading-none " +
+                    (urgent ? "text-red-200" : "text-amber-100")
+                  }
+                >
+                  {formatMs(msLeft)}
+                </span>
               </div>
             </div>
           </div>
 
-          {/* Message */}
-          <div className="min-w-0">
-            <div className="flex items-center gap-2 mb-1.5">
+          {/* Message + code */}
+          <div className="min-w-0 flex-1">
+            <div className="hidden lg:flex items-center gap-2 mb-2">
               <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-400/30 text-[10px] font-extrabold uppercase tracking-[0.18em]">
                 <Sparkles className="w-3 h-3" /> Limited · One-time per user
               </span>
+              {/* DESKTOP BIG COUNTDOWN — prominent but clean */}
+              <div
+                className={
+                  "inline-flex items-center gap-2 px-3 py-1 rounded-lg border shadow-sm " +
+                  (urgent
+                    ? "bg-red-500/15 border-red-400/50 animate-pulse"
+                    : "bg-black/50 border-amber-400/50")
+                }
+              >
+                <Timer className={"w-3.5 h-3.5 " + (urgent ? "text-red-300" : "text-amber-300")} />
+                <span
+                  className={
+                    "text-[10px] font-bold uppercase tracking-[0.15em] " +
+                    (urgent ? "text-red-300" : "text-amber-300/90")
+                  }
+                >
+                  Ends in
+                </span>
+                <span
+                  className={
+                    "text-lg font-black tabular-nums leading-none drop-shadow " +
+                    (urgent ? "text-red-200" : "text-amber-100")
+                  }
+                >
+                  {formatMs(msLeft)}
+                </span>
+              </div>
             </div>
             <h3 className="text-base md:text-lg font-extrabold leading-tight">
               <span className="bg-gradient-to-r from-amber-200 via-yellow-100 to-amber-300 bg-clip-text text-transparent">
