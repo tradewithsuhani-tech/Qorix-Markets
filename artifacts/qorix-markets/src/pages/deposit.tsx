@@ -24,6 +24,7 @@ import { Layout } from "@/components/layout";
 import { cn } from "@/lib/utils";
 import QRCode from "qrcode";
 import { BannerCarousel } from "@/components/banner-carousel";
+import { PromoBonusBanner } from "@/components/promo-bonus-banner";
 
 const DEPOSIT_BANNERS = [
   { src: `${import.meta.env.BASE_URL}promo/banner-4-automate.png`, alt: "Automate. Invest. Grow. — Trade Smarter, Not Harder" },
@@ -193,6 +194,10 @@ export default function DepositPage() {
             Send USDT via TRC20. Deposits are detected automatically and credited to your balance.
           </p>
         </div>
+
+        {/* Live rotating bonus offer — peak intent moment (user is already on deposit page).
+            Locks in the current 2-10% offer before they send funds. */}
+        <PromoBonusBanner />
 
         {/* Promo Banners — auto-scrolling carousel */}
         <BannerCarousel
