@@ -213,6 +213,31 @@ const TOP_RANK: Record<1 | 2 | 3, TopRankStyle & { accentBar: string; glow: stri
   },
 };
 
+/**
+ * Tiny "updated Xs ago / just now" text that ticks every second so the LIVE
+ * pill above it actually feels alive instead of being a static badge.
+ */
+function UpdatedAgo() {
+  const [, forceTick] = useState(0);
+  const mountedAt = useRef(Date.now());
+  useEffect(() => {
+    const t = setInterval(() => forceTick((v) => v + 1), 1000);
+    return () => clearInterval(t);
+  }, []);
+  const seconds = Math.floor((Date.now() - mountedAt.current) / 1000);
+  const label =
+    seconds < 5
+      ? "updated just now"
+      : seconds < 60
+      ? `updated ${seconds}s ago`
+      : `updated ${Math.floor(seconds / 60)}m ago`;
+  return (
+    <span className="text-[9.5px] text-emerald-400/70 font-medium tracking-wide tabular-nums">
+      {label}
+    </span>
+  );
+}
+
 function CountUp({
   value,
   prefix = "",
@@ -292,9 +317,12 @@ function WeeklyLeaderboard({ userId }: { userId: number }) {
               </div>
               <div className="text-[15px] sm:text-[16px] font-extrabold text-white leading-tight">
                 Top investors made{" "}
-                <span className="bg-gradient-to-r from-emerald-300 to-green-400 bg-clip-text text-transparent">
-                  {fmtAbbr(topPool)}+
-                </span>
+                <CountUp
+                  value={topPool}
+                  prefix="$"
+                  className="bg-gradient-to-r from-emerald-300 to-green-400 bg-clip-text text-transparent"
+                />
+                <span className="bg-gradient-to-r from-emerald-300 to-green-400 bg-clip-text text-transparent">+</span>
                 <span className="hidden sm:inline text-white/70 font-semibold"> · join them today</span>
               </div>
             </div>
@@ -330,14 +358,17 @@ function WeeklyLeaderboard({ userId }: { userId: number }) {
             </div>
             <div>
               <div className="text-[10px] uppercase tracking-wider text-white/45">Profit</div>
-              <div className={cn(
-                "text-[20px] font-black tabular-nums leading-none",
-                myProfit > 0 ? "text-emerald-400" : "text-rose-300",
-              )}>
-                {myProfit > 0
-                  ? `+$${myProfit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                  : "$0"}
-              </div>
+              {myProfit > 0 ? (
+                <CountUp
+                  value={myProfit}
+                  prefix="+$"
+                  className="text-[20px] font-black tabular-nums leading-none text-emerald-400"
+                />
+              ) : (
+                <div className="text-[20px] font-black tabular-nums leading-none text-rose-300">
+                  $0
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -691,10 +722,13 @@ export function GrowthPanel() {
               <p className="text-[10px] text-muted-foreground">Leaderboards · Promotions</p>
             </div>
           </div>
-          <span className="live-pill inline-flex items-center gap-1.5 text-[11px] font-bold tracking-[0.14em] px-2.5 py-1 rounded-full border border-yellow-400/40 text-yellow-300 bg-gradient-to-r from-yellow-500/15 via-amber-500/12 to-yellow-500/15">
-            <span className="live-pill-dot" />
-            <span className="live-pill-text">LIVE</span>
-          </span>
+          <div className="flex flex-col items-end gap-0.5">
+            <span className="live-pill inline-flex items-center gap-1.5 text-[11px] font-bold tracking-[0.14em] px-2.5 py-1 rounded-full border border-yellow-400/40 text-yellow-300 bg-gradient-to-r from-yellow-500/15 via-amber-500/12 to-yellow-500/15">
+              <span className="live-pill-dot" />
+              <span className="live-pill-text">LIVE</span>
+            </span>
+            <UpdatedAgo />
+          </div>
         </div>
 
         {/* Tabs */}
