@@ -15,6 +15,7 @@ import { PeriodFilter, DAYS_PERIOD_OPTIONS } from "@/components/period-filter";
 import { GrowthPanel } from "@/components/growth-panel";
 import { IdleBalanceBanner } from "@/components/idle-balance-banner";
 import { MissedTradeBanner } from "@/components/missed-trade-banner";
+import { PromoBonusBanner } from "@/components/promo-bonus-banner";
 import { UpdatedAgo } from "@/components/updated-ago";
 import { VipBadge, VipCard } from "@/components/vip-badge";
 import { AnimatedCounter, BigBalanceCounter } from "@/components/animated-counter";
@@ -1266,6 +1267,9 @@ export function DemoDashboardBody({
         {!hideFomoTicker && conversion?.fomoMessages && conversion.fomoMessages.length > 0 && (
           <FomoTicker messages={conversion.fomoMessages} />
         )}
+
+        {/* 5% deposit-bonus promo banner — reappears every 30 minutes */}
+        <PromoBonusBanner />
 
         {/* Missed-trade FOMO banner (main screen alert, not a popup) */}
         <MissedTradeBanner />
