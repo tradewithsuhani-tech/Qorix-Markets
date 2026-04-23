@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { randomBytes } from "crypto";
+import { createHmac } from "crypto";
 import { db } from "@workspace/db";
 import { promoRedemptionsTable } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
@@ -9,58 +9,107 @@ import { logger } from "../lib/logger";
 const router = Router();
 router.use(authMiddleware);
 
-const BONUS_PERCENT = 5;
+/* ── Time-windowed offer system ────────────────────────────────────
+ * Every 30-minute wall-clock window defines one system-wide offer.
+ * The offer is ACTIVE for the first 10 minutes of each window; after
+ * that, the banner hides until the next window starts. Code + bonus %
+ * are derived deterministically (HMAC-SHA256 with a server secret)
+ * from the window index — no DB write needed per window. A user can
+ * redeem at most ONE offer for life.
+ * ───────────────────────────────────────────────────────────────── */
+const WINDOW_MS = 30 * 60 * 1000; // 30 minutes
+const ACTIVE_MS = 10 * 60 * 1000; // 10-minute redemption window
+const OFFER_SECRET =
+  process.env["PROMO_SECRET"] ||
+  process.env["JWT_SECRET"] ||
+  "qorix-promo-default-secret-change-me";
 
-function generateCode(): string {
-  // Short, human-friendly, no ambiguous chars. Example: QRX-7H2K9P
-  const alphabet = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
-  const buf = randomBytes(6);
-  let out = "";
-  for (let i = 0; i < 6; i++) out += alphabet[buf[i]! % alphabet.length];
-  return `QRX-${out}`;
+const CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"; // no ambiguous chars
+
+function windowCode(windowIndex: number): string {
+  const h = createHmac("sha256", OFFER_SECRET).update(`offer:${windowIndex}`).digest();
+  let code = "";
+  for (let i = 0; i < 6; i++) code += CODE_ALPHABET[h[i]! % CODE_ALPHABET.length];
+  return `QRX-${code}`;
 }
 
-async function getOrCreateUserPromo(userId: number) {
-  const existing = await db
+/** Deterministic bonus in [2.0, 10.0], step 0.5 → 17 discrete values. */
+function windowBonusPct(windowIndex: number): number {
+  const h = createHmac("sha256", OFFER_SECRET).update(`bonus:${windowIndex}`).digest();
+  const n = h.readUInt32BE(0);
+  const steps = 17; // 2.0, 2.5, 3.0, ..., 10.0
+  return 2 + (n % steps) * 0.5;
+}
+
+interface CurrentOffer {
+  windowIndex: number;
+  windowStart: number;
+  activeEnd: number;
+  nextWindowStart: number;
+  isActive: boolean;
+  code: string;
+  bonusPercent: number;
+}
+
+function getCurrentOffer(nowMs: number = Date.now()): CurrentOffer {
+  const windowIndex = Math.floor(nowMs / WINDOW_MS);
+  const windowStart = windowIndex * WINDOW_MS;
+  const activeEnd = windowStart + ACTIVE_MS;
+  const isActive = nowMs < activeEnd;
+  return {
+    windowIndex,
+    windowStart,
+    activeEnd,
+    nextWindowStart: windowStart + WINDOW_MS,
+    isActive,
+    code: windowCode(windowIndex),
+    bonusPercent: windowBonusPct(windowIndex),
+  };
+}
+
+async function fetchUserRedemption(userId: number) {
+  const rows = await db
     .select()
     .from(promoRedemptionsTable)
     .where(eq(promoRedemptionsTable.userId, userId))
     .limit(1);
-  if (existing[0]) return existing[0];
-
-  // Generate unique code (retry on unlikely collision)
-  for (let attempt = 0; attempt < 6; attempt++) {
-    const code = generateCode();
-    try {
-      const [row] = await db
-        .insert(promoRedemptionsTable)
-        .values({ userId, code, status: "issued", bonusPercent: BONUS_PERCENT.toString() })
-        .returning();
-      if (row) return row;
-    } catch (err: any) {
-      if (!String(err?.message ?? "").includes("duplicate")) throw err;
-    }
-  }
-  throw new Error("Failed to issue promo code");
+  return rows[0] ?? null;
 }
 
 /**
  * GET /api/promo/offer
- * Returns the user's personal 5% deposit-bonus promo code.
- * Creates it lazily on first request; one per user for life.
+ * Returns the current system-wide offer (if active) plus this user's
+ * redemption status. Frontend uses the returned timestamps to render a
+ * live countdown.
  */
 router.get("/promo/offer", async (req: AuthRequest, res) => {
   const userId = req.userId!;
   try {
-    const row = await getOrCreateUserPromo(userId);
+    const redemption = await fetchUserRedemption(userId);
+    const offer = getCurrentOffer();
+
     res.json({
-      code: row.code,
-      status: row.status,
-      bonusPercent: Number(row.bonusPercent),
-      redeemedAt: row.redeemedAt?.toISOString() ?? null,
-      creditedAt: row.creditedAt?.toISOString() ?? null,
-      bonusAmount: row.bonusAmount != null ? Number(row.bonusAmount) : null,
-      available: row.status === "issued",
+      // User state — if already redeemed/credited, banner stays hidden forever
+      alreadyRedeemed: !!redemption,
+      redemption: redemption
+        ? {
+            code: redemption.code,
+            status: redemption.status,
+            bonusPercent: Number(redemption.bonusPercent),
+            bonusAmount: redemption.bonusAmount != null ? Number(redemption.bonusAmount) : null,
+            redeemedAt: redemption.redeemedAt?.toISOString() ?? null,
+            creditedAt: redemption.creditedAt?.toISOString() ?? null,
+          }
+        : null,
+
+      // Current system offer
+      active: offer.isActive && !redemption,
+      code: offer.code,
+      bonusPercent: offer.bonusPercent,
+      windowStart: offer.windowStart,       // ms epoch — when this offer started
+      expiresAt: offer.activeEnd,           // ms epoch — when this offer stops being redeemable
+      nextOfferAt: offer.nextWindowStart,   // ms epoch — when the NEXT new offer begins
+      serverTime: Date.now(),               // for client-side clock-skew correction
     });
   } catch (err: any) {
     logger.error({ err, userId }, "Failed to fetch promo offer");
@@ -70,53 +119,75 @@ router.get("/promo/offer", async (req: AuthRequest, res) => {
 
 /**
  * POST /api/promo/redeem
- * Body: { code: string }
- * Marks the user's promo as redeemed (claim locked). The 5% bonus is credited
- * automatically when the user's NEXT confirmed on-chain deposit lands.
+ * Body: { code }
+ * Locks the user's redemption to the currently-active offer. The %
+ * used is the one that was active in the current window at request
+ * time. Bonus credits automatically on the user's next confirmed
+ * on-chain deposit (handled by tron-monitor.ts).
  */
 router.post("/promo/redeem", async (req: AuthRequest, res) => {
   const userId = req.userId!;
-  const code = String(req.body?.code ?? "").trim().toUpperCase();
-  if (!code) {
+  const submitted = String(req.body?.code ?? "").trim().toUpperCase();
+  if (!submitted) {
     res.status(400).json({ error: "Promo code required" });
     return;
   }
 
-  const rows = await db
-    .select()
-    .from(promoRedemptionsTable)
-    .where(eq(promoRedemptionsTable.userId, userId))
-    .limit(1);
-  const row = rows[0];
-
-  if (!row) {
-    res.status(404).json({ error: "No promo code issued for this user" });
-    return;
-  }
-  if (row.code.toUpperCase() !== code) {
-    res.status(400).json({ error: "Invalid promo code" });
-    return;
-  }
-  if (row.status !== "issued") {
-    res.status(409).json({ error: "Promo code already used", status: row.status });
+  const existing = await fetchUserRedemption(userId);
+  if (existing) {
+    res.status(409).json({
+      error: "You have already redeemed a promo code",
+      status: existing.status,
+    });
     return;
   }
 
-  const [updated] = await db
-    .update(promoRedemptionsTable)
-    .set({ status: "redeemed", redeemedAt: new Date() })
-    .where(eq(promoRedemptionsTable.userId, userId))
-    .returning();
+  const offer = getCurrentOffer();
+  if (!offer.isActive) {
+    res.status(410).json({
+      error: "Offer window has expired. Wait for the next offer.",
+      nextOfferAt: offer.nextWindowStart,
+    });
+    return;
+  }
+  if (offer.code.toUpperCase() !== submitted) {
+    res.status(400).json({ error: "Invalid or expired promo code" });
+    return;
+  }
 
-  logger.info({ userId, code }, "Promo code redeemed — awaiting qualifying deposit");
+  try {
+    const [row] = await db
+      .insert(promoRedemptionsTable)
+      .values({
+        userId,
+        code: offer.code,
+        status: "redeemed",
+        bonusPercent: offer.bonusPercent.toFixed(2),
+        redeemedAt: new Date(),
+      })
+      .returning();
 
-  res.json({
-    success: true,
-    code: updated!.code,
-    status: updated!.status,
-    bonusPercent: Number(updated!.bonusPercent),
-    message: "Promo locked. Bonus will credit on your next confirmed deposit.",
-  });
+    logger.info(
+      { userId, code: offer.code, bonusPercent: offer.bonusPercent },
+      "Promo code redeemed — awaiting qualifying deposit",
+    );
+
+    res.json({
+      success: true,
+      code: row!.code,
+      status: row!.status,
+      bonusPercent: Number(row!.bonusPercent),
+      message: `Locked in ${offer.bonusPercent}% bonus — credits to Trading Balance on next confirmed deposit.`,
+    });
+  } catch (err: any) {
+    // Unique violation on userId → user already redeemed concurrently
+    if (String(err?.message ?? "").toLowerCase().includes("duplicate")) {
+      res.status(409).json({ error: "You have already redeemed a promo code" });
+      return;
+    }
+    logger.error({ err, userId }, "Failed to redeem promo code");
+    res.status(500).json({ error: "Failed to redeem promo code" });
+  }
 });
 
 export default router;
