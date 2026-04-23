@@ -1727,21 +1727,6 @@ export default function DemoDashboard() {
           </div>
         </motion.div>
 
-        {/* VIP Membership */}
-        {summary?.vip && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.52, duration: 0.4 }}
-          >
-            <div className="flex items-center gap-2 mb-3">
-              <h2 className="text-base font-semibold">VIP Membership</h2>
-              <div className="h-px flex-1 bg-gradient-to-r from-white/10 to-transparent" />
-            </div>
-            <VipCard vip={summary.vip as VipInfo} investmentAmount={summary.activeInvestment ?? 0} />
-          </motion.div>
-        )}
-
         {/* Growth & Leaderboard Panel */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
