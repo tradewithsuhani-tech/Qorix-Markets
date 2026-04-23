@@ -587,37 +587,66 @@ function PortfolioInner() {
   const daysRunning = daysBetween(investment?.startedAt);
   const trades = tradesData?.trades ?? [];
 
-  // Empty state — investor hasn't invested yet.
-  if (!invLoading && investedAmount <= 0) {
+  // Locked state — either user hasn't invested yet, or trading is stopped.
+  // In both cases: data shows zero, all features locked, single CTA to start trading.
+  if (!invLoading && (investedAmount <= 0 || !isActive)) {
+    const hasStoppedInvestment = investedAmount > 0 && !isActive;
     return (
       <div className="px-4 md:px-8 py-6 md:py-8 max-w-7xl mx-auto">
         <div className="mb-6">
           <h1 className="text-2xl md:text-3xl font-bold text-white">Portfolio</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Track your invested capital, returns and live allocation in one place.
+            Track your trading fund, returns and live allocation in one place.
           </p>
         </div>
 
-        <div className="rounded-2xl border border-white/10 bg-gradient-to-br from-emerald-500/8 via-[#0d1525] to-[#0a1020] p-8 md:p-12 text-center">
+        <div className="rounded-2xl border border-white/10 bg-gradient-to-br from-emerald-500/8 via-[#0d1525] to-[#0a1020] p-6 md:p-10 text-center">
           <div className="mx-auto w-16 h-16 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center mb-5">
-            <PieChart className="w-8 h-8 text-emerald-400" />
+            {hasStoppedInvestment ? (
+              <Lock className="w-8 h-8 text-amber-400" />
+            ) : (
+              <PieChart className="w-8 h-8 text-emerald-400" />
+            )}
           </div>
-          <h2 className="text-xl md:text-2xl font-bold text-white">No active portfolio yet</h2>
+          <h2 className="text-xl md:text-2xl font-bold text-white">
+            {hasStoppedInvestment ? "Trading is paused" : "No active portfolio yet"}
+          </h2>
           <p className="text-sm md:text-base text-muted-foreground mt-2 max-w-md mx-auto">
-            Start your first investment to unlock live portfolio tracking, asset allocation,
-            risk-protected drawdown limits and daily P&amp;L attribution.
+            {hasStoppedInvestment
+              ? "Your trading fund is idle. Resume trading to unlock live portfolio tracking, returns and P&L."
+              : "Start your first trading fund to unlock live portfolio tracking, asset allocation, risk-protected drawdown limits and daily P&L attribution."}
           </p>
           <Link
             href="/invest"
             className="inline-flex items-center gap-2 mt-6 px-6 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-semibold transition-all shadow-lg shadow-emerald-500/30"
           >
             <Sparkles className="w-4 h-4" />
-            Start Investing
+            {hasStoppedInvestment ? "Resume Trading" : "Start Trading"}
             <ArrowUpRight className="w-4 h-4" />
           </Link>
 
-          {/* Teaser strip — what they'll see once invested. */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-10 max-w-3xl mx-auto">
+          {/* Zero-data stat strip */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-8 max-w-4xl mx-auto">
+            {[
+              { label: "Trading Fund", value: "$0.00" },
+              { label: "Total P&L", value: "$0.00" },
+              { label: "Rolling Return", value: "0.00%" },
+              { label: "Win Rate", value: "0%" },
+            ].map((s) => (
+              <div
+                key={s.label}
+                className="rounded-xl border border-white/8 bg-white/3 px-3 py-3 text-left"
+              >
+                <div className="text-[10px] uppercase tracking-wider text-muted-foreground/70 font-semibold">
+                  {s.label}
+                </div>
+                <div className="text-lg font-bold text-muted-foreground mt-0.5">{s.value}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Locked features teaser */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4 max-w-4xl mx-auto">
             {[
               { icon: TrendingUp, label: "Live equity curve" },
               { icon: PieChart, label: "Asset allocation" },
