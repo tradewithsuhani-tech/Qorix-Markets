@@ -420,7 +420,7 @@ function WeeklyLeaderboard({ userId }: { userId: number }) {
       ) : (
         <div className="flex items-center gap-2 mb-3 px-3 py-2 rounded-xl bg-white/3 border border-white/8">
           <Zap className="w-3 h-3 text-amber-400" />
-          <span className="text-xs text-muted-foreground">Activate investment to appear here</span>
+          <span className="text-xs text-muted-foreground">Start trading to enter top investors list</span>
         </div>
       )}
       {list.length === 0 ? (
