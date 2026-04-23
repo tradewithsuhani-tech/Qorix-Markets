@@ -65,13 +65,20 @@ router.get("/signal-trades/recent", async (_req, res) => {
 async function advanceLiveCounters(currentBaseline: number): Promise<{
   activeInvestors: number;
   usersEarningNow: number;
+  withdrawals24h: number;
 }> {
   const INCREMENT_WINDOW_MS = 30 * 60 * 1000; // 30 minutes
+  const DAY_MS = 24 * 60 * 60 * 1000;
   const MIN_BUMP = 5;
   const MAX_BUMP = 25;
   const FLOOR = 124; // matches landing-page fallback so the number always feels real
   const EARNING_MIN_PCT = 80;
   const EARNING_MAX_PCT = 95;
+  // Withdrawals (24h running total)
+  const WD_RESET_MIN = 15000;
+  const WD_RESET_MAX = 35000;
+  const WD_BUMP_MIN = 100;
+  const WD_BUMP_MAX = 1000;
   const now = Date.now();
 
   const rows = await db
@@ -81,12 +88,18 @@ async function advanceLiveCounters(currentBaseline: number): Promise<{
       "active_investors_count",
       "active_investors_last_increment_at",
       "users_earning_now_count",
+      "withdrawals_24h_amount",
+      "withdrawals_24h_last_increment_at",
+      "withdrawals_24h_window_start_at",
     ]));
   const map = Object.fromEntries(rows.map((r) => [r.key, r.value]));
 
   let count = Number(map["active_investors_count"] ?? "0");
   let lastAt = Number(map["active_investors_last_increment_at"] ?? "0");
   let earning = Number(map["users_earning_now_count"] ?? "0");
+  let wdAmount = Number(map["withdrawals_24h_amount"] ?? "0");
+  let wdLastAt = Number(map["withdrawals_24h_last_increment_at"] ?? "0");
+  let wdWindowStart = Number(map["withdrawals_24h_window_start_at"] ?? "0");
   let dirty = false;
 
   // Monotonic floor for active investors
@@ -127,6 +140,37 @@ async function advanceLiveCounters(currentBaseline: number): Promise<{
     dirty = true;
   }
 
+  // Withdrawals (24h):
+  //   - Reset to a fresh random $15K–$35K every 24h
+  //   - Bump by random $100–$1000 every 30 min within a 24h window
+  if (!wdWindowStart || now - wdWindowStart >= DAY_MS) {
+    // New day → reset to a fresh starting amount
+    wdAmount = WD_RESET_MIN + Math.floor(Math.random() * (WD_RESET_MAX - WD_RESET_MIN + 1));
+    // Snap window-start to the most recent 24h boundary so we don't drift
+    if (!wdWindowStart) {
+      wdWindowStart = now;
+    } else {
+      const daysPassed = Math.floor((now - wdWindowStart) / DAY_MS);
+      wdWindowStart = wdWindowStart + daysPassed * DAY_MS;
+    }
+    wdLastAt = wdWindowStart;
+    dirty = true;
+  } else {
+    // Catch up 30-min bumps inside the current 24h window
+    if (!wdLastAt) wdLastAt = wdWindowStart;
+    const wdElapsed = now - wdLastAt;
+    const wdWindows = Math.floor(wdElapsed / INCREMENT_WINDOW_MS);
+    if (wdWindows > 0) {
+      let wdAdded = 0;
+      for (let i = 0; i < wdWindows; i++) {
+        wdAdded += WD_BUMP_MIN + Math.floor(Math.random() * (WD_BUMP_MAX - WD_BUMP_MIN + 1));
+      }
+      wdAmount += wdAdded;
+      wdLastAt = wdLastAt + wdWindows * INCREMENT_WINDOW_MS;
+      dirty = true;
+    }
+  }
+
   if (dirty) {
     await db
       .insert(systemSettingsTable)
@@ -134,6 +178,9 @@ async function advanceLiveCounters(currentBaseline: number): Promise<{
         { key: "active_investors_count", value: String(count) },
         { key: "active_investors_last_increment_at", value: String(lastAt) },
         { key: "users_earning_now_count", value: String(earning) },
+        { key: "withdrawals_24h_amount", value: String(wdAmount) },
+        { key: "withdrawals_24h_last_increment_at", value: String(wdLastAt) },
+        { key: "withdrawals_24h_window_start_at", value: String(wdWindowStart) },
       ])
       .onConflictDoUpdate({
         target: systemSettingsTable.key,
@@ -141,7 +188,7 @@ async function advanceLiveCounters(currentBaseline: number): Promise<{
       });
   }
 
-  return { activeInvestors: count, usersEarningNow: earning };
+  return { activeInvestors: count, usersEarningNow: earning, withdrawals24h: wdAmount };
 }
 
 router.get("/public/market-indicators", async (_req, res) => {
@@ -210,7 +257,9 @@ router.get("/public/market-indicators", async (_req, res) => {
   res.json({
     activeInvestors: live.activeInvestors,
     usersEarningNow: Math.max(live.usersEarningNow, realActiveInvestors + baseEarning),
-    withdrawals24h: realWithdrawals24h + baseWithdrawals,
+    // Synthetic 24h withdrawal volume (USD), persisted in DB.
+    // Resets to a fresh $15K–$35K every 24h, bumps $100–$1000 every 30 min.
+    withdrawals24h: live.withdrawals24h,
     avgMonthlyReturn: realAvgMonthlyReturn > 0 ? realAvgMonthlyReturn : baseAvgReturn,
     demoModeEnabled: settings["demo_mode_enabled"] !== "false",
     demoProfitEnabled: settings["demo_profit_enabled"] !== "false",
