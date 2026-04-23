@@ -63,7 +63,8 @@ export function PromoBonusBanner() {
     onSuccess: () => {
       toast({
         title: "Promo locked in",
-        description: "Your 5% bonus will credit on your next confirmed deposit.",
+        description:
+          "Your 5% bonus will be added to your Trading Balance on your next confirmed deposit. Bonus is non-withdrawable — only realized profits can be withdrawn.",
       });
       queryClient.invalidateQueries({ queryKey: ["promo-offer"] });
     },
@@ -152,8 +153,10 @@ export function PromoBonusBanner() {
               </span>
             </h3>
             <p className="mt-0.5 text-xs md:text-[13px] text-white/65 leading-snug">
-              Apply your personal code on the next USDT deposit. Bonus auto-credits after
-              confirmation. <span className="text-white/40">T&amp;C apply.</span>
+              Apply your personal code on the next USDT deposit. Bonus credits to your{" "}
+              <span className="text-amber-200 font-semibold">Trading Balance</span> (non-withdrawable
+              — grows your fund, profits are withdrawable).{" "}
+              <span className="text-white/40">T&amp;C apply.</span>
             </p>
 
             {/* Code box */}
