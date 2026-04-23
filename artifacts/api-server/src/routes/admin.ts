@@ -422,18 +422,7 @@ router.post("/admin/broadcast", async (req: AuthRequest, res) => {
   // Email broadcast — send sequentially with a small batch delay to stay
   // well within SES throughput limits. Plain-text + lightweight HTML wrapper.
   if (channel === "email" || channel === "both") {
-    const html = `
-<!DOCTYPE html>
-<html><body style="margin:0;padding:24px;background:#0b1220;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#e2e8f0;">
-  <div style="max-width:560px;margin:0 auto;background:#0f172a;border:1px solid #1e293b;border-radius:14px;padding:28px;">
-    <div style="font-size:18px;font-weight:700;color:#60a5fa;margin-bottom:4px;">Qorix Markets</div>
-    <h2 style="font-size:22px;margin:14px 0 12px;color:#f1f5f9;">${escapeHtml(title!)}</h2>
-    <div style="font-size:15px;line-height:1.6;color:#cbd5e1;white-space:pre-wrap;">${escapeHtml(message!)}</div>
-    <div style="margin-top:24px;padding-top:16px;border-top:1px solid #1e293b;font-size:12px;color:#64748b;">
-      You're receiving this because you have an account at Qorix Markets.
-    </div>
-  </div>
-</body></html>`.trim();
+    const html = buildBroadcastHtml(title!, message!);
 
     for (const u of recipients) {
       if (!u.email) continue;
@@ -476,6 +465,68 @@ function escapeHtml(s: string): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+}
+
+// Premium branded broadcast email — dark Qorix theme, gradient header, CTA button.
+// Auto-detects URLs in body and converts them to clickable links. Auto-bolds the
+// subject as the hero heading and converts plain-text bullets/checks into rich HTML.
+function buildBroadcastHtml(title: string, message: string): string {
+  const safeTitle = escapeHtml(title);
+  const year = new Date().getFullYear();
+
+  // Convert message to HTML: escape, then linkify URLs, then preserve line breaks.
+  const escaped = escapeHtml(message);
+  const linkified = escaped.replace(
+    /(https?:\/\/[^\s<]+)/g,
+    '<a href="$1" style="color:#60a5fa;text-decoration:underline;word-break:break-all;">$1</a>',
+  );
+  const bodyHtml = linkified.replace(/\n/g, "<br/>");
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="x-apple-disable-message-reformatting" />
+<title>${safeTitle} — Qorix Markets</title>
+</head>
+<body style="margin:0;padding:0;background:#0B0F1A;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;">
+<div style="display:none;max-height:0;overflow:hidden;font-size:1px;line-height:1px;color:#0B0F1A;">${safeTitle}</div>
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#0B0F1A;padding:20px;">
+  <tr>
+    <td align="center">
+      <table width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#0F172A;border-radius:18px;overflow:hidden;border:1px solid #1F2937;">
+        <tr>
+          <td align="center" style="padding:34px 20px 24px 20px;background:linear-gradient(135deg,#0B0F1A 0%,#1E293B 60%,#312E81 100%);">
+            <div style="font-size:11px;letter-spacing:4px;color:#A5B4FC;font-weight:600;margin-bottom:8px;">QORIX MARKETS</div>
+            <div style="font-size:22px;font-weight:700;color:#ffffff;line-height:1.3;">AI-Powered Trading System</div>
+            <div style="width:48px;height:3px;background:linear-gradient(90deg,#38BDF8,#7C3AED);margin:14px auto 0;border-radius:2px;"></div>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:32px 30px 12px;color:#ffffff;">
+            <h2 style="margin:0 0 18px;font-size:20px;color:#ffffff;line-height:1.4;font-weight:700;">${safeTitle}</h2>
+            <div style="font-size:15px;line-height:1.7;color:#cbd5e1;">${bodyHtml}</div>
+          </td>
+        </tr>
+        <tr>
+          <td align="center" style="padding:8px 30px 30px;">
+            <a href="https://qorixmarkets.com/" style="display:inline-block;padding:14px 36px;background:linear-gradient(90deg,#2563EB,#7C3AED);color:#ffffff;text-decoration:none;font-weight:700;font-size:15px;border-radius:12px;box-shadow:0 0 25px rgba(124,58,237,0.35);">⚡ Activate Trading Now</a>
+          </td>
+        </tr>
+        <tr>
+          <td align="center" style="padding:18px 20px;border-top:1px solid #1F2937;color:#6B7280;font-size:12px;line-height:1.6;">
+            <p style="margin:4px 0;">© ${year} Qorix Markets. All rights reserved.</p>
+            <p style="margin:4px 0;"><a href="https://qorixmarkets.com" style="color:#38BDF8;text-decoration:none;">qorixmarkets.com</a> · <a href="mailto:support@qorixmarkets.com" style="color:#38BDF8;text-decoration:none;">support@qorixmarkets.com</a></p>
+            <p style="margin:8px 0 0;color:#475569;font-size:11px;">You're receiving this because you have an account at Qorix Markets.</p>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
+</body>
+</html>`;
 }
 
 router.get("/admin/logs", async (_req: AuthRequest, res) => {

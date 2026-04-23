@@ -89,6 +89,37 @@ const EMAIL_TEMPLATES = [
     defaultTitle: "Platform Update",
     defaultMessage: "Dear Investor,\n\nHere is a brief update on platform performance and upcoming changes...",
   },
+  {
+    id: "next_trade",
+    icon: Zap,
+    label: "Next Trade FOMO",
+    color: "text-violet-400 bg-violet-500/10",
+    defaultTitle: "⚡ Next Trade Coming Soon — Don't Miss It",
+    defaultMessage:
+      "Dear Investor,\n\n" +
+      "You just joined Qorix — great decision.\n\n" +
+      "But here's something important:\n\n" +
+      "⚡ A trade was executed today…\n" +
+      "And users already booked profits.\n\n" +
+      "You're not in yet.\n\n" +
+      "Right now, the system is actively scanning the market for the next opportunity.\n\n" +
+      "⏳ Next trade is expected soon.\n\n" +
+      "Once it executes, entries close — and only active accounts participate.\n\n" +
+      "💡 What you can do now:\n\n" +
+      "• Activate your trading\n" +
+      "• Start from as low as $10\n" +
+      "• Let the system handle execution\n\n" +
+      "🚀 Why users are joining Qorix:\n\n" +
+      "✔ Fully automated trading\n" +
+      "✔ No emotions, no missed entries\n" +
+      "✔ Risk-managed system\n" +
+      "✔ Withdraw anytime\n\n" +
+      "👉 Don't miss the next trade.\n\n" +
+      "Start now and be part of the next profit.\n\n" +
+      "👉 Activate Trading Now: https://qorixmarkets.com/\n\n" +
+      "Qorix Markets\n" +
+      "AI-Powered Trading System",
+  },
 ];
 
 export default function AdminCommunicationPage() {
