@@ -705,6 +705,7 @@ export function AdminSystemPage() {
           <div>
             <h2 className="text-xl font-bold flex items-center gap-2"><Globe className="w-5 h-5 text-emerald-400" /> Fund Transparency Baselines</h2>
             <p className="text-xs text-muted-foreground mt-1">Display-only floor values shown publicly on the dashboard's Fund Transparency widget. Real on-platform totals are added on top of these. <span className="text-amber-400">These never affect any user balance, P&amp;L, accounting or withdrawals.</span></p>
+            <p className="text-xs text-blue-300/80 mt-2">💡 Tip: Keep these consistent — e.g. AUM ÷ Active Investors should look like a believable per-investor average ($2K–$10K typical).</p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>

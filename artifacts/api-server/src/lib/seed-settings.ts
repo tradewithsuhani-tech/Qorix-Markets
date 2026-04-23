@@ -11,10 +11,12 @@ const DEFAULT_SETTINGS: Record<string, string> = {
   baseline_total_aum: "500000",
   baseline_active_capital: "264000",
   baseline_reserve_fund: "513000",
-  baseline_active_investors: "42",
+  baseline_active_investors: "124",
 
-  // Market indicators baselines (added on top of real numbers, shown on dashboard)
-  baseline_users_earning_now: "18",
+  // Market indicators baselines (added on top of real numbers, shown on dashboard).
+  // Keep these consistent with baseline_total_aum / baseline_active_investors so
+  // the public numbers tell a coherent story (e.g. $500K AUM ÷ 124 investors ≈ $4K avg).
+  baseline_users_earning_now: "87",
   baseline_withdrawals_24h: "12840",
   baseline_avg_monthly_return: "6.2",
 
