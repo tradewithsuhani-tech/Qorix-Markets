@@ -640,6 +640,12 @@ function PortfolioInner() {
             <Wallet className="w-3.5 h-3.5" /> Deposit
           </Link>
           <Link
+            href="/withdraw"
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500/20 to-orange-500/15 hover:from-amber-500/35 hover:to-orange-500/25 border border-amber-400/35 text-amber-100 text-sm font-semibold transition-all shadow-lg shadow-amber-500/15"
+          >
+            <ArrowUpRight className="w-3.5 h-3.5" /> Withdraw
+          </Link>
+          <Link
             href="/invest"
             className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-blue-500/20 to-indigo-500/15 hover:from-blue-500/30 hover:to-indigo-500/25 border border-blue-500/30 text-blue-200 text-sm font-medium transition-all shadow-lg shadow-blue-500/10"
           >
