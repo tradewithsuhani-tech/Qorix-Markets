@@ -25,6 +25,10 @@ import { cn } from "@/lib/utils";
 import QRCode from "qrcode";
 import { BannerCarousel } from "@/components/banner-carousel";
 import { PromoBonusBanner } from "@/components/promo-bonus-banner";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { authFetch } from "@/lib/auth-fetch";
+import { useToast } from "@/hooks/use-toast";
+import { BadgePercent, Gift, Sparkles } from "lucide-react";
 
 const DEPOSIT_BANNERS = [
   { src: `${import.meta.env.BASE_URL}promo/banner-4-automate.png`, alt: "Automate. Invest. Grow. — Trade Smarter, Not Harder" },
@@ -98,6 +102,8 @@ type DepositStep = "amount" | "address" | "confirmed";
 export default function DepositPage() {
   const qc = useQueryClient();
 
+  const { toast } = useToast();
+
   // Deposit stepper state
   const [step, setStep] = useState<DepositStep>("amount");
   const [amount, setAmount] = useState("");
@@ -106,6 +112,43 @@ export default function DepositPage() {
   const [polling, setPolling] = useState(false);
   const [lastDepositCount, setLastDepositCount] = useState<number | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Promo code state
+  const [promoInput, setPromoInput] = useState("");
+  const { data: promoOffer, refetch: refetchPromo } = useQuery<{
+    alreadyRedeemed: boolean;
+    redemption: { code: string; bonusPercent: number; status: string } | null;
+    active: boolean;
+    code: string;
+    bonusPercent: number;
+  }>({
+    queryKey: ["promo-offer"],
+    queryFn: () => authFetch("/api/promo/offer"),
+    retry: false,
+  });
+
+  const redeemPromo = useMutation({
+    mutationFn: (code: string) =>
+      authFetch<{ success: boolean; bonusPercent: number }>("/api/promo/redeem", {
+        method: "POST",
+        body: JSON.stringify({ code }),
+      }),
+    onSuccess: (res) => {
+      toast({
+        title: `${res.bonusPercent}% bonus locked in`,
+        description:
+          "Your bonus will credit to Trading Balance after this deposit confirms.",
+      });
+      refetchPromo();
+    },
+    onError: (err: any) => {
+      toast({
+        title: "Could not apply promo",
+        description: err?.message ?? "Invalid or expired code.",
+        variant: "destructive",
+      });
+    },
+  });
 
   const { data: historyData, isLoading: historyLoading, refetch } = useGetBlockchainDepositHistory(
     { limit: 20 },
@@ -290,6 +333,57 @@ export default function DepositPage() {
                         ${amt >= 1000 ? `${amt / 1000}k` : amt}
                       </button>
                     ))}
+                  </div>
+
+                  {/* Promo Code Input */}
+                  <div>
+                    <label className="text-xs text-muted-foreground font-medium mb-1.5 flex items-center gap-1.5">
+                      <Gift className="w-3.5 h-3.5 text-purple-400" />
+                      Promo Code <span className="text-muted-foreground/60 font-normal">(optional)</span>
+                    </label>
+                    {promoOffer?.alreadyRedeemed ? (
+                      <div className="flex items-center justify-between bg-emerald-500/10 border border-emerald-500/25 rounded-xl px-3 py-2.5">
+                        <div className="flex items-center gap-2">
+                          <Sparkles className="w-4 h-4 text-emerald-400" />
+                          <div>
+                            <div className="text-xs font-bold text-emerald-300 font-mono tracking-wider">
+                              {promoOffer.redemption?.code}
+                            </div>
+                            <div className="text-[10px] text-emerald-400/80">
+                              {promoOffer.redemption?.bonusPercent}% bonus applied — credits to Trading Balance
+                            </div>
+                          </div>
+                        </div>
+                        <BadgePercent className="w-4 h-4 text-emerald-400" />
+                      </div>
+                    ) : (
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={promoInput}
+                          onChange={(e) => setPromoInput(e.target.value.toUpperCase())}
+                          className="field-input flex-1 font-mono tracking-wider uppercase"
+                          placeholder={promoOffer?.code ? `Try ${promoOffer.code}` : "Enter code"}
+                          maxLength={20}
+                        />
+                        <button
+                          onClick={() => {
+                            const code = promoInput.trim() || promoOffer?.code || "";
+                            if (code) redeemPromo.mutate(code);
+                          }}
+                          disabled={redeemPromo.isPending || (!promoInput.trim() && !promoOffer?.code)}
+                          className="px-4 rounded-xl bg-purple-500/15 hover:bg-purple-500/25 border border-purple-500/30 text-purple-300 text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed transition-all whitespace-nowrap"
+                        >
+                          {redeemPromo.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Apply"}
+                        </button>
+                      </div>
+                    )}
+                    {!promoOffer?.alreadyRedeemed && promoOffer?.active && (
+                      <div className="text-[10px] text-purple-300/70 mt-1.5 flex items-center gap-1">
+                        <Sparkles className="w-3 h-3" />
+                        Live offer: <span className="font-mono font-bold text-purple-300">{promoOffer.code}</span> — {promoOffer.bonusPercent}% bonus to Trading Balance
+                      </div>
+                    )}
                   </div>
 
                   <div className="flex items-start gap-2.5 bg-blue-500/6 border border-blue-500/15 rounded-xl px-3 py-2.5">
