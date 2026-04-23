@@ -169,16 +169,35 @@ router.post("/promo/redeem", async (req: AuthRequest, res) => {
   }
 
   try {
-    const [row] = await db
-      .insert(promoRedemptionsTable)
-      .values({
-        userId,
-        code: offer.code,
-        status: "redeemed",
-        bonusPercent: offer.bonusPercent.toFixed(2),
-        redeemedAt: new Date(),
-      })
-      .returning();
+    // If a legacy/unused row exists (e.g. status="issued" from the old
+    // per-user-code scheme), UPDATE it instead of INSERT — the table has a
+    // UNIQUE(user_id) constraint so insert would fail.
+    let row;
+    if (existing) {
+      const [updated] = await db
+        .update(promoRedemptionsTable)
+        .set({
+          code: offer.code,
+          status: "redeemed",
+          bonusPercent: offer.bonusPercent.toFixed(2),
+          redeemedAt: new Date(),
+        })
+        .where(eq(promoRedemptionsTable.userId, userId))
+        .returning();
+      row = updated;
+    } else {
+      const [inserted] = await db
+        .insert(promoRedemptionsTable)
+        .values({
+          userId,
+          code: offer.code,
+          status: "redeemed",
+          bonusPercent: offer.bonusPercent.toFixed(2),
+          redeemedAt: new Date(),
+        })
+        .returning();
+      row = inserted;
+    }
 
     logger.info(
       { userId, code: offer.code, bonusPercent: offer.bonusPercent },
