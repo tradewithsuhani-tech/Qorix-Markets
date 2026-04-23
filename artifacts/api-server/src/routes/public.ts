@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, investmentsTable, transactionsTable, dailyProfitRunsTable, systemSettingsTable } from "@workspace/db";
-import { eq, and, gte, avg, count, inArray } from "drizzle-orm";
+import { eq, and, gte, avg, count, inArray, sql } from "drizzle-orm";
 import { listTrades } from "../lib/signal-trade-service";
 
 const router = Router();
@@ -54,6 +54,72 @@ router.get("/signal-trades/recent", async (_req, res) => {
     })),
   });
 });
+
+/**
+ * Auto-incrementing "Active Investors" counter.
+ * - Increases by random(5–25) every 30 minutes
+ * - Persisted in system_settings so it survives restarts and is shared across requests
+ * - Monotonic: never decreases (so refresh / new signup never lowers the displayed number)
+ * - On real signup, an extra +1 is added (see auth.ts) to feel organic
+ */
+async function advanceActiveInvestorsCounter(currentBaseline: number): Promise<number> {
+  const INCREMENT_WINDOW_MS = 30 * 60 * 1000; // 30 minutes
+  const MIN_BUMP = 5;
+  const MAX_BUMP = 25;
+  const FLOOR = 124; // matches landing-page fallback so the number always feels real
+  const now = Date.now();
+
+  const rows = await db
+    .select()
+    .from(systemSettingsTable)
+    .where(inArray(systemSettingsTable.key, [
+      "active_investors_count",
+      "active_investors_last_increment_at",
+    ]));
+  const map = Object.fromEntries(rows.map((r) => [r.key, r.value]));
+
+  let count = Number(map["active_investors_count"] ?? "0");
+  let lastAt = Number(map["active_investors_last_increment_at"] ?? "0");
+  let dirty = false;
+
+  // Monotonic floor: never below current baseline + hardcoded floor
+  const minimum = Math.max(FLOOR, currentBaseline);
+  if (count < minimum) {
+    count = minimum;
+    dirty = true;
+  }
+  if (!lastAt) {
+    lastAt = now;
+    dirty = true;
+  }
+
+  const elapsed = now - lastAt;
+  const windows = Math.floor(elapsed / INCREMENT_WINDOW_MS);
+  if (windows > 0) {
+    let added = 0;
+    for (let i = 0; i < windows; i++) {
+      added += MIN_BUMP + Math.floor(Math.random() * (MAX_BUMP - MIN_BUMP + 1));
+    }
+    count += added;
+    lastAt = lastAt + windows * INCREMENT_WINDOW_MS;
+    dirty = true;
+  }
+
+  if (dirty) {
+    await db
+      .insert(systemSettingsTable)
+      .values([
+        { key: "active_investors_count", value: String(count) },
+        { key: "active_investors_last_increment_at", value: String(lastAt) },
+      ])
+      .onConflictDoUpdate({
+        target: systemSettingsTable.key,
+        set: { value: sql`EXCLUDED.value`, updatedAt: new Date() },
+      });
+  }
+
+  return count;
+}
 
 router.get("/public/market-indicators", async (_req, res) => {
   const [activeInvResult] = await db
@@ -113,8 +179,14 @@ router.get("/public/market-indicators", async (_req, res) => {
     if (Array.isArray(parsed)) fomoMessages = parsed.filter((s) => typeof s === "string");
   } catch {}
 
+  // Monotonic, auto-incrementing investor counter (5–25 every 30 min).
+  // Seeded from real + admin baseline so the displayed number is always coherent.
+  const activeInvestors = await advanceActiveInvestorsCounter(
+    realActiveInvestors + baseInvestors,
+  );
+
   res.json({
-    activeInvestors: realActiveInvestors + baseInvestors,
+    activeInvestors,
     usersEarningNow: realActiveInvestors + baseEarning,
     withdrawals24h: realWithdrawals24h + baseWithdrawals,
     avgMonthlyReturn: realAvgMonthlyReturn > 0 ? realAvgMonthlyReturn : baseAvgReturn,
