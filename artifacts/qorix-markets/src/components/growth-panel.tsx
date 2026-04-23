@@ -221,18 +221,24 @@ const TOP_RANK: Record<1 | 2 | 3, TopRankStyle & { accentBar: string; glow: stri
 function NextUpdateCountdown({ onRollover }: { onRollover?: () => void }) {
   const CYCLE = 5 * 60; // seconds
   const [remaining, setRemaining] = useState(CYCLE);
+  // Hold the latest callback in a ref so the interval doesn't get torn down
+  // and recreated on every parent re-render — that was freezing the timer.
+  const cbRef = useRef(onRollover);
+  useEffect(() => {
+    cbRef.current = onRollover;
+  }, [onRollover]);
   useEffect(() => {
     const t = setInterval(() => {
       setRemaining((r) => {
         if (r <= 1) {
-          onRollover?.();
+          cbRef.current?.();
           return CYCLE;
         }
         return r - 1;
       });
     }, 1000);
     return () => clearInterval(t);
-  }, [onRollover]);
+  }, []);
   const m = Math.floor(remaining / 60).toString().padStart(2, "0");
   const s = (remaining % 60).toString().padStart(2, "0");
   return (
