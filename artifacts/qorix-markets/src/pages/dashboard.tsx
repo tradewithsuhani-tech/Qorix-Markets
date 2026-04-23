@@ -694,8 +694,9 @@ export default function Dashboard() {
       icon: <Wallet style={{ width: 16, height: 16 }} className="text-blue-400" />,
       value: <BigBalanceCounter value={fundStats?.totalAUM ?? summary?.totalBalance ?? 0} className="text-2xl md:text-3xl" />,
       sub: (
-        <span className="text-xs text-muted-foreground">
-          Profit: <span className="text-green-400 font-medium">${(summary?.profitBalance || 0).toFixed(2)}</span>
+        <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-400">
+          <ArrowUpRight style={{ width: 12, height: 12 }} />
+          +{(dailyPct || 0).toFixed(2)}% today
         </span>
       ),
       accent: "blue",
