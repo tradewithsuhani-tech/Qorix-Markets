@@ -489,7 +489,17 @@ router.get("/dashboard/performance", async (req: AuthRequest, res) => {
   let synthRiskScore = (w?.synthRiskScore ?? "Low") as string;
   const storedDay = (w?.synthMetricsDay ?? "") as string;
 
-  if (w && storedDay !== today) {
+  // Force-recompute also when persisted values are out of allowed bounds.
+  // This heals rows that were seeded with 0s before the new floors were
+  // introduced (otherwise they'd stay at +0% / 0% until next UTC midnight).
+  const synthOutOfRange =
+    synthAvgReturn < 0.8 ||
+    synthAvgReturn > 2.5 ||
+    synthWinRate < 70 ||
+    synthWinRate > 95 ||
+    synthMaxDrawdown < 3 ||
+    synthMaxDrawdown > 12;
+  if (w && (storedDay !== today || synthOutOfRange)) {
     const winJitter = (hashSeed(`${req.userId}:${today}:winrate`) - 0.5) * 3; // ±1.5
     const ddJitter = (hashSeed(`${req.userId}:${today}:drawdown`) - 0.5) * 1; // ±0.5
     const arJitter = (hashSeed(`${req.userId}:${today}:avgreturn`) - 0.5) * 0.3; // ±0.15
