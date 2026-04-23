@@ -692,7 +692,7 @@ function PortfolioInner() {
               </div>
             </div>
             <div className="relative text-3xl md:text-[2.1rem] font-extrabold text-white tabular-nums leading-none">
-              $<BigBalanceCounter value={investedAmount} className="inline" />
+              <BigBalanceCounter value={investedAmount} className="inline" />
             </div>
             <div className="relative mt-2 text-[11px] text-muted-foreground/90 flex items-center gap-1.5">
               <span className="inline-block w-1 h-1 rounded-full bg-blue-400/60" />
@@ -716,7 +716,7 @@ function PortfolioInner() {
               </div>
             </div>
             <div className="relative text-3xl md:text-[2.1rem] font-extrabold text-white tabular-nums leading-none">
-              $<BigBalanceCounter value={currentEquity} className="inline" />
+              <BigBalanceCounter value={currentEquity} className="inline" />
             </div>
             <div className="relative mt-2 text-[11px] text-muted-foreground/90 flex items-center gap-1.5">
               <span className="inline-block w-1 h-1 rounded-full bg-cyan-400/60" />
