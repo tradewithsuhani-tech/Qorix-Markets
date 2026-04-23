@@ -864,6 +864,7 @@ export default function PortfolioPage() {
           hideGrowthPanel
           hideFundTransparency
           hideLiveTrades
+          hidePrimaryStatCards
         />
       </div>
       {/* Recent Trade Attribution moved to bottom per request */}
