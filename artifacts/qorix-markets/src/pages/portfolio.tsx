@@ -7,7 +7,9 @@ import {
   useGetDashboardPerformance,
   useGetEquityChart,
   useGetTrades,
+  type VipInfo,
 } from "@workspace/api-client-react";
+import { VipCard } from "@/components/vip-badge";
 import { useQuery } from "@tanstack/react-query";
 import { authFetch } from "@/lib/auth-fetch";
 import {
@@ -1060,6 +1062,15 @@ export default function PortfolioPage() {
           swapEquityWithRolling
         />
       </div>
+      {summary?.vip && (
+        <div className="px-4 md:px-8 pb-2 max-w-7xl mx-auto">
+          <div className="flex items-center gap-2 mb-3">
+            <h2 className="text-base font-semibold">VIP Membership</h2>
+            <div className="h-px flex-1 bg-gradient-to-r from-white/10 to-transparent" />
+          </div>
+          <VipCard vip={summary.vip as VipInfo} investmentAmount={summary.activeInvestment ?? 0} />
+        </div>
+      )}
       <div className="px-4 md:px-8 pb-8 max-w-7xl mx-auto">
         <RecentTradeAttribution />
       </div>
