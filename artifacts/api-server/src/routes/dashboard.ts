@@ -616,8 +616,13 @@ router.get("/dashboard/fund-stats", async (req: AuthRequest, res) => {
   const live = await advanceLiveCounters(realActiveInvestors + baselineInvestors, baselineAUM);
 
   const totalAUM = realAUM + baselineAUM + live.totalEquityBoost;
-  const activeCapital = realAUM + baselineActiveCapital + live.totalEquityBoost;
-  const reserveFund = realReserve + baselineReserve;
+  // Active Capital is what's deployed in trading right now. Cap it at Total AUM
+  // so the books always balance: Total AUM = Active Capital + Reserve Fund.
+  const rawActiveCapital = realAUM + baselineActiveCapital + live.totalEquityBoost;
+  const activeCapital = Math.min(rawActiveCapital, totalAUM);
+  // Reserve Fund is whatever is not actively deployed — derived so the three
+  // numbers always tie out cleanly for "Fund Transparency".
+  const reserveFund = Math.max(0, totalAUM - activeCapital);
   const activeInvestors = Math.max(realActiveInvestors + baselineInvestors, live.activeInvestors);
   const slotData = await getSlotData();
 
@@ -626,8 +631,8 @@ router.get("/dashboard/fund-stats", async (req: AuthRequest, res) => {
     activeCapital,
     reserveFund,
     activeInvestors,
-    utilizationRate: (activeCapital + reserveFund) > 0
-      ? parseFloat(((activeCapital / (activeCapital + reserveFund)) * 100).toFixed(1))
+    utilizationRate: totalAUM > 0
+      ? parseFloat(((activeCapital / totalAUM) * 100).toFixed(1))
       : 0,
     maxSlots: slotData.maxSlots,
     availableSlots: slotData.availableSlots,
