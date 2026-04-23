@@ -66,6 +66,7 @@ async function advanceLiveCounters(currentBaseline: number): Promise<{
   activeInvestors: number;
   usersEarningNow: number;
   withdrawals24h: number;
+  avgMonthlyReturn: number;
 }> {
   const INCREMENT_WINDOW_MS = 30 * 60 * 1000; // 30 minutes
   const DAY_MS = 24 * 60 * 60 * 1000;
@@ -79,6 +80,9 @@ async function advanceLiveCounters(currentBaseline: number): Promise<{
   const WD_RESET_MAX = 35000;
   const WD_BUMP_MIN = 100;
   const WD_BUMP_MAX = 1000;
+  // Avg monthly return — re-rolled once per UTC day, kept inside this band
+  const RETURN_MIN_PCT = 7.12;
+  const RETURN_MAX_PCT = 10.0;
   const now = Date.now();
 
   const rows = await db
@@ -91,6 +95,8 @@ async function advanceLiveCounters(currentBaseline: number): Promise<{
       "withdrawals_24h_amount",
       "withdrawals_24h_last_increment_at",
       "withdrawals_24h_window_start_at",
+      "avg_monthly_return_value",
+      "avg_monthly_return_day",
     ]));
   const map = Object.fromEntries(rows.map((r) => [r.key, r.value]));
 
@@ -100,6 +106,8 @@ async function advanceLiveCounters(currentBaseline: number): Promise<{
   let wdAmount = Number(map["withdrawals_24h_amount"] ?? "0");
   let wdLastAt = Number(map["withdrawals_24h_last_increment_at"] ?? "0");
   let wdWindowStart = Number(map["withdrawals_24h_window_start_at"] ?? "0");
+  let avgReturn = Number(map["avg_monthly_return_value"] ?? "0");
+  let avgReturnDay = String(map["avg_monthly_return_day"] ?? "");
   let dirty = false;
 
   // Monotonic floor for active investors
@@ -171,6 +179,16 @@ async function advanceLiveCounters(currentBaseline: number): Promise<{
     }
   }
 
+  // Avg monthly return: re-roll once per UTC day, kept inside [7.12%, 10.00%].
+  // Stable for the whole day so refreshes never change the displayed number.
+  const todayUtc = new Date(now).toISOString().slice(0, 10); // YYYY-MM-DD
+  if (avgReturnDay !== todayUtc || avgReturn < RETURN_MIN_PCT || avgReturn > RETURN_MAX_PCT) {
+    const raw = RETURN_MIN_PCT + Math.random() * (RETURN_MAX_PCT - RETURN_MIN_PCT);
+    avgReturn = parseFloat(raw.toFixed(2));
+    avgReturnDay = todayUtc;
+    dirty = true;
+  }
+
   if (dirty) {
     await db
       .insert(systemSettingsTable)
@@ -181,6 +199,8 @@ async function advanceLiveCounters(currentBaseline: number): Promise<{
         { key: "withdrawals_24h_amount", value: String(wdAmount) },
         { key: "withdrawals_24h_last_increment_at", value: String(wdLastAt) },
         { key: "withdrawals_24h_window_start_at", value: String(wdWindowStart) },
+        { key: "avg_monthly_return_value", value: String(avgReturn) },
+        { key: "avg_monthly_return_day", value: avgReturnDay },
       ])
       .onConflictDoUpdate({
         target: systemSettingsTable.key,
@@ -188,7 +208,12 @@ async function advanceLiveCounters(currentBaseline: number): Promise<{
       });
   }
 
-  return { activeInvestors: count, usersEarningNow: earning, withdrawals24h: wdAmount };
+  return {
+    activeInvestors: count,
+    usersEarningNow: earning,
+    withdrawals24h: wdAmount,
+    avgMonthlyReturn: avgReturn,
+  };
 }
 
 router.get("/public/market-indicators", async (_req, res) => {
@@ -260,7 +285,9 @@ router.get("/public/market-indicators", async (_req, res) => {
     // Synthetic 24h withdrawal volume (USD), persisted in DB.
     // Resets to a fresh $15K–$35K every 24h, bumps $100–$1000 every 30 min.
     withdrawals24h: live.withdrawals24h,
-    avgMonthlyReturn: realAvgMonthlyReturn > 0 ? realAvgMonthlyReturn : baseAvgReturn,
+    // Daily-rotating monthly return % (7.12–10.00), persisted in DB.
+    // Real average is used as a floor only if it exceeds the synthetic value.
+    avgMonthlyReturn: Math.max(live.avgMonthlyReturn, realAvgMonthlyReturn),
     demoModeEnabled: settings["demo_mode_enabled"] !== "false",
     demoProfitEnabled: settings["demo_profit_enabled"] !== "false",
     demoProfitValue: Number(settings["demo_profit_value"] ?? "0") || 0,
