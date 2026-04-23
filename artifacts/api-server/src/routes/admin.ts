@@ -386,7 +386,6 @@ router.post("/admin/broadcast", async (req: AuthRequest, res) => {
     .select({
       id: usersTable.id,
       email: usersTable.email,
-      name: usersTable.name,
       isAdmin: usersTable.isAdmin,
     })
     .from(usersTable);
