@@ -540,7 +540,7 @@ export default function Dashboard() {
   const { data: summary, isLoading: summaryLoading } = useGetDashboardSummary({
     query: { refetchInterval: 5000 }
   });
-  const { data: equity, isLoading: equityLoading } = useGetEquityChart(
+  const { data: equity, isLoading: equityLoading, dataUpdatedAt: equityUpdatedAt } = useGetEquityChart(
     { days: chartDays },
     { query: { refetchInterval: 15000 } }
   );
@@ -1247,7 +1247,7 @@ export default function Dashboard() {
                     Live Performance
                   </p>
                   <span className="text-muted-foreground/40">·</span>
-                  <UpdatedAgo />
+                  <UpdatedAgo timestamp={equityUpdatedAt} />
                 </div>
               </div>
               <div className="-mx-1 overflow-x-auto scrollbar-hide sm:mx-0 sm:overflow-visible">
