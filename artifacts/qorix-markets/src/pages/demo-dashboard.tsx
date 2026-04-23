@@ -14,6 +14,7 @@ import { AdminPopup } from "@/components/admin-popup";
 import { PeriodFilter, DAYS_PERIOD_OPTIONS } from "@/components/period-filter";
 import { GrowthPanel } from "@/components/growth-panel";
 import { IdleBalanceBanner } from "@/components/idle-balance-banner";
+import { UpdatedAgo } from "@/components/updated-ago";
 import { VipBadge, VipCard } from "@/components/vip-badge";
 import { AnimatedCounter, BigBalanceCounter } from "@/components/animated-counter";
 import { useAuth } from "@/hooks/use-auth";
@@ -1280,17 +1281,18 @@ export default function DemoDashboard() {
               <div className="min-w-0">
                 <h3 className="font-semibold whitespace-nowrap flex items-center gap-2">
                   Equity Curve
-                  {!investment?.isActive && conversion?.demoModeEnabled !== false && (
-                    <span className="text-[9px] px-1.5 py-0.5 rounded font-bold bg-blue-500/15 text-blue-300 border border-blue-500/25 uppercase tracking-wider">
-                      Demo
-                    </span>
-                  )}
+                  <span className="text-[9px] px-1.5 py-0.5 rounded font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-400/30 uppercase tracking-wider inline-flex items-center gap-1">
+                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    Live
+                  </span>
                 </h3>
-                <p className="text-xs text-muted-foreground whitespace-nowrap">
-                  {!investment?.isActive && conversion?.demoModeEnabled !== false
-                    ? "Demo Performance (Simulation)"
-                    : "Portfolio value over time"}
-                </p>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="text-xs text-muted-foreground whitespace-nowrap">
+                    Live Performance
+                  </p>
+                  <span className="text-muted-foreground/40">·</span>
+                  <UpdatedAgo />
+                </div>
               </div>
               <div className="-mx-1 overflow-x-auto scrollbar-hide sm:mx-0 sm:overflow-visible">
                 <PeriodFilter
