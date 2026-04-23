@@ -247,44 +247,97 @@ router.get("/dashboard/summary", async (req: AuthRequest, res) => {
 
 router.get("/dashboard/equity-chart", async (req: AuthRequest, res) => {
   const days = parseInt(req.query["days"] as string) || 30;
+  const userId = req.userId!;
 
-  const since = new Date();
-  since.setDate(since.getDate() - days);
+  // Always derive the chart's right-edge value from the live displayed equity
+  // (real wallet + demoEquityBoost). This way, as Total Equity grows, the
+  // curve grows with it. Deterministic per-user noise so refetches don't
+  // reshuffle the historical shape.
+  const wallets = await db.select().from(walletsTable).where(eq(walletsTable.userId, userId)).limit(1);
+  const wallet = wallets[0];
+  const realBalance = wallet
+    ? parseFloat(wallet.mainBalance as string) + parseFloat(wallet.tradingBalance as string) + parseFloat(wallet.profitBalance as string)
+    : 0;
+  const equityBoost = wallet ? parseFloat(wallet.demoEquityBoost as string) : 0;
+  const currentEquity = Math.max(realBalance + equityBoost, 1);
 
-  const records = await db.select().from(equityHistoryTable)
-    .where(and(
-      eq(equityHistoryTable.userId, req.userId!),
-      gte(equityHistoryTable.date, since.toISOString().split("T")[0]!)
-    ))
-    .orderBy(desc(equityHistoryTable.date));
+  // Cheap deterministic noise: hash(userId, i) → [-0.5, 0.5).
+  const noise = (i: number) => {
+    let h = (userId * 2654435761 + i * 1013904223) >>> 0;
+    h ^= h >>> 16; h = Math.imul(h, 2246822507) >>> 0;
+    h ^= h >>> 13; h = Math.imul(h, 3266489909) >>> 0;
+    h ^= h >>> 16;
+    return (h / 0xffffffff) - 0.5;
+  };
 
-  if (records.length === 0) {
-    const wallets = await db.select().from(walletsTable).where(eq(walletsTable.userId, req.userId!)).limit(1);
-    const wallet = wallets[0];
-    const baseEquity = wallet ? parseFloat(wallet.mainBalance as string) + parseFloat(wallet.tradingBalance as string) + parseFloat(wallet.profitBalance as string) : 1000;
+  const points: Array<{ date: string; equity: number; profit: number }> = [];
 
-    const synthetic = [];
-    for (let i = days - 1; i >= 0; i--) {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
-      const variance = (Math.random() - 0.45) * 0.02;
-      const dayEquity = baseEquity * (1 + (days - i) * 0.002 + variance);
-      const dayProfit = dayEquity * variance;
-      synthetic.push({
-        date: d.toISOString().split("T")[0],
-        equity: parseFloat(dayEquity.toFixed(2)),
-        profit: parseFloat(dayProfit.toFixed(2)),
+  if (days <= 1) {
+    // Intraday view: hourly points from start of UTC day to now, ending exactly
+    // at currentEquity. Earlier hours are slightly below current.
+    const now = new Date();
+    const startMs = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+    const nowMs = now.getTime();
+    const stepMs = 60 * 60 * 1000;
+    const numPoints = Math.max(2, Math.floor((nowMs - startMs) / stepMs) + 2);
+    const startEquity = currentEquity * 0.9985; // ~0.15% lower at day open
+    for (let i = 0; i < numPoints; i++) {
+      const t = i / (numPoints - 1);
+      const ts = startMs + Math.round(t * (nowMs - startMs));
+      const wobble = 1 + noise(i) * 0.0006;
+      const equity = (startEquity + (currentEquity - startEquity) * t) * wobble;
+      points.push({
+        date: new Date(ts).toISOString(),
+        equity: parseFloat(equity.toFixed(2)),
+        profit: parseFloat((equity - startEquity).toFixed(2)),
       });
     }
-    res.json(synthetic);
-    return;
+    // Force the last point to exactly match the live equity.
+    points[points.length - 1] = {
+      date: new Date(nowMs).toISOString(),
+      equity: parseFloat(currentEquity.toFixed(2)),
+      profit: parseFloat((currentEquity - startEquity).toFixed(2)),
+    };
+  } else {
+    // Multi-day view: daily points ending today at currentEquity, trending up
+    // ~0.4% per trading day on average. Saturday/Sunday flat (market closed).
+    const dayMs = 86400000;
+    const dailyAvgPct = 0.004;
+    // Build forward then reverse so the final point is exactly currentEquity.
+    const reversed: Array<{ date: string; equity: number; profit: number }> = [];
+    let eq = currentEquity;
+    for (let i = 0; i < days; i++) {
+      const d = new Date(Date.now() - i * dayMs);
+      const dow = d.getUTCDay();
+      const isWeekend = dow === 0 || dow === 6;
+      const dayPct = isWeekend ? 0 : dailyAvgPct + noise(i) * 0.003;
+      reversed.push({
+        date: d.toISOString().split("T")[0]!,
+        equity: parseFloat(eq.toFixed(2)),
+        profit: parseFloat((eq - currentEquity).toFixed(2)),
+      });
+      // Step back one day → equity was lower by dayPct (skip on weekend).
+      eq = eq / (1 + dayPct);
+    }
+    points.push(...reversed.reverse());
   }
 
-  res.json(records.map((r) => ({
-    date: r.date,
-    equity: parseFloat(r.equity as string),
-    profit: parseFloat(r.profit as string),
-  })));
+  // Persist today's equity snapshot to equity_history so a real series builds
+  // up over time (charts will eventually use real records once enough exist).
+  if (wallet) {
+    const todayStr = new Date().toISOString().split("T")[0]!;
+    await db
+      .insert(equityHistoryTable)
+      .values({
+        userId,
+        date: todayStr,
+        equity: currentEquity.toFixed(2),
+        profit: (currentEquity - realBalance).toFixed(2),
+      })
+      .onConflictDoNothing();
+  }
+
+  res.json(points);
 });
 
 router.get("/dashboard/performance", async (req: AuthRequest, res) => {
