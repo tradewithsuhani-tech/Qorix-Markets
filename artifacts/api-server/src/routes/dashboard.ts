@@ -464,7 +464,25 @@ router.get("/dashboard/performance", async (req: AuthRequest, res) => {
 
   const totalTrades = allTrades.length;
   const winningTrades = allTrades.filter(t => parseFloat(t.profit as string) > 0).length;
-  const winRate = totalTrades > 0 ? (winningTrades / totalTrades) * 100 : 0;
+  const realWinRate = totalTrades > 0 ? (winningTrades / totalTrades) * 100 : 0;
+
+  // Synthetic Win Rate in [70, 95] driven by today's Daily P&L performance:
+  // higher pct within the [0.40%, 0.60%] band → higher win rate. Adds a small
+  // deterministic per-day jitter so the number breathes without flickering.
+  const wRows = await db.select().from(walletsTable).where(eq(walletsTable.userId, req.userId!)).limit(1);
+  const w = wRows[0];
+  const dailyPct = w ? parseFloat((w.dailyPnlPct ?? "0") as string) : 0;
+  const ratio = Math.max(0, Math.min(1, (dailyPct - 0.4) / 0.2));
+  const today = new Date().toISOString().slice(0, 10);
+  let h = 2166136261 >>> 0;
+  const seed = `${req.userId}:${today}:winrate`;
+  for (let i = 0; i < seed.length; i++) {
+    h = Math.imul(h ^ seed.charCodeAt(i), 16777619);
+  }
+  h ^= h >>> 13; h = Math.imul(h, 1540483477) >>> 0; h ^= h >>> 15;
+  const jitter = (((h >>> 0) / 0xffffffff) - 0.5) * 3; // ±1.5
+  const synthWinRate = Math.max(70, Math.min(95, 70 + ratio * 25 + jitter));
+  const winRate = Math.max(realWinRate, synthWinRate);
 
   const avgReturn = totalTrades > 0
     ? allTrades.reduce((acc, t) => acc + parseFloat(t.profitPercent as string), 0) / totalTrades
