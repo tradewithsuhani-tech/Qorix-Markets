@@ -261,7 +261,7 @@ function App() {
           </AuthProvider>
         </WouterRouter>
         <Toaster />
-        <SiteActivityToaster />
+        {/* <SiteActivityToaster /> disabled per user request */}
       </TooltipProvider>
     </QueryClientProvider>
   );
