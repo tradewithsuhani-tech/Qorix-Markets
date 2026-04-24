@@ -4,6 +4,8 @@ import { eq } from "drizzle-orm";
 import { signToken } from "../middlewares/auth";
 import crypto from "crypto";
 import { logger } from "../lib/logger";
+import { sendEmail } from "../lib/email-service";
+import { buildBrandedEmailHtml } from "../lib/email-template";
 
 const router = Router();
 
@@ -141,6 +143,38 @@ router.get("/auth/google/callback", async (req, res) => {
       await db.insert(walletsTable).values({ userId });
       await db.insert(investmentsTable).values({ userId });
       logger.info({ userId, email }, "[google-oauth] new user created");
+
+      // Send branded welcome email to new Google sign-ups (fire-and-forget)
+      const newReferralCode = newUser.referralCode;
+      const fullName = newUser.fullName ?? "";
+      setImmediate(async () => {
+        try {
+          const firstName = fullName.trim().split(/\s+/)[0] || "Trader";
+          const welcomeTitle = `Welcome to Qorix Markets, ${firstName} 👋`;
+          const welcomeMessage =
+            `Aapka account successfully ban gaya hai — welcome aboard!\n\n` +
+            `Qorix Markets ek institutional-grade AI trading platform hai jo aapke liye 24/7 trades execute karta hai — ` +
+            `zero emotion, zero delay, fully risk-managed.\n\n` +
+            `Aapko mil rahe hain:\n` +
+            `• AI-powered automated trading strategies\n` +
+            `• Built-in stop-loss aur smart risk management\n` +
+            `• USDT (TRC20) deposits aur withdrawals — anytime\n` +
+            `• Real-time portfolio dashboard aur live P&L tracking\n` +
+            `• 24/7 dedicated support team\n\n` +
+            `Shuru karne ke liye:\n` +
+            `1. Sirf $10 se fund karo apna trading balance\n` +
+            `2. Strategy choose karo — AI baki sambhal lega\n` +
+            `3. Apna progress real-time dashboard pe track karo\n\n` +
+            `Aapka referral code: ${newReferralCode}\n` +
+            `Har dost jo join kare aur trade kare — aapko 10% lifetime commission milta hai.\n\n` +
+            `Welcome to the future of automated trading. 🚀`;
+
+          const html = buildBrandedEmailHtml(welcomeTitle, welcomeMessage);
+          await sendEmail(email, welcomeTitle, welcomeMessage, html);
+        } catch (err) {
+          logger.warn({ err: (err as Error).message, userId, email }, "[google-oauth] welcome email failed");
+        }
+      });
     }
 
     const token = signToken(userId, isAdmin);
