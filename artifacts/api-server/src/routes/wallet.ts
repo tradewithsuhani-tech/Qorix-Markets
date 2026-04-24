@@ -346,6 +346,19 @@ router.post("/wallet/withdraw", async (req: AuthRequest, res) => {
     `Your withdrawal of $${netAmount.toFixed(2)} USDT (after $${feeAmount.toFixed(2)} fee) to ${walletAddress.slice(0, 8)}...${walletAddress.slice(-4)} is pending review.`,
   );
 
+  sendTxnEmailToUser(
+    req.userId!,
+    "Withdrawal Requested",
+    `We have received your withdrawal request and it is now pending review by our team.\n\n` +
+      `Net Amount: $${netAmount.toFixed(2)} USDT\n` +
+      `Network Fee: $${feeAmount.toFixed(2)} USDT (${(vipInfo.withdrawalFee * 100).toFixed(1)}% — ${vipInfo.label} tier)\n` +
+      `Destination Wallet (TRC20): ${walletAddress}\n` +
+      `Request ID: #${txnRecord!.id}\n\n` +
+      `Withdrawals are typically processed within a few hours during business hours. ` +
+      `You will receive another email confirmation as soon as the on-chain transaction has been broadcast.\n\n` +
+      `If you did not request this withdrawal, please contact support immediately.`,
+  );
+
   res.json({
     id: txnRecord!.id,
     userId: txnRecord!.userId,

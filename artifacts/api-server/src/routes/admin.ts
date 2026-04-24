@@ -25,7 +25,7 @@ import {
   journalForSystem,
   runReconciliation,
 } from "../lib/ledger-service";
-import { sendEmail } from "../lib/email-service";
+import { sendEmail, sendTxnEmailToUser } from "../lib/email-service";
 
 const router = Router();
 router.use("/admin", authMiddleware);
@@ -643,6 +643,19 @@ router.post("/admin/withdrawals/:id/approve", async (req: AuthRequest, res) => {
     message: `Your withdrawal of $${netAmount.toFixed(2)} USDT has been sent to ${toAddress.slice(0, 8)}…${toAddress.slice(-4)}. Tx: ${txHash.slice(0, 12)}…`,
   });
 
+  sendTxnEmailToUser(
+    updated!.userId,
+    "Withdrawal Sent — Funds On The Way",
+    `Your withdrawal has been approved and the on-chain transaction has been broadcast successfully.\n\n` +
+      `Amount Sent: $${netAmount.toFixed(2)} USDT (TRC20)\n` +
+      `Destination Wallet: ${toAddress}\n` +
+      `Transaction Hash: ${txHash}\n` +
+      `Request ID: #${id}\n\n` +
+      `Funds typically arrive in your wallet within 1–3 minutes after network confirmation. ` +
+      `You can verify the transaction on Tronscan using the hash above.\n\n` +
+      `Thank you for trading with Qorix Markets.`,
+  );
+
   transactionLogger.info(
     {
       event: "withdrawal_approved",
@@ -713,6 +726,18 @@ router.post("/admin/withdrawals/:id/reject", async (req: AuthRequest, res) => {
   }
 
   const user = txUser[0];
+
+  sendTxnEmailToUser(
+    updated.userId,
+    "Withdrawal Rejected — Funds Refunded",
+    `We were unable to process your recent withdrawal request. The full amount has been refunded back to your account.\n\n` +
+      `Refunded Amount: $${parseFloat(updated.amount as string).toFixed(2)} USDT\n` +
+      `Credited to: Profit Balance\n` +
+      `Request ID: #${id}\n\n` +
+      `Common reasons for rejection include incomplete KYC verification, suspicious activity flags, ` +
+      `invalid destination wallet, or risk-management holds.\n\n` +
+      `Please contact our support team if you would like more details, or you can submit a new withdrawal request once any required steps have been completed.`,
+  );
 
   transactionLogger.info(
     {

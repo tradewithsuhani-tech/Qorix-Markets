@@ -3,6 +3,7 @@ import { blockchainDepositsTable, promoRedemptionsTable } from "@workspace/db/sc
 import { eq, isNotNull, or, isNull, sql } from "drizzle-orm";
 import { logger, errorLogger } from "./logger";
 import { createNotification } from "./notifications";
+import { sendTxnEmailToUser } from "./email-service";
 import { emitDepositEvent } from "./event-bus";
 import { ensureUserAccounts, postJournalEntry, journalForTransaction } from "./ledger-service";
 import { getAllDepositAddresses, decryptDepositPrivateKey } from "./deposit-address-service";
@@ -172,6 +173,18 @@ async function creditUserDeposit(
     "deposit",
     "USDT Deposit Confirmed",
     `$${amount.toFixed(2)} USDT (TRC20) has been credited to your main balance.`,
+  );
+
+  sendTxnEmailToUser(
+    userId,
+    "Deposit Confirmed — Funds Credited",
+    `Great news — we have detected and credited your on-chain USDT deposit.\n\n` +
+      `Amount: $${amount.toFixed(2)} USDT (TRC20)\n` +
+      `Credited to: Main Balance\n` +
+      `New Main Balance: $${newMain.toFixed(2)} USDT\n` +
+      `Transaction Hash: ${txHash}\n\n` +
+      `You can now transfer funds to your Trading Balance and start earning with our AI-powered strategies.\n\n` +
+      `If you did not make this deposit, please contact support immediately.`,
   );
 
   await emitDepositEvent({ userId, amount, newMainBalance: newMain }).catch((err) => {
