@@ -658,30 +658,26 @@ function WeeklyLeaderboard({ userId }: { userId: number }) {
                       ${tradingFund.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                     </div>
 
-                    {/* Mobile: stacked P&L + Payout in one right-aligned column */}
+                    {/* Mobile: stacked P&L + Payout in one right-aligned column.
+                        Labels dropped — emerald = P&L, amber = Payout (color codes
+                        the meaning, saves precious horizontal pixels). */}
                     <div className="sm:hidden flex flex-col items-end gap-0.5 tabular-nums whitespace-nowrap">
-                      <div className="flex items-baseline gap-1">
-                        <span className="text-[8.5px] font-semibold uppercase tracking-wider text-emerald-400/60">P&amp;L</span>
-                        <span className={cn(
-                          "text-emerald-400 font-bold leading-none",
-                          rank === 1 ? "text-[14px] font-black drop-shadow-[0_1px_8px_rgba(52,211,153,0.4)]"
-                            : isTop3 ? "text-[13px] font-extrabold"
-                            : "text-[12px]",
-                        )}>
-                          +${profit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </span>
-                      </div>
-                      <div className="flex items-baseline gap-1">
-                        <span className="text-[8.5px] font-semibold uppercase tracking-wider text-amber-300/60">Payout</span>
-                        <span className={cn(
-                          "text-amber-300 font-semibold leading-none",
-                          rank === 1 ? "text-[12px] font-extrabold text-amber-200"
-                            : isTop3 ? "text-[12px] font-bold"
-                            : "text-[11px]",
-                        )}>
-                          ${payout.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </span>
-                      </div>
+                      <span className={cn(
+                        "text-emerald-400 font-bold leading-none",
+                        rank === 1 ? "text-[15px] font-black drop-shadow-[0_1px_8px_rgba(52,211,153,0.4)]"
+                          : isTop3 ? "text-[14px] font-extrabold"
+                          : "text-[13px]",
+                      )}>
+                        +${profit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
+                      <span className={cn(
+                        "text-amber-300/90 font-semibold leading-none",
+                        rank === 1 ? "text-[11px] font-bold text-amber-200"
+                          : isTop3 ? "text-[11px] font-semibold"
+                          : "text-[10px]",
+                      )}>
+                        +${payout.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} <span className="text-amber-300/50 font-medium uppercase text-[8px] tracking-wider">payout</span>
+                      </span>
                     </div>
 
                     {/* Desktop P&L */}
