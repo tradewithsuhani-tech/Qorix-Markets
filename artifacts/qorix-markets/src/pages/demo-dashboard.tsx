@@ -783,7 +783,7 @@ export function DemoDashboardBody({
         ? <TrendingUp style={{ width: 16, height: 16 }} className="text-green-400" />
         : <TrendingDown style={{ width: 16, height: 16 }} className="text-red-400" />,
       value: (
-        <span className={`text-2xl md:text-3xl font-bold ${isPositive ? "profit-text" : "loss-text"}`}>
+        <span className={`inline-flex items-end text-2xl md:text-3xl font-bold whitespace-nowrap max-w-full ${isPositive ? "profit-text" : "loss-text"}`}>
           {isPositive ? "+" : ""}<AnimatedCounter value={Math.abs(dailyPL)} prefix="$" />
         </span>
       ),
@@ -828,7 +828,7 @@ export function DemoDashboardBody({
       // synced with Total Equity — scales proportionally to fund size
       icon: <Activity style={{ width: 16, height: 16 }} className="text-emerald-400" />,
       value: (
-        <span className="text-2xl md:text-3xl font-bold profit-text">
+        <span className="inline-flex items-end text-2xl md:text-3xl font-bold profit-text whitespace-nowrap max-w-full">
           +<AnimatedCounter value={totalProfitDisplay} prefix="$" />
         </span>
       ),
