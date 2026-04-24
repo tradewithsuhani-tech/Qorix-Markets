@@ -16,6 +16,7 @@ import {
   Zap,
   AlertTriangle,
   Info,
+  ShieldAlert,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -131,6 +132,7 @@ export default function AdminCommunicationPage() {
   const [emailForm, setEmailForm] = useState({ title: "", message: "", audience: "all" });
   const [emailLoading, setEmailLoading] = useState(false);
   const [settingsSaving, setSettingsSaving] = useState(false);
+  const [kycReminderLoading, setKycReminderLoading] = useState(false);
 
   async function loadSettings() {
     try {
@@ -174,6 +176,22 @@ export default function AdminCommunicationPage() {
     if (!tpl) return;
     setSelectedTemplate(templateId);
     setEmailForm({ ...emailForm, title: tpl.defaultTitle, message: tpl.defaultMessage });
+  }
+
+  async function sendKycReminder() {
+    if (!confirm("Send KYC reminder email to ALL users with incomplete KYC (not_submitted + rejected)?")) return;
+    setKycReminderLoading(true);
+    try {
+      const result = await adminFetch("/admin/kyc-reminder", { method: "POST", body: JSON.stringify({}) });
+      toast({
+        title: "KYC reminders sent",
+        description: `${result.emailsSent ?? 0} email(s) sent${result.emailsFailed ? `, ${result.emailsFailed} failed` : ""} (out of ${result.recipients} pending users).`,
+      });
+    } catch (e: any) {
+      toast({ title: "Error", description: e.message, variant: "destructive" });
+    } finally {
+      setKycReminderLoading(false);
+    }
   }
 
   async function sendEmailBroadcast() {
@@ -364,6 +382,32 @@ export default function AdminCommunicationPage() {
             </button>
           </SectionCard>
         </div>
+
+        <SectionCard
+          icon={ShieldAlert}
+          color="text-amber-400 bg-amber-500/10 border border-amber-500/20"
+          title="KYC Reminder Email"
+          subtitle="Email all users who signed up but have not completed KYC verification"
+        >
+          <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 text-sm text-amber-200/90 leading-relaxed">
+            Sends a branded reminder email to users with KYC status of{" "}
+            <span className="font-semibold text-amber-300">not_submitted</span> or{" "}
+            <span className="font-semibold text-amber-300">rejected</span>.
+            <br />
+            <span className="text-xs text-muted-foreground">
+              Skips users already approved or pending review. The email explains required documents and links to the KYC submission page.
+            </span>
+          </div>
+          <button
+            onClick={sendKycReminder}
+            disabled={kycReminderLoading}
+            className="w-full py-3 rounded-xl bg-amber-600 hover:bg-amber-500 disabled:opacity-50 flex items-center justify-center gap-2 font-medium transition-all text-white"
+          >
+            <ShieldAlert className="w-4 h-4" />
+            {kycReminderLoading ? "Sending KYC reminders..." : "Send KYC Reminder to All Pending Users"}
+          </button>
+        </SectionCard>
+
 
         <SectionCard icon={Mail} color="text-violet-400 bg-violet-500/10 border border-violet-500/20" title="Email Broadcast Templates" subtitle="Select a template and customize before sending to all users">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
