@@ -1325,6 +1325,20 @@ export default function Dashboard() {
                       tickLine={false}
                       tickFormatter={v => `$${Number(v).toLocaleString()}`}
                       width={70}
+                      domain={[
+                        (dataMin: number) => {
+                          const dataMax = Math.max(...chartData.map(d => Number(d.equity) || 0));
+                          const range = dataMax - dataMin;
+                          const pad = Math.max(range * 0.25, dataMax * 0.02);
+                          return Math.max(0, Math.floor((dataMin - pad) / 100) * 100);
+                        },
+                        (dataMax: number) => {
+                          const dataMin = Math.min(...chartData.map(d => Number(d.equity) || 0));
+                          const range = dataMax - dataMin;
+                          const pad = Math.max(range * 0.15, dataMax * 0.02);
+                          return Math.ceil((dataMax + pad) / 100) * 100;
+                        },
+                      ]}
                     />
                     <Tooltip
                       content={<CustomTooltip />}
