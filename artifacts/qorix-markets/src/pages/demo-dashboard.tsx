@@ -804,7 +804,7 @@ export function DemoDashboardBody({
       glow: marketClosed ? "rgba(245,158,11,0.1)" : isPositive ? "rgba(34,197,94,0.1)" : "rgba(239,68,68,0.1)",
     },
     {
-      label: "Active Trading Fund",
+      label: "Active Fund",
       // synced with Active Capital (Fund Transparency) — same value across both cards
       icon: <Zap style={{ width: 16, height: 16 }} className="text-indigo-400" />,
       value: <BigBalanceCounter value={fundStats?.activeCapital ?? summary?.activeInvestment ?? 0} className="text-2xl md:text-3xl" />,
