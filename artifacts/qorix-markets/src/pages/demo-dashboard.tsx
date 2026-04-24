@@ -1537,8 +1537,8 @@ export function DemoDashboardBody({
                 className="absolute top-0 right-0 w-24 h-24 rounded-full opacity-10 pointer-events-none"
                 style={{ background: card.glow, filter: "blur(20px)", transform: "translate(30%,-30%)" }}
               />
-              <div className="flex items-start justify-between gap-2 text-muted-foreground min-w-0">
-                <span className="text-[10px] md:text-xs font-medium uppercase tracking-wide md:tracking-wider leading-tight break-words min-w-0">{card.label}</span>
+              <div className="flex items-center justify-between gap-2 text-muted-foreground min-w-0">
+                <span className="text-[9px] md:text-xs font-medium uppercase tracking-normal md:tracking-wider leading-tight whitespace-nowrap truncate min-w-0">{card.label}</span>
                 <span className="shrink-0">{card.icon}</span>
               </div>
               {summaryLoading ? (
