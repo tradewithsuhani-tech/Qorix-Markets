@@ -199,7 +199,7 @@ function RiskBadge({ score }: { score: string }) {
     High: "bg-red-500/15 text-red-400 border-red-500/25",
   };
   return (
-    <span className={`text-xs px-2.5 py-1 rounded-full border font-semibold ${colors[score] ?? colors["Low"]}`}>
+    <span className={`inline-block text-xs px-2.5 py-1 rounded-full border font-semibold whitespace-nowrap shrink-0 ${colors[score] ?? colors["Low"]}`}>
       {score} Risk
     </span>
   );
