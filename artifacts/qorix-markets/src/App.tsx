@@ -239,12 +239,30 @@ function AppContent() {
   const { showSplash, onSplashDone } = useSplash();
   const [location] = useLocation();
   const isAdminArea = location.startsWith("/admin");
+  // Don't show the floating "High Impact" market alert on public/marketing
+  // pages — it overlaps the hero on mobile and is only meaningful for
+  // logged-in investors.
+  const isPublicArea =
+    location === "/" ||
+    location === "" ||
+    location.startsWith("/login") ||
+    location.startsWith("/register") ||
+    location.startsWith("/signup") ||
+    location.startsWith("/forgot") ||
+    location.startsWith("/reset") ||
+    location.startsWith("/verify") ||
+    location.startsWith("/auth") ||
+    location.startsWith("/legal") ||
+    location.startsWith("/terms") ||
+    location.startsWith("/privacy") ||
+    location.startsWith("/about") ||
+    location.startsWith("/contact");
 
   return (
     <MaintenanceGate>
       {showSplash && <SplashScreen onDone={onSplashDone} />}
       <Router />
-      {!isAdminArea && <HighImpactNotificationBanner />}
+      {!isAdminArea && !isPublicArea && <HighImpactNotificationBanner />}
       {!isAdminArea && <QorixAssistant />}
       {!isAdminArea && <PWAInstallPrompt />}
     </MaintenanceGate>
