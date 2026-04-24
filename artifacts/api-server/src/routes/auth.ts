@@ -5,7 +5,8 @@ import { eq, and, gte, count, sql } from "drizzle-orm";
 import { authMiddleware, signToken, type AuthRequest } from "../middlewares/auth";
 import { RegisterBody, LoginBody } from "@workspace/api-zod";
 import { trackLoginEvent, runFraudChecks } from "../lib/fraud-service";
-import { sendOtp, verifyOtp, getDevOtp } from "../lib/email-service";
+import { sendOtp, verifyOtp, getDevOtp, sendEmail } from "../lib/email-service";
+import { buildBrandedEmailHtml } from "../lib/email-template";
 import { verifyCaptcha } from "../lib/captcha-service";
 import crypto from "crypto";
 import rateLimit from "express-rate-limit";
@@ -209,6 +210,36 @@ router.post("/auth/register", async (req, res) => {
       await sendOtp(newUser.id, email, "verify_email");
     } catch (err) {
       // Non-fatal — user can resend
+    }
+  });
+
+  // Send branded welcome email (fire-and-forget)
+  setImmediate(async () => {
+    try {
+      const firstName = (fullName ?? "").trim().split(/\s+/)[0] || "Trader";
+      const welcomeTitle = `Welcome to Qorix Markets, ${firstName} 👋`;
+      const welcomeMessage =
+        `Aapka account successfully ban gaya hai — welcome aboard!\n\n` +
+        `Qorix Markets ek institutional-grade AI trading platform hai jo aapke liye 24/7 trades execute karta hai — ` +
+        `zero emotion, zero delay, fully risk-managed.\n\n` +
+        `Aapko mil rahe hain:\n` +
+        `• AI-powered automated trading strategies\n` +
+        `• Built-in stop-loss aur smart risk management\n` +
+        `• USDT (TRC20) deposits aur withdrawals — anytime\n` +
+        `• Real-time portfolio dashboard aur live P&L tracking\n` +
+        `• 24/7 dedicated support team\n\n` +
+        `Shuru karne ke liye:\n` +
+        `1. Apna email verify karo (OTP bhej diya hai)\n` +
+        `2. Sirf $10 se fund karo apna trading balance\n` +
+        `3. Strategy choose karo — AI baki sambhal lega\n\n` +
+        `Aapka referral code: ${referralCode}\n` +
+        `Har dost jo join kare aur trade kare — aapko 10% lifetime commission milta hai.\n\n` +
+        `Welcome to the future of automated trading. 🚀`;
+
+      const html = buildBrandedEmailHtml(welcomeTitle, welcomeMessage);
+      await sendEmail(email, welcomeTitle, welcomeMessage, html);
+    } catch (err) {
+      // Non-fatal — welcome email is a nice-to-have
     }
   });
 
