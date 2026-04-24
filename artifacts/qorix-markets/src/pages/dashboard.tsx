@@ -836,10 +836,10 @@ export default function Dashboard() {
             <h1 className="text-2xl md:text-3xl font-bold tracking-tight gradient-text">Overview</h1>
             <p className="text-muted-foreground text-sm mt-0.5">Portfolio performance dashboard</p>
           </div>
-          {/* Pill row — wraps cleanly on mobile so nothing gets clipped at the
-              right edge (iPhone SE was cutting off "Markets Open"). On tablet
-              and up it stays inline. */}
-          <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 sm:flex-nowrap">
+          {/* Pill row — horizontally scrollable on mobile (iOS-style chip row)
+              so rotating-content pills like InsightRotatorPill never clip at
+              the viewport edge. Inline + no-scroll on tablet and up. */}
+          <div className="flex items-center gap-2 sm:gap-2.5 overflow-x-auto sm:overflow-visible flex-nowrap sm:flex-nowrap [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden -mx-4 px-4 sm:mx-0 sm:px-0 pb-1 sm:pb-0">
             {summary?.riskLevel && <RiskBadge score={perf?.riskScore ?? "Low"} />}
             {summary?.vip && (summary.vip.tier as string) !== "none" && (
               <VipBadge tier={summary.vip.tier as "silver" | "gold" | "platinum"} size="sm" />

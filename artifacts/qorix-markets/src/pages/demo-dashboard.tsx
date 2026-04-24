@@ -1157,7 +1157,7 @@ export function DemoDashboardBody({
             <h1 className="text-2xl md:text-3xl font-bold tracking-tight gradient-text">Overview</h1>
             <p className="text-muted-foreground text-sm mt-0.5">Portfolio performance dashboard</p>
           </div>
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2 sm:gap-2.5 overflow-x-auto sm:overflow-visible flex-nowrap [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden -mx-4 px-4 sm:mx-0 sm:px-0 pb-1 sm:pb-0">
             {summary?.riskLevel && <RiskBadge score={perf?.riskScore ?? "Low"} />}
             {/* VIP, Points pill, and Download Report removed from demo dashboard — not relevant in demo. */}
             <MarketsStatusPill />
