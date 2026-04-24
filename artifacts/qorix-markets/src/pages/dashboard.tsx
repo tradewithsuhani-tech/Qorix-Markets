@@ -1238,16 +1238,16 @@ export default function Dashboard() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.07, duration: 0.4 }}
-              className="stat-card p-4 md:p-5 rounded-2xl space-y-2.5 relative overflow-hidden"
+              className="stat-card p-3 md:p-5 rounded-2xl space-y-2 md:space-y-2.5 relative overflow-hidden min-w-0"
               style={{ boxShadow: `0 4px 24px ${card.glow}, 0 1px 0 rgba(255,255,255,0.07) inset` }}
             >
               <div
                 className="absolute top-0 right-0 w-24 h-24 rounded-full opacity-10 pointer-events-none"
                 style={{ background: card.glow, filter: "blur(20px)", transform: "translate(30%,-30%)" }}
               />
-              <div className="flex items-center justify-between text-muted-foreground">
-                <span className="text-xs font-medium uppercase tracking-wider">{card.label}</span>
-                {card.icon}
+              <div className="flex items-center justify-between gap-2 text-muted-foreground min-w-0">
+                <span className="text-[10px] md:text-xs font-medium uppercase tracking-wider truncate min-w-0">{card.label}</span>
+                <span className="shrink-0">{card.icon}</span>
               </div>
               {summaryLoading ? (
                 <Skeleton className="h-8 w-28" />
