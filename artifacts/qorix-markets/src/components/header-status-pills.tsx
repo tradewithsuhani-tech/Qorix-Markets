@@ -43,7 +43,7 @@ export function MarketsStatusPill() {
           }`}
         />
       </span>
-      <span className="uppercase tracking-wider text-[10.5px]">
+      <span className="uppercase tracking-wider text-[10.5px] whitespace-nowrap">
         {open ? "Markets Open" : "Markets Closed"}
       </span>
     </div>
