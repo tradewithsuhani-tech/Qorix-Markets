@@ -1,8 +1,38 @@
-import { defineConfig } from "vite";
+import { defineConfig, type PluginOption } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import path from "path";
+import { writeFileSync, mkdirSync } from "fs";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
+
+// ─── Build version stamp for cache-busting ──────────────────────────────────
+// Each build gets a unique timestamp so the client-side update checker can
+// detect when a new deployment has gone live and prompt the user to refresh.
+const BUILD_VERSION = String(Date.now());
+
+/**
+ * Writes /version.json into the build output (and into public/ during dev so
+ * the runtime checker has something to fetch). Keeps the asset tiny — the
+ * client only needs the version string to compare against the baked-in one.
+ */
+function buildVersionPlugin(): PluginOption {
+  return {
+    name: "qorix-build-version",
+    apply: () => true,
+    buildStart() {
+      const publicDir = path.resolve(import.meta.dirname, "public");
+      try {
+        mkdirSync(publicDir, { recursive: true });
+        writeFileSync(
+          path.resolve(publicDir, "version.json"),
+          JSON.stringify({ version: BUILD_VERSION, builtAt: new Date().toISOString() }),
+        );
+      } catch {
+        // Non-fatal: dev server still works, version check just degrades gracefully.
+      }
+    },
+  };
+}
 
 const rawPort = process.env.PORT;
 
@@ -28,7 +58,14 @@ if (!basePath) {
 
 export default defineConfig({
   base: basePath,
+  define: {
+    // Baked-in build version that the runtime version checker compares
+    // against /version.json on the server. Stable across HMR (set once at
+    // config load) so detection only fires after a true rebuild + redeploy.
+    __APP_VERSION__: JSON.stringify(BUILD_VERSION),
+  },
   plugins: [
+    buildVersionPlugin(),
     react(),
     tailwindcss(),
     runtimeErrorOverlay(),

@@ -4,6 +4,14 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no" />
 
+    <!-- Cache busting: never cache index.html so users always get the latest
+         JS/CSS bundle hashes after a deploy. The bundles themselves are
+         content-hashed by Vite and immutable, so only the entry document
+         needs to be no-cached. -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+
     <!-- Theme & PWA -->
     <meta name="theme-color" content="#0a0f1c" />
     <meta name="application-name" content="Qorix Markets" />
