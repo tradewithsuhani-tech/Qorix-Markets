@@ -514,20 +514,30 @@ function WeeklyLeaderboard({ userId }: { userId: number }) {
         initial={{ opacity: 0, y: -8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, ease: "easeOut" }}
-        className="relative mb-4 overflow-hidden rounded-2xl border border-emerald-400/20 bg-[radial-gradient(120%_140%_at_50%_0%,rgba(16,185,129,0.14),transparent_60%),linear-gradient(to_bottom,rgba(15,23,42,0.95),rgba(2,6,23,0.95))] px-5 py-5 sm:px-6 sm:py-6 text-center"
+        className="relative mb-4 overflow-hidden rounded-2xl border border-emerald-400/20 bg-[radial-gradient(120%_140%_at_50%_0%,rgba(16,185,129,0.14),transparent_60%),linear-gradient(to_bottom,rgba(15,23,42,0.95),rgba(2,6,23,0.95))] px-4 py-3.5 sm:px-6 sm:py-5"
       >
         <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-emerald-300/50 to-transparent" />
 
-        <div className="text-base sm:text-lg font-bold text-white tracking-tight leading-snug">
-          You're just one step away from{" "}
-          <span className="bg-gradient-to-r from-emerald-300 to-green-400 bg-clip-text text-transparent">
-            top investors
-          </span>
+        <div className="flex items-center gap-3">
+          <div className="shrink-0 flex items-center justify-center w-10 h-10 rounded-full bg-emerald-500/15 border border-emerald-400/40">
+            <Zap className="w-4.5 h-4.5 text-emerald-300" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-emerald-300/80">
+              One step away
+            </div>
+            <div className="text-[13px] sm:text-sm font-semibold text-white/85 leading-snug">
+              Join the{" "}
+              <span className="bg-gradient-to-r from-emerald-300 to-green-400 bg-clip-text text-transparent font-bold">
+                top investors
+              </span>
+            </div>
+          </div>
         </div>
 
         <a
           href="/invest"
-          className="group relative mt-4 inline-flex items-center justify-center gap-2 px-7 py-3 rounded-xl font-bold text-sm text-white bg-gradient-to-r from-emerald-500 to-green-500 shadow-[0_8px_24px_-6px_rgba(16,185,129,0.7)] hover:shadow-[0_10px_28px_-4px_rgba(16,185,129,0.95)] hover:-translate-y-0.5 active:translate-y-0 transition-all"
+          className="group relative mt-3 flex w-full items-center justify-center gap-1.5 px-4 py-3 rounded-xl font-bold text-sm text-white bg-gradient-to-r from-emerald-500 to-green-500 shadow-[0_8px_24px_-6px_rgba(16,185,129,0.7)] hover:shadow-[0_10px_28px_-4px_rgba(16,185,129,0.95)] hover:-translate-y-0.5 active:translate-y-0 transition-all"
           data-testid="link-leaderboard-cta-start-trading"
         >
           Start Earning Now
