@@ -3,15 +3,9 @@ import { eq, and, gt } from "drizzle-orm";
 import { logger } from "./logger";
 import crypto from "crypto";
 import nodemailer, { type Transporter } from "nodemailer";
-// Embedded brand logo (bundled via esbuild `binary` loader for .png).
-// Sent as a CID inline attachment so it always renders, even when the
-// email client blocks remote images.
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore — base64 loader returns a base64-encoded string
-import qorixLogoPng from "./qorix-logo.png";
-
-const LOGO_BUFFER: Buffer = Buffer.from(qorixLogoPng as unknown as string, "base64");
-const LOGO_CID = "qorix-logo@qorixmarkets";
+// Hosted brand logo URL — no inline attachment so emails appear "clean"
+// in Gmail (no "One attachment" badge).
+const LOGO_URL = process.env.EMAIL_LOGO_URL || "https://qorixmarkets.com/qorix-logo.png";
 
 // ---------------------------------------------------------------------------
 // SMTP transport (Google Workspace) — lazy-initialized
@@ -81,16 +75,6 @@ export async function sendEmail(
       subject,
       text,
       html,
-      attachments: html
-        ? [
-            {
-              filename: "qorix-logo.png",
-              content: LOGO_BUFFER,
-              cid: LOGO_CID,
-              contentType: "image/png",
-            },
-          ]
-        : undefined,
     });
     logger.info({ to, subject, messageId: info.messageId }, "[email-service] email sent via SMTP");
   } catch (err) {
@@ -128,7 +112,7 @@ function renderOtpHtml(opts: {
       <table width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#0F172A;border-radius:18px;overflow:hidden;border:1px solid #1F2937;">
         <tr>
           <td align="center" style="padding:34px 20px 28px 20px;background:linear-gradient(135deg,#0B0F1A,#1E293B);">
-            <img src="cid:${LOGO_CID}" alt="Qorix Markets" width="220" style="display:block;width:220px;max-width:80%;height:auto;border:0;outline:none;text-decoration:none;margin:0 auto;" />
+            <img src="${LOGO_URL}" alt="Qorix Markets" width="220" style="display:block;width:220px;max-width:80%;height:auto;border:0;outline:none;text-decoration:none;margin:0 auto;" />
           </td>
         </tr>
         <tr>
