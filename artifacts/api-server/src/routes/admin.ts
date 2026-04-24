@@ -12,7 +12,7 @@ import {
   notificationsTable,
 } from "@workspace/db";
 import { loginEventsTable, blockchainDepositsTable } from "@workspace/db/schema";
-import { eq, sum, count, and, desc, sql } from "drizzle-orm";
+import { eq, sum, count, and, or, desc, sql, inArray } from "drizzle-orm";
 import { authMiddleware, adminMiddleware, type AuthRequest } from "../middlewares/auth";
 import { SetDailyProfitBody } from "@workspace/api-zod";
 import { transferProfitToMain } from "../lib/profit-service";
@@ -452,6 +452,106 @@ router.post("/admin/broadcast", async (req: AuthRequest, res) => {
 import { buildBrandedEmailHtml } from "../lib/email-template";
 
 const buildBroadcastHtml = buildBrandedEmailHtml;
+
+// ---------------------------------------------------------------------------
+// POST /admin/kyc-reminder
+// Send a branded KYC reminder email to all users who have signed up but not
+// yet completed KYC verification. By default targets users with kycStatus
+// of "not_submitted" or "rejected" (skipping "pending" users already in
+// review queue, and "approved" users who don't need reminding).
+// Optional body { userId } sends the reminder to one specific user instead.
+// ---------------------------------------------------------------------------
+router.post("/admin/kyc-reminder", async (req: AuthRequest, res) => {
+  const { userId } = (req.body ?? {}) as { userId?: number };
+
+  let targets: { id: number; email: string; fullName: string | null; kycStatus: string }[];
+
+  if (userId) {
+    const rows = await db
+      .select({
+        id: usersTable.id,
+        email: usersTable.email,
+        fullName: usersTable.fullName,
+        kycStatus: usersTable.kycStatus,
+      })
+      .from(usersTable)
+      .where(eq(usersTable.id, userId))
+      .limit(1);
+    if (!rows[0]) {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
+    if (rows[0].kycStatus === "approved") {
+      res.status(400).json({ error: "User already KYC-approved" });
+      return;
+    }
+    targets = rows as any;
+  } else {
+    targets = (await db
+      .select({
+        id: usersTable.id,
+        email: usersTable.email,
+        fullName: usersTable.fullName,
+        kycStatus: usersTable.kycStatus,
+      })
+      .from(usersTable)
+      .where(inArray(usersTable.kycStatus, ["not_submitted", "rejected"]))) as any;
+  }
+
+  const title = "Action Required — Complete Your KYC Verification";
+  let emailsSent = 0;
+  let emailsFailed = 0;
+
+  for (const u of targets) {
+    if (!u.email) continue;
+    const firstName = (u.fullName ?? "").trim().split(/\s+/)[0] || "Trader";
+    const reasonLine =
+      u.kycStatus === "rejected"
+        ? `Your previous KYC submission was not approved. Please review the rejection reason in your dashboard and resubmit your documents.`
+        : `You have created your Qorix Markets account but have not yet submitted your KYC documents.`;
+
+    const message =
+      `Hi ${firstName},\n\n` +
+      `${reasonLine}\n\n` +
+      `KYC verification is mandatory before you can withdraw funds from your account. ` +
+      `Completing it now ensures your account is fully secure and ready for trading.\n\n` +
+      `What you need to submit:\n` +
+      `• A valid government-issued ID (passport, driver's license, or national ID)\n` +
+      `• A clear selfie holding your ID\n` +
+      `• Optional: proof of address for higher tier limits\n\n` +
+      `It takes less than 2 minutes. Verification is usually completed within 24 hours.\n\n` +
+      `Visit https://qorixmarkets.com/kyc to submit your documents now.\n\n` +
+      `If you need any help, our support team is available 24/7.`;
+
+    try {
+      const html = buildBrandedEmailHtml(title, message);
+      await sendEmail(u.email, title, message, html);
+      emailsSent++;
+    } catch (err) {
+      emailsFailed++;
+      errorLogger.error({ err, to: u.email, userId: u.id }, "KYC reminder email failed");
+    }
+  }
+
+  transactionLogger.info(
+    {
+      event: "admin_kyc_reminder",
+      adminId: req.userId,
+      targetUserId: userId ?? null,
+      recipients: targets.length,
+      emailsSent,
+      emailsFailed,
+    },
+    "Admin KYC reminder dispatched",
+  );
+
+  res.json({
+    success: true,
+    recipients: targets.length,
+    emailsSent,
+    emailsFailed,
+  });
+});
 
 
 router.get("/admin/logs", async (_req: AuthRequest, res) => {
