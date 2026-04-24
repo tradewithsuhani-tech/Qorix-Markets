@@ -430,63 +430,80 @@ function WeeklyLeaderboard({ userId }: { userId: number }) {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, delay: 0.05 }}
         className={cn(
-          "relative mb-3 overflow-hidden rounded-2xl border px-4 py-3.5",
+          "relative mb-3 overflow-hidden rounded-2xl border px-3.5 py-3 sm:px-4 sm:py-3.5",
           isActive
             ? "border-blue-400/30 bg-[linear-gradient(to_right,rgba(59,130,246,0.18),rgba(99,102,241,0.06)_60%,transparent)]"
             : "border-rose-400/30 bg-[linear-gradient(to_right,rgba(244,63,94,0.18),rgba(244,63,94,0.04)_60%,transparent)]",
         )}
       >
-        <div className="text-[10.5px] font-semibold uppercase tracking-wider text-white/60">
-          Your Position
+        <div className="flex items-center justify-between gap-2">
+          <div className="text-[10px] sm:text-[10.5px] font-semibold uppercase tracking-wider text-white/60">
+            Your Position
+          </div>
+          <div className={cn(
+            "text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md border",
+            isActive
+              ? "text-blue-300 border-blue-400/30 bg-blue-500/10"
+              : "text-rose-300 border-rose-400/30 bg-rose-500/10",
+          )}>
+            {isActive ? "Active" : "Not ranked"}
+          </div>
         </div>
-        <div className="mt-1.5 grid grid-cols-3 gap-3">
-          <div>
-            <div className="text-[10px] uppercase tracking-wider text-white/45">Rank</div>
+
+        {/* Mobile: 2-col grid (Rank hero left, You vs Top #1 stacked right). Desktop: 3-col */}
+        <div className="mt-2 grid grid-cols-[auto_1fr] sm:grid-cols-3 gap-x-4 sm:gap-3 gap-y-2 items-center sm:items-start">
+          {/* Rank — hero on mobile, column on desktop */}
+          <div className="row-span-2 sm:row-span-1 pr-3 sm:pr-0 border-r sm:border-r-0 border-white/8">
+            <div className="text-[9px] sm:text-[10px] uppercase tracking-wider text-white/45">Rank</div>
             <div className={cn(
-              "text-[19px] font-black tabular-nums leading-none mt-0.5",
+              "text-[22px] sm:text-[19px] font-black tabular-nums leading-none mt-0.5 whitespace-nowrap",
               isActive ? "text-blue-300" : "text-rose-300",
             )}>
-              {data?.myRank ? `#${data.myRank}` : "#—"}
+              {data?.myRank ? `#${data.myRank.toLocaleString()}` : "#—"}
             </div>
           </div>
-          <div>
-            <div className="text-[10px] uppercase tracking-wider text-white/45">Your profit</div>
+
+          {/* You vs Top #1 — stacked rows on mobile, separate columns on desktop */}
+          <div className="flex items-baseline justify-between gap-2 sm:block min-w-0">
+            <div className="text-[9px] sm:text-[10px] uppercase tracking-wider text-white/45 whitespace-nowrap">You</div>
             {myProfit > 0 ? (
               <CountUp
                 value={myProfit}
                 prefix="+$"
-                className="text-[19px] font-black tabular-nums leading-none mt-0.5 text-emerald-400 inline-block"
+                className="text-[15px] sm:text-[19px] font-black tabular-nums leading-none sm:mt-0.5 text-emerald-400 inline-block whitespace-nowrap"
               />
             ) : (
-              <div className="text-[19px] font-black tabular-nums leading-none mt-0.5 text-rose-300">
+              <div className="text-[15px] sm:text-[19px] font-black tabular-nums leading-none sm:mt-0.5 text-rose-300/90">
                 $0
               </div>
             )}
           </div>
-          <div>
-            <div className="text-[10px] uppercase tracking-wider text-yellow-300/70">Top #1 profit</div>
+
+          <div className="flex items-baseline justify-between gap-2 sm:block min-w-0">
+            <div className="text-[9px] sm:text-[10px] uppercase tracking-wider text-yellow-300/80 whitespace-nowrap">Top #1</div>
             {top1Profit > 0 ? (
               <CountUp
                 value={top1Profit}
                 prefix="$"
-                className="text-[19px] font-black tabular-nums leading-none mt-0.5 bg-gradient-to-r from-yellow-300 to-amber-400 bg-clip-text text-transparent inline-block"
+                className="text-[15px] sm:text-[19px] font-black tabular-nums leading-none sm:mt-0.5 bg-gradient-to-r from-yellow-300 to-amber-400 bg-clip-text text-transparent inline-block whitespace-nowrap"
               />
             ) : (
-              <div className="text-[19px] font-black tabular-nums leading-none mt-0.5 text-white/40">
+              <div className="text-[15px] sm:text-[19px] font-black tabular-nums leading-none sm:mt-0.5 text-white/40">
                 —
               </div>
             )}
           </div>
         </div>
+
         {!isActive && missingAmount > 0 && (
           <div className="mt-2.5 pt-2.5 border-t border-rose-400/20 flex items-center gap-2">
             <Flame className="w-3.5 h-3.5 text-rose-400 shrink-0" />
-            <div className="text-[12.5px] font-bold text-rose-200 leading-tight">
+            <div className="text-[12px] sm:text-[12.5px] font-bold text-rose-200 leading-tight min-w-0">
               You're missing{" "}
-              <span className="text-rose-300">
+              <span className="text-rose-300 whitespace-nowrap">
                 ${missingAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>{" "}
-              <span className="text-rose-200/80 font-semibold">opportunity this week</span>
+              <span className="text-rose-200/80 font-semibold">this week</span>
             </div>
           </div>
         )}
