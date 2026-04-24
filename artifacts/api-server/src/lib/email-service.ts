@@ -1,6 +1,7 @@
 import { db, emailOtpsTable, usersTable } from "@workspace/db";
 import { eq, and, gt } from "drizzle-orm";
 import { logger } from "./logger";
+import { buildBrandedEmailHtml } from "./email-template";
 import crypto from "crypto";
 import nodemailer, { type Transporter } from "nodemailer";
 // Hosted brand logo URL — no inline attachment so emails appear "clean"
@@ -206,6 +207,33 @@ export async function sendOtp(
   logger.info({ userId, purpose, otp: otpForLog }, "[email-service] OTP created");
 
   return { otp, expiresAt };
+}
+
+// ---------------------------------------------------------------------------
+// Helper: send a branded transactional email (deposit/withdrawal/etc).
+// Looks up the user's email by id and sends in the background. Safe to call
+// fire-and-forget from request handlers — never blocks and never throws.
+// ---------------------------------------------------------------------------
+export function sendTxnEmailToUser(
+  userId: number,
+  title: string,
+  message: string,
+): void {
+  setImmediate(async () => {
+    try {
+      const rows = await db
+        .select({ email: usersTable.email })
+        .from(usersTable)
+        .where(eq(usersTable.id, userId))
+        .limit(1);
+      const email = rows[0]?.email;
+      if (!email) return;
+      const html = buildBrandedEmailHtml(title, message);
+      await sendEmail(email, title, message, html);
+    } catch (err) {
+      logger.warn({ err: (err as Error).message, userId, title }, "[email-service] txn email failed");
+    }
+  });
 }
 
 // ---------------------------------------------------------------------------
