@@ -609,37 +609,39 @@ export default function Landing() {
             </FadeIn>
 
             <FadeIn delay={0.3}>
-              <div className="flex flex-wrap items-center gap-3 mb-8">
+              <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-3 mb-8">
                 <button
                   onClick={() => navigate("/register")}
-                  className="group inline-flex items-center gap-2 px-7 py-4 rounded-2xl text-base font-bold text-white bg-gradient-to-r from-blue-500 to-violet-500 hover:from-blue-400 hover:to-violet-400 shadow-xl shadow-blue-500/30 hover:shadow-blue-500/50 transition-all"
+                  className="group relative inline-flex items-center justify-center gap-2 px-7 py-4 rounded-2xl text-base font-bold text-white bg-gradient-to-r from-blue-500 via-indigo-500 to-violet-500 hover:from-blue-400 hover:via-indigo-400 hover:to-violet-400 shadow-[0_10px_30px_-10px_rgba(99,102,241,0.7)] hover:shadow-[0_14px_40px_-8px_rgba(99,102,241,0.85)] transition-all overflow-hidden"
                 >
-                  Start with $10
-                  <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
+                  <span className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/20 to-white/0 -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
+                  <span className="relative">Start with $10</span>
+                  <ArrowRight size={18} className="relative group-hover:translate-x-1 transition-transform" />
                 </button>
                 <button
                   onClick={() => {
                     document.getElementById("how-it-works")?.scrollIntoView({ behavior: "smooth" });
                   }}
-                  className="inline-flex items-center gap-2 px-6 py-4 rounded-2xl text-base font-semibold border border-white/15 hover:border-white/30 hover:bg-white/5 transition-all"
+                  className="inline-flex items-center justify-center gap-2 px-6 py-4 rounded-2xl text-base font-semibold border border-white/15 hover:border-white/30 bg-white/[0.02] hover:bg-white/[0.06] backdrop-blur-sm transition-all"
                 >
-                  <PlayCircle size={18} />
+                  <PlayCircle size={18} className="text-blue-300" />
                   See how it works
                 </button>
               </div>
             </FadeIn>
 
             <FadeIn delay={0.4}>
-              <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-slate-400">
+              {/* Trust pills — premium card on mobile, inline on desktop */}
+              <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center sm:gap-x-5 sm:gap-y-2 p-3 sm:p-0 rounded-2xl sm:rounded-none border border-white/[0.06] sm:border-0 bg-white/[0.02] sm:bg-transparent">
                 {[
                   "No lock-in",
                   "Withdraw anytime",
                   "USDT (TRC20)",
                   "Drawdown protected",
                 ].map((t) => (
-                  <div key={t} className="flex items-center gap-1.5">
-                    <CheckCircle2 size={13} className="text-emerald-400" />
-                    {t}
+                  <div key={t} className="flex items-center gap-1.5 text-[11px] sm:text-xs text-slate-300 sm:text-slate-400">
+                    <CheckCircle2 size={13} className="text-emerald-400 shrink-0" />
+                    <span className="truncate">{t}</span>
                   </div>
                 ))}
               </div>
