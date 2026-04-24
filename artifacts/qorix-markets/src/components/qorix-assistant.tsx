@@ -626,7 +626,7 @@ export function QorixAssistant({ guestMode = false }: { guestMode?: boolean } = 
       <motion.button
         onClick={() => setIsOpen(true)}
         className={cn(
-          "fixed bottom-28 right-3 md:bottom-6 md:right-6 z-40 w-11 h-11 md:w-14 md:h-14 rounded-full shadow-2xl",
+          "fixed bottom-24 right-2 md:bottom-6 md:right-6 z-40 w-10 h-10 md:w-14 md:h-14 rounded-full shadow-2xl",
           "bg-gradient-to-br from-blue-600 to-blue-700",
           "flex items-center justify-center",
           "hover:scale-105 active:scale-95 transition-transform",

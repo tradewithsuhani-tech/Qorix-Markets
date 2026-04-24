@@ -836,7 +836,10 @@ export default function Dashboard() {
             <h1 className="text-2xl md:text-3xl font-bold tracking-tight gradient-text">Overview</h1>
             <p className="text-muted-foreground text-sm mt-0.5">Portfolio performance dashboard</p>
           </div>
-          <div className="flex items-center gap-2.5">
+          {/* Pill row — wraps cleanly on mobile so nothing gets clipped at the
+              right edge (iPhone SE was cutting off "Markets Open"). On tablet
+              and up it stays inline. */}
+          <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 sm:flex-nowrap">
             {summary?.riskLevel && <RiskBadge score={perf?.riskScore ?? "Low"} />}
             {summary?.vip && (summary.vip.tier as string) !== "none" && (
               <VipBadge tier={summary.vip.tier as "silver" | "gold" | "platinum"} size="sm" />
@@ -846,10 +849,17 @@ export default function Dashboard() {
             <button
               onClick={handleDownloadReport}
               disabled={isGeneratingReport || summaryLoading || perfLoading}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all duration-150 bg-blue-500/10 border-blue-500/25 text-blue-400 hover:bg-blue-500/20 hover:border-blue-500/40 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all duration-150 bg-blue-500/10 border-blue-500/25 text-blue-400 hover:bg-blue-500/20 hover:border-blue-500/40 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
             >
               <FileDown style={{ width: 12, height: 12 }} />
-              {isGeneratingReport ? "Generating…" : "Download Report"}
+              {isGeneratingReport
+                ? "Generating…"
+                : (
+                  <>
+                    <span className="sm:hidden">Report</span>
+                    <span className="hidden sm:inline">Download Report</span>
+                  </>
+                )}
             </button>
             <MarketsStatusPill />
             <InsightRotatorPill
@@ -1222,9 +1232,9 @@ export default function Dashboard() {
               {summaryLoading ? (
                 <Skeleton className="h-8 w-28" />
               ) : (
-                <div className="font-bold leading-tight">{card.value}</div>
+                <div className="font-bold leading-tight min-w-0 max-w-full overflow-hidden">{card.value}</div>
               )}
-              {card.sub && !summaryLoading && <div>{card.sub}</div>}
+              {card.sub && !summaryLoading && <div className="min-w-0 max-w-full overflow-hidden">{card.sub}</div>}
             </motion.div>
           ))}
         </div>
