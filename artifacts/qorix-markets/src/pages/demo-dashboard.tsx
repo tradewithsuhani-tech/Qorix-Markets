@@ -1436,20 +1436,39 @@ export function DemoDashboardBody({
                 bg: "bg-violet-500/5 border-violet-500/15",
               },
           ]).map(({ icon: Icon, label, value, decimals, suffix, sub, color, bg }) => (
-            <div key={label} className={`glass-card rounded-xl px-4 py-3 border ${bg} flex items-center gap-3`}>
-              <div className={`shrink-0 w-8 h-8 rounded-lg bg-white/5 border border-white/8 flex items-center justify-center`}>
-                <Icon style={{ width: 14, height: 14 }} className={color} />
-              </div>
-              <div className="min-w-0">
-                <div className={`text-base font-bold ${color} tabular-nums leading-tight`}>
-                  {marketIndicators == null ? (
-                    "—"
-                  ) : (
-                    <AnimatedCounter value={value} decimals={decimals} suffix={suffix} />
-                  )}
-                  {sub ? <span className="text-xs font-normal text-muted-foreground ml-1">{sub}</span> : null}
+            <div
+              key={label}
+              className={`glass-card rounded-xl border ${bg} px-3 py-2.5 sm:px-4 sm:py-3 flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-3 min-w-0`}
+            >
+              {/* Icon row: icon + label on mobile (saves vertical space) */}
+              <div className="flex items-center gap-2 sm:gap-0">
+                <div className="shrink-0 w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-white/5 border border-white/8 flex items-center justify-center">
+                  <Icon style={{ width: 13, height: 13 }} className={color} />
                 </div>
-                <div className="text-[11px] text-muted-foreground truncate">{label}</div>
+                <div className="sm:hidden text-[10px] uppercase tracking-wider text-muted-foreground truncate flex-1 min-w-0">
+                  {label}
+                </div>
+              </div>
+              {/* Value + sub */}
+              <div className="min-w-0 flex-1">
+                <div className={`flex items-baseline gap-1 ${color} tabular-nums leading-tight min-w-0`}>
+                  <span className="text-base font-bold truncate">
+                    {marketIndicators == null ? (
+                      "—"
+                    ) : (
+                      <AnimatedCounter value={value} decimals={decimals} suffix={suffix} />
+                    )}
+                  </span>
+                  {sub ? (
+                    <span className="text-[10px] sm:text-xs font-normal text-muted-foreground truncate">
+                      {sub}
+                    </span>
+                  ) : null}
+                </div>
+                {/* Label below value on desktop only */}
+                <div className="hidden sm:block text-[11px] text-muted-foreground truncate mt-0.5">
+                  {label}
+                </div>
               </div>
             </div>
           ))}
