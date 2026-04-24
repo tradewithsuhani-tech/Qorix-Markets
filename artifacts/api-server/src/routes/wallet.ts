@@ -12,7 +12,7 @@ import {
   postJournalEntry,
   journalForTransaction,
 } from "../lib/ledger-service";
-import { verifyOtp } from "../lib/email-service";
+import { verifyOtp, sendTxnEmailToUser } from "../lib/email-service";
 
 const router = Router();
 router.use(authMiddleware);
@@ -110,6 +110,17 @@ router.post("/wallet/deposit", async (req: AuthRequest, res) => {
     "deposit",
     "Deposit Confirmed",
     `$${amount.toFixed(2)} USDT has been credited to your main balance.`,
+  );
+
+  sendTxnEmailToUser(
+    req.userId!,
+    "Deposit Confirmed",
+    `Great news — your USDT deposit has been confirmed and credited to your account.\n\n` +
+      `Amount: $${amount.toFixed(2)} USDT\n` +
+      `Credited to: Main Balance\n` +
+      `New Main Balance: $${newMain.toFixed(2)} USDT\n\n` +
+      `You can now transfer funds to your Trading Balance and start earning with our AI strategies.\n\n` +
+      `If you did not initiate this deposit, please contact support immediately.`,
   );
 
   emitDepositEvent({ userId: req.userId!, amount, newMainBalance: newMain }).catch((err) => {
