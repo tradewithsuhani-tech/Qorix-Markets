@@ -1803,15 +1803,23 @@ export default function Dashboard() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.58, duration: 0.4 }}
         >
-          <div className="flex items-baseline justify-between gap-2 mb-1">
-            <h2 className="text-base font-semibold">Fund Transparency</h2>
-            <span className="text-[10px] text-muted-foreground border border-white/10 px-2 py-0.5 rounded-full">Public</span>
-          </div>
-          <div className="mb-3 flex items-center gap-2">
-            <span className="text-xl sm:text-[22px] font-extrabold bg-gradient-to-r from-emerald-300 to-green-400 bg-clip-text text-transparent">
-              $1M+ Managed Capital
-            </span>
-            <div className="h-px flex-1 bg-gradient-to-r from-emerald-400/30 to-transparent" />
+          <div className="mb-3 rounded-2xl border border-emerald-400/15 bg-[radial-gradient(120%_140%_at_0%_0%,rgba(16,185,129,0.10),transparent_60%),linear-gradient(to_bottom,rgba(15,23,42,0.7),rgba(2,6,23,0.7))] px-3.5 py-3 sm:px-4 sm:py-3.5">
+            <div className="flex items-center justify-between gap-2 mb-1.5">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-300 shrink-0" />
+                <h2 className="text-[13px] sm:text-sm font-semibold text-white truncate">Fund Transparency</h2>
+              </div>
+              <span className="inline-flex items-center gap-1 text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-emerald-300 bg-emerald-500/10 border border-emerald-400/30 px-1.5 py-[2px] rounded-full shrink-0">
+                <span className="w-1 h-1 rounded-full bg-emerald-400 animate-pulse" />
+                Public
+              </span>
+            </div>
+            <div className="flex items-baseline gap-2">
+              <span className="text-[20px] sm:text-[22px] font-extrabold leading-none bg-gradient-to-r from-emerald-300 to-green-400 bg-clip-text text-transparent tabular-nums whitespace-nowrap">
+                $1M+
+              </span>
+              <span className="text-[11px] sm:text-xs font-medium text-slate-400 truncate">Managed Capital · Live</span>
+            </div>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4">
             {fundCards.map((card, i) => (
