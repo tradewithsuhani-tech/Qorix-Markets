@@ -219,22 +219,22 @@ router.post("/auth/register", async (req, res) => {
       const firstName = (fullName ?? "").trim().split(/\s+/)[0] || "Trader";
       const welcomeTitle = `Welcome to Qorix Markets, ${firstName} 👋`;
       const welcomeMessage =
-        `Aapka account successfully ban gaya hai — welcome aboard!\n\n` +
-        `Qorix Markets ek institutional-grade AI trading platform hai jo aapke liye 24/7 trades execute karta hai — ` +
+        `Your account has been successfully created — welcome aboard!\n\n` +
+        `Qorix Markets is an institutional-grade AI trading platform that executes trades for you 24/7 — ` +
         `zero emotion, zero delay, fully risk-managed.\n\n` +
-        `Aapko mil rahe hain:\n` +
+        `What you get:\n` +
         `• AI-powered automated trading strategies\n` +
-        `• Built-in stop-loss aur smart risk management\n` +
-        `• USDT (TRC20) deposits aur withdrawals — anytime\n` +
-        `• Real-time portfolio dashboard aur live P&L tracking\n` +
+        `• Built-in stop-loss and smart risk management\n` +
+        `• USDT (TRC20) deposits and withdrawals — anytime\n` +
+        `• Real-time portfolio dashboard and live P&L tracking\n` +
         `• 24/7 dedicated support team\n\n` +
-        `Shuru karne ke liye:\n` +
-        `1. Apna email verify karo (OTP bhej diya hai)\n` +
-        `2. Sirf $10 se fund karo apna trading balance\n` +
-        `3. Strategy choose karo — AI baki sambhal lega\n\n` +
-        `Aapka referral code: ${referralCode}\n` +
-        `Har dost jo join kare aur trade kare — aapko 10% lifetime commission milta hai.\n\n` +
-        `Welcome to the future of automated trading. 🚀`;
+        `To get started:\n` +
+        `1. Verify your email (we just sent you an OTP)\n` +
+        `2. Fund your trading balance with as little as $10\n` +
+        `3. Choose a strategy — the AI handles the rest\n\n` +
+        `Your referral code: ${referralCode}\n` +
+        `Earn 10% lifetime commission on every friend who joins and trades.\n\n` +
+        `Welcome to the future of automated trading.`;
 
       const html = buildBrandedEmailHtml(welcomeTitle, welcomeMessage);
       await sendEmail(email, welcomeTitle, welcomeMessage, html);
