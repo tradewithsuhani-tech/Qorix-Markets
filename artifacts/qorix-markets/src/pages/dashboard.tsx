@@ -710,7 +710,7 @@ export default function Dashboard() {
         ? <TrendingUp style={{ width: 16, height: 16 }} className="text-green-400" />
         : <TrendingDown style={{ width: 16, height: 16 }} className="text-red-400" />,
       value: (
-        <span className={`text-2xl md:text-3xl font-bold ${isPositive ? "profit-text" : "loss-text"}`}>
+        <span className={`inline-flex items-end text-2xl md:text-3xl font-bold whitespace-nowrap max-w-full ${isPositive ? "profit-text" : "loss-text"}`}>
           {isPositive ? "+" : ""}<AnimatedCounter value={Math.abs(dailyPL)} prefix="$" />
         </span>
       ),
