@@ -1155,7 +1155,7 @@ export default function Dashboard() {
                   <Icon style={{ width: 13, height: 13 }} className={color} />
                 </div>
                 {/* Label inline with icon on mobile (saves vertical space) */}
-                <div className="sm:hidden text-[10px] uppercase tracking-wider text-muted-foreground truncate flex-1 min-w-0">
+                <div className="sm:hidden text-[9px] uppercase tracking-normal text-muted-foreground whitespace-nowrap truncate flex-1 min-w-0">
                   {label}
                 </div>
               </div>

@@ -1445,7 +1445,7 @@ export function DemoDashboardBody({
                 <div className="shrink-0 w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-white/5 border border-white/8 flex items-center justify-center">
                   <Icon style={{ width: 13, height: 13 }} className={color} />
                 </div>
-                <div className="sm:hidden text-[10px] uppercase tracking-wider text-muted-foreground truncate flex-1 min-w-0">
+                <div className="sm:hidden text-[9px] uppercase tracking-normal text-muted-foreground whitespace-nowrap truncate flex-1 min-w-0">
                   {label}
                 </div>
               </div>
