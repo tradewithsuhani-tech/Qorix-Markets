@@ -53,6 +53,7 @@ import TradeActivityPage from "@/pages/trade-activity";
 import VerifyPage from "@/pages/verify";
 import MarketInsightsPage from "@/pages/market-insights";
 import { HighImpactNotificationBanner } from "@/components/economic-news-widget";
+import { UpdateBanner } from "@/components/update-banner";
 import TermsPage from "@/pages/legal/terms";
 import PrivacyPage from "@/pages/legal/privacy";
 import RiskDisclosurePage from "@/pages/legal/risk-disclosure";
@@ -265,6 +266,7 @@ function AppContent() {
       {!isAdminArea && !isPublicArea && <HighImpactNotificationBanner />}
       {!isAdminArea && <QorixAssistant />}
       {!isAdminArea && <PWAInstallPrompt />}
+      <UpdateBanner />
     </MaintenanceGate>
   );
 }
