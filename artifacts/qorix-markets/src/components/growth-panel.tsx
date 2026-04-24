@@ -399,26 +399,25 @@ function WeeklyLeaderboard({ userId }: { userId: number }) {
           initial={{ opacity: 0, y: -6 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4 }}
-          className="relative mb-3 overflow-hidden rounded-2xl border border-emerald-400/25 bg-[radial-gradient(120%_140%_at_50%_0%,rgba(16,185,129,0.18),transparent_60%),linear-gradient(to_bottom,rgba(6,78,59,0.45),rgba(2,6,23,0.85))] px-4 py-3 sm:px-5 sm:py-4"
+          className="relative mb-3 overflow-hidden rounded-2xl border border-emerald-400/25 bg-[radial-gradient(120%_140%_at_50%_0%,rgba(16,185,129,0.18),transparent_60%),linear-gradient(to_bottom,rgba(6,78,59,0.45),rgba(2,6,23,0.85))] px-3.5 py-3 sm:px-5 sm:py-4"
         >
           <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-emerald-300/60 to-transparent" />
           <div className="flex items-center gap-3">
-            <div className="shrink-0 flex items-center justify-center w-9 h-9 rounded-full bg-emerald-500/15 border border-emerald-400/40">
+            <div className="shrink-0 flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-emerald-500/15 border border-emerald-400/40">
               <Flame className="w-4.5 h-4.5 text-emerald-300" />
             </div>
             <div className="min-w-0 flex-1">
-              <div className="text-[10.5px] font-semibold uppercase tracking-wider text-emerald-300/80">
-                This week so far
+              <div className="flex items-center gap-1.5 text-[9.5px] sm:text-[10.5px] font-semibold uppercase tracking-wider text-emerald-300/80">
+                <span className="whitespace-nowrap">This week</span>
+                <span className="text-emerald-300/40">·</span>
+                <span className="text-white/55 normal-case font-medium tracking-normal truncate">Top investors made</span>
               </div>
-              <div className="text-[15px] sm:text-[16px] font-extrabold text-white leading-tight">
-                Top investors made{" "}
-                <CountUp
-                  value={topPool}
-                  prefix="$"
-                  className="bg-gradient-to-r from-emerald-300 to-green-400 bg-clip-text text-transparent"
-                />
-                <span className="bg-gradient-to-r from-emerald-300 to-green-400 bg-clip-text text-transparent">+</span>
-                <span className="hidden sm:inline text-white/70 font-semibold"> · join them today</span>
+              <div className="mt-0.5 flex items-baseline gap-2 leading-tight">
+                <span className="text-[22px] sm:text-[24px] font-extrabold whitespace-nowrap bg-gradient-to-r from-emerald-300 to-green-400 bg-clip-text text-transparent tabular-nums">
+                  <CountUp value={topPool} prefix="$" />
+                  <span>+</span>
+                </span>
+                <span className="hidden sm:inline text-xs text-white/60 font-semibold whitespace-nowrap">join them today</span>
               </div>
             </div>
           </div>
