@@ -1743,12 +1743,12 @@ export function DemoDashboardBody({
             className="glass-card p-5 rounded-2xl flex flex-col"
             style={{ minHeight: 240 }}
           >
-            <div className="flex items-center justify-between mb-4 gap-2">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 gap-2">
               <div>
                 <h3 className="font-semibold">Daily P&L</h3>
                 <p className="text-xs text-muted-foreground">Per-day P&L history</p>
               </div>
-              <div className="-mx-1 overflow-x-auto scrollbar-hide sm:mx-0 sm:overflow-visible">
+              <div className="overflow-x-auto scrollbar-hide -mx-1 px-1 sm:mx-0 sm:px-0 sm:overflow-visible">
                 <PeriodFilter
                   options={DAYS_PERIOD_OPTIONS}
                   selected={pnlDays}

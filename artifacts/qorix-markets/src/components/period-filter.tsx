@@ -20,7 +20,7 @@ export function PeriodFilter<V extends string | number>({
     <div
       role="radiogroup"
       aria-label={ariaLabel}
-      className={`flex items-center gap-1 bg-white/[0.04] border border-white/8 rounded-xl p-1 ${className}`}
+      className={`inline-flex items-center gap-0.5 sm:gap-1 bg-white/[0.04] border border-white/8 rounded-xl p-1 ${className}`}
     >
       {options.map((opt) => {
         const active = selected === opt.value;
@@ -31,7 +31,7 @@ export function PeriodFilter<V extends string | number>({
             role="radio"
             aria-checked={active}
             onClick={() => onChange(opt.value)}
-            className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition-all duration-200 ${
+            className={`text-[11px] sm:text-xs px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg font-semibold transition-all duration-200 whitespace-nowrap ${
               active
                 ? "bg-blue-500/25 text-blue-400 border border-blue-500/40 shadow-[0_0_8px_rgba(59,130,246,0.15)]"
                 : "text-muted-foreground hover:text-white border border-transparent"
