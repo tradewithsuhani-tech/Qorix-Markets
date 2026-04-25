@@ -35,15 +35,17 @@ const AUTO_NOTES_PREFIX = `${AUTO_TAG} planned slot`;
 const WINDOW_START_HHMM = { h: 12, m: 30 };
 const WINDOW_END_HHMM = { h: 20, m: 30 };
 
-const TOTAL_SLOTS = 25;
-const MIN_GAP_MIN = 15;
-const MAX_GAP_MIN = 25;
+const TOTAL_SLOTS = 100;
+const MIN_GAP_MIN = 4;
+const MAX_GAP_MIN = 6;
 const DAILY_TARGET_MIN_PCT = 0.30;
 const DAILY_TARGET_MAX_PCT = 0.50;
 const LOSER_PCT_MIN = 0.05;
 const LOSER_PCT_MAX = 0.15;
-// Weighted picker: ~67% chance of 1 loser, ~33% chance of 2 → matches user spec "1-2 SL hit per ~10 trades"
-const LOSER_COUNT_OPTIONS: number[] = [1, 1, 2];
+// Loser ratio target: ~5% of slots/day (computed dynamically — see loserCount
+// derivation in `generateDailyPlan`). This constant is unused but kept as a
+// sentinel for future picker tweaks.
+const LOSER_COUNT_OPTIONS: number[] = [4, 5, 6];
 
 type PairCfg = {
   code: string;
@@ -220,7 +222,7 @@ function generateDailyPlan(dayKey: string): DailyPlan {
   const effectiveDurationMin = Math.max(0, (endMs - effectiveStart) / 60_000);
 
   // How many slots fit in the remaining window with at least MIN_GAP_MIN spacing?
-  // For full window (480 min, MIN_GAP=15): floor(480/15)+1 = 33 → cap to 25.
+  // For full window (480 min, MIN_GAP=4): floor(480/4)+1 = 121 → cap to 100.
   // For partial window (e.g. 180 min): floor(180/15)+1 = 13.
   let slotCount = TOTAL_SLOTS;
   if (effectiveDurationMin <= 0) {
@@ -247,7 +249,11 @@ function generateDailyPlan(dayKey: string): DailyPlan {
   }
 
   // Pick loser count (skip if very few slots)
-  const loserCount = slotCount >= 5 ? pick(LOSER_COUNT_OPTIONS) : 0;
+  // Loser count = ~5% of slot count with ±1 jitter, so a 25-slot day has 1-2
+  // losers and a 100-slot day has 5-6 losers (~95% win rate either way).
+  const loserCount = slotCount >= 5
+    ? Math.max(1, Math.min(slotCount - 1, Math.round(slotCount * 0.05) + Math.floor(Math.random() * 2)))
+    : 0;
   const loserIdxSet = new Set<number>();
   while (loserIdxSet.size < loserCount && slotCount > 1) {
     // Avoid first slot (let day start with a win)

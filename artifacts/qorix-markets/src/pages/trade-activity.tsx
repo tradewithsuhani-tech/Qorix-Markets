@@ -292,9 +292,12 @@ export default function TradeActivityPage() {
         const entry = Number(t.entryPrice) || 0;
         const exit = Number(t.realizedExitPrice) || 0;
         const priceDiff = Math.abs(exit - entry);
-        const lot = seededLot(t.id);
-        const sign = pct >= 0 ? 1 : -1;
-        const usd = sign * lot * priceDiff;
+        // Round lot first, then derive USD from the rounded value so the
+        // displayed equation `lot × |exit-entry| = profit` always ties out
+        // exactly on screen (no precision drift).
+        const displayLot = +seededLot(t.id).toFixed(2);
+        const sign = pct > 0 ? 1 : pct < 0 ? -1 : 0;
+        const usd = sign * displayLot * priceDiff;
         return {
           id: t.id,
           symbol: t.pair,
@@ -304,7 +307,7 @@ export default function TradeActivityPage() {
           profit: +usd.toFixed(2),
           profitPercent: pct,
           executedAt: t.closedAt,
-          lot: +lot.toFixed(2),
+          lot: displayLot,
         };
       });
 
