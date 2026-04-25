@@ -70,10 +70,10 @@ function PointsPill() {
       type="button"
       onClick={() => navigate("/tasks")}
       title="Earn more points by completing tasks"
-      className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border bg-amber-500/10 border-amber-500/25 text-amber-300 hover:bg-amber-500/20 hover:border-amber-500/40 transition-all"
+      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border bg-amber-500/10 border-amber-500/25 text-amber-300 hover:bg-amber-500/20 hover:border-amber-500/40 transition-all whitespace-nowrap shrink-0 leading-none"
     >
-      <Award style={{ width: 13, height: 13 }} className="text-amber-400" />
-      <span>{balance.toLocaleString()} pts</span>
+      <Award style={{ width: 13, height: 13 }} className="text-amber-400 shrink-0" />
+      <span className="whitespace-nowrap tabular-nums">{balance.toLocaleString()}&nbsp;pts</span>
     </button>
   );
 }
