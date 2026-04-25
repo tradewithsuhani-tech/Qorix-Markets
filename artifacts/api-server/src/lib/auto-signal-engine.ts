@@ -67,19 +67,18 @@ const PAIR_BY_CODE: Record<string, PairCfg> = PAIRS.reduce((acc, p) => {
 }, {} as Record<string, PairCfg>);
 
 /**
- * Market-hours gate (UTC).
- * - Crypto: 24/7
- * - Forex / Gold / Oil: closed Fri 22:00 UTC → Sun 22:00 UTC (weekend),
- *   plus daily CME maintenance break 21:00–22:00 UTC (Mon–Thu).
+ * Market-hours gate (UTC). All pairs (forex, metals, oil, crypto) follow the
+ * same broker-style schedule: closed Fri 22:00 UTC → Sun 22:00 UTC (full
+ * weekend) plus daily CME maintenance break 21:00–22:00 UTC on Mon–Thu.
+ * Saturday & Sunday (until 22:00 UTC) → no trades fire for any pair.
  */
-function isMarketOpen(pairCode: string, atTime: Date): boolean {
-  if (pairCode === "BTCUSD") return true;
+function isMarketOpen(_pairCode: string, atTime: Date): boolean {
   const day = atTime.getUTCDay();   // 0=Sun … 6=Sat
   const hour = atTime.getUTCHours();
-  if (day === 6) return false;
-  if (day === 5 && hour >= 22) return false;
-  if (day === 0 && hour < 22) return false;
-  if (day >= 1 && day <= 4 && hour === 21) return false;
+  if (day === 6) return false;                       // Saturday: closed all day
+  if (day === 5 && hour >= 22) return false;         // Friday: closed after 22 UTC
+  if (day === 0 && hour < 22) return false;          // Sunday: closed until 22 UTC
+  if (day >= 1 && day <= 4 && hour === 21) return false; // Mon-Thu maintenance
   return true;
 }
 
@@ -237,10 +236,19 @@ function randomBetween(min: number, max: number): number {
   return min + Math.random() * (max - min);
 }
 
-function pickOpenPairAt(d: Date): PairCfg {
+function pickOpenPairAt(d: Date): PairCfg | null {
   const open = PAIRS.filter((p) => isMarketOpen(p.code, d));
-  if (open.length === 0) return PAIR_BY_CODE.BTCUSD!;
+  if (open.length === 0) return null;
   return pick(open);
+}
+
+/** Quick check: does the day-window have ANY open trading time? */
+function windowHasOpenTime(startMs: number, endMs: number): boolean {
+  for (let t = startMs; t <= endMs; t += 5 * 60_000) {
+    const d = new Date(t);
+    if (PAIRS.some((p) => isMarketOpen(p.code, d))) return true;
+  }
+  return false;
 }
 
 /**
@@ -261,6 +269,12 @@ function generateDailyPlan(dayKey: string): DailyPlan {
     slotCount = 0;
   } else if (effectiveDurationMin < (TOTAL_SLOTS - 1) * MIN_GAP_MIN) {
     slotCount = Math.max(1, Math.floor(effectiveDurationMin / MIN_GAP_MIN) + 1);
+  }
+
+  // Weekend / fully-closed-day guard: if no pair is ever open in this window,
+  // don't schedule any trades for the day.
+  if (slotCount > 0 && !windowHasOpenTime(effectiveStart, endMs)) {
+    slotCount = 0;
   }
 
   // Random gaps in [MIN_GAP_MIN, MAX_GAP_MIN], scaled to fit
@@ -331,7 +345,7 @@ function generateDailyPlan(dayKey: string): DailyPlan {
   for (let i = 0; i < slotCount; i++) {
     const scheduledAtMs = scheduledTimes[i]!;
     const slotDate = new Date(scheduledAtMs);
-    const pair = pickOpenPairAt(slotDate);
+    const pair = pickOpenPairAt(slotDate) ?? PAIRS[0]!; // safety: shouldn't trigger after windowHasOpenTime guard
     const direction: "BUY" | "SELL" = Math.random() < 0.5 ? "BUY" : "SELL";
     const isLoser = loserIdxSet.has(i);
     const pct = isLoser ? -loserPcts[loserCursor++]! : winnerPcts[winnerCursor++]!;
@@ -479,16 +493,26 @@ export async function tickAutoSignalEngine(opts: { force?: boolean } = {}): Prom
     return { ok: false, reason: pending.length === 0 ? "all_slots_done" : "no_due_slot" };
   }
 
-  // Re-check market hours; if planned pair is closed at execution time, fall back to BTC.
-  let pairCode = slot.pair;
+  // Re-check market hours; if planned pair (and any pair) is closed at
+  // execution time, mark this slot failed and skip — engine sirf market hours
+  // me trades fire karta hai (no BTC weekend fallback anymore).
+  const pairCode = slot.pair;
   if (!isMarketOpen(pairCode, new Date(now))) {
-    logger.warn({ slotIndex: slot.index, originalPair: pairCode }, "[auto-engine] planned pair market closed — using BTCUSD");
-    pairCode = "BTCUSD";
+    const fallback = PAIRS.find((p) => isMarketOpen(p.code, new Date(now)));
+    if (!fallback) {
+      slot.status = "failed";
+      slot.error = "market_closed";
+      await savePlan(plan);
+      logger.info({ slotIndex: slot.index, pair: pairCode }, "[auto-engine] slot skipped — market closed");
+      return { ok: false, reason: "market_closed", slotIndex: slot.index };
+    }
+    logger.warn({ slotIndex: slot.index, originalPair: pairCode, fallback: fallback.code }, "[auto-engine] swapping to open pair");
+    slot.pair = fallback.code;
   }
-  const pair = PAIR_BY_CODE[pairCode]!;
+  const pair = PAIR_BY_CODE[slot.pair]!;
 
   logger.info(
-    { slotIndex: slot.index, pair: pairCode, direction: slot.direction, plannedPct: slot.pct, isLoser: slot.isLoser },
+    { slotIndex: slot.index, pair: slot.pair, direction: slot.direction, plannedPct: slot.pct, isLoser: slot.isLoser },
     "[auto-engine] AI scanning market...",
   );
 
@@ -536,7 +560,7 @@ export async function tickAutoSignalEngine(opts: { force?: boolean } = {}): Prom
   logger.info(
     {
       slotIndex: slot.index,
-      pair: pairCode,
+      pair: slot.pair,
       direction: slot.direction,
       entry,
       exit,
