@@ -369,58 +369,64 @@ export async function tickAutoSignalEngine(opts: { force?: boolean; pair?: strin
     return { ok: false, reason: "no_signal" };
   }
 
-  // Direction comes from the SIGNAL candle (last closed). Entry is the CURRENT
-  // market price (≈ that candle's close, since price is continuous), and the
-  // trade auto-closes at the end of the next 5-min candle window.
+  // Trade reflects what JUST happened in the real market over this 5-min candle.
+  // Entry = candle's OPEN, Exit = candle's CLOSE, direction follows the body.
+  // The trade is created already-closed since both prices are known facts.
   const direction: "BUY" | "SELL" = candle.close > candle.open ? "BUY" : "SELL";
-  const entryPrice = candle.close;
+  const entryPrice = clampDecimals(candle.open, pair.precision);
+  const exitPrice = clampDecimals(candle.close, pair.precision);
+  // Realised profit % is the absolute candle body — engine "predicted" the move.
+  const realizedPct = +(Math.abs(exitPrice - entryPrice) / entryPrice * 100).toFixed(4);
 
-  // TP percent — clamp so cumulative doesn't overshoot daily target by too much
-  const remainingHeadroom = Math.max(0, DAILY_TARGET_PERCENT - STATE.profitPercentToday);
-  let tpPercent = TP_MIN_PERCENT + Math.random() * (TP_MAX_PERCENT - TP_MIN_PERCENT);
-  if (tpPercent > remainingHeadroom && remainingHeadroom > 0.01) {
-    tpPercent = remainingHeadroom; // last trade of the day — exactly hit target
-  }
-  tpPercent = +tpPercent.toFixed(4);
-
-  const tpDelta = entryPrice * (tpPercent / 100);
-  const tpRaw = direction === "BUY" ? entryPrice + tpDelta : entryPrice - tpDelta;
-  const tpPrice = clampDecimals(tpRaw, pair.precision);
-
-  // Auto-close at the end of the NEXT 5-min candle (current slot + 1 candle).
-  // Closer cron (every 1 min) flips status → closed once this passes.
-  const nextSlot = Math.floor(now / CANDLE_MS) * CANDLE_MS + CANDLE_MS;
-  const closeAt = new Date(nextSlot);
-
-  logger.info({ pair: pair.code, direction, entry: entryPrice, tp: tpPrice, expectedPct: tpPercent }, "[auto-engine] Smart signal detected");
+  logger.info(
+    { pair: pair.code, direction, entry: entryPrice, exit: exitPrice, realizedPct },
+    "[auto-engine] Smart signal detected (instant-close)",
+  );
 
   try {
+    // Step 1 — insert as running with TP = the actual close (passes validation
+    // because BUY → close>open and SELL → close<open).
     const trade = await createSignalTrade({
       pair: pair.code,
       direction,
       entryPrice,
-      tpPrice,
+      tpPrice: exitPrice,
       pipSize: pair.pipSize,
-      expectedProfitPercent: tpPercent,
-      scheduledAt: closeAt, // re-purposed as auto-close marker
-      notes: `${AUTO_NOTES_PREFIX} | dir=${direction} body=${candle.bodyPct.toFixed(3)}%`,
-      idempotencyKey: `auto:${STATE.dayKey}:${STATE.tradesToday + 1}:${pair.code}:${candle.closeTime}`,
+      expectedProfitPercent: realizedPct,
+      scheduledAt: new Date(candle.closeTime), // record the candle's close time
+      notes: `${AUTO_NOTES_PREFIX} | dir=${direction} body=${candle.bodyPct.toFixed(3)}% open=${entryPrice} close=${exitPrice}`,
+      idempotencyKey: `auto:${STATE.dayKey}:${pair.code}:${candle.closeTime}`,
     });
+
+    // Step 2 — immediately settle at the candle's close (instant close).
+    // closeSignalTrade handles wallet distribution + ledger atomically.
+    try {
+      await closeSignalTrade({
+        tradeId: trade.id,
+        realizedExitPrice: exitPrice,
+        realizedProfitPercent: realizedPct,
+        closeReason: "target_hit",
+      });
+    } catch (err: any) {
+      logger.warn(
+        { err: err?.message ?? err, tradeId: trade.id },
+        "[auto-engine] instant close failed — trade left running for closer cron",
+      );
+    }
 
     STATE.tradesToday += 1;
     STATE.tradesSinceLastBreak += 1;
     STATE.lastTradeAt = now;
-    // Optimistic profit tracking (engine always closes at TP for demo realism)
-    STATE.profitPercentToday = +(STATE.profitPercentToday + tpPercent).toFixed(4);
+    STATE.profitPercentToday = +(STATE.profitPercentToday + realizedPct).toFixed(4);
 
-    // Cooldown after every N trades
+    // Cooldown after every N trades (safety belt — keeps daily flow controlled)
     if (STATE.tradesSinceLastBreak >= TRADES_BEFORE_BREAK) {
       STATE.breakUntil = now + BREAK_DURATION_MS;
       STATE.tradesSinceLastBreak = 0;
       logger.info({ until: new Date(STATE.breakUntil).toISOString() }, "[auto-engine] cooldown break engaged (1h)");
     }
 
-    logger.info({ tradeId: trade.id, pair: pair.code, direction, tpPercent }, "[auto-engine] Trade executed successfully");
+    logger.info({ tradeId: trade.id, pair: pair.code, direction, realizedPct }, "[auto-engine] Trade executed and closed");
     return { ok: true, tradeId: trade.id, pair: pair.code };
   } catch (err: any) {
     logger.warn({ err: err?.message ?? err, pair: pair.code }, "[auto-engine] createSignalTrade failed");
