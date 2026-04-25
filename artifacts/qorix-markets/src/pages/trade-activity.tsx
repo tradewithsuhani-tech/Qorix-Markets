@@ -263,20 +263,43 @@ export default function TradeActivityPage() {
     placeholderData: keepPreviousData,
   });
 
+  // Pull the user's displayed Active Capital so we can convert each platform
+  // signal trade's % into a USD amount specific to this user (% × activeCapital).
+  const { data: dashSummary } = useQuery<{ activeInvestment?: number }>({
+    queryKey: ["dashboard-summary-for-activity"],
+    queryFn: async () => {
+      let token: string | null = null;
+      try { token = localStorage.getItem("qorix_token"); } catch {}
+      const res = await fetch("/api/dashboard/summary", {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) throw new Error("failed");
+      return res.json();
+    },
+    refetchInterval: 30000,
+    placeholderData: keepPreviousData,
+  });
+  const activeCapital = Number(dashSummary?.activeInvestment) || 0;
+
   const usingPlatformFallback = personalTrades.length === 0 && (recentData?.trades?.length ?? 0) > 0;
 
   const allTrades: Trade[] = personalTrades.length > 0
     ? personalTrades
-    : (recentData?.trades ?? []).map((t) => ({
-        id: t.id,
-        symbol: t.pair,
-        direction: t.direction,
-        entryPrice: Number(t.entryPrice) || 0,
-        exitPrice: Number(t.realizedExitPrice) || 0,
-        profit: 0,
-        profitPercent: Number(t.realizedProfitPercent) || 0,
-        executedAt: t.closedAt,
-      }));
+    : (recentData?.trades ?? []).map((t) => {
+        const pct = Number(t.realizedProfitPercent) || 0;
+        // Per-user USD = trade % × THIS user's displayed Active Capital
+        const usd = activeCapital > 0 ? +(pct * activeCapital / 100).toFixed(2) : 0;
+        return {
+          id: t.id,
+          symbol: t.pair,
+          direction: t.direction,
+          entryPrice: Number(t.entryPrice) || 0,
+          exitPrice: Number(t.realizedExitPrice) || 0,
+          profit: usd,
+          profitPercent: pct,
+          executedAt: t.closedAt,
+        };
+      });
 
   // Period filter (client-side)
   const { fromTs, toTs } = useMemo(() => {
@@ -303,11 +326,8 @@ export default function TradeActivityPage() {
   }, [allTrades, fromTs, toTs]);
 
   const totalPL = filtered.reduce((s, t) => s + t.profit, 0);
-  const totalPctAvg = filtered.length > 0
-    ? filtered.reduce((s, t) => s + (t.profitPercent || 0), 0) / filtered.length
-    : 0;
-  const wins = filtered.filter((t) => (usingPlatformFallback ? t.profitPercent : t.profit) > 0).length;
-  const losses = filtered.filter((t) => (usingPlatformFallback ? t.profitPercent : t.profit) < 0).length;
+  const wins = filtered.filter((t) => t.profitPercent > 0).length;
+  const losses = filtered.filter((t) => t.profitPercent < 0).length;
   const winRate = filtered.length ? `${((wins / filtered.length) * 100).toFixed(0)}%` : "0%";
 
   // Pagination
@@ -341,26 +361,14 @@ export default function TradeActivityPage() {
                 : "Your live trade history — Qorix-grade execution view"}
             </p>
           </div>
-          {!usingPlatformFallback && (
-            <div className="text-right">
-              <div className="text-[10px] text-white/40 uppercase tracking-wider">
-                P/L ({PERIODS.find((p) => p.key === period)?.label})
-              </div>
-              <div className={`text-lg font-bold ${totalPL >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-                {totalPL >= 0 ? "+" : ""}${totalPL.toFixed(2)}
-              </div>
+          <div className="text-right">
+            <div className="text-[10px] text-white/40 uppercase tracking-wider">
+              P/L ({PERIODS.find((p) => p.key === period)?.label})
             </div>
-          )}
-          {usingPlatformFallback && (
-            <div className="text-right">
-              <div className="text-[10px] text-white/40 uppercase tracking-wider">
-                Avg P/L ({PERIODS.find((p) => p.key === period)?.label})
-              </div>
-              <div className={`text-lg font-bold ${totalPctAvg >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-                {totalPctAvg >= 0 ? "+" : ""}{totalPctAvg.toFixed(2)}%
-              </div>
+            <div className={`text-lg font-bold ${totalPL >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+              {totalPL >= 0 ? "+" : ""}${totalPL.toFixed(2)}
             </div>
-          )}
+          </div>
         </div>
 
         {usingPlatformFallback && (
@@ -415,7 +423,6 @@ export default function TradeActivityPage() {
           <MobileTradeList
             trades={filtered}
             loading={showInitialLoader}
-            showPercent={usingPlatformFallback}
           />
         </div>
 
@@ -430,7 +437,7 @@ export default function TradeActivityPage() {
             <span>Type</span>
             <span className="text-right">Open price</span>
             <span className="text-right">Close price</span>
-            <span className="text-right">{usingPlatformFallback ? "P/L, %" : "P/L, USD"}</span>
+            <span className="text-right">P/L, USD</span>
             <span className="text-right">Time</span>
           </div>
 
@@ -464,11 +471,9 @@ export default function TradeActivityPage() {
                     {t.exitPrice.toFixed(dp)}
                   </div>
                   <div className={`text-right font-mono text-sm font-semibold ${
-                    (usingPlatformFallback ? t.profitPercent : t.profit) >= 0 ? "text-emerald-400" : "text-red-400"
+                    t.profit >= 0 ? "text-emerald-400" : "text-red-400"
                   }`}>
-                    {usingPlatformFallback
-                      ? `${t.profitPercent >= 0 ? "+" : ""}${t.profitPercent.toFixed(2)}%`
-                      : `${t.profit >= 0 ? "+" : ""}${t.profit.toFixed(2)}`}
+                    {t.profit >= 0 ? "+" : ""}${t.profit.toFixed(2)}
                   </div>
                   <div className="text-right text-xs text-white/40">
                     {new Date(t.executedAt).toLocaleString(undefined, {

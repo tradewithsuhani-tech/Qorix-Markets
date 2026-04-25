@@ -20,7 +20,6 @@ export type MobileTrade = {
 type Props = {
   trades: MobileTrade[];
   loading?: boolean;
-  showPercent?: boolean;
 };
 
 function dayBucket(d: Date): { key: string; label: string } {
@@ -41,10 +40,10 @@ function dayBucket(d: Date): { key: string; label: string } {
   return { key: d0.toISOString(), label: `${diffDays} days ago, ${fmtDate}` };
 }
 
-export function MobileTradeList({ trades, loading, showPercent }: Props) {
+export function MobileTradeList({ trades, loading }: Props) {
   // Group by day, ordered newest-first.
   const groups = useMemo(() => {
-    const map = new Map<string, { label: string; ts: number; trades: MobileTrade[]; total: number; totalPct: number }>();
+    const map = new Map<string, { label: string; ts: number; trades: MobileTrade[]; total: number }>();
     for (const t of trades) {
       const d = new Date(t.executedAt);
       const b = dayBucket(d);
@@ -52,7 +51,6 @@ export function MobileTradeList({ trades, loading, showPercent }: Props) {
       if (existing) {
         existing.trades.push(t);
         existing.total += t.profit || 0;
-        existing.totalPct += t.profitPercent || 0;
       } else {
         const day = new Date(d);
         day.setHours(0, 0, 0, 0);
@@ -61,7 +59,6 @@ export function MobileTradeList({ trades, loading, showPercent }: Props) {
           ts: day.getTime(),
           trades: [t],
           total: t.profit || 0,
-          totalPct: t.profitPercent || 0,
         });
       }
     }
@@ -85,23 +82,21 @@ export function MobileTradeList({ trades, loading, showPercent }: Props) {
   return (
     <div className="space-y-5">
       {groups.map((g) => {
-        const groupValue = showPercent ? g.totalPct : g.total;
-        const positive = groupValue >= 0;
+        const positive = g.total >= 0;
         return (
           <section key={g.label}>
             {/* Date group header */}
             <div className="flex items-baseline justify-between px-1 mb-2">
               <span className="text-xs font-medium text-white/55">{g.label}</span>
               <span className={cn("text-xs font-semibold tabular-nums", positive ? "text-emerald-400" : "text-red-400")}>
-                {positive ? "+" : ""}
-                {showPercent ? `${groupValue.toFixed(2)}%` : `${groupValue.toFixed(2)} USD`}
+                {positive ? "+" : ""}${g.total.toFixed(2)}
               </span>
             </div>
 
             {/* Cards container */}
             <div className="rounded-2xl border border-white/8 bg-white/[0.02] divide-y divide-white/[0.05] overflow-hidden">
               {g.trades.map((t, i) => (
-                <TradeRow key={t.id} t={t} showPercent={!!showPercent} index={i} />
+                <TradeRow key={t.id} t={t} index={i} />
               ))}
             </div>
           </section>
@@ -111,13 +106,12 @@ export function MobileTradeList({ trades, loading, showPercent }: Props) {
   );
 }
 
-function TradeRow({ t, showPercent, index }: { t: MobileTrade; showPercent: boolean; index: number }) {
+function TradeRow({ t, index }: { t: MobileTrade; index: number }) {
   const meta = findPair(t.symbol);
   const dp = meta ? (meta.pipSize < 0.01 ? 5 : 3) : 4;
   const isBuy = t.direction === "BUY" || t.direction === "LONG";
   const directionClr = isBuy ? "text-sky-400" : "text-rose-400";
-  const value = showPercent ? t.profitPercent : t.profit;
-  const positive = value >= 0;
+  const positive = t.profit >= 0;
   const valueClr = positive ? "text-emerald-400" : "text-red-400";
   const lot = (t.lot ?? 1.29).toFixed(2);
 
@@ -149,8 +143,7 @@ function TradeRow({ t, showPercent, index }: { t: MobileTrade; showPercent: bool
       {/* Right column: P/L + close price */}
       <div className="text-right shrink-0">
         <div className={cn("text-[15px] font-semibold tabular-nums leading-tight", valueClr)}>
-          {positive ? "+" : ""}
-          {showPercent ? `${value.toFixed(2)}%` : `${value.toFixed(2)} USD`}
+          {positive ? "+" : ""}${t.profit.toFixed(2)}
         </div>
         <div className="text-[12px] text-white/45 mt-1 leading-tight tabular-nums">
           {t.exitPrice.toFixed(dp)}
