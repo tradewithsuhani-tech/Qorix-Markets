@@ -286,4 +286,6 @@ Helper: `lib/staging-mode.ts` exports `isStagingMode()` and `logStagingSkip(comp
 
 **Express 5 gotcha:** `app.get("*", ...)` no longer works (path-to-regexp v8 requires named params). Use a generic middleware filtered to GET/HEAD instead.
 
+**Vite manualChunks gotcha — DO NOT split React-using libs into separate chunks.** A previous split (vendor-radix, vendor-charts, vendor-icons, vendor-router, etc. separate from vendor-react) produced "Circular chunk: vendor-radix → vendor-react → vendor-radix" build warnings and crashed at runtime with `Cannot read properties of undefined (reading 'useLayoutEffect')` because the dependent chunk evaluated before React initialized. The current safe split keeps React + every React-using library (radix, recharts, framer-motion, react-hook-form, wouter, lucide-react, @tanstack/react-query) in a single `vendor` chunk; only purely-data libs without React imports (date-fns, dayjs, zod) get their own chunks. See `artifacts/qorix-markets/vite.config.ts`.
+
 See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details.
