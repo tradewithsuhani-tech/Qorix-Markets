@@ -6,6 +6,13 @@ import { logger } from "./lib/logger";
 
 const app: Express = express();
 
+// Trust the first proxy hop. Replit (deploys & dev preview) terminates TLS at
+// the edge proxy and forwards X-Forwarded-For/Proto/Host headers. Without this,
+// express-rate-limit and req.ip read the proxy address instead of the client,
+// and rate-limit throws ERR_ERL_UNEXPECTED_X_FORWARDED_FOR. Setting `1` is
+// safe here because we only ever sit behind exactly one Replit proxy hop.
+app.set("trust proxy", 1);
+
 app.use(
   pinoHttp({
     logger,
