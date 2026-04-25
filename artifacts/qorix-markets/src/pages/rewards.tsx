@@ -1,19 +1,25 @@
 import { useGetReferral, useGetReferredUsers, useGetDashboardSummary } from "@workspace/api-client-react";
+import { customFetch } from "@workspace/api-client-react";
+import { useQuery } from "@tanstack/react-query";
 import { Layout } from "@/components/layout";
 import { AnimatedCounter } from "@/components/animated-counter";
 import { motion } from "framer-motion";
 import {
   Copy, Users, DollarSign, Award, CheckCircle2, TrendingUp,
   Star, Crown, Zap, Shield, ChevronRight, Gift, Trophy,
-  ArrowRight, Info, Sparkles, Clock, CalendarClock,
+  ArrowRight, Info, Sparkles, Medal,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
 
 const container = { hidden: {}, show: { transition: { staggerChildren: 0.07 } } };
 const item = { hidden: { opacity: 0, y: 14 }, show: { opacity: 1, y: 0, transition: { duration: 0.35, ease: "easeOut" } } };
 
-// Partner level definitions
+// Partner level definitions — tier perks layered on top of the universal
+// 3% activation + 10% lifetime daily commission base rate. The percentages
+// shown here are EXTRA perks unlocked at each tier (not replacements for
+// the base rate).
 const PARTNER_LEVELS = [
   {
     id: "starter",
@@ -24,8 +30,8 @@ const PARTNER_LEVELS = [
     bgColor: "bg-slate-500/10",
     gradientFrom: "from-slate-500/20",
     gradientTo: "to-slate-600/10",
-    commission: "0.5%",
-    commissionDesc: "monthly on network investment",
+    perk: "Standard",
+    perkDesc: "3% activation + 10% daily commission",
     minReferrals: 0,
     minNetworkAum: 0,
     badge: null,
@@ -39,8 +45,8 @@ const PARTNER_LEVELS = [
     bgColor: "bg-amber-600/10",
     gradientFrom: "from-amber-600/20",
     gradientTo: "to-amber-700/10",
-    commission: "0.75%",
-    commissionDesc: "monthly on network investment",
+    perk: "Verified",
+    perkDesc: "Verified Partner badge + priority support",
     minReferrals: 5,
     minNetworkAum: 10000,
     badge: "Bronze",
@@ -54,8 +60,8 @@ const PARTNER_LEVELS = [
     bgColor: "bg-slate-300/10",
     gradientFrom: "from-slate-300/20",
     gradientTo: "to-slate-400/10",
-    commission: "1.0%",
-    commissionDesc: "monthly on network investment",
+    perk: "Priority",
+    perkDesc: "Faster withdrawal review + exclusive promo previews",
     minReferrals: 15,
     minNetworkAum: 50000,
     badge: "Silver",
@@ -69,8 +75,8 @@ const PARTNER_LEVELS = [
     bgColor: "bg-yellow-400/10",
     gradientFrom: "from-yellow-400/20",
     gradientTo: "to-amber-500/10",
-    commission: "1.25%",
-    commissionDesc: "monthly on network investment",
+    perk: "VIP",
+    perkDesc: "Dedicated account manager + custom marketing assets",
     minReferrals: 30,
     minNetworkAum: 150000,
     badge: "Gold",
@@ -84,20 +90,35 @@ const PARTNER_LEVELS = [
     bgColor: "bg-blue-400/10",
     gradientFrom: "from-blue-400/20",
     gradientTo: "to-indigo-500/10",
-    commission: "1.5%",
-    commissionDesc: "monthly on network investment",
+    perk: "Elite",
+    perkDesc: "Co-marketing budget + direct line to leadership",
     minReferrals: 50,
     minNetworkAum: 500000,
     badge: "Platinum",
   },
 ];
 
-// Loyalty milestones
+// Loyalty milestones — keep in sync with backend lib/milestone-service.ts
 const LOYALTY_MILESTONES = [
   { id: 1, label: "Target 1", networkAum: 50000, reward: "$500 Cash", rewardAlt: "Account Credit", description: "Reach $50K total network investment" },
   { id: 2, label: "Target 2", networkAum: 200000, reward: "$2,000 Cash", rewardAlt: "Account Credit", description: "Reach $200K total network investment" },
   { id: 3, label: "Target 3", networkAum: 1000000, reward: "$10,000 Cash", rewardAlt: "Account Credit", description: "Reach $1M total network investment" },
 ];
+
+// Referral leaderboard widget data type — names come pre-masked from server.
+interface LeaderboardRow {
+  id: number;
+  displayName: string;
+  referralCount: number;
+  totalEarnings: string | number;
+}
+
+function rankBadgeClasses(rank: number): string {
+  if (rank === 1) return "bg-yellow-500/20 text-yellow-400 border-yellow-500/40";
+  if (rank === 2) return "bg-slate-300/20 text-slate-200 border-slate-300/30";
+  if (rank === 3) return "bg-amber-700/20 text-amber-500 border-amber-600/30";
+  return "bg-white/[0.04] text-muted-foreground border-white/10";
+}
 
 function getPartnerLevel(activeReferrals: number, networkAum: number) {
   let level = PARTNER_LEVELS[0]!;
@@ -114,25 +135,8 @@ function getNextLevel(currentLevelId: string) {
   return idx < PARTNER_LEVELS.length - 1 ? PARTNER_LEVELS[idx + 1] : null;
 }
 
-// Returns days remaining until the next commission payout (25th of current/next month)
-function getDaysLeftInPeriod(): number {
-  const now = new Date();
-  const day = now.getDate();
-  const payoutDay = 25;
-  let target: Date;
-  if (day < payoutDay) {
-    target = new Date(now.getFullYear(), now.getMonth(), payoutDay);
-  } else {
-    // Past the 25th — next period ends 25th of next month
-    target = new Date(now.getFullYear(), now.getMonth() + 1, payoutDay);
-  }
-  const diff = target.getTime() - now.getTime();
-  return Math.ceil(diff / (1000 * 60 * 60 * 24));
-}
-
-function DaysLeftBadge({ daysLeft, size = "md" }: { daysLeft: number; size?: "sm" | "md" }) {
-  const urgent = daysLeft <= 5;
-  const warning = daysLeft <= 14;
+// Live indicator badge — daily commissions accrue continuously
+function LiveBadge({ size = "md" }: { size?: "sm" | "md" }) {
   return (
     <motion.div
       initial={{ opacity: 0, scale: 0.85 }}
@@ -141,16 +145,14 @@ function DaysLeftBadge({ daysLeft, size = "md" }: { daysLeft: number; size?: "sm
       className={cn(
         "inline-flex items-center gap-1.5 rounded-full border font-semibold",
         size === "sm" ? "px-2 py-0.5 text-[10px]" : "px-2.5 py-1 text-xs",
-        urgent
-          ? "bg-red-500/15 border-red-500/30 text-red-400"
-          : warning
-          ? "bg-amber-500/15 border-amber-500/30 text-amber-400"
-          : "bg-blue-500/15 border-blue-500/30 text-blue-400"
+        "bg-emerald-500/15 border-emerald-500/30 text-emerald-400"
       )}
     >
-      <Clock className={size === "sm" ? "w-2.5 h-2.5" : "w-3 h-3"} />
-      <span>{daysLeft}d left</span>
-      <ChevronRight className={size === "sm" ? "w-2.5 h-2.5 opacity-60" : "w-3 h-3 opacity-60"} />
+      <span className={cn("relative flex", size === "sm" ? "w-1.5 h-1.5" : "w-2 h-2")}>
+        <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75 animate-ping" />
+        <span className="relative inline-flex rounded-full bg-emerald-400 w-full h-full" />
+      </span>
+      <span>Live · paid daily</span>
     </motion.div>
   );
 }
@@ -192,7 +194,17 @@ export default function RewardsPage() {
 
   const currentLevel = getPartnerLevel(activeReferrals, networkAum);
   const nextLevel = getNextLevel(currentLevel.id);
-  const daysLeft = getDaysLeftInPeriod();
+
+  // Referral leaderboard — top 10 referrers across the platform
+  const { user: me } = useAuth();
+  const { data: leaderboardData, isLoading: leaderboardLoading } = useQuery({
+    queryKey: ["leaderboard-referrals"],
+    queryFn: () => customFetch<{ leaderboard: LeaderboardRow[]; myRank: number | null }>("/api/leaderboard/referrals"),
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+  });
+  const leaderboard = leaderboardData?.leaderboard ?? [];
+  const myRank = leaderboardData?.myRank ?? null;
 
   const handleCopy = () => {
     if (referral?.referralCode) {
@@ -232,20 +244,20 @@ export default function RewardsPage() {
             <div className="relative z-10">
               <div className="flex items-start justify-between mb-4">
                 <div>
-                  <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">Your Level</div>
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">Your Tier</div>
                   <div className={cn("text-xl font-bold", currentLevel.color)}>{currentLevel.label}</div>
-                  <div className="text-xs text-muted-foreground mt-0.5">{currentLevel.commissionDesc}</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">{currentLevel.perkDesc}</div>
                 </div>
                 <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center", currentLevel.bgColor)}>
                   <LevelIcon className={cn("w-5 h-5", currentLevel.color)} />
                 </div>
               </div>
 
-              {/* Commission rate */}
+              {/* Base commission strip — same for everyone, tier perks layer on top */}
               <div className={cn("inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border mb-4", currentLevel.borderColor, currentLevel.bgColor)}>
                 <TrendingUp className={cn("w-3.5 h-3.5", currentLevel.color)} />
-                <span className={cn("text-lg font-bold", currentLevel.color)}>{currentLevel.commission}</span>
-                <span className="text-xs text-muted-foreground">commission</span>
+                <span className={cn("text-lg font-bold", currentLevel.color)}>3% + 10%</span>
+                <span className="text-xs text-muted-foreground">activation + daily</span>
               </div>
 
               {/* Progress to next level */}
@@ -253,7 +265,7 @@ export default function RewardsPage() {
                 <div className="space-y-2.5">
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-muted-foreground">Progress to {nextLevel.label}</span>
-                    <DaysLeftBadge daysLeft={daysLeft} size="sm" />
+                    <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Tier {PARTNER_LEVELS.indexOf(currentLevel) + 1}/{PARTNER_LEVELS.length}</span>
                   </div>
 
                   {/* Active referrals progress */}
@@ -404,14 +416,116 @@ export default function RewardsPage() {
                     </div>
                   </div>
 
-                  {/* Commission */}
-                  <div className="text-right shrink-0">
-                    <div className={cn("text-lg font-bold", level.color)}>{level.commission}</div>
-                    <div className="text-[10px] text-muted-foreground">monthly</div>
+                  {/* Tier perk badge */}
+                  <div className="text-right shrink-0 max-w-[140px]">
+                    <div className={cn("text-sm font-bold", level.color)}>{level.perk}</div>
+                    <div className="text-[10px] text-muted-foreground leading-tight mt-0.5">{level.perkDesc}</div>
                   </div>
                 </div>
               );
             })}
+          </div>
+        </motion.div>
+
+        {/* Referral Leaderboard — top 10 referrers globally */}
+        <motion.div variants={item} className="glass-card rounded-2xl overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-white/8">
+            <div className="flex items-center gap-2">
+              <Trophy className="w-4 h-4 text-yellow-400" />
+              <span className="text-sm font-semibold text-white">Top Referrers</span>
+            </div>
+            <div className="flex items-center gap-2">
+              {myRank !== null && (
+                <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                  Your Rank: <span className="text-white font-semibold">#{myRank}</span>
+                </span>
+              )}
+              <LiveBadge size="sm" />
+            </div>
+          </div>
+          <div className="p-3">
+            {leaderboardLoading ? (
+              <div className="space-y-2">
+                {[...Array(5)].map((_, i) => (
+                  <div key={i} className="flex items-center gap-3 p-2.5 rounded-xl bg-white/[0.02] animate-pulse">
+                    <div className="w-7 h-7 rounded-lg bg-white/[0.06]" />
+                    <div className="flex-1 h-3 rounded bg-white/[0.06]" />
+                    <div className="w-16 h-3 rounded bg-white/[0.06]" />
+                  </div>
+                ))}
+              </div>
+            ) : leaderboard.length === 0 ? (
+              <div className="flex flex-col items-center gap-2 py-8 text-center">
+                <Trophy className="w-8 h-8 text-muted-foreground/40" />
+                <div className="text-sm text-muted-foreground">No referrers yet — be the first!</div>
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                {leaderboard.map((row: LeaderboardRow, idx: number) => {
+                  const rank = idx + 1;
+                  const isMe = me?.id === row.id;
+                  const earnings = typeof row.totalEarnings === "string" ? parseFloat(row.totalEarnings) : row.totalEarnings;
+                  return (
+                    <motion.div
+                      key={row.id}
+                      initial={{ opacity: 0, x: -8 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ duration: 0.25, delay: idx * 0.025 }}
+                      className={cn(
+                        "flex items-center gap-3 p-2.5 rounded-xl border transition-colors",
+                        isMe
+                          ? "bg-primary/10 border-primary/30 ring-1 ring-primary/20"
+                          : "bg-white/[0.02] border-white/[0.04] hover:bg-white/[0.04]"
+                      )}
+                    >
+                      {/* Rank badge */}
+                      <div className={cn(
+                        "w-7 h-7 rounded-lg border flex items-center justify-center shrink-0",
+                        rankBadgeClasses(rank)
+                      )}>
+                        {rank <= 3 ? (
+                          <Medal className="w-3.5 h-3.5" />
+                        ) : (
+                          <span className="text-[11px] font-bold font-mono">{rank}</span>
+                        )}
+                      </div>
+
+                      {/* Name + referral count */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className={cn("text-sm font-medium truncate", isMe ? "text-primary" : "text-white")}>
+                            {isMe ? "You" : row.displayName}
+                          </span>
+                          {isMe && (
+                            <span className="text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-primary/20 text-primary font-bold">You</span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1 text-[11px] text-muted-foreground mt-0.5">
+                          <Users className="w-2.5 h-2.5" />
+                          <span>{row.referralCount} {row.referralCount === 1 ? "referral" : "referrals"}</span>
+                        </div>
+                      </div>
+
+                      {/* Earnings */}
+                      <div className="text-right shrink-0">
+                        <div className={cn("text-sm font-bold font-mono", isMe ? "text-primary" : "text-emerald-400")}>
+                          ${earnings.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                        </div>
+                        <div className="text-[9px] uppercase tracking-wider text-muted-foreground">earned</div>
+                      </div>
+                    </motion.div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Footer call-to-action */}
+            {leaderboard.length > 0 && myRank === null && (
+              <div className="mt-3 pt-3 border-t border-white/[0.06] flex items-center justify-between text-[11px] text-muted-foreground">
+                <span>Invite your first active partner to enter the rankings</span>
+                <ArrowRight className="w-3 h-3" />
+              </div>
+            )}
           </div>
         </motion.div>
 
@@ -539,14 +653,14 @@ export default function RewardsPage() {
               </span>
             )}
             <div className="ml-auto flex items-center gap-2">
-              <DaysLeftBadge daysLeft={daysLeft} size="md" />
+              <LiveBadge size="md" />
             </div>
           </div>
           {/* Period info strip */}
           <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground mb-4 pl-0.5">
-            <CalendarClock className="w-3 h-3 shrink-0" />
+            <Sparkles className="w-3 h-3 shrink-0" />
             <span>
-              Commissions paid on the <span className="text-white font-medium">25th of each month</span> — meet criteria before the deadline to level up.
+              Commissions credited <span className="text-white font-medium">daily</span> alongside your partners' profits — hit the milestones below to claim cash bonuses.
             </span>
           </div>
 
@@ -608,8 +722,8 @@ export default function RewardsPage() {
           ) : (
             <div className="flex flex-col items-center gap-2 py-4 text-center">
               <Crown className="w-8 h-8 text-blue-400" />
-              <div className="text-sm font-semibold text-white">You've reached Platinum — the highest level!</div>
-              <div className="text-xs text-muted-foreground">Enjoy the maximum 1.5% monthly commission on your entire network.</div>
+              <div className="text-sm font-semibold text-white">You've reached the top tier — Elite Partner!</div>
+              <div className="text-xs text-muted-foreground">Personal account manager, exclusive events, and the highest milestone bonuses.</div>
             </div>
           )}
         </motion.div>
@@ -623,8 +737,8 @@ export default function RewardsPage() {
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {[
               { n: "1", title: "Invite Members", desc: "Share your unique code. Anyone who signs up becomes part of your network." },
-              { n: "2", title: "They Invest", desc: "When your referrals make active investments, their AUM counts toward your level." },
-              { n: "3", title: "You Earn Monthly", desc: "On the 25th of each month, your commission is automatically paid to your profit balance." },
+              { n: "2", title: "They Invest", desc: "When your referrals make active investments, you earn 3% of their activation amount instantly." },
+              { n: "3", title: "Earn Daily Forever", desc: "10% of your network's daily profit is auto-credited to your balance every single day — no waiting period." },
             ].map((step) => (
               <div key={step.n} className="flex items-start gap-3 p-3.5 rounded-xl bg-white/[0.03] border border-white/[0.06]">
                 <div className="w-6 h-6 rounded-full bg-primary/20 text-primary text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">

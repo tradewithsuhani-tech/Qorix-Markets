@@ -30,6 +30,8 @@ import {
   HardDrive,
   CheckCheck,
   Globe,
+  Sparkles,
+  Tag,
 } from "lucide-react";
 import { AddressDisplay } from "@/components/address-display";
 import { useToast } from "@/hooks/use-toast";
@@ -769,6 +771,120 @@ export function AdminSystemPage() {
               className="mt-2 w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm font-mono resize-none"
             />
             <p className="text-[11px] text-muted-foreground mt-1.5">Rotates every 3.5s on the user dashboard.</p>
+          </div>
+        </div>
+
+        {/* Rotating Promo Builder — controls the FOMO deposit-bonus banner */}
+        <div className="glass-card p-6 rounded-2xl space-y-4">
+          <div>
+            <h2 className="text-xl font-bold flex items-center gap-2"><Sparkles className="w-5 h-5 text-yellow-400" /> Rotating Promo Offer</h2>
+            <p className="text-xs text-muted-foreground mt-1">
+              Time-windowed deposit bonus shown on the dashboard banner. Each window generates a unique code (e.g. <span className="text-white font-mono">QRX-3F2A</span>) with a randomised bonus % within the configured range. Users have 24h to claim before the redemption auto-expires.
+            </p>
+            <p className="text-xs text-blue-300/80 mt-2">💡 Changes take effect within ~60s (cached server-side). The current live offer will keep its window until it naturally rotates.</p>
+          </div>
+
+          <ToggleRow
+            icon={Sparkles}
+            label="Enable rotating promo banner"
+            value={settings?.promoEnabled ?? true}
+            onToggle={(v) => { setSettings({ ...settings, promoEnabled: v }); save({ promoEnabled: v }); }}
+          />
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="text-sm text-muted-foreground flex items-center gap-1.5"><Clock className="w-3.5 h-3.5" /> Window Length (minutes)</label>
+              <input
+                type="number"
+                min={5}
+                max={240}
+                value={settings?.promoWindowMinutes ?? 30}
+                onChange={(e) => setSettings({ ...settings, promoWindowMinutes: e.target.value })}
+                onBlur={() => save({ promoWindowMinutes: Math.max(5, Math.min(240, Number(settings?.promoWindowMinutes ?? 30))) })}
+                className="mt-2 w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm font-mono"
+              />
+              <p className="text-[11px] text-muted-foreground mt-1">How long each rotating offer stays live (5–240 min). Lower = more urgency.</p>
+            </div>
+
+            <div>
+              <label className="text-sm text-muted-foreground flex items-center gap-1.5"><Tag className="w-3.5 h-3.5" /> Code Prefix</label>
+              <input
+                type="text"
+                maxLength={8}
+                value={settings?.promoCodePrefix ?? "QRX"}
+                onChange={(e) => setSettings({ ...settings, promoCodePrefix: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "") })}
+                onBlur={() => save({ promoCodePrefix: (settings?.promoCodePrefix ?? "QRX").toString().toUpperCase().slice(0, 8) || "QRX" })}
+                className="mt-2 w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm font-mono uppercase"
+              />
+              <p className="text-[11px] text-muted-foreground mt-1">Letters/digits only, max 8 chars. Final code: <span className="font-mono text-white">{(settings?.promoCodePrefix || "QRX").toString().toUpperCase()}-XXXX</span></p>
+            </div>
+
+            <div>
+              <label className="text-sm text-muted-foreground">Min Bonus %</label>
+              <input
+                type="number"
+                min={0.5}
+                max={50}
+                step="0.5"
+                value={settings?.promoMinPct ?? 2}
+                onChange={(e) => setSettings({ ...settings, promoMinPct: e.target.value })}
+                onBlur={() => {
+                  const min = Math.max(0.5, Number(settings?.promoMinPct ?? 2));
+                  save({ promoMinPct: min });
+                }}
+                className="mt-2 w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm font-mono"
+              />
+            </div>
+
+            <div>
+              <label className="text-sm text-muted-foreground">Max Bonus %</label>
+              <input
+                type="number"
+                min={0.5}
+                max={50}
+                step="0.5"
+                value={settings?.promoMaxPct ?? 10}
+                onChange={(e) => setSettings({ ...settings, promoMaxPct: e.target.value })}
+                onBlur={() => {
+                  const max = Math.max(Number(settings?.promoMinPct ?? 2), Number(settings?.promoMaxPct ?? 10));
+                  save({ promoMaxPct: max });
+                }}
+                className="mt-2 w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm font-mono"
+              />
+            </div>
+
+            <div>
+              <label className="text-sm text-muted-foreground">Step %</label>
+              <input
+                type="number"
+                min={0.1}
+                max={5}
+                step="0.1"
+                value={settings?.promoStepPct ?? 0.5}
+                onChange={(e) => setSettings({ ...settings, promoStepPct: e.target.value })}
+                onBlur={() => save({ promoStepPct: Math.max(0.1, Number(settings?.promoStepPct ?? 0.5)) })}
+                className="mt-2 w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm font-mono"
+              />
+              <p className="text-[11px] text-muted-foreground mt-1">Bonus % is rounded to this step (e.g. 0.5 → 2.0, 2.5, 3.0...).</p>
+            </div>
+          </div>
+
+          {/* Live preview strip */}
+          <div className="rounded-xl border border-yellow-500/30 bg-yellow-500/5 p-4 flex items-center gap-3">
+            <Sparkles className="w-5 h-5 text-yellow-400 shrink-0" />
+            <div className="flex-1 min-w-0">
+              <div className="text-xs text-yellow-200/80 uppercase tracking-wider font-semibold">Live Preview</div>
+              <div className="text-sm text-white mt-1">
+                <span className="font-mono text-yellow-400">{(settings?.promoCodePrefix || "QRX").toString().toUpperCase()}-XXXX</span>
+                {" · "}
+                <span className="text-emerald-400 font-semibold">+{Number(settings?.promoMinPct ?? 2)}% to +{Number(settings?.promoMaxPct ?? 10)}%</span>
+                {" bonus on next deposit · rotates every "}
+                <span className="text-white font-semibold">{Number(settings?.promoWindowMinutes ?? 30)} min</span>
+              </div>
+              <div className="text-[11px] text-muted-foreground mt-1">
+                Status: {settings?.promoEnabled === false ? <span className="text-red-400 font-semibold">Disabled</span> : <span className="text-emerald-400 font-semibold">Active — banner visible to users</span>}
+              </div>
+            </div>
           </div>
         </div>
 

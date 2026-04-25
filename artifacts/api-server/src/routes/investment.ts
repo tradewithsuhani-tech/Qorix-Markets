@@ -5,6 +5,7 @@ import { authMiddleware, type AuthRequest } from "../middlewares/auth";
 import { StartInvestmentBody, ToggleCompoundingBody } from "@workspace/api-zod";
 import { ensureUserAccounts, postJournalEntry, journalForTransaction } from "../lib/ledger-service";
 import { createNotification } from "../lib/notifications";
+import { checkAndFireMilestones } from "../lib/milestone-service";
 import { logger } from "../lib/logger";
 
 const REFERRAL_SIGNUP_BONUS_RATE = 0.03;
@@ -211,6 +212,21 @@ router.post("/investment/start", async (req: AuthRequest, res) => {
 
     return inv!;
   });
+
+  // Fire milestone check for sponsor (post-commit, fire-and-forget — never blocks user response)
+  try {
+    const sponsorRows = await db
+      .select({ sponsorId: usersTable.sponsorId })
+      .from(usersTable)
+      .where(eq(usersTable.id, req.userId!))
+      .limit(1);
+    const sponsorId = sponsorRows[0]?.sponsorId;
+    if (sponsorId && sponsorId !== req.userId && sponsorId > 0) {
+      void checkAndFireMilestones(sponsorId);
+    }
+  } catch (err) {
+    logger.warn({ err, userId: req.userId }, "Milestone check enqueue failed (non-fatal)");
+  }
 
   res.json(formatInvestment(updated));
 });
