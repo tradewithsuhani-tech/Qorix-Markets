@@ -1203,53 +1203,67 @@ function PortfolioInner() {
 
             {/* Today + MTD strip */}
             <div className="relative grid grid-cols-1 md:grid-cols-3 gap-3 mb-5">
-              <div className="md:col-span-1 rounded-xl border border-emerald-400/30 bg-gradient-to-br from-emerald-500/[0.10] to-emerald-500/[0.02] p-4">
-                <div className="flex items-center justify-between mb-1">
-                  <div className="text-[10px] uppercase tracking-wider text-emerald-300 font-semibold">
-                    Today's Projected Profit
+              {(() => {
+                const dow = now.getDay();
+                const isWeekend = dow === 0 || dow === 6;
+                const isTradingDay = !isWeekend && projection.todayAmount > 0;
+                return (
+                  <div className="md:col-span-1 rounded-xl border border-emerald-400/30 bg-gradient-to-br from-emerald-500/[0.10] to-emerald-500/[0.02] p-4">
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="text-[10px] uppercase tracking-wider text-emerald-300 font-semibold">
+                        {isTradingDay ? "Today's Profit" : "Markets Closed"}
+                      </div>
+                      <span className={`inline-flex items-center gap-1 text-[9px] font-bold uppercase border px-1.5 py-0.5 rounded ${isTradingDay ? "text-emerald-300 bg-emerald-500/15 border-emerald-400/30" : "text-amber-300 bg-amber-500/15 border-amber-400/30"}`}>
+                        <span className={`inline-block w-1 h-1 rounded-full ${isTradingDay ? "bg-emerald-300 animate-pulse" : "bg-amber-300"}`} />
+                        {isTradingDay ? "Live" : "Off"}
+                      </span>
+                    </div>
+                    {isTradingDay ? (
+                      <>
+                        <div className="text-2xl md:text-3xl font-extrabold tabular-nums bg-gradient-to-r from-emerald-200 to-green-400 bg-clip-text text-transparent">
+                          ${projection.todayAmount.toFixed(2)}
+                        </div>
+                        <div className="text-[10px] text-muted-foreground mt-1">
+                          Settles at end of session
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="text-xl md:text-2xl font-bold text-white">
+                          Weekend Pause
+                        </div>
+                        <div className="text-[10px] text-muted-foreground mt-1">
+                          Forex desk resumes Monday
+                        </div>
+                      </>
+                    )}
                   </div>
-                  <span className="inline-flex items-center gap-1 text-[9px] font-bold uppercase text-emerald-300 bg-emerald-500/15 border border-emerald-400/30 px-1.5 py-0.5 rounded">
-                    <span className="inline-block w-1 h-1 rounded-full bg-emerald-300 animate-pulse" />
-                    Estimate
-                  </span>
-                </div>
-                <div className="text-2xl md:text-3xl font-extrabold tabular-nums bg-gradient-to-r from-emerald-200 to-green-400 bg-clip-text text-transparent">
-                  ~${projection.todayAmount.toFixed(2)}
-                </div>
-                <div className="text-[10px] text-muted-foreground mt-1">
-                  Indicative only — settled at session close
-                </div>
-              </div>
+                );
+              })()}
 
               <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
                 <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">
-                  Month-to-Date (Projected)
+                  Earned This Month
                 </div>
                 <div className="text-2xl font-bold text-white tabular-nums">
                   ${projection.mtdProjected.toFixed(2)}
                 </div>
-                <div className="mt-2 h-1.5 rounded-full bg-white/5 overflow-hidden">
-                  <div
-                    className="h-full bg-gradient-to-r from-emerald-400 to-green-500"
-                    style={{
-                      width: `${Math.min(100, (projection.mtdProjected / Math.max(0.01, projection.monthlyTarget)) * 100).toFixed(1)}%`,
-                    }}
-                  />
-                </div>
-                <div className="text-[10px] text-muted-foreground mt-1.5">
-                  {((projection.mtdProjected / Math.max(0.01, projection.monthlyTarget)) * 100).toFixed(1)}% of monthly target
+                <div className="text-[10px] text-muted-foreground mt-1.5 tabular-nums">
+                  {investedAmount > 0
+                    ? `+${((projection.mtdProjected / investedAmount) * 100).toFixed(2)}% on capital · ${monthLabel}`
+                    : monthLabel}
                 </div>
               </div>
 
               <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
                 <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">
-                  Remaining This Month
+                  Active Trading Days Left
                 </div>
                 <div className="text-2xl font-bold text-white tabular-nums">
-                  ${projection.remainingProjected.toFixed(2)}
+                  {projection.days.filter((d) => !d.isPast && !d.isToday).length}
                 </div>
                 <div className="text-[10px] text-muted-foreground mt-1.5">
-                  Across {projection.days.filter((d) => !d.isPast && !d.isToday).length} upcoming forex day(s)
+                  Forex sessions remaining this month
                 </div>
               </div>
             </div>
