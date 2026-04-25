@@ -111,32 +111,37 @@ export function VipCard({ vip, investmentAmount = 0 }: VipCardProps) {
     ? Math.min(100, (investmentAmount / vip.nextTier.minAmount) * 100)
     : 100;
 
+  // Compact min-amount label (e.g. $10,000 → $10K) so tier rows never wrap
+  // on narrow screens like iPhone SE (375px).
+  const fmtMin = (n: number) =>
+    n >= 1000 ? `$${(n / 1000).toString().replace(/\.0$/, "")}K` : `$${n}`;
+
   return (
     <div className={cn(
-      "rounded-2xl border p-5 bg-gradient-to-br",
+      "rounded-2xl border p-4 sm:p-5 bg-gradient-to-br",
       cfg.gradient,
       cfg.border,
     )}>
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <div className="text-xs text-muted-foreground font-medium uppercase tracking-widest mb-1">Membership</div>
-          <div className={cn("text-2xl font-bold tracking-tight", cfg.text)}>
+      <div className="flex items-center justify-between gap-3 mb-4">
+        <div className="min-w-0 flex-1">
+          <div className="text-[10px] sm:text-xs text-muted-foreground font-medium uppercase tracking-widest mb-1">Membership</div>
+          <div className={cn("text-xl sm:text-2xl font-bold tracking-tight truncate", cfg.text)}>
             {cfg.label}
           </div>
         </div>
         <VipBadge tier={tier} size="md" />
       </div>
 
-      <div className="grid grid-cols-2 gap-3 mb-4">
-        <div className="bg-black/20 rounded-xl p-3 border border-white/5">
-          <div className="text-xs text-muted-foreground mb-1">Profit Bonus</div>
-          <div className={cn("text-lg font-bold", cfg.text)}>
+      <div className="grid grid-cols-2 gap-2.5 sm:gap-3 mb-4">
+        <div className="bg-black/20 rounded-xl p-2.5 sm:p-3 border border-white/5">
+          <div className="text-[10px] sm:text-xs text-muted-foreground mb-0.5 sm:mb-1">Profit Bonus</div>
+          <div className={cn("text-base sm:text-lg font-bold", cfg.text)}>
             {tier === "none" || currentBonus === undefined ? "—" : `+${currentBonus}%`}
           </div>
         </div>
-        <div className="bg-black/20 rounded-xl p-3 border border-white/5">
-          <div className="text-xs text-muted-foreground mb-1">Withdrawal Fee</div>
-          <div className={cn("text-lg font-bold", cfg.text)}>
+        <div className="bg-black/20 rounded-xl p-2.5 sm:p-3 border border-white/5">
+          <div className="text-[10px] sm:text-xs text-muted-foreground mb-0.5 sm:mb-1">Withdrawal Fee</div>
+          <div className={cn("text-base sm:text-lg font-bold", cfg.text)}>
             {(vip.withdrawalFee * 100).toFixed(1)}%
           </div>
         </div>
@@ -179,7 +184,7 @@ export function VipCard({ vip, investmentAmount = 0 }: VipCardProps) {
       )}
 
       <div className="space-y-1.5">
-        <div className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2">All Tiers</div>
+        <div className="text-[10px] sm:text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2">All Tiers</div>
         {tiers.map((t) => {
           const isActive = t.tier === tier;
           const tierCfg = TIER_CONFIG[t.tier];
@@ -187,21 +192,23 @@ export function VipCard({ vip, investmentAmount = 0 }: VipCardProps) {
             <div
               key={t.tier}
               className={cn(
-                "flex items-center justify-between px-3 py-2 rounded-lg text-xs border transition-all",
+                "grid grid-cols-[auto_1fr_auto_auto] items-center gap-x-2 sm:gap-x-3 px-2.5 sm:px-3 py-2 rounded-lg text-[11px] sm:text-xs border transition-all",
                 isActive
                   ? cn("bg-black/20 border-white/10", tierCfg.text, "font-semibold")
                   : "text-muted-foreground border-transparent"
               )}
             >
-              <div className="flex items-center gap-2">
-                <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", isActive ? tierCfg.dotClass : "bg-white/20")} />
-                <span>{t.label}</span>
-                <span className="text-muted-foreground/60">(${t.min.toLocaleString()}+)</span>
+              <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", isActive ? tierCfg.dotClass : "bg-white/20")} />
+              <div className="flex items-baseline gap-1.5 min-w-0">
+                <span className="truncate">{t.label}</span>
+                <span className="text-muted-foreground/60 text-[10px] sm:text-[11px] whitespace-nowrap">
+                  {fmtMin(t.min)}+
+                </span>
               </div>
-              <div className="flex items-center gap-3">
-                <span>+{t.profitBonus}% bonus</span>
-                <span>{t.fee}% fee</span>
-              </div>
+              <span className="whitespace-nowrap tabular-nums">+{t.profitBonus}%</span>
+              <span className="whitespace-nowrap tabular-nums text-muted-foreground/80">
+                {t.fee}% fee
+              </span>
             </div>
           );
         })}
