@@ -694,7 +694,7 @@ export default function Dashboard() {
     {
       label: "Total Equity",
       icon: <Wallet style={{ width: 16, height: 16 }} className="text-blue-400" />,
-      value: <BigBalanceCounter value={fundStats?.totalAUM ?? summary?.totalBalance ?? 0} className="text-2xl md:text-3xl" />,
+      value: <BigBalanceCounter value={fundStats?.totalAUM ?? summary?.totalBalance ?? 0} className="text-lg sm:text-2xl md:text-3xl" />,
       sub: (
         <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-400">
           <ArrowUpRight style={{ width: 12, height: 12 }} />
@@ -710,7 +710,7 @@ export default function Dashboard() {
         ? <TrendingUp style={{ width: 16, height: 16 }} className="text-green-400" />
         : <TrendingDown style={{ width: 16, height: 16 }} className="text-red-400" />,
       value: (
-        <span className={`inline-flex items-end text-2xl md:text-3xl font-bold whitespace-nowrap max-w-full ${isPositive ? "profit-text" : "loss-text"}`}>
+        <span className={`inline-flex items-end text-lg sm:text-2xl md:text-3xl font-bold whitespace-nowrap max-w-full ${isPositive ? "profit-text" : "loss-text"}`}>
           {isPositive ? "+" : ""}<AnimatedCounter value={Math.abs(dailyPL)} prefix="$" />
         </span>
       ),
@@ -727,7 +727,7 @@ export default function Dashboard() {
       label: "Active Trading Fund",
       // synced with Active Capital (Fund Transparency) — same value across both cards
       icon: <Zap style={{ width: 16, height: 16 }} className="text-indigo-400" />,
-      value: <BigBalanceCounter value={fundStats?.activeCapital ?? summary?.activeInvestment ?? 0} className="text-2xl md:text-3xl" />,
+      value: <BigBalanceCounter value={fundStats?.activeCapital ?? summary?.activeInvestment ?? 0} className="text-lg sm:text-2xl md:text-3xl" />,
       sub: summary?.isTrading ? (
         <div className="flex items-center gap-1.5">
           <span className="live-dot" style={{ width: 6, height: 6 }} />
@@ -748,7 +748,7 @@ export default function Dashboard() {
       // synced with Total Equity — scales proportionally to fund size
       icon: <Activity style={{ width: 16, height: 16 }} className="text-emerald-400" />,
       value: (
-        <span className="text-2xl md:text-3xl font-bold profit-text">
+        <span className="inline-flex items-end text-lg sm:text-2xl md:text-3xl font-bold profit-text whitespace-nowrap max-w-full">
           +<AnimatedCounter value={totalProfitDisplay} prefix="$" />
         </span>
       ),
