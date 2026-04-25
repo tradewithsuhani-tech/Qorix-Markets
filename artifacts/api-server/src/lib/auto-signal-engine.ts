@@ -58,9 +58,9 @@ type PairCfg = {
 
 const PAIRS: PairCfg[] = [
   { code: "BTCUSD", base: 78000, pipSize: 1,      precision: 2, volPercent: 0.20, liveSource: "kraken:XBTUSD" },
-  { code: "XAUUSD", base: 3320,  pipSize: 0.01,   precision: 2, volPercent: 0.15 },
-  { code: "EURUSD", base: 1.082, pipSize: 0.0001, precision: 5, volPercent: 0.08 },
-  { code: "USOIL",  base: 71.80, pipSize: 0.01,   precision: 2, volPercent: 0.18 },
+  { code: "XAUUSD", base: 3320,  pipSize: 0.01,   precision: 2, volPercent: 0.15, liveSource: "stooq:xauusd" },
+  { code: "EURUSD", base: 1.082, pipSize: 0.0001, precision: 5, volPercent: 0.08, liveSource: "stooq:eurusd" },
+  { code: "USOIL",  base: 71.80, pipSize: 0.01,   precision: 2, volPercent: 0.18, liveSource: "stooq:cl.f" },
 ];
 const PAIR_BY_CODE: Record<string, PairCfg> = PAIRS.reduce((acc, p) => {
   acc[p.code] = p; return acc;
@@ -124,6 +124,31 @@ async function fetchCoinbaseSpot(coinbasePair: string): Promise<LiveAnchor | nul
   }
 }
 
+/**
+ * Stooq free CSV quote endpoint — works for forex (eurusd), metals (xauusd),
+ * commodities (cl.f WTI crude). Updates roughly every minute during market
+ * hours; on weekends returns last Friday close, which still seeds a realistic
+ * anchor.  CSV format: Symbol,Date,Time,Open,High,Low,Close,Volume
+ */
+async function fetchStooqLastPrice(stooqSymbol: string): Promise<LiveAnchor | null> {
+  try {
+    const url = `https://stooq.com/q/l/?s=${stooqSymbol}&f=sd2t2ohlcv&h&e=csv`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(4000) });
+    if (!res.ok) return null;
+    const txt = await res.text();
+    const lines = txt.trim().split(/\r?\n/);
+    if (lines.length < 2) return null;
+    const cols = lines[1]!.split(",");
+    // Close is column index 6
+    const close = parseFloat(cols[6] ?? "");
+    if (!Number.isFinite(close) || close <= 0) return null;
+    return { price: close, source: "stooq" };
+  } catch (err: any) {
+    logger.warn({ err: err?.message ?? err, stooqSymbol }, "[auto-engine] stooq fetch failed");
+    return null;
+  }
+}
+
 // Per-pair drifting anchor for synthetic pricing (non-crypto pairs without live source)
 const lastAnchorByPair: Record<string, number> = {};
 
@@ -142,8 +167,15 @@ async function getEntryAnchor(pair: PairCfg): Promise<LiveAnchor> {
         return { price: +cb.price.toFixed(pair.precision), source: cb.source };
       }
     }
+    if (provider === "stooq" && symbol) {
+      const live = await fetchStooqLastPrice(symbol);
+      if (live) {
+        lastAnchorByPair[pair.code] = live.price;
+        return { price: +live.price.toFixed(pair.precision), source: live.source };
+      }
+    }
   }
-  // Synthetic random walk for non-crypto pairs
+  // Synthetic random walk for pairs without live source (fallback if API down)
   const prev = lastAnchorByPair[pair.code] ?? pair.base;
   const drift = (Math.random() * 2 - 1) * pair.volPercent / 100;
   const next = +(prev * (1 + drift)).toFixed(pair.precision);
