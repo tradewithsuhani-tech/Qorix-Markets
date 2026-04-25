@@ -690,6 +690,9 @@ export default function Dashboard() {
     }
   };
 
+  const istWeekday = new Intl.DateTimeFormat("en-US", { weekday: "short", timeZone: "Asia/Kolkata" }).format(new Date());
+  const isMarketLive = istWeekday !== "Sat" && istWeekday !== "Sun";
+
   const statCards = [
     {
       label: "Total Equity",
@@ -728,16 +731,19 @@ export default function Dashboard() {
       // synced with Active Capital (Fund Transparency) — same value across both cards
       icon: <Zap style={{ width: 16, height: 16 }} className="text-indigo-400" />,
       value: <BigBalanceCounter value={fundStats?.activeCapital ?? summary?.activeInvestment ?? 0} className="text-lg sm:text-2xl md:text-3xl" />,
-      sub: summary?.isTrading ? (
-        <div className="flex items-center gap-1.5">
-          <span className="live-dot" style={{ width: 6, height: 6 }} />
-          <span className="text-xs text-green-400 font-medium">Trading Live</span>
-        </div>
-      ) : (
-        <div className="flex items-center gap-1.5">
-          <span className="live-dot" style={{ width: 6, height: 6, background: "#34d399", boxShadow: "0 0 6px #10b981" }} />
-          <span className="text-xs font-medium text-emerald-400">Ready to grow</span>
-          <span className="text-[10px] font-semibold text-emerald-400/70 tabular-nums">· +0.50%/day potential</span>
+      sub: (
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {isMarketLive ? (
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 whitespace-nowrap">
+              <span className="live-dot" style={{ width: 5, height: 5 }} />
+              <span className="text-[10px] font-bold text-emerald-400 tracking-wider">LIVE</span>
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/30 whitespace-nowrap">
+              <span className="text-[10px] font-bold text-amber-400 tracking-wider">CLOSED</span>
+            </span>
+          )}
+          <span className="text-[11px] font-semibold text-emerald-400/80 tabular-nums whitespace-nowrap">+0.50%/day</span>
         </div>
       ),
       accent: "indigo",
