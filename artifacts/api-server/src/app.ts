@@ -13,6 +13,19 @@ const app: Express = express();
 // Disable etag overhead for API JSON; we don't rely on it and it costs CPU.
 app.set("etag", false);
 
+// Trust the single Replit edge proxy (workspace + deployment) so that
+// req.ip / X-Forwarded-For are honored correctly. Required for
+// express-rate-limit to identify clients — without this, the rate limiter
+// throws ERR_ERL_UNEXPECTED_X_FORWARDED_FOR on every request and any
+// API endpoint behind a limiter (login, OTP, dashboard data) returns 500.
+//
+// SECURITY NOTE: We use the integer "1" (single trusted hop) instead of
+// `true`. Setting `true` would let any client spoof their IP via the
+// X-Forwarded-For header, defeating rate limiting and audit logs. With
+// "1", Express only trusts the rightmost X-Forwarded-For entry that the
+// Replit proxy itself appended, which is the real client IP.
+app.set("trust proxy", 1);
+
 // gzip / deflate every response > 1KB. Cuts JSON payload size 60-80% on the
 // wire — huge perceived speedup on slow mobile networks (3G/Edge in India).
 // Brotli isn't built into the `compression` package; gzip is the safe default
