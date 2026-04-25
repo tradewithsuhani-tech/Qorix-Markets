@@ -185,7 +185,14 @@ type Trade = {
   profit: number;
   profitPercent: number;
   executedAt: string;
+  lot?: number;
 };
+
+// Hard ceiling on displayed lot size. When a planned % over the demo Active
+// Capital implies a lot larger than this (e.g. a tight 5-min candle move with
+// big capital), we cap the lot here and shrink the displayed USD profit
+// accordingly so the trade card stays realistic.
+const MAX_DISPLAY_LOT = 1.10;
 
 type SignalRecent = {
   id: number;
@@ -263,23 +270,21 @@ export default function TradeActivityPage() {
     placeholderData: keepPreviousData,
   });
 
-  // Pull the user's displayed Active Capital so we can convert each platform
-  // signal trade's % into a USD amount specific to this user (% × activeCapital).
-  const { data: dashSummary } = useQuery<{ activeInvestment?: number }>({
-    queryKey: ["dashboard-summary-for-activity"],
+  // Pull the demo dashboard's Active Capital (a baseline + monotonic-growth
+  // figure shown across the public/demo dashboard) so every trade card uses
+  // the SAME notional reference, independent of any individual user's funded
+  // balance. This is the "$867k-style" demo number, not user-specific.
+  const { data: fundStats } = useQuery<{ activeCapital?: number }>({
+    queryKey: ["fund-stats-for-activity"],
     queryFn: async () => {
-      let token: string | null = null;
-      try { token = localStorage.getItem("qorix_token"); } catch {}
-      const res = await fetch("/api/dashboard/summary", {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
+      const res = await fetch("/api/dashboard/fund-stats");
       if (!res.ok) throw new Error("failed");
       return res.json();
     },
     refetchInterval: 30000,
     placeholderData: keepPreviousData,
   });
-  const activeCapital = Number(dashSummary?.activeInvestment) || 0;
+  const demoActiveCapital = Number(fundStats?.activeCapital) || 0;
 
   const usingPlatformFallback = personalTrades.length === 0 && (recentData?.trades?.length ?? 0) > 0;
 
@@ -287,17 +292,32 @@ export default function TradeActivityPage() {
     ? personalTrades
     : (recentData?.trades ?? []).map((t) => {
         const pct = Number(t.realizedProfitPercent) || 0;
-        // Per-user USD = trade % × THIS user's displayed Active Capital
-        const usd = activeCapital > 0 ? +(pct * activeCapital / 100).toFixed(2) : 0;
+        const entry = Number(t.entryPrice) || 0;
+        const exit = Number(t.realizedExitPrice) || 0;
+        const priceDiff = Math.abs(exit - entry);
+        // Naive USD on the demo Active Capital: pct × demoActiveCapital.
+        const naiveUsd = demoActiveCapital > 0 ? pct * demoActiveCapital / 100 : 0;
+        // Derived lot from naive USD. If it exceeds the display ceiling we
+        // cap the lot AND recompute USD = sign(pct) × lot × priceDiff so the
+        // displayed profit auto-shrinks for big-candle trades — keeps the
+        // card realistic ("max 1.10 lot, profit bhi auto kam").
+        let lot = priceDiff > 0 ? Math.abs(naiveUsd) / priceDiff : 0;
+        let usd = naiveUsd;
+        if (lot > MAX_DISPLAY_LOT) {
+          lot = MAX_DISPLAY_LOT;
+          const sign = pct >= 0 ? 1 : -1;
+          usd = sign * lot * priceDiff;
+        }
         return {
           id: t.id,
           symbol: t.pair,
           direction: t.direction,
-          entryPrice: Number(t.entryPrice) || 0,
-          exitPrice: Number(t.realizedExitPrice) || 0,
-          profit: usd,
+          entryPrice: entry,
+          exitPrice: exit,
+          profit: +usd.toFixed(2),
           profitPercent: pct,
           executedAt: t.closedAt,
+          lot: +lot.toFixed(2),
         };
       });
 
