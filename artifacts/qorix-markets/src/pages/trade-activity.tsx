@@ -373,9 +373,9 @@ export default function TradeActivityPage() {
             isUp ? "bg-emerald-500/10" : "bg-rose-500/10",
           )} />
 
-          {/* Decorative sparkline (right side, behind content) */}
+          {/* Decorative sparkline (right side, behind content) — hidden on phones to avoid clash */}
           <svg
-            className="pointer-events-none absolute bottom-0 right-0 h-24 w-1/2 opacity-[0.18]"
+            className="pointer-events-none absolute bottom-0 right-0 hidden sm:block h-24 sm:w-1/2 opacity-[0.18]"
             viewBox="0 0 200 60"
             preserveAspectRatio="none"
             aria-hidden="true"
@@ -430,36 +430,36 @@ export default function TradeActivityPage() {
           <div className="relative mx-4 sm:mx-5 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
 
           {/* Bottom row: P/L + micro KPIs */}
-          <div className="relative flex items-center justify-between gap-4 px-4 sm:px-5 py-3.5 sm:py-4">
-            <div className="min-w-0">
+          <div className="relative flex items-center justify-between gap-3 px-4 sm:px-5 py-3 sm:py-4">
+            <div className="min-w-0 flex-1">
               <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/45">
                 P/L · {periodLabel}
               </div>
-              <div className="mt-0.5 flex items-center gap-1.5 text-[10px] sm:text-[11px] text-white/40">
+              <div className="mt-0.5 flex items-center gap-1.5 text-[10px] sm:text-[11px] text-white/40 whitespace-nowrap">
                 <span className="tabular-nums">{filtered.length}</span>
                 <span>trade{filtered.length === 1 ? "" : "s"}</span>
                 {filtered.length > 0 && (
                   <>
-                    <span className="text-white/20">•</span>
+                    <span className="text-white/20">·</span>
                     <span className="text-emerald-400/80 tabular-nums">{winRate}</span>
-                    <span className="text-white/35">win rate</span>
+                    <span className="text-white/35">win</span>
                   </>
                 )}
               </div>
             </div>
             <div className={cn(
-              "flex items-center gap-2 rounded-lg px-2.5 py-1.5 border backdrop-blur-sm",
+              "flex items-center gap-1.5 sm:gap-2 rounded-lg px-2 sm:px-2.5 py-1 sm:py-1.5 border shrink-0",
               isUp
-                ? "bg-emerald-500/[0.08] border-emerald-400/20"
-                : "bg-rose-500/[0.08] border-rose-400/20",
+                ? "bg-emerald-500/[0.12] border-emerald-400/25"
+                : "bg-rose-500/[0.12] border-rose-400/25",
             )}>
               <TrendIcon
-                className={cn("w-4 h-4 shrink-0", isUp ? "text-emerald-400" : "text-rose-400")}
+                className={cn("w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0", isUp ? "text-emerald-400" : "text-rose-400")}
                 strokeWidth={2.5}
               />
               <div
                 className={cn(
-                  "text-xl sm:text-[26px] font-bold tabular-nums tracking-tight leading-none",
+                  "text-base sm:text-[26px] font-bold tabular-nums tracking-tight leading-none",
                   isUp ? "text-emerald-400" : "text-rose-400",
                 )}
               >
