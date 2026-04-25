@@ -214,6 +214,15 @@ If push has already been attempted and the index failed, drop the bad index, run
 - **AWS SES**: sender email must be verified; request production access to leave sandbox
 - **reCAPTCHA**: live domain `qorix-markets-1.replit.app` must be added in the reCAPTCHA console
 
+## Promotions System
+
+Two layered offer sources, both gated by ONE-redemption-per-user-lifetime in `promo_redemptions`:
+
+1. **Rotating-window offers** (`/api/promo/offer`) — deterministic HMAC-derived codes per N-minute window. Window length, %, prefix, master toggle in `system_settings`. Admin-tunable via System Control panel without redeploy.
+2. **Scheduled holiday promos** (`scheduled_promos` table, admin CRUD at `/api/admin/scheduled-promos`) — fixed bonus % over a `[startsAt, endsAt)` window. When active, OVERRIDE the rotating offer (highest bonus % wins on overlap). Optional per-promo cap. Redeem flow runs in a single DB transaction with `SELECT ... FOR UPDATE` on the user redemption row + WHERE-filtered cap claim — atomic, no cap drift, safe under concurrency. Composite index `(is_active, starts_at, ends_at)` covers the active-lookup path.
+
+Cap rule, lifetime cap, milestone idempotency (advisory-lock) and PROMO_BOUNDS bounds-clamp all live in `lib/promo-bounds.ts` + `lib/milestone-service.ts`.
+
 ## Design
 
 - Dark theme: deep navy/obsidian (HSL 224 71% 4%) + electric blue (#3b82f6)

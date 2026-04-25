@@ -20,3 +20,14 @@ export function normalizePromoCodePrefix(raw: string): string {
     .slice(0, PROMO_BOUNDS.codePrefixMaxLen);
   return cleaned || "QRX";
 }
+
+// Scheduled holiday-promo codes (e.g. "DIWALI25", "NYE2026") — independent of
+// the rotating-window prefix. Allowed: A-Z, 0-9. Length 1..32. Returns "" when
+// nothing valid remains so the caller can produce a 400.
+export const SCHEDULED_PROMO_CODE_MAX_LEN = 32;
+export function normalizeScheduledPromoCode(raw: string): string {
+  return String(raw ?? "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "")
+    .slice(0, SCHEDULED_PROMO_CODE_MAX_LEN);
+}
