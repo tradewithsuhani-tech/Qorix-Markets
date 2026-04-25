@@ -1248,14 +1248,16 @@ function PortfolioInner() {
               />
               <div className="relative flex items-start justify-between gap-3 flex-wrap">
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="w-7 h-7 rounded-lg bg-emerald-500/20 border border-emerald-400/40 flex items-center justify-center shrink-0">
-                      <Target className="w-3.5 h-3.5 text-emerald-300" />
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className="w-7 h-7 rounded-lg bg-emerald-500/20 border border-emerald-400/40 flex items-center justify-center shrink-0">
+                        <Target className="w-3.5 h-3.5 text-emerald-300" />
+                      </div>
+                      <div className="text-[10px] sm:text-[11px] uppercase tracking-wider text-emerald-300 font-bold whitespace-nowrap">
+                        Monthly Potential
+                      </div>
                     </div>
-                    <div className="text-[10px] sm:text-[11px] uppercase tracking-wider text-emerald-300 font-bold">
-                      Monthly Potential
-                    </div>
-                    <span className="inline-flex items-center gap-1 text-[9px] uppercase tracking-wider text-emerald-200/90 bg-emerald-500/15 border border-emerald-400/30 px-1.5 py-0.5 rounded font-bold">
+                    <span className="inline-flex items-center gap-1 text-[9px] uppercase tracking-wider text-emerald-200/90 bg-emerald-500/15 border border-emerald-400/30 px-1.5 py-0.5 rounded font-bold shrink-0 whitespace-nowrap">
                       <Sparkles className="w-2.5 h-2.5" /> Projected
                     </span>
                   </div>
