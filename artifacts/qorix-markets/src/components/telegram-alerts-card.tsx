@@ -23,7 +23,10 @@ type Status = {
 
 type LinkResp = {
   code: string;
-  deepLink: string;
+  deepLink: string; // legacy alias of httpsUrl
+  httpsUrl: string;
+  tgUrl: string;
+  botUsername: string;
   expiresAt: string;
 };
 
@@ -138,6 +141,35 @@ export function TelegramAlertsCard() {
     }
   }
 
+  // Smart Telegram open: try the native `tg://` scheme first (instant in-app
+  // jump if Telegram is installed). After a short timeout, fall back to the
+  // universal https://t.me link which opens the browser → Telegram handoff.
+  // Same-window navigation lets iOS/Android Universal Links engage cleanly.
+  function openTelegram() {
+    if (!linkData) return;
+    const fellBack = { current: false };
+    const fallback = window.setTimeout(() => {
+      fellBack.current = true;
+      window.location.href = linkData.httpsUrl;
+    }, 900);
+    // If the page becomes hidden, the tg:// scheme worked — cancel fallback.
+    const onHide = () => {
+      if (document.hidden) {
+        window.clearTimeout(fallback);
+        document.removeEventListener("visibilitychange", onHide);
+      }
+    };
+    document.addEventListener("visibilitychange", onHide);
+    try {
+      window.location.href = linkData.tgUrl;
+    } catch {
+      if (!fellBack.current) {
+        window.clearTimeout(fallback);
+        window.location.href = linkData.httpsUrl;
+      }
+    }
+  }
+
   async function copyCode() {
     if (!linkData) return;
     try {
@@ -212,18 +244,16 @@ export function TelegramAlertsCard() {
       ) : linkData ? (
         <div className="space-y-3">
           <p className="text-xs text-muted-foreground">
-            Tap the button below to open Telegram and confirm the link. The page will refresh automatically once it's done.
+            Tap below — Telegram will open straight to the bot. Hit <span className="font-semibold text-white">START</span> once and you're linked. This page refreshes automatically.
           </p>
 
-          <a
-            href={linkData.deepLink}
-            target="_blank"
-            rel="noopener noreferrer"
+          <button
+            onClick={openTelegram}
             className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-sky-500 hover:bg-sky-600 text-white font-semibold text-sm transition-all"
           >
             <ExternalLink style={{ width: 15, height: 15 }} />
             Open Telegram & link
-          </a>
+          </button>
 
           <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-3">
             <div className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1.5">
