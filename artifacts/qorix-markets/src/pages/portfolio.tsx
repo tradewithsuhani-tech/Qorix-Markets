@@ -1190,24 +1190,39 @@ function PortfolioInner() {
       </div>
 
       {/* Daily Return Projection — investment-based forex-day breakdown */}
-      <div className="relative overflow-hidden rounded-2xl border border-emerald-400/20 bg-gradient-to-br from-emerald-500/[0.06] via-[#0a1322] to-[#070b14] p-5 md:p-6">
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-emerald-400/50 to-transparent" />
+      <div className="relative overflow-hidden rounded-2xl border border-emerald-400/20 bg-gradient-to-br from-emerald-500/[0.06] via-[#0a1322] to-[#070b14] p-4 sm:p-5 md:p-6">
+        {/* Top hairline highlight */}
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-emerald-400/60 to-transparent" />
+        {/* Ambient glow */}
         <div
-          className="pointer-events-none absolute -top-20 -right-20 w-72 h-72 rounded-full opacity-40"
-          style={{ background: "radial-gradient(circle, rgba(16,185,129,0.20) 0%, transparent 70%)" }}
+          className="pointer-events-none absolute -top-24 -right-24 w-80 h-80 rounded-full opacity-40"
+          style={{ background: "radial-gradient(circle, rgba(16,185,129,0.22) 0%, transparent 70%)" }}
+        />
+        {/* Subtle grid texture */}
+        <div
+          className="pointer-events-none absolute inset-0 opacity-[0.025]"
+          style={{
+            backgroundImage:
+              "linear-gradient(to right, white 1px, transparent 1px), linear-gradient(to bottom, white 1px, transparent 1px)",
+            backgroundSize: "32px 32px",
+          }}
         />
 
         <div className="relative flex items-start justify-between flex-wrap gap-3 mb-5">
-          <div>
-            <h3 className="text-base md:text-lg font-semibold text-white flex items-center gap-2">
+          <div className="flex items-start gap-2.5 min-w-0 flex-1">
+            <div className="w-9 h-9 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center shrink-0 shadow-[0_0_18px_-6px_rgba(16,185,129,0.5)]">
               <LineChart className="w-4 h-4 text-emerald-400" />
-              Daily Return Projection
-            </h3>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Indicative daily profit estimate based on your risk tier, distributed across forex working days (Mon–Fri) of {monthLabel}. Realised profit may vary with market conditions.
-            </p>
+            </div>
+            <div className="min-w-0">
+              <h3 className="text-sm sm:text-base md:text-lg font-semibold text-white flex items-center gap-2 leading-tight">
+                Daily Return Projection
+              </h3>
+              <p className="text-[11px] sm:text-xs text-muted-foreground mt-1 leading-relaxed">
+                Indicative daily profit, distributed across forex working days (Mon–Fri) of {monthLabel}.
+              </p>
+            </div>
           </div>
-          <span className="inline-flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-emerald-300 bg-emerald-500/10 border border-emerald-500/25 px-2 py-1 rounded-full font-semibold">
+          <span className="inline-flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-emerald-300 bg-emerald-500/10 border border-emerald-500/30 px-2.5 py-1 rounded-full font-bold shrink-0 shadow-[inset_0_0_0_1px_rgba(16,185,129,0.05)]">
             <Calendar className="w-3 h-3" />
             {projection.workingDays} Forex Days
           </span>
@@ -1222,54 +1237,121 @@ function PortfolioInner() {
           </div>
         ) : (
           <>
-            {/* Top metrics */}
-            <div className="relative grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
-              <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-3.5">
-                <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-blue-300 font-semibold mb-1.5">
-                  <Wallet className="w-3 h-3" /> Investment
+            {/* Hero: Monthly Potential — full-width premium showcase */}
+            <div className="relative overflow-hidden rounded-2xl border border-emerald-400/30 bg-gradient-to-br from-emerald-500/[0.14] via-emerald-500/[0.05] to-transparent p-4 sm:p-5 mb-3 shadow-[0_0_32px_-12px_rgba(16,185,129,0.5)]">
+              <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-emerald-300/70 to-transparent" />
+              <div
+                className="pointer-events-none absolute -bottom-16 -left-12 w-56 h-56 rounded-full opacity-50"
+                style={{ background: "radial-gradient(circle, rgba(16,185,129,0.25) 0%, transparent 70%)" }}
+              />
+              <div className="relative flex items-start justify-between gap-3 flex-wrap">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-7 h-7 rounded-lg bg-emerald-500/20 border border-emerald-400/40 flex items-center justify-center shrink-0">
+                      <Target className="w-3.5 h-3.5 text-emerald-300" />
+                    </div>
+                    <div className="text-[10px] sm:text-[11px] uppercase tracking-wider text-emerald-300 font-bold">
+                      Monthly Potential
+                    </div>
+                    <span className="inline-flex items-center gap-1 text-[9px] uppercase tracking-wider text-emerald-200/90 bg-emerald-500/15 border border-emerald-400/30 px-1.5 py-0.5 rounded font-bold">
+                      <Sparkles className="w-2.5 h-2.5" /> Projected
+                    </span>
+                  </div>
+                  <div className="flex items-baseline gap-1.5 flex-wrap">
+                    <span className="text-2xl sm:text-3xl md:text-4xl font-extrabold tabular-nums bg-gradient-to-r from-white via-emerald-100 to-emerald-300 bg-clip-text text-transparent leading-none">
+                      ${((investedAmount * projection.monthlyMinPct) / 100).toFixed(2)}
+                    </span>
+                    <span className="text-lg sm:text-xl md:text-2xl font-bold text-emerald-300/70 tabular-nums leading-none">
+                      –
+                    </span>
+                    <span className="text-2xl sm:text-3xl md:text-4xl font-extrabold tabular-nums bg-gradient-to-r from-emerald-200 via-emerald-300 to-green-400 bg-clip-text text-transparent leading-none">
+                      ${((investedAmount * projection.monthlyMaxPct) / 100).toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-muted-foreground mt-2 flex items-center gap-1.5 flex-wrap">
+                    <span className="inline-flex items-center gap-1 text-emerald-200/80 font-medium">
+                      <TrendingUp className="w-3 h-3" />
+                      {projection.monthlyMinPct}–{projection.monthlyMaxPct}%
+                    </span>
+                    <span className="text-muted-foreground/60">·</span>
+                    <span>Estimated monthly range</span>
+                  </div>
                 </div>
-                <div className="text-lg md:text-xl font-bold text-white tabular-nums">
+                {/* Mini sparkline-style progress visual */}
+                <div className="hidden sm:flex flex-col items-end gap-1.5 shrink-0 pt-1">
+                  <div className="flex items-end gap-0.5 h-10">
+                    {[40, 55, 45, 70, 60, 80, 65, 90, 75, 100].map((h, i) => (
+                      <div
+                        key={i}
+                        className="w-1.5 rounded-sm bg-gradient-to-t from-emerald-500/30 to-emerald-300/80"
+                        style={{ height: `${h}%` }}
+                      />
+                    ))}
+                  </div>
+                  <div className="text-[9px] uppercase tracking-wider text-emerald-300/70 font-bold">
+                    Trend
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Supporting metrics — 3 compact tiles */}
+            <div className="relative grid grid-cols-3 gap-2 sm:gap-3 mb-5">
+              {/* Investment */}
+              <div className="group relative overflow-hidden rounded-xl border border-blue-500/20 bg-gradient-to-br from-blue-500/[0.08] to-blue-500/[0.02] p-3 sm:p-3.5 transition-all hover:border-blue-400/40 hover:-translate-y-0.5 duration-200">
+                <div className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-gradient-to-br from-white/[0.04] to-transparent" />
+                <div className="relative flex items-center gap-1.5 mb-2">
+                  <div className="w-6 h-6 rounded-md bg-blue-500/20 border border-blue-400/30 flex items-center justify-center shrink-0">
+                    <Wallet className="w-3 h-3 text-blue-300" />
+                  </div>
+                  <div className="text-[9px] sm:text-[10px] uppercase tracking-wider text-blue-300 font-bold truncate">
+                    Investment
+                  </div>
+                </div>
+                <div className="relative text-base sm:text-lg md:text-xl font-bold text-white tabular-nums leading-tight truncate">
                   ${investedAmount.toFixed(2)}
                 </div>
-                <div className="text-[10px] text-muted-foreground mt-0.5 capitalize">
-                  {riskSafe} risk strategy
+                <div className="relative text-[10px] text-muted-foreground mt-0.5 capitalize truncate">
+                  {riskSafe} risk
                 </div>
               </div>
 
-              <div className="rounded-xl border border-violet-500/20 bg-violet-500/5 p-3.5">
-                <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-violet-300 font-semibold mb-1.5">
-                  <TrendingUp className="w-3 h-3" /> Monthly Range
+              {/* Monthly Range */}
+              <div className="group relative overflow-hidden rounded-xl border border-violet-500/20 bg-gradient-to-br from-violet-500/[0.08] to-violet-500/[0.02] p-3 sm:p-3.5 transition-all hover:border-violet-400/40 hover:-translate-y-0.5 duration-200">
+                <div className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-gradient-to-br from-white/[0.04] to-transparent" />
+                <div className="relative flex items-center gap-1.5 mb-2">
+                  <div className="w-6 h-6 rounded-md bg-violet-500/20 border border-violet-400/30 flex items-center justify-center shrink-0">
+                    <TrendingUp className="w-3 h-3 text-violet-300" />
+                  </div>
+                  <div className="text-[9px] sm:text-[10px] uppercase tracking-wider text-violet-300 font-bold truncate">
+                    Range
+                  </div>
                 </div>
-                <div className="text-lg md:text-xl font-bold text-white tabular-nums">
+                <div className="relative text-base sm:text-lg md:text-xl font-bold text-white tabular-nums leading-tight">
                   {projection.monthlyMinPct}–{projection.monthlyMaxPct}%
                 </div>
-                <div className="text-[10px] text-muted-foreground mt-0.5">
+                <div className="relative text-[10px] text-muted-foreground mt-0.5 truncate">
                   Performance band
                 </div>
               </div>
 
-              <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/8 p-3.5 shadow-[0_0_20px_-8px_rgba(16,185,129,0.4)]">
-                <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-emerald-300 font-semibold mb-1.5">
-                  <Target className="w-3 h-3" /> Monthly Potential
+              {/* Today */}
+              <div className="group relative overflow-hidden rounded-xl border border-amber-500/20 bg-gradient-to-br from-amber-500/[0.08] to-amber-500/[0.02] p-3 sm:p-3.5 transition-all hover:border-amber-400/40 hover:-translate-y-0.5 duration-200">
+                <div className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-gradient-to-br from-white/[0.04] to-transparent" />
+                <div className="relative flex items-center gap-1.5 mb-2">
+                  <div className="w-6 h-6 rounded-md bg-amber-500/20 border border-amber-400/30 flex items-center justify-center shrink-0">
+                    <Activity className="w-3 h-3 text-amber-300" />
+                  </div>
+                  <div className="text-[9px] sm:text-[10px] uppercase tracking-wider text-amber-300 font-bold truncate">
+                    Today
+                  </div>
                 </div>
-                <div className="text-base md:text-lg font-bold tabular-nums bg-gradient-to-r from-emerald-200 to-green-400 bg-clip-text text-transparent">
-                  ${((investedAmount * projection.monthlyMinPct) / 100).toFixed(2)}–${((investedAmount * projection.monthlyMaxPct) / 100).toFixed(2)}
-                </div>
-                <div className="text-[10px] text-muted-foreground mt-0.5">
-                  Estimated monthly range
-                </div>
-              </div>
-
-              <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3.5">
-                <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-amber-300 font-semibold mb-1.5">
-                  <Activity className="w-3 h-3" /> Today
-                </div>
-                <div className="text-lg md:text-xl font-bold text-white tabular-nums">
+                <div className="relative text-base sm:text-lg md:text-xl font-bold text-white tabular-nums leading-tight truncate">
                   ${projection.todayAmount.toFixed(2)}
                 </div>
-                <div className="text-[10px] text-muted-foreground mt-0.5 tabular-nums">
+                <div className="relative text-[10px] text-muted-foreground mt-0.5 tabular-nums truncate">
                   {investedAmount > 0
-                    ? `+${((projection.todayAmount / investedAmount) * 100).toFixed(3)}% on capital`
+                    ? `+${((projection.todayAmount / investedAmount) * 100).toFixed(3)}%`
                     : "—"}
                 </div>
               </div>
