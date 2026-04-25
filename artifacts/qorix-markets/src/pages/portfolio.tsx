@@ -1063,77 +1063,120 @@ function PortfolioInner() {
       </div>
 
       {/* Investment Setup — premium metric tile grid */}
-      <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-[#0e1828] via-[#0a1322] to-[#070b14] p-5 md:p-6">
+      <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-[#0e1828] via-[#0a1322] to-[#070b14] p-4 sm:p-5 md:p-6">
+        {/* Top hairline highlight */}
         <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/15 to-transparent" />
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-base font-semibold text-white flex items-center gap-2">
-            <Gauge className="w-4 h-4 text-blue-400" /> Investment Setup
-          </h3>
-          <span className="text-[10px] uppercase tracking-wider text-muted-foreground border border-white/10 px-2 py-0.5 rounded-full">
-            Configuration
+        {/* Subtle ambient glow in the corner */}
+        <div
+          className="pointer-events-none absolute -top-24 -right-24 w-64 h-64 rounded-full opacity-30"
+          style={{ background: "radial-gradient(circle, rgba(59,130,246,0.18) 0%, transparent 70%)" }}
+        />
+
+        <div className="relative flex items-center justify-between gap-2 mb-4">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 rounded-lg bg-blue-500/15 border border-blue-500/25 flex items-center justify-center shrink-0">
+              <Gauge className="w-4 h-4 text-blue-400" />
+            </div>
+            <div className="min-w-0">
+              <h3 className="text-sm sm:text-base font-semibold text-white whitespace-nowrap leading-tight">
+                Investment Setup
+              </h3>
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground/70 font-medium mt-0.5 whitespace-nowrap">
+                Strategy parameters
+              </div>
+            </div>
+          </div>
+          <span className={cn(
+            "inline-flex items-center gap-1.5 px-2 py-1 rounded-full border whitespace-nowrap shrink-0",
+            isActive
+              ? "bg-emerald-500/10 border-emerald-500/25"
+              : "bg-amber-500/10 border-amber-500/25"
+          )}>
+            <span className={cn(
+              "w-1.5 h-1.5 rounded-full",
+              isActive ? "bg-emerald-400 animate-pulse" : "bg-amber-400"
+            )} />
+            <span className={cn(
+              "text-[10px] font-bold tracking-wider uppercase",
+              isActive ? "text-emerald-300" : "text-amber-300"
+            )}>
+              {isActive ? "Active" : "Paused"}
+            </span>
           </span>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+        {/* 4 tiles — 2-col mobile, 4-col desktop. Status moved to header pill so we
+            avoid the orphaned 5th tile that used to sit alone on a new row. */}
+        <div className="relative grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3">
           {[
             {
               icon: Shield,
               label: "Risk Level",
               value: (investment?.riskLevel ?? "low").toString().charAt(0).toUpperCase() + (investment?.riskLevel ?? "low").toString().slice(1),
+              hint: "Strategy aggressiveness",
               color: "text-emerald-400",
-              bg: "from-emerald-500/10 to-emerald-500/5",
+              bg: "from-emerald-500/[0.08] to-emerald-500/[0.02]",
               border: "border-emerald-500/20",
               iconBg: "bg-emerald-500/15",
+              ring: "shadow-[inset_0_1px_0_0_rgba(16,185,129,0.08)]",
             },
             {
               icon: Gauge,
-              label: "Drawdown Limit",
+              label: "Drawdown",
               value: `${investment?.drawdownLimit?.toFixed?.(2) ?? "0.00"}%`,
+              hint: "Max allowed loss",
               color: "text-amber-400",
-              bg: "from-amber-500/10 to-amber-500/5",
+              bg: "from-amber-500/[0.08] to-amber-500/[0.02]",
               border: "border-amber-500/20",
               iconBg: "bg-amber-500/15",
+              ring: "shadow-[inset_0_1px_0_0_rgba(245,158,11,0.08)]",
             },
             {
               icon: Repeat,
               label: "Auto-Compound",
               value: investment?.autoCompound ? "Enabled" : "Disabled",
-              color: investment?.autoCompound ? "text-emerald-400" : "text-muted-foreground",
-              bg: investment?.autoCompound ? "from-emerald-500/10 to-emerald-500/5" : "from-white/5 to-white/[0.02]",
+              hint: investment?.autoCompound ? "Profits reinvested daily" : "Profits paid out daily",
+              color: investment?.autoCompound ? "text-emerald-400" : "text-slate-300",
+              bg: investment?.autoCompound ? "from-emerald-500/[0.08] to-emerald-500/[0.02]" : "from-white/[0.04] to-white/[0.01]",
               border: investment?.autoCompound ? "border-emerald-500/20" : "border-white/10",
               iconBg: investment?.autoCompound ? "bg-emerald-500/15" : "bg-white/5",
+              ring: "",
             },
             {
               icon: CalendarDays,
               label: "Days Running",
               value: `${daysRunning}d`,
+              hint: daysRunning >= 30 ? "Diamond hands" : "Building streak",
               color: "text-blue-300",
-              bg: "from-blue-500/10 to-blue-500/5",
+              bg: "from-blue-500/[0.08] to-blue-500/[0.02]",
               border: "border-blue-500/20",
               iconBg: "bg-blue-500/15",
-            },
-            {
-              icon: isActive ? Zap : CircleDot,
-              label: "Status",
-              value: isActive ? "Active" : "Paused",
-              color: isActive ? "text-emerald-400" : "text-amber-400",
-              bg: isActive ? "from-emerald-500/10 to-emerald-500/5" : "from-amber-500/10 to-amber-500/5",
-              border: isActive ? "border-emerald-500/20" : "border-amber-500/20",
-              iconBg: isActive ? "bg-emerald-500/15" : "bg-amber-500/15",
+              ring: "shadow-[inset_0_1px_0_0_rgba(59,130,246,0.08)]",
             },
           ].map((tile) => (
             <div
               key={tile.label}
-              className={`relative overflow-hidden rounded-xl border ${tile.border} bg-gradient-to-br ${tile.bg} p-3.5 transition-all hover:border-white/20 hover:-translate-y-0.5 duration-200`}
+              className={cn(
+                "group relative overflow-hidden rounded-xl border bg-gradient-to-br p-3 sm:p-3.5 transition-all duration-200 hover:-translate-y-0.5 hover:border-white/25",
+                tile.border, tile.bg, tile.ring
+              )}
             >
-              <div className={`w-7 h-7 rounded-lg ${tile.iconBg} flex items-center justify-center mb-2`}>
-                <tile.icon className={`w-3.5 h-3.5 ${tile.color}`} />
+              {/* Hover sheen */}
+              <div className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-gradient-to-br from-white/[0.04] to-transparent" />
+
+              <div className="relative flex items-start justify-between mb-2.5">
+                <div className={cn("w-7 h-7 rounded-lg flex items-center justify-center", tile.iconBg)}>
+                  <tile.icon className={cn("w-3.5 h-3.5", tile.color)} />
+                </div>
               </div>
-              <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium mb-0.5">
+              <div className="relative text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1 truncate">
                 {tile.label}
               </div>
-              <div className={`text-sm md:text-base font-bold tabular-nums ${tile.color}`}>
+              <div className={cn("relative text-base sm:text-lg font-bold tabular-nums leading-tight truncate", tile.color)}>
                 {tile.value}
+              </div>
+              <div className="relative text-[10px] text-muted-foreground/70 mt-1 truncate">
+                {tile.hint}
               </div>
             </div>
           ))}
