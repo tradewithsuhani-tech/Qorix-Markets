@@ -1322,7 +1322,7 @@ function PortfolioInner() {
               </div>
 
               <p className="text-[10px] text-muted-foreground mt-3 leading-relaxed">
-                <span className="text-emerald-300/80 font-semibold">How it works:</span> Profit accrues only on forex working days (Mon–Fri) — weekends are off. Daily figures vary; the {monthLabel} total targets ~<span className="text-white">${projection.monthlyTarget.toFixed(2)}</span> ({projection.monthlyAvgPct}% of ${investedAmount.toFixed(2)} at {riskSafe} risk). <span className="opacity-80">Projections are illustrative and not a guarantee of returns — actual results depend on market performance and active risk controls.</span>
+                <span className="text-emerald-300/80 font-semibold">Trading never sleeps — but earnings settle smart.</span> Your capital works through Mon–Fri global forex sessions, locking in real profits as markets close. Weekends rest; the engine is back live every Monday. <span className="opacity-80">Returns are driven by live market performance and protected by your active risk controls.</span>
               </p>
             </div>
           </>
