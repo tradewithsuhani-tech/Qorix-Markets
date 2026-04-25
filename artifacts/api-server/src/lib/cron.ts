@@ -79,18 +79,17 @@ export async function initCronJobs(): Promise<void> {
     })
     .catch((err) => errorLogger.error({ err }, "Startup: promo expiry sweep failed"));
 
-  // Auto Signal Engine — controlled 5-minute auto-trading.
-  // Tick every 5 min on the clock (00:00, 00:05, …) — matches synthetic candle boundaries.
-  // Closer runs every minute to settle trades that have hit their candle close.
+  // Auto Signal Engine — daily plan of 25 trades (12:30→20:30 UTC, 8h window)
+  // Tick every minute: each tick executes the earliest pending-and-due slot.
+  // Legacy closer kept for any v1 running trades.
   if (AUTO_ENGINE_ENABLED) {
-    // Rehydrate today's counters from DB BEFORE scheduling the tick
-    // so a server restart can't reset the daily 15-trade / 0.4% caps
-    // and let the engine over-trade if the first */5 tick fires fast.
+    // Restore today's plan (or create it) so executed slots aren't duplicated
+    // after a server restart.
     await rehydrateAutoEngineState().catch((err) =>
       errorLogger.error({ err }, "Startup: auto-engine rehydrate failed"),
     );
 
-    cron.schedule("*/5 * * * *", async () => {
+    cron.schedule("* * * * *", async () => {
       try {
         await tickAutoSignalEngine();
       } catch (err) {
@@ -106,7 +105,7 @@ export async function initCronJobs(): Promise<void> {
       }
     });
 
-    logger.info("Cron: auto-signal-engine registered — tick */5min, closer every 1min");
+    logger.info("Cron: auto-signal-engine v2 registered — tick + closer every 1min");
   } else {
     logger.info("Cron: auto-signal-engine DISABLED via AUTO_SIGNAL_ENGINE_ENABLED=0");
   }

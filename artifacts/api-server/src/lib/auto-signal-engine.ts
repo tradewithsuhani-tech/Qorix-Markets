@@ -1,46 +1,59 @@
 import { db, signalTradesTable } from "@workspace/db";
-import { and, eq, gte, isNull, like, lte, sql } from "drizzle-orm";
+import { and, eq, gte, isNull, like, lte } from "drizzle-orm";
 import { logger } from "./logger";
 import { createSignalTrade, closeSignalTrade } from "./signal-trade-service";
+import { redisConnection } from "./redis";
 
 /**
- * CONTROLLED AUTO SIGNAL ENGINE
+ * AUTO SIGNAL ENGINE — v2 (planned daily target)
  *
- * Generates signal trades automatically on a 5-minute candle cadence with:
- *  - Max 15 trades / UTC day
- *  - 1-hour pause after every 2 trades
- *  - Daily profit target = 0.4% of demo balance (track cumulative %)
- *  - TP per trade ≈ 0.2–0.4%
- *  - Multi-pair rotation: BTCUSD / XAUUSD / EURUSD / USOIL
- *  - Auto-close on candle close (5 min after open) — TP always hit (demo realism)
+ * Generates a deterministic daily plan of 25 signal trades that, in aggregate,
+ * deliver a daily profit target of 0.30%–0.50% of "Active Capital", spread
+ * across an 8-hour window with random 15–25 min gaps.
  *
- * Engine trades are tagged in `notes` with the AUTO_TAG so the closer can
- * find them without affecting manually-created admin trades.
+ * Behaviour:
+ *  - Window: 12:30 UTC → 20:30 UTC (8 h, 480 min)
+ *  - 25 trade slots, gaps randomised in [15, 25] min (avg 19.2)
+ *  - Daily target % chosen once per day (uniform random in [0.30, 0.50]%)
+ *  - 1 or 2 randomly-chosen "loser" slots/day → ~92–96% win rate
+ *  - Loser per-trade %: -0.05 to -0.15
+ *  - Winner % distributed across remaining slots so total target is hit
+ *  - Real Kraken price (or Coinbase spot fallback) is used as ENTRY anchor;
+ *    EXIT is engineered from entry + planned %.
+ *
+ * Plan is persisted in Redis (key `auto:plan:YYYY-MM-DD`, TTL 36h) and
+ * re-loaded on server restart so executed slots are not duplicated.
+ *
+ * The cron tick runs every minute; each tick executes the earliest
+ * pending-and-due slot (one trade per tick, at most).
  */
 
-// Tag includes a non-typeable marker so admin-typed notes can never collide.
-// Combined with `createdBy IS NULL` filter on the closer, this is double-safe.
-const AUTO_TAG = "[AUTO-ENGINE-v1#a7c2]";
-const AUTO_NOTES_PREFIX = `${AUTO_TAG} 5m candle signal`;
-const MAX_TRADES_PER_DAY = 15;
-const TRADES_BEFORE_BREAK = 2;
-const BREAK_DURATION_MS = 60 * 60 * 1000; // 1 hour
-const DAILY_TARGET_PERCENT = 0.4; // 0.4% of balance
-const TP_MIN_PERCENT = 0.2;
-const TP_MAX_PERCENT = 0.4;
-const CANDLE_MS = 5 * 60 * 1000;
-const MIN_BODY_PERCENT = 0.005; // skip true dojis only — real BTC 5m can be very tight
+const AUTO_TAG = "[AUTO-ENGINE-v2#daily-plan]";
+const AUTO_NOTES_PREFIX = `${AUTO_TAG} planned slot`;
+
+// Window 12:30 → 20:30 UTC = 480 min = 8 h
+const WINDOW_START_HHMM = { h: 12, m: 30 };
+const WINDOW_END_HHMM = { h: 20, m: 30 };
+
+const TOTAL_SLOTS = 25;
+const MIN_GAP_MIN = 15;
+const MAX_GAP_MIN = 25;
+const DAILY_TARGET_MIN_PCT = 0.30;
+const DAILY_TARGET_MAX_PCT = 0.50;
+const LOSER_PCT_MIN = 0.05;
+const LOSER_PCT_MAX = 0.15;
+// Weighted picker: ~67% chance of 1 loser, ~33% chance of 2 → matches user spec "1-2 SL hit per ~10 trades"
+const LOSER_COUNT_OPTIONS: number[] = [1, 1, 2];
 
 type PairCfg = {
   code: string;
-  base: number;        // last-known anchor — fallback only if live fetch fails
-  pipSize: number;     // matches frontend pair-meta
-  precision: number;   // decimals for entry price string
-  volPercent: number;  // typical 5-min body volatility (%) — fallback synth
-  liveSource?: string; // `kraken:<pair>` or `coinbase:<pair>` for live OHLC fetch
+  base: number;
+  pipSize: number;
+  precision: number;
+  volPercent: number;
+  liveSource?: string; // `kraken:<symbol>`
 };
 
-// Base prices are last-known anchors used only if live fetch fails.
 const PAIRS: PairCfg[] = [
   { code: "BTCUSD", base: 78000, pipSize: 1,      precision: 2, volPercent: 0.20, liveSource: "kraken:XBTUSD" },
   { code: "XAUUSD", base: 3320,  pipSize: 0.01,   precision: 2, volPercent: 0.15 },
@@ -56,266 +69,343 @@ const PAIR_BY_CODE: Record<string, PairCfg> = PAIRS.reduce((acc, p) => {
  * - Crypto: 24/7
  * - Forex / Gold / Oil: closed Fri 22:00 UTC → Sun 22:00 UTC (weekend),
  *   plus daily CME maintenance break 21:00–22:00 UTC (Mon–Thu).
- * Note: ignores exchange holidays (rare) — acceptable for a synthetic engine.
  */
-function isMarketOpen(pairCode: string, now = new Date()): boolean {
+function isMarketOpen(pairCode: string, atTime: Date): boolean {
   if (pairCode === "BTCUSD") return true;
-  const day = now.getUTCDay();   // 0=Sun … 6=Sat
-  const hour = now.getUTCHours();
-  // Weekend
-  if (day === 6) return false;             // all of Saturday
-  if (day === 5 && hour >= 22) return false; // Friday after 22:00 UTC
-  if (day === 0 && hour < 22) return false;  // Sunday before 22:00 UTC
-  // Daily CME maintenance break 21:00–22:00 UTC (Mon, Tue, Wed, Thu)
+  const day = atTime.getUTCDay();   // 0=Sun … 6=Sat
+  const hour = atTime.getUTCHours();
+  if (day === 6) return false;
+  if (day === 5 && hour >= 22) return false;
+  if (day === 0 && hour < 22) return false;
   if (day >= 1 && day <= 4 && hour === 21) return false;
   return true;
 }
 
-type LiveCandle = {
-  openTime: number; closeTime: number;
-  open: number; high: number; low: number; close: number;
-  source: string;
-};
+// ─────────────────────────────────────────────────────────────────────────────
+// Live price anchors
+// ─────────────────────────────────────────────────────────────────────────────
+type LiveAnchor = { price: number; source: string };
 
-/**
- * Fetch a real, fully-closed 5-min candle from Kraken's public REST API.
- * Kraken returns OHLC tuples [time, open, high, low, close, vwap, volume, count].
- * `time` is the candle's open second (epoch). closeTime = time + 300s.
- * The last entry is usually the still-forming candle, so we pick the most recent
- * one whose closeTime has passed.
- */
-async function fetchKrakenLastClosedCandle(krakenPair: string): Promise<LiveCandle> {
-  const url = `https://api.kraken.com/0/public/OHLC?pair=${krakenPair}&interval=5`;
-  const res = await fetch(url, { signal: AbortSignal.timeout(4000) });
-  if (!res.ok) throw new Error(`Kraken HTTP ${res.status}`);
-  const j = (await res.json()) as { error?: string[]; result?: Record<string, any> };
-  if (j.error && j.error.length > 0) throw new Error(`Kraken: ${j.error.join(",")}`);
-  const result = j.result ?? {};
-  // Kraken returns the data under a key like "XXBTZUSD" (varies by pair) plus "last"
-  const ohlcKey = Object.keys(result).find((k) => k !== "last");
-  if (!ohlcKey) throw new Error("Kraken: no OHLC key in result");
-  const arr = result[ohlcKey] as any[];
-  if (!Array.isArray(arr) || arr.length === 0) throw new Error("Kraken: empty OHLC");
-  const nowSec = Math.floor(Date.now() / 1000);
-  const closed = [...arr].reverse().find((c) => Number(c[0]) + 300 <= nowSec);
-  if (!closed) throw new Error("Kraken: no closed candle in window");
-  return {
-    openTime: Number(closed[0]) * 1000,
-    closeTime: (Number(closed[0]) + 300) * 1000,
-    open: parseFloat(closed[1]),
-    high: parseFloat(closed[2]),
-    low: parseFloat(closed[3]),
-    close: parseFloat(closed[4]),
-    source: "kraken",
-  };
-}
-
-/**
- * Fallback: Coinbase spot price (no OHLC). We synthesise a tight candle around
- * the spot price using a small jitter so the body still has a direction. Only
- * used if Kraken is unreachable.
- */
-async function fetchCoinbaseSpotCandle(coinbasePair: string, pair: PairCfg): Promise<LiveCandle> {
-  const url = `https://api.coinbase.com/v2/prices/${coinbasePair}/spot`;
-  const res = await fetch(url, { signal: AbortSignal.timeout(4000) });
-  if (!res.ok) throw new Error(`Coinbase HTTP ${res.status}`);
-  const j = (await res.json()) as { data?: { amount?: string } };
-  const spot = parseFloat(j.data?.amount ?? "");
-  if (!Number.isFinite(spot) || spot <= 0) throw new Error("Coinbase: invalid spot");
-  const now = Date.now();
-  const slot = Math.floor(now / CANDLE_MS) * CANDLE_MS;
-  const closeTime = slot - CANDLE_MS;
-  const openTime = closeTime - CANDLE_MS;
-  // Tight 0.05% jitter so direction isn't always the same
-  const jitter = (Math.random() * 2 - 1) * 0.0005;
-  const open = +(spot * (1 - jitter / 2)).toFixed(pair.precision);
-  const close = +(spot * (1 + jitter / 2)).toFixed(pair.precision);
-  return {
-    openTime, closeTime,
-    open, close,
-    high: Math.max(open, close), low: Math.min(open, close),
-    source: "coinbase-spot",
-  };
-}
-
-/**
- * Try the configured live source for a pair (e.g. `kraken:XBTUSD`).
- * On failure, returns null so the caller can fall back to synthetic.
- */
-async function tryFetchLiveCandle(pair: PairCfg): Promise<LiveCandle | null> {
-  if (!pair.liveSource) return null;
-  const [provider, symbol] = pair.liveSource.split(":");
+async function fetchKrakenLastPrice(krakenPair: string): Promise<LiveAnchor | null> {
   try {
-    if (provider === "kraken") return await fetchKrakenLastClosedCandle(symbol!);
-    // No Coinbase OHLC endpoint without auth — only spot fallback
+    const url = `https://api.kraken.com/0/public/OHLC?pair=${krakenPair}&interval=5`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(4000) });
+    if (!res.ok) return null;
+    const j = (await res.json()) as { error?: string[]; result?: Record<string, any> };
+    if (j.error && j.error.length > 0) return null;
+    const result = j.result ?? {};
+    const ohlcKey = Object.keys(result).find((k) => k !== "last");
+    if (!ohlcKey) return null;
+    const arr = result[ohlcKey] as any[];
+    if (!Array.isArray(arr) || arr.length === 0) return null;
+    const nowSec = Math.floor(Date.now() / 1000);
+    const closed = [...arr].reverse().find((c) => Number(c[0]) + 300 <= nowSec);
+    if (!closed) return null;
+    return { price: parseFloat(closed[4]), source: "kraken" };
   } catch (err: any) {
-    logger.warn({ pair: pair.code, provider, err: err?.message ?? err }, "[auto-engine] kraken fetch failed — trying coinbase spot");
-    try {
-      // Map Kraken symbols → Coinbase format
-      const coinbasePair = symbol === "XBTUSD" ? "BTC-USD" : null;
-      if (coinbasePair) return await fetchCoinbaseSpotCandle(coinbasePair, pair);
-    } catch (err2: any) {
-      logger.warn({ pair: pair.code, err: err2?.message ?? err2 }, "[auto-engine] coinbase spot fallback also failed");
+    logger.warn({ err: err?.message ?? err, krakenPair }, "[auto-engine] kraken fetch failed");
+    return null;
+  }
+}
+
+async function fetchCoinbaseSpot(coinbasePair: string): Promise<LiveAnchor | null> {
+  try {
+    const url = `https://api.coinbase.com/v2/prices/${coinbasePair}/spot`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(4000) });
+    if (!res.ok) return null;
+    const j = (await res.json()) as { data?: { amount?: string } };
+    const spot = parseFloat(j.data?.amount ?? "");
+    if (!Number.isFinite(spot) || spot <= 0) return null;
+    return { price: spot, source: "coinbase-spot" };
+  } catch {
+    return null;
+  }
+}
+
+// Per-pair drifting anchor for synthetic pricing (non-crypto pairs without live source)
+const lastAnchorByPair: Record<string, number> = {};
+
+async function getEntryAnchor(pair: PairCfg): Promise<LiveAnchor> {
+  if (pair.liveSource) {
+    const [provider, symbol] = pair.liveSource.split(":");
+    if (provider === "kraken" && symbol) {
+      const live = await fetchKrakenLastPrice(symbol);
+      if (live) {
+        lastAnchorByPair[pair.code] = live.price;
+        return { price: +live.price.toFixed(pair.precision), source: live.source };
+      }
+      const cb = symbol === "XBTUSD" ? await fetchCoinbaseSpot("BTC-USD") : null;
+      if (cb) {
+        lastAnchorByPair[pair.code] = cb.price;
+        return { price: +cb.price.toFixed(pair.precision), source: cb.source };
+      }
     }
   }
-  return null;
+  // Synthetic random walk for non-crypto pairs
+  const prev = lastAnchorByPair[pair.code] ?? pair.base;
+  const drift = (Math.random() * 2 - 1) * pair.volPercent / 100;
+  const next = +(prev * (1 + drift)).toFixed(pair.precision);
+  lastAnchorByPair[pair.code] = next;
+  return { price: next, source: "synthetic" };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// In-memory engine state (single-process; resets on server restart by design)
+// Daily plan
 // ─────────────────────────────────────────────────────────────────────────────
-type EngineState = {
+type SlotPlan = {
+  index: number;
+  pair: string;
+  direction: "BUY" | "SELL";
+  isLoser: boolean;
+  pct: number;            // signed: positive = winner, negative = loser
+  scheduledAtMs: number;
+  status: "pending" | "executed" | "failed";
+  tradeId?: number;
+  error?: string;
+};
+
+type DailyPlan = {
   dayKey: string;
-  tradesToday: number;
-  tradesSinceLastBreak: number;
-  profitPercentToday: number;
-  lastTradeAt: number | null;
-  breakUntil: number | null;
+  windowStartMs: number;
+  windowEndMs: number;
+  effectiveStartMs: number;
+  targetPct: number;
+  loserCount: number;
+  slots: SlotPlan[];
+  generatedAt: number;
 };
-
-const STATE: EngineState = {
-  dayKey: "",
-  tradesToday: 0,
-  tradesSinceLastBreak: 0,
-  profitPercentToday: 0,
-  lastTradeAt: null,
-  breakUntil: null,
-};
-
-// Per-pair drifting "last close" so synthetic candles chain naturally
-const lastCloseByPair: Record<string, number> = {};
 
 function utcDayKey(d = new Date()): string {
   return d.toISOString().slice(0, 10); // YYYY-MM-DD
 }
 
-function resetIfNewDay() {
-  const today = utcDayKey();
-  if (STATE.dayKey !== today) {
-    STATE.dayKey = today;
-    STATE.tradesToday = 0;
-    STATE.tradesSinceLastBreak = 0;
-    STATE.profitPercentToday = 0;
-    STATE.lastTradeAt = null;
-    STATE.breakUntil = null;
-    logger.info({ day: today }, "[auto-engine] day reset");
+function dayWindowMs(dayKey: string): { startMs: number; endMs: number } {
+  const start = Date.UTC(
+    Number(dayKey.slice(0, 4)),
+    Number(dayKey.slice(5, 7)) - 1,
+    Number(dayKey.slice(8, 10)),
+    WINDOW_START_HHMM.h, WINDOW_START_HHMM.m, 0, 0,
+  );
+  const end = Date.UTC(
+    Number(dayKey.slice(0, 4)),
+    Number(dayKey.slice(5, 7)) - 1,
+    Number(dayKey.slice(8, 10)),
+    WINDOW_END_HHMM.h, WINDOW_END_HHMM.m, 0, 0,
+  );
+  return { startMs: start, endMs: end };
+}
+
+function pick<T>(arr: T[]): T {
+  return arr[Math.floor(Math.random() * arr.length)]!;
+}
+
+function randomBetween(min: number, max: number): number {
+  return min + Math.random() * (max - min);
+}
+
+function pickOpenPairAt(d: Date): PairCfg {
+  const open = PAIRS.filter((p) => isMarketOpen(p.code, d));
+  if (open.length === 0) return PAIR_BY_CODE.BTCUSD!;
+  return pick(open);
+}
+
+/**
+ * Generate the day's plan. Honours partial windows: if the engine starts
+ * mid-window, slot count is reduced so MIN_GAP_MIN is preserved.
+ */
+function generateDailyPlan(dayKey: string): DailyPlan {
+  const { startMs, endMs } = dayWindowMs(dayKey);
+  const now = Date.now();
+  const effectiveStart = Math.max(startMs, now + 2 * 60_000);
+  const effectiveDurationMin = Math.max(0, (endMs - effectiveStart) / 60_000);
+
+  // How many slots fit in the remaining window with at least MIN_GAP_MIN spacing?
+  // For full window (480 min, MIN_GAP=15): floor(480/15)+1 = 33 → cap to 25.
+  // For partial window (e.g. 180 min): floor(180/15)+1 = 13.
+  let slotCount = TOTAL_SLOTS;
+  if (effectiveDurationMin <= 0) {
+    slotCount = 0;
+  } else if (effectiveDurationMin < (TOTAL_SLOTS - 1) * MIN_GAP_MIN) {
+    slotCount = Math.max(1, Math.floor(effectiveDurationMin / MIN_GAP_MIN) + 1);
+  }
+
+  // Random gaps in [MIN_GAP_MIN, MAX_GAP_MIN], scaled to fit
+  const gapsCount = Math.max(0, slotCount - 1);
+  const rawGaps: number[] = [];
+  for (let i = 0; i < gapsCount; i++) rawGaps.push(randomBetween(MIN_GAP_MIN, MAX_GAP_MIN));
+  const sumGaps = rawGaps.reduce((a, b) => a + b, 0) || 1;
+  const targetTotal = Math.max(0, effectiveDurationMin - 5); // leave ~5 min buffer
+  const scale = sumGaps > 0 && targetTotal > 0 ? Math.min(1, targetTotal / sumGaps) : 1;
+  const gaps = rawGaps.map((g) => g * scale);
+
+  // Schedule slot times (rounded to nearest minute)
+  const scheduledTimes: number[] = [];
+  let cursorMs = effectiveStart;
+  for (let i = 0; i < slotCount; i++) {
+    scheduledTimes.push(Math.round(cursorMs / 60_000) * 60_000);
+    if (i < gaps.length) cursorMs += gaps[i]! * 60_000;
+  }
+
+  // Pick loser count (skip if very few slots)
+  const loserCount = slotCount >= 5 ? pick(LOSER_COUNT_OPTIONS) : 0;
+  const loserIdxSet = new Set<number>();
+  while (loserIdxSet.size < loserCount && slotCount > 1) {
+    // Avoid first slot (let day start with a win)
+    const idx = 1 + Math.floor(Math.random() * (slotCount - 1));
+    loserIdxSet.add(idx);
+  }
+
+  // Daily target %
+  const targetPct = +randomBetween(DAILY_TARGET_MIN_PCT, DAILY_TARGET_MAX_PCT).toFixed(4);
+
+  // Loser pcts
+  const loserPcts: number[] = [];
+  let totalLossPct = 0;
+  for (let i = 0; i < loserCount; i++) {
+    const lp = +randomBetween(LOSER_PCT_MIN, LOSER_PCT_MAX).toFixed(4);
+    loserPcts.push(lp);
+    totalLossPct += lp;
+  }
+
+  // Winner pcts: distribute (targetPct + totalLossPct) across non-loser slots
+  // with weighted variation so individual trades differ in size.
+  const winnerCount = slotCount - loserCount;
+  const totalWinnerPct = +(targetPct + totalLossPct).toFixed(4);
+  const winnerWeights: number[] = [];
+  for (let i = 0; i < winnerCount; i++) winnerWeights.push(randomBetween(0.5, 2.0));
+  const sumW = winnerWeights.reduce((a, b) => a + b, 0) || 1;
+  const winnerPcts = winnerWeights.map((w) => +(w / sumW * totalWinnerPct).toFixed(4));
+  // Reconcile rounding residual on the last winner so sum(winners) === totalWinnerPct
+  // exactly. Without this, per-slot rounding can drift the daily total off target
+  // by ~0.0001-0.001%.
+  if (winnerPcts.length > 0) {
+    const sumWinners = winnerPcts.reduce((a, b) => a + b, 0);
+    const residual = +(totalWinnerPct - sumWinners).toFixed(4);
+    if (residual !== 0) {
+      winnerPcts[winnerPcts.length - 1] = +(winnerPcts[winnerPcts.length - 1]! + residual).toFixed(4);
+    }
+  }
+
+  // Build slot list
+  const slots: SlotPlan[] = [];
+  let winnerCursor = 0;
+  let loserCursor = 0;
+  for (let i = 0; i < slotCount; i++) {
+    const scheduledAtMs = scheduledTimes[i]!;
+    const slotDate = new Date(scheduledAtMs);
+    const pair = pickOpenPairAt(slotDate);
+    const direction: "BUY" | "SELL" = Math.random() < 0.5 ? "BUY" : "SELL";
+    const isLoser = loserIdxSet.has(i);
+    const pct = isLoser ? -loserPcts[loserCursor++]! : winnerPcts[winnerCursor++]!;
+    slots.push({
+      index: i,
+      pair: pair.code,
+      direction,
+      isLoser,
+      pct: +pct.toFixed(4),
+      scheduledAtMs,
+      status: "pending",
+    });
+  }
+
+  return {
+    dayKey,
+    windowStartMs: startMs,
+    windowEndMs: endMs,
+    effectiveStartMs: effectiveStart,
+    targetPct,
+    loserCount,
+    slots,
+    generatedAt: Date.now(),
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Plan persistence (Redis)
+// ─────────────────────────────────────────────────────────────────────────────
+const PLAN_REDIS_KEY_PREFIX = "auto:plan:";
+const PLAN_TTL_SECONDS = 36 * 60 * 60;
+
+async function loadPlan(dayKey: string): Promise<DailyPlan | null> {
+  try {
+    const raw = await redisConnection.get(PLAN_REDIS_KEY_PREFIX + dayKey);
+    if (!raw) return null;
+    return JSON.parse(raw) as DailyPlan;
+  } catch (err: any) {
+    logger.warn({ err: err?.message ?? err, dayKey }, "[auto-engine] load plan failed");
+    return null;
+  }
+}
+
+async function savePlan(plan: DailyPlan): Promise<void> {
+  try {
+    await redisConnection.set(
+      PLAN_REDIS_KEY_PREFIX + plan.dayKey,
+      JSON.stringify(plan),
+      "EX",
+      PLAN_TTL_SECONDS,
+    );
+  } catch (err: any) {
+    logger.warn({ err: err?.message ?? err, dayKey: plan.dayKey }, "[auto-engine] save plan failed");
   }
 }
 
 /**
- * Rehydrate today's counters from the DB so server restarts don't reset
- * the daily caps and let the engine exceed 15 trades / 0.4% target.
- * Looks at all auto-engine trades created today and replays the running totals.
+ * Load today's plan or create one. On first creation, scans DB for any
+ * already-executed trades whose idempotency key matches a slot, and marks
+ * them executed in the new plan to prevent duplicate creation.
  */
-export async function rehydrateAutoEngineState(): Promise<void> {
-  const today = utcDayKey();
-  const dayStartUtc = new Date(`${today}T00:00:00.000Z`);
-  STATE.dayKey = today;
+async function getOrCreatePlan(dayKey: string): Promise<DailyPlan> {
+  const existing = await loadPlan(dayKey);
+  if (existing) return existing;
 
+  const plan = generateDailyPlan(dayKey);
+
+  // Replay: find any DB rows already created for today's v2 slots
   try {
+    const dayStart = new Date(`${dayKey}T00:00:00.000Z`);
     const rows = await db
       .select({
-        count: sql<number>`count(*)::int`,
-        profitSum: sql<number>`coalesce(sum(${signalTradesTable.expectedProfitPercent}::numeric), 0)::float`,
-        lastAt: sql<Date | null>`max(${signalTradesTable.createdAt})`,
+        id: signalTradesTable.id,
+        idempotencyKey: signalTradesTable.idempotencyKey,
       })
       .from(signalTradesTable)
       .where(
         and(
           like(signalTradesTable.notes, `${AUTO_TAG}%`),
           isNull(signalTradesTable.createdBy),
-          gte(signalTradesTable.createdAt, dayStartUtc),
+          gte(signalTradesTable.createdAt, dayStart),
         ),
       );
-
-    const r = rows[0];
-    if (r && r.count > 0) {
-      STATE.tradesToday = r.count;
-      STATE.profitPercentToday = +Number(r.profitSum ?? 0).toFixed(4);
-      STATE.lastTradeAt = r.lastAt ? new Date(r.lastAt as any).getTime() : null;
-      // Re-derive cooldown: if last trade was within BREAK_DURATION_MS AND a multiple
-      // of TRADES_BEFORE_BREAK has been hit, restore the pause.
-      const inBreakBlock = STATE.tradesToday % TRADES_BEFORE_BREAK === 0 && STATE.tradesToday > 0;
-      if (inBreakBlock && STATE.lastTradeAt) {
-        const breakEnds = STATE.lastTradeAt + BREAK_DURATION_MS;
-        if (breakEnds > Date.now()) {
-          STATE.breakUntil = breakEnds;
-          STATE.tradesSinceLastBreak = 0;
-        } else {
-          STATE.tradesSinceLastBreak = 0;
-        }
-      } else {
-        STATE.tradesSinceLastBreak = STATE.tradesToday % TRADES_BEFORE_BREAK;
+    for (const r of rows) {
+      const m = (r.idempotencyKey ?? "").match(/auto:v2:[\d-]+:slot(\d+)/);
+      if (!m) continue;
+      const slotIdx = parseInt(m[1]!, 10);
+      const slot = plan.slots.find((s) => s.index === slotIdx);
+      if (slot) {
+        slot.status = "executed";
+        slot.tradeId = r.id;
       }
-      logger.info(
-        {
-          tradesToday: STATE.tradesToday,
-          profitPercentToday: STATE.profitPercentToday,
-          breakUntil: STATE.breakUntil ? new Date(STATE.breakUntil).toISOString() : null,
-        },
-        "[auto-engine] state rehydrated from DB",
-      );
-    } else {
-      logger.info({ day: today }, "[auto-engine] no prior trades today — fresh state");
     }
   } catch (err: any) {
-    logger.warn({ err: err?.message ?? err }, "[auto-engine] rehydrate failed (continuing with empty state)");
+    logger.warn({ err: err?.message ?? err }, "[auto-engine] plan replay failed");
   }
-}
 
-function pickPair(): PairCfg | null {
-  const open = PAIRS.filter((p) => isMarketOpen(p.code));
-  if (open.length === 0) return null;
-  return open[Math.floor(Math.random() * open.length)]!;
-}
-
-/**
- * Get the last CLOSED 5-min candle for a pair.
- * - For pairs with `liveSource`: try the configured public API.
- * - On any failure (network, rate limit, geo-block, etc.): fall back to the
- *   synthetic random-walk candle anchored to the last known close.
- */
-async function getLastClosedCandle(pair: PairCfg) {
-  const live = await tryFetchLiveCandle(pair);
-  if (live) {
-    const open = +live.open.toFixed(pair.precision);
-    const close = +live.close.toFixed(pair.precision);
-    const high = +live.high.toFixed(pair.precision);
-    const low = +live.low.toFixed(pair.precision);
-    const bodyPct = open === 0 ? 0 : ((close - open) / open) * 100;
-    lastCloseByPair[pair.code] = close;
-    logger.info(
-      { pair: pair.code, source: live.source, open, close, bodyPct: +bodyPct.toFixed(4) },
-      "[auto-engine] real candle fetched",
-    );
-    return { openTime: live.openTime, closeTime: live.closeTime, open, close, high, low, bodyPct };
-  }
-  logger.warn({ pair: pair.code }, "[auto-engine] no live source available — using synthetic");
-  return simulateLastClosedCandle(pair);
-}
-
-/**
- * Simulate the last CLOSED 5-minute candle for the given pair.
- * Aligned to UTC clock (00:00, 00:05, 00:10, …). The candle's openTime is
- * 10 min ago and closeTime is 5 min ago — i.e. fully settled.
- */
-function simulateLastClosedCandle(pair: PairCfg) {
-  const now = Date.now();
-  const slot = Math.floor(now / CANDLE_MS) * CANDLE_MS;
-  const closeTime = slot - CANDLE_MS;       // last fully closed
-  const openTime = closeTime - CANDLE_MS;
-
-  const prev = lastCloseByPair[pair.code] ?? pair.base;
-  // body: random walk in [-vol, +vol]
-  const bodyPct = (Math.random() * 2 - 1) * pair.volPercent;
-  const open = prev;
-  const close = +(open * (1 + bodyPct / 100)).toFixed(pair.precision);
-  const wickPct = pair.volPercent * 0.4;
-  const high = +(Math.max(open, close) * (1 + Math.random() * wickPct / 100)).toFixed(pair.precision);
-  const low = +(Math.min(open, close) * (1 - Math.random() * wickPct / 100)).toFixed(pair.precision);
-
-  lastCloseByPair[pair.code] = close;
-  return { openTime, closeTime, open, close, high, low, bodyPct };
+  await savePlan(plan);
+  const executed = plan.slots.filter((s) => s.status === "executed").length;
+  logger.info(
+    {
+      dayKey,
+      slots: plan.slots.length,
+      executed,
+      targetPct: plan.targetPct,
+      loserCount: plan.loserCount,
+      windowStart: new Date(plan.effectiveStartMs).toISOString(),
+      windowEnd: new Date(plan.windowEndMs).toISOString(),
+    },
+    "[auto-engine] daily plan generated",
+  );
+  return plan;
 }
 
 function clampDecimals(n: number, decimals: number): number {
@@ -323,123 +413,170 @@ function clampDecimals(n: number, decimals: number): number {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Public: tick — called every 5 minutes by cron
+// Public: tick — runs every minute
 // ─────────────────────────────────────────────────────────────────────────────
-export async function tickAutoSignalEngine(opts: { force?: boolean; pair?: string } = {}): Promise<{ ok: boolean; reason?: string; tradeId?: number; pair?: string }> {
-  resetIfNewDay();
+export async function tickAutoSignalEngine(opts: { force?: boolean } = {}): Promise<{
+  ok: boolean;
+  reason?: string;
+  tradeId?: number;
+  pair?: string;
+  slotIndex?: number;
+}> {
   const now = Date.now();
+  const dayKey = utcDayKey(new Date(now));
+  const plan = await getOrCreatePlan(dayKey);
 
-  // `force` is a debug escape hatch: bypasses cooldown, daily target, and max-trades.
-  // Used by the admin debug endpoint (`POST /admin/auto-engine/tick?force=1`).
-  if (!opts.force && STATE.breakUntil && now < STATE.breakUntil) {
-    const minsLeft = Math.ceil((STATE.breakUntil - now) / 60000);
-    logger.info({ minsLeft }, "[auto-engine] paused — cooldown break in progress");
-    return { ok: false, reason: `break:${minsLeft}m` };
-  }
-  if (!opts.force && STATE.tradesToday >= MAX_TRADES_PER_DAY) {
-    return { ok: false, reason: "max_trades_reached" };
-  }
-  if (!opts.force && STATE.profitPercentToday >= DAILY_TARGET_PERCENT) {
-    return { ok: false, reason: "daily_target_hit" };
-  }
+  // Pick earliest pending slot. If `force`, take next pending regardless of due time.
+  const pending = plan.slots
+    .filter((s) => s.status === "pending")
+    .sort((a, b) => a.scheduledAtMs - b.scheduledAtMs);
 
-  // AI-scanning realism log
-  logger.info("[auto-engine] AI scanning market...");
-
-  let pair: PairCfg | null;
-  if (opts.pair) {
-    const forced = PAIR_BY_CODE[opts.pair];
-    if (!forced) return { ok: false, reason: `unknown_pair:${opts.pair}` };
-    if (!opts.force && !isMarketOpen(forced.code)) {
-      return { ok: false, reason: `market_closed:${forced.code}` };
-    }
-    pair = forced;
+  let slot: SlotPlan | undefined;
+  if (opts.force) {
+    slot = pending[0];
   } else {
-    pair = pickPair();
+    slot = pending.find((s) => s.scheduledAtMs <= now);
   }
-  if (!pair) {
-    logger.info({ utcDay: new Date().getUTCDay() }, "[auto-engine] all eligible markets closed");
-    return { ok: false, reason: "all_markets_closed" };
-  }
-  const candle = await getLastClosedCandle(pair);
-
-  // Doji guard
-  if (Math.abs(candle.bodyPct) < MIN_BODY_PERCENT) {
-    logger.info({ pair: pair.code, bodyPct: candle.bodyPct }, "[auto-engine] no signal — body too small");
-    return { ok: false, reason: "no_signal" };
+  if (!slot) {
+    return { ok: false, reason: pending.length === 0 ? "all_slots_done" : "no_due_slot" };
   }
 
-  // Trade reflects what JUST happened in the real market over this 5-min candle.
-  // Entry = candle's OPEN, Exit = candle's CLOSE, direction follows the body.
-  // The trade is created already-closed since both prices are known facts.
-  const direction: "BUY" | "SELL" = candle.close > candle.open ? "BUY" : "SELL";
-  const entryPrice = clampDecimals(candle.open, pair.precision);
-  const exitPrice = clampDecimals(candle.close, pair.precision);
-  // Realised profit % is the absolute candle body — engine "predicted" the move.
-  const realizedPct = +(Math.abs(exitPrice - entryPrice) / entryPrice * 100).toFixed(4);
+  // Re-check market hours; if planned pair is closed at execution time, fall back to BTC.
+  let pairCode = slot.pair;
+  if (!isMarketOpen(pairCode, new Date(now))) {
+    logger.warn({ slotIndex: slot.index, originalPair: pairCode }, "[auto-engine] planned pair market closed — using BTCUSD");
+    pairCode = "BTCUSD";
+  }
+  const pair = PAIR_BY_CODE[pairCode]!;
 
   logger.info(
-    { pair: pair.code, direction, entry: entryPrice, exit: exitPrice, realizedPct },
-    "[auto-engine] Smart signal detected (instant-close)",
+    { slotIndex: slot.index, pair: pairCode, direction: slot.direction, plannedPct: slot.pct, isLoser: slot.isLoser },
+    "[auto-engine] AI scanning market...",
+  );
+
+  // Anchor entry to a real (or synthetic) market price
+  const anchor = await getEntryAnchor(pair);
+  const entry = clampDecimals(anchor.price, pair.precision);
+
+  // Engineer exit from entry + planned pct
+  // direction sign: BUY = +1 (price up = profit), SELL = -1 (price down = profit)
+  // loser flips the move so price moves AGAINST the direction
+  const dirSign = slot.direction === "BUY" ? 1 : -1;
+  const moveSign = slot.isLoser ? -dirSign : dirSign;
+  const moveFraction = Math.abs(slot.pct) / 100;
+  let exit = clampDecimals(entry * (1 + moveSign * moveFraction), pair.precision);
+
+  // Build TP and SL (both always set for visual realism)
+  let tpPrice: number;
+  let slPrice: number;
+  if (slot.isLoser) {
+    slPrice = exit;
+    const winFraction = randomBetween(0.05, 0.15) / 100;
+    tpPrice = clampDecimals(entry * (1 + dirSign * winFraction), pair.precision);
+  } else {
+    tpPrice = exit;
+    const lossFraction = randomBetween(0.05, 0.15) / 100;
+    slPrice = clampDecimals(entry * (1 - dirSign * lossFraction), pair.precision);
+  }
+
+  // Validation safety: ensure TP/SL on correct sides of entry
+  const minTick = pair.pipSize;
+  if (slot.direction === "BUY") {
+    if (tpPrice <= entry) tpPrice = clampDecimals(entry + minTick, pair.precision);
+    if (slPrice >= entry) slPrice = clampDecimals(entry - minTick, pair.precision);
+    if (slot.isLoser && exit >= entry) exit = clampDecimals(entry - minTick, pair.precision);
+  } else {
+    if (tpPrice >= entry) tpPrice = clampDecimals(entry - minTick, pair.precision);
+    if (slPrice <= entry) slPrice = clampDecimals(entry + minTick, pair.precision);
+    if (slot.isLoser && exit <= entry) exit = clampDecimals(entry + minTick, pair.precision);
+  }
+
+  const realizedPct = slot.pct;
+  const closeReason: "target_hit" | "stop_loss" = slot.isLoser ? "stop_loss" : "target_hit";
+  const idempotencyKey = `auto:v2:${dayKey}:slot${slot.index}`;
+
+  logger.info(
+    {
+      slotIndex: slot.index,
+      pair: pairCode,
+      direction: slot.direction,
+      entry,
+      exit,
+      tpPrice,
+      slPrice,
+      realizedPct,
+      isLoser: slot.isLoser,
+      anchorSource: anchor.source,
+    },
+    "[auto-engine] Smart signal — instant close (planned slot)",
   );
 
   try {
-    // Step 1 — insert as running with TP = the actual close (passes validation
-    // because BUY → close>open and SELL → close<open).
     const trade = await createSignalTrade({
       pair: pair.code,
-      direction,
-      entryPrice,
-      tpPrice: exitPrice,
+      direction: slot.direction,
+      entryPrice: entry,
+      tpPrice,
+      slPrice,
       pipSize: pair.pipSize,
-      expectedProfitPercent: realizedPct,
-      scheduledAt: new Date(candle.closeTime), // record the candle's close time
-      notes: `${AUTO_NOTES_PREFIX} | dir=${direction} body=${candle.bodyPct.toFixed(3)}% open=${entryPrice} close=${exitPrice}`,
-      idempotencyKey: `auto:${STATE.dayKey}:${pair.code}:${candle.closeTime}`,
+      // expectedProfitPercent stored as ABS so existing UI/audit conventions stay positive.
+      // Realized sign is applied on close.
+      expectedProfitPercent: Math.abs(realizedPct),
+      scheduledAt: new Date(slot.scheduledAtMs),
+      notes: `${AUTO_NOTES_PREFIX} #${slot.index} | ${slot.direction} ${realizedPct.toFixed(4)}% ${slot.isLoser ? "[SL]" : "[TP]"} src=${anchor.source}`,
+      idempotencyKey,
     });
 
-    // Step 2 — immediately settle at the candle's close (instant close).
-    // closeSignalTrade handles wallet distribution + ledger atomically.
     try {
       await closeSignalTrade({
         tradeId: trade.id,
-        realizedExitPrice: exitPrice,
+        realizedExitPrice: exit,
         realizedProfitPercent: realizedPct,
-        closeReason: "target_hit",
+        closeReason,
       });
     } catch (err: any) {
-      logger.warn(
-        { err: err?.message ?? err, tradeId: trade.id },
-        "[auto-engine] instant close failed — trade left running for closer cron",
-      );
+      logger.warn({ err: err?.message ?? err, tradeId: trade.id }, "[auto-engine] instant close failed");
+      slot.status = "failed";
+      slot.error = String(err?.message ?? err);
+      await savePlan(plan);
+      return { ok: false, reason: "close_failed", tradeId: trade.id, slotIndex: slot.index };
     }
 
-    STATE.tradesToday += 1;
-    STATE.tradesSinceLastBreak += 1;
-    STATE.lastTradeAt = now;
-    STATE.profitPercentToday = +(STATE.profitPercentToday + realizedPct).toFixed(4);
+    slot.status = "executed";
+    slot.tradeId = trade.id;
+    await savePlan(plan);
 
-    // Cooldown after every N trades (safety belt — keeps daily flow controlled)
-    if (STATE.tradesSinceLastBreak >= TRADES_BEFORE_BREAK) {
-      STATE.breakUntil = now + BREAK_DURATION_MS;
-      STATE.tradesSinceLastBreak = 0;
-      logger.info({ until: new Date(STATE.breakUntil).toISOString() }, "[auto-engine] cooldown break engaged (1h)");
-    }
+    logger.info(
+      {
+        tradeId: trade.id,
+        slotIndex: slot.index,
+        pair: pair.code,
+        direction: slot.direction,
+        realizedPct,
+        isLoser: slot.isLoser,
+      },
+      "[auto-engine] Trade executed and closed",
+    );
 
-    logger.info({ tradeId: trade.id, pair: pair.code, direction, realizedPct }, "[auto-engine] Trade executed and closed");
-    return { ok: true, tradeId: trade.id, pair: pair.code };
+    return { ok: true, tradeId: trade.id, pair: pair.code, slotIndex: slot.index };
   } catch (err: any) {
-    logger.warn({ err: err?.message ?? err, pair: pair.code }, "[auto-engine] createSignalTrade failed");
-    return { ok: false, reason: "create_failed" };
+    logger.warn({ err: err?.message ?? err, slotIndex: slot.index, pair: pair.code }, "[auto-engine] createSignalTrade failed");
+    slot.status = "failed";
+    slot.error = String(err?.message ?? err);
+    await savePlan(plan);
+    return { ok: false, reason: "create_failed", slotIndex: slot.index };
   }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Public: close matured auto-engine trades — called every minute by cron
+// Public: closer — handles ONLY legacy v1 trades. v2 trades are always
+// instant-closed inside `tickAutoSignalEngine` and never left running, so
+// matching v1-only here prevents a race where the closer would settle a v2
+// trade as a winner using the abs(expected) value before tick closes it
+// with the planned (possibly negative) realized %.
 // ─────────────────────────────────────────────────────────────────────────────
 export async function closeMaturedAutoTrades(): Promise<number> {
   const now = new Date();
-  // Find running auto-engine trades whose scheduled close time has passed
   const matured = await db
     .select({
       id: signalTradesTable.id,
@@ -450,17 +587,13 @@ export async function closeMaturedAutoTrades(): Promise<number> {
     .where(
       and(
         eq(signalTradesTable.status, "running"),
-        like(signalTradesTable.notes, `${AUTO_TAG}%`),
-        // Defence-in-depth: only trades with NULL createdBy (engine never sets it)
-        // are eligible. Admin/manual trades always set createdBy via the auth route.
+        like(signalTradesTable.notes, `[AUTO-ENGINE-v1#%`),
         isNull(signalTradesTable.createdBy),
         lte(signalTradesTable.scheduledAt, now),
       ),
     )
     .limit(20);
-
   if (matured.length === 0) return 0;
-
   let closed = 0;
   for (const t of matured) {
     try {
@@ -473,26 +606,61 @@ export async function closeMaturedAutoTrades(): Promise<number> {
         closeReason: "target_hit",
       });
       closed += 1;
-      logger.info({ tradeId: t.id }, "[auto-engine] auto-closed at TP (candle close)");
+      logger.info({ tradeId: t.id }, "[auto-engine] legacy auto-closed at TP");
     } catch (err: any) {
-      logger.warn({ err: err?.message ?? err, tradeId: t.id }, "[auto-engine] auto-close failed");
+      logger.warn({ err: err?.message ?? err, tradeId: t.id }, "[auto-engine] legacy auto-close failed");
     }
   }
-  if (closed > 0) logger.info({ closed }, "[auto-engine] matured trades closed");
   return closed;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Public: state inspector (for /api/admin or debug logs)
+// Public: rehydrate (called once at startup)
 // ─────────────────────────────────────────────────────────────────────────────
-export function getAutoEngineState() {
-  resetIfNewDay();
+export async function rehydrateAutoEngineState(): Promise<void> {
+  const dayKey = utcDayKey();
+  await getOrCreatePlan(dayKey);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Public: state inspector (admin /admin/auto-engine/state)
+// ─────────────────────────────────────────────────────────────────────────────
+export async function getAutoEngineState() {
+  const dayKey = utcDayKey();
+  const plan = await loadPlan(dayKey);
+  if (!plan) {
+    return { dayKey, plan: null };
+  }
+  const executed = plan.slots.filter((s) => s.status === "executed").length;
+  const pending = plan.slots.filter((s) => s.status === "pending").length;
+  const failed = plan.slots.filter((s) => s.status === "failed").length;
+  const next = plan.slots
+    .filter((s) => s.status === "pending")
+    .sort((a, b) => a.scheduledAtMs - b.scheduledAtMs)[0];
+  const cumulativeRealizedPct = plan.slots
+    .filter((s) => s.status === "executed")
+    .reduce((acc, s) => acc + s.pct, 0);
   return {
-    ...STATE,
-    breakUntil: STATE.breakUntil ? new Date(STATE.breakUntil).toISOString() : null,
-    lastTradeAt: STATE.lastTradeAt ? new Date(STATE.lastTradeAt).toISOString() : null,
-    targetPercent: DAILY_TARGET_PERCENT,
-    maxTradesPerDay: MAX_TRADES_PER_DAY,
-    tradesBeforeBreak: TRADES_BEFORE_BREAK,
+    dayKey: plan.dayKey,
+    targetPct: plan.targetPct,
+    loserCount: plan.loserCount,
+    totalSlots: plan.slots.length,
+    executed,
+    pending,
+    failed,
+    cumulativeRealizedPct: +cumulativeRealizedPct.toFixed(4),
+    nextSlot: next
+      ? {
+          index: next.index,
+          pair: next.pair,
+          direction: next.direction,
+          pct: next.pct,
+          isLoser: next.isLoser,
+          scheduledAt: new Date(next.scheduledAtMs).toISOString(),
+        }
+      : null,
+    windowStart: new Date(plan.windowStartMs).toISOString(),
+    windowEnd: new Date(plan.windowEndMs).toISOString(),
+    effectiveStart: new Date(plan.effectiveStartMs).toISOString(),
   };
 }

@@ -1421,16 +1421,17 @@ router.get("/admin/activity-logs", async (_req: AuthRequest, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 router.get("/admin/auto-engine/state", async (_req: AuthRequest, res) => {
-  res.json(getAutoEngineState());
+  res.json(await getAutoEngineState());
 });
 
 router.post("/admin/auto-engine/tick", async (req: AuthRequest, res) => {
   const force = req.query.force === "1" || req.body?.force === true;
-  const pair = (req.query.pair as string | undefined) ?? req.body?.pair;
+  // Note: v2 engine schedules pair per-slot in the daily plan; the legacy
+  // `pair` override is ignored. Kept in the request shape for backwards-compat.
   try {
-    const result = await tickAutoSignalEngine({ force, pair });
+    const result = await tickAutoSignalEngine({ force });
     transactionLogger.info(
-      { event: "admin_auto_engine_tick", adminId: req.userId, force, pair, result },
+      { event: "admin_auto_engine_tick", adminId: req.userId, force, result },
       "Admin auto-engine tick",
     );
     res.json(result);
