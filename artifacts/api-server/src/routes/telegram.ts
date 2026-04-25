@@ -28,7 +28,7 @@ router.use(authMiddleware);
 
 const LINK_CODE_TTL_MS = 15 * 60 * 1000; // 15 minutes
 
-router.post("/api/telegram/link/start", async (req: AuthRequest, res: Response) => {
+router.post("/telegram/link/start", async (req: AuthRequest, res: Response) => {
   const userId = req.userId!;
   if (!isTelegramConfigured()) {
     return res.status(503).json({ error: "Telegram bot is not configured on this server." });
@@ -75,7 +75,7 @@ router.post("/api/telegram/link/start", async (req: AuthRequest, res: Response) 
   });
 });
 
-router.get("/api/telegram/status", async (req: AuthRequest, res: Response) => {
+router.get("/telegram/status", async (req: AuthRequest, res: Response) => {
   const userId = req.userId!;
   const rows = await db
     .select({
@@ -98,7 +98,7 @@ router.get("/api/telegram/status", async (req: AuthRequest, res: Response) => {
   });
 });
 
-router.post("/api/telegram/opt-in", async (req: AuthRequest, res: Response) => {
+router.post("/telegram/opt-in", async (req: AuthRequest, res: Response) => {
   const userId = req.userId!;
   const optIn = (req.body as { optIn?: unknown })?.optIn;
   if (typeof optIn !== "boolean") {
@@ -111,7 +111,7 @@ router.post("/api/telegram/opt-in", async (req: AuthRequest, res: Response) => {
   return res.json({ ok: true, optIn });
 });
 
-router.delete("/api/telegram/link", async (req: AuthRequest, res: Response) => {
+router.delete("/telegram/link", async (req: AuthRequest, res: Response) => {
   const userId = req.userId!;
   const rows = await db
     .select({ chatId: usersTable.telegramChatId })
