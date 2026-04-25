@@ -15,6 +15,7 @@ export const investmentsTable = pgTable("investments", {
   drawdown: numeric("drawdown", { precision: 18, scale: 8 }).notNull().default("0"),
   drawdownLimit: numeric("drawdown_limit", { precision: 5, scale: 2 }).notNull().default("5.00"), // percentage e.g. 5.00 = 5%
   peakBalance: numeric("peak_balance", { precision: 18, scale: 8 }).notNull().default("0"), // highest equity reached
+  referralBonusPaid: boolean("referral_bonus_paid").notNull().default(false), // one-time signup bonus to sponsor (3% of first activation amount)
   startedAt: timestamp("started_at"),
   stoppedAt: timestamp("stopped_at"),
   pausedAt: timestamp("paused_at"),

@@ -6,6 +6,7 @@ export type NotificationType =
   | "drawdown_alert"
   | "deposit"
   | "withdrawal"
+  | "referral_bonus"
   | "system";
 
 export async function createNotification(

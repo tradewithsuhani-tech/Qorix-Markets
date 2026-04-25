@@ -139,7 +139,7 @@ export default function ReferralPage() {
           <div className="flex items-start justify-between">
             <div>
               <h1 className="text-2xl md:text-3xl font-bold tracking-tight gradient-text">Partner Dashboard</h1>
-              <p className="text-muted-foreground text-sm mt-0.5">Invite investors, earn 10% of their monthly profits — automatically.</p>
+              <p className="text-muted-foreground text-sm mt-0.5">Earn <span className="text-emerald-400 font-semibold">3% instant</span> + <span className="text-emerald-400 font-semibold">10% lifetime</span> on every active partner.</p>
             </div>
             <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 mt-1">
               <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
@@ -170,9 +170,9 @@ export default function ReferralPage() {
 
               <div className="glass-card p-5 rounded-2xl relative overflow-hidden col-span-2 lg:col-span-1">
                 <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-violet-500/60 to-purple-500/40" />
-                <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-3">Commission Rate</p>
-                <p className="text-3xl font-bold text-violet-400">10%</p>
-                <p className="text-xs text-muted-foreground mt-2">Of each referral's monthly profits</p>
+                <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-3">Reward Structure</p>
+                <p className="text-2xl md:text-3xl font-bold text-violet-400 leading-tight">3% + 10%</p>
+                <p className="text-xs text-muted-foreground mt-2">Activation bonus + lifetime daily share</p>
               </div>
             </>
           )}
@@ -380,13 +380,20 @@ export default function ReferralPage() {
                 {
                   n: "03",
                   title: "They activate an investment",
-                  desc: "Once they deposit and start an investment plan, they become an active referral in your network.",
+                  desc: "Once they deposit and start an investment plan ($100 minimum), they become an active partner in your network.",
                   color: "text-amber-400",
                   dot: "bg-amber-500",
                 },
                 {
                   n: "04",
-                  title: "You earn 10% daily",
+                  title: "Instant 3% activation bonus",
+                  desc: "The moment your partner activates, you earn 3% of their first investment — credited to your profit balance immediately.",
+                  color: "text-cyan-400",
+                  dot: "bg-cyan-500",
+                },
+                {
+                  n: "05",
+                  title: "Lifetime 10% daily share",
                   desc: "Every day your partner earns a profit, 10% of it is automatically credited to your profit balance — instantly withdrawable.",
                   color: "text-emerald-400",
                   dot: "bg-emerald-500",
