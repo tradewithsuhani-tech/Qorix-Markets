@@ -243,4 +243,20 @@ Personal account alerts via Telegram bot. Bot: **@Qorixmarketsbot**.
 - Recharts equity area chart
 - PWA installable
 
+## STAGING_MODE (blue-green deployment safety)
+
+Set `STAGING_MODE=true` (or `1`) on a staging copy of this server to disable ALL background jobs that mutate shared state. Used when running a parallel staging Replit alongside production to avoid double-processing.
+
+When `STAGING_MODE=true`:
+- TronGrid USDT monitor (`tron-monitor.ts`) → skipped (would double-credit deposits)
+- Crypto deposit watcher (`crypto-deposit/depositWatcher.ts`) → skipped
+- Telegram poller (`telegram-poller.ts`) → skipped (Telegram returns 409 Conflict if two pollers share a token)
+- All cron jobs (`cron.ts`) → skipped: daily profit distribution, monthly trading→profit sweep, hourly promo expiry, auto-signal engine tick + closer
+
+API endpoints, auth, frontend serving — all still work normally on staging. Only background mutators are gated.
+
+**Default OFF.** Production behavior is unchanged unless this env var is explicitly set on the staging deployment.
+
+Helper: `lib/staging-mode.ts` exports `isStagingMode()` and `logStagingSkip(component)`.
+
 See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details.
