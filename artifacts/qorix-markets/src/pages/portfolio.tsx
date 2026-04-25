@@ -1607,9 +1607,14 @@ function PortfolioInner() {
                 })}
               </div>
 
-              <p className="text-[10px] text-muted-foreground mt-3 leading-relaxed">
-                <span className="text-emerald-300/80 font-semibold">Trading never sleeps — but earnings settle smart.</span> Your capital works through Mon–Fri global forex sessions, locking in real profits as markets close. Weekends rest; the engine is back live every Monday. <span className="opacity-80">Returns are driven by live market performance and protected by your active risk controls.</span>
-              </p>
+              <div className="mt-4 rounded-xl border border-emerald-500/15 bg-gradient-to-br from-emerald-500/[0.06] to-transparent p-3 sm:p-3.5">
+                <h4 className="text-xs sm:text-sm font-bold text-emerald-300 leading-tight">
+                  Trading never sleeps — but earnings settle smart.
+                </h4>
+                <p className="text-[10.5px] sm:text-[11px] text-muted-foreground/90 leading-relaxed mt-1.5">
+                  Your capital works through Mon–Fri global forex sessions, locking in real profits as markets close. Weekends rest; the engine is back live every Monday. Returns are driven by live market performance and protected by your active risk controls.
+                </p>
+              </div>
             </div>
           </>
         )}
