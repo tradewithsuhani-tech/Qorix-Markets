@@ -259,4 +259,31 @@ API endpoints, auth, frontend serving — all still work normally on staging. On
 
 Helper: `lib/staging-mode.ts` exports `isStagingMode()` and `logStagingSkip(component)`.
 
+## Production static asset serving (Express, not Replit static handler)
+
+**Architecture change (Apr 2026):** In production the api-server (`artifacts/api-server/src/app.ts`) serves the qorix-markets SPA bundles directly via `express.static`, NOT Replit's built-in static handler.
+
+**Why:** Replit's static handler returned `cache-control: private` with NO gzip/brotli on JS/CSS bundles. With ~3 MB of bundles, slow Indian mobile networks (3G/Edge) showed a 30+ second blank page on first load — users gave up before React rendered. Express + `compression` middleware + immutable cache headers cuts wire transfer ~4x and makes repeat visits instant.
+
+**How it works:**
+- `artifacts/api-server/.replit-artifact/artifact.toml`: `paths = ["/"]` (was `["/api"]`). Production build first runs `pnpm --filter @workspace/qorix-markets run build`, then `pnpm --filter @workspace/api-server run build`. Health check still on `/api/healthz`.
+- `artifacts/qorix-markets/.replit-artifact/artifact.toml`: `[services.production]` block REMOVED. The qorix-markets artifact is now dev-only (vite dev server). Its build happens inside api-server's build step.
+- `app.ts`:
+  - `/assets/*` (Vite content-hashed) → `Cache-Control: public, max-age=31536000, immutable`
+  - `index.html`, `sw.js`, `manifest.json`, `version.json` → `no-cache, no-store, must-revalidate`
+  - SPA fallback: any non-`/api/*` GET returns `index.html` so wouter handles routing.
+  - Compression threshold 1KB, level 6, skips images/video/audio.
+  - Path resolution uses `import.meta.url` (NOT `process.cwd()`) so it works in both dev and prod regardless of working directory.
+
+**Measured wins (post-deploy):**
+| Asset | Raw | Gzipped |
+|-------|-----|---------|
+| index.js | 868 KB | 195 KB (4.4x) |
+| vendor.js | 1.25 MB | 397 KB (3.1x) |
+| vendor-react.js | 566 KB | 153 KB (3.7x) |
+| index.css | 382 KB | 44 KB (8.7x) |
+| **Total** | **3.1 MB** | **789 KB** |
+
+**Express 5 gotcha:** `app.get("*", ...)` no longer works (path-to-regexp v8 requires named params). Use a generic middleware filtered to GET/HEAD instead.
+
 See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details.
