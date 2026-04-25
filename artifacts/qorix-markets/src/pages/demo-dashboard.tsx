@@ -1352,60 +1352,142 @@ export function DemoDashboardBody({
             transition={{ duration: 0.4, delay: 0.1 }}
             className="grid grid-cols-1 lg:grid-cols-5 gap-4"
           >
-            {/* Activate Trading CTA */}
-            <div className="lg:col-span-3 rounded-2xl border border-blue-500/25 bg-gradient-to-br from-[#0d1117] via-[#0d1117] to-blue-950/30 p-5 md:p-6 space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-[11px] font-semibold uppercase tracking-wider text-blue-300 mb-1">Start Trading</div>
-                  <h3 className="text-xl md:text-2xl font-bold leading-tight">Start from <span className="gradient-text">$10</span></h3>
-                </div>
-                <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold border bg-emerald-500/10 border-emerald-500/25 text-emerald-300">
-                  <CheckCircle style={{ width: 11, height: 11 }} /> No lock-in
-                </div>
-              </div>
+            {/* Activate Trading CTA — premium */}
+            <div className="lg:col-span-3 relative overflow-hidden rounded-2xl border border-blue-500/25 bg-gradient-to-br from-[#0d1117] via-[#0a0f1a] to-blue-950/40 p-4 sm:p-5 md:p-6 space-y-4 shadow-[0_0_40px_-12px_rgba(59,130,246,0.35)]">
+              {/* Top hairline + ambient glow */}
+              <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-blue-400/60 to-transparent" />
+              <div
+                className="pointer-events-none absolute -top-24 -right-20 w-72 h-72 rounded-full opacity-40"
+                style={{ background: "radial-gradient(circle, rgba(59,130,246,0.25) 0%, transparent 70%)" }}
+              />
+              <div
+                className="pointer-events-none absolute -bottom-24 -left-20 w-72 h-72 rounded-full opacity-30"
+                style={{ background: "radial-gradient(circle, rgba(168,85,247,0.20) 0%, transparent 70%)" }}
+              />
 
-              <div className="grid grid-cols-3 gap-2">
-                {[
-                  { name: "Low", returns: "2–5%/mo", bg: "bg-emerald-500/5 border-emerald-500/20", text: "text-emerald-300" },
-                  { name: "Balanced", returns: "4–6%/mo", bg: "bg-blue-500/5 border-blue-500/20", text: "text-blue-300" },
-                  { name: "Growth", returns: "5–8%/mo", bg: "bg-violet-500/5 border-violet-500/20", text: "text-violet-300" },
-                ].map((mode) => (
-                  <div
-                    key={mode.name}
-                    className={`rounded-xl border p-2.5 sm:p-3 text-center ${mode.bg} min-w-0`}
-                  >
-                    <div className={`text-xs font-semibold ${mode.text} mb-1 truncate`}>{mode.name}</div>
-                    <div className="text-[11px] text-muted-foreground tabular-nums whitespace-nowrap">{mode.returns}</div>
+              {/* Header */}
+              <div className="relative flex items-start justify-between gap-2">
+                <div className="flex items-start gap-3 min-w-0">
+                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500/25 to-purple-500/15 border border-blue-400/40 flex items-center justify-center shrink-0 shadow-[0_0_18px_-4px_rgba(59,130,246,0.6)]">
+                    <Zap style={{ width: 18, height: 18 }} className="text-blue-300" />
                   </div>
-                ))}
+                  <div className="min-w-0">
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-blue-300/90 mb-0.5">
+                      Start Trading
+                    </div>
+                    <h3 className="text-xl sm:text-2xl md:text-3xl font-extrabold leading-tight whitespace-nowrap">
+                      Start from <span className="bg-gradient-to-r from-blue-300 via-violet-300 to-purple-400 bg-clip-text text-transparent">$10</span>
+                    </h3>
+                  </div>
+                </div>
+                <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border bg-emerald-500/10 border-emerald-500/30 text-emerald-300 shrink-0 whitespace-nowrap">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  No lock-in
+                </span>
               </div>
 
+              {/* Strategy tier picker */}
+              <div className="relative">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70 mb-2">
+                  Choose your strategy
+                </div>
+                <div className="grid grid-cols-3 gap-2 sm:gap-2.5">
+                  {[
+                    { name: "Low", returns: "2–5%", icon: ShieldCheck, accent: "emerald", bg: "from-emerald-500/[0.10] to-emerald-500/[0.02]", border: "border-emerald-500/25 hover:border-emerald-400/50", text: "text-emerald-300", iconBg: "bg-emerald-500/20 border-emerald-400/30" },
+                    { name: "Balanced", returns: "4–6%", icon: BarChart2, accent: "blue", bg: "from-blue-500/[0.10] to-blue-500/[0.02]", border: "border-blue-500/30 hover:border-blue-400/50", text: "text-blue-300", iconBg: "bg-blue-500/20 border-blue-400/30" },
+                    { name: "Growth", returns: "5–8%", icon: TrendingUp, accent: "violet", bg: "from-violet-500/[0.10] to-violet-500/[0.02]", border: "border-violet-500/25 hover:border-violet-400/50", text: "text-violet-300", iconBg: "bg-violet-500/20 border-violet-400/30" },
+                  ].map((mode) => (
+                    <div
+                      key={mode.name}
+                      className={`group relative overflow-hidden rounded-xl border bg-gradient-to-br p-2.5 sm:p-3 text-center transition-all duration-200 hover:-translate-y-0.5 ${mode.bg} ${mode.border}`}
+                    >
+                      <div className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-gradient-to-br from-white/[0.05] to-transparent" />
+                      <div className={`relative w-7 h-7 mx-auto rounded-lg border flex items-center justify-center mb-1.5 ${mode.iconBg}`}>
+                        <mode.icon style={{ width: 14, height: 14 }} className={mode.text} />
+                      </div>
+                      <div className={`relative text-xs sm:text-sm font-bold ${mode.text} mb-0.5 truncate`}>{mode.name}</div>
+                      <div className="relative text-[10px] sm:text-[11px] text-muted-foreground tabular-nums whitespace-nowrap font-medium">{mode.returns}/mo</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* CTA button — premium with shimmer */}
               <button
                 onClick={() => navigate("/deposit")}
-                className="w-full px-5 py-3 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 shadow-lg shadow-blue-600/30 transition-all"
+                className="group relative w-full overflow-hidden px-5 py-3.5 rounded-xl text-sm sm:text-base font-bold text-white bg-gradient-to-r from-blue-600 via-violet-600 to-purple-600 hover:from-blue-500 hover:via-violet-500 hover:to-purple-500 shadow-[0_8px_24px_-6px_rgba(99,102,241,0.55)] hover:shadow-[0_12px_32px_-6px_rgba(99,102,241,0.75)] transition-all duration-300 border border-white/15"
               >
-                Activate Trading →
+                {/* Shimmer sweep */}
+                <span className="pointer-events-none absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out" />
+                <span className="relative inline-flex items-center justify-center gap-2">
+                  <Zap style={{ width: 16, height: 16 }} />
+                  Activate Trading
+                  <span className="transition-transform group-hover:translate-x-1">→</span>
+                </span>
               </button>
-              <div className="text-[11px] text-muted-foreground text-center">Start small. Scale anytime. Withdraw with one click.</div>
+
+              {/* Trust pills below button */}
+              <div className="relative flex items-center justify-center gap-1.5 sm:gap-3 flex-wrap text-[10px] sm:text-[11px] text-muted-foreground">
+                <span className="inline-flex items-center gap-1">
+                  <CheckCircle style={{ width: 11, height: 11 }} className="text-emerald-400" />
+                  Start small
+                </span>
+                <span className="text-muted-foreground/40">·</span>
+                <span className="inline-flex items-center gap-1">
+                  <CheckCircle style={{ width: 11, height: 11 }} className="text-emerald-400" />
+                  Scale anytime
+                </span>
+                <span className="text-muted-foreground/40">·</span>
+                <span className="inline-flex items-center gap-1">
+                  <CheckCircle style={{ width: 11, height: 11 }} className="text-emerald-400" />
+                  1-click withdraw
+                </span>
+              </div>
             </div>
 
-            {/* Trust Block */}
-            <div className="lg:col-span-2 rounded-2xl border border-white/10 bg-white/[0.02] p-5 space-y-3">
-              <div className="flex items-center gap-2">
-                <ShieldCheck style={{ width: 16, height: 16 }} className="text-emerald-400" />
-                <h3 className="font-semibold">Why Qorix</h3>
+            {/* Why Qorix — premium trust block */}
+            <div className="lg:col-span-2 relative overflow-hidden rounded-2xl border border-emerald-500/15 bg-gradient-to-br from-[#0e1828] via-[#0a1322] to-[#070b14] p-4 sm:p-5">
+              <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-emerald-400/40 to-transparent" />
+              <div
+                className="pointer-events-none absolute -top-20 -right-20 w-60 h-60 rounded-full opacity-25"
+                style={{ background: "radial-gradient(circle, rgba(16,185,129,0.20) 0%, transparent 70%)" }}
+              />
+
+              <div className="relative flex items-center gap-2.5 mb-4">
+                <div className="w-9 h-9 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center shrink-0 shadow-[0_0_16px_-4px_rgba(16,185,129,0.5)]">
+                  <ShieldCheck style={{ width: 16, height: 16 }} className="text-emerald-400" />
+                </div>
+                <div>
+                  <h3 className="text-sm sm:text-base font-bold text-white leading-tight">Why Qorix</h3>
+                  <div className="text-[10px] uppercase tracking-wider text-emerald-300/80 font-semibold">
+                    Built for trust
+                  </div>
+                </div>
               </div>
-              <ul className="space-y-2.5">
+
+              <ul className="relative space-y-2">
                 {[
-                  "Fully automated execution",
-                  "No manual trading required",
-                  "Risk-managed strategies",
-                  "Transparent dashboard",
-                  "Withdraw anytime",
+                  { icon: Zap, label: "Fully automated execution", desc: "AI-driven 24/7" },
+                  { icon: ShieldCheck, label: "No manual trading", desc: "Set & forget" },
+                  { icon: Gauge, label: "Risk-managed strategies", desc: "Protected by limits" },
+                  { icon: BarChart2, label: "Transparent dashboard", desc: "Real-time P&L" },
+                  { icon: Banknote, label: "Withdraw anytime", desc: "1-click cash-out" },
                 ].map((item) => (
-                  <li key={item} className="flex items-start gap-2.5 text-sm">
-                    <CheckCircle style={{ width: 14, height: 14 }} className="text-emerald-400 shrink-0 mt-0.5" />
-                    <span className="text-muted-foreground">{item}</span>
+                  <li
+                    key={item.label}
+                    className="group flex items-center gap-2.5 p-2 rounded-lg border border-transparent hover:border-emerald-500/15 hover:bg-emerald-500/[0.04] transition-all duration-200"
+                  >
+                    <div className="w-7 h-7 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center shrink-0 group-hover:bg-emerald-500/20 group-hover:border-emerald-400/40 transition-colors">
+                      <item.icon style={{ width: 13, height: 13 }} className="text-emerald-400" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs sm:text-sm font-semibold text-white truncate">
+                        {item.label}
+                      </div>
+                      <div className="text-[10px] text-muted-foreground/80 truncate">
+                        {item.desc}
+                      </div>
+                    </div>
                   </li>
                 ))}
               </ul>
