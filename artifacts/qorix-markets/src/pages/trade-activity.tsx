@@ -361,6 +361,18 @@ export default function TradeActivityPage() {
   const isUp = totalPL >= 0;
   const TrendIcon = isUp ? TrendingUp : TrendingDown;
 
+  // Bounded P/L formatter — compact (K/M/B) for huge totals so the chip never
+  // overflows on small viewports (iPhone SE = 375px). Uses comma grouping
+  // below the compact threshold for clean readability.
+  function formatPL(n: number): string {
+    const sign = n >= 0 ? "+" : "-";
+    const abs = Math.abs(n);
+    if (abs >= 1_000_000_000) return `${sign}$${(abs / 1_000_000_000).toFixed(2)}B`;
+    if (abs >= 1_000_000) return `${sign}$${(abs / 1_000_000).toFixed(2)}M`;
+    if (abs >= 100_000) return `${sign}$${(abs / 1_000).toFixed(1)}K`;
+    return `${sign}$${abs.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  }
+
   return (
     <Layout>
       <div className="max-w-7xl mx-auto px-4 py-5 sm:py-8 space-y-4 sm:space-y-6">
@@ -459,11 +471,12 @@ export default function TradeActivityPage() {
               />
               <div
                 className={cn(
-                  "text-base sm:text-[26px] font-bold tabular-nums tracking-tight leading-none",
+                  "text-base sm:text-[26px] font-bold tabular-nums tracking-tight leading-none truncate",
                   isUp ? "text-emerald-400" : "text-rose-400",
                 )}
+                title={`${isUp ? "+" : ""}$${totalPL.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
               >
-                {isUp ? "+" : ""}${totalPL.toFixed(2)}
+                {formatPL(totalPL)}
               </div>
             </div>
           </div>
