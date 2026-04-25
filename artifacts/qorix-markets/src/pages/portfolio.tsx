@@ -1208,24 +1208,26 @@ function PortfolioInner() {
           }}
         />
 
-        <div className="relative flex items-start justify-between flex-wrap gap-3 mb-5">
-          <div className="flex items-start gap-2.5 min-w-0 flex-1">
-            <div className="w-9 h-9 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center shrink-0 shadow-[0_0_18px_-6px_rgba(16,185,129,0.5)]">
-              <LineChart className="w-4 h-4 text-emerald-400" />
-            </div>
-            <div className="min-w-0">
-              <h3 className="text-sm sm:text-base md:text-lg font-semibold text-white flex items-center gap-2 leading-tight">
-                Daily Return Projection
+        <div className="relative mb-5">
+          {/* Row 1: icon + title + pill — single line, no wrap */}
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-9 h-9 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center shrink-0 shadow-[0_0_18px_-6px_rgba(16,185,129,0.5)]">
+                <LineChart className="w-4 h-4 text-emerald-400" />
+              </div>
+              <h3 className="text-sm sm:text-base md:text-lg font-semibold text-white whitespace-nowrap leading-tight">
+                Daily Returns
               </h3>
-              <p className="text-[11px] sm:text-xs text-muted-foreground mt-1 leading-relaxed">
-                Indicative daily profit, distributed across forex working days (Mon–Fri) of {monthLabel}.
-              </p>
             </div>
+            <span className="inline-flex items-center gap-1 text-[9px] sm:text-[10px] uppercase tracking-wider text-emerald-300 bg-emerald-500/10 border border-emerald-500/30 px-2 py-0.5 sm:py-1 rounded-full font-bold shrink-0">
+              <Calendar className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
+              <span className="whitespace-nowrap">{projection.workingDays} Days</span>
+            </span>
           </div>
-          <span className="inline-flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-emerald-300 bg-emerald-500/10 border border-emerald-500/30 px-2.5 py-1 rounded-full font-bold shrink-0 shadow-[inset_0_0_0_1px_rgba(16,185,129,0.05)]">
-            <Calendar className="w-3 h-3" />
-            {projection.workingDays} Forex Days
-          </span>
+          {/* Row 2: description — full width below */}
+          <p className="text-[11px] sm:text-xs text-muted-foreground leading-relaxed pl-[46px]">
+            Indicative profit · Mon–Fri sessions of {monthLabel}.
+          </p>
         </div>
 
         {investedAmount <= 0 ? (
@@ -1295,66 +1297,91 @@ function PortfolioInner() {
               </div>
             </div>
 
-            {/* Supporting metrics — 3 compact tiles */}
-            <div className="relative grid grid-cols-3 gap-2 sm:gap-3 mb-5">
-              {/* Investment */}
-              <div className="group relative overflow-hidden rounded-xl border border-blue-500/20 bg-gradient-to-br from-blue-500/[0.08] to-blue-500/[0.02] p-3 sm:p-3.5 transition-all hover:border-blue-400/40 hover:-translate-y-0.5 duration-200">
-                <div className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-gradient-to-br from-white/[0.04] to-transparent" />
-                <div className="relative flex items-center gap-1.5 mb-2">
-                  <div className="w-6 h-6 rounded-md bg-blue-500/20 border border-blue-400/30 flex items-center justify-center shrink-0">
-                    <Wallet className="w-3 h-3 text-blue-300" />
-                  </div>
-                  <div className="text-[9px] sm:text-[10px] uppercase tracking-wider text-blue-300 font-bold truncate">
-                    Investment
-                  </div>
-                </div>
-                <div className="relative text-base sm:text-lg md:text-xl font-bold text-white tabular-nums leading-tight truncate">
-                  ${investedAmount.toFixed(2)}
-                </div>
-                <div className="relative text-[10px] text-muted-foreground mt-0.5 capitalize truncate">
-                  {riskSafe} risk
-                </div>
-              </div>
+            {/* Supporting metrics — list on mobile (horizontal flow, no truncation),
+                3-col grid on tablet+ */}
+            <div className="relative grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3 mb-5">
+              {[
+                {
+                  icon: Wallet,
+                  label: "Investment",
+                  value: `$${investedAmount.toFixed(2)}`,
+                  sub: `${riskSafe.charAt(0).toUpperCase() + riskSafe.slice(1)} risk strategy`,
+                  color: "text-blue-300",
+                  iconBg: "bg-blue-500/20 border-blue-400/30",
+                  border: "border-blue-500/20 hover:border-blue-400/40",
+                  bg: "from-blue-500/[0.08] to-blue-500/[0.02]",
+                },
+                {
+                  icon: TrendingUp,
+                  label: "Range",
+                  value: `${projection.monthlyMinPct}–${projection.monthlyMaxPct}%`,
+                  sub: "Monthly performance band",
+                  color: "text-violet-300",
+                  iconBg: "bg-violet-500/20 border-violet-400/30",
+                  border: "border-violet-500/20 hover:border-violet-400/40",
+                  bg: "from-violet-500/[0.08] to-violet-500/[0.02]",
+                },
+                {
+                  icon: Activity,
+                  label: "Today",
+                  value: `$${projection.todayAmount.toFixed(2)}`,
+                  sub: investedAmount > 0
+                    ? `+${((projection.todayAmount / investedAmount) * 100).toFixed(3)}% on capital`
+                    : "—",
+                  color: "text-amber-300",
+                  iconBg: "bg-amber-500/20 border-amber-400/30",
+                  border: "border-amber-500/20 hover:border-amber-400/40",
+                  bg: "from-amber-500/[0.08] to-amber-500/[0.02]",
+                },
+              ].map((m) => (
+                <div
+                  key={m.label}
+                  className={cn(
+                    "group relative overflow-hidden rounded-xl border bg-gradient-to-br p-3 sm:p-3.5 transition-all hover:-translate-y-0.5 duration-200",
+                    m.border, m.bg
+                  )}
+                >
+                  <div className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-gradient-to-br from-white/[0.04] to-transparent" />
 
-              {/* Monthly Range */}
-              <div className="group relative overflow-hidden rounded-xl border border-violet-500/20 bg-gradient-to-br from-violet-500/[0.08] to-violet-500/[0.02] p-3 sm:p-3.5 transition-all hover:border-violet-400/40 hover:-translate-y-0.5 duration-200">
-                <div className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-gradient-to-br from-white/[0.04] to-transparent" />
-                <div className="relative flex items-center gap-1.5 mb-2">
-                  <div className="w-6 h-6 rounded-md bg-violet-500/20 border border-violet-400/30 flex items-center justify-center shrink-0">
-                    <TrendingUp className="w-3 h-3 text-violet-300" />
+                  {/* Mobile: horizontal layout (icon left, content right) — full width, no truncation */}
+                  <div className="relative flex sm:hidden items-center gap-3">
+                    <div className={cn("w-9 h-9 rounded-lg border flex items-center justify-center shrink-0", m.iconBg)}>
+                      <m.icon className={cn("w-4 h-4", m.color)} />
+                    </div>
+                    <div className="flex-1 min-w-0 flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className={cn("text-[10px] uppercase tracking-wider font-bold", m.color)}>
+                          {m.label}
+                        </div>
+                        <div className="text-[10px] text-muted-foreground mt-0.5 truncate">
+                          {m.sub}
+                        </div>
+                      </div>
+                      <div className="text-base font-bold text-white tabular-nums shrink-0">
+                        {m.value}
+                      </div>
+                    </div>
                   </div>
-                  <div className="text-[9px] sm:text-[10px] uppercase tracking-wider text-violet-300 font-bold truncate">
-                    Range
-                  </div>
-                </div>
-                <div className="relative text-base sm:text-lg md:text-xl font-bold text-white tabular-nums leading-tight">
-                  {projection.monthlyMinPct}–{projection.monthlyMaxPct}%
-                </div>
-                <div className="relative text-[10px] text-muted-foreground mt-0.5 truncate">
-                  Performance band
-                </div>
-              </div>
 
-              {/* Today */}
-              <div className="group relative overflow-hidden rounded-xl border border-amber-500/20 bg-gradient-to-br from-amber-500/[0.08] to-amber-500/[0.02] p-3 sm:p-3.5 transition-all hover:border-amber-400/40 hover:-translate-y-0.5 duration-200">
-                <div className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-gradient-to-br from-white/[0.04] to-transparent" />
-                <div className="relative flex items-center gap-1.5 mb-2">
-                  <div className="w-6 h-6 rounded-md bg-amber-500/20 border border-amber-400/30 flex items-center justify-center shrink-0">
-                    <Activity className="w-3 h-3 text-amber-300" />
+                  {/* Tablet+: stacked layout */}
+                  <div className="relative hidden sm:block">
+                    <div className="flex items-center gap-1.5 mb-2">
+                      <div className={cn("w-6 h-6 rounded-md border flex items-center justify-center shrink-0", m.iconBg)}>
+                        <m.icon className={cn("w-3 h-3", m.color)} />
+                      </div>
+                      <div className={cn("text-[10px] uppercase tracking-wider font-bold", m.color)}>
+                        {m.label}
+                      </div>
+                    </div>
+                    <div className="text-lg md:text-xl font-bold text-white tabular-nums leading-tight">
+                      {m.value}
+                    </div>
+                    <div className="text-[10px] text-muted-foreground mt-0.5 truncate">
+                      {m.sub}
+                    </div>
                   </div>
-                  <div className="text-[9px] sm:text-[10px] uppercase tracking-wider text-amber-300 font-bold truncate">
-                    Today
-                  </div>
                 </div>
-                <div className="relative text-base sm:text-lg md:text-xl font-bold text-white tabular-nums leading-tight truncate">
-                  ${projection.todayAmount.toFixed(2)}
-                </div>
-                <div className="relative text-[10px] text-muted-foreground mt-0.5 tabular-nums truncate">
-                  {investedAmount > 0
-                    ? `+${((projection.todayAmount / investedAmount) * 100).toFixed(3)}%`
-                    : "—"}
-                </div>
-              </div>
+              ))}
             </div>
 
             {/* Today + MTD strip */}
