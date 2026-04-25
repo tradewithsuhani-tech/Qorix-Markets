@@ -20,3 +20,4 @@ export * from "./tasks";
 export * from "./signal-trades";
 export * from "./pnl-history";
 export * from "./promo-redemptions";
+export * from "./scheduled-promos";

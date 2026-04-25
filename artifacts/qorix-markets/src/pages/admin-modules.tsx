@@ -32,6 +32,10 @@ import {
   Globe,
   Sparkles,
   Tag,
+  Calendar,
+  Trash2,
+  Power,
+  PartyPopper,
 } from "lucide-react";
 import { AddressDisplay } from "@/components/address-display";
 import { useToast } from "@/hooks/use-toast";
@@ -647,6 +651,330 @@ export function AdminWalletPage() {
   );
 }
 
+// Holiday / Scheduled Promo manager — full CRUD against /api/admin/scheduled-promos.
+// Active scheduled promos OVERRIDE the rotating-window offer for everyone, so this
+// is what admins use to ship one-off Diwali / NYE / event promos without redeploys.
+interface ScheduledPromoRow {
+  id: number;
+  name: string;
+  code: string;
+  description: string | null;
+  bonusPercent: string | number;
+  startsAt: string;
+  endsAt: string;
+  maxRedemptions: number | null;
+  redemptionCount: number;
+  isActive: boolean;
+}
+
+function toLocalDateTimeInput(d: Date): string {
+  // <input type="datetime-local"> wants "YYYY-MM-DDTHH:mm" in local time.
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function ScheduledPromosManager() {
+  const { toast } = useToast();
+  const [rows, setRows] = useState<ScheduledPromoRow[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [showForm, setShowForm] = useState(false);
+  const now = useMemo(() => new Date(), []);
+  const defaultStart = useMemo(() => toLocalDateTimeInput(now), [now]);
+  const defaultEnd = useMemo(() => {
+    const d = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
+    return toLocalDateTimeInput(d);
+  }, [now]);
+  const [form, setForm] = useState({
+    name: "",
+    code: "",
+    description: "",
+    bonusPercent: "15",
+    startsAt: defaultStart,
+    endsAt: defaultEnd,
+    maxRedemptions: "" as string | "",
+  });
+  const [submitting, setSubmitting] = useState(false);
+
+  async function load() {
+    setLoading(true);
+    try {
+      const data = await adminFetch("/admin/scheduled-promos");
+      setRows(Array.isArray(data?.promos) ? data.promos : []);
+    } catch (err: any) {
+      toast({ title: "Failed to load holiday promos", description: String(err?.message ?? err), variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { load(); }, []);
+
+  function resetForm() {
+    setForm({
+      name: "",
+      code: "",
+      description: "",
+      bonusPercent: "15",
+      startsAt: toLocalDateTimeInput(new Date()),
+      endsAt: toLocalDateTimeInput(new Date(Date.now() + 3 * 24 * 60 * 60 * 1000)),
+      maxRedemptions: "",
+    });
+  }
+
+  async function createPromo() {
+    if (!form.name.trim() || !form.code.trim()) {
+      toast({ title: "Name and code are required", variant: "destructive" });
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await adminFetch("/admin/scheduled-promos", {
+        method: "POST",
+        body: JSON.stringify({
+          name: form.name.trim(),
+          code: form.code.trim().toUpperCase(),
+          description: form.description.trim() || null,
+          bonusPercent: Number(form.bonusPercent),
+          startsAt: new Date(form.startsAt).toISOString(),
+          endsAt: new Date(form.endsAt).toISOString(),
+          maxRedemptions: form.maxRedemptions ? Number(form.maxRedemptions) : null,
+        }),
+      });
+      toast({ title: "Holiday promo created" });
+      resetForm();
+      setShowForm(false);
+      await load();
+    } catch (err: any) {
+      toast({ title: "Failed to create promo", description: String(err?.message ?? err), variant: "destructive" });
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function toggleActive(row: ScheduledPromoRow) {
+    try {
+      await adminFetch(`/admin/scheduled-promos/${row.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ isActive: !row.isActive }),
+      });
+      toast({ title: row.isActive ? "Promo disabled" : "Promo enabled" });
+      await load();
+    } catch (err: any) {
+      toast({ title: "Update failed", description: String(err?.message ?? err), variant: "destructive" });
+    }
+  }
+
+  async function deletePromo(row: ScheduledPromoRow) {
+    if (row.redemptionCount > 0) {
+      toast({ title: "Cannot delete — promo has redemptions. Disable it instead.", variant: "destructive" });
+      return;
+    }
+    if (!confirm(`Delete "${row.name}"? This cannot be undone.`)) return;
+    try {
+      await adminFetch(`/admin/scheduled-promos/${row.id}`, { method: "DELETE" });
+      toast({ title: "Promo deleted" });
+      await load();
+    } catch (err: any) {
+      toast({ title: "Delete failed", description: String(err?.message ?? err), variant: "destructive" });
+    }
+  }
+
+  function statusOf(row: ScheduledPromoRow): { label: string; tone: string } {
+    const t = Date.now();
+    const start = new Date(row.startsAt).getTime();
+    const end = new Date(row.endsAt).getTime();
+    const capExhausted = row.maxRedemptions != null && row.redemptionCount >= row.maxRedemptions;
+    if (!row.isActive) return { label: "Disabled", tone: "text-slate-400 bg-slate-500/10 border-slate-500/20" };
+    if (capExhausted) return { label: "Sold Out", tone: "text-orange-400 bg-orange-500/10 border-orange-500/20" };
+    if (t < start) return { label: "Scheduled", tone: "text-blue-400 bg-blue-500/10 border-blue-500/20" };
+    if (t >= end) return { label: "Expired", tone: "text-slate-400 bg-slate-500/10 border-slate-500/20" };
+    return { label: "Live Now", tone: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20" };
+  }
+
+  return (
+    <div className="glass-card p-6 rounded-2xl space-y-4">
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <h2 className="text-xl font-bold flex items-center gap-2">
+            <PartyPopper className="w-5 h-5 text-pink-400" /> Holiday & Scheduled Promos
+          </h2>
+          <p className="text-xs text-muted-foreground mt-1 max-w-2xl">
+            Special event promos with fixed bonus % and date windows. When a scheduled promo is live, it <span className="text-white font-semibold">overrides</span> the rotating offer for all users. Use this for Diwali, New Year, milestone events, etc. Lifetime per-user redemption rule still applies.
+          </p>
+        </div>
+        <button
+          onClick={() => setShowForm((s) => !s)}
+          className="px-4 py-2 rounded-xl bg-pink-500/15 border border-pink-500/30 text-pink-300 hover:bg-pink-500/25 text-sm font-semibold flex items-center gap-2"
+        >
+          <Plus className="w-4 h-4" /> {showForm ? "Cancel" : "New Holiday Promo"}
+        </button>
+      </div>
+
+      {showForm && (
+        <div className="rounded-xl border border-pink-500/20 bg-pink-500/5 p-4 space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="text-sm text-muted-foreground">Name</label>
+              <input
+                type="text"
+                maxLength={120}
+                placeholder="Diwali Boost 2026"
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                className="mt-2 w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm"
+              />
+            </div>
+            <div>
+              <label className="text-sm text-muted-foreground flex items-center gap-1.5"><Tag className="w-3.5 h-3.5" /> Redeem Code</label>
+              <input
+                type="text"
+                maxLength={32}
+                placeholder="DIWALI25"
+                value={form.code}
+                onChange={(e) => setForm({ ...form, code: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "") })}
+                className="mt-2 w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm font-mono uppercase"
+              />
+              <p className="text-[11px] text-muted-foreground mt-1">Letters/digits only. Users will type this exact code.</p>
+            </div>
+            <div>
+              <label className="text-sm text-muted-foreground">Bonus %</label>
+              <input
+                type="number"
+                min={0.5}
+                max={100}
+                step="0.5"
+                value={form.bonusPercent}
+                onChange={(e) => setForm({ ...form, bonusPercent: e.target.value })}
+                className="mt-2 w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm font-mono"
+              />
+              <p className="text-[11px] text-muted-foreground mt-1">Fixed % credited on next confirmed deposit (0.5–100).</p>
+            </div>
+            <div>
+              <label className="text-sm text-muted-foreground">Max Redemptions (optional)</label>
+              <input
+                type="number"
+                min={1}
+                placeholder="Leave blank = unlimited"
+                value={form.maxRedemptions}
+                onChange={(e) => setForm({ ...form, maxRedemptions: e.target.value })}
+                className="mt-2 w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm font-mono"
+              />
+            </div>
+            <div>
+              <label className="text-sm text-muted-foreground flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5" /> Starts At</label>
+              <input
+                type="datetime-local"
+                value={form.startsAt}
+                onChange={(e) => setForm({ ...form, startsAt: e.target.value })}
+                className="mt-2 w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm font-mono"
+              />
+            </div>
+            <div>
+              <label className="text-sm text-muted-foreground flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5" /> Ends At</label>
+              <input
+                type="datetime-local"
+                value={form.endsAt}
+                onChange={(e) => setForm({ ...form, endsAt: e.target.value })}
+                className="mt-2 w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm font-mono"
+              />
+            </div>
+            <div className="md:col-span-2">
+              <label className="text-sm text-muted-foreground">Description (optional)</label>
+              <textarea
+                rows={2}
+                maxLength={500}
+                placeholder="Celebrate Diwali with us — limited-time bonus on your next deposit."
+                value={form.description}
+                onChange={(e) => setForm({ ...form, description: e.target.value })}
+                className="mt-2 w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm resize-none"
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <button
+              onClick={() => { resetForm(); setShowForm(false); }}
+              className="px-4 py-2 rounded-xl border border-white/10 text-sm text-muted-foreground hover:bg-white/5"
+            >
+              Cancel
+            </button>
+            <button
+              disabled={submitting}
+              onClick={createPromo}
+              className="px-5 py-2 rounded-xl bg-gradient-to-r from-pink-500 to-fuchsia-500 text-white text-sm font-semibold disabled:opacity-50"
+            >
+              {submitting ? "Creating…" : "Create Promo"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className="rounded-xl border border-white/10 overflow-hidden">
+        <table className="w-full text-sm">
+          <thead className="bg-white/5 text-xs uppercase tracking-wider text-muted-foreground">
+            <tr>
+              <th className="text-left p-3">Name / Code</th>
+              <th className="text-left p-3">Bonus</th>
+              <th className="text-left p-3">Window</th>
+              <th className="text-left p-3">Redemptions</th>
+              <th className="text-left p-3">Status</th>
+              <th className="text-right p-3">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading && (
+              <tr><td colSpan={6} className="p-6 text-center text-muted-foreground">Loading…</td></tr>
+            )}
+            {!loading && rows.length === 0 && (
+              <tr><td colSpan={6} className="p-6 text-center text-muted-foreground">No holiday promos yet. Click <span className="text-pink-300 font-semibold">New Holiday Promo</span> to create one.</td></tr>
+            )}
+            {rows.map((r) => {
+              const s = statusOf(r);
+              return (
+                <tr key={r.id} className="border-t border-white/5 hover:bg-white/[0.02]">
+                  <td className="p-3">
+                    <div className="text-white font-medium">{r.name}</div>
+                    <div className="font-mono text-xs text-pink-300 mt-0.5">{r.code}</div>
+                  </td>
+                  <td className="p-3 text-emerald-400 font-mono font-semibold">+{Number(r.bonusPercent)}%</td>
+                  <td className="p-3 text-xs text-muted-foreground">
+                    <div>{new Date(r.startsAt).toLocaleString()}</div>
+                    <div className="opacity-70">→ {new Date(r.endsAt).toLocaleString()}</div>
+                  </td>
+                  <td className="p-3 font-mono text-xs">
+                    {r.redemptionCount}{r.maxRedemptions != null ? ` / ${r.maxRedemptions}` : " / ∞"}
+                  </td>
+                  <td className="p-3">
+                    <span className={`text-[11px] uppercase tracking-wider font-semibold px-2 py-1 rounded border ${s.tone}`}>{s.label}</span>
+                  </td>
+                  <td className="p-3 text-right">
+                    <div className="inline-flex gap-1">
+                      <button
+                        title={r.isActive ? "Disable" : "Enable"}
+                        onClick={() => toggleActive(r)}
+                        className={`p-2 rounded-lg border ${r.isActive ? "border-amber-500/30 text-amber-400 hover:bg-amber-500/10" : "border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10"}`}
+                      >
+                        <Power className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        title="Delete"
+                        onClick={() => deletePromo(r)}
+                        disabled={r.redemptionCount > 0}
+                        className="p-2 rounded-lg border border-red-500/30 text-red-400 hover:bg-red-500/10 disabled:opacity-30 disabled:cursor-not-allowed"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 export function AdminSystemPage() {
   const [settings, setSettings] = useState<any>(null);
   const [broadcast, setBroadcast] = useState({ title: "", message: "", audience: "all" });
@@ -887,6 +1215,9 @@ export function AdminSystemPage() {
             </div>
           </div>
         </div>
+
+        {/* Holiday / Scheduled Promos — overrides the rotating offer when active */}
+        <ScheduledPromosManager />
 
         <div className="glass-card p-6 rounded-2xl">
           <h2 className="text-xl font-bold mb-4 flex items-center gap-2"><Shield className="w-5 h-5 text-blue-400" /> RBAC — Role-Based Access</h2>
