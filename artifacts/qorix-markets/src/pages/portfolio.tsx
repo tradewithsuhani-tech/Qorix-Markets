@@ -33,10 +33,13 @@ import {
   CircleDot,
   Square,
   AlertTriangle,
+  LineChart,
+  Calendar,
+  Target,
 } from "lucide-react";
 import { AnimatedCounter, BigBalanceCounter } from "@/components/animated-counter";
 import { UpdatedAgo } from "@/components/updated-ago";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AreaChart,
   Area,
@@ -50,6 +53,119 @@ import {
 } from "recharts";
 
 type RiskKey = "low" | "medium" | "high";
+
+// ---------------------------------------------------------------------------
+// Daily Return Projection helpers
+// ---------------------------------------------------------------------------
+// Each risk tier maps to a monthly return % range. Average is used to derive
+// the monthly target $; the range is shown to the user as a band.
+const MONTHLY_RETURN_BY_RISK: Record<RiskKey, { min: number; max: number; avg: number }> = {
+  low: { min: 2, max: 5, avg: 3.5 },
+  medium: { min: 4, max: 7, avg: 5.5 },
+  high: { min: 6, max: 10, avg: 8 },
+};
+
+// Mulberry32 — tiny seeded PRNG, deterministic per (seed) so the daily
+// breakdown stays stable across renders for the same user/month.
+function mulberry32(seed: number) {
+  return function () {
+    let t = (seed += 0x6d2b79f5);
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// Forex working days = Mon–Fri (skip Sat/Sun). Returns Date[] for given month.
+function forexWorkingDaysOfMonth(year: number, month0: number): Date[] {
+  const days: Date[] = [];
+  const last = new Date(year, month0 + 1, 0).getDate();
+  for (let d = 1; d <= last; d++) {
+    const dt = new Date(year, month0, d);
+    const dow = dt.getDay();
+    if (dow !== 0 && dow !== 6) days.push(dt);
+  }
+  return days;
+}
+
+type DayProjection = {
+  date: Date;
+  amount: number;
+  pct: number; // share of monthly target (%)
+  isToday: boolean;
+  isPast: boolean;
+};
+
+function buildDailyProjection(args: {
+  amount: number;
+  riskKey: RiskKey;
+  year: number;
+  month0: number;
+}): {
+  monthlyTarget: number;
+  monthlyMinPct: number;
+  monthlyMaxPct: number;
+  monthlyAvgPct: number;
+  workingDays: number;
+  dailyAvg: number;
+  todayAmount: number;
+  mtdProjected: number;
+  remainingProjected: number;
+  days: DayProjection[];
+} {
+  const tier = MONTHLY_RETURN_BY_RISK[args.riskKey];
+  const monthlyTarget = (args.amount * tier.avg) / 100;
+  const days = forexWorkingDaysOfMonth(args.year, args.month0);
+  const n = days.length;
+
+  // Seed: amount + tier + year/month so it's stable but unique per user/month.
+  const seed =
+    Math.floor(args.amount * 100) +
+    args.year * 1000 +
+    (args.month0 + 1) * 31 +
+    (args.riskKey === "low" ? 1 : args.riskKey === "medium" ? 2 : 3) * 7919;
+  const rand = mulberry32(seed);
+
+  // Generate weights in 0.6..1.4 then normalize so sum * monthlyTarget = monthlyTarget.
+  const raw: number[] = [];
+  let total = 0;
+  for (let i = 0; i < n; i++) {
+    const w = 0.6 + rand() * 0.8;
+    raw.push(w);
+    total += w;
+  }
+
+  const today = new Date();
+  const isCurrentMonth =
+    today.getFullYear() === args.year && today.getMonth() === args.month0;
+  const todayDate = today.getDate();
+
+  let mtd = 0;
+  let todayAmt = 0;
+  const projection: DayProjection[] = days.map((dt, i) => {
+    const share = raw[i] / total;
+    const amount = +(share * monthlyTarget).toFixed(2);
+    const pct = +(share * 100).toFixed(2);
+    const isToday = isCurrentMonth && dt.getDate() === todayDate;
+    const isPast = isCurrentMonth ? dt.getDate() < todayDate : false;
+    if (isPast || isToday) mtd += amount;
+    if (isToday) todayAmt = amount;
+    return { date: dt, amount, pct, isToday, isPast };
+  });
+
+  return {
+    monthlyTarget: +monthlyTarget.toFixed(2),
+    monthlyMinPct: tier.min,
+    monthlyMaxPct: tier.max,
+    monthlyAvgPct: tier.avg,
+    workingDays: n,
+    dailyAvg: +(monthlyTarget / Math.max(1, n)).toFixed(2),
+    todayAmount: +todayAmt.toFixed(2),
+    mtdProjected: +mtd.toFixed(2),
+    remainingProjected: +(monthlyTarget - mtd).toFixed(2),
+    days: projection,
+  };
+}
 
 const ALLOCATION_BY_RISK: Record<RiskKey, { label: string; pct: number; color: string }[]> = {
   low: [
@@ -587,6 +703,24 @@ function PortfolioInner() {
   const daysRunning = daysBetween(investment?.startedAt);
   const trades = tradesData?.trades ?? [];
 
+  // Daily Return Projection (forex working days, deterministic per user/month)
+  const now = new Date();
+  // todayKey ensures projection re-derives on day rollover so "Today" /
+  // MTD markers don't go stale within the same month.
+  const todayKey = now.toDateString();
+  const projection = useMemo(
+    () =>
+      buildDailyProjection({
+        amount: investedAmount,
+        riskKey: riskSafe,
+        year: now.getFullYear(),
+        month0: now.getMonth(),
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [investedAmount, riskSafe, todayKey],
+  );
+  const monthLabel = now.toLocaleString("en-US", { month: "long", year: "numeric" });
+
   // Locked state — either user hasn't invested yet, or trading is stopped.
   // In both cases: data shows zero, all features locked, single CTA to start trading.
   if (false && !invLoading && (investedAmount <= 0 || !isActive)) {
@@ -979,6 +1113,211 @@ function PortfolioInner() {
             </div>
           ))}
         </div>
+      </div>
+
+      {/* Daily Return Projection — investment-based forex-day breakdown */}
+      <div className="relative overflow-hidden rounded-2xl border border-emerald-400/20 bg-gradient-to-br from-emerald-500/[0.06] via-[#0a1322] to-[#070b14] p-5 md:p-6">
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-emerald-400/50 to-transparent" />
+        <div
+          className="pointer-events-none absolute -top-20 -right-20 w-72 h-72 rounded-full opacity-40"
+          style={{ background: "radial-gradient(circle, rgba(16,185,129,0.20) 0%, transparent 70%)" }}
+        />
+
+        <div className="relative flex items-start justify-between flex-wrap gap-3 mb-5">
+          <div>
+            <h3 className="text-base md:text-lg font-semibold text-white flex items-center gap-2">
+              <LineChart className="w-4 h-4 text-emerald-400" />
+              Daily Return Projection
+            </h3>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Indicative daily profit estimate based on your risk tier, distributed across forex working days (Mon–Fri) of {monthLabel}. Realised profit may vary with market conditions.
+            </p>
+          </div>
+          <span className="inline-flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-emerald-300 bg-emerald-500/10 border border-emerald-500/25 px-2 py-1 rounded-full font-semibold">
+            <Calendar className="w-3 h-3" />
+            {projection.workingDays} Forex Days
+          </span>
+        </div>
+
+        {investedAmount <= 0 ? (
+          <div className="relative rounded-xl border border-white/10 bg-white/[0.02] p-6 text-center">
+            <Lock className="w-6 h-6 text-muted-foreground mx-auto mb-2" />
+            <div className="text-sm text-muted-foreground">
+              Start a trading fund to see your daily profit projection.
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* Top metrics */}
+            <div className="relative grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+              <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-3.5">
+                <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-blue-300 font-semibold mb-1.5">
+                  <Wallet className="w-3 h-3" /> Investment
+                </div>
+                <div className="text-lg md:text-xl font-bold text-white tabular-nums">
+                  ${investedAmount.toFixed(2)}
+                </div>
+                <div className="text-[10px] text-muted-foreground mt-0.5 capitalize">
+                  {riskSafe} risk strategy
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-violet-500/20 bg-violet-500/5 p-3.5">
+                <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-violet-300 font-semibold mb-1.5">
+                  <TrendingUp className="w-3 h-3" /> Monthly Range
+                </div>
+                <div className="text-lg md:text-xl font-bold text-white tabular-nums">
+                  {projection.monthlyMinPct}–{projection.monthlyMaxPct}%
+                </div>
+                <div className="text-[10px] text-muted-foreground mt-0.5">
+                  Avg ~ {projection.monthlyAvgPct}% / month
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/8 p-3.5 shadow-[0_0_20px_-8px_rgba(16,185,129,0.4)]">
+                <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-emerald-300 font-semibold mb-1.5">
+                  <Target className="w-3 h-3" /> Monthly Target
+                </div>
+                <div className="text-lg md:text-xl font-bold tabular-nums bg-gradient-to-r from-emerald-200 to-green-400 bg-clip-text text-transparent">
+                  ${projection.monthlyTarget.toFixed(2)}
+                </div>
+                <div className="text-[10px] text-muted-foreground mt-0.5">
+                  Total profit this month
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3.5">
+                <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-amber-300 font-semibold mb-1.5">
+                  <Activity className="w-3 h-3" /> Per Working Day
+                </div>
+                <div className="text-lg md:text-xl font-bold text-white tabular-nums">
+                  ~${projection.dailyAvg.toFixed(2)}
+                </div>
+                <div className="text-[10px] text-muted-foreground mt-0.5">
+                  Average · varies daily
+                </div>
+              </div>
+            </div>
+
+            {/* Today + MTD strip */}
+            <div className="relative grid grid-cols-1 md:grid-cols-3 gap-3 mb-5">
+              <div className="md:col-span-1 rounded-xl border border-emerald-400/30 bg-gradient-to-br from-emerald-500/[0.10] to-emerald-500/[0.02] p-4">
+                <div className="flex items-center justify-between mb-1">
+                  <div className="text-[10px] uppercase tracking-wider text-emerald-300 font-semibold">
+                    Today's Projected Profit
+                  </div>
+                  <span className="inline-flex items-center gap-1 text-[9px] font-bold uppercase text-emerald-300 bg-emerald-500/15 border border-emerald-400/30 px-1.5 py-0.5 rounded">
+                    <span className="inline-block w-1 h-1 rounded-full bg-emerald-300 animate-pulse" />
+                    Estimate
+                  </span>
+                </div>
+                <div className="text-2xl md:text-3xl font-extrabold tabular-nums bg-gradient-to-r from-emerald-200 to-green-400 bg-clip-text text-transparent">
+                  ~${projection.todayAmount.toFixed(2)}
+                </div>
+                <div className="text-[10px] text-muted-foreground mt-1">
+                  Indicative only — settled at session close
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+                <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">
+                  Month-to-Date (Projected)
+                </div>
+                <div className="text-2xl font-bold text-white tabular-nums">
+                  ${projection.mtdProjected.toFixed(2)}
+                </div>
+                <div className="mt-2 h-1.5 rounded-full bg-white/5 overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-emerald-400 to-green-500"
+                    style={{
+                      width: `${Math.min(100, (projection.mtdProjected / Math.max(0.01, projection.monthlyTarget)) * 100).toFixed(1)}%`,
+                    }}
+                  />
+                </div>
+                <div className="text-[10px] text-muted-foreground mt-1.5">
+                  {((projection.mtdProjected / Math.max(0.01, projection.monthlyTarget)) * 100).toFixed(1)}% of monthly target
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+                <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">
+                  Remaining This Month
+                </div>
+                <div className="text-2xl font-bold text-white tabular-nums">
+                  ${projection.remainingProjected.toFixed(2)}
+                </div>
+                <div className="text-[10px] text-muted-foreground mt-1.5">
+                  Across {projection.days.filter((d) => !d.isPast && !d.isToday).length} upcoming forex day(s)
+                </div>
+              </div>
+            </div>
+
+            {/* Daily breakdown calendar grid */}
+            <div className="relative">
+              <div className="flex items-center justify-between mb-2">
+                <div className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">
+                  Daily Breakdown · Forex Working Days
+                </div>
+                <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
+                  <span className="inline-flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-sm bg-emerald-400/80" /> Today
+                  </span>
+                  <span className="inline-flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-sm bg-white/20" /> Past
+                  </span>
+                  <span className="inline-flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-sm bg-blue-400/40" /> Upcoming
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-11 gap-2">
+                {projection.days.map((d, idx) => {
+                  const dayNum = d.date.getDate();
+                  const dow = d.date.toLocaleString("en-US", { weekday: "short" });
+                  const status = d.isToday ? "today" : d.isPast ? "past" : "upcoming";
+                  const cls = d.isToday
+                    ? "border-emerald-400/50 bg-emerald-500/15 shadow-[0_0_14px_-4px_rgba(16,185,129,0.6)]"
+                    : d.isPast
+                      ? "border-white/10 bg-white/[0.03] opacity-70"
+                      : "border-blue-400/15 bg-blue-500/[0.04]";
+                  const textCls = d.isToday
+                    ? "text-emerald-200"
+                    : d.isPast
+                      ? "text-muted-foreground"
+                      : "text-white";
+                  const statusGlyph = d.isToday ? "●" : d.isPast ? "✓" : "·";
+                  const ariaLabel = `${d.date.toDateString()}, ${status}: estimated profit $${d.amount.toFixed(2)} (${d.pct.toFixed(2)}% of monthly target)`;
+                  return (
+                    <div
+                      key={idx}
+                      role="gridcell"
+                      tabIndex={0}
+                      aria-label={ariaLabel}
+                      className={`rounded-lg border p-2 text-center transition-all focus:outline-none focus:ring-2 focus:ring-emerald-400/60 ${cls}`}
+                      title={ariaLabel}
+                    >
+                      <div className="flex items-center justify-center gap-1 text-[9px] uppercase tracking-wider text-muted-foreground/80 font-medium">
+                        <span aria-hidden="true">{statusGlyph}</span>
+                        {dow}
+                      </div>
+                      <div className={`text-sm font-bold tabular-nums ${textCls}`}>
+                        {dayNum}
+                      </div>
+                      <div className={`text-[10px] font-semibold tabular-nums mt-0.5 ${d.isToday ? "text-emerald-300" : d.isPast ? "text-muted-foreground" : "text-blue-300/90"}`}>
+                        ${d.amount.toFixed(2)}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <p className="text-[10px] text-muted-foreground mt-3 leading-relaxed">
+                <span className="text-emerald-300/80 font-semibold">How it works:</span> Profit accrues only on forex working days (Mon–Fri) — weekends are off. Daily figures vary; the {monthLabel} total targets ~<span className="text-white">${projection.monthlyTarget.toFixed(2)}</span> ({projection.monthlyAvgPct}% of ${investedAmount.toFixed(2)} at {riskSafe} risk). <span className="opacity-80">Projections are illustrative and not a guarantee of returns — actual results depend on market performance and active risk controls.</span>
+              </p>
+            </div>
+          </>
+        )}
       </div>
 
       {/* Asset Allocation — premium */}
