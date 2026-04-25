@@ -743,7 +743,12 @@ export default function Dashboard() {
               <span className="text-[10px] font-bold text-amber-400 tracking-wider">CLOSED</span>
             </span>
           )}
-          <span className="text-[11px] font-semibold text-emerald-400/80 tabular-nums whitespace-nowrap">+0.50%/day</span>
+          <span className={cn(
+            "text-[11px] font-semibold tabular-nums whitespace-nowrap",
+            isMarketLive ? "text-emerald-400/80" : "text-muted-foreground"
+          )}>
+            {isMarketLive ? "+0.50%/day" : "0.00%/day"}
+          </span>
         </div>
       ),
       accent: "indigo",
