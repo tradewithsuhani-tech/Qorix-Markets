@@ -1,17 +1,9 @@
-// CRITICAL: Bump this version on every deploy that changes SW behavior or
-// HTML/asset cache strategy. The activate handler deletes any cache name that
-// doesn't match the current version, so a bump cleanly nukes stale caches
-// (e.g. cached old index.html that references asset hashes which no longer
-// exist on the server, causing 404 → blank page after deploy).
-const CACHE_VERSION = 'v9';
+const CACHE_VERSION = 'v8';
 const APP_SHELL_CACHE = `qorix-shell-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `qorix-runtime-${CACHE_VERSION}`;
 
-// Deliberately MINIMAL app shell — we no longer pre-cache '/' (index.html)
-// because it contains hashed asset references that change every deploy.
-// HTML is now always fetched network-first (see fetch handler), so caching
-// stale HTML can no longer cause an asset-hash mismatch crash.
 const APP_SHELL_URLS = [
+  '/',
   '/manifest.json',
   '/favicon.svg',
   '/icon-192.png',
@@ -66,21 +58,9 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // HTML navigation → NETWORK-FIRST.
-  //
-  // Was previously stale-while-revalidate which caused this prod incident:
-  // after a deploy, SW served the OLD cached index.html (with old hashed
-  // asset references like /assets/index-Cfxtfwbh.js) while the server only
-  // had the NEW hashes (/assets/index-DZVDtGS0.js). Result: every navigation
-  // hit cache → got stale HTML → browser fetched dead asset URLs → 404 →
-  // blank page until user hard-refreshed.
-  //
-  // Network-first means online users always get the latest HTML (and
-  // therefore latest asset hash references). Cache is only used as a true
-  // offline fallback. The minor cost: ~50ms slower first paint when online,
-  // but no more deploy-mismatch crashes.
-  if (request.mode === 'navigate' || request.headers.get('accept')?.includes('text/html')) {
-    event.respondWith(networkFirst(request, RUNTIME_CACHE));
+  // HTML navigation → stale-while-revalidate
+  if (request.headers.get('accept')?.includes('text/html')) {
+    event.respondWith(staleWhileRevalidate(request));
     return;
   }
 

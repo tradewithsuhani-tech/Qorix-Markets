@@ -99,31 +99,26 @@ export default defineConfig({
     target: "es2020",
     cssCodeSplit: true,
     sourcemap: false,
-    chunkSizeWarningLimit: 1500,
+    chunkSizeWarningLimit: 800,
     rollupOptions: {
       output: {
-        // Split strategy: ONE big vendor chunk for everything React-dependent
-        // (radix-ui, recharts, framer-motion, react-hook-form, wouter, etc.)
-        // plus React itself. Splitting them into separate chunks created
-        // circular dependencies between chunks ("Circular chunk: vendor-radix
-        // -> vendor-react -> vendor-radix" build warning) which manifested
-        // at runtime as: "Cannot read properties of undefined (reading
-        // 'useLayoutEffect')" when vendor-radix loaded before vendor-react.
-        //
-        // Keeping React + its dependents in one chunk eliminates the cross-
-        // chunk import order problem entirely. The single vendor.js is
-        // ~2.5 MB raw / ~600 KB gzipped — Express serves it compressed with
-        // a 1-year immutable cache header, so the trade-off is minimal: one
-        // extra ~400 KB on first load (vs. multi-chunk parallel download)
-        // in exchange for zero load-order bugs.
+        // Split heavy vendor libs into their own chunks so the browser can
+        // download them in parallel and cache them across deploys (the
+        // hashed filename only changes when that vendor's code changes).
+        // First paint stays fast — only the page-specific chunk + small
+        // shared runtime is required to render.
         manualChunks(id) {
           if (!id.includes("node_modules")) return undefined;
-          // Keep purely-data libs that don't touch React in their own chunks
-          // — safe to split because they have no React imports to race on.
+          if (id.includes("react-dom")) return "vendor-react";
+          if (id.includes("/react/") || id.includes("scheduler")) return "vendor-react";
+          if (id.includes("@tanstack")) return "vendor-query";
+          if (id.includes("@radix-ui")) return "vendor-radix";
+          if (id.includes("lucide-react")) return "vendor-icons";
+          if (id.includes("recharts") || id.includes("d3-")) return "vendor-charts";
+          if (id.includes("framer-motion")) return "vendor-motion";
           if (id.includes("date-fns") || id.includes("dayjs")) return "vendor-date";
-          if (id.includes("/zod/")) return "vendor-zod";
-          // Everything else (React core + every React-using library) shares
-          // a single chunk. This is the safe default.
+          if (id.includes("zod") || id.includes("react-hook-form")) return "vendor-forms";
+          if (id.includes("wouter")) return "vendor-router";
           return "vendor";
         },
       },

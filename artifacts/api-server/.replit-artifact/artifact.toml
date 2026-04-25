@@ -7,7 +7,7 @@ id = "3B4_FFSkEVBkAeYMFRJ2e"
 [[services]]
 localPort = 8080
 name = "API Server"
-paths = ["/"]
+paths = ["/api"]
 
 [services.development]
 run = "pnpm --filter @workspace/api-server run dev"
@@ -15,12 +15,7 @@ run = "pnpm --filter @workspace/api-server run dev"
 [services.production]
 
 [services.production.build]
-# Build the qorix-markets SPA first (output goes to artifacts/qorix-markets/dist/public),
-# then build the api-server. The api-server serves the SPA at runtime so we get
-# Express's gzip compression + immutable cache headers on JS/CSS bundles.
-# Inline env vars on the SPA build because qorix-markets/vite.config.ts hard-fails
-# without PORT and BASE_PATH (those are only set by Replit at runtime, not build time).
-args = ["bash", "-c", "PORT=21638 BASE_PATH=/ pnpm --filter @workspace/qorix-markets run build && pnpm --filter @workspace/api-server run build && test -f artifacts/qorix-markets/dist/public/index.html && echo 'SPA build verified'"]
+args = ["pnpm", "--filter", "@workspace/api-server", "run", "build"]
 
 [services.production.build.env]
 NODE_ENV = "production"

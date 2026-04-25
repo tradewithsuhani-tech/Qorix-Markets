@@ -2,7 +2,6 @@ import { db, emailOtpsTable, usersTable } from "@workspace/db";
 import { eq, and, gt } from "drizzle-orm";
 import { logger } from "./logger";
 import { buildBrandedEmailHtml } from "./email-template";
-import { isStagingMode } from "./staging-mode";
 import crypto from "crypto";
 import nodemailer, { type Transporter } from "nodemailer";
 // Hosted brand logo URL — no inline attachment so emails appear "clean"
@@ -54,14 +53,6 @@ export async function sendEmail(
   text: string,
   html?: string,
 ): Promise<void> {
-  // STAGING_MODE guard — never send real email from a staging server, even if
-  // SMTP credentials are configured. Logs the attempt so developers can see
-  // what would have been sent. Default OFF — production unaffected.
-  if (isStagingMode()) {
-    logger.info({ to, subject }, "[email-service] STAGING_MODE — email suppressed (would have been sent)");
-    return;
-  }
-
   const transporter = getTransporter();
   const from = process.env.SES_FROM_EMAIL;
 

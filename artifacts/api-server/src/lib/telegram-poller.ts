@@ -15,7 +15,6 @@ import { db, usersTable } from "@workspace/db";
 import { and, eq, gt, isNull } from "drizzle-orm";
 import { logger } from "./logger";
 import { isTelegramConfigured, sendTelegramMessage } from "./telegram";
-import { isStagingMode, logStagingSkip } from "./staging-mode";
 
 const TG_API_BASE = "https://api.telegram.org/bot";
 const POLL_TIMEOUT_SECONDS = 30;
@@ -36,12 +35,6 @@ let stopped = false;
 let nextOffset = 0;
 
 export function startTelegramPoller(): { stop: () => void } {
-  // STAGING_MODE guard — only one server may poll Telegram at a time
-  // (Telegram returns Conflict 409 if two pollers share a bot token).
-  if (isStagingMode()) {
-    logStagingSkip("telegram-poller");
-    return { stop: () => {} };
-  }
   if (!isTelegramConfigured()) {
     logger.warn("[telegram-poller] TELEGRAM_BOT_TOKEN not set — poller disabled");
     return { stop: () => {} };

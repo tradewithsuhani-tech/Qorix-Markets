@@ -15,7 +15,6 @@ import { getAllWallets, creditBalance } from "./wallet.js";
 import { runSweepPipeline } from "./sweep.js";
 import { db, systemSettingsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
-import { isStagingMode, logStagingSkip } from "../staging-mode";
 
 async function isTestModeEnabled(): Promise<boolean> {
   try {
@@ -136,12 +135,6 @@ async function runPollCycle(): Promise<void> {
 }
 
 export function startDepositWatcher(): { stop: () => void } {
-  // STAGING_MODE guard — see comment in tron-monitor.ts
-  if (isStagingMode()) {
-    logStagingSkip("deposit-watcher");
-    return { stop: () => {} };
-  }
-
   console.log(
     `[depositWatcher] Started — polling every ${POLL_INTERVAL_MS / 1000}s for USDT deposits`,
   );
