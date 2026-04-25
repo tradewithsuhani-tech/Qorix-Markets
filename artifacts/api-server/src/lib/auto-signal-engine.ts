@@ -29,25 +29,133 @@ const DAILY_TARGET_PERCENT = 0.4; // 0.4% of balance
 const TP_MIN_PERCENT = 0.2;
 const TP_MAX_PERCENT = 0.4;
 const CANDLE_MS = 5 * 60 * 1000;
-const MIN_BODY_PERCENT = 0.02; // skip dojis below this %
+const MIN_BODY_PERCENT = 0.005; // skip true dojis only — real BTC 5m can be very tight
 
 type PairCfg = {
   code: string;
-  base: number;        // anchor price
+  base: number;        // last-known anchor — fallback only if live fetch fails
   pipSize: number;     // matches frontend pair-meta
   precision: number;   // decimals for entry price string
-  volPercent: number;  // typical 5-min body volatility (%)
+  volPercent: number;  // typical 5-min body volatility (%) — fallback synth
+  liveSource?: string; // `kraken:<pair>` or `coinbase:<pair>` for live OHLC fetch
 };
 
+// Base prices are last-known anchors used only if live fetch fails.
 const PAIRS: PairCfg[] = [
-  { code: "BTCUSD", base: 67000, pipSize: 1,      precision: 2, volPercent: 0.20 },
-  { code: "XAUUSD", base: 2380,  pipSize: 0.01,   precision: 2, volPercent: 0.15 },
-  { code: "EURUSD", base: 1.085, pipSize: 0.0001, precision: 5, volPercent: 0.08 },
-  { code: "USOIL",  base: 78.50, pipSize: 0.01,   precision: 2, volPercent: 0.18 },
+  { code: "BTCUSD", base: 78000, pipSize: 1,      precision: 2, volPercent: 0.20, liveSource: "kraken:XBTUSD" },
+  { code: "XAUUSD", base: 3320,  pipSize: 0.01,   precision: 2, volPercent: 0.15 },
+  { code: "EURUSD", base: 1.082, pipSize: 0.0001, precision: 5, volPercent: 0.08 },
+  { code: "USOIL",  base: 71.80, pipSize: 0.01,   precision: 2, volPercent: 0.18 },
 ];
 const PAIR_BY_CODE: Record<string, PairCfg> = PAIRS.reduce((acc, p) => {
   acc[p.code] = p; return acc;
 }, {} as Record<string, PairCfg>);
+
+/**
+ * Market-hours gate (UTC).
+ * - Crypto: 24/7
+ * - Forex / Gold / Oil: closed Fri 22:00 UTC → Sun 22:00 UTC (weekend)
+ * Note: this is a simplified gate (ignores daily 1h CME break + holidays).
+ */
+function isMarketOpen(pairCode: string, now = new Date()): boolean {
+  if (pairCode === "BTCUSD") return true;
+  const day = now.getUTCDay();   // 0=Sun … 6=Sat
+  const hour = now.getUTCHours();
+  if (day === 6) return false;             // all of Saturday
+  if (day === 5 && hour >= 22) return false; // Friday after 22:00 UTC
+  if (day === 0 && hour < 22) return false;  // Sunday before 22:00 UTC
+  return true;
+}
+
+type LiveCandle = {
+  openTime: number; closeTime: number;
+  open: number; high: number; low: number; close: number;
+  source: string;
+};
+
+/**
+ * Fetch a real, fully-closed 5-min candle from Kraken's public REST API.
+ * Kraken returns OHLC tuples [time, open, high, low, close, vwap, volume, count].
+ * `time` is the candle's open second (epoch). closeTime = time + 300s.
+ * The last entry is usually the still-forming candle, so we pick the most recent
+ * one whose closeTime has passed.
+ */
+async function fetchKrakenLastClosedCandle(krakenPair: string): Promise<LiveCandle> {
+  const url = `https://api.kraken.com/0/public/OHLC?pair=${krakenPair}&interval=5`;
+  const res = await fetch(url, { signal: AbortSignal.timeout(4000) });
+  if (!res.ok) throw new Error(`Kraken HTTP ${res.status}`);
+  const j = (await res.json()) as { error?: string[]; result?: Record<string, any> };
+  if (j.error && j.error.length > 0) throw new Error(`Kraken: ${j.error.join(",")}`);
+  const result = j.result ?? {};
+  // Kraken returns the data under a key like "XXBTZUSD" (varies by pair) plus "last"
+  const ohlcKey = Object.keys(result).find((k) => k !== "last");
+  if (!ohlcKey) throw new Error("Kraken: no OHLC key in result");
+  const arr = result[ohlcKey] as any[];
+  if (!Array.isArray(arr) || arr.length === 0) throw new Error("Kraken: empty OHLC");
+  const nowSec = Math.floor(Date.now() / 1000);
+  const closed = [...arr].reverse().find((c) => Number(c[0]) + 300 <= nowSec);
+  if (!closed) throw new Error("Kraken: no closed candle in window");
+  return {
+    openTime: Number(closed[0]) * 1000,
+    closeTime: (Number(closed[0]) + 300) * 1000,
+    open: parseFloat(closed[1]),
+    high: parseFloat(closed[2]),
+    low: parseFloat(closed[3]),
+    close: parseFloat(closed[4]),
+    source: "kraken",
+  };
+}
+
+/**
+ * Fallback: Coinbase spot price (no OHLC). We synthesise a tight candle around
+ * the spot price using a small jitter so the body still has a direction. Only
+ * used if Kraken is unreachable.
+ */
+async function fetchCoinbaseSpotCandle(coinbasePair: string, pair: PairCfg): Promise<LiveCandle> {
+  const url = `https://api.coinbase.com/v2/prices/${coinbasePair}/spot`;
+  const res = await fetch(url, { signal: AbortSignal.timeout(4000) });
+  if (!res.ok) throw new Error(`Coinbase HTTP ${res.status}`);
+  const j = (await res.json()) as { data?: { amount?: string } };
+  const spot = parseFloat(j.data?.amount ?? "");
+  if (!Number.isFinite(spot) || spot <= 0) throw new Error("Coinbase: invalid spot");
+  const now = Date.now();
+  const slot = Math.floor(now / CANDLE_MS) * CANDLE_MS;
+  const closeTime = slot - CANDLE_MS;
+  const openTime = closeTime - CANDLE_MS;
+  // Tight 0.05% jitter so direction isn't always the same
+  const jitter = (Math.random() * 2 - 1) * 0.0005;
+  const open = +(spot * (1 - jitter / 2)).toFixed(pair.precision);
+  const close = +(spot * (1 + jitter / 2)).toFixed(pair.precision);
+  return {
+    openTime, closeTime,
+    open, close,
+    high: Math.max(open, close), low: Math.min(open, close),
+    source: "coinbase-spot",
+  };
+}
+
+/**
+ * Try the configured live source for a pair (e.g. `kraken:XBTUSD`).
+ * On failure, returns null so the caller can fall back to synthetic.
+ */
+async function tryFetchLiveCandle(pair: PairCfg): Promise<LiveCandle | null> {
+  if (!pair.liveSource) return null;
+  const [provider, symbol] = pair.liveSource.split(":");
+  try {
+    if (provider === "kraken") return await fetchKrakenLastClosedCandle(symbol!);
+    // No Coinbase OHLC endpoint without auth — only spot fallback
+  } catch (err: any) {
+    logger.warn({ pair: pair.code, provider, err: err?.message ?? err }, "[auto-engine] kraken fetch failed — trying coinbase spot");
+    try {
+      // Map Kraken symbols → Coinbase format
+      const coinbasePair = symbol === "XBTUSD" ? "BTC-USD" : null;
+      if (coinbasePair) return await fetchCoinbaseSpotCandle(coinbasePair, pair);
+    } catch (err2: any) {
+      logger.warn({ pair: pair.code, err: err2?.message ?? err2 }, "[auto-engine] coinbase spot fallback also failed");
+    }
+  }
+  return null;
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // In-memory engine state (single-process; resets on server restart by design)
@@ -151,8 +259,35 @@ export async function rehydrateAutoEngineState(): Promise<void> {
   }
 }
 
-function pickPair(): PairCfg {
-  return PAIRS[Math.floor(Math.random() * PAIRS.length)]!;
+function pickPair(): PairCfg | null {
+  const open = PAIRS.filter((p) => isMarketOpen(p.code));
+  if (open.length === 0) return null;
+  return open[Math.floor(Math.random() * open.length)]!;
+}
+
+/**
+ * Get the last CLOSED 5-min candle for a pair.
+ * - For pairs with `liveSource`: try the configured public API.
+ * - On any failure (network, rate limit, geo-block, etc.): fall back to the
+ *   synthetic random-walk candle anchored to the last known close.
+ */
+async function getLastClosedCandle(pair: PairCfg) {
+  const live = await tryFetchLiveCandle(pair);
+  if (live) {
+    const open = +live.open.toFixed(pair.precision);
+    const close = +live.close.toFixed(pair.precision);
+    const high = +live.high.toFixed(pair.precision);
+    const low = +live.low.toFixed(pair.precision);
+    const bodyPct = open === 0 ? 0 : ((close - open) / open) * 100;
+    lastCloseByPair[pair.code] = close;
+    logger.info(
+      { pair: pair.code, source: live.source, open, close, bodyPct: +bodyPct.toFixed(4) },
+      "[auto-engine] real candle fetched",
+    );
+    return { openTime: live.openTime, closeTime: live.closeTime, open, close, high, low, bodyPct };
+  }
+  logger.warn({ pair: pair.code }, "[auto-engine] no live source available — using synthetic");
+  return simulateLastClosedCandle(pair);
 }
 
 /**
@@ -186,27 +321,43 @@ function clampDecimals(n: number, decimals: number): number {
 // ─────────────────────────────────────────────────────────────────────────────
 // Public: tick — called every 5 minutes by cron
 // ─────────────────────────────────────────────────────────────────────────────
-export async function tickAutoSignalEngine(): Promise<{ ok: boolean; reason?: string; tradeId?: number; pair?: string }> {
+export async function tickAutoSignalEngine(opts: { force?: boolean; pair?: string } = {}): Promise<{ ok: boolean; reason?: string; tradeId?: number; pair?: string }> {
   resetIfNewDay();
   const now = Date.now();
 
-  if (STATE.breakUntil && now < STATE.breakUntil) {
+  // `force` is a debug escape hatch: bypasses cooldown, daily target, and max-trades.
+  // Used by the admin debug endpoint (`POST /admin/auto-engine/tick?force=1`).
+  if (!opts.force && STATE.breakUntil && now < STATE.breakUntil) {
     const minsLeft = Math.ceil((STATE.breakUntil - now) / 60000);
     logger.info({ minsLeft }, "[auto-engine] paused — cooldown break in progress");
     return { ok: false, reason: `break:${minsLeft}m` };
   }
-  if (STATE.tradesToday >= MAX_TRADES_PER_DAY) {
+  if (!opts.force && STATE.tradesToday >= MAX_TRADES_PER_DAY) {
     return { ok: false, reason: "max_trades_reached" };
   }
-  if (STATE.profitPercentToday >= DAILY_TARGET_PERCENT) {
+  if (!opts.force && STATE.profitPercentToday >= DAILY_TARGET_PERCENT) {
     return { ok: false, reason: "daily_target_hit" };
   }
 
   // AI-scanning realism log
   logger.info("[auto-engine] AI scanning market...");
 
-  const pair = pickPair();
-  const candle = simulateLastClosedCandle(pair);
+  let pair: PairCfg | null;
+  if (opts.pair) {
+    const forced = PAIR_BY_CODE[opts.pair];
+    if (!forced) return { ok: false, reason: `unknown_pair:${opts.pair}` };
+    if (!opts.force && !isMarketOpen(forced.code)) {
+      return { ok: false, reason: `market_closed:${forced.code}` };
+    }
+    pair = forced;
+  } else {
+    pair = pickPair();
+  }
+  if (!pair) {
+    logger.info({ utcDay: new Date().getUTCDay() }, "[auto-engine] all eligible markets closed");
+    return { ok: false, reason: "all_markets_closed" };
+  }
+  const candle = await getLastClosedCandle(pair);
 
   // Doji guard
   if (Math.abs(candle.bodyPct) < MIN_BODY_PERCENT) {
