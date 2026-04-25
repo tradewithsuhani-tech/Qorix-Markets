@@ -1287,7 +1287,10 @@ function PortfolioInner() {
                       ? "text-muted-foreground"
                       : "text-white";
                   const statusGlyph = d.isToday ? "●" : d.isPast ? "✓" : "·";
-                  const ariaLabel = `${d.date.toDateString()}, ${status}: estimated profit $${d.amount.toFixed(2)} (${d.pct.toFixed(2)}% of monthly target)`;
+                  const showAmount = d.isPast || d.isToday;
+                  const ariaLabel = showAmount
+                    ? `${d.date.toDateString()}, ${status}: profit $${d.amount.toFixed(2)}`
+                    : `${d.date.toDateString()}, upcoming forex day — amount revealed at session close`;
                   return (
                     <div
                       key={idx}
@@ -1304,9 +1307,15 @@ function PortfolioInner() {
                       <div className={`text-sm font-bold tabular-nums ${textCls}`}>
                         {dayNum}
                       </div>
-                      <div className={`text-[10px] font-semibold tabular-nums mt-0.5 ${d.isToday ? "text-emerald-300" : d.isPast ? "text-muted-foreground" : "text-blue-300/90"}`}>
-                        ${d.amount.toFixed(2)}
-                      </div>
+                      {showAmount ? (
+                        <div className={`text-[10px] font-semibold tabular-nums mt-0.5 ${d.isToday ? "text-emerald-300" : "text-muted-foreground"}`}>
+                          ${d.amount.toFixed(2)}
+                        </div>
+                      ) : (
+                        <div className="text-[10px] font-medium tabular-nums mt-0.5 text-muted-foreground/50">
+                          —
+                        </div>
+                      )}
                     </div>
                   );
                 })}
