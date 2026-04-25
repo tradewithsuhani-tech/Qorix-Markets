@@ -2,6 +2,7 @@ import { db, walletsTable, transactionsTable, usersTable, systemSettingsTable } 
 import { blockchainDepositsTable, promoRedemptionsTable } from "@workspace/db/schema";
 import { eq, isNotNull, or, isNull, sql } from "drizzle-orm";
 import { logger, errorLogger } from "./logger";
+import { isStagingMode, logStagingSkip } from "./staging-mode";
 import { createNotification } from "./notifications";
 import { sendTxnEmailToUser } from "./email-service";
 import { emitDepositEvent } from "./event-bus";
@@ -482,6 +483,13 @@ async function runPollCycle(): Promise<void> {
 }
 
 export function startTronMonitor(): { stop: () => void } {
+  // STAGING_MODE guard — never mutate shared blockchain state from staging server
+  // (would double-credit user deposits if both prod + staging were polling).
+  // Default OFF — production is unaffected unless STAGING_MODE=true is explicitly set.
+  if (isStagingMode()) {
+    logStagingSkip("tron-monitor");
+    return { stop: () => {} };
+  }
   logger.info({ interval: POLL_INTERVAL_MS, platformAddress: PLATFORM_TRON_ADDRESS }, "TronGrid USDT monitor started");
   monitorTimer = setTimeout(runPollCycle, 5_000);
   return {
