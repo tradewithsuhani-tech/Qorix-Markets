@@ -1114,7 +1114,12 @@ function PortfolioInner() {
               icon: Shield,
               label: "Risk Level",
               value: (investment?.riskLevel ?? "low").toString().charAt(0).toUpperCase() + (investment?.riskLevel ?? "low").toString().slice(1),
-              hint: "Strategy aggressiveness",
+              hint: (() => {
+                const r = (investment?.riskLevel ?? "low").toString().toLowerCase();
+                if (r === "high") return "Aggressive growth";
+                if (r === "medium") return "Balanced approach";
+                return "Conservative & safe";
+              })(),
               color: "text-emerald-400",
               bg: "from-emerald-500/[0.08] to-emerald-500/[0.02]",
               border: "border-emerald-500/20",
