@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { Activity, TrendingUp, TrendingDown, ChevronLeft, ChevronRight, CalendarIcon } from "lucide-react";
+import { Activity, TrendingUp, TrendingDown, ChevronLeft, ChevronRight, CalendarIcon, ShieldCheck } from "lucide-react";
 import { Layout } from "@/components/layout";
 import { PeriodFilter } from "@/components/period-filter";
 import { findPair, formatPair } from "@/lib/pair-meta";
@@ -356,37 +356,67 @@ export default function TradeActivityPage() {
   const fallbackPending = personalTrades.length === 0 && (recentLoading || (recentFetching && !recentData));
   const showInitialLoader = allTrades.length === 0 && (isLoading || fallbackPending);
 
+  const periodLabel = PERIODS.find((p) => p.key === period)?.label ?? "1M";
+
   return (
     <Layout>
-      <div className="max-w-7xl mx-auto px-4 py-8 space-y-6">
-        <div className="flex items-center gap-3">
-          <div className="p-2.5 rounded-xl bg-blue-500/15 border border-blue-500/30">
-            <Activity className="w-6 h-6 text-blue-400" />
-          </div>
-          <div className="flex-1">
-            <h1 className="text-2xl font-bold text-white">Trade Activity</h1>
-            <p className="text-sm text-white/50">
-              {usingPlatformFallback
-                ? "Live signal trades from Qorix Markets — fund your account to start trading"
-                : "Your live trade history — Qorix-grade execution view"}
-            </p>
-          </div>
-          <div className="text-right">
-            <div className="text-[10px] text-white/40 uppercase tracking-wider">
-              P/L ({PERIODS.find((p) => p.key === period)?.label})
+      <div className="max-w-7xl mx-auto px-4 py-6 sm:py-8 space-y-5 sm:space-y-6">
+        {/* ── Premium header card ─────────────────────────────────────── */}
+        <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-white/[0.04] via-white/[0.02] to-transparent p-4 sm:p-5">
+          {/* subtle ambient glow */}
+          <div className="pointer-events-none absolute -top-20 -right-20 h-48 w-48 rounded-full bg-blue-500/10 blur-3xl" />
+
+          <div className="relative flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-5">
+            {/* Title block */}
+            <div className="flex items-center gap-3 sm:gap-4 min-w-0 flex-1">
+              <div className="relative shrink-0">
+                <div className="p-2.5 sm:p-3 rounded-xl bg-gradient-to-br from-blue-500/25 to-blue-600/10 border border-blue-400/30 shadow-lg shadow-blue-500/10">
+                  <Activity className="w-5 h-5 sm:w-6 sm:h-6 text-blue-300" />
+                </div>
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight truncate">
+                    Trade Activity
+                  </h1>
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-400/30 bg-emerald-500/10 px-2 py-0.5">
+                    <span className="relative flex h-1.5 w-1.5">
+                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                      <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                    </span>
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-emerald-300">Live</span>
+                  </span>
+                </div>
+                <p className="mt-1 text-xs sm:text-sm text-white/50 line-clamp-2 sm:line-clamp-1">
+                  {usingPlatformFallback
+                    ? "Live signal trades from Qorix Markets — fund your account to start trading"
+                    : "Your live trade history — Qorix-grade execution view"}
+                </p>
+              </div>
             </div>
-            <div className={`text-lg font-bold ${totalPL >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-              {totalPL >= 0 ? "+" : ""}${totalPL.toFixed(2)}
+
+            {/* P/L stat — own card on mobile, inline on desktop */}
+            <div className="flex sm:flex-col sm:items-end items-center justify-between sm:justify-center gap-3 sm:gap-1 rounded-xl sm:rounded-none border border-white/8 sm:border-0 bg-white/[0.03] sm:bg-transparent px-3 py-2.5 sm:px-0 sm:py-0 shrink-0">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/45">
+                P/L · {periodLabel}
+              </div>
+              <div
+                className={cn(
+                  "text-xl sm:text-2xl font-bold tabular-nums tracking-tight",
+                  totalPL >= 0 ? "text-emerald-400" : "text-red-400",
+                )}
+              >
+                {totalPL >= 0 ? "+" : ""}${totalPL.toFixed(2)}
+              </div>
             </div>
           </div>
         </div>
 
+        {/* ── Compact disclaimer banner (platform fallback only) ──────── */}
         {usingPlatformFallback && (
-          <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 px-4 py-3 flex items-start gap-3">
-            <div className="w-8 h-8 rounded-lg bg-blue-500/15 border border-blue-500/30 flex items-center justify-center shrink-0 mt-0.5">
-              <Activity className="w-4 h-4 text-blue-400" />
-            </div>
-            <p className="flex-1 text-xs text-blue-200/90 leading-relaxed">
+          <div className="flex items-start gap-2.5 rounded-xl border border-blue-400/15 bg-blue-500/[0.04] px-3.5 py-2.5">
+            <ShieldCheck className="w-4 h-4 text-blue-300/90 shrink-0 mt-0.5" />
+            <p className="text-[11px] sm:text-xs leading-relaxed text-blue-100/75">
               All trades shown here are executed by our automated trading system using pooled investor capital.
             </p>
           </div>
