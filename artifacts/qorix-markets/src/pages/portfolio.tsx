@@ -1170,31 +1170,33 @@ function PortfolioInner() {
                   {projection.monthlyMinPct}–{projection.monthlyMaxPct}%
                 </div>
                 <div className="text-[10px] text-muted-foreground mt-0.5">
-                  Avg ~ {projection.monthlyAvgPct}% / month
+                  Performance band
                 </div>
               </div>
 
               <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/8 p-3.5 shadow-[0_0_20px_-8px_rgba(16,185,129,0.4)]">
                 <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-emerald-300 font-semibold mb-1.5">
-                  <Target className="w-3 h-3" /> Monthly Target
+                  <Target className="w-3 h-3" /> Monthly Potential
                 </div>
-                <div className="text-lg md:text-xl font-bold tabular-nums bg-gradient-to-r from-emerald-200 to-green-400 bg-clip-text text-transparent">
-                  ${projection.monthlyTarget.toFixed(2)}
+                <div className="text-base md:text-lg font-bold tabular-nums bg-gradient-to-r from-emerald-200 to-green-400 bg-clip-text text-transparent">
+                  ${((investedAmount * projection.monthlyMinPct) / 100).toFixed(2)}–${((investedAmount * projection.monthlyMaxPct) / 100).toFixed(2)}
                 </div>
                 <div className="text-[10px] text-muted-foreground mt-0.5">
-                  Total profit this month
+                  Estimated monthly range
                 </div>
               </div>
 
               <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3.5">
                 <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-amber-300 font-semibold mb-1.5">
-                  <Activity className="w-3 h-3" /> Per Working Day
+                  <Activity className="w-3 h-3" /> Today
                 </div>
                 <div className="text-lg md:text-xl font-bold text-white tabular-nums">
-                  ~${projection.dailyAvg.toFixed(2)}
+                  ${projection.todayAmount.toFixed(2)}
                 </div>
-                <div className="text-[10px] text-muted-foreground mt-0.5">
-                  Average · varies daily
+                <div className="text-[10px] text-muted-foreground mt-0.5 tabular-nums">
+                  {investedAmount > 0
+                    ? `+${((projection.todayAmount / investedAmount) * 100).toFixed(3)}% on capital`
+                    : "—"}
                 </div>
               </div>
             </div>
