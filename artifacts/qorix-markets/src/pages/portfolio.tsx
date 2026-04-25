@@ -1257,7 +1257,7 @@ function PortfolioInner() {
                         Monthly Potential
                       </div>
                     </div>
-                    <span className="inline-flex items-center gap-1 text-[9px] uppercase tracking-wider text-emerald-200/90 bg-emerald-500/15 border border-emerald-400/30 px-1.5 py-0.5 rounded font-bold shrink-0 whitespace-nowrap">
+                    <span className="hidden sm:inline-flex items-center gap-1 text-[9px] uppercase tracking-wider text-emerald-200/90 bg-emerald-500/15 border border-emerald-400/30 px-1.5 py-0.5 rounded font-bold shrink-0 whitespace-nowrap">
                       <Sparkles className="w-2.5 h-2.5" /> Projected
                     </span>
                   </div>
