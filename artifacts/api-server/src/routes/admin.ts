@@ -10,6 +10,7 @@ import {
   glAccountsTable,
   ledgerEntriesTable,
   notificationsTable,
+  signalTradesTable,
 } from "@workspace/db";
 import { loginEventsTable, blockchainDepositsTable } from "@workspace/db/schema";
 import { eq, sum, count, and, or, desc, sql, inArray } from "drizzle-orm";
@@ -31,6 +32,8 @@ import {
   tickAutoSignalEngine,
   closeMaturedAutoTrades,
   getAutoEngineState,
+  PAIRS as ENGINE_PAIRS,
+  getEntryAnchor,
 } from "../lib/auto-signal-engine";
 
 const router = Router();
@@ -1448,6 +1451,111 @@ router.post("/admin/auto-engine/close-matured", async (req: AuthRequest, res) =>
   } catch (err: any) {
     errorLogger.error({ err, adminId: req.userId }, "Admin auto-engine close-matured failed");
     res.status(500).json({ error: err?.message ?? "close failed" });
+  }
+});
+
+/**
+ * Re-anchor historical auto-engine trade prices to the current real-market
+ * level for each pair. Old trades created before live (stooq/kraken) sources
+ * were wired up have stale base prices (e.g. XAU @ 2400 when the real market
+ * is ~4700). This endpoint shifts each pair's stored entry/exit/tp/sl by the
+ * SAME delta so:
+ *   - lot, USD profit, % move are all PRESERVED
+ *   - only the displayed price LEVEL changes to look real
+ *
+ * Idempotent: running it twice just re-anchors to the latest live price.
+ * Pass ?dryRun=1 to preview without writing.
+ */
+router.post("/admin/signal-trades/reanchor", async (req: AuthRequest, res) => {
+  const dryRun = req.query.dryRun === "1" || req.body?.dryRun === true;
+  const summary: Array<Record<string, unknown>> = [];
+  try {
+    for (const pair of ENGINE_PAIRS) {
+      const rows = await db
+        .select({
+          id: signalTradesTable.id,
+          entryPrice: signalTradesTable.entryPrice,
+          exitPrice: signalTradesTable.exitPrice,
+          tpPrice: signalTradesTable.tpPrice,
+          slPrice: signalTradesTable.slPrice,
+          realizedExitPrice: signalTradesTable.realizedExitPrice,
+        })
+        .from(signalTradesTable)
+        .where(eq(signalTradesTable.pair, pair.code));
+
+      if (rows.length === 0) {
+        summary.push({ pair: pair.code, count: 0, skipped: "no_rows" });
+        continue;
+      }
+
+      const anchor = await getEntryAnchor(pair);
+      const currentReal = anchor.price;
+      const meanEntry =
+        rows.reduce((s, r) => s + Number(r.entryPrice), 0) / rows.length;
+      const shift = currentReal - meanEntry;
+
+      // Skip if already close (within ±0.5% of mean) → already anchored
+      const driftPct = Math.abs(shift / (meanEntry || 1)) * 100;
+      if (driftPct < 0.5) {
+        summary.push({
+          pair: pair.code,
+          count: rows.length,
+          meanEntry: +meanEntry.toFixed(pair.precision),
+          currentReal,
+          driftPct: +driftPct.toFixed(3),
+          skipped: "already_anchored",
+        });
+        continue;
+      }
+
+      const round = (v: number) => +v.toFixed(pair.precision);
+      let updated = 0;
+      for (const r of rows) {
+        const e = Number(r.entryPrice);
+        const x = Number(r.exitPrice);
+        const tp = r.tpPrice == null ? null : Number(r.tpPrice);
+        const sl = r.slPrice == null ? null : Number(r.slPrice);
+        const re = r.realizedExitPrice == null ? null : Number(r.realizedExitPrice);
+        const newEntry = round(e + shift);
+        const newExit = round(x + shift);
+        const newTp = tp == null ? null : round(tp + shift);
+        const newSl = sl == null ? null : round(sl + shift);
+        const newRe = re == null ? null : round(re + shift);
+        if (!dryRun) {
+          await db
+            .update(signalTradesTable)
+            .set({
+              entryPrice: newEntry.toString(),
+              exitPrice: newExit.toString(),
+              tpPrice: newTp == null ? null : newTp.toString(),
+              slPrice: newSl == null ? null : newSl.toString(),
+              realizedExitPrice: newRe == null ? null : newRe.toString(),
+            })
+            .where(eq(signalTradesTable.id, r.id));
+        }
+        updated++;
+      }
+
+      summary.push({
+        pair: pair.code,
+        count: rows.length,
+        meanEntry: +meanEntry.toFixed(pair.precision),
+        currentReal,
+        shift: +shift.toFixed(pair.precision),
+        anchorSource: anchor.source,
+        updated: dryRun ? 0 : updated,
+        dryRun,
+      });
+    }
+
+    transactionLogger.info(
+      { event: "admin_reanchor_signal_trades", adminId: req.userId, dryRun, summary },
+      "Admin re-anchored signal trade prices",
+    );
+    res.json({ ok: true, dryRun, summary });
+  } catch (err: any) {
+    errorLogger.error({ err, adminId: req.userId }, "Admin re-anchor failed");
+    res.status(500).json({ error: err?.message ?? "reanchor failed", summary });
   }
 });
 

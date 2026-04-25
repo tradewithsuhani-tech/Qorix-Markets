@@ -106,9 +106,20 @@ export function MobileTradeList({ trades, loading }: Props) {
   );
 }
 
+// Pro-grade price formatter: comma-grouped + pair-specific decimal places.
+//   BTC / XAU / OIL → 2dp with comma grouping  (e.g. 75,234.56)
+//   EUR (and other 0.0001 pip)                  → 5dp, no grouping (e.g. 1.17234)
+function formatPrice(value: number, pipSize: number): string {
+  const dp = pipSize < 0.001 ? 5 : 2;
+  return value.toLocaleString("en-US", {
+    minimumFractionDigits: dp,
+    maximumFractionDigits: dp,
+  });
+}
+
 function TradeRow({ t, index }: { t: MobileTrade; index: number }) {
   const meta = findPair(t.symbol);
-  const dp = meta ? (meta.pipSize < 0.01 ? 5 : 3) : 4;
+  const pipSize = meta?.pipSize ?? 0.01;
   const isBuy = t.direction === "BUY" || t.direction === "LONG";
   const directionClr = isBuy ? "text-sky-400" : "text-rose-400";
   const positive = t.profit >= 0;
@@ -142,7 +153,7 @@ function TradeRow({ t, index }: { t: MobileTrade; index: number }) {
           <span className={cn("font-medium", directionClr)}>
             {isBuy ? "Buy" : "Sell"} {lot} lot
           </span>
-          <span className="text-white/45"> at {t.entryPrice.toFixed(dp)}</span>
+          <span className="text-white/45"> at {formatPrice(t.entryPrice, pipSize)}</span>
         </div>
       </div>
 
@@ -152,7 +163,7 @@ function TradeRow({ t, index }: { t: MobileTrade; index: number }) {
           {positive ? "+" : ""}${t.profit.toFixed(2)}
         </div>
         <div className="text-[12px] text-white/45 mt-1 leading-tight tabular-nums">
-          {t.exitPrice.toFixed(dp)}
+          {formatPrice(t.exitPrice, pipSize)}
         </div>
       </div>
     </motion.div>
