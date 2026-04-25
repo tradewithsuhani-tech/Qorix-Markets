@@ -56,7 +56,7 @@ type PairCfg = {
   liveSource?: string; // `kraken:<symbol>`
 };
 
-const PAIRS: PairCfg[] = [
+export const PAIRS: PairCfg[] = [
   { code: "BTCUSD", base: 78000, pipSize: 1,      precision: 2, volPercent: 0.20, liveSource: "kraken:XBTUSD" },
   { code: "XAUUSD", base: 3320,  pipSize: 0.01,   precision: 2, volPercent: 0.15, liveSource: "stooq:xauusd" },
   { code: "EURUSD", base: 1.082, pipSize: 0.0001, precision: 5, volPercent: 0.08, liveSource: "stooq:eurusd" },
@@ -65,6 +65,7 @@ const PAIRS: PairCfg[] = [
 const PAIR_BY_CODE: Record<string, PairCfg> = PAIRS.reduce((acc, p) => {
   acc[p.code] = p; return acc;
 }, {} as Record<string, PairCfg>);
+export type { PairCfg };
 
 /**
  * Market-hours gate (UTC). All pairs (forex, metals, oil, crypto) follow the
@@ -151,7 +152,7 @@ async function fetchStooqLastPrice(stooqSymbol: string): Promise<LiveAnchor | nu
 // Per-pair drifting anchor for synthetic pricing (non-crypto pairs without live source)
 const lastAnchorByPair: Record<string, number> = {};
 
-async function getEntryAnchor(pair: PairCfg): Promise<LiveAnchor> {
+export async function getEntryAnchor(pair: PairCfg): Promise<LiveAnchor> {
   if (pair.liveSource) {
     const [provider, symbol] = pair.liveSource.split(":");
     if (provider === "kraken" && symbol) {
