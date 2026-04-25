@@ -46,11 +46,24 @@ export async function getBotUsername(): Promise<string | null> {
   }
 }
 
-/** Build the t.me deep link the user taps from Settings to bind their account. */
-export async function buildLinkUrl(linkCode: string): Promise<string | null> {
+/**
+ * Build deep links the Settings card uses to bind a user.
+ *  - `httpsUrl`: universal `https://t.me/...` link (always safe, opens in
+ *    browser → handoff to native Telegram app via Universal/App Links).
+ *  - `tgUrl`: native `tg://resolve?...` scheme — instant app open if
+ *    Telegram is installed (no browser bounce). Frontend tries this first.
+ */
+export async function buildLinkUrl(
+  linkCode: string,
+): Promise<{ httpsUrl: string; tgUrl: string; username: string } | null> {
   const username = await getBotUsername();
   if (!username) return null;
-  return `https://t.me/${username}?start=${encodeURIComponent(linkCode)}`;
+  const code = encodeURIComponent(linkCode);
+  return {
+    username,
+    httpsUrl: `https://t.me/${username}?start=${code}`,
+    tgUrl: `tg://resolve?domain=${username}&start=${code}`,
+  };
 }
 
 /**

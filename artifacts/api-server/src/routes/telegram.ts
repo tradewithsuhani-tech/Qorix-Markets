@@ -64,13 +64,16 @@ router.post("/telegram/link/start", async (req: AuthRequest, res: Response) => {
       .where(eq(usersTable.id, userId));
   }
 
-  const deepLink = await buildLinkUrl(code);
-  if (!deepLink) {
+  const links = await buildLinkUrl(code);
+  if (!links) {
     return res.status(503).json({ error: "Could not resolve the bot username — try again shortly." });
   }
   return res.json({
     code,
-    deepLink,
+    deepLink: links.httpsUrl, // legacy field name kept for compat
+    httpsUrl: links.httpsUrl,
+    tgUrl: links.tgUrl,
+    botUsername: links.username,
     expiresAt: expiresAt.toISOString(),
   });
 });
