@@ -18,6 +18,36 @@ uri = "file://artifacts/qorix-markets/public/qorix-logo-transparent.png"
 type = "image"
 title = "generated_image"
 
+[[generated]]
+id = "sQHQ2yHPqAkQ2Lc8P_yvM"
+uri = "file://artifacts/qorix-tutorial/public/images/dashboard-mockup.png"
+type = "image"
+title = "Qorix app dashboard mockup"
+
+[[generated]]
+id = "SVwmB-LDAutGILkimECjn"
+uri = "file://artifacts/qorix-tutorial/public/images/trading-chart.png"
+type = "image"
+title = "Crypto trading chart"
+
+[[generated]]
+id = "BUkHQcRTf5ktyS3WkkCk0"
+uri = "file://artifacts/qorix-tutorial/public/images/promo-cards.png"
+type = "image"
+title = "VIP promo cards"
+
+[[generated]]
+id = "Ipk9PzcAMMdmWrRnLHwxG"
+uri = "file://artifacts/qorix-tutorial/public/images/telegram-notification.png"
+type = "image"
+title = "Notification popup"
+
+[[generated]]
+id = "481Kk-zuwPOepRV3RFTxj"
+uri = "file://artifacts/qorix-tutorial/public/images/withdrawal-flow.png"
+type = "image"
+title = "Withdrawal timeline"
+
 [[outputs]]
 id = "6rSZPOBhvb4DcdIIRf7go"
 uri = "file://attached_assets/generated_images/qorix-markets-logo.png"
