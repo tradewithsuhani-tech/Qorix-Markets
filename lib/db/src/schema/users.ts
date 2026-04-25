@@ -1,4 +1,4 @@
-import { pgTable, serial, integer, text, boolean, timestamp, varchar } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, text, boolean, timestamp, varchar, bigint, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -41,8 +41,23 @@ export const usersTable = pgTable("users", {
   tronAddress: varchar("tron_address", { length: 64 }),
   emailVerified: boolean("email_verified").notNull().default(false),
   points: integer("points").notNull().default(0),
+  // ── Telegram Bot link (opt-in personal alerts) ─────────────────────────────
+  // chat_id is a Telegram-issued integer (can exceed 2^31 for some chats), so
+  // we store it as bigint. NULL means user has not linked Telegram. Once
+  // linked, the unique index below prevents two Qorix users from claiming the
+  // same Telegram account. `link_code` + `expires_at` back the one-time deep
+  // link the user taps to bind their account; both clear on success.
+  telegramChatId: bigint("telegram_chat_id", { mode: "number" }),
+  telegramUsername: varchar("telegram_username", { length: 64 }),
+  telegramLinkCode: varchar("telegram_link_code", { length: 16 }),
+  telegramLinkCodeExpiresAt: timestamp("telegram_link_code_expires_at"),
+  telegramLinkedAt: timestamp("telegram_linked_at"),
+  // When linked, defaults to true. User can mute alerts without unlinking.
+  telegramOptIn: boolean("telegram_opt_in").notNull().default(true),
   createdAt: timestamp("created_at").notNull().defaultNow(),
-});
+}, (t) => [
+  uniqueIndex("users_telegram_chat_id_uidx").on(t.telegramChatId),
+]);
 
 export const insertUserSchema = createInsertSchema(usersTable).omit({ id: true, createdAt: true });
 export type InsertUser = z.infer<typeof insertUserSchema>;

@@ -223,6 +223,17 @@ Two layered offer sources, both gated by ONE-redemption-per-user-lifetime in `pr
 
 Cap rule, lifetime cap, milestone idempotency (advisory-lock) and PROMO_BOUNDS bounds-clamp all live in `lib/promo-bounds.ts` + `lib/milestone-service.ts`.
 
+## Telegram Alerts (opt-in)
+
+Personal account alerts via Telegram bot. Bot: **@Qorixmarketsbot**.
+
+- `users.telegram_chat_id` (bigint, unique idx) + link_code/expires_at + opt_in flag.
+- Long-poll worker `lib/telegram-poller.ts` boots with api-server; handles `/start <code>` deep-link binds with atomic conditional UPDATE (id+code+not-expired+chatId IS NULL).
+- Routes `/api/telegram/*`: link/start (mints 8-char A-Z2-9 code with 15-min TTL, returns deep link `https://t.me/Qorixmarketsbot?start=<code>`), status, opt-in toggle, unlink.
+- Frontend card on Settings page (`components/telegram-alerts-card.tsx`).
+- `createNotification` mirrors title+message to Telegram via `setImmediate` (fire-and-forget, never throws, never blocks tx). On 403/400 (user blocked or deleted bot) the binding is auto-cleared.
+- Requires `TELEGRAM_BOT_TOKEN` env var. All code degrades to no-op when token missing — card hides on the frontend via `/status.configured`.
+
 ## Design
 
 - Dark theme: deep navy/obsidian (HSL 224 71% 4%) + electric blue (#3b82f6)

@@ -23,6 +23,7 @@ import signalTradesRouter from "./signal-trades";
 import googleOauthRouter from "./google-oauth";
 import kycRouter from "./kyc";
 import promoRouter from "./promo";
+import telegramRouter from "./telegram";
 
 const router: IRouter = Router();
 
@@ -56,5 +57,6 @@ router.use(tasksRouter);
 router.use(adminTasksRouter);
 router.use(signalTradesRouter);
 router.use(promoRouter);
+router.use(telegramRouter);
 
 export default router;
