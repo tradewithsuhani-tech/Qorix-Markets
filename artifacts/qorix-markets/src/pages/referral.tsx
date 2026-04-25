@@ -386,8 +386,8 @@ export default function ReferralPage() {
                 },
                 {
                   n: "04",
-                  title: "You earn 10% monthly",
-                  desc: "On the 25th of each month, 10% of their profits are automatically credited to your profit balance.",
+                  title: "You earn 10% daily",
+                  desc: "Every day your partner earns a profit, 10% of it is automatically credited to your profit balance — instantly withdrawable.",
                   color: "text-emerald-400",
                   dot: "bg-emerald-500",
                 },
