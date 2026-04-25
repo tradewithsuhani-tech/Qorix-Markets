@@ -281,7 +281,7 @@ router.patch("/investment/compounding", async (req: AuthRequest, res) => {
   res.json(formatInvestment(updated!));
 });
 
-router.get("/trades", async (req: AuthRequest, res) => {
+router.get("/investment/trades", async (req: AuthRequest, res) => {
   const limit = parseInt(req.query["limit"] as string) || 10;
 
   const trades = await db.select().from(tradesTable)
