@@ -244,7 +244,3 @@ Personal account alerts via Telegram bot. Bot: **@Qorixmarketsbot**.
 - PWA installable
 
 See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details.
-
-## Tutorial Video Artifact
-
-`artifacts/qorix-tutorial` (kind: video, slug `qorix-tutorial`) — 3-minute (180s) animated motion-graphics tutorial for the Qorix Markets platform. Six scenes: Intro / Onboarding / Dashboard & Live Trading / Promotions & VIP / Notifications & Withdrawal / Outro. Built per the `video-js` skill: design subagent generated scenes + AI image/video assets + theme; main agent added scene controls (`useSceneControls.ts`, `VideoWithControls.tsx`) — control bar only renders inside the iframe (preview pane), export path renders bare `<VideoTemplate />` so recording markers fire correctly. Tutorial is exported from the preview pane (Replit's video export pipeline), not deployed.
