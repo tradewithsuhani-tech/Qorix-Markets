@@ -673,6 +673,300 @@ function toLocalDateTimeInput(d: Date): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+// India Standard Time offset (UTC+5:30, no DST). All holiday dates in
+// HOLIDAY_TEMPLATES are calendar dates in IST per Indian festival convention,
+// so we anchor windows to IST wall-clock and convert to admin-local times only
+// when populating the datetime-local inputs.
+const IST_OFFSET_MS = (5 * 60 + 30) * 60 * 1000;
+
+/** Build a UTC Date that represents the given IST wall-clock instant. */
+function istWallClockToUtc(year: number, month1: number, day: number, hour = 0, minute = 0): Date {
+  return new Date(Date.UTC(year, month1 - 1, day, hour, minute) - IST_OFFSET_MS);
+}
+
+/** Returns the year IT IS RIGHT NOW in the IST timezone (admin may be elsewhere). */
+function getISTYear(d: Date): number {
+  return new Date(d.getTime() + IST_OFFSET_MS).getUTCFullYear();
+}
+
+const MONTH_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+// ── Holiday templates (Indian-festival heavy, with global staples) ───────────
+// Each template carries copy + a multi-year date table so we always pick the
+// NEXT upcoming occurrence relative to the admin's current local time. Lunar
+// holidays (Diwali, Eid, etc.) need explicit per-year dates because the
+// Gregorian date shifts; solar holidays (Republic Day, Christmas) repeat the
+// same month/day every year.
+type HolidayTemplate = {
+  id: string;                     // dropdown <option> value
+  label: string;                  // display label in dropdown
+  emoji: string;                  // friendly cue
+  codeBase: string;               // becomes "<CODEBASE><YY>" e.g. DIWALI26
+  nameTemplate: string;           // "{year}" placeholder gets the holiday year
+  description: string;            // English copy shown to users
+  bonusPercent: number;           // suggested fixed bonus %
+  daysBefore: number;             // promo window opens N days before holiday (00:00)
+  daysAfter: number;              // promo window closes N days after holiday (23:59)
+  // For lunar/movable holidays. ISO "YYYY-MM-DD" in IST.
+  fixedDates?: Record<number, string>;
+  // For solar/recurring holidays — same month/day every year.
+  fixedMonthDay?: { month: number; day: number };
+};
+
+// All dates are in IST (Asia/Kolkata) per Indian festival calendar convention.
+// Years 2026-2028 covered so the form keeps working through end of 2027.
+const HOLIDAY_TEMPLATES: HolidayTemplate[] = [
+  {
+    id: "diwali",
+    label: "Diwali (Festival of Lights)",
+    emoji: "🪔",
+    codeBase: "DIWALI",
+    nameTemplate: "Diwali Boost {year}",
+    description: "Celebrate Diwali with us — a limited-time bonus on your next deposit. Light up your portfolio this festive season.",
+    bonusPercent: 25,
+    daysBefore: 3,
+    daysAfter: 2,
+    fixedDates: { 2026: "2026-11-08", 2027: "2027-10-28", 2028: "2028-11-15" },
+  },
+  {
+    id: "dhanteras",
+    label: "Dhanteras",
+    emoji: "🪙",
+    codeBase: "DHANTERAS",
+    nameTemplate: "Dhanteras Special {year}",
+    description: "Dhanteras — the day of wealth. Multiply your prosperity with a bonus on your next deposit.",
+    bonusPercent: 20,
+    daysBefore: 1,
+    daysAfter: 1,
+    fixedDates: { 2026: "2026-11-06", 2027: "2027-10-26", 2028: "2028-11-12" },
+  },
+  {
+    id: "dussehra",
+    label: "Dussehra (Vijayadashami)",
+    emoji: "🏹",
+    codeBase: "DUSSEHRA",
+    nameTemplate: "Dussehra Victory Bonus {year}",
+    description: "Vijayadashami — the triumph of good. Lock in a victory bonus on your next deposit.",
+    bonusPercent: 15,
+    daysBefore: 2,
+    daysAfter: 1,
+    fixedDates: { 2026: "2026-10-20", 2027: "2027-10-09", 2028: "2028-09-27" },
+  },
+  {
+    id: "navratri",
+    label: "Navratri (9 Nights)",
+    emoji: "💃",
+    codeBase: "NAVRATRI",
+    nameTemplate: "Navratri Festival {year}",
+    description: "Nine nights of celebration — earn an extra bonus on your next deposit through the festival.",
+    bonusPercent: 18,
+    daysBefore: 0,
+    daysAfter: 9,
+    fixedDates: { 2026: "2026-10-12", 2027: "2027-10-01", 2028: "2028-09-19" },
+  },
+  {
+    id: "ganesh-chaturthi",
+    label: "Ganesh Chaturthi",
+    emoji: "🐘",
+    codeBase: "GANESH",
+    nameTemplate: "Ganesh Chaturthi {year}",
+    description: "Lord Ganesha removes obstacles — start something new with a bonus on your next deposit.",
+    bonusPercent: 15,
+    daysBefore: 1,
+    daysAfter: 2,
+    fixedDates: { 2026: "2026-09-14", 2027: "2027-09-04", 2028: "2028-08-23" },
+  },
+  {
+    id: "janmashtami",
+    label: "Janmashtami",
+    emoji: "🦚",
+    codeBase: "JANMASHTAMI",
+    nameTemplate: "Janmashtami Bonus {year}",
+    description: "Krishna Janmashtami — celebrate with a divine bonus on your next deposit.",
+    bonusPercent: 12,
+    daysBefore: 1,
+    daysAfter: 1,
+    fixedDates: { 2026: "2026-09-04", 2027: "2027-08-25", 2028: "2028-08-13" },
+  },
+  {
+    id: "raksha-bandhan",
+    label: "Raksha Bandhan",
+    emoji: "🎗️",
+    codeBase: "RAKHI",
+    nameTemplate: "Raksha Bandhan {year}",
+    description: "A bond worth celebrating — refer your siblings and earn an extra bonus this Raksha Bandhan.",
+    bonusPercent: 12,
+    daysBefore: 1,
+    daysAfter: 1,
+    fixedDates: { 2026: "2026-08-28", 2027: "2027-08-17", 2028: "2028-08-05" },
+  },
+  {
+    id: "karwa-chauth",
+    label: "Karwa Chauth",
+    emoji: "🌙",
+    codeBase: "KARWA",
+    nameTemplate: "Karwa Chauth {year}",
+    description: "A day of devotion — cherish the bond with a special bonus on your next deposit.",
+    bonusPercent: 10,
+    daysBefore: 1,
+    daysAfter: 0,
+    fixedDates: { 2026: "2026-10-30", 2027: "2027-10-19", 2028: "2028-11-07" },
+  },
+  {
+    id: "holi",
+    label: "Holi (Festival of Colors)",
+    emoji: "🌈",
+    codeBase: "HOLI",
+    nameTemplate: "Holi Color Bonus {year}",
+    description: "Splash of colors, splash of bonus — claim your Holi deposit boost.",
+    bonusPercent: 20,
+    daysBefore: 1,
+    daysAfter: 1,
+    fixedDates: { 2026: "2026-03-04", 2027: "2027-03-22", 2028: "2028-03-11" },
+  },
+  {
+    id: "eid-al-fitr",
+    label: "Eid al-Fitr",
+    emoji: "🌙",
+    codeBase: "EID",
+    nameTemplate: "Eid al-Fitr {year}",
+    description: "Eid Mubarak — celebrate the sweet end of Ramadan with a bonus on your next deposit.",
+    bonusPercent: 15,
+    daysBefore: 1,
+    daysAfter: 2,
+    fixedDates: { 2026: "2026-03-20", 2027: "2027-03-09", 2028: "2028-02-26" },
+  },
+  {
+    id: "eid-al-adha",
+    label: "Eid al-Adha (Bakra Eid)",
+    emoji: "🐑",
+    codeBase: "BAKRAEID",
+    nameTemplate: "Eid al-Adha {year}",
+    description: "A festival of sacrifice and giving — claim a generous bonus this Eid al-Adha.",
+    bonusPercent: 12,
+    daysBefore: 1,
+    daysAfter: 2,
+    fixedDates: { 2026: "2026-05-27", 2027: "2027-05-17", 2028: "2028-05-05" },
+  },
+  {
+    id: "onam",
+    label: "Onam",
+    emoji: "🌺",
+    codeBase: "ONAM",
+    nameTemplate: "Onam Festival {year}",
+    description: "Welcome King Mahabali home — claim a special bonus this Onam season.",
+    bonusPercent: 12,
+    daysBefore: 2,
+    daysAfter: 2,
+    fixedDates: { 2026: "2026-08-26", 2027: "2027-09-14", 2028: "2028-09-02" },
+  },
+  // ── Solar / fixed-date holidays ────────────────────────────────────────
+  {
+    id: "republic-day",
+    label: "Republic Day (Jan 26)",
+    emoji: "🇮🇳",
+    codeBase: "REPUBLIC",
+    nameTemplate: "Republic Day {year}",
+    description: "Honour the nation — claim a patriotic bonus this Republic Day.",
+    bonusPercent: 10,
+    daysBefore: 1,
+    daysAfter: 1,
+    fixedMonthDay: { month: 1, day: 26 },
+  },
+  {
+    id: "independence-day",
+    label: "Independence Day (Aug 15)",
+    emoji: "🇮🇳",
+    codeBase: "AZADI",
+    nameTemplate: "Azadi Bonus {year}",
+    description: "Celebrate the spirit of independence — a freedom-day bonus on your next deposit.",
+    bonusPercent: 15,
+    daysBefore: 1,
+    daysAfter: 1,
+    fixedMonthDay: { month: 8, day: 15 },
+  },
+  {
+    id: "makar-sankranti",
+    label: "Makar Sankranti / Pongal (Jan 14)",
+    emoji: "☀️",
+    codeBase: "SANKRANTI",
+    nameTemplate: "Makar Sankranti {year}",
+    description: "Harvest the sun — claim a bonus on your next deposit this Sankranti.",
+    bonusPercent: 10,
+    daysBefore: 1,
+    daysAfter: 2,
+    fixedMonthDay: { month: 1, day: 14 },
+  },
+  {
+    id: "christmas",
+    label: "Christmas (Dec 25)",
+    emoji: "🎄",
+    codeBase: "XMAS",
+    nameTemplate: "Christmas Bonus {year}",
+    description: "Wishing you a merry Christmas — unwrap a holiday bonus on your next deposit.",
+    bonusPercent: 12,
+    daysBefore: 2,
+    daysAfter: 1,
+    fixedMonthDay: { month: 12, day: 25 },
+  },
+  {
+    id: "new-year",
+    label: "New Year (Jan 1)",
+    emoji: "🎆",
+    codeBase: "NY",
+    nameTemplate: "New Year {year}",
+    description: "Start the year strong — claim a new-year bonus on your next deposit.",
+    bonusPercent: 20,
+    daysBefore: 2,
+    daysAfter: 3,
+    fixedMonthDay: { month: 1, day: 1 },
+  },
+];
+
+/** A holiday occurrence resolved in IST. `instant` is the absolute UTC moment
+ *  of midnight-IST on the holiday day; the istYear/istMonth/istDay components
+ *  are what the Indian calendar actually says for that day. We always plan
+ *  the promo window from these IST components so admins in any timezone get
+ *  the correct India-local festival window. */
+type HolidayOccurrence = {
+  instant: Date;
+  istYear: number;
+  istMonth: number; // 1-indexed
+  istDay: number;
+};
+
+/** Returns the next upcoming IST occurrence for the given template, or null
+ *  if our table doesn't carry a future entry (lunar holidays past coverage). */
+function pickUpcomingHolidayDate(t: HolidayTemplate, now: Date): HolidayOccurrence | null {
+  if (t.fixedMonthDay) {
+    const { month, day } = t.fixedMonthDay;
+    const startYear = getISTYear(now);
+    for (let y = startYear; y <= startYear + 1; y++) {
+      const instant = istWallClockToUtc(y, month, day);
+      if (instant.getTime() > now.getTime()) {
+        return { instant, istYear: y, istMonth: month, istDay: day };
+      }
+    }
+    return null;
+  }
+  if (t.fixedDates) {
+    const occurrences = Object.entries(t.fixedDates)
+      .map(([, iso]) => {
+        const [yy, mm, dd] = iso.split("-").map(Number);
+        return {
+          instant: istWallClockToUtc(yy!, mm!, dd!),
+          istYear: yy!,
+          istMonth: mm!,
+          istDay: dd!,
+        };
+      })
+      .filter((x) => x.instant.getTime() > now.getTime())
+      .sort((a, b) => a.instant.getTime() - b.instant.getTime());
+    return occurrences[0] ?? null;
+  }
+  return null;
+}
+
 function ScheduledPromosManager() {
   const { toast } = useToast();
   const [rows, setRows] = useState<ScheduledPromoRow[]>([]);
@@ -694,6 +988,42 @@ function ScheduledPromosManager() {
     maxRedemptions: "" as string | "",
   });
   const [submitting, setSubmitting] = useState(false);
+  const [templateId, setTemplateId] = useState<string>("");
+
+  function applyTemplate(id: string) {
+    setTemplateId(id);
+    if (!id) return; // "Custom" — leave fields untouched
+    const t = HOLIDAY_TEMPLATES.find((x) => x.id === id);
+    if (!t) return;
+    const occ = pickUpcomingHolidayDate(t, new Date());
+    if (!occ) {
+      toast({
+        title: "No upcoming date for this holiday",
+        description: "Please add the date manually or extend the template table.",
+        variant: "destructive",
+      });
+      return;
+    }
+    // Build the window in IST: starts at 00:00 IST `daysBefore` days before
+    // the holiday, ends at 23:59 IST `daysAfter` days after. We feed
+    // istWallClockToUtc the unadjusted day number (it can be negative or
+    // overflow into the next month — Date.UTC normalises both correctly).
+    const startInstant = istWallClockToUtc(occ.istYear, occ.istMonth, occ.istDay - t.daysBefore, 0, 0);
+    const endInstant = istWallClockToUtc(occ.istYear, occ.istMonth, occ.istDay + t.daysAfter, 23, 59);
+    const yy = String(occ.istYear).slice(-2);
+    setForm({
+      name: t.nameTemplate.replace("{year}", String(occ.istYear)),
+      code: `${t.codeBase}${yy}`.replace(/[^A-Z0-9]/g, "").slice(0, 32),
+      description: t.description,
+      bonusPercent: String(t.bonusPercent),
+      // datetime-local always shows the admin's local wall clock — that's
+      // what they need to see and edit in their own timezone. The absolute
+      // instant (the line above us) is preserved.
+      startsAt: toLocalDateTimeInput(startInstant),
+      endsAt: toLocalDateTimeInput(endInstant),
+      maxRedemptions: form.maxRedemptions, // preserve whatever the admin had typed
+    });
+  }
 
   async function load() {
     setLoading(true);
@@ -719,6 +1049,7 @@ function ScheduledPromosManager() {
       endsAt: toLocalDateTimeInput(new Date(Date.now() + 3 * 24 * 60 * 60 * 1000)),
       maxRedemptions: "",
     });
+    setTemplateId("");
   }
 
   async function createPromo() {
@@ -812,6 +1143,36 @@ function ScheduledPromosManager() {
 
       {showForm && (
         <div className="rounded-xl border border-pink-500/20 bg-pink-500/5 p-4 space-y-4">
+          {/* Holiday template picker — auto-fills name/code/dates/copy/bonus%
+              with the next upcoming occurrence of the chosen festival. Admins
+              can still tweak any field after applying a template. */}
+          <div className="rounded-lg border border-fuchsia-500/20 bg-fuchsia-500/5 p-3 flex flex-col sm:flex-row sm:items-center gap-3">
+            <div className="flex-1 min-w-0">
+              <label className="text-xs uppercase tracking-wider font-semibold text-fuchsia-300 flex items-center gap-1.5">
+                <PartyPopper className="w-3.5 h-3.5" /> Quick template
+              </label>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                Pick a holiday and the form auto-fills with name, code, dates and English copy. Edit anything afterwards.
+              </p>
+            </div>
+            <select
+              value={templateId}
+              onChange={(e) => applyTemplate(e.target.value)}
+              className="bg-black/60 border border-fuchsia-500/30 rounded-lg px-3 py-2 text-sm text-white min-w-[260px]"
+            >
+              <option value="">Custom (no template)</option>
+              {HOLIDAY_TEMPLATES
+                .map((t) => ({ t, occ: pickUpcomingHolidayDate(t, new Date()) }))
+                .filter((x): x is { t: HolidayTemplate; occ: HolidayOccurrence } => x.occ != null)
+                .sort((a, b) => a.occ.instant.getTime() - b.occ.instant.getTime())
+                .map(({ t, occ }) => (
+                  <option key={t.id} value={t.id}>
+                    {t.emoji} {t.label} — {occ.istDay} {MONTH_SHORT[occ.istMonth - 1]} {occ.istYear}
+                  </option>
+                ))}
+            </select>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="text-sm text-muted-foreground">Name</label>
