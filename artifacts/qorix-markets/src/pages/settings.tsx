@@ -1,7 +1,7 @@
 import { Layout } from "@/components/layout";
 import { useAuth } from "@/hooks/use-auth";
 import { motion } from "framer-motion";
-import { User as UserIcon, Mail, Calendar, Shield, Crown, Copy, CheckCircle2, LogOut, Volume2, VolumeX, ShieldCheck, ChevronRight, Clock, XCircle } from "lucide-react";
+import { User as UserIcon, Mail, Calendar, Shield, Crown, Copy, CheckCircle2, LogOut, Volume2, VolumeX, ShieldCheck, ChevronRight, Clock, XCircle, Send, ExternalLink, Loader2, Unlink } from "lucide-react";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { authFetch } from "@/lib/auth-fetch";
@@ -10,8 +10,9 @@ import { format } from "date-fns";
 import { useGetDashboardSummary } from "@workspace/api-client-react";
 import { VipBadge, VipCard } from "@/components/vip-badge";
 import type { VipInfo } from "@workspace/api-client-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
+import { TelegramAlertsCard } from "@/components/telegram-alerts-card";
 
 const container = { hidden: {}, show: { transition: { staggerChildren: 0.08 } } };
 const item = { hidden: { opacity: 0, y: 14 }, show: { opacity: 1, y: 0, transition: { duration: 0.35, ease: "easeOut" } } };
@@ -208,6 +209,11 @@ export default function SettingsPage() {
             <VipCard vip={vip as VipInfo} investmentAmount={summary?.activeInvestment ?? 0} />
           </motion.div>
         ) : null}
+
+        {/* Telegram Alerts */}
+        <motion.div variants={item}>
+          <TelegramAlertsCard />
+        </motion.div>
 
         {/* Preferences */}
         <motion.div variants={item} className="glass-card rounded-2xl p-5 space-y-4">
