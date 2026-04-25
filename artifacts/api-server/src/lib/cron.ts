@@ -5,6 +5,9 @@ import { and, eq, isNull, lt, sql } from "drizzle-orm";
 import { logger, profitLogger, errorLogger } from "./logger";
 import { getLastDailyProfitPercent, sweepSignalProfitsToProfitWallet } from "./profit-service";
 import { emitProfitDistribution } from "./event-bus";
+import { tickAutoSignalEngine, closeMaturedAutoTrades, rehydrateAutoEngineState } from "./auto-signal-engine";
+
+const AUTO_ENGINE_ENABLED = (process.env.AUTO_SIGNAL_ENGINE_ENABLED ?? "1") !== "0";
 
 const PROMO_REDEMPTION_TTL_HOURS = 24;
 
@@ -75,6 +78,37 @@ export function initCronJobs(): void {
       if (n > 0) logger.info({ expiredCount: n }, "Startup: promo redemptions expired");
     })
     .catch((err) => errorLogger.error({ err }, "Startup: promo expiry sweep failed"));
+
+  // Auto Signal Engine — controlled 5-minute auto-trading.
+  // Tick every 5 min on the clock (00:00, 00:05, …) — matches synthetic candle boundaries.
+  // Closer runs every minute to settle trades that have hit their candle close.
+  if (AUTO_ENGINE_ENABLED) {
+    // Rehydrate today's counters from DB so a server restart can't reset
+    // the daily 15-trade / 0.4% caps and let the engine over-trade.
+    void rehydrateAutoEngineState().catch((err) =>
+      errorLogger.error({ err }, "Startup: auto-engine rehydrate failed"),
+    );
+
+    cron.schedule("*/5 * * * *", async () => {
+      try {
+        await tickAutoSignalEngine();
+      } catch (err) {
+        errorLogger.error({ err }, "Cron: auto-signal-engine tick failed");
+      }
+    });
+
+    cron.schedule("* * * * *", async () => {
+      try {
+        await closeMaturedAutoTrades();
+      } catch (err) {
+        errorLogger.error({ err }, "Cron: auto-signal-engine closer failed");
+      }
+    });
+
+    logger.info("Cron: auto-signal-engine registered — tick */5min, closer every 1min");
+  } else {
+    logger.info("Cron: auto-signal-engine DISABLED via AUTO_SIGNAL_ENGINE_ENABLED=0");
+  }
 
   logger.info(
     "Cron: jobs registered — daily profit (00:00), monthly trading→profit sweep (25th 00:00), hourly promo expiry",
