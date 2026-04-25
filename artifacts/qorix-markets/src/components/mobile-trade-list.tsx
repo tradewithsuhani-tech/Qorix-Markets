@@ -113,7 +113,13 @@ function TradeRow({ t, index }: { t: MobileTrade; index: number }) {
   const directionClr = isBuy ? "text-sky-400" : "text-rose-400";
   const positive = t.profit >= 0;
   const valueClr = positive ? "text-emerald-400" : "text-red-400";
-  const lot = (t.lot ?? 1.29).toFixed(2);
+  // Real lot derived from displayed USD profit and price move. This is
+  // mathematically equivalent to (activeCapital / entryPrice) and keeps the
+  // displayed lot, USD profit and price move all consistent for every trade.
+  const priceDiff = Math.abs(t.exitPrice - t.entryPrice);
+  const derivedLot = priceDiff > 0 ? Math.abs(t.profit) / priceDiff : 0;
+  const lotNum = t.lot ?? derivedLot;
+  const lot = lotNum.toFixed(2);
 
   return (
     <motion.div
