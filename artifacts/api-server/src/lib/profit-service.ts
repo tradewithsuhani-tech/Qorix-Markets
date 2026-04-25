@@ -67,9 +67,7 @@ export const RISK_PROFILES = {
   },
 } as const;
 
-const REFERRAL_MONTHLY_RATE = 0.10;
-const DAYS_PER_MONTH = 30;
-const REFERRAL_DAILY_RATE = REFERRAL_MONTHLY_RATE / DAYS_PER_MONTH;
+const REFERRAL_COMMISSION_RATE = 0.10;
 
 export async function getLastDailyProfitPercent(): Promise<number> {
   const rows = await db
@@ -369,7 +367,12 @@ export async function distributeDailyProfit(
         .limit(1);
 
       const sponsorId = userRows[0]?.sponsorId;
-      if (sponsorId && sponsorId !== inv.userId && sponsorId !== 0) {
+      if (
+        sponsorId &&
+        sponsorId !== inv.userId &&
+        sponsorId !== 0 &&
+        dailyProfitAmount > 0
+      ) {
         const sponsorInvRows = await tx
           .select({ isActive: investmentsTable.isActive })
           .from(investmentsTable)
@@ -377,7 +380,7 @@ export async function distributeDailyProfit(
           .limit(1);
 
         if (sponsorInvRows[0]?.isActive) {
-          const referralBonus = amount * REFERRAL_DAILY_RATE;
+          const referralBonus = dailyProfitAmount * REFERRAL_COMMISSION_RATE;
           const sponsorWalletRows = await tx
             .select()
             .from(walletsTable)
@@ -401,7 +404,7 @@ export async function distributeDailyProfit(
               type: "referral_bonus",
               amount: referralBonus.toString(),
               status: "completed",
-              description: `Referral bonus from active investor (daily ${(REFERRAL_DAILY_RATE * 100).toFixed(4)}%)`,
+              description: `Referral commission: ${(REFERRAL_COMMISSION_RATE * 100).toFixed(0)}% of partner's daily profit ($${dailyProfitAmount.toFixed(2)})`,
             }).returning({ id: transactionsTable.id });
 
             await ensureUserAccounts(sponsorId, tx);
