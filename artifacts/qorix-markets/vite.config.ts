@@ -94,6 +94,35 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
+    // Aggressive minification + tree-shaking for prod. Modern target keeps
+    // bundle small (no IE/old-Safari polyfills) and lets terser drop dead code.
+    target: "es2020",
+    cssCodeSplit: true,
+    sourcemap: false,
+    chunkSizeWarningLimit: 800,
+    rollupOptions: {
+      output: {
+        // Split heavy vendor libs into their own chunks so the browser can
+        // download them in parallel and cache them across deploys (the
+        // hashed filename only changes when that vendor's code changes).
+        // First paint stays fast — only the page-specific chunk + small
+        // shared runtime is required to render.
+        manualChunks(id) {
+          if (!id.includes("node_modules")) return undefined;
+          if (id.includes("react-dom")) return "vendor-react";
+          if (id.includes("/react/") || id.includes("scheduler")) return "vendor-react";
+          if (id.includes("@tanstack")) return "vendor-query";
+          if (id.includes("@radix-ui")) return "vendor-radix";
+          if (id.includes("lucide-react")) return "vendor-icons";
+          if (id.includes("recharts") || id.includes("d3-")) return "vendor-charts";
+          if (id.includes("framer-motion")) return "vendor-motion";
+          if (id.includes("date-fns") || id.includes("dayjs")) return "vendor-date";
+          if (id.includes("zod") || id.includes("react-hook-form")) return "vendor-forms";
+          if (id.includes("wouter")) return "vendor-router";
+          return "vendor";
+        },
+      },
+    },
   },
   server: {
     port,
