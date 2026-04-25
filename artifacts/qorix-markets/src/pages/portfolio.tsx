@@ -1453,41 +1453,99 @@ function PortfolioInner() {
               </div>
             </div>
 
-            {/* Daily breakdown calendar grid */}
+            {/* Daily breakdown calendar grid — premium */}
             <div className="relative">
-              <div className="flex items-center justify-between mb-2">
-                <div className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">
-                  Daily Breakdown · Forex Working Days
-                </div>
-                <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
-                  <span className="inline-flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-sm bg-emerald-400/80" /> Today
-                  </span>
-                  <span className="inline-flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-sm bg-white/20" /> Past
-                  </span>
-                  <span className="inline-flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-sm bg-blue-400/40" /> Upcoming
-                  </span>
-                </div>
-              </div>
+              {(() => {
+                const totalDays = projection.days.length;
+                const settledDays = projection.days.filter((d) => d.isPast).length;
+                const todayDays = projection.days.filter((d) => d.isToday).length;
+                const completedDays = settledDays + todayDays;
+                const settledAmount = projection.days
+                  .filter((d) => d.isPast || d.isToday)
+                  .reduce((s, d) => s + d.amount, 0);
+                const progressPct = totalDays > 0 ? (completedDays / totalDays) * 100 : 0;
 
-              <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-11 gap-2">
+                return (
+                  <>
+                    {/* Header row */}
+                    <div className="mb-3">
+                      <div className="flex items-center justify-between gap-2 mb-2.5">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div className="w-7 h-7 rounded-lg bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center shrink-0">
+                            <Calendar className="w-3.5 h-3.5 text-emerald-400" />
+                          </div>
+                          <div className="min-w-0">
+                            <div className="text-[11px] sm:text-xs uppercase tracking-wider text-white font-bold whitespace-nowrap">
+                              Daily Breakdown
+                            </div>
+                            <div className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground/80 font-medium whitespace-nowrap">
+                              Forex working days
+                            </div>
+                          </div>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <div className="text-[10px] uppercase tracking-wider text-emerald-300 font-bold tabular-nums">
+                            {completedDays}/{totalDays}
+                          </div>
+                          <div className="text-[9px] text-muted-foreground tabular-nums">
+                            ${settledAmount.toFixed(2)} earned
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Progress bar */}
+                      <div className="relative h-1.5 rounded-full bg-white/[0.04] border border-white/[0.06] overflow-hidden">
+                        <div
+                          className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-emerald-500/80 via-emerald-400 to-green-400 transition-all duration-700 shadow-[0_0_12px_-2px_rgba(16,185,129,0.6)]"
+                          style={{ width: `${progressPct}%` }}
+                        />
+                      </div>
+
+                      {/* Legend */}
+                      <div className="flex items-center justify-between flex-wrap gap-2 mt-2.5">
+                        <div className="flex items-center gap-2.5 text-[9px] sm:text-[10px] text-muted-foreground">
+                          <span className="inline-flex items-center gap-1">
+                            <span className="w-2 h-2 rounded-sm bg-emerald-400 shadow-[0_0_6px_rgba(16,185,129,0.6)]" />
+                            <span className="font-semibold text-emerald-300/90">Today</span>
+                          </span>
+                          <span className="inline-flex items-center gap-1">
+                            <span className="w-2 h-2 rounded-sm bg-emerald-500/40" />
+                            <span>Settled</span>
+                          </span>
+                          <span className="inline-flex items-center gap-1">
+                            <span className="w-2 h-2 rounded-sm bg-blue-400/40" />
+                            <span>Upcoming</span>
+                          </span>
+                        </div>
+                        <div className="text-[9px] sm:text-[10px] uppercase tracking-wider text-muted-foreground/70 font-semibold tabular-nums">
+                          {progressPct.toFixed(0)}% complete
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                );
+              })()}
+
+              <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-11 gap-1.5 sm:gap-2">
                 {projection.days.map((d, idx) => {
                   const dayNum = d.date.getDate();
                   const dow = d.date.toLocaleString("en-US", { weekday: "short" });
                   const status = d.isToday ? "today" : d.isPast ? "past" : "upcoming";
                   const cls = d.isToday
-                    ? "border-emerald-400/50 bg-emerald-500/15 shadow-[0_0_14px_-4px_rgba(16,185,129,0.6)]"
+                    ? "border-emerald-400/60 bg-gradient-to-br from-emerald-500/[0.20] via-emerald-500/[0.10] to-emerald-500/[0.05] shadow-[0_0_18px_-4px_rgba(16,185,129,0.7),inset_0_1px_0_0_rgba(16,185,129,0.15)]"
                     : d.isPast
-                      ? "border-white/10 bg-white/[0.03] opacity-70"
-                      : "border-blue-400/15 bg-blue-500/[0.04]";
-                  const textCls = d.isToday
-                    ? "text-emerald-200"
+                      ? "border-emerald-500/15 bg-gradient-to-br from-emerald-500/[0.05] to-emerald-500/[0.01] hover:border-emerald-500/30"
+                      : "border-blue-400/15 bg-gradient-to-br from-blue-500/[0.05] to-blue-500/[0.01] hover:border-blue-400/30";
+                  const dayNumCls = d.isToday
+                    ? "text-white"
                     : d.isPast
-                      ? "text-muted-foreground"
+                      ? "text-white/85"
                       : "text-white";
-                  const statusGlyph = d.isToday ? "●" : d.isPast ? "✓" : "·";
+                  const dowCls = d.isToday
+                    ? "text-emerald-300"
+                    : d.isPast
+                      ? "text-emerald-400/70"
+                      : "text-blue-300/80";
                   const showAmount = d.isPast || d.isToday;
                   const ariaLabel = showAmount
                     ? `${d.date.toDateString()}, ${status}: profit $${d.amount.toFixed(2)}`
@@ -1498,22 +1556,49 @@ function PortfolioInner() {
                       role="gridcell"
                       tabIndex={0}
                       aria-label={ariaLabel}
-                      className={`rounded-lg border p-2 text-center transition-all focus:outline-none focus:ring-2 focus:ring-emerald-400/60 ${cls}`}
+                      className={cn(
+                        "group relative overflow-hidden rounded-lg border p-1.5 sm:p-2 text-center transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-emerald-400/60 hover:-translate-y-0.5",
+                        cls
+                      )}
                       title={ariaLabel}
                     >
-                      <div className="flex items-center justify-center gap-1 text-[9px] uppercase tracking-wider text-muted-foreground/80 font-medium">
-                        <span aria-hidden="true">{statusGlyph}</span>
+                      {/* Today live dot indicator */}
+                      {d.isToday && (
+                        <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_6px_rgba(16,185,129,0.9)]" />
+                      )}
+                      {/* Past settled checkmark */}
+                      {d.isPast && (
+                        <svg
+                          className="absolute top-1 right-1 w-2.5 h-2.5 text-emerald-400/80"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="3"
+                          viewBox="0 0 24 24"
+                          aria-hidden="true"
+                        >
+                          <polyline points="20 6 9 17 4 12" />
+                        </svg>
+                      )}
+
+                      <div className={cn("text-[8.5px] sm:text-[9px] uppercase tracking-wider font-bold mt-0.5", dowCls)}>
                         {dow}
                       </div>
-                      <div className={`text-sm font-bold tabular-nums ${textCls}`}>
+                      <div className={cn("text-base sm:text-lg font-extrabold tabular-nums leading-none mt-0.5", dayNumCls)}>
                         {dayNum}
                       </div>
                       {showAmount ? (
-                        <div className={`text-[10px] font-semibold tabular-nums mt-0.5 ${d.isToday ? "text-emerald-300" : "text-muted-foreground"}`}>
+                        <div
+                          className={cn(
+                            "text-[9.5px] sm:text-[10px] font-bold tabular-nums mt-1",
+                            d.isToday
+                              ? "text-emerald-300"
+                              : "text-emerald-400/75"
+                          )}
+                        >
                           ${d.amount.toFixed(2)}
                         </div>
                       ) : (
-                        <div className="text-[10px] font-medium tabular-nums mt-0.5 text-muted-foreground/50">
+                        <div className="text-[9.5px] sm:text-[10px] font-medium tabular-nums mt-1 text-blue-300/40">
                           —
                         </div>
                       )}
