@@ -19,13 +19,14 @@ import { transferProfitToMain } from "../lib/profit-service";
 import { sendUsdtFromTreasury, getTreasuryUsdtBalance } from "../lib/crypto-deposit/sweep";
 import { emitProfitDistribution } from "../lib/event-bus";
 import { transactionLogger, profitLogger, errorLogger } from "../lib/logger";
+import { sendEmail, sendTxnEmailToUser } from "../lib/email-service";
+import { PROMO_BOUNDS, normalizePromoCodePrefix } from "../lib/promo-bounds";
 import {
   ensureUserAccounts,
   postJournalEntry,
   journalForSystem,
   runReconciliation,
 } from "../lib/ledger-service";
-import { sendEmail, sendTxnEmailToUser } from "../lib/email-service";
 
 const router = Router();
 router.use("/admin", authMiddleware);
@@ -327,8 +328,57 @@ router.get("/admin/settings", async (_req: AuthRequest, res) => {
     demoProfitEnabled: settings["demo_profit_enabled"] !== "false",
     demoProfitValue: Number(settings["demo_profit_value"] ?? "0") || 0,
     fomoMessages: settings["fomo_messages"] ?? "[]",
+    // Rotating promo offer (FOMO deposit bonus banner)
+    promoEnabled: settings["promo_enabled"] !== "false",
+    promoWindowMinutes: Number(settings["promo_window_minutes"] ?? "30") || 30,
+    promoMinPct: Number(settings["promo_min_pct"] ?? "2") || 2,
+    promoMaxPct: Number(settings["promo_max_pct"] ?? "10") || 10,
+    promoStepPct: Number(settings["promo_step_pct"] ?? "0.5") || 0.5,
+    promoCodePrefix: settings["promo_code_prefix"] ?? "QRX",
   });
 });
+
+// Bounds for promo settings live in lib/promo-bounds.ts so they stay in sync
+// across the admin UI (admin-modules.tsx), the validator here, and the
+// runtime clamp in routes/promo.ts. Do NOT duplicate values inline.
+function validatePromoSettings(body: Record<string, unknown>): string | null {
+  // Only validate fields actually present in the request — partial updates ok.
+  if ("promoWindowMinutes" in body) {
+    const n = Number(body["promoWindowMinutes"]);
+    if (!Number.isFinite(n) || n < PROMO_BOUNDS.windowMin || n > PROMO_BOUNDS.windowMax) {
+      return `promoWindowMinutes must be between ${PROMO_BOUNDS.windowMin} and ${PROMO_BOUNDS.windowMax}`;
+    }
+  }
+  if ("promoStepPct" in body) {
+    const n = Number(body["promoStepPct"]);
+    if (!Number.isFinite(n) || n < PROMO_BOUNDS.stepMin || n > PROMO_BOUNDS.stepMax) {
+      return `promoStepPct must be between ${PROMO_BOUNDS.stepMin} and ${PROMO_BOUNDS.stepMax}`;
+    }
+  }
+  const minPct = "promoMinPct" in body ? Number(body["promoMinPct"]) : null;
+  const maxPct = "promoMaxPct" in body ? Number(body["promoMaxPct"]) : null;
+  if (minPct !== null && (!Number.isFinite(minPct) || minPct < PROMO_BOUNDS.pctMin || minPct > PROMO_BOUNDS.pctMax)) {
+    return `promoMinPct must be between ${PROMO_BOUNDS.pctMin} and ${PROMO_BOUNDS.pctMax}`;
+  }
+  if (maxPct !== null && (!Number.isFinite(maxPct) || maxPct < PROMO_BOUNDS.pctMin || maxPct > PROMO_BOUNDS.pctMax)) {
+    return `promoMaxPct must be between ${PROMO_BOUNDS.pctMin} and ${PROMO_BOUNDS.pctMax}`;
+  }
+  // Cross-field: max must be strictly greater than min. We have to also
+  // consider the persisted values when only one side is being updated.
+  if (minPct !== null || maxPct !== null) {
+    return null; // we need DB read to fully validate — see below
+  }
+  if ("promoCodePrefix" in body) {
+    const raw = String(body["promoCodePrefix"] ?? "").trim();
+    if (raw.length === 0 || raw.length > PROMO_BOUNDS.codePrefixMaxLen) {
+      return `promoCodePrefix must be 1-${PROMO_BOUNDS.codePrefixMaxLen} characters`;
+    }
+    if (!/^[A-Z0-9]+$/i.test(raw)) {
+      return "promoCodePrefix must contain only letters and digits";
+    }
+  }
+  return null;
+}
 
 router.post("/admin/settings", async (req: AuthRequest, res) => {
   const allowed: Record<string, string> = {
@@ -354,20 +404,55 @@ router.post("/admin/settings", async (req: AuthRequest, res) => {
     demoProfitEnabled: "demo_profit_enabled",
     demoProfitValue: "demo_profit_value",
     fomoMessages: "fomo_messages",
+    promoEnabled: "promo_enabled",
+    promoWindowMinutes: "promo_window_minutes",
+    promoMinPct: "promo_min_pct",
+    promoMaxPct: "promo_max_pct",
+    promoStepPct: "promo_step_pct",
+    promoCodePrefix: "promo_code_prefix",
   };
+
+  // Promo settings: validate ranges + cross-field constraints (min < max)
+  // before any write so admins cannot accidentally break the public banner.
+  const validationError = validatePromoSettings(req.body ?? {});
+  if (validationError) {
+    return res.status(400).json({ error: validationError });
+  }
+  if ("promoMinPct" in req.body || "promoMaxPct" in req.body) {
+    const persisted = await db.select().from(systemSettingsTable);
+    const current = Object.fromEntries(persisted.map((r) => [r.key, r.value]));
+    const effectiveMin = "promoMinPct" in req.body
+      ? Number(req.body["promoMinPct"])
+      : Number(current["promo_min_pct"] ?? "2");
+    const effectiveMax = "promoMaxPct" in req.body
+      ? Number(req.body["promoMaxPct"])
+      : Number(current["promo_max_pct"] ?? "10");
+    if (!(effectiveMax > effectiveMin)) {
+      return res.status(400).json({
+        error: `promoMaxPct (${effectiveMax}) must be strictly greater than promoMinPct (${effectiveMin})`,
+      });
+    }
+  }
 
   for (const [bodyKey, settingKey] of Object.entries(allowed)) {
     if (bodyKey in req.body) {
-      await db.insert(systemSettingsTable).values({ key: settingKey, value: String(req.body[bodyKey]) }).onConflictDoUpdate({
+      let value = String(req.body[bodyKey]);
+      // Normalise the promo prefix using the SHARED helper so the live
+      // preview, the saved value, and the runtime-generated codes always
+      // match (uppercase, alnum-only, length-capped at codePrefixMaxLen).
+      if (bodyKey === "promoCodePrefix") {
+        value = normalizePromoCodePrefix(value);
+      }
+      await db.insert(systemSettingsTable).values({ key: settingKey, value }).onConflictDoUpdate({
         target: systemSettingsTable.key,
-        set: { value: String(req.body[bodyKey]), updatedAt: new Date() },
+        set: { value, updatedAt: new Date() },
       });
     }
   }
 
   transactionLogger.info({ event: "admin_settings_update", adminId: req.userId, keys: Object.keys(req.body) }, "Admin settings updated");
   const rows = await db.select().from(systemSettingsTable);
-  res.json({ success: true, settings: Object.fromEntries(rows.map((r) => [r.key, r.value])) });
+  return res.json({ success: true, settings: Object.fromEntries(rows.map((r) => [r.key, r.value])) });
 });
 
 router.post("/admin/broadcast", async (req: AuthRequest, res) => {

@@ -6,6 +6,29 @@ import { sql } from "drizzle-orm";
 const router = Router();
 
 // ─── Referral Leaderboard ────────────────────────────────────────────────────
+// Privacy: returns only `id` (so the caller can detect "this is me") plus a
+// pre-masked `displayName`. Raw full names and referral codes never leave
+// the server, so PII cannot be scraped via the network response.
+function maskNameServer(name: string | null | undefined): string {
+  if (!name || !String(name).trim()) return "Anonymous";
+  const parts = String(name).trim().split(/\s+/);
+  const first = parts[0]!;
+  const firstMasked = first.length <= 2
+    ? first + "***"
+    : first.slice(0, 2) + "*".repeat(Math.max(3, first.length - 2));
+  const lastInitial = parts.length > 1
+    ? ` ${parts[parts.length - 1]![0]!.toUpperCase()}.`
+    : "";
+  return firstMasked + lastInitial;
+}
+
+interface RawLeaderboardRow {
+  id: number;
+  fullName: string | null;
+  referralCount: number;
+  totalEarnings: string | number | null;
+}
+
 router.get("/leaderboard/referrals", authMiddleware, async (req: AuthRequest, res) => {
   try {
     const userId = req.userId!;
@@ -14,7 +37,6 @@ router.get("/leaderboard/referrals", authMiddleware, async (req: AuthRequest, re
       SELECT
         u.id,
         u.full_name            AS "fullName",
-        u.referral_code        AS "referralCode",
         COUNT(refs.id)::int    AS "referralCount",
         COALESCE(SUM(t.amount)::numeric, 0) AS "totalEarnings"
       FROM users u
@@ -24,7 +46,7 @@ router.get("/leaderboard/referrals", authMiddleware, async (req: AuthRequest, re
         AND t.type     = 'referral_bonus'
         AND t.status   = 'completed'
       WHERE u.is_admin = false
-      GROUP BY u.id, u.full_name, u.referral_code
+      GROUP BY u.id, u.full_name
       HAVING COUNT(refs.id) > 0
       ORDER BY COUNT(refs.id) DESC, COALESCE(SUM(t.amount), 0) DESC
       LIMIT 10
@@ -48,8 +70,15 @@ router.get("/leaderboard/referrals", authMiddleware, async (req: AuthRequest, re
       SELECT rank FROM ranked WHERE id = ${userId}
     `);
 
+    const leaderboard = (rows.rows as unknown as RawLeaderboardRow[]).map((r) => ({
+      id: r.id,
+      displayName: maskNameServer(r.fullName),
+      referralCount: r.referralCount,
+      totalEarnings: r.totalEarnings ?? 0,
+    }));
+
     return res.json({
-      leaderboard: rows.rows,
+      leaderboard,
       myRank: myRank.rows[0]?.rank ?? null,
     });
   } catch (err) {
