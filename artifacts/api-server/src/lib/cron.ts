@@ -6,7 +6,6 @@ import { logger, profitLogger, errorLogger } from "./logger";
 import { getLastDailyProfitPercent, sweepSignalProfitsToProfitWallet } from "./profit-service";
 import { emitProfitDistribution } from "./event-bus";
 import { tickAutoSignalEngine, closeMaturedAutoTrades, rehydrateAutoEngineState } from "./auto-signal-engine";
-import { isStagingMode, logStagingSkip } from "./staging-mode";
 
 const AUTO_ENGINE_ENABLED = (process.env.AUTO_SIGNAL_ENGINE_ENABLED ?? "1") !== "0";
 
@@ -29,14 +28,6 @@ async function expireStalePromoRedemptions(): Promise<number> {
 }
 
 export async function initCronJobs(): Promise<void> {
-  // STAGING_MODE: skip ALL cron jobs (profit distribution, monthly sweep,
-  // promo expiry, auto-signal engine). Staging server must never mutate
-  // shared business state. Default OFF — production unaffected.
-  if (isStagingMode()) {
-    logStagingSkip("cron-jobs");
-    return;
-  }
-
   cron.schedule("0 0 * * *", async () => {
     profitLogger.info("Cron: daily profit distribution — enqueuing job");
     try {

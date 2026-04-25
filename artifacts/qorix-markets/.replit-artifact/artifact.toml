@@ -17,12 +17,14 @@ localPort = 21638
 [services.development]
 run = "pnpm --filter @workspace/qorix-markets run dev"
 
-# NOTE: Production serving moved to api-server (artifacts/api-server) so that
-# Express's gzip compression + immutable cache headers are applied to JS/CSS
-# bundles. Replit's built-in static handler doesn't compress, which made
-# 3 MB of bundles take 30+ seconds to download on slow Indian mobile networks.
-# This artifact is dev-only now; api-server triggers its build and serves the
-# resulting dist/public in production.
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/qorix-markets", "run", "build" ]
+publicDir = "artifacts/qorix-markets/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
 
 [services.env]
 PORT = "21638"
