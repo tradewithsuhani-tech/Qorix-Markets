@@ -232,23 +232,23 @@ function LiveProfitFeed({ enabled }: { enabled: boolean }) {
   }, [enabled]);
 
   return (
-    <div className="rounded-2xl border border-emerald-500/20 bg-[#0d1525] p-5 overflow-hidden">
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <span className="live-dot inline-block w-2 h-2 rounded-full" />
-          <span className="text-[11px] uppercase tracking-wider font-bold text-emerald-300">
+    <div className="rounded-2xl border border-emerald-500/20 bg-[#0d1525] p-4 sm:p-5 overflow-hidden">
+      <div className="flex items-center justify-between gap-2 mb-3">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="live-dot inline-block w-2 h-2 rounded-full shrink-0" />
+          <span className="text-[11px] uppercase tracking-wider font-bold text-emerald-300 whitespace-nowrap">
             Live Profit Feed
           </span>
         </div>
-        <span className="text-[10px] text-muted-foreground tabular-nums">
-          per execution · auto-refreshing
+        <span className="text-[10px] text-muted-foreground tabular-nums whitespace-nowrap shrink-0">
+          auto-refreshing
         </span>
       </div>
 
       {/* Ticker row — latest tick on left, fades right */}
-      <div className="flex items-end gap-3 sm:gap-5 min-h-[52px]">
+      <div className="flex items-end gap-3 sm:gap-5 min-h-[52px] overflow-hidden">
         {ticks.length === 0 ? (
-          <div className="text-2xl md:text-3xl font-bold text-emerald-400/40 tabular-nums">
+          <div className="text-2xl md:text-3xl font-bold text-emerald-400/40 tabular-nums whitespace-nowrap">
             +$0.00…
           </div>
         ) : (
@@ -256,7 +256,7 @@ function LiveProfitFeed({ enabled }: { enabled: boolean }) {
             <div
               key={t.id}
               className={
-                "tabular-nums font-bold transition-all duration-500 " +
+                "tabular-nums font-bold transition-all duration-500 whitespace-nowrap " +
                 (i === 0
                   ? "text-2xl md:text-3xl text-emerald-400 live-tick-flash"
                   : i === 1
@@ -271,11 +271,11 @@ function LiveProfitFeed({ enabled }: { enabled: boolean }) {
       </div>
 
       <div className="mt-3 pt-3 border-t border-white/5 flex items-center gap-2">
-        <span className="relative flex h-1.5 w-1.5">
+        <span className="relative flex h-1.5 w-1.5 shrink-0">
           <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75 animate-ping" />
           <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-400" />
         </span>
-        <span className="text-xs text-muted-foreground">
+        <span className="text-[11px] sm:text-xs text-muted-foreground truncate">
           Live market execution in progress
         </span>
       </div>
