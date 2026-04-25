@@ -140,6 +140,23 @@ export default function AdminSignalTradesPage() {
               ${totalRealizedToday.toFixed(2)}
             </div>
           </div>
+          <button
+            type="button"
+            onClick={async () => {
+              if (!confirm("Cleanup junk trades + re-anchor remaining to live price? This DELETES manual/absurd-profit/far-from-live rows.")) return;
+              try {
+                const r = await apiFetch("/api/admin/signal-trades/reanchor?cleanup=1", "POST");
+                toast({ title: "Cleanup + reanchor done", description: JSON.stringify(r.summary).slice(0, 200) });
+                qc.invalidateQueries();
+              } catch (e: any) {
+                toast({ title: "Failed", description: e.message ?? "error", variant: "destructive" });
+              }
+            }}
+            className="ml-2 px-3 py-2 rounded-xl text-xs font-semibold bg-amber-500/15 border border-amber-500/40 text-amber-200 hover:bg-amber-500/25 transition-colors"
+            title="DELETE junk seed trades (manual / |pct|>2 / >±20% off live), then re-anchor remaining to current live price."
+          >
+            <RefreshCw className="w-3.5 h-3.5 inline mr-1" /> Cleanup & Re-anchor
+          </button>
         </div>
 
         {/* Create form */}
