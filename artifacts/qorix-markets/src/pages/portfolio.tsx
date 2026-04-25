@@ -337,19 +337,36 @@ function NextTradeStatus({ enabled }: { enabled: boolean }) {
   const mm = String(Math.floor(countdown / 60)).padStart(2, "0");
   const ss = String(countdown % 60).padStart(2, "0");
 
+  // Per-phase theming so the whole card breathes the current state.
+  const theme =
+    phase === "scanning"
+      ? { ring: "border-blue-500/25", bg: "bg-blue-500/10", dot: "bg-blue-400", text: "text-blue-300", accent: "from-blue-500/40 via-blue-400/20" }
+      : phase === "signal"
+      ? { ring: "border-amber-500/30", bg: "bg-amber-500/10", dot: "bg-amber-400", text: "text-amber-300", accent: "from-amber-500/40 via-amber-400/20" }
+      : { ring: "border-emerald-500/30", bg: "bg-emerald-500/10", dot: "bg-emerald-400", text: "text-emerald-300", accent: "from-emerald-500/40 via-emerald-400/20" };
+
   return (
-    <div className="rounded-2xl border border-white/10 bg-[#0d1525] p-5">
-      <div className="flex items-center justify-between mb-3">
-        <span className="text-[11px] uppercase tracking-wider font-bold text-muted-foreground">
-          Next Trade Status
+    <div className="relative rounded-2xl border border-white/10 bg-[#0d1525] p-4 sm:p-5 overflow-hidden">
+      {/* Phase-colored accent bar at the top */}
+      <div className={`absolute top-0 left-0 right-0 h-px bg-gradient-to-r ${theme.accent} to-transparent`} />
+
+      <div className="flex items-center justify-between gap-2 mb-4">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="text-[11px] uppercase tracking-wider font-bold text-muted-foreground whitespace-nowrap">
+            Next Trade Status
+          </span>
+        </div>
+        <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border ${theme.ring} ${theme.bg} whitespace-nowrap shrink-0`}>
+          <span className={`w-1.5 h-1.5 rounded-full ${theme.dot}`} />
+          <span className={`text-[10px] font-semibold tracking-wider ${theme.text}`}>AUTO ENGINE</span>
         </span>
-        <span className="text-[10px] text-muted-foreground">Auto-trading engine</span>
       </div>
 
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        {phase === "scanning" && (
-          <div className="flex items-center gap-3">
-            <div className="flex items-end gap-[3px] h-6">
+      <div className="flex items-center gap-3 sm:gap-4">
+        {/* Phase icon — fixed size, color-themed container */}
+        <div className={`w-11 h-11 sm:w-12 sm:h-12 rounded-xl border ${theme.ring} ${theme.bg} flex items-center justify-center shrink-0`}>
+          {phase === "scanning" && (
+            <div className="flex items-end gap-[3px] h-5">
               {[0, 1, 2, 3].map((i) => (
                 <span
                   key={i}
@@ -358,67 +375,75 @@ function NextTradeStatus({ enabled }: { enabled: boolean }) {
                 />
               ))}
             </div>
-            <div>
-              <div className="text-base md:text-lg font-bold text-white">
+          )}
+          {phase === "signal" && (
+            <span className="relative flex h-2.5 w-2.5">
+              <span className="absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75 animate-ping" />
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-400" />
+            </span>
+          )}
+          {phase === "countdown" && (
+            <Activity className="w-5 h-5 text-emerald-400" />
+          )}
+        </div>
+
+        {/* Title + subtitle */}
+        <div className="flex-1 min-w-0">
+          {phase === "scanning" && (
+            <>
+              <div className="text-sm sm:text-base font-bold text-white truncate">
                 Scanning markets<span className="dots-anim" />
               </div>
-              <div className="text-xs text-muted-foreground">
-                Analyzing 87 instruments across FX · Gold · Indices
+              <div className="text-[11px] sm:text-xs text-muted-foreground mt-0.5">
+                Analyzing <span className="text-white/80 font-semibold">87</span> instruments · FX, Gold, Indices
               </div>
-            </div>
-          </div>
-        )}
-
-        {phase === "signal" && (
-          <div className="flex items-center gap-3">
-            <span className="relative flex h-3 w-3">
-              <span className="absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75 animate-ping" />
-              <span className="relative inline-flex rounded-full h-3 w-3 bg-amber-400" />
-            </span>
-            <div>
-              <div className="text-base md:text-lg font-bold text-amber-300">
+            </>
+          )}
+          {phase === "signal" && (
+            <>
+              <div className="text-sm sm:text-base font-bold text-amber-300 truncate">
                 Signal detected<span className="dots-anim" />
               </div>
-              <div className="text-xs text-muted-foreground">
-                Confirming entry · risk-checked · queueing execution
+              <div className="text-[11px] sm:text-xs text-muted-foreground mt-0.5 truncate">
+                Risk-checked · queueing execution
               </div>
-            </div>
-          </div>
-        )}
-
-        {phase === "countdown" && (
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center">
-              <Activity className="w-5 h-5 text-emerald-400" />
-            </div>
-            <div>
-              <div className="text-base md:text-lg font-bold text-white">
+            </>
+          )}
+          {phase === "countdown" && (
+            <>
+              <div className="text-sm sm:text-base font-bold text-white truncate">
                 Next trade in{" "}
-                <span className="text-emerald-400 tabular-nums">
+                <span className="text-emerald-400 tabular-nums font-mono">
                   {mm}:{ss}
                 </span>
               </div>
-              <div className="text-xs text-muted-foreground">
+              <div className="text-[11px] sm:text-xs text-muted-foreground mt-0.5 truncate">
                 Holding for optimal entry window
               </div>
-            </div>
-          </div>
-        )}
-
-        {/* Phase indicator */}
-        <div className="flex items-center gap-1.5">
-          {(["scanning", "signal", "countdown"] as Phase[]).map((p) => (
-            <span
-              key={p}
-              className={
-                "h-1.5 rounded-full transition-all duration-500 " +
-                (p === phase
-                  ? "w-6 bg-emerald-400"
-                  : "w-1.5 bg-white/15")
-              }
-            />
-          ))}
+            </>
+          )}
         </div>
+      </div>
+
+      {/* Phase indicator strip — bottom, full-width, segmented progress */}
+      <div className="mt-4 pt-3 border-t border-white/5 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-1.5 flex-1 max-w-[200px]">
+          {(["scanning", "signal", "countdown"] as Phase[]).map((p) => {
+            const active = p === phase;
+            return (
+              <div
+                key={p}
+                className={
+                  "h-1 rounded-full transition-all duration-500 " +
+                  (active ? `flex-[2] ${theme.dot}` : "flex-1 bg-white/10")
+                }
+              />
+            );
+          })}
+        </div>
+        <span className="text-[10px] uppercase tracking-wider text-muted-foreground/70 font-semibold whitespace-nowrap">
+          {phase === "scanning" ? "Phase 1 / 3" : phase === "signal" ? "Phase 2 / 3" : "Phase 3 / 3"}
+        </span>
       </div>
     </div>
   );
