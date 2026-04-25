@@ -188,11 +188,20 @@ type Trade = {
   lot?: number;
 };
 
-// Hard ceiling on displayed lot size. When a planned % over the demo Active
-// Capital implies a lot larger than this (e.g. a tight 5-min candle move with
-// big capital), we cap the lot here and shrink the displayed USD profit
-// accordingly so the trade card stays realistic.
-const MAX_DISPLAY_LOT = 1.10;
+// Display-only lot range per trade (random, deterministic per trade.id so the
+// number never flickers across refetches). USD profit is then derived as
+// sign × lot × |exit-entry| so lot, USD and price move are always consistent.
+const LOT_MIN = 0.30;
+const LOT_MAX = 1.10;
+
+function seededLot(seed: number): number {
+  // Mulberry32 — fast deterministic [0,1) from an integer seed.
+  let t = (seed + 0x6D2B79F5) >>> 0;
+  t = Math.imul(t ^ (t >>> 15), t | 1);
+  t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+  const r = ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  return LOT_MIN + r * (LOT_MAX - LOT_MIN);
+}
 
 type SignalRecent = {
   id: number;
@@ -270,24 +279,12 @@ export default function TradeActivityPage() {
     placeholderData: keepPreviousData,
   });
 
-  // Pull the demo dashboard's Active Capital (a baseline + monotonic-growth
-  // figure shown across the public/demo dashboard) so every trade card uses
-  // the SAME notional reference, independent of any individual user's funded
-  // balance. This is the "$867k-style" demo number, not user-specific.
-  const { data: fundStats } = useQuery<{ activeCapital?: number }>({
-    queryKey: ["fund-stats-for-activity"],
-    queryFn: async () => {
-      const res = await fetch("/api/dashboard/fund-stats");
-      if (!res.ok) throw new Error("failed");
-      return res.json();
-    },
-    refetchInterval: 30000,
-    placeholderData: keepPreviousData,
-  });
-  const demoActiveCapital = Number(fundStats?.activeCapital) || 0;
-
   const usingPlatformFallback = personalTrades.length === 0 && (recentData?.trades?.length ?? 0) > 0;
 
+  // Each platform signal trade renders with a randomly-picked lot in
+  // [LOT_MIN..LOT_MAX] and USD = sign(pct) × lot × |exit-entry|. Same model as
+  // a CFD: 1 lot of BTC over a 1000-point move = $1000 profit. This keeps the
+  // displayed lot, USD, and price move all internally consistent on every card.
   const allTrades: Trade[] = personalTrades.length > 0
     ? personalTrades
     : (recentData?.trades ?? []).map((t) => {
@@ -295,19 +292,9 @@ export default function TradeActivityPage() {
         const entry = Number(t.entryPrice) || 0;
         const exit = Number(t.realizedExitPrice) || 0;
         const priceDiff = Math.abs(exit - entry);
-        // Naive USD on the demo Active Capital: pct × demoActiveCapital.
-        const naiveUsd = demoActiveCapital > 0 ? pct * demoActiveCapital / 100 : 0;
-        // Derived lot from naive USD. If it exceeds the display ceiling we
-        // cap the lot AND recompute USD = sign(pct) × lot × priceDiff so the
-        // displayed profit auto-shrinks for big-candle trades — keeps the
-        // card realistic ("max 1.10 lot, profit bhi auto kam").
-        let lot = priceDiff > 0 ? Math.abs(naiveUsd) / priceDiff : 0;
-        let usd = naiveUsd;
-        if (lot > MAX_DISPLAY_LOT) {
-          lot = MAX_DISPLAY_LOT;
-          const sign = pct >= 0 ? 1 : -1;
-          usd = sign * lot * priceDiff;
-        }
+        const lot = seededLot(t.id);
+        const sign = pct >= 0 ? 1 : -1;
+        const usd = sign * lot * priceDiff;
         return {
           id: t.id,
           symbol: t.pair,
