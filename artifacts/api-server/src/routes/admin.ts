@@ -1468,9 +1468,46 @@ router.post("/admin/auto-engine/close-matured", async (req: AuthRequest, res) =>
  */
 router.post("/admin/signal-trades/reanchor", async (req: AuthRequest, res) => {
   const dryRun = req.query.dryRun === "1" || req.body?.dryRun === true;
+  // Cleanup mode: BEFORE shifting, DELETE obvious junk rows that would
+  // pollute the mean and corrupt good data. Junk = (a) close_reason='manual'
+  // hand-seeded test trades, (b) absurd realized_profit_percent (engine never
+  // produces |pct| > 2), (c) entry_price more than ±20% off live anchor.
+  const cleanup = req.query.cleanup === "1" || req.body?.cleanup === true;
   const summary: Array<Record<string, unknown>> = [];
   try {
     for (const pair of ENGINE_PAIRS) {
+      const anchor = await getEntryAnchor(pair);
+      const currentReal = anchor.price;
+      let deleted = 0;
+
+      if (cleanup) {
+        // 1) Manual hand-seeded test trades.
+        // 2) Realized P/L outside engine envelope (engine produces 0.05–0.7%).
+        // 3) Entry far from live (more than ±20%).
+        const lo = currentReal * 0.8;
+        const hi = currentReal * 1.2;
+        const junkIds = await db
+          .select({ id: signalTradesTable.id })
+          .from(signalTradesTable)
+          .where(
+            and(
+              eq(signalTradesTable.pair, pair.code),
+              or(
+                eq(signalTradesTable.closeReason, "manual"),
+                sql`ABS(COALESCE(${signalTradesTable.realizedProfitPercent}, 0)) > 2`,
+                sql`${signalTradesTable.entryPrice} < ${lo}`,
+                sql`${signalTradesTable.entryPrice} > ${hi}`,
+              ),
+            ),
+          );
+        if (junkIds.length > 0 && !dryRun) {
+          await db
+            .delete(signalTradesTable)
+            .where(inArray(signalTradesTable.id, junkIds.map((r) => r.id)));
+        }
+        deleted = junkIds.length;
+      }
+
       const rows = await db
         .select({
           id: signalTradesTable.id,
@@ -1484,12 +1521,9 @@ router.post("/admin/signal-trades/reanchor", async (req: AuthRequest, res) => {
         .where(eq(signalTradesTable.pair, pair.code));
 
       if (rows.length === 0) {
-        summary.push({ pair: pair.code, count: 0, skipped: "no_rows" });
+        summary.push({ pair: pair.code, count: 0, deleted, currentReal, skipped: "no_rows" });
         continue;
       }
-
-      const anchor = await getEntryAnchor(pair);
-      const currentReal = anchor.price;
       const meanEntry =
         rows.reduce((s, r) => s + Number(r.entryPrice), 0) / rows.length;
       const shift = currentReal - meanEntry;
