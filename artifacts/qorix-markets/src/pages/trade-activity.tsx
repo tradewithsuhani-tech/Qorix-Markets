@@ -358,55 +358,112 @@ export default function TradeActivityPage() {
 
   const periodLabel = PERIODS.find((p) => p.key === period)?.label ?? "1M";
 
+  const isUp = totalPL >= 0;
+  const TrendIcon = isUp ? TrendingUp : TrendingDown;
+
   return (
     <Layout>
-      <div className="max-w-7xl mx-auto px-4 py-6 sm:py-8 space-y-5 sm:space-y-6">
+      <div className="max-w-7xl mx-auto px-4 py-5 sm:py-8 space-y-4 sm:space-y-6">
         {/* ── Premium header card ─────────────────────────────────────── */}
-        <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-white/[0.04] via-white/[0.02] to-transparent p-4 sm:p-5">
-          {/* subtle ambient glow */}
-          <div className="pointer-events-none absolute -top-20 -right-20 h-48 w-48 rounded-full bg-blue-500/10 blur-3xl" />
+        <div className="relative overflow-hidden rounded-2xl border border-white/[0.08] bg-gradient-to-br from-slate-900/80 via-slate-950/60 to-slate-950/40 backdrop-blur-xl shadow-[0_8px_40px_-12px_rgba(0,0,0,0.6)]">
+          {/* Ambient color glows */}
+          <div className="pointer-events-none absolute -top-24 -right-16 h-56 w-56 rounded-full bg-blue-500/15 blur-3xl" />
+          <div className={cn(
+            "pointer-events-none absolute -bottom-24 -left-16 h-48 w-48 rounded-full blur-3xl",
+            isUp ? "bg-emerald-500/10" : "bg-rose-500/10",
+          )} />
 
-          <div className="relative flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-5">
-            {/* Title block */}
-            <div className="flex items-center gap-3 sm:gap-4 min-w-0 flex-1">
-              <div className="relative shrink-0">
-                <div className="p-2.5 sm:p-3 rounded-xl bg-gradient-to-br from-blue-500/25 to-blue-600/10 border border-blue-400/30 shadow-lg shadow-blue-500/10">
-                  <Activity className="w-5 h-5 sm:w-6 sm:h-6 text-blue-300" />
-                </div>
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight truncate">
-                    Trade Activity
-                  </h1>
-                  <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-400/30 bg-emerald-500/10 px-2 py-0.5">
-                    <span className="relative flex h-1.5 w-1.5">
-                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                      <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                    </span>
-                    <span className="text-[10px] font-semibold uppercase tracking-wider text-emerald-300">Live</span>
-                  </span>
-                </div>
-                <p className="mt-1 text-xs sm:text-sm text-white/50 line-clamp-2 sm:line-clamp-1">
-                  {usingPlatformFallback
-                    ? "Live signal trades from Qorix Markets — fund your account to start trading"
-                    : "Your live trade history — Qorix-grade execution view"}
-                </p>
-              </div>
+          {/* Decorative sparkline (right side, behind content) */}
+          <svg
+            className="pointer-events-none absolute bottom-0 right-0 h-24 w-1/2 opacity-[0.18]"
+            viewBox="0 0 200 60"
+            preserveAspectRatio="none"
+            aria-hidden="true"
+          >
+            <defs>
+              <linearGradient id="sparkFill" x1="0" x2="0" y1="0" y2="1">
+                <stop offset="0%" stopColor={isUp ? "#10b981" : "#f43f5e"} stopOpacity="0.5" />
+                <stop offset="100%" stopColor={isUp ? "#10b981" : "#f43f5e"} stopOpacity="0" />
+              </linearGradient>
+            </defs>
+            <path
+              d="M0,45 L20,38 L40,42 L60,30 L80,33 L100,22 L120,28 L140,16 L160,20 L180,10 L200,14 L200,60 L0,60 Z"
+              fill="url(#sparkFill)"
+            />
+            <path
+              d="M0,45 L20,38 L40,42 L60,30 L80,33 L100,22 L120,28 L140,16 L160,20 L180,10 L200,14"
+              fill="none"
+              stroke={isUp ? "#34d399" : "#fb7185"}
+              strokeWidth="1.5"
+              strokeLinejoin="round"
+              strokeLinecap="round"
+            />
+          </svg>
+
+          {/* Top row: identity */}
+          <div className="relative flex items-start sm:items-center gap-3 sm:gap-4 p-4 sm:p-5">
+            <div className="shrink-0 p-2.5 sm:p-3 rounded-xl bg-gradient-to-br from-blue-500/25 to-blue-600/5 border border-blue-400/30 shadow-lg shadow-blue-500/20 ring-1 ring-inset ring-white/5">
+              <Activity className="w-5 h-5 sm:w-6 sm:h-6 text-blue-300" strokeWidth={2.25} />
             </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h1 className="text-[19px] sm:text-2xl font-bold text-white tracking-tight leading-none">
+                  Trade Activity
+                </h1>
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-400/30 bg-emerald-500/[0.08] px-2 py-0.5 backdrop-blur-sm">
+                  <span className="relative flex h-1.5 w-1.5">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                    <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                  </span>
+                  <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-[0.14em] text-emerald-300">Live</span>
+                </span>
+              </div>
+              <p className="mt-1 text-[11px] sm:text-xs text-white/45 leading-snug line-clamp-2 sm:line-clamp-1">
+                {usingPlatformFallback
+                  ? "Live signal trades from Qorix Markets — fund your account to start trading"
+                  : "Your live trade history — Qorix-grade execution view"}
+              </p>
+            </div>
+          </div>
 
-            {/* P/L stat — own card on mobile, inline on desktop */}
-            <div className="flex sm:flex-col sm:items-end items-center justify-between sm:justify-center gap-3 sm:gap-1 rounded-xl sm:rounded-none border border-white/8 sm:border-0 bg-white/[0.03] sm:bg-transparent px-3 py-2.5 sm:px-0 sm:py-0 shrink-0">
-              <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/45">
+          {/* Hairline divider */}
+          <div className="relative mx-4 sm:mx-5 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
+
+          {/* Bottom row: P/L + micro KPIs */}
+          <div className="relative flex items-center justify-between gap-4 px-4 sm:px-5 py-3.5 sm:py-4">
+            <div className="min-w-0">
+              <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/45">
                 P/L · {periodLabel}
               </div>
+              <div className="mt-0.5 flex items-center gap-1.5 text-[10px] sm:text-[11px] text-white/40">
+                <span className="tabular-nums">{filtered.length}</span>
+                <span>trade{filtered.length === 1 ? "" : "s"}</span>
+                {filtered.length > 0 && (
+                  <>
+                    <span className="text-white/20">•</span>
+                    <span className="text-emerald-400/80 tabular-nums">{winRate}</span>
+                    <span className="text-white/35">win rate</span>
+                  </>
+                )}
+              </div>
+            </div>
+            <div className={cn(
+              "flex items-center gap-2 rounded-lg px-2.5 py-1.5 border backdrop-blur-sm",
+              isUp
+                ? "bg-emerald-500/[0.08] border-emerald-400/20"
+                : "bg-rose-500/[0.08] border-rose-400/20",
+            )}>
+              <TrendIcon
+                className={cn("w-4 h-4 shrink-0", isUp ? "text-emerald-400" : "text-rose-400")}
+                strokeWidth={2.5}
+              />
               <div
                 className={cn(
-                  "text-xl sm:text-2xl font-bold tabular-nums tracking-tight",
-                  totalPL >= 0 ? "text-emerald-400" : "text-red-400",
+                  "text-xl sm:text-[26px] font-bold tabular-nums tracking-tight leading-none",
+                  isUp ? "text-emerald-400" : "text-rose-400",
                 )}
               >
-                {totalPL >= 0 ? "+" : ""}${totalPL.toFixed(2)}
+                {isUp ? "+" : ""}${totalPL.toFixed(2)}
               </div>
             </div>
           </div>
@@ -414,10 +471,12 @@ export default function TradeActivityPage() {
 
         {/* ── Compact disclaimer banner (platform fallback only) ──────── */}
         {usingPlatformFallback && (
-          <div className="flex items-start gap-2.5 rounded-xl border border-blue-400/15 bg-blue-500/[0.04] px-3.5 py-2.5">
-            <ShieldCheck className="w-4 h-4 text-blue-300/90 shrink-0 mt-0.5" />
+          <div className="flex items-center gap-2.5 rounded-xl border border-blue-400/15 bg-blue-500/[0.04] px-3.5 py-2.5">
+            <div className="shrink-0 flex h-7 w-7 items-center justify-center rounded-lg bg-blue-500/10 border border-blue-400/20">
+              <ShieldCheck className="w-3.5 h-3.5 text-blue-300" strokeWidth={2.25} />
+            </div>
             <p className="text-[11px] sm:text-xs leading-relaxed text-blue-100/75">
-              All trades shown here are executed by our automated trading system using pooled investor capital.
+              All trades shown are executed by our automated trading system using pooled investor capital.
             </p>
           </div>
         )}
