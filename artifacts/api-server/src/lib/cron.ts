@@ -27,7 +27,7 @@ async function expireStalePromoRedemptions(): Promise<number> {
   return result.length;
 }
 
-export function initCronJobs(): void {
+export async function initCronJobs(): Promise<void> {
   cron.schedule("0 0 * * *", async () => {
     profitLogger.info("Cron: daily profit distribution — enqueuing job");
     try {
@@ -83,9 +83,10 @@ export function initCronJobs(): void {
   // Tick every 5 min on the clock (00:00, 00:05, …) — matches synthetic candle boundaries.
   // Closer runs every minute to settle trades that have hit their candle close.
   if (AUTO_ENGINE_ENABLED) {
-    // Rehydrate today's counters from DB so a server restart can't reset
-    // the daily 15-trade / 0.4% caps and let the engine over-trade.
-    void rehydrateAutoEngineState().catch((err) =>
+    // Rehydrate today's counters from DB BEFORE scheduling the tick
+    // so a server restart can't reset the daily 15-trade / 0.4% caps
+    // and let the engine over-trade if the first */5 tick fires fast.
+    await rehydrateAutoEngineState().catch((err) =>
       errorLogger.error({ err }, "Startup: auto-engine rehydrate failed"),
     );
 

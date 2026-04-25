@@ -54,16 +54,20 @@ const PAIR_BY_CODE: Record<string, PairCfg> = PAIRS.reduce((acc, p) => {
 /**
  * Market-hours gate (UTC).
  * - Crypto: 24/7
- * - Forex / Gold / Oil: closed Fri 22:00 UTC → Sun 22:00 UTC (weekend)
- * Note: this is a simplified gate (ignores daily 1h CME break + holidays).
+ * - Forex / Gold / Oil: closed Fri 22:00 UTC → Sun 22:00 UTC (weekend),
+ *   plus daily CME maintenance break 21:00–22:00 UTC (Mon–Thu).
+ * Note: ignores exchange holidays (rare) — acceptable for a synthetic engine.
  */
 function isMarketOpen(pairCode: string, now = new Date()): boolean {
   if (pairCode === "BTCUSD") return true;
   const day = now.getUTCDay();   // 0=Sun … 6=Sat
   const hour = now.getUTCHours();
+  // Weekend
   if (day === 6) return false;             // all of Saturday
   if (day === 5 && hour >= 22) return false; // Friday after 22:00 UTC
   if (day === 0 && hour < 22) return false;  // Sunday before 22:00 UTC
+  // Daily CME maintenance break 21:00–22:00 UTC (Mon, Tue, Wed, Thu)
+  if (day >= 1 && day <= 4 && hour === 21) return false;
   return true;
 }
 

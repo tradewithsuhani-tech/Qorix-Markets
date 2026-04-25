@@ -63,7 +63,9 @@ async function main() {
       if (process.env.NODE_ENV === "production") errorLogger.error(msg);
       else logger.warn(msg);
     }
-    initCronJobs();
+    void initCronJobs().catch((err) => {
+      console.error("initCronJobs failed:", err);
+    });
   });
 }
 
