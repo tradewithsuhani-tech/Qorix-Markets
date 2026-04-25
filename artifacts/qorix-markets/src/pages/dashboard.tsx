@@ -20,6 +20,7 @@ import { MarketsStatusPill, InsightRotatorPill } from "@/components/header-statu
 import { AnimatedCounter, BigBalanceCounter } from "@/components/animated-counter";
 import { useAuth } from "@/hooks/use-auth";
 import { generateMonthlyReport } from "@/lib/report-generator";
+import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { format } from "date-fns";
 import {
