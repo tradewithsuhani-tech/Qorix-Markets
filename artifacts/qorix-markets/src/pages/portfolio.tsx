@@ -1224,9 +1224,9 @@ function PortfolioInner() {
               <span className="whitespace-nowrap">{projection.workingDays} Days</span>
             </span>
           </div>
-          {/* Row 2: description — full width below */}
-          <p className="text-[11px] sm:text-xs text-muted-foreground leading-relaxed pl-[46px]">
-            Indicative profit · Mon–Fri sessions of {monthLabel}.
+          {/* Row 2: description — full width below, no indent on mobile so it fits 1 line */}
+          <p className="text-[10.5px] sm:text-xs text-muted-foreground leading-relaxed sm:pl-[46px] whitespace-nowrap overflow-hidden text-ellipsis">
+            Indicative profit · Mon–Fri · {monthLabel}
           </p>
         </div>
 
