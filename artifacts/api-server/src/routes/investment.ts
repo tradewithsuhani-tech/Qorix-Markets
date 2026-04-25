@@ -1,8 +1,14 @@
 import { Router } from "express";
-import { db, investmentsTable, walletsTable, transactionsTable, tradesTable, equityHistoryTable } from "@workspace/db";
+import { db, investmentsTable, walletsTable, transactionsTable, tradesTable, equityHistoryTable, usersTable } from "@workspace/db";
 import { eq, desc } from "drizzle-orm";
 import { authMiddleware, type AuthRequest } from "../middlewares/auth";
 import { StartInvestmentBody, ToggleCompoundingBody } from "@workspace/api-zod";
+import { ensureUserAccounts, postJournalEntry, journalForTransaction } from "../lib/ledger-service";
+import { createNotification } from "../lib/notifications";
+import { logger } from "../lib/logger";
+
+const REFERRAL_SIGNUP_BONUS_RATE = 0.03;
+const REFERRAL_SIGNUP_MIN_DEPOSIT = 100;
 
 const router = Router();
 router.use(authMiddleware);
@@ -95,32 +101,118 @@ router.post("/investment/start", async (req: AuthRequest, res) => {
 
   const drawdownLimit = existingDrawdownLimit > 0 ? existingDrawdownLimit : (RISK_DEFAULT_DRAWDOWN[riskKey] ?? 5);
 
-  const [updated] = await db.update(investmentsTable)
-    .set({
-      amount: amount.toString(),
-      riskLevel: riskKey,
-      isActive: true,
-      isPaused: false,
-      dailyProfit: "0",
-      drawdown: "0",
-      peakBalance: amount.toString(),
-      drawdownLimit: drawdownLimit.toString(),
-      startedAt: new Date(),
-      stoppedAt: null,
-      pausedAt: null,
-    })
-    .where(eq(investmentsTable.userId, req.userId!))
-    .returning();
+  const updated = await db.transaction(async (tx) => {
+    const [inv] = await tx.update(investmentsTable)
+      .set({
+        amount: amount.toString(),
+        riskLevel: riskKey,
+        isActive: true,
+        isPaused: false,
+        dailyProfit: "0",
+        drawdown: "0",
+        peakBalance: amount.toString(),
+        drawdownLimit: drawdownLimit.toString(),
+        startedAt: new Date(),
+        stoppedAt: null,
+        pausedAt: null,
+      })
+      .where(eq(investmentsTable.userId, req.userId!))
+      .returning();
 
-  await db.insert(transactionsTable).values({
-    userId: req.userId!,
-    type: "investment",
-    amount: amount.toString(),
-    status: "completed",
-    description: `Started auto trading with $${amount.toFixed(2)} at ${riskKey} risk (${drawdownLimit}% protection)`,
+    // Read referralBonusPaid AFTER the row is locked by the update above to avoid TOCTOU race.
+    const alreadyPaidReferralBonus = inv?.referralBonusPaid ?? false;
+
+    await tx.insert(transactionsTable).values({
+      userId: req.userId!,
+      type: "investment",
+      amount: amount.toString(),
+      status: "completed",
+      description: `Started auto trading with $${amount.toFixed(2)} at ${riskKey} risk (${drawdownLimit}% protection)`,
+    });
+
+    // ── One-time referral signup bonus (3% of first activation amount) ──
+    // Conditions:
+    //   1) sponsor exists and is not the user themselves
+    //   2) bonus not already paid for this referral
+    //   3) activation amount meets minimum deposit threshold
+    //   4) sponsor has an active investment of their own
+    if (!alreadyPaidReferralBonus && amount >= REFERRAL_SIGNUP_MIN_DEPOSIT) {
+      const userRows = await tx
+        .select({ sponsorId: usersTable.sponsorId })
+        .from(usersTable)
+        .where(eq(usersTable.id, req.userId!))
+        .limit(1);
+
+      const sponsorId = userRows[0]?.sponsorId;
+      if (sponsorId && sponsorId !== req.userId && sponsorId !== 0) {
+        const sponsorInvRows = await tx
+          .select({ isActive: investmentsTable.isActive })
+          .from(investmentsTable)
+          .where(eq(investmentsTable.userId, sponsorId))
+          .limit(1);
+
+        if (sponsorInvRows[0]?.isActive) {
+          const signupBonus = amount * REFERRAL_SIGNUP_BONUS_RATE;
+
+          const sponsorWalletRows = await tx
+            .select()
+            .from(walletsTable)
+            .where(eq(walletsTable.userId, sponsorId))
+            .limit(1);
+
+          if (sponsorWalletRows.length > 0) {
+            const sponsorWallet = sponsorWalletRows[0]!;
+            const sponsorProfitBalance = parseFloat(sponsorWallet.profitBalance as string);
+
+            await tx
+              .update(walletsTable)
+              .set({
+                profitBalance: (sponsorProfitBalance + signupBonus).toString(),
+                updatedAt: new Date(),
+              })
+              .where(eq(walletsTable.userId, sponsorId));
+
+            const [bonusTxn] = await tx.insert(transactionsTable).values({
+              userId: sponsorId,
+              type: "referral_bonus",
+              amount: signupBonus.toString(),
+              status: "completed",
+              description: `Partner activation bonus: 3% of $${amount.toFixed(2)} first investment ($${signupBonus.toFixed(2)})`,
+            }).returning({ id: transactionsTable.id });
+
+            await ensureUserAccounts(sponsorId, tx);
+            await postJournalEntry(
+              journalForTransaction(bonusTxn!.id),
+              [
+                { accountCode: "platform:referral_expense", entryType: "debit", amount: signupBonus, description: `Partner activation bonus to sponsor ${sponsorId}` },
+                { accountCode: `user:${sponsorId}:profit`, entryType: "credit", amount: signupBonus, description: `Partner activation bonus credited to sponsor ${sponsorId}` },
+              ],
+              bonusTxn!.id,
+              tx,
+            );
+
+            await tx
+              .update(investmentsTable)
+              .set({ referralBonusPaid: true })
+              .where(eq(investmentsTable.userId, req.userId!));
+
+            await createNotification(
+              sponsorId,
+              "referral_bonus",
+              "🎉 New Partner Activated",
+              `Your partner just started trading with $${amount.toFixed(2)}. You earned $${signupBonus.toFixed(2)} activation bonus — credited to your profit balance.`,
+            );
+
+            logger.info({ sponsorId, referralUserId: req.userId, amount, bonus: signupBonus }, "Referral signup bonus credited");
+          }
+        }
+      }
+    }
+
+    return inv!;
   });
 
-  res.json(formatInvestment(updated!));
+  res.json(formatInvestment(updated));
 });
 
 router.post("/investment/stop", async (req: AuthRequest, res) => {
