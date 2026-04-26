@@ -11,13 +11,20 @@ primary_region = "bom"
 
 # ─── Build ──────────────────────────────────────────────────────────────────
 [build]
-  dockerfile = "artifacts/qorix-markets/Dockerfile"
+  dockerfile = "Dockerfile"
 
   # Build-time args baked into the Vite bundle. To change the api host,
   # update this value (or override via `flyctl deploy --build-arg`).
+  #
+  # VITE_RECAPTCHA_SITE_KEY is a PUBLIC key (browser sends it to Google) but
+  # is sourced from a Replit secret to keep one source of truth. Every deploy
+  # MUST pass it via `--build-arg VITE_RECAPTCHA_SITE_KEY=$VITE_RECAPTCHA_SITE_KEY`
+  # — otherwise login captcha breaks. Empty default here is intentional so a
+  # forgotten flag fails loudly in QA instead of silently shipping no key.
   [build.args]
-    VITE_API_URL = "https://api.qorixmarkets.com"
-    BASE_PATH    = "/"
+    VITE_API_URL            = "https://api.qorixmarkets.com"
+    BASE_PATH               = "/"
+    VITE_RECAPTCHA_SITE_KEY = ""
 
 # ─── Runtime env ────────────────────────────────────────────────────────────
 [env]
