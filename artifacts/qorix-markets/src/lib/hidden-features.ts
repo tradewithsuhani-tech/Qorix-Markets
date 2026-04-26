@@ -34,6 +34,17 @@ export type HiddenFeature = {
 
 export const HIDDEN_FEATURES: HiddenFeature[] = [
   {
+    id: "analytics:page",
+    title: "Advanced Analytics page (entire route)",
+    location: "Sidebar → Analytics  ·  Route: /analytics",
+    filePath: "artifacts/qorix-markets/src/pages/analytics.tsx",
+    hiddenAt: "2026-04-27",
+    reason:
+      "Page is being polished — investor-facing copy, fund-scaling parity with the dashboard headline, and a couple of charts still need a redesign. Locked for everyone (including investors above the $10K threshold) until the redesign ships, so no one sees a half-finished view.",
+    restoreNotes:
+      "Remove this entry from HIDDEN_FEATURES. The page-level fund gate ($10K via ANALYTICS_MIN_FUND in analytics.tsx) will then take over again — the same Crown/Lock 'Premium Tier' card the trading desk uses. Sidebar nav entry stays as-is; no layout changes were made.",
+  },
+  {
     id: "analytics:risk-vs-return",
     title: "Per-Trade Risk vs Monthly Return chart",
     location: "Analytics page → Advanced Analytics section (4th chart card, after Drawdown)",

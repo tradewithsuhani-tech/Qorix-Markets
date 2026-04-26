@@ -414,7 +414,14 @@ export default function AnalyticsPage() {
     Number(summary?.activeInvestment ?? 0),
     Number(investment?.amount ?? 0),
   );
-  const hasAccess = investorFund >= ANALYTICS_MIN_FUND;
+  // Page-level kill switch — when `analytics:page` is in the
+  // hidden-features registry we force-lock for everyone (regardless of
+  // fund), so even investors above the $10K threshold see the same
+  // premium "coming soon" card the trading desk uses while the page
+  // is being polished. Removing the entry restores the normal fund
+  // gate below.
+  const analyticsPageHidden = isFeatureHidden("analytics:page");
+  const hasAccess = !analyticsPageHidden && investorFund >= ANALYTICS_MIN_FUND;
   const progressPct = Math.min(100, (investorFund / ANALYTICS_MIN_FUND) * 100);
 
   if (!hasAccess) {
