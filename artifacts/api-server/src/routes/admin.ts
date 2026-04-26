@@ -36,7 +36,7 @@ import {
   PAIRS as ENGINE_PAIRS,
   getEntryAnchor,
 } from "../lib/auto-signal-engine";
-import { notSmokeTestUser, shouldIncludeSmokeTest } from "../lib/smoke-test-account";
+import { notSmokeTestUser, notSmokeTestUserRef, shouldIncludeSmokeTest } from "../lib/smoke-test-account";
 
 const router = Router();
 router.use("/admin", authMiddleware);
@@ -1031,34 +1031,43 @@ router.post("/admin/withdrawals/:id/reject", async (req: AuthRequest, res) => {
   });
 });
 
-router.get("/admin/intelligence", async (_req: AuthRequest, res) => {
+router.get("/admin/intelligence", async (req: AuthRequest, res) => {
+  // Hide the deploy smoke-test account from user-keyed intelligence
+  // aggregations by default; admins can opt in via `?includeSmokeTest=true`
+  // for support / debugging (mirrors the user list and KYC queue UX).
+  // transactions / investments are keyed by userId, so we filter via a
+  // NOT EXISTS subquery against users.is_smoke_test rather than joining.
+  const includeSmoke = shouldIncludeSmokeTest(req.query["includeSmokeTest"]);
+  const txnSmokeFilter = includeSmoke ? undefined : notSmokeTestUserRef(transactionsTable.userId);
+  const invSmokeFilter = includeSmoke ? undefined : notSmokeTestUserRef(investmentsTable.userId);
+
   // --- Summary stats ---
   const [depositResult] = await db
     .select({ total: sum(transactionsTable.amount) })
     .from(transactionsTable)
-    .where(and(eq(transactionsTable.type, "deposit"), eq(transactionsTable.status, "completed")));
+    .where(and(eq(transactionsTable.type, "deposit"), eq(transactionsTable.status, "completed"), txnSmokeFilter));
 
   const [withdrawalResult] = await db
     .select({ total: sum(transactionsTable.amount) })
     .from(transactionsTable)
-    .where(and(eq(transactionsTable.type, "withdrawal"), eq(transactionsTable.status, "completed")));
+    .where(and(eq(transactionsTable.type, "withdrawal"), eq(transactionsTable.status, "completed"), txnSmokeFilter));
 
   const [feeResult] = await db
     .select({ total: sum(transactionsTable.amount) })
     .from(transactionsTable)
-    .where(eq(transactionsTable.type, "fee"));
+    .where(and(eq(transactionsTable.type, "fee"), txnSmokeFilter));
 
   const [pendingCountResult] = await db
     .select({ count: count() })
     .from(transactionsTable)
-    .where(and(eq(transactionsTable.type, "withdrawal"), eq(transactionsTable.status, "pending")));
+    .where(and(eq(transactionsTable.type, "withdrawal"), eq(transactionsTable.status, "pending"), txnSmokeFilter));
 
   const [pendingAmtResult] = await db
     .select({ total: sum(transactionsTable.amount) })
     .from(transactionsTable)
-    .where(and(eq(transactionsTable.type, "withdrawal"), eq(transactionsTable.status, "pending")));
+    .where(and(eq(transactionsTable.type, "withdrawal"), eq(transactionsTable.status, "pending"), txnSmokeFilter));
 
-  // Risk exposure by level
+  // Risk exposure by level (investments are user-keyed)
   const riskRows = await db
     .select({
       riskLevel: investmentsTable.riskLevel,
@@ -1066,7 +1075,7 @@ router.get("/admin/intelligence", async (_req: AuthRequest, res) => {
       investors: count(),
     })
     .from(investmentsTable)
-    .where(eq(investmentsTable.isActive, true))
+    .where(and(eq(investmentsTable.isActive, true), invSmokeFilter))
     .groupBy(investmentsTable.riskLevel);
 
   const riskExposure: Record<string, { amount: number; investors: number }> = {
@@ -1098,6 +1107,7 @@ router.get("/admin/intelligence", async (_req: AuthRequest, res) => {
         eq(transactionsTable.type, "deposit"),
         eq(transactionsTable.status, "completed"),
         sql`created_at >= ${thirtyDaysAgo.toISOString()}`,
+        txnSmokeFilter,
       ),
     )
     .groupBy(sql`DATE(created_at)`)
@@ -1114,6 +1124,7 @@ router.get("/admin/intelligence", async (_req: AuthRequest, res) => {
         eq(transactionsTable.type, "withdrawal"),
         eq(transactionsTable.status, "completed"),
         sql`created_at >= ${thirtyDaysAgo.toISOString()}`,
+        txnSmokeFilter,
       ),
     )
     .groupBy(sql`DATE(created_at)`)
@@ -1160,7 +1171,7 @@ router.get("/admin/intelligence", async (_req: AuthRequest, res) => {
       aum: parseFloat(String(r.totalAUM ?? "0")),
     }));
 
-  // --- Top users by investment ---
+  // --- Top users by investment (user-keyed) ---
   const topInvestors = await db
     .select({
       userId: investmentsTable.userId,
@@ -1169,7 +1180,7 @@ router.get("/admin/intelligence", async (_req: AuthRequest, res) => {
       totalProfit: investmentsTable.totalProfit,
     })
     .from(investmentsTable)
-    .where(eq(investmentsTable.isActive, true))
+    .where(and(eq(investmentsTable.isActive, true), invSmokeFilter))
     .orderBy(desc(investmentsTable.amount))
     .limit(5);
 
@@ -1445,13 +1456,23 @@ router.get("/admin/system-health", async (_req: AuthRequest, res) => {
   });
 });
 
-router.get("/admin/activity-logs", async (_req: AuthRequest, res) => {
+router.get("/admin/activity-logs", async (req: AuthRequest, res) => {
+  // Hide the deploy smoke-test account from the recent-logins feed by
+  // default. login_events is keyed by userId, so we filter via a NOT EXISTS
+  // subquery against users.is_smoke_test rather than joining. Admins can
+  // opt in with `?includeSmokeTest=true` like the user list / KYC queues.
+  const includeSmoke = shouldIncludeSmokeTest(req.query["includeSmokeTest"]);
+  const loginSmokeFilter = includeSmoke ? undefined : notSmokeTestUserRef(loginEventsTable.userId);
+
   const [recentTransactions, recentLogins, recentSettings] = await Promise.all([
     db.select().from(transactionsTable)
       .where(sql`description LIKE '%admin%' OR description LIKE '%Admin%' OR description LIKE '%manual%'`)
       .orderBy(desc(transactionsTable.createdAt))
       .limit(30),
-    db.select().from(loginEventsTable).orderBy(desc(loginEventsTable.createdAt)).limit(20),
+    db.select().from(loginEventsTable)
+      .where(loginSmokeFilter)
+      .orderBy(desc(loginEventsTable.createdAt))
+      .limit(20),
     db.select().from(systemSettingsTable).orderBy(desc(systemSettingsTable.updatedAt)).limit(20),
   ]);
 

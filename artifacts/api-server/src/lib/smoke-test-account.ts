@@ -14,7 +14,7 @@
  */
 
 import { db, usersTable } from "@workspace/db";
-import { eq, ne, or, isNull, sql, type SQL } from "drizzle-orm";
+import { eq, ne, or, isNull, sql, type SQL, type SQLWrapper } from "drizzle-orm";
 import { logger } from "./logger";
 
 /**
@@ -27,6 +27,19 @@ import { logger } from "./logger";
  */
 export function notSmokeTestUser(): SQL {
   return or(ne(usersTable.isSmokeTest, true), isNull(usersTable.isSmokeTest))!;
+}
+
+/**
+ * SQL predicate suitable for tables that are keyed by `userId` rather than
+ * joined to `usersTable` directly (e.g. `login_events`, `transactions`,
+ * `investments`). Compiles to a `NOT EXISTS (SELECT 1 FROM users …)` so the
+ * caller doesn't need to add a join — the column reference can be passed
+ * straight in (`notSmokeTestUserRef(transactionsTable.userId)`).
+ *
+ * Mirrors the helper used internally by `fraud-service.ts`.
+ */
+export function notSmokeTestUserRef(userIdCol: SQLWrapper): SQL {
+  return sql`NOT EXISTS (SELECT 1 FROM ${usersTable} WHERE ${usersTable.id} = ${userIdCol} AND ${usersTable.isSmokeTest} = true)`;
 }
 
 /**
