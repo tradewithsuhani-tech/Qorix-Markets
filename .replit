@@ -132,6 +132,7 @@ SMTP_PORT = "587"
 SMTP_USER = "no-reply@qorixmarkets.com"
 GOOGLE_CALLBACK_URL = "https://qorixmarkets.com/auth/google/callback"
 TRONGRID_API_KEY = "b90ecaf6-608f-49c7-927e-8469fa9cfc87"
+GITHUB_PAT = "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"
 
 [userenv.development]
 RUN_BACKGROUND_JOBS = "false"
