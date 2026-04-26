@@ -2,55 +2,45 @@ import { Router } from "express";
 import { db, investmentsTable, transactionsTable, dailyProfitRunsTable, systemSettingsTable } from "@workspace/db";
 import { eq, and, gte, avg, count, inArray, sql } from "drizzle-orm";
 import { listTrades } from "../lib/signal-trade-service";
-import { isMaintenanceMode, getMaintenanceEndsAt } from "../middlewares/maintenance";
+import { getMaintenanceState } from "../middlewares/maintenance";
 
 const router = Router();
 
-// Public: system status (maintenance mode + dynamic dashboard return)
+// Public: system status (maintenance mode + dynamic dashboard return).
 //
-// Two distinct maintenance signals get merged into the single `maintenance`
+// Two distinct maintenance signals are merged into the single `maintenance`
 // flag the web app polls:
-//   1. system_settings.maintenance_mode — admin-toggled full-app freeze that
-//      shows the existing blocking overlay. Used for non-cutover incidents.
-//   2. MAINTENANCE_MODE env var — flipped via Fly secret during the Mumbai-DB
-//      cutover window (runbook step 2). Reads still work; only writes 503.
-//      Surfaced separately as `writesDisabled` so the frontend can render the
-//      lighter inline banner instead of the full overlay.
+//   1. system_settings.maintenance_mode — admin-toggled freeze. Soft by
+//      default (writes 503, reads pass, friendly inline banner shows). Set
+//      `maintenance_hard_block=true` to additionally block reads for
+//      non-admins (legacy "fully block all traffic" behaviour).
+//   2. MAINTENANCE_MODE env var — flipped via Fly secret during the
+//      Mumbai-DB cutover window. Same soft semantics as the admin toggle.
 router.get("/system/status", async (_req, res) => {
+  // Unified maintenance state — merges the MAINTENANCE_MODE env var and the
+  // `system_settings.maintenance_mode` row toggled from the admin UI. Either
+  // path freezes writes only (soft maintenance) and the friendly inline
+  // banner appears for users; reads keep working. The legacy "fully block
+  // all traffic" mode is a separate opt-in (`maintenance_hard_block`) that
+  // adds a hard 503 in authMiddleware for non-admins.
+  const maintenance = await getMaintenanceState();
   const rows = await db
     .select()
     .from(systemSettingsTable)
-    .where(inArray(systemSettingsTable.key, [
-      "maintenance_mode",
-      "maintenance_message",
-      "maintenance_ends_at",
-      "dashboard_return_label",
-    ]));
+    .where(inArray(systemSettingsTable.key, ["dashboard_return_label"]));
   const map = Object.fromEntries(rows.map((r) => [r.key, r.value]));
-  const dbMaintenance = map["maintenance_mode"] === "true";
-  const envMaintenance = isMaintenanceMode();
-  // ETA is taken from the env var first (operator-set during the cutover via
-  // `fly secrets set MAINTENANCE_ETA=...`) and falls back to the admin-settable
-  // `maintenance_ends_at` row. Either value must be a parseable ISO timestamp;
-  // we normalize before exposing so the frontend countdown never has to guess.
-  const envEndsAt = getMaintenanceEndsAt();
-  let maintenanceEndsAt: string | null = envEndsAt;
-  if (!maintenanceEndsAt) {
-    const dbEta = map["maintenance_ends_at"];
-    if (dbEta) {
-      const ts = Date.parse(dbEta);
-      if (!Number.isNaN(ts)) maintenanceEndsAt = new Date(ts).toISOString();
-    }
-  }
+  // `writesDisabled` is the signal the web app uses to choose the lighter
+  // inline banner over the full-screen overlay. Both env-var and admin-toggle
+  // maintenance are now soft (writes-only) by default, so we surface BOTH
+  // through this flag — that's what swaps the legacy admin-toggle UX from a
+  // raw 503 to the banner. Hard-block is left as `maintenance` only so the
+  // existing full-screen overlay still kicks in for that explicit opt-in.
+  const writesDisabled = maintenance.active && !maintenance.hardBlock;
   res.json({
-    maintenance: dbMaintenance || envMaintenance,
-    writesDisabled: envMaintenance,
-    maintenanceMessage:
-      map["maintenance_message"] ||
-      (envMaintenance
-        ? "Brief maintenance in progress — balances will be back shortly."
-        : "We are upgrading our platform. Please check back shortly."),
-    maintenanceEndsAt,
+    maintenance: maintenance.active,
+    writesDisabled,
+    maintenanceMessage: maintenance.message,
+    maintenanceEndsAt: maintenance.endsAt,
     dashboardReturnLabel: map["dashboard_return_label"] || "",
   });
 });

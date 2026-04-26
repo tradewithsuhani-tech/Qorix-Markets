@@ -15,6 +15,7 @@ import {
 import { loginEventsTable, blockchainDepositsTable } from "@workspace/db/schema";
 import { eq, sum, count, and, or, desc, sql, inArray } from "drizzle-orm";
 import { authMiddleware, adminMiddleware, getParam, getQueryInt, getQueryString, type AuthRequest } from "../middlewares/auth";
+import { invalidateMaintenanceCache } from "../middlewares/maintenance";
 import { SetDailyProfitBody } from "@workspace/api-zod";
 import { transferProfitToMain } from "../lib/profit-service";
 import { sendUsdtFromTreasury, getTreasuryUsdtBalance } from "../lib/crypto-deposit/sweep";
@@ -332,6 +333,11 @@ router.get("/admin/settings", async (_req: AuthRequest, res) => {
   res.json({
     maintenanceMode: settings["maintenance_mode"] === "true",
     maintenanceMessage: settings["maintenance_message"] ?? "System under maintenance",
+    // Optional opt-in for the legacy "fully block all traffic" behaviour.
+    // When false (default), maintenanceMode only freezes writes — reads keep
+    // working and the friendly inline banner appears. When true, non-admin
+    // reads also get a structured 503 (admins always bypass).
+    maintenanceHardBlock: settings["maintenance_hard_block"] === "true",
     registrationEnabled: settings["registration_enabled"] !== "false",
     autoWithdrawLimit: Number(settings["auto_withdraw_limit"] ?? "0"),
     popupTitle: settings["popup_title"] ?? "",
@@ -411,6 +417,7 @@ router.post("/admin/settings", async (req: AuthRequest, res) => {
   const allowed: Record<string, string> = {
     maintenanceMode: "maintenance_mode",
     maintenanceMessage: "maintenance_message",
+    maintenanceHardBlock: "maintenance_hard_block",
     registrationEnabled: "registration_enabled",
     autoWithdrawLimit: "auto_withdraw_limit",
     popupTitle: "popup_title",
@@ -477,6 +484,17 @@ router.post("/admin/settings", async (req: AuthRequest, res) => {
     }
   }
 
+  // Drop the in-memory maintenance cache the moment any maintenance-related
+  // setting changes, so a freshly-flipped admin toggle takes effect on the
+  // very next request instead of waiting out the TTL.
+  if (
+    "maintenanceMode" in req.body ||
+    "maintenanceMessage" in req.body ||
+    "maintenanceHardBlock" in req.body ||
+    "maintenanceEndsAt" in req.body
+  ) {
+    invalidateMaintenanceCache();
+  }
   transactionLogger.info({ event: "admin_settings_update", adminId: req.userId, keys: Object.keys(req.body) }, "Admin settings updated");
   const rows = await db.select().from(systemSettingsTable);
   return res.json({ success: true, settings: Object.fromEntries(rows.map((r) => [r.key, r.value])) });

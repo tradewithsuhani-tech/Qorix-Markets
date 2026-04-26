@@ -2,6 +2,7 @@ import type { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import { db, systemSettingsTable, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
+import { getMaintenanceState } from "./maintenance";
 
 // SESSION_SECRET is the signing key for every Bearer JWT the api hands out.
 // Falling back to a hardcoded value would mean anyone could forge tokens for
@@ -39,13 +40,27 @@ export async function authMiddleware(req: AuthRequest, res: Response, next: Next
       res.status(401).json({ error: "Account access is restricted" });
       return;
     }
-    const maintenanceRows = await db
-      .select({ value: systemSettingsTable.value })
-      .from(systemSettingsTable)
-      .where(eq(systemSettingsTable.key, "maintenance_mode"))
-      .limit(1);
-    if (maintenanceRows[0]?.value === "true" && !user.isAdmin) {
-      res.status(503).json({ error: "System under maintenance" });
+    // Hard-block path: only takes effect when an operator has explicitly set
+    // `system_settings.maintenance_hard_block` alongside `maintenance_mode`.
+    // Default soft maintenance only freezes writes (handled upstream in
+    // maintenanceMiddleware) so reads keep working and the friendly inline
+    // banner shows. We mirror the same structured 503 shape here so the
+    // banner still triggers when hard-block is on; admins always bypass so
+    // they can disable the toggle from the dashboard.
+    const maintenance = await getMaintenanceState();
+    if (maintenance.active && maintenance.hardBlock && !user.isAdmin) {
+      res.setHeader("Retry-After", "60");
+      res.setHeader("X-Maintenance-Mode", "true");
+      if (maintenance.endsAt) {
+        res.setHeader("X-Maintenance-Ends-At", maintenance.endsAt);
+      }
+      res.status(503).json({
+        error: "maintenance",
+        code: "maintenance_mode",
+        maintenance: true,
+        message: maintenance.message,
+        endsAt: maintenance.endsAt,
+      });
       return;
     }
     if (user.forceLogoutAfter && decoded.iat && decoded.iat * 1000 < user.forceLogoutAfter.getTime()) {
