@@ -594,15 +594,18 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen w-full bg-background flex items-center justify-center px-4 relative overflow-hidden">
+    <div className="min-h-screen w-full bg-background flex flex-col items-center px-4 pt-20 pb-8 relative overflow-hidden">
       {/* Background */}
       <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[700px] h-[500px] bg-primary/8 rounded-full blur-[120px] pointer-events-none" />
       <div className="absolute bottom-0 left-1/4 w-[400px] h-[400px] bg-indigo-600/6 rounded-full blur-[100px] pointer-events-none" />
 
-      {/* Back link */}
+      {/* Back link — sits in the safe top-left zone above the form column.
+          The parent now uses `flex-col` + `pt-20` so the form starts at y≈80
+          and never collides with this absolutely-positioned button (which
+          ends around y≈46). The button text stays readable down to 320px. */}
       <button
         onClick={() => setLocation("/")}
-        className="absolute top-6 left-6 flex items-center gap-1.5 text-sm text-muted-foreground hover:text-white transition-colors"
+        className="absolute top-6 left-4 sm:left-6 flex items-center gap-1.5 text-sm text-muted-foreground hover:text-white transition-colors z-10"
       >
         <ArrowLeft style={{ width: 15, height: 15 }} />
         Back to home
