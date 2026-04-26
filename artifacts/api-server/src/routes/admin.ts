@@ -15,7 +15,7 @@ import {
 import { loginEventsTable, blockchainDepositsTable } from "@workspace/db/schema";
 import { eq, sum, count, and, or, desc, sql, inArray } from "drizzle-orm";
 import { authMiddleware, adminMiddleware, getParam, getQueryInt, getQueryString, type AuthRequest } from "../middlewares/auth";
-import { invalidateMaintenanceCache } from "../middlewares/maintenance";
+import { invalidateMaintenanceCache, getMaintenanceState } from "../middlewares/maintenance";
 import { SetDailyProfitBody } from "@workspace/api-zod";
 import { transferProfitToMain } from "../lib/profit-service";
 import { sendUsdtFromTreasury, getTreasuryUsdtBalance } from "../lib/crypto-deposit/sweep";
@@ -356,7 +356,15 @@ router.get("/admin/transactions", async (req, res) => {
 });
 
 router.get("/admin/settings", async (_req: AuthRequest, res) => {
-  const rows = await db.select().from(systemSettingsTable);
+  const [rows, maintenance] = await Promise.all([
+    db.select().from(systemSettingsTable),
+    // Resolve the *effective* maintenance state (env var ∪ DB row) so the
+    // admin UI can show admins which switch is currently freezing the site.
+    // Without this, an admin who flips the DB toggle off while
+    // MAINTENANCE_MODE is set on Fly would be confused about why the banner
+    // is still up — the toggle row is just one of two possible sources.
+    getMaintenanceState(),
+  ]);
   const settings = Object.fromEntries(rows.map((r) => [r.key, r.value]));
   res.json({
     maintenanceMode: settings["maintenance_mode"] === "true",
@@ -366,6 +374,18 @@ router.get("/admin/settings", async (_req: AuthRequest, res) => {
     // working and the friendly inline banner appears. When true, non-admin
     // reads also get a structured 503 (admins always bypass).
     maintenanceHardBlock: settings["maintenance_hard_block"] === "true",
+    // Effective merged maintenance state. `maintenanceMode` above is the raw
+    // DB toggle the admin controls; `maintenanceEffective` reflects what the
+    // gate actually sees right now. `source` is "env" | "db" | "both" while
+    // active and `null` otherwise — the UI uses this to warn that flipping
+    // the admin toggle off won't fully clear maintenance when env is also on.
+    maintenanceEffective: {
+      active: maintenance.active,
+      source: maintenance.source,
+      hardBlock: maintenance.hardBlock,
+      endsAt: maintenance.endsAt,
+      message: maintenance.message,
+    },
     // Admin-set ETA (ISO timestamp) for the maintenance banner countdown.
     // Lives in system_settings.maintenance_ends_at; the env var
     // MAINTENANCE_ETA still wins at /api/system/status for cutover windows.
