@@ -1,0 +1,103 @@
+name: Deploy to Fly.io
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Which app(s) to deploy"
+        required: true
+        default: "both"
+        type: choice
+        options:
+          - both
+          - api
+          - web
+
+concurrency:
+  group: fly-deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # Detect which artifact actually changed so api-only / web-only commits
+  # don't redeploy the unchanged service. Shared lib/* and pnpm workspace
+  # files trigger BOTH (because either app could be affected).
+  changes:
+    name: Detect changed paths
+    runs-on: ubuntu-latest
+    outputs:
+      api: ${{ steps.filter.outputs.api }}
+      web: ${{ steps.filter.outputs.web }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            api:
+              - 'artifacts/api-server/**'
+              - 'lib/**'
+              - 'pnpm-workspace.yaml'
+              - 'pnpm-lock.yaml'
+              - 'package.json'
+              - 'tsconfig.base.json'
+              - 'tsconfig.json'
+              - '.dockerignore'
+              - '.github/workflows/deploy.yml'
+            web:
+              - 'artifacts/qorix-markets/**'
+              - 'lib/**'
+              - 'pnpm-workspace.yaml'
+              - 'pnpm-lock.yaml'
+              - 'package.json'
+              - 'tsconfig.base.json'
+              - 'tsconfig.json'
+              - '.dockerignore'
+              - '.github/workflows/deploy.yml'
+
+  deploy-api:
+    name: Deploy api-server → qorix-api
+    needs: changes
+    if: |
+      (github.event_name == 'workflow_dispatch' && (inputs.target == 'both' || inputs.target == 'api')) ||
+      (github.event_name == 'push' && needs.changes.outputs.api == 'true')
+    runs-on: ubuntu-latest
+    concurrency:
+      group: fly-deploy-api
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - name: Deploy api-server
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          flyctl deploy \
+            --remote-only \
+            --config artifacts/api-server/fly.toml \
+            --dockerfile artifacts/api-server/Dockerfile \
+            --wait-timeout 600
+
+  deploy-web:
+    name: Deploy qorix-markets → qorix-markets-web
+    needs: changes
+    if: |
+      (github.event_name == 'workflow_dispatch' && (inputs.target == 'both' || inputs.target == 'web')) ||
+      (github.event_name == 'push' && needs.changes.outputs.web == 'true')
+    runs-on: ubuntu-latest
+    concurrency:
+      group: fly-deploy-web
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - name: Deploy qorix-markets web
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          flyctl deploy \
+            --remote-only \
+            --config artifacts/qorix-markets/fly.toml \
+            --dockerfile artifacts/qorix-markets/Dockerfile \
+            --wait-timeout 600

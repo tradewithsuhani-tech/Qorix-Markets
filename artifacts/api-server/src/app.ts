@@ -32,7 +32,31 @@ app.use(
     },
   }),
 );
-app.use(cors());
+// CORS — when the web app and api are served on different origins (Fly prod:
+// qorixmarkets.com → api.qorixmarkets.com) the browser needs an explicit
+// allow-list and `credentials: true` for cookie-based auth to work. In
+// Replit dev the Vite proxy keeps everything same-origin so unsetting
+// CORS_ORIGIN keeps the permissive default.
+const corsOriginEnv = process.env["CORS_ORIGIN"]?.trim();
+if (corsOriginEnv) {
+  const allowedOrigins = corsOriginEnv
+    .split(",")
+    .map((o) => o.trim())
+    .filter(Boolean);
+  app.use(
+    cors({
+      origin(origin, cb) {
+        // Allow same-origin / curl / health probes (no Origin header).
+        if (!origin) return cb(null, true);
+        if (allowedOrigins.includes(origin)) return cb(null, true);
+        return cb(new Error(`Origin ${origin} not allowed by CORS_ORIGIN`));
+      },
+      credentials: true,
+    }),
+  );
+} else {
+  app.use(cors());
+}
 app.use(express.json({ limit: "12mb" }));
 app.use(express.urlencoded({ extended: true }));
 
