@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Layout } from "@/components/layout";
+import { PageContainer } from "@/components/page-container";
 import { motion } from "framer-motion";
 import { TrendingUp, TrendingDown, Activity } from "lucide-react";
 
@@ -40,7 +41,7 @@ export default function SignalHistoryPage() {
 
   return (
     <Layout>
-      <div className="max-w-5xl mx-auto px-4 py-8 space-y-6">
+      <PageContainer maxWidth="wide">
         <div className="flex items-center gap-3">
           <div className="p-2.5 rounded-xl bg-violet-500/15 border border-violet-500/30">
             <Activity className="w-6 h-6 text-violet-400" />
@@ -92,7 +93,7 @@ export default function SignalHistoryPage() {
             </div>
           )}
         </div>
-      </div>
+      </PageContainer>
     </Layout>
   );
 }
