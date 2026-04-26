@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db, usersTable, fraudFlagsTable, loginEventsTable } from "@workspace/db";
 import { eq, and, desc, count, ne, gte, inArray } from "drizzle-orm";
-import { authMiddleware, adminMiddleware, type AuthRequest } from "../middlewares/auth";
+import { authMiddleware, adminMiddleware, getParam, type AuthRequest } from "../middlewares/auth";
 import { getFraudStats } from "../lib/fraud-service";
 import { errorLogger } from "../lib/logger";
 
@@ -102,7 +102,7 @@ router.get("/admin/fraud/flags", async (req, res) => {
 // ---------------------------------------------------------------------------
 router.post("/admin/fraud/flags/:id/resolve", async (req: AuthRequest, res) => {
   try {
-    const id = parseInt(req.params["id"]! as string);
+    const id = parseInt(getParam(req, "id"));
     const note = (req.body as { note?: string }).note ?? "";
 
     const [updated] = await db
@@ -128,7 +128,7 @@ router.post("/admin/fraud/flags/:id/resolve", async (req: AuthRequest, res) => {
 // ---------------------------------------------------------------------------
 router.post("/admin/fraud/flags/:id/reopen", async (_req: AuthRequest, res) => {
   try {
-    const id = parseInt(_req.params["id"]! as string);
+    const id = parseInt(getParam(_req, "id"));
 
     const [updated] = await db
       .update(fraudFlagsTable)
@@ -153,7 +153,7 @@ router.post("/admin/fraud/flags/:id/reopen", async (_req: AuthRequest, res) => {
 // ---------------------------------------------------------------------------
 router.get("/admin/fraud/users/:userId/events", async (req, res) => {
   try {
-    const userId = parseInt(req.params["userId"]! as string);
+    const userId = parseInt(getParam(req, "userId"));
     const events = await db
       .select()
       .from(loginEventsTable)
