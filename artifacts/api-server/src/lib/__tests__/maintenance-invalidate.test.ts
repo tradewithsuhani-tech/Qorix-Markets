@@ -16,6 +16,7 @@ const {
   notifyMaintenanceInvalidation,
   invalidateMaintenanceCache,
   __getListenerProcessIdForTest,
+  __setListenClientFactoryForTest,
 } = await import("../../middlewares/maintenance");
 const { eq, inArray } = await import("drizzle-orm");
 
@@ -217,7 +218,7 @@ test("listener re-LISTENs after the backend is terminated (pg_terminate_backend)
   // the LISTEN backend from another connection.
   await pool.query("SELECT pg_terminate_backend($1::int)", [originalPid]);
 
-  // The reconnect loop waits RECONNECT_DELAY_MS (1 s) then dials a fresh
+  // The reconnect loop waits RECONNECT_DELAY_FLOOR_MS (1 s) then dials a fresh
   // client. Wait for a different PID to appear on the listener — that's
   // the direct proof the reconnect actually established a brand-new
   // backend (not just that the old socket is still hanging around).
@@ -256,4 +257,94 @@ test("listener re-LISTENs after the backend is terminated (pg_terminate_backend)
     "after the LISTEN backend was terminated and the listener reconnected, a peer NOTIFY must still invalidate the cache — otherwise admins would see stale maintenance state on this instance until the 5 s TTL fallback kicks in",
   );
   assert.equal(after.source, "db", "DB-only toggle should still report source=db after reconnect");
+});
+
+// Regression: when Postgres is hard-down (think a multi-minute Fly Postgres
+// outage rather than a one-off backend rotation), the LISTEN reconnect loop
+// must NOT retry every 1 s indefinitely. The old flat-1s schedule meant
+// every API instance produced one connect attempt + one error log + one
+// socket churn per second for the whole outage window — which both spammed
+// the error logs and added load to whatever DB-front proxy is between us and
+// Postgres while it's already struggling.
+//
+// The fix is bounded exponential backoff (1s, 2s, 4s, 8s, 16s, 30s, 30s, …).
+// This test asserts the *minimum* contract: after the first failure, the
+// gap between consecutive failed connect attempts must grow above 1s — i.e.
+// the schedule is no longer flat. We verify that by injecting a factory
+// that throws synchronously (simulating "DB hard-down") and recording the
+// timestamps of the resulting connect attempts.
+test("scheduleReconnect uses exponential backoff so consecutive failed connects don't all happen within 1s", async () => {
+  // Stop the live listener owned by the before() hook so we control the
+  // lifecycle for this test. We're about to inject a failing factory and
+  // we don't want the existing healthy connection's reconnect path to
+  // fight us.
+  if (stopListener) {
+    await stopListener();
+    stopListener = null;
+  }
+
+  const attemptTimestamps: number[] = [];
+  __setListenClientFactoryForTest(() => {
+    attemptTimestamps.push(Date.now());
+    // Synchronous throw — connectListener()'s try/catch turns this into a
+    // scheduleReconnect() call without ever having a real client to clean
+    // up. Same observable effect as a TCP-level connect refusal.
+    throw new Error("simulated DB hard-down (test injection)");
+  });
+
+  try {
+    // First attempt fires synchronously inside startMaintenanceInvalidationListener
+    // (it awaits connectListener() once). Subsequent attempts are scheduled
+    // by scheduleReconnect() with the backed-off delays.
+    stopListener = await startMaintenanceInvalidationListener();
+
+    // Wait until at least three failed attempts have landed: that gives us
+    // two inter-attempt gaps to compare. The expected gaps are ~1s and ~2s,
+    // so a 10s timeout is comfortable headroom even on a slow CI runner.
+    await waitFor(
+      () => attemptTimestamps.length,
+      (n) => n >= 3,
+      { timeoutMs: 10_000, intervalMs: 25 },
+    );
+    assert.ok(
+      attemptTimestamps.length >= 3,
+      `expected at least 3 connect attempts within the timeout, got ${attemptTimestamps.length}. ` +
+        "If this fails, the reconnect loop is not running at all — check that connectListener()'s catch block still calls scheduleReconnect().",
+    );
+
+    const gap1 = attemptTimestamps[1]! - attemptTimestamps[0]!;
+    const gap2 = attemptTimestamps[2]! - attemptTimestamps[1]!;
+
+    // Gap1 is the floor (~1s — the first retry after the initial failure).
+    // Gap2 is the second retry, which after the doubling should be ~2s.
+    // Assert it cleared 1.5s — that's the explicit "two consecutive failed
+    // connects don't both happen within ~1s" guarantee from the runbook.
+    // Using 1500ms (not 2000ms) gives us tolerance for setTimeout drift on
+    // a loaded CI host without weakening the regression: the OLD flat-1s
+    // schedule would put gap2 at ~1000ms, well below this threshold.
+    assert.ok(
+      gap2 >= 1_500,
+      `expected exponential backoff to push the second inter-attempt gap above 1.5s, ` +
+        `but got gap1=${gap1}ms, gap2=${gap2}ms. The old flat-1s schedule would also produce gap2≈1000ms, ` +
+        "so this regression means scheduleReconnect() is hammering Postgres at the floor delay forever during a hard-down outage.",
+    );
+    // Belt-and-braces: gap2 should also be strictly larger than gap1 by a
+    // meaningful margin — proves the schedule is *growing*, not just
+    // happening to be slow on this run.
+    assert.ok(
+      gap2 > gap1 + 500,
+      `expected gap2 to exceed gap1 by at least 500ms (proving the backoff is doubling, not flat); got gap1=${gap1}ms, gap2=${gap2}ms`,
+    );
+  } finally {
+    // Tear down the failing-listener lifecycle BEFORE clearing the
+    // injected factory. If we cleared the factory first, the next
+    // scheduled reconnect would dial the real Postgres, attach an
+    // error/end handler, and leave a real LISTEN client behind that the
+    // after() hook isn't tracking.
+    if (stopListener) {
+      await stopListener();
+      stopListener = null;
+    }
+    __setListenClientFactoryForTest(null);
+  }
 });
