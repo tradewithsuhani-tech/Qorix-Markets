@@ -100,11 +100,21 @@ jobs:
             --dockerfile artifacts/api-server/Dockerfile \
             --wait-timeout 600
       # Post-deploy smoke check. `flyctl deploy` only proves the container
-      # started — these curls prove the API is actually reachable and that
-      # the Neon connection works. Retries cover the brief warmup window
-      # before Fly's edge routes traffic to the new machine.
+      # started — these curls prove the API is actually reachable, that the
+      # Neon connection works, AND that the auth pipeline (login + JWT verify
+      # + authMiddleware) still issues working tokens. Retries on the public
+      # checks cover the brief warmup window before Fly's edge routes traffic
+      # to the new machine; by the time we hit the auth checks, warmup is
+      # done so we use lighter retry settings (connection-refused only) to
+      # avoid hiding a real auth break behind 25s of retries.
       - name: Smoke test api-server
         id: smoke_api
+        env:
+          # Dedicated smoke-test account — read-only usage, password rotated
+          # out-of-band. Defined as repo secrets so credentials never land in
+          # the workflow file or logs.
+          SMOKE_TEST_EMAIL: ${{ secrets.SMOKE_TEST_EMAIL }}
+          SMOKE_TEST_PASSWORD: ${{ secrets.SMOKE_TEST_PASSWORD }}
         run: |
           set -euo pipefail
           API_BASE="https://api.qorixmarkets.com"
@@ -118,6 +128,46 @@ jobs:
             --max-time 15 "${API_BASE}/api/public/market-indicators" \
             | tee /tmp/market.json
           grep -q '"activeInvestors"' /tmp/market.json
+          echo
+          echo "→ Authenticated smoke check (login + protected route)"
+          if [ -z "${SMOKE_TEST_EMAIL:-}" ] || [ -z "${SMOKE_TEST_PASSWORD:-}" ]; then
+            echo "::error::SMOKE_TEST_EMAIL / SMOKE_TEST_PASSWORD secrets are not set." \
+              "Configure them in repo settings so the deploy can verify the auth pipeline."
+            exit 1
+          fi
+          # POST /api/auth/login — fail fast on 4xx (no --retry-all-errors).
+          echo "→ POST ${API_BASE}/api/auth/login"
+          LOGIN_BODY=$(jq -nc \
+            --arg email "${SMOKE_TEST_EMAIL}" \
+            --arg password "${SMOKE_TEST_PASSWORD}" \
+            '{email: $email, password: $password}')
+          curl -fsS --retry 3 --retry-delay 3 --retry-connrefused \
+            --max-time 15 \
+            -H "Content-Type: application/json" \
+            -d "${LOGIN_BODY}" \
+            "${API_BASE}/api/auth/login" \
+            -o /tmp/login.json
+          TOKEN=$(jq -r '.token // empty' /tmp/login.json)
+          if [ -z "${TOKEN}" ]; then
+            echo "::error::Login returned 200 but no token in response body."
+            jq 'del(.token)' /tmp/login.json || cat /tmp/login.json
+            exit 1
+          fi
+          echo "✓ obtained smoke-test token"
+          # GET /api/auth/me — exercises authMiddleware (JWT verify + user
+          # lookup + maintenance / disabled / forceLogoutAfter checks). We
+          # use /auth/me rather than /api/wallet because it's a strict read
+          # (no lazy row creation), so re-running the smoke check on every
+          # deploy can never mutate any state on the smoke-test account.
+          echo "→ GET ${API_BASE}/api/auth/me (authenticated)"
+          curl -fsS --retry 3 --retry-delay 3 --retry-connrefused \
+            --max-time 15 \
+            -H "Authorization: Bearer ${TOKEN}" \
+            "${API_BASE}/api/auth/me" \
+            -o /tmp/me.json
+          jq -e 'has("id") and has("email")' /tmp/me.json > /dev/null \
+            || { echo "::error::/api/auth/me returned 200 but body is not a user"; cat /tmp/me.json; exit 1; }
+          echo "✓ authenticated route returned a valid user payload"
 
       # Auto-rollback: if (and only if) the smoke check above failed, promote
       # the previous release back so users aren't left on a known-bad build.
@@ -140,6 +190,9 @@ jobs:
       # that the rollback target is bad too and a human needs to step in.
       - name: Smoke test rolled-back api-server
         if: failure() && steps.smoke_api.outcome == 'failure' && steps.rollback_api.outcome == 'success'
+        env:
+          SMOKE_TEST_EMAIL: ${{ secrets.SMOKE_TEST_EMAIL }}
+          SMOKE_TEST_PASSWORD: ${{ secrets.SMOKE_TEST_PASSWORD }}
         run: |
           set -euo pipefail
           API_BASE="https://api.qorixmarkets.com"
@@ -153,6 +206,38 @@ jobs:
             --max-time 15 "${API_BASE}/api/public/market-indicators" \
             | tee /tmp/market-rollback.json
           grep -q '"activeInvestors"' /tmp/market-rollback.json
+          echo
+          echo "→ (post-rollback) Authenticated smoke check"
+          if [ -z "${SMOKE_TEST_EMAIL:-}" ] || [ -z "${SMOKE_TEST_PASSWORD:-}" ]; then
+            echo "::warning::SMOKE_TEST_EMAIL / SMOKE_TEST_PASSWORD secrets are not set —" \
+              "skipping post-rollback auth check."
+          else
+            LOGIN_BODY=$(jq -nc \
+              --arg email "${SMOKE_TEST_EMAIL}" \
+              --arg password "${SMOKE_TEST_PASSWORD}" \
+              '{email: $email, password: $password}')
+            curl -fsS --retry 3 --retry-delay 3 --retry-connrefused \
+              --max-time 15 \
+              -H "Content-Type: application/json" \
+              -d "${LOGIN_BODY}" \
+              "${API_BASE}/api/auth/login" \
+              -o /tmp/login-rollback.json
+            TOKEN=$(jq -r '.token // empty' /tmp/login-rollback.json)
+            if [ -z "${TOKEN}" ]; then
+              echo "::error::(post-rollback) login returned 200 but no token —" \
+                "rollback target also has a broken auth pipeline."
+              jq 'del(.token)' /tmp/login-rollback.json || cat /tmp/login-rollback.json
+              exit 1
+            fi
+            curl -fsS --retry 3 --retry-delay 3 --retry-connrefused \
+              --max-time 15 \
+              -H "Authorization: Bearer ${TOKEN}" \
+              "${API_BASE}/api/auth/me" \
+              -o /tmp/me-rollback.json
+            jq -e 'has("id") and has("email")' /tmp/me-rollback.json > /dev/null \
+              || { echo "::error::(post-rollback) /api/auth/me returned 200 but body is not a user"; cat /tmp/me-rollback.json; exit 1; }
+            echo "✓ (post-rollback) authenticated route healthy"
+          fi
 
   deploy-web:
     name: Deploy qorix-markets → qorix-markets-web
