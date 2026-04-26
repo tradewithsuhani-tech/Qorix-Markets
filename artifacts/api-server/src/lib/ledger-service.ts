@@ -148,55 +148,104 @@ export async function postJournalEntry(
 
   const db_ = txn ?? db;
 
-  // Resolve account IDs for all lines
-  const accountMap = new Map<string, number>();
+  // Batch-resolve account id + metadata for every distinct account code in
+  // one query, replacing N per-line SELECTs against gl_accounts.
+  const uniqueCodes = Array.from(new Set(lines.map((l) => l.accountCode)));
+  const accountRows = await db_
+    .select({
+      id: glAccountsTable.id,
+      code: glAccountsTable.code,
+      accountType: glAccountsTable.accountType,
+      normalBalance: glAccountsTable.normalBalance,
+    })
+    .from(glAccountsTable)
+    .where(inArray(glAccountsTable.code, uniqueCodes));
+
+  const accountMeta = new Map<
+    string,
+    { id: number; accountType: string; normalBalance: string }
+  >();
+  for (const r of accountRows) {
+    accountMeta.set(r.code, {
+      id: r.id,
+      accountType: r.accountType,
+      normalBalance: r.normalBalance,
+    });
+  }
+  // Preserve the original behavior of erroring on the first unknown code
+  // encountered in line order (so the error message is deterministic).
   for (const line of lines) {
-    if (accountMap.has(line.accountCode)) continue;
-    const existing = await db_
-      .select({ id: glAccountsTable.id })
-      .from(glAccountsTable)
-      .where(eq(glAccountsTable.code, line.accountCode))
-      .limit(1);
-    if (existing.length === 0) {
-      throw new Error(`Journal ${journalId}: unknown account code "${line.accountCode}"`);
+    if (!accountMeta.has(line.accountCode)) {
+      throw new Error(
+        `Journal ${journalId}: unknown account code "${line.accountCode}"`,
+      );
     }
-    accountMap.set(line.accountCode, existing[0]!.id);
   }
 
   // Negative-balance guard: aggregate net change per account, then for each
-  // user liability account verify resulting balance >= 0.
+  // credit-normal account that ends up with a net debit verify the resulting
+  // balance is >= 0.
   const netByAccount = new Map<string, number>();
   for (const l of lines) {
     const sign = l.entryType === "credit" ? 1 : -1; // credit-normal: credits add, debits subtract
     netByAccount.set(l.accountCode, (netByAccount.get(l.accountCode) ?? 0) + sign * l.amount);
   }
 
+  // Determine which accounts actually need a running-balance lookup. We reuse
+  // the metadata fetched above instead of issuing a per-account SELECT.
+  const codesNeedingBalance: string[] = [];
   for (const [code, delta] of netByAccount.entries()) {
     if (NEGATIVE_BALANCE_ALLOWED_PREFIXES.some((p) => code.startsWith(p))) continue;
-    const acct = accountMap.get(code)!;
-    const meta = await db_
-      .select({ accountType: glAccountsTable.accountType, normalBalance: glAccountsTable.normalBalance })
-      .from(glAccountsTable)
-      .where(eq(glAccountsTable.id, acct))
-      .limit(1);
-    const normalBalance = meta[0]?.normalBalance ?? "credit";
-    // Only enforce on credit-normal liability accounts (user wallets, pending withdrawals, user_liability)
-    if (normalBalance !== "credit") continue;
+    const meta = accountMeta.get(code)!;
+    // Only enforce on credit-normal liability accounts (user wallets, pending
+    // withdrawals, user_liability)
+    if (meta.normalBalance !== "credit") continue;
     if (delta >= 0) continue; // net credit — can't go negative from this entry alone
+    codesNeedingBalance.push(code);
+  }
 
-    const current = await getLedgerBalance(code, db_);
-    const projected = current + delta;
-    if (projected < -0.000001) {
-      throw new Error(
-        `Journal ${journalId}: insufficient balance on "${code}" (current=${current.toFixed(8)}, attempted change=${delta.toFixed(8)})`,
-      );
+  // Batch the running-balance reads in a single grouped query, replacing the
+  // per-account getLedgerBalance() calls (each of which fired two queries).
+  if (codesNeedingBalance.length > 0) {
+    const balanceRows = await db_
+      .select({
+        accountCode: ledgerEntriesTable.accountCode,
+        entryType: ledgerEntriesTable.entryType,
+        total: sql<string>`sum(${ledgerEntriesTable.amount})`,
+      })
+      .from(ledgerEntriesTable)
+      .where(inArray(ledgerEntriesTable.accountCode, codesNeedingBalance))
+      .groupBy(ledgerEntriesTable.accountCode, ledgerEntriesTable.entryType);
+
+    const sums = new Map<string, { debits: number; credits: number }>();
+    for (const code of codesNeedingBalance) sums.set(code, { debits: 0, credits: 0 });
+    for (const r of balanceRows) {
+      const s = sums.get(r.accountCode);
+      if (!s) continue;
+      const v = parseFloat(r.total ?? "0");
+      if (r.entryType === "debit") s.debits += v;
+      else s.credits += v;
+    }
+
+    for (const code of codesNeedingBalance) {
+      const meta = accountMeta.get(code)!;
+      const s = sums.get(code)!;
+      const current =
+        meta.normalBalance === "debit" ? s.debits - s.credits : s.credits - s.debits;
+      const delta = netByAccount.get(code)!;
+      const projected = current + delta;
+      if (projected < -0.000001) {
+        throw new Error(
+          `Journal ${journalId}: insufficient balance on "${code}" (current=${current.toFixed(8)}, attempted change=${delta.toFixed(8)})`,
+        );
+      }
     }
   }
 
   const entries = lines.map((line) => ({
     journalId,
     transactionId: transactionId ?? undefined,
-    accountId: accountMap.get(line.accountCode)!,
+    accountId: accountMeta.get(line.accountCode)!.id,
     accountCode: line.accountCode,
     entryType: line.entryType,
     amount: line.amount.toFixed(8),
