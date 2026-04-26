@@ -47,3 +47,9 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+
+# Replit auto-attached screenshots / files from chat. These pile up
+# fast (we hit a 161 MB push because of accumulated PNGs) and don't
+# belong in the GitHub repo. Already-tracked files keep working
+# locally; new ones from now on are ignored.
+attached_assets/
