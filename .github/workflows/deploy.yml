@@ -966,6 +966,279 @@ jobs:
           JS
           node banner.mjs
 
+      # The previous step proves the banner appears when /version.json
+      # reports a newer build, but never tests what tapping "Update"
+      # actually DOES. forceReload() in
+      # artifacts/qorix-markets/src/lib/version-check.ts has three
+      # contracts that the network/UI smoke checks above cannot see:
+      #   1. Cache Storage gets emptied (so the next request hits the
+      #      wire instead of a stale Workbox / SW cache from the old
+      #      build).
+      #   2. Active service workers get unregistered (a SW from the old
+      #      build can otherwise serve a stale shell forever, even
+      #      after a hard reload).
+      #   3. The reload URL gets a fresh ?_v=<ts> cache-buster query
+      #      param so CDNs that ignore Cache-Control still revalidate
+      #      index.html.
+      # Catches the silent-regression failure mode where users tap
+      # Update and still see the stale bundle: e.g. caches.delete()
+      # throws and the catch swallows it, the SW unregister loop is
+      # removed, or the reload URL stops including ?_v=. This step
+      # drives a real browser, instruments those side effects, clicks
+      # the Update button, and asserts all three contracts hold
+      # end-to-end after the page reloads.
+      - name: Browser smoke test — Update click clears caches + hard-reloads
+        id: smoke_web_browser_version_banner_click
+        # WEB_BASE / API_BASE inherited from workflow-level env so this
+        # step exercises the same hostnames as every other web smoke step.
+        run: |
+          set -euo pipefail
+          # Self-contained playwright install in a tmp dir so we don't
+          # touch the monorepo's pnpm workspace state. Pinned to the
+          # same version as the other browser smoke steps — bump
+          # deliberately together.
+          PW_DIR="$(mktemp -d)"
+          cd "${PW_DIR}"
+          npm init -y >/dev/null
+          npm install --silent playwright@1.55.0
+          npx playwright install --with-deps chromium
+
+          cat > update-click.mjs <<'JS'
+          import { chromium } from 'playwright';
+
+          const WEB_BASE = process.env.WEB_BASE;
+          const API_BASE = process.env.API_BASE;
+
+          // Synthetic version that can never match the bundle's baked-in
+          // __APP_VERSION__. Same shape as smoke_web_browser_version_banner
+          // so the banner appears BOTH before and after the forced reload
+          // — that lets us prove /version.json gets re-polled by the
+          // freshly-loaded page (i.e. it was a real reload, not a SPA
+          // pushState).
+          const SYNTHETIC_VERSION = `playwright-smoke-update-${Date.now()}`;
+          // Unique cache name so the assertions don't accidentally pass
+          // on a leftover cache from some unrelated session — the
+          // sentinel must be the cache forceReload() just deleted.
+          const SEED_CACHE_NAME = `qorix-smoke-seed-${Date.now()}`;
+
+          let versionRequests = 0;
+          const events = [];
+          const errors = [];
+
+          const browser = await chromium.launch({ headless: true });
+          const ctx = await browser.newContext({
+            viewport: { width: 1280, height: 800 },
+            userAgent:
+              'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 ' +
+              '(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+          });
+
+          // Bridge from the page to Node so we can record side effects
+          // that happen DURING forceReload (between the click and the
+          // navigation away). Survives the navigation because the Node
+          // `events` array is what we read after the reload.
+          await ctx.exposeFunction('__smokeRecord', (name) => {
+            events.push(name);
+          });
+
+          // Stub navigator.serviceWorker so forceReload sees at least
+          // one registration to unregister. Production fly.io builds
+          // don't currently ship a service worker, so without a stub
+          // the unregister() loop in forceReload would have nothing to
+          // run against and we couldn't tell whether the code path is
+          // still wired up. The stub also records each call so we can
+          // assert forceReload genuinely walked the SW unregister
+          // branch after the click.
+          await ctx.addInitScript(() => {
+            try {
+              const sw = navigator.serviceWorker;
+              if (!sw) return;
+              const fakeReg = {
+                unregister: async () => {
+                  try { window.__smokeRecord?.('sw-unregister'); } catch {}
+                  return true;
+                },
+              };
+              const origGet = sw.getRegistrations?.bind(sw);
+              Object.defineProperty(sw, 'getRegistrations', {
+                configurable: true,
+                value: async () => {
+                  try { window.__smokeRecord?.('sw-getRegistrations'); } catch {}
+                  const real = origGet ? await origGet().catch(() => []) : [];
+                  return [...real, fakeReg];
+                },
+              });
+            } catch {
+              /* serviceWorker unavailable in this context — forceReload
+                 will skip the SW branch and the assertions below will
+                 surface the absence as a failure. */
+            }
+          });
+
+          await ctx.route('**/version.json**', async (route) => {
+            versionRequests++;
+            await route.fulfill({
+              status: 200,
+              headers: {
+                'content-type': 'application/json',
+                'cache-control': 'no-store, no-cache, must-revalidate',
+              },
+              body: JSON.stringify({
+                version: SYNTHETIC_VERSION,
+                builtAt: new Date().toISOString(),
+              }),
+            });
+          });
+
+          const page = await ctx.newPage();
+          page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
+          page.on('requestfailed', (req) => {
+            const u = req.url();
+            if (u.startsWith(WEB_BASE) || (API_BASE && u.startsWith(API_BASE))) {
+              errors.push(`requestfailed: ${u} → ${req.failure()?.errorText}`);
+            }
+          });
+          page.on('console', (msg) => {
+            if (msg.type() === 'error') {
+              console.log(`[browser console.error] ${msg.text()}`);
+            }
+          });
+
+          const fail = async (reason) => {
+            console.error(`::error::${reason}`);
+            try {
+              const html = await page.content();
+              console.error('--- page HTML (first 2000 chars) ---');
+              console.error(html.slice(0, 2000));
+            } catch {}
+            await browser.close();
+            process.exit(1);
+          };
+
+          try {
+            // Use /login (public) so we don't need the smoke-test login
+            // to exercise the banner — keeps this check isolated from
+            // any auth-pipeline flake. <UpdateBanner /> is mounted
+            // globally in App.tsx so it renders on every route.
+            console.log(`→ goto ${WEB_BASE}/login (with /version.json intercepted → ${SYNTHETIC_VERSION})`);
+            await page.goto(`${WEB_BASE}/login`, {
+              waitUntil: 'domcontentloaded',
+              timeout: 30000,
+            });
+            await page
+              .locator('input[placeholder="Email Address"]')
+              .waitFor({ state: 'visible', timeout: 15000 });
+
+            console.log('→ wait for [data-testid=banner-update-available]');
+            await page
+              .locator('[data-testid="banner-update-available"]')
+              .waitFor({ state: 'visible', timeout: 30000 });
+
+            // Seed Cache Storage so we have something concrete to
+            // prove forceReload actually clears it. Without a seeded
+            // entry, an "empty cache after reload" assertion would
+            // pass even if the caches.delete() loop got removed
+            // entirely (a fresh page just has no caches by default).
+            console.log(`→ seed cache "${SEED_CACHE_NAME}" with sentinel entry`);
+            await page.evaluate(async (cacheName) => {
+              const c = await caches.open(cacheName);
+              await c.put('/__smoke_sentinel', new Response('seeded'));
+            }, SEED_CACHE_NAME);
+
+            const seededKeys = await page.evaluate(() => caches.keys());
+            if (!seededKeys.includes(SEED_CACHE_NAME)) {
+              await fail(
+                `Cache seed never landed (have ${JSON.stringify(seededKeys)}, expected to include ${SEED_CACHE_NAME}).`,
+              );
+            }
+            console.log(`✓ pre-click cache state: ${JSON.stringify(seededKeys)}`);
+
+            const versionRequestsBeforeClick = versionRequests;
+
+            // Click Update — forceReload() will clear caches,
+            // unregister service workers, then call
+            // window.location.replace() with a ?_v=<ts> cache-buster.
+            // Wait for that navigation by URL pattern (not
+            // waitForNavigation) so we ALSO assert the cache-buster
+            // query param is present — if forceReload stops appending
+            // _v=, this wait times out instead of silently passing.
+            console.log('→ click [data-testid=button-update-app] and wait for cache-busted reload');
+            const navPromise = page.waitForURL(
+              (url) => /[?&]_v=\d+/.test(url.toString()),
+              { timeout: 30000 },
+            );
+            await page.locator('[data-testid="button-update-app"]').click();
+            await navPromise;
+
+            const finalURL = page.url();
+            if (!/[?&]_v=\d+/.test(finalURL)) {
+              await fail(
+                `Reloaded URL is missing the ?_v=<ts> cache-buster: ${finalURL}`,
+              );
+            }
+            console.log(`✓ reloaded URL has cache-buster: ${finalURL}`);
+
+            // Wait for the freshly-loaded SPA to settle so the caches
+            // API and useVersionCheck have actually had a chance to run.
+            await page
+              .locator('input[placeholder="Email Address"]')
+              .waitFor({ state: 'visible', timeout: 15000 });
+
+            const keysAfterReload = await page.evaluate(() => caches.keys());
+            if (keysAfterReload.length !== 0) {
+              await fail(
+                `caches.keys() is non-empty after Update: ${JSON.stringify(keysAfterReload)} — forceReload did not clear Cache Storage.`,
+              );
+            }
+            console.log('✓ Cache Storage is empty after Update');
+
+            if (!events.includes('sw-getRegistrations')) {
+              await fail(
+                'forceReload never called navigator.serviceWorker.getRegistrations() — the SW unregister branch was skipped.',
+              );
+            }
+            if (!events.includes('sw-unregister')) {
+              await fail(
+                'forceReload called getRegistrations() but never unregister() — stale service workers would survive an Update tap.',
+              );
+            }
+            console.log('✓ service worker getRegistrations + unregister both ran');
+
+            // Hook on the freshly-loaded page must re-poll
+            // /version.json. If versionRequests didn't grow, the
+            // navigation was actually a SPA pushState rather than a
+            // real document reload — which would defeat the whole
+            // point of forceReload (the old JS module graph would
+            // still be live).
+            console.log('→ wait for re-mounted useVersionCheck hook to re-poll /version.json');
+            const deadline = Date.now() + 15000;
+            while (versionRequests <= versionRequestsBeforeClick && Date.now() < deadline) {
+              await new Promise((r) => setTimeout(r, 250));
+            }
+            if (versionRequests <= versionRequestsBeforeClick) {
+              await fail(
+                `/version.json was not re-requested after Update (before=${versionRequestsBeforeClick}, after=${versionRequests}) — page did not actually hard-reload.`,
+              );
+            }
+            console.log(
+              `✓ /version.json re-polled after reload (before=${versionRequestsBeforeClick}, after=${versionRequests})`,
+            );
+          } catch (err) {
+            await fail(`Update-click smoke flow failed: ${err.message}`);
+          }
+
+          if (errors.length) {
+            console.error('::error::Update-click smoke recorded fatal errors:');
+            errors.forEach((e) => console.error('  - ' + e));
+            await browser.close();
+            process.exit(1);
+          }
+
+          await browser.close();
+          console.log('✓ tapping Update clears caches, unregisters service workers, and hard-reloads with cache-buster');
+          JS
+          node update-click.mjs
+
       # Auto-rollback: if (and only if) one of the smoke checks above
       # failed, promote the previous release back so users aren't left on
       # a known-bad build. We don't trigger on `flyctl deploy` itself
@@ -978,7 +1251,8 @@ jobs:
             steps.smoke_web.outcome == 'failure' ||
             steps.smoke_web_version.outcome == 'failure' ||
             steps.smoke_web_browser.outcome == 'failure' ||
-            steps.smoke_web_browser_version_banner.outcome == 'failure'
+            steps.smoke_web_browser_version_banner.outcome == 'failure' ||
+            steps.smoke_web_browser_version_banner_click.outcome == 'failure'
           )
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
@@ -1000,7 +1274,8 @@ jobs:
             steps.smoke_web.outcome == 'failure' ||
             steps.smoke_web_version.outcome == 'failure' ||
             steps.smoke_web_browser.outcome == 'failure' ||
-            steps.smoke_web_browser_version_banner.outcome == 'failure'
+            steps.smoke_web_browser_version_banner.outcome == 'failure' ||
+            steps.smoke_web_browser_version_banner_click.outcome == 'failure'
           )
         env:
           SMOKE_TEST_EMAIL: ${{ secrets.SMOKE_TEST_EMAIL }}
@@ -1158,7 +1433,8 @@ jobs:
             steps.smoke_web.outcome == 'failure' ||
             steps.smoke_web_version.outcome == 'failure' ||
             steps.smoke_web_browser.outcome == 'failure' ||
-            steps.smoke_web_browser_version_banner.outcome == 'failure'
+            steps.smoke_web_browser_version_banner.outcome == 'failure' ||
+            steps.smoke_web_browser_version_banner_click.outcome == 'failure'
           )
         uses: actions/setup-node@v4
         with:
@@ -1169,7 +1445,8 @@ jobs:
             steps.smoke_web.outcome == 'failure' ||
             steps.smoke_web_version.outcome == 'failure' ||
             steps.smoke_web_browser.outcome == 'failure' ||
-            steps.smoke_web_browser_version_banner.outcome == 'failure'
+            steps.smoke_web_browser_version_banner.outcome == 'failure' ||
+            steps.smoke_web_browser_version_banner_click.outcome == 'failure'
           )
         env:
           SMOKE_TEST_EMAIL: ${{ secrets.SMOKE_TEST_EMAIL }}
