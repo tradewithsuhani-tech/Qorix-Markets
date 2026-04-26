@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { Layout } from "@/components/layout";
+import { PageContainer } from "@/components/page-container";
 import { useAuth } from "@/hooks/use-auth";
 import { motion, AnimatePresence, type Variants } from "framer-motion";
 import { useToast } from "@/hooks/use-toast";
@@ -456,7 +457,7 @@ export default function TasksPage() {
 
   return (
     <Layout>
-      <div className="max-w-2xl mx-auto px-4 py-6 space-y-6">
+      <PageContainer maxWidth="compact">
         {/* Header */}
         <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}>
           <h1 className="text-xl font-bold">Tasks & Promotions</h1>
@@ -577,7 +578,7 @@ export default function TasksPage() {
             </div>
           </motion.div>
         )}
-      </div>
+      </PageContainer>
 
       {/* Proof modal */}
       <AnimatePresence>

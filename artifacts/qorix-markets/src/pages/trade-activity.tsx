@@ -3,6 +3,7 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { Activity, TrendingUp, TrendingDown, ChevronLeft, ChevronRight, CalendarIcon, ShieldCheck } from "lucide-react";
 import { Layout } from "@/components/layout";
+import { PageContainer } from "@/components/page-container";
 import { PeriodFilter } from "@/components/period-filter";
 import { findPair, formatPair } from "@/lib/pair-meta";
 import { PairIcon } from "@/components/pair-icon";
@@ -375,7 +376,7 @@ export default function TradeActivityPage() {
 
   return (
     <Layout>
-      <div className="max-w-7xl mx-auto px-4 py-5 sm:py-8 space-y-4 sm:space-y-6">
+      <PageContainer maxWidth="wide">
         {/* ── Premium header card ─────────────────────────────────────── */}
         <div className="relative overflow-hidden rounded-2xl border border-white/[0.08] bg-gradient-to-br from-slate-900/80 via-slate-950/60 to-slate-950/40 backdrop-blur-xl shadow-[0_8px_40px_-12px_rgba(0,0,0,0.6)]">
           {/* Ambient color glows */}
@@ -626,7 +627,7 @@ export default function TradeActivityPage() {
             </div>
           )}
         </motion.div>
-      </div>
+      </PageContainer>
     </Layout>
   );
 }

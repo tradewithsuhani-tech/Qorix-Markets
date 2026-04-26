@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { WEEK_EVENTS, type ImpactLevel, type EconomicEvent } from "@/lib/economic-calendar-data";
 import { CountdownBadge, ImpactDot } from "@/components/economic-news-widget";
 import { Layout } from "@/components/layout";
+import { PageContainer } from "@/components/page-container";
 
 function groupByDay(events: EconomicEvent[]) {
   const groups: Record<string, EconomicEvent[]> = {};
@@ -121,7 +122,7 @@ export default function MarketInsightsPage() {
 
   return (
     <Layout>
-      <div className="max-w-4xl mx-auto px-4 md:px-6 py-6 md:py-8 space-y-6">
+      <PageContainer maxWidth="default">
         <div className="flex items-start justify-between gap-4">
           <div>
             <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Market Insights</h1>
@@ -244,7 +245,7 @@ export default function MarketInsightsPage() {
             Always manage your risk accordingly.
           </p>
         </div>
-      </div>
+      </PageContainer>
     </Layout>
   );
 }
