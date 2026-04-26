@@ -573,3 +573,26 @@ means real user money is at risk. Defined in `lib/db/src/schema/`:
 There is no `sessions` table — auth is JWT, signed by `SESSION_SECRET`.
 That's why step 6's warning is about *the secret*, not about migrating
 session rows.
+
+---
+
+## Cutover actuals — 2026-04-26
+
+- **Operator**: hbabbu (with agent assist over Replit)
+- **Window**: ~13:24 UTC (dump start) → 13:43 UTC (Fly health passing) ≈ 19 min total. User-visible degradation ≈ end-to-end 17 hrs because of an unrelated `DATABASE_URL` shell-escaping incident — not a runbook defect.
+- **Source → target row counts** (verify-db-cutover PASS):
+  - users: 24 → 24
+  - wallets: 24 → 24
+  - investments: 24 → 24
+  - ledger_entries: 6 → 6
+  - blockchain_deposits: 5 → 5
+  - blockchain_transactions: 2 → 2
+  - gl_accounts: 17 → 17
+- **Fly release pinned for rollback**: `qorix-api:deployment-01KQ4JJ9W64GZG6X3VTTM6257D` (image SHA `sha256:51e0a1d9aa95d7094b5f66c6e3532d4d054c123f42281b3c316527bb5ff3b4f8`); previous DATABASE_URL digest `23c81fc6a24adfba` (mangled mid-cut), rollback target = original Replit Deployment Postgres URL still warm.
+- **Deviations from runbook**:
+  1. `MAINTENANCE_MODE` step skipped — middleware not yet in deployed Fly image (predates `d762a20`). User accepted the risk because no users were active during the window. Zero drift detected after the dump.
+  2. `pg_dump` had to be `--schema=public` only (Replit-managed Postgres exposes a `_system` schema that's restricted to the role).
+  3. Sequence-reset SQL needed `public.` schema-qualification because raw Neon (unlike Replit-managed Neon) ships with an empty `search_path`. Same fix applied in `verify-db-cutover.ts` (added `set search_path to public` post-connect).
+  4. `DATABASE_URL` set on Fly via `fly secrets import` from agent-side using `printf` + pipe (avoided shell `&` mangling — root cause of the ~17 hr stall). Direct `fly secrets set 'URL'` from MacBook zsh failed twice, presumably from clipboard/shell interaction with the `&channel_binding=require` query param.
+- **Smoke tests passed**: `https://qorixmarkets.com/api/healthz` → 200 in 211 ms; Fly health-check `servicecheck-00-http-8080` passing on machine `82d331b7711678` in `bom`.
+
