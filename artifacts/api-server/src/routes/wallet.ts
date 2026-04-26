@@ -196,6 +196,30 @@ router.post("/wallet/withdraw", async (req: AuthRequest, res) => {
     return;
   }
 
+  // 24h post-password-change lock — pairs with POST /auth/change-password.
+  // If the password was changed in the last 24h (in-app), withdrawals are
+  // frozen so a stolen-password attacker who immediately rotates the
+  // password can't drain the account before the real owner reacts to the
+  // "your password was changed" email. /auth/security-status surfaces the
+  // same window to the UI.
+  const { WITHDRAWAL_LOCK_HOURS_AFTER_PASSWORD_CHANGE } = await import("./auth");
+  if (user.passwordChangedAt) {
+    const lockMs = WITHDRAWAL_LOCK_HOURS_AFTER_PASSWORD_CHANGE * 60 * 60 * 1000;
+    const sinceChangeMs = Date.now() - new Date(user.passwordChangedAt).getTime();
+    if (sinceChangeMs < lockMs) {
+      const hoursLeft = Math.ceil((lockMs - sinceChangeMs) / 3_600_000);
+      res.status(403).json({
+        error: "withdrawal_locked_password_change",
+        message:
+          `Withdrawals are paused for ${WITHDRAWAL_LOCK_HOURS_AFTER_PASSWORD_CHANGE}h after a password change ` +
+          `for your security (${hoursLeft}h remaining). Deposits and trading continue as normal.`,
+        hoursLeft,
+        lockedUntil: new Date(new Date(user.passwordChangedAt).getTime() + lockMs).toISOString(),
+      });
+      return;
+    }
+  }
+
   // --- Withdrawal OTP verification ---
   const { otp } = req.body;
   if (!otp || typeof otp !== "string") {
@@ -253,6 +277,22 @@ router.post("/wallet/withdraw", async (req: AuthRequest, res) => {
   try {
     txnRecord = await db.transaction(async (tx) => {
       await ensureUserAccounts(req.userId!, tx);
+
+      // --- Re-check 24h post-password-change lock INSIDE the txn ---
+      // Closes the TOCTOU window where a concurrent password change/reset
+      // could land between the pre-check above and this transaction. Reads
+      // the freshly-committed row; if the lock is now active, we abort and
+      // roll back instead of letting the withdrawal slip through.
+      const lockMs = WITHDRAWAL_LOCK_HOURS_AFTER_PASSWORD_CHANGE * 60 * 60 * 1000;
+      const recheck = await tx
+        .select({ passwordChangedAt: usersTable.passwordChangedAt })
+        .from(usersTable)
+        .where(eq(usersTable.id, req.userId!))
+        .limit(1);
+      const pwdChangedAt = recheck[0]?.passwordChangedAt;
+      if (pwdChangedAt && Date.now() - new Date(pwdChangedAt).getTime() < lockMs) {
+        throw new Error("WITHDRAWAL_LOCKED_PASSWORD_CHANGE");
+      }
 
       // --- Atomic guarded balance debit (prevents over-withdrawal under concurrency) ---
       const balanceCol = source === "main" ? walletsTable.mainBalance : walletsTable.profitBalance;
@@ -346,6 +386,17 @@ router.post("/wallet/withdraw", async (req: AuthRequest, res) => {
     }
     if (err?.message === "INSUFFICIENT_POINTS") {
       res.status(400).json({ error: "Insufficient points balance" });
+      return;
+    }
+    if (err?.message === "WITHDRAWAL_LOCKED_PASSWORD_CHANGE") {
+      // Race winner: a password change/reset committed between our
+      // pre-check and this transaction. Same shape as the pre-check 403.
+      res.status(403).json({
+        error: "withdrawal_locked_password_change",
+        message:
+          `Withdrawals are paused for ${WITHDRAWAL_LOCK_HOURS_AFTER_PASSWORD_CHANGE}h after a password change ` +
+          `for your security. Deposits and trading continue as normal.`,
+      });
       return;
     }
     throw err;

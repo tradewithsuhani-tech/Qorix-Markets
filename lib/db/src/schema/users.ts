@@ -36,6 +36,13 @@ export const usersTable = pgTable("users", {
   isDisabled: boolean("is_disabled").notNull().default(false),
   isFrozen: boolean("is_frozen").notNull().default(false),
   forceLogoutAfter: timestamp("force_logout_after"),
+  // When the user last changed their password (via the in-app
+  // "Update Password" flow). Used to enforce the 24h post-password-change
+  // withdrawal cool-off so a stolen-password attacker who immediately
+  // changes the password can't cash out before the real owner notices.
+  // NULL means "never changed in-app" (pre-existing accounts) — those are
+  // not locked.
+  passwordChangedAt: timestamp("password_changed_at"),
   referralCode: varchar("referral_code", { length: 20 }).notNull().unique(),
   sponsorId: serial("sponsor_id"),
   tronAddress: varchar("tron_address", { length: 64 }),
