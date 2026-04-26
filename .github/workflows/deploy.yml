@@ -19,6 +19,23 @@ concurrency:
   group: fly-deploy-${{ github.ref }}
   cancel-in-progress: false
 
+# Workflow-level env. Both bases are sourced from repo Variables (Settings →
+# Secrets and variables → Actions → Variables) so we can switch what the smoke
+# checks point at without editing this file.
+#
+# Pre-cutover defaults (Fly direct hostnames) keep the deploy honest:
+# `qorixmarkets.com` and `api.qorixmarkets.com` still resolve to the OLD
+# Replit deployment until the DNS cutover, so smoke-testing those would just
+# be hitting an unrelated stack and giving us false confidence in Fly.
+#
+# Cutover flip — when DNS is moved to Fly, set these repo variables:
+#   WEB_BASE = https://qorixmarkets.com
+#   API_BASE = https://api.qorixmarkets.com
+# No code change needed.
+env:
+  WEB_BASE: ${{ vars.WEB_BASE || 'https://qorix-markets-web.fly.dev' }}
+  API_BASE: ${{ vars.API_BASE || 'https://qorix-api.fly.dev' }}
+
 jobs:
   # Detect which artifact actually changed so api-only / web-only commits
   # don't redeploy the unchanged service. Shared lib/* and pnpm workspace
@@ -67,7 +84,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
         with:
-          version: 9
+          # Match artifacts/*/Dockerfile (PNPM_VERSION=10) so the typecheck
+          # job resolves the lockfile the same way the deploy build does.
+          version: 10
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -117,7 +136,9 @@ jobs:
           SMOKE_TEST_PASSWORD: ${{ secrets.SMOKE_TEST_PASSWORD }}
         run: |
           set -euo pipefail
-          API_BASE="https://api.qorixmarkets.com"
+          # API_BASE is inherited from the workflow-level env block above
+          # (defaults to https://qorix-api.fly.dev pre-cutover, override via
+          # repo variable API_BASE after DNS cutover).
           echo "→ GET ${API_BASE}/api/healthz"
           curl -fsS --retry 5 --retry-delay 5 --retry-all-errors \
             --max-time 10 "${API_BASE}/api/healthz" | tee /tmp/healthz.json
@@ -201,7 +222,7 @@ jobs:
           SMOKE_TEST_PASSWORD: ${{ secrets.SMOKE_TEST_PASSWORD }}
         run: |
           set -euo pipefail
-          API_BASE="https://api.qorixmarkets.com"
+          # API_BASE inherited from workflow-level env (see top of file).
           echo "→ (post-rollback) GET ${API_BASE}/api/healthz"
           curl -fsS --retry 5 --retry-delay 5 --retry-all-errors \
             --max-time 10 "${API_BASE}/api/healthz" | tee /tmp/healthz-rollback.json
@@ -262,10 +283,28 @@ jobs:
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
         run: |
+          # Build args explicitly passed so the deployed SPA aligns with what
+          # the smoke check below will assert.
+          #
+          # VITE_API_URL = ${API_BASE}: the Vite bundle calls the same API
+          # host that the smoke step's bundle-content assertion checks for.
+          # Pre-cutover defaults (qorix-api.fly.dev) keep the deploy honest;
+          # post-cutover the repo variable API_BASE flips to api.qorixmarkets.com.
+          # If we DIDN'T pass this, the bundle would inherit fly.toml's
+          # default (api.qorixmarkets.com) and the smoke assertion would
+          # fail every time before DNS cutover, triggering an unnecessary
+          # rollback on every web deploy.
+          #
+          # VITE_RECAPTCHA_SITE_KEY: public site key (browser sends it to
+          # Google) but stored as a repo secret to keep one source of truth.
+          # fly.toml leaves this as "" by design so a forgotten flag fails
+          # loudly in QA — without this build-arg, login captcha breaks.
           flyctl deploy \
             --remote-only \
             --config artifacts/qorix-markets/fly.toml \
             --dockerfile artifacts/qorix-markets/Dockerfile \
+            --build-arg VITE_API_URL="${API_BASE}" \
+            --build-arg VITE_RECAPTCHA_SITE_KEY="${{ secrets.VITE_RECAPTCHA_SITE_KEY }}" \
             --wait-timeout 600
       # Static / network-level smoke check. Confirms nginx is serving the
       # new build, the bundle has VITE_API_URL baked in, the SPA fallback
@@ -284,9 +323,10 @@ jobs:
           SMOKE_TEST_PASSWORD: ${{ secrets.SMOKE_TEST_PASSWORD }}
         run: |
           set -euo pipefail
-          WEB_BASE="https://qorixmarkets.com"
-          API_BASE="https://api.qorixmarkets.com"
-
+          # WEB_BASE / API_BASE inherited from workflow-level env (see top of
+          # file). Defaults are the Fly direct hostnames pre-cutover; flip the
+          # repo variables WEB_BASE / API_BASE to qorixmarkets.com /
+          # api.qorixmarkets.com after DNS is moved to Fly.
           echo "→ GET ${WEB_BASE}/healthz"
           body=$(curl -fsS --retry 5 --retry-delay 5 --retry-all-errors \
             --max-time 10 "${WEB_BASE}/healthz")
@@ -349,6 +389,9 @@ jobs:
           # CORS preflight — the browser sends this before the real POST
           # because of the JSON content-type. A 4xx here means CORS is
           # broken for the web origin even if direct curls to the API work.
+          # The api-server's CORS_ORIGIN must list ${WEB_BASE} (currently
+          # both qorixmarkets.com AND qorix-markets-web.fly.dev are allowed
+          # in artifacts/api-server/fly.toml [env].CORS_ORIGIN).
           echo "→ OPTIONS ${API_BASE}/api/auth/login (CORS preflight from web origin)"
           PREFLIGHT_HEADERS=$(curl -fsS --retry 3 --retry-delay 3 --retry-connrefused \
             --max-time 15 -X OPTIONS \
@@ -421,7 +464,8 @@ jobs:
         env:
           SMOKE_TEST_EMAIL: ${{ secrets.SMOKE_TEST_EMAIL }}
           SMOKE_TEST_PASSWORD: ${{ secrets.SMOKE_TEST_PASSWORD }}
-          WEB_BASE: https://qorixmarkets.com
+          # WEB_BASE / API_BASE come from workflow-level env so this step
+          # tests the same hostnames as the curl-based smoke step above.
         run: |
           set -euo pipefail
           if [ -z "${SMOKE_TEST_EMAIL:-}" ] || [ -z "${SMOKE_TEST_PASSWORD:-}" ]; then
@@ -462,9 +506,10 @@ jobs:
           // Failed network requests to our own origins (web shell + api)
           // mean the bundle or backend is broken; ignore third-party noise
           // (fonts, recaptcha, analytics).
+          const API_BASE = process.env.API_BASE;
           page.on('requestfailed', (req) => {
             const u = req.url();
-            if (u.startsWith(WEB_BASE) || u.startsWith('https://api.qorixmarkets.com')) {
+            if (u.startsWith(WEB_BASE) || u.startsWith(API_BASE)) {
               errors.push(`requestfailed: ${u} → ${req.failure()?.errorText}`);
             }
           });
@@ -594,9 +639,8 @@ jobs:
           SMOKE_TEST_PASSWORD: ${{ secrets.SMOKE_TEST_PASSWORD }}
         run: |
           set -euo pipefail
-          WEB_BASE="https://qorixmarkets.com"
-          API_BASE="https://api.qorixmarkets.com"
-
+          # WEB_BASE / API_BASE inherited from workflow-level env (see top
+          # of file). Same hostnames as the forward smoke step.
           echo "→ (post-rollback) GET ${WEB_BASE}/healthz"
           body=$(curl -fsS --retry 5 --retry-delay 5 --retry-all-errors \
             --max-time 10 "${WEB_BASE}/healthz")
@@ -708,7 +752,7 @@ jobs:
         env:
           SMOKE_TEST_EMAIL: ${{ secrets.SMOKE_TEST_EMAIL }}
           SMOKE_TEST_PASSWORD: ${{ secrets.SMOKE_TEST_PASSWORD }}
-          WEB_BASE: https://qorixmarkets.com
+          # WEB_BASE / API_BASE come from workflow-level env.
         run: |
           set -euo pipefail
           if [ -z "${SMOKE_TEST_EMAIL:-}" ] || [ -z "${SMOKE_TEST_PASSWORD:-}" ]; then
@@ -740,9 +784,10 @@ jobs:
           const page = await ctx.newPage();
 
           page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
+          const API_BASE = process.env.API_BASE;
           page.on('requestfailed', (req) => {
             const u = req.url();
-            if (u.startsWith(WEB_BASE) || u.startsWith('https://api.qorixmarkets.com')) {
+            if (u.startsWith(WEB_BASE) || u.startsWith(API_BASE)) {
               errors.push(`requestfailed: ${u} → ${req.failure()?.errorText}`);
             }
           });
