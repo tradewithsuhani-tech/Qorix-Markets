@@ -1,8 +1,18 @@
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import { sql, inArray } from "drizzle-orm";
-import { db, pool, glAccountsTable, ledgerEntriesTable } from "@workspace/db";
-import { postJournalEntry, runReconciliation } from "../ledger-service";
+import {
+  db,
+  pool,
+  glAccountsTable,
+  ledgerEntriesTable,
+  walletsTable,
+} from "@workspace/db";
+import {
+  ensureUserAccounts,
+  postJournalEntry,
+  runReconciliation,
+} from "../ledger-service";
 
 // Use a unique prefix per test run so concurrent runs and pre-existing data
 // can't collide with our seeded rows.
@@ -16,6 +26,19 @@ const ALL_OUR_JOURNALS = [J1, J2, J3];
 const ALL_OUR_ACCOUNTS = [ACCT_ASSET, ACCT_LIAB];
 
 const BAD_J = `test:recon:${RUN_TAG}:bad`;
+
+// Synthetic user IDs picked from a high range so they cannot collide with real
+// users in the test DB. wallets.user_id is a non-FK integer with a UNIQUE
+// constraint, so we just need values that are not already present.
+function pickTestUserId(): number {
+  return 1_500_000_000 + Math.floor(Math.random() * 600_000_000);
+}
+const DRIFT_USER_ID = pickTestUserId();
+const MATCH_USER_ID = pickTestUserId();
+const DRIFT_J = `test:recon:${RUN_TAG}:wallet-drift`;
+const MATCH_J = `test:recon:${RUN_TAG}:wallet-match`;
+const ALL_WALLET_TEST_USER_IDS = [DRIFT_USER_ID, MATCH_USER_ID];
+const ALL_WALLET_TEST_JOURNALS = [DRIFT_J, MATCH_J];
 
 async function ensureTestAccounts() {
   await db
@@ -43,11 +66,22 @@ async function cleanup() {
   await db
     .delete(ledgerEntriesTable)
     .where(
-      inArray(ledgerEntriesTable.journalId, [...ALL_OUR_JOURNALS, BAD_J]),
+      inArray(ledgerEntriesTable.journalId, [
+        ...ALL_OUR_JOURNALS,
+        BAD_J,
+        ...ALL_WALLET_TEST_JOURNALS,
+      ]),
     );
   await db
     .delete(glAccountsTable)
     .where(inArray(glAccountsTable.code, ALL_OUR_ACCOUNTS));
+  // Per-user GL accounts created by ensureUserAccounts() for the wallet drift tests.
+  await db
+    .delete(glAccountsTable)
+    .where(inArray(glAccountsTable.userId, ALL_WALLET_TEST_USER_IDS));
+  await db
+    .delete(walletsTable)
+    .where(inArray(walletsTable.userId, ALL_WALLET_TEST_USER_IDS));
 }
 
 after(async () => {
@@ -220,4 +254,98 @@ test("runReconciliation flags an unbalanced journal", async () => {
       .delete(ledgerEntriesTable)
       .where(inArray(ledgerEntriesTable.journalId, [BAD_J]));
   }
+});
+
+test("runReconciliation flags wallet vs ledger drift for a user", async () => {
+  // Make sure the offset asset account exists (test 1 may have been skipped or
+  // its rows cleaned up by a parallel run).
+  await ensureTestAccounts();
+
+  // Create the user's per-wallet GL accounts (main/trading/profit/locked).
+  await ensureUserAccounts(DRIFT_USER_ID);
+
+  // Seed the wallet row claiming the user has $100 in main. trading and profit
+  // default to 0, which will agree with the ledger (0 entries posted there) and
+  // therefore must NOT be reported.
+  await db
+    .insert(walletsTable)
+    .values({
+      userId: DRIFT_USER_ID,
+      mainBalance: "100.00000000",
+      tradingBalance: "0",
+      profitBalance: "0",
+    })
+    .onConflictDoNothing();
+
+  // Post a balanced journal that credits only $80 to user:DRIFT:main, leaving
+  // the ledger $20 short of what the wallet row claims.
+  await postJournalEntry(DRIFT_J, [
+    { accountCode: ACCT_ASSET, entryType: "debit", amount: 80 },
+    { accountCode: `user:${DRIFT_USER_ID}:main`, entryType: "credit", amount: 80 },
+  ]);
+
+  const report = await runReconciliation();
+
+  const ours = report.walletDiscrepancies.filter(
+    (d) => d.userId === DRIFT_USER_ID,
+  );
+  assert.equal(
+    ours.length,
+    1,
+    `expected exactly one wallet discrepancy for user ${DRIFT_USER_ID}, got ${JSON.stringify(ours)}`,
+  );
+  const drift = ours[0]!;
+  assert.equal(drift.wallet, "main", `discrepancy should be on the main wallet, got ${drift.wallet}`);
+  assert.ok(
+    Math.abs(drift.walletBalance - 100) < 0.0000001,
+    `walletBalance should be 100, got ${drift.walletBalance}`,
+  );
+  assert.ok(
+    Math.abs(drift.ledgerBalance - 80) < 0.0000001,
+    `ledgerBalance should be 80, got ${drift.ledgerBalance}`,
+  );
+  assert.ok(
+    Math.abs(drift.diff - 20) < 0.0000001,
+    `diff should be 20, got ${drift.diff}`,
+  );
+
+  // overall report cannot pass while at least one wallet discrepancy exists.
+  assert.equal(
+    report.passed,
+    false,
+    "reconciliation should not be marked passed when wallet drift is present",
+  );
+});
+
+test("runReconciliation does not flag a user when wallet matches ledger exactly", async () => {
+  await ensureTestAccounts();
+  await ensureUserAccounts(MATCH_USER_ID);
+
+  await db
+    .insert(walletsTable)
+    .values({
+      userId: MATCH_USER_ID,
+      mainBalance: "50.00000000",
+      tradingBalance: "0",
+      profitBalance: "0",
+    })
+    .onConflictDoNothing();
+
+  // Post a balanced journal that credits exactly $50 to user:MATCH:main so
+  // wallet and ledger agree.
+  await postJournalEntry(MATCH_J, [
+    { accountCode: ACCT_ASSET, entryType: "debit", amount: 50 },
+    { accountCode: `user:${MATCH_USER_ID}:main`, entryType: "credit", amount: 50 },
+  ]);
+
+  const report = await runReconciliation();
+
+  const ours = report.walletDiscrepancies.filter(
+    (d) => d.userId === MATCH_USER_ID,
+  );
+  assert.equal(
+    ours.length,
+    0,
+    `user ${MATCH_USER_ID} should NOT appear in walletDiscrepancies, got ${JSON.stringify(ours)}`,
+  );
 });
