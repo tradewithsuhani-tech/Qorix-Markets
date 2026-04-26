@@ -317,6 +317,200 @@ test("runReconciliation flags wallet vs ledger drift for a user", async () => {
   );
 });
 
+// ---------------------------------------------------------------------------
+// postJournalEntry safety-guard tests
+//
+// Each test below uses its own dedicated account codes / journal IDs scoped to
+// the per-run RUN_TAG so it can run alongside the reconciliation tests above
+// without interfering with their state, and is cleaned up at the end.
+// ---------------------------------------------------------------------------
+
+const GUARD_ACCT_ASSET = `test:guard:${RUN_TAG}:asset`;
+const GUARD_ACCT_LIAB = `test:guard:${RUN_TAG}:liab`;
+const GUARD_UNBALANCED_J = `test:guard:${RUN_TAG}:unbalanced`;
+const GUARD_UNKNOWN_J = `test:guard:${RUN_TAG}:unknown`;
+const GUARD_FUND_J = `test:guard:${RUN_TAG}:fund`;
+const GUARD_OK_J = `test:guard:${RUN_TAG}:ok`;
+const GUARD_OVERDRAW_J = `test:guard:${RUN_TAG}:overdraw`;
+const GUARD_ALL_ACCOUNTS = [GUARD_ACCT_ASSET, GUARD_ACCT_LIAB];
+const GUARD_ALL_JOURNALS = [
+  GUARD_UNBALANCED_J,
+  GUARD_UNKNOWN_J,
+  GUARD_FUND_J,
+  GUARD_OK_J,
+  GUARD_OVERDRAW_J,
+];
+
+async function ensureGuardAccounts() {
+  await db
+    .insert(glAccountsTable)
+    .values([
+      {
+        code: GUARD_ACCT_ASSET,
+        name: "Test Asset (guards)",
+        accountType: "asset",
+        normalBalance: "debit",
+        isSystem: false,
+      },
+      {
+        code: GUARD_ACCT_LIAB,
+        name: "Test Liability (guards)",
+        accountType: "liability",
+        normalBalance: "credit",
+        isSystem: false,
+      },
+    ])
+    .onConflictDoNothing();
+}
+
+async function cleanupGuardArtifacts() {
+  await db
+    .delete(ledgerEntriesTable)
+    .where(inArray(ledgerEntriesTable.journalId, GUARD_ALL_JOURNALS));
+  await db
+    .delete(glAccountsTable)
+    .where(inArray(glAccountsTable.code, GUARD_ALL_ACCOUNTS));
+}
+
+test("postJournalEntry rejects an unbalanced journal (debits ≠ credits)", async (t) => {
+  await ensureGuardAccounts();
+  t.after(cleanupGuardArtifacts);
+
+  await assert.rejects(
+    () =>
+      postJournalEntry(GUARD_UNBALANCED_J, [
+        { accountCode: GUARD_ACCT_ASSET, entryType: "debit", amount: 100 },
+        { accountCode: GUARD_ACCT_LIAB, entryType: "credit", amount: 60 },
+      ]),
+    (err: unknown) => {
+      assert.ok(err instanceof Error, "error should be an Error");
+      assert.match(
+        err.message,
+        /debits .* ≠ credits/,
+        `error should mention "debits ≠ credits", got: ${err.message}`,
+      );
+      assert.ok(
+        err.message.includes(GUARD_UNBALANCED_J),
+        `error should reference journal id, got: ${err.message}`,
+      );
+      return true;
+    },
+  );
+
+  // No ledger rows must have been written for the rejected journal.
+  const written = await db
+    .select({ id: ledgerEntriesTable.id })
+    .from(ledgerEntriesTable)
+    .where(inArray(ledgerEntriesTable.journalId, [GUARD_UNBALANCED_J]));
+  assert.equal(
+    written.length,
+    0,
+    `unbalanced journal must not insert any ledger rows, got ${written.length}`,
+  );
+});
+
+test("postJournalEntry rejects an unknown account code", async (t) => {
+  await ensureGuardAccounts();
+  t.after(cleanupGuardArtifacts);
+
+  const missingCode = `test:guard:${RUN_TAG}:does-not-exist`;
+
+  await assert.rejects(
+    () =>
+      postJournalEntry(GUARD_UNKNOWN_J, [
+        { accountCode: GUARD_ACCT_ASSET, entryType: "debit", amount: 25 },
+        { accountCode: missingCode, entryType: "credit", amount: 25 },
+      ]),
+    (err: unknown) => {
+      assert.ok(err instanceof Error, "error should be an Error");
+      assert.match(
+        err.message,
+        /unknown account code/,
+        `error should mention "unknown account code", got: ${err.message}`,
+      );
+      assert.ok(
+        err.message.includes(missingCode),
+        `error should reference the missing code, got: ${err.message}`,
+      );
+      return true;
+    },
+  );
+
+  // No ledger rows must have been written for the rejected journal.
+  const written = await db
+    .select({ id: ledgerEntriesTable.id })
+    .from(ledgerEntriesTable)
+    .where(inArray(ledgerEntriesTable.journalId, [GUARD_UNKNOWN_J]));
+  assert.equal(
+    written.length,
+    0,
+    `journal with unknown account must not insert any ledger rows, got ${written.length}`,
+  );
+});
+
+test("postJournalEntry enforces non-negative balance on credit-normal accounts", async (t) => {
+  await ensureGuardAccounts();
+  t.after(cleanupGuardArtifacts);
+
+  // 1. Fund the credit-normal liability account with 100 (debit asset, credit liab).
+  await postJournalEntry(GUARD_FUND_J, [
+    { accountCode: GUARD_ACCT_ASSET, entryType: "debit", amount: 100 },
+    { accountCode: GUARD_ACCT_LIAB, entryType: "credit", amount: 100 },
+  ]);
+
+  // 2. A debit of 60 against the liability is within the available balance and
+  //    must be allowed.
+  await postJournalEntry(GUARD_OK_J, [
+    { accountCode: GUARD_ACCT_LIAB, entryType: "debit", amount: 60 },
+    { accountCode: GUARD_ACCT_ASSET, entryType: "credit", amount: 60 },
+  ]);
+
+  // Sanity: both lines for the allowed journal landed in the ledger.
+  const okRows = await db
+    .select({ id: ledgerEntriesTable.id })
+    .from(ledgerEntriesTable)
+    .where(inArray(ledgerEntriesTable.journalId, [GUARD_OK_J]));
+  assert.equal(
+    okRows.length,
+    2,
+    `allowed journal should insert 2 ledger rows, got ${okRows.length}`,
+  );
+
+  // 3. After the previous posting the liability balance is 40. A debit of 50
+  //    would drive it to -10 and must be rejected with "insufficient balance".
+  await assert.rejects(
+    () =>
+      postJournalEntry(GUARD_OVERDRAW_J, [
+        { accountCode: GUARD_ACCT_LIAB, entryType: "debit", amount: 50 },
+        { accountCode: GUARD_ACCT_ASSET, entryType: "credit", amount: 50 },
+      ]),
+    (err: unknown) => {
+      assert.ok(err instanceof Error, "error should be an Error");
+      assert.match(
+        err.message,
+        /insufficient balance/,
+        `error should mention "insufficient balance", got: ${err.message}`,
+      );
+      assert.ok(
+        err.message.includes(GUARD_ACCT_LIAB),
+        `error should reference the offending account code, got: ${err.message}`,
+      );
+      return true;
+    },
+  );
+
+  // The rejected overdraw must not have written any rows.
+  const overdrawRows = await db
+    .select({ id: ledgerEntriesTable.id })
+    .from(ledgerEntriesTable)
+    .where(inArray(ledgerEntriesTable.journalId, [GUARD_OVERDRAW_J]));
+  assert.equal(
+    overdrawRows.length,
+    0,
+    `overdraw journal must not insert any ledger rows, got ${overdrawRows.length}`,
+  );
+});
+
 test("runReconciliation does not flag a user when wallet matches ledger exactly", async () => {
   await ensureTestAccounts();
   await ensureUserAccounts(MATCH_USER_ID);
