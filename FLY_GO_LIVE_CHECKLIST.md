@@ -232,3 +232,11 @@ curl https://api.qorixmarkets.com/api/healthz   # → 200
 curl https://qorixmarkets.com/healthz           # → 200
 ```
 Then sign in with Google end-to-end on https://qorixmarkets.com.
+
+---
+
+### When a deploy goes bad
+
+See [`FLY_ROLLBACK_RUNBOOK.md`](./FLY_ROLLBACK_RUNBOOK.md) for the 5-minute
+rollback procedure (`fly releases rollback`, background-jobs failover to
+Replit, post-rollback verification, and incident comms).
