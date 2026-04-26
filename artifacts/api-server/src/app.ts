@@ -3,6 +3,7 @@ import cors from "cors";
 import pinoHttp from "pino-http";
 import router from "./routes";
 import { logger } from "./lib/logger";
+import { maintenanceMiddleware } from "./middlewares/maintenance";
 
 const app: Express = express();
 
@@ -60,6 +61,11 @@ if (corsOriginEnv) {
 app.use(express.json({ limit: "12mb" }));
 app.use(express.urlencoded({ extended: true }));
 
-app.use("/api", router);
+// Maintenance gate sits in front of every /api route. When MAINTENANCE_MODE=true
+// (set as a Fly secret during the cutover window) it lets reads through with a
+// header marker and rejects writes with a structured 503 — replacing the blunt
+// "scale to zero machines → raw 503 on every request" approach in
+// MUMBAI_DB_CUTOVER_RUNBOOK.md step 2.
+app.use("/api", maintenanceMiddleware, router);
 
 export default app;

@@ -1,7 +1,13 @@
 import { createRoot } from "react-dom/client";
-import { setBaseUrl } from "@workspace/api-client-react";
+import { setBaseUrl, setMaintenanceHandler } from "@workspace/api-client-react";
+import { notifyMaintenance } from "@/lib/maintenance-state";
 import App from "./App";
 import "./index.css";
+
+// Forward MAINTENANCE_MODE 503s (and read responses tagged with the
+// X-Maintenance-Mode header) into the global maintenance store so the
+// inline banner shows up automatically during the Mumbai-DB cutover.
+setMaintenanceHandler((message) => notifyMaintenance(message));
 
 // ─── API base URL wiring ────────────────────────────────────────────────────
 // In Replit dev, the Vite dev server proxies /api → localhost:8080, so

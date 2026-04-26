@@ -32,9 +32,11 @@ shell with `flyctl`, `psql`, and `pg_dump` in another.
         window announced).
   - [ ] **1.** T-15: pin Fly rollback target (`fly releases`), post
         `[CUTOVER]` start message, raise web maintenance banner.
-  - [ ] **2.** Stop writes: `fly secrets set RUN_BACKGROUND_JOBS=false
-        --app qorix-api`, then `fly scale count 0 --app qorix-api`,
-        confirm `pg_stat_activity` is quiet.
+  - [ ] **2.** Stop writes: `fly secrets set MAINTENANCE_MODE=true
+        --app qorix-api` (the API stays up serving GETs and rejects
+        writes with a 503 the web app shows as a friendly inline banner;
+        background jobs are gated on the same secret), confirm
+        `pg_stat_activity` is quiet.
   - [ ] **3.** Snapshot source row counts to `/tmp/cutover-source-*.txt`
         and grab one `deposit_addresses` ciphertext sample.
   - [ ] **4.** `pg_dump --format=custom --data-only --no-owner
@@ -47,9 +49,11 @@ shell with `flyctl`, `psql`, and `pg_dump` in another.
   - [ ] **7.** `fly secrets set DATABASE_URL=...` (skip on Fly MPG —
         `fly mpg attach` already set it). No DNS changes needed for this
         cutover (see step 7 for the conditional).
-  - [ ] **8.** Re-enable: `RUN_BACKGROUND_JOBS=true`, `fly scale count 1`,
-        smoke `curl /api/healthz`, drop maintenance banner, post
-        `[CUTOVER] complete`. Keep source DB up read-only for 7 days.
+  - [ ] **8.** Re-enable: `fly secrets unset MAINTENANCE_MODE
+        --app qorix-api` (background jobs come back automatically when
+        the secret is gone), smoke `curl /api/healthz`, drop maintenance
+        banner, post `[CUTOVER] complete`. Keep source DB up read-only
+        for 7 days.
   - [ ] **9.** (Only if smoke fails / first-hour errors) execute
         back-out: re-freeze, point `DATABASE_URL` at source, scale up,
         smoke, post `[INCIDENT]`.
@@ -122,30 +126,49 @@ will be back shortly."*
 
 The **only** way to guarantee zero in-flight write loss is for there to
 be exactly one Postgres being written to at a time. We achieve that by
-freezing the source.
+freezing the source via the in-app maintenance mode.
 
 ```bash
-# 1. Stop background jobs first — cron, the Telegram poller, the TRON
-#    watcher, and BullMQ workers all write to the DB and don't go through
-#    the HTTP API. Setting this secret restarts the machine.
-fly secrets set RUN_BACKGROUND_JOBS=false --app qorix-api
+# 1. Flip MAINTENANCE_MODE on. This single Fly secret does two things in
+#    the API process (see artifacts/api-server/src/middlewares/maintenance.ts
+#    and src/index.ts):
+#      • The maintenance middleware in front of every /api route lets GETs
+#        through (so balances, charts, signals, /healthz keep responding)
+#        and rejects POST/PUT/PATCH/DELETE with a structured 503 the web
+#        app renders as a friendly inline "Brief maintenance" banner.
+#      • Background jobs (cron, Telegram poller, TRON watcher, BullMQ
+#        workers) skip startup just like RUN_BACKGROUND_JOBS=false — so
+#        the only writes that could possibly hit the source DB are
+#        already-in-flight HTTP requests, which drain in a few seconds.
+#    Setting this secret restarts the machine, which is what causes the
+#    background-job gate to take effect.
+fly secrets set MAINTENANCE_MODE=true --app qorix-api
 
 # 2. If background jobs are still running on Replit (they shouldn't be —
 #    step 8 of FLY_GO_LIVE_CHECKLIST.md disabled them), turn them off
 #    there too.
 #    Replit → Secrets → RUN_BACKGROUND_JOBS=false → restart workflow.
 
-# 3. Stop the API itself so HTTP requests can't write either. We scale
-#    to zero rather than rely on a Postgres-side read-only flag because
-#    Supabase pooled URLs and Fly MPG don't expose `default_transaction_
-#    read_only` in a way the app reliably hits.
-fly scale count 0 --app qorix-api
-fly status   --app qorix-api          # confirm: 0 machines started
+# 3. Confirm the API came back up in maintenance mode (do NOT scale to
+#    zero — we want reads to keep serving so signed-in users don't see
+#    a broken site for 15 minutes).
+fly status --app qorix-api            # confirm: 1 machine started, healthchecks OK
+fly logs   --app qorix-api | grep -i 'MAINTENANCE_MODE=true'
+curl -fsS https://api.qorixmarkets.com/api/system/status | grep '"writesDisabled":true'
 ```
 
-Users now see 503 on every API call. The web app keeps serving the
-maintenance banner. **Start a stopwatch — your goal is to be back in
-step 8 within 15 minutes.**
+Users now see balances, charts, and history continue to load (GETs still
+work) with the inline "Brief maintenance" banner pinned to the top of
+the page; any attempt to deposit, withdraw, place a trade, etc. fails
+fast with a structured 503 instead of a generic network error.
+**Start a stopwatch — your goal is to be back in step 8 within 15 minutes.**
+
+> ℹ️ **Why not `fly scale count 0`?** That was the old approach, and it
+> made every API call return a raw 503 — including the GETs the web app
+> uses to render balances, charts, and the existing maintenance banner.
+> The signed-in experience looked like the site was completely down. The
+> in-app maintenance mode keeps reads alive while still guaranteeing the
+> single-writer invariant the cutover needs.
 
 Sanity check that the source DB is quiet (should be 0 active write
 transactions besides your own session):
@@ -434,20 +457,24 @@ in DNS changes.
 ## 8. Re-enable writes and bring the API back
 
 ```bash
-# Bring background jobs back on Fly (cron, Telegram poller, watchers,
-# BullMQ workers). Make sure Replit still has RUN_BACKGROUND_JOBS=false
-# from FLY_GO_LIVE_CHECKLIST step 8 — two pollers will fight over
-# Telegram updates and double-process trades.
-fly secrets set RUN_BACKGROUND_JOBS=true --app qorix-api
-
-# Scale the API back up. fly.toml in this repo defines the desired
-# count; `fly scale count 1` is a safe default.
-fly scale count 1 --app qorix-api
-fly status   --app qorix-api          # wait for "started" + healthchecks passing
+# Drop MAINTENANCE_MODE. This single command undoes step 2: the
+# maintenance middleware stops returning 503s and starts forwarding
+# writes again, AND background jobs (cron, Telegram poller, TRON
+# watcher, BullMQ workers) start up again on the next boot. Setting or
+# unsetting a secret restarts the machine.
+#
+# Make sure Replit still has RUN_BACKGROUND_JOBS=false from
+# FLY_GO_LIVE_CHECKLIST step 8 — two pollers will fight over Telegram
+# updates and double-process trades.
+fly secrets unset MAINTENANCE_MODE --app qorix-api
+fly status --app qorix-api            # wait for "started" + healthchecks passing
 
 # Smoke test (same checks as the GitHub Actions deploy)
 curl -fsS https://api.qorixmarkets.com/api/healthz | grep '"status":"ok"'
 curl -fsS https://api.qorixmarkets.com/api/public/market-indicators | grep '"activeInvestors"'
+# Confirm the system-status endpoint no longer reports writes disabled
+# (the web app's inline banner clears off the back of this).
+curl -fsS https://api.qorixmarkets.com/api/system/status | grep '"writesDisabled":false'
 
 # Tail logs for ~60s and watch for [wallet-preflight] OK and clean
 # startup with no DB error spam.
@@ -490,9 +517,9 @@ revert to the source DB. The procedure is the cutover in reverse, but
 much shorter because the source has not been written to since step 2.
 
 ```bash
-# 1. Stop writes again — same as step 2.
-fly secrets set RUN_BACKGROUND_JOBS=false --app qorix-api
-fly scale count 0 --app qorix-api
+# 1. Stop writes again — same as step 2. Reads keep serving so users see
+#    the inline maintenance banner instead of a dead site.
+fly secrets set MAINTENANCE_MODE=true --app qorix-api
 
 # 2. Point DATABASE_URL back at the source.
 #    (Option A: if you migrated FROM Fly MPG TO another provider, you'll
@@ -501,9 +528,9 @@ fly scale count 0 --app qorix-api
 #    the previous URL.)
 fly secrets set DATABASE_URL="$SOURCE_DATABASE_URL" --app qorix-api
 
-# 3. Bring the API and background jobs back up.
-fly secrets set RUN_BACKGROUND_JOBS=true --app qorix-api
-fly scale count 1 --app qorix-api
+# 3. Drop MAINTENANCE_MODE to bring writes and background jobs back up
+#    (one machine restart, same as step 8).
+fly secrets unset MAINTENANCE_MODE --app qorix-api
 
 # 4. Re-run the step 8 smoke tests against the API. Login + dashboard
 #    + deposit address + ledger query must all pass.
