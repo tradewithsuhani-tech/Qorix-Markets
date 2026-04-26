@@ -448,9 +448,15 @@ export default function DepositPage() {
                       </div>
                     )}
                     {!promoOffer?.alreadyRedeemed && promoOffer?.active && (
-                      <div className="text-[10px] text-purple-300/70 mt-1.5 flex items-center gap-1">
-                        <Sparkles className="w-3 h-3" />
-                        Live offer: <span className="font-mono font-bold text-purple-300">{promoOffer.code}</span> — {promoOffer.bonusPercent}% bonus to Trading Balance
+                      <div className="text-[10px] text-purple-300/70 mt-1.5 flex items-start gap-1">
+                        <Sparkles className="w-3 h-3 shrink-0 mt-px" />
+                        <span className="leading-snug min-w-0">
+                          Live offer:{" "}
+                          <span className="font-mono font-bold text-purple-300 whitespace-nowrap">
+                            {promoOffer.code}
+                          </span>{" "}
+                          — {promoOffer.bonusPercent}% bonus to Trading Balance
+                        </span>
                       </div>
                     )}
                   </div>
