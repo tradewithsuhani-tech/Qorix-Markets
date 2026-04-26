@@ -41,11 +41,13 @@ router.get("/leaderboard/referrals", authMiddleware, async (req: AuthRequest, re
         COALESCE(SUM(t.amount)::numeric, 0) AS "totalEarnings"
       FROM users u
       LEFT JOIN users refs    ON refs.sponsor_id = u.id AND refs.id != u.id
+                              AND refs.is_smoke_test = false
       LEFT JOIN transactions t
         ON  t.user_id  = u.id
         AND t.type     = 'referral_bonus'
         AND t.status   = 'completed'
       WHERE u.is_admin = false
+        AND u.is_smoke_test = false
       GROUP BY u.id, u.full_name
       HAVING COUNT(refs.id) > 0
       ORDER BY COUNT(refs.id) DESC, COALESCE(SUM(t.amount), 0) DESC
@@ -59,11 +61,13 @@ router.get("/leaderboard/referrals", authMiddleware, async (req: AuthRequest, re
           RANK() OVER (ORDER BY COUNT(refs.id) DESC, COALESCE(SUM(t.amount), 0) DESC) AS rank
         FROM users u
         LEFT JOIN users refs    ON refs.sponsor_id = u.id AND refs.id != u.id
+                                AND refs.is_smoke_test = false
         LEFT JOIN transactions t
           ON  t.user_id = u.id
           AND t.type    = 'referral_bonus'
           AND t.status  = 'completed'
         WHERE u.is_admin = false
+          AND u.is_smoke_test = false
         GROUP BY u.id
         HAVING COUNT(refs.id) > 0
       )
@@ -247,6 +251,7 @@ router.get("/leaderboard/rewards", authMiddleware, async (req: AuthRequest, res)
       db.execute(sql`
         SELECT COUNT(*)::int AS cnt FROM users
         WHERE sponsor_id = ${userId} AND id != ${userId}
+          AND is_smoke_test = false
       `),
       db.execute(sql`
         SELECT COALESCE(SUM(amount)::numeric, 0) AS total
@@ -260,11 +265,13 @@ router.get("/leaderboard/rewards", authMiddleware, async (req: AuthRequest, res)
             RANK() OVER (ORDER BY COUNT(refs.id) DESC, COALESCE(SUM(t.amount), 0) DESC) AS rank
           FROM users u
           LEFT JOIN users refs    ON refs.sponsor_id = u.id AND refs.id != u.id
+                                  AND refs.is_smoke_test = false
           LEFT JOIN transactions t
             ON  t.user_id = u.id
             AND t.type    = 'referral_bonus'
             AND t.status  = 'completed'
           WHERE u.is_admin = false
+            AND u.is_smoke_test = false
           GROUP BY u.id
           HAVING COUNT(refs.id) > 0
         )

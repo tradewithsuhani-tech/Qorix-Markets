@@ -631,10 +631,19 @@ router.get("/dashboard/fund-stats", async (req: AuthRequest, res) => {
     .select({ total: sum(walletsTable.profitBalance) })
     .from(walletsTable);
 
-  const [activeCountResult] = await db
-    .select({ count: count() })
-    .from(investmentsTable)
-    .where(eq(investmentsTable.isActive, true));
+  // Excludes the deploy smoke-test account so a stray active investment on it
+  // never inflates the displayed "Active Investors" tile. Mirrors the same
+  // filter used in /api/public/market-indicators.
+  const activeCountRows = await db.execute(sql`
+    SELECT COUNT(*)::int AS count
+    FROM investments i
+    WHERE i.is_active = true
+      AND NOT EXISTS (
+        SELECT 1 FROM users u
+        WHERE u.id = i.user_id AND u.is_smoke_test = true
+      )
+  `);
+  const activeCountResult = activeCountRows.rows[0] as { count: number } | undefined;
 
   const realAUM = parseFloat(String(aumResult?.total ?? "0")) || 0;
   const realReserve = (parseFloat(String(allMainResult?.total ?? "0")) || 0) +

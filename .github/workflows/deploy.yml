@@ -130,6 +130,12 @@ jobs:
           grep -q '"activeInvestors"' /tmp/market.json
           echo
           echo "→ Authenticated smoke check (login + protected route)"
+          # NOTE: SMOKE_TEST_EMAIL is flagged in the database with users.is_smoke_test=true
+          # by flagSmokeTestAccount() at api-server boot. That flag blocks
+          # deposits/withdrawals/transfers/trading on the account and excludes it from
+          # leaderboards, referral payouts, public stats, and fraud signals — so this
+          # repeated CI login can never accidentally move money or pollute counters.
+          # See docs/smoke-test-account.md.
           if [ -z "${SMOKE_TEST_EMAIL:-}" ] || [ -z "${SMOKE_TEST_PASSWORD:-}" ]; then
             echo "::error::SMOKE_TEST_EMAIL / SMOKE_TEST_PASSWORD secrets are not set." \
               "Configure them in repo settings so the deploy can verify the auth pipeline."

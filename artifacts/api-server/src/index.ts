@@ -3,6 +3,7 @@ import { initSystemAccounts } from "./lib/ledger-service";
 import { seedTasks } from "./lib/task-service";
 import { seedSystemSettings } from "./lib/seed-settings";
 import { runWalletEncryptionPreflight } from "./lib/wallet-preflight";
+import { flagSmokeTestAccount } from "./lib/smoke-test-account";
 
 // Gate single-instance background work (cron, Telegram poller, on-chain
 // watchers, BullMQ workers) behind a single env flag so we can flip it off in
@@ -24,6 +25,11 @@ async function main() {
   // user's TRC20 deposit address would silently become un-decryptable. This
   // call decrypts one known row and exits the process if it can't.
   await runWalletEncryptionPreflight();
+  // Tag the dedicated post-deploy smoke-test account (SMOKE_TEST_EMAIL) with
+  // users.is_smoke_test=true so it's excluded from leaderboards / referral
+  // payouts / fraud signals and blocked from real-money flows. Idempotent —
+  // safe to run on every boot, no-op if SMOKE_TEST_EMAIL is unset.
+  await flagSmokeTestAccount();
 
   const { default: app } = await import("./app");
   const { logger, errorLogger } = await import("./lib/logger");

@@ -7,6 +7,7 @@ import { ensureUserAccounts, postJournalEntry, journalForTransaction } from "../
 import { createNotification } from "../lib/notifications";
 import { checkAndFireMilestones } from "../lib/milestone-service";
 import { logger } from "../lib/logger";
+import { isSmokeTestUser } from "../lib/smoke-test-account";
 
 const REFERRAL_SIGNUP_BONUS_RATE = 0.03;
 const REFERRAL_SIGNUP_MIN_DEPOSIT = 100;
@@ -68,6 +69,17 @@ router.post("/investment/start", async (req: AuthRequest, res) => {
   const result = StartInvestmentBody.safeParse(req.body);
   if (!result.success) {
     res.status(400).json({ error: "Invalid request" });
+    return;
+  }
+
+  // Block trading activation for the deploy smoke-test account so a stray
+  // trading_balance can never start posting real journal entries, fire
+  // referral bonuses, or land in active-investor counters.
+  if (await isSmokeTestUser(req.userId!)) {
+    res.status(403).json({
+      error: "smoke_test_account_blocked",
+      message: "The deploy smoke-test account is read-only — trading is disabled.",
+    });
     return;
   }
 
@@ -146,6 +158,29 @@ router.post("/investment/start", async (req: AuthRequest, res) => {
 
       const sponsorId = userRows[0]?.sponsorId;
       if (sponsorId && sponsorId !== req.userId && sponsorId !== 0) {
+        // Look up sponsor's smoke-test flag + active-investment in one go.
+        // The deploy smoke-test account must NEVER receive a referral payout
+        // (wallet credit, transaction row, journal posting), even if some
+        // real user happens to have it as their sponsor.
+        const sponsorRows = await tx
+          .select({ isSmokeTest: usersTable.isSmokeTest })
+          .from(usersTable)
+          .where(eq(usersTable.id, sponsorId))
+          .limit(1);
+        if (sponsorRows[0]?.isSmokeTest) {
+          logger.info(
+            { sponsorId, referralUserId: req.userId },
+            "Skipping referral payout: sponsor is the smoke-test account",
+          );
+          // Mark the bonus as paid on the referred investment so we don't
+          // re-evaluate this branch every time the user adds capital.
+          await tx
+            .update(investmentsTable)
+            .set({ referralBonusPaid: true })
+            .where(eq(investmentsTable.userId, req.userId!));
+          return inv!;
+        }
+
         const sponsorInvRows = await tx
           .select({ isActive: investmentsTable.isActive })
           .from(investmentsTable)

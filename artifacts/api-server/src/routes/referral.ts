@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, usersTable, investmentsTable, transactionsTable } from "@workspace/db";
-import { eq, sum } from "drizzle-orm";
+import { and, eq, sum } from "drizzle-orm";
 import { authMiddleware, type AuthRequest } from "../middlewares/auth";
 
 const router = Router();
@@ -14,7 +14,12 @@ router.get("/referral", async (req: AuthRequest, res) => {
     return;
   }
 
-  const referredUsers = await db.select().from(usersTable).where(eq(usersTable.sponsorId, req.userId!));
+  // Exclude the deploy smoke-test account from referral counts so it never
+  // shows up in someone's downline / earns a sponsor a referral bonus.
+  const referredUsers = await db
+    .select()
+    .from(usersTable)
+    .where(and(eq(usersTable.sponsorId, req.userId!), eq(usersTable.isSmokeTest, false)));
   const activeCount = referredUsers.filter((u) => u.id).length;
 
   const bonusTxs = await db.select({ total: sum(transactionsTable.amount) })
@@ -38,7 +43,12 @@ router.get("/referral", async (req: AuthRequest, res) => {
 });
 
 router.get("/referral/referred-users", async (req: AuthRequest, res) => {
-  const referredUsers = await db.select().from(usersTable).where(eq(usersTable.sponsorId, req.userId!));
+  // Same exclusion as /referral above — smoke-test account never appears in
+  // anyone's downline list.
+  const referredUsers = await db
+    .select()
+    .from(usersTable)
+    .where(and(eq(usersTable.sponsorId, req.userId!), eq(usersTable.isSmokeTest, false)));
 
   const result = await Promise.all(referredUsers.map(async (u) => {
     const invs = await db.select().from(investmentsTable).where(eq(investmentsTable.userId, u.id)).limit(1);

@@ -257,10 +257,20 @@ async function advanceLiveCounters(currentBaseline: number, baselineAum: number 
 export { advanceLiveCounters };
 
 router.get("/public/market-indicators", async (_req, res) => {
-  const [activeInvResult] = await db
-    .select({ count: count() })
-    .from(investmentsTable)
-    .where(eq(investmentsTable.isActive, true));
+  // NOT EXISTS subquery (rather than a join + filter) so the query plan stays
+  // a simple count over the active-investments index. Excludes the deploy
+  // smoke-test account so a stray active investment on it never inflates the
+  // public "Active Investors" widget.
+  const activeInvRows = await db.execute(sql`
+    SELECT COUNT(*)::int AS count
+    FROM investments i
+    WHERE i.is_active = true
+      AND NOT EXISTS (
+        SELECT 1 FROM users u
+        WHERE u.id = i.user_id AND u.is_smoke_test = true
+      )
+  `);
+  const activeInvResult = activeInvRows.rows[0] as { count: number } | undefined;
 
   const realActiveInvestors = Number(activeInvResult?.count ?? 0);
 
