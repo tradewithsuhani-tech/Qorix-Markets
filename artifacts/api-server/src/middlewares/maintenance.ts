@@ -73,6 +73,32 @@ const CACHE_TTL_MS = 5_000;
 // interpolate user input into the LISTEN/NOTIFY identifier.
 const MAINTENANCE_NOTIFY_CHANNEL = "maintenance_invalidate";
 
+// Observability for the per-request system_settings lookup inside
+// getMaintenanceState(). The catch block intentionally swallows DB errors so
+// a transient Postgres blip can't flap the gate (regression-tested in
+// maintenance-db-fault.test.ts), but a *sustained* failure means the merged
+// state has silently degraded to env-only — an admin who flipped the toggle
+// in the UI would have no idea their toggle isn't being honoured. We surface
+// this without flooding the log:
+//
+//   * First failure of a streak emits a warn line immediately so on-call
+//     sees the degradation right away.
+//   * Subsequent failures within the same streak are throttled to one warn
+//     per DB_LOOKUP_WARN_THROTTLE_MS so a hard-down DB on a busy instance
+//     doesn't produce thousands of log lines per minute. The carried
+//     `failureStreak` counter still tells ops the true failure rate.
+//   * A successful poll resets the streak so a future failure logs a fresh
+//     "first failure" line, which is the signal alerting hooks into.
+//
+// We use `errorLogger.warn` (not error) because the gate has NOT failed —
+// the env-only fallback still serves traffic. Ops should alert on
+// "this warn line present continuously for N minutes", not on a single
+// occurrence.
+const DB_LOOKUP_WARN_THROTTLE_MS = 30_000;
+let dbLookupFailureStreak = 0;
+let lastDbLookupWarnAt = 0;
+let lastDbLookupOkAt: number | null = null;
+
 export function isEnvMaintenanceMode(): boolean {
   return (process.env["MAINTENANCE_MODE"] ?? "").toLowerCase() === "true";
 }
@@ -368,10 +394,53 @@ export async function getMaintenanceState(): Promise<MaintenanceState> {
       const ts = Date.parse(rawEta);
       if (!Number.isNaN(ts)) dbEndsAt = new Date(ts).toISOString();
     }
-  } catch {
+    // Successful poll: clear the failure-streak telemetry so the *next*
+    // failure logs a fresh "first failure" warn line (which is the signal
+    // alerts hook into). If we'd been logging a sustained-failure streak,
+    // emit a one-shot recovery info line so ops can bookmark the moment
+    // the gate stopped degrading to env-only.
+    if (dbLookupFailureStreak > 0) {
+      logger.info(
+        {
+          channel: MAINTENANCE_NOTIFY_CHANNEL,
+          recoveredAfterFailures: dbLookupFailureStreak,
+        },
+        "Maintenance system_settings lookup recovered — gate no longer degraded to env-only",
+      );
+    }
+    dbLookupFailureStreak = 0;
+    lastDbLookupOkAt = Date.now();
+  } catch (err) {
     // If the DB lookup fails we fall back to env-only. Flapping the gate on
     // every transient DB blip would be worse than briefly missing an admin
-    // toggle update — the next successful poll will reconcile.
+    // toggle update — the next successful poll will reconcile. But silence
+    // is dangerous when the failure is *sustained*: an admin who flipped
+    // the toggle in the UI during a Mumbai-DB cutover would have no signal
+    // that their toggle is being silently dropped on every API instance.
+    // Emit a rate-limited warn so ops can alert on continuous degradation
+    // without drowning the log when Postgres is hard-down on a busy
+    // instance. The behaviour-preserving guarantee from
+    // maintenance-db-fault.test.ts still holds: dbActive / dbHardBlock /
+    // dbMessage / dbEndsAt are left at their defaults so the merge below
+    // collapses to env-only exactly as before.
+    dbLookupFailureStreak += 1;
+    const now = Date.now();
+    if (
+      dbLookupFailureStreak === 1 ||
+      now - lastDbLookupWarnAt >= DB_LOOKUP_WARN_THROTTLE_MS
+    ) {
+      errorLogger.warn(
+        {
+          err,
+          failureStreak: dbLookupFailureStreak,
+          msSinceLastOk:
+            lastDbLookupOkAt === null ? null : now - lastDbLookupOkAt,
+          degradedTo: "env-only",
+        },
+        "Maintenance system_settings lookup failed — gate degraded to env-only for this poll",
+      );
+      lastDbLookupWarnAt = now;
+    }
   }
 
   const active = envActive || dbActive;
