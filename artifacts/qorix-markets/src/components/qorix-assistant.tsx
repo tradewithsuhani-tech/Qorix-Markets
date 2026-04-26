@@ -344,6 +344,7 @@ export function QorixAssistant({ guestMode = false }: { guestMode?: boolean } = 
       setPollTimer(timer);
       return () => clearInterval(timer);
     }
+    return undefined;
   }, [expertMode, sessionId, isOpen]);
 
   async function initSession() {

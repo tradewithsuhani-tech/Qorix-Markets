@@ -82,7 +82,7 @@ router.post(
   authMiddleware,
   adminMiddleware,
   async (req: AuthRequest, res) => {
-    const id = parseInt(req.params.id, 10);
+    const id = parseInt(req.params.id as string, 10);
     if (isNaN(id)) { res.status(400).json({ error: "Invalid trade id" }); return; }
     const b = req.body ?? {};
     const realizedExitPrice = num(b.realizedExitPrice);
@@ -120,7 +120,7 @@ router.post(
   authMiddleware,
   adminMiddleware,
   async (req: AuthRequest, res) => {
-    const id = parseInt(req.params.id, 10);
+    const id = parseInt(req.params.id as string, 10);
     if (isNaN(id)) { res.status(400).json({ error: "Invalid trade id" }); return; }
     try {
       const result = await hitTakeProfit(id, req.userId);
@@ -137,7 +137,7 @@ router.post(
   authMiddleware,
   adminMiddleware,
   async (req: AuthRequest, res) => {
-    const id = parseInt(req.params.id, 10);
+    const id = parseInt(req.params.id as string, 10);
     if (isNaN(id)) { res.status(400).json({ error: "Invalid trade id" }); return; }
     try {
       const result = await hitStopLoss(id, req.userId);
@@ -154,7 +154,7 @@ router.get(
   authMiddleware,
   adminMiddleware,
   async (req: AuthRequest, res) => {
-    const id = parseInt(req.params.id, 10);
+    const id = parseInt(req.params.id as string, 10);
     if (isNaN(id)) { res.status(400).json({ error: "Invalid trade id" }); return; }
     const log = await getTradeAuditLog(id);
     res.json({ log });

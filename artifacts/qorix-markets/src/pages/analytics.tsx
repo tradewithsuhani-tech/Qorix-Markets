@@ -46,8 +46,9 @@ import {
   Legend,
   Filler,
   ScatterController,
+  type ChartDataset,
 } from "chart.js";
-import { Line, Bar, Scatter, Radar } from "react-chartjs-2";
+import { Line, Bar, Scatter, Radar, Chart } from "react-chartjs-2";
 
 ChartJS.register(
   CategoryScale,
@@ -445,7 +446,7 @@ export default function AnalyticsPage() {
             <PeriodFilter
               options={DAYS_PERIOD_OPTIONS}
               selected={days}
-              onChange={setDays}
+              onChange={(v) => setDays(v)}
               ariaLabel="Equity & drawdown period"
             />
           </div>
@@ -1030,13 +1031,15 @@ export default function AnalyticsPage() {
                 statColor="#facc15"
                 delay={0.1}
               >
-                <Bar
+                <Chart
+                  type="bar"
                   data={{
                     labels: monthlyData.map((m) => {
                       try { return format(parseISO(`${m.yearMonth}-01`), "MMM yy"); } catch { return m.yearMonth; }
                     }),
                     datasets: [
                       {
+                        type: "bar" as const,
                         label: "Win Rate %",
                         data: monthlyData.map((m) => m.winRate),
                         backgroundColor: monthlyData.map((m) =>
@@ -1048,18 +1051,18 @@ export default function AnalyticsPage() {
                         borderWidth: 1,
                         borderRadius: 6,
                         borderSkipped: false,
-                      },
+                      } satisfies ChartDataset<"bar", number[]>,
                       {
+                        type: "line" as const,
                         label: "50% Threshold",
                         data: monthlyData.map(() => 50),
-                        type: "line" as const,
                         borderColor: "rgba(255,255,255,0.2)",
                         borderWidth: 1.5,
                         borderDash: [6, 4],
                         pointRadius: 0,
                         fill: false,
                         tension: 0,
-                      },
+                      } satisfies ChartDataset<"line", number[]>,
                     ],
                   }}
                   options={{

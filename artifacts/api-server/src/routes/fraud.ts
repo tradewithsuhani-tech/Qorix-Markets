@@ -102,7 +102,7 @@ router.get("/admin/fraud/flags", async (req, res) => {
 // ---------------------------------------------------------------------------
 router.post("/admin/fraud/flags/:id/resolve", async (req: AuthRequest, res) => {
   try {
-    const id = parseInt(req.params["id"]!);
+    const id = parseInt(req.params["id"]! as string);
     const note = (req.body as { note?: string }).note ?? "";
 
     const [updated] = await db
@@ -128,7 +128,7 @@ router.post("/admin/fraud/flags/:id/resolve", async (req: AuthRequest, res) => {
 // ---------------------------------------------------------------------------
 router.post("/admin/fraud/flags/:id/reopen", async (_req: AuthRequest, res) => {
   try {
-    const id = parseInt(_req.params["id"]!);
+    const id = parseInt(_req.params["id"]! as string);
 
     const [updated] = await db
       .update(fraudFlagsTable)
@@ -153,7 +153,7 @@ router.post("/admin/fraud/flags/:id/reopen", async (_req: AuthRequest, res) => {
 // ---------------------------------------------------------------------------
 router.get("/admin/fraud/users/:userId/events", async (req, res) => {
   try {
-    const userId = parseInt(req.params["userId"]!);
+    const userId = parseInt(req.params["userId"]! as string);
     const events = await db
       .select()
       .from(loginEventsTable)

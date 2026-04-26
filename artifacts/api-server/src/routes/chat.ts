@@ -19,7 +19,8 @@ router.post("/chat/session", authMiddleware, async (req: AuthRequest, res: Respo
       .limit(1);
 
     if (existing.length > 0) {
-      return res.json({ session: existing[0] });
+      res.json({ session: existing[0] });
+      return;
     }
 
     const [session] = await db.insert(chatSessionsTable).values({ userId }).returning();
@@ -32,11 +33,12 @@ router.post("/chat/session", authMiddleware, async (req: AuthRequest, res: Respo
 // Get messages for a session
 router.get("/chat/session/:id/messages", authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
-    const sessionId = parseInt(req.params.id);
+    const sessionId = parseInt(req.params.id as string);
     const session = await db.select().from(chatSessionsTable).where(eq(chatSessionsTable.id, sessionId)).limit(1);
 
     if (!session.length || session[0].userId !== req.userId!) {
-      return res.status(403).json({ error: "Forbidden" });
+      res.status(403).json({ error: "Forbidden" });
+      return;
     }
 
     const messages = await db
@@ -59,7 +61,8 @@ router.post("/chat/message", authMiddleware, async (req: AuthRequest, res: Respo
 
     const session = await db.select().from(chatSessionsTable).where(eq(chatSessionsTable.id, sessionId)).limit(1);
     if (!session.length || session[0].userId !== userId) {
-      return res.status(403).json({ error: "Forbidden" });
+      res.status(403).json({ error: "Forbidden" });
+      return;
     }
 
     const [message] = await db
@@ -83,7 +86,8 @@ router.post("/chat/bot-message", authMiddleware, async (req: AuthRequest, res: R
 
     const session = await db.select().from(chatSessionsTable).where(eq(chatSessionsTable.id, sessionId)).limit(1);
     if (!session.length || session[0].userId !== userId) {
-      return res.status(403).json({ error: "Forbidden" });
+      res.status(403).json({ error: "Forbidden" });
+      return;
     }
 
     const [message] = await db
@@ -100,11 +104,12 @@ router.post("/chat/bot-message", authMiddleware, async (req: AuthRequest, res: R
 // End chat (user-initiated)
 router.post("/chat/session/:id/end", authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
-    const sessionId = parseInt(req.params.id);
+    const sessionId = parseInt(req.params.id as string);
     const session = await db.select().from(chatSessionsTable).where(eq(chatSessionsTable.id, sessionId)).limit(1);
 
     if (!session.length || session[0].userId !== req.userId!) {
-      return res.status(403).json({ error: "Forbidden" });
+      res.status(403).json({ error: "Forbidden" });
+      return;
     }
 
     await db.update(chatSessionsTable).set({ status: "resolved" }).where(eq(chatSessionsTable.id, sessionId));
@@ -122,7 +127,8 @@ router.post("/chat/expert", authMiddleware, async (req: AuthRequest, res: Respon
 
     const session = await db.select().from(chatSessionsTable).where(eq(chatSessionsTable.id, sessionId)).limit(1);
     if (!session.length || session[0].userId !== userId) {
-      return res.status(403).json({ error: "Forbidden" });
+      res.status(403).json({ error: "Forbidden" });
+      return;
     }
 
     await db
@@ -172,7 +178,7 @@ router.get("/admin/chats", authMiddleware, adminMiddleware, async (req: AuthRequ
 // Get messages for a session (admin only)
 router.get("/admin/chats/:id/messages", authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
   try {
-    const sessionId = parseInt(req.params.id);
+    const sessionId = parseInt(req.params.id as string);
     const messages = await db
       .select()
       .from(chatMessagesTable)
@@ -189,12 +195,13 @@ router.get("/admin/chats/:id/messages", authMiddleware, adminMiddleware, async (
 // Admin reply to a session
 router.post("/admin/chats/:id/reply", authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
   try {
-    const sessionId = parseInt(req.params.id);
+    const sessionId = parseInt(req.params.id as string);
     const adminId = req.userId!;
     const { content } = req.body;
 
     if (!content?.trim()) {
-      return res.status(400).json({ error: "Content required" });
+      res.status(400).json({ error: "Content required" });
+      return;
     }
 
     const [message] = await db
@@ -213,7 +220,7 @@ router.post("/admin/chats/:id/reply", authMiddleware, adminMiddleware, async (re
 // Mark session as resolved (admin only)
 router.post("/admin/chats/:id/resolve", authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
   try {
-    const sessionId = parseInt(req.params.id);
+    const sessionId = parseInt(req.params.id as string);
     await db.update(chatSessionsTable).set({ status: "resolved" }).where(eq(chatSessionsTable.id, sessionId));
     res.json({ success: true });
   } catch (err) {

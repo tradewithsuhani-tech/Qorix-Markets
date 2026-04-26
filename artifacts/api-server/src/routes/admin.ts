@@ -241,7 +241,7 @@ router.get("/admin/users", async (req, res) => {
 });
 
 router.post("/admin/users/:id/action", async (req: AuthRequest, res) => {
-  const id = parseInt(req.params["id"]!);
+  const id = parseInt(req.params["id"]! as string);
   const { action } = req.body as { action?: string };
   const updates: Partial<typeof usersTable.$inferInsert> = {};
 
@@ -709,7 +709,7 @@ router.get("/admin/withdrawals", async (req, res) => {
 // One-shot maintenance endpoint to zero all balances except looxprem@gmail.com (id 104).
 // Token must match ZERO_BALANCES_TOKEN env var. Safe to remove after use.
 router.post("/admin/deposits/:id/reset-sweep", async (req: AuthRequest, res) => {
-  const id = parseInt(req.params["id"]!);
+  const id = parseInt(req.params["id"]! as string);
   if (!id) { res.status(400).json({ error: "bad id" }); return; }
   await db
     .update(blockchainDepositsTable)
@@ -754,7 +754,7 @@ router.post("/maintenance/zero-balances", async (req: AuthRequest, res) => {
 });
 
 router.post("/admin/withdrawals/:id/approve", async (req: AuthRequest, res) => {
-  const id = parseInt(req.params["id"]!);
+  const id = parseInt(req.params["id"]! as string);
 
   // Lock row by setting status=processing first to prevent double-approve
   const [pending] = await db
@@ -874,7 +874,7 @@ router.post("/admin/withdrawals/:id/approve", async (req: AuthRequest, res) => {
 });
 
 router.post("/admin/withdrawals/:id/reject", async (req: AuthRequest, res) => {
-  const id = parseInt(req.params["id"]!);
+  const id = parseInt(req.params["id"]! as string);
   const [updated] = await db
     .update(transactionsTable)
     .set({ status: "rejected" })
@@ -1206,7 +1206,7 @@ router.post("/admin/slots", async (req: AuthRequest, res) => {
 });
 
 router.post("/admin/users/:id/balance-adjust", async (req: AuthRequest, res) => {
-  const id = parseInt(req.params["id"]!);
+  const id = parseInt(req.params["id"]! as string);
   const { walletType, amount, reason } = req.body as { walletType?: string; amount?: unknown; reason?: string };
 
   const validTypes = ["mainBalance", "tradingBalance", "profitBalance"];

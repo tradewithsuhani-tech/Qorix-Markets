@@ -1,7 +1,7 @@
 import { useGetTransactions } from "@workspace/api-client-react";
 import { Layout } from "@/components/layout";
 import { format } from "date-fns";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, type Variants } from "framer-motion";
 import {
   ArrowDownCircle, ArrowUpCircle, ArrowRightLeft, TrendingUp,
   Clock, CheckCircle2, XCircle, Filter, DollarSign, X,
@@ -56,8 +56,8 @@ function TxSkeleton() {
   );
 }
 
-const container = { hidden: {}, show: { transition: { staggerChildren: 0.04 } } };
-const row = { hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0, transition: { duration: 0.3, ease: "easeOut" } } };
+const container: Variants = { hidden: {}, show: { transition: { staggerChildren: 0.04 } } };
+const row: Variants = { hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0, transition: { duration: 0.3, ease: "easeOut" } } };
 
 /** Strip raw wallet address from server description so we can render a masked/revealable pill instead. */
 function cleanDescription(desc: string | null | undefined, addr: string | null | undefined): string {

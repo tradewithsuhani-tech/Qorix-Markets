@@ -3,7 +3,7 @@ import { customFetch } from "@workspace/api-client-react";
 import { useQuery } from "@tanstack/react-query";
 import { Layout } from "@/components/layout";
 import { AnimatedCounter } from "@/components/animated-counter";
-import { motion } from "framer-motion";
+import { motion, type Variants } from "framer-motion";
 import {
   Copy, Users, DollarSign, Award, CheckCircle2, TrendingUp,
   Star, Crown, Zap, Shield, ChevronRight, Gift, Trophy,
@@ -13,8 +13,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
 
-const container = { hidden: {}, show: { transition: { staggerChildren: 0.07 } } };
-const item = { hidden: { opacity: 0, y: 14 }, show: { opacity: 1, y: 0, transition: { duration: 0.35, ease: "easeOut" } } };
+const container: Variants = { hidden: {}, show: { transition: { staggerChildren: 0.07 } } };
+const item: Variants = { hidden: { opacity: 0, y: 14 }, show: { opacity: 1, y: 0, transition: { duration: 0.35, ease: "easeOut" } } };
 
 // Partner level definitions — tier perks layered on top of the universal
 // 3% activation + 10% lifetime daily commission base rate. The percentages

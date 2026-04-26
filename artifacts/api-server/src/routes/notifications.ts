@@ -68,7 +68,7 @@ router.get("/notifications", async (req: AuthRequest, res) => {
 });
 
 router.patch("/notifications/:id/read", async (req: AuthRequest, res) => {
-  const id = parseInt(req.params["id"]!);
+  const id = parseInt(req.params["id"]! as string);
   if (isNaN(id)) {
     res.status(400).json({ error: "Invalid id" });
     return;
@@ -98,7 +98,7 @@ router.patch("/notifications/read-all", async (req: AuthRequest, res) => {
 });
 
 router.delete("/notifications/:id", async (req: AuthRequest, res) => {
-  const id = parseInt(req.params["id"]!);
+  const id = parseInt(req.params["id"]! as string);
   if (isNaN(id)) {
     res.status(400).json({ error: "Invalid id" });
     return;

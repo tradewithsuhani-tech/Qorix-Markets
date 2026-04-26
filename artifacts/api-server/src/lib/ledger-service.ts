@@ -98,7 +98,7 @@ export async function ensureUserAccounts(userId: number, txn?: any): Promise<voi
     .select({ code: glAccountsTable.code })
     .from(glAccountsTable)
     .where(inArray(glAccountsTable.code, codes));
-  const existingCodes = new Set(existing.map((r) => r.code));
+  const existingCodes = new Set(existing.map((r: { code: string }) => r.code));
 
   for (const def of USER_ACCOUNT_DEFS) {
     const code = `user:${userId}:${def.suffix}`;
@@ -378,7 +378,7 @@ export async function runReconciliation(): Promise<ReconciliationResult> {
     });
   }
 
-  const totalEntries = globalRows.reduce((s, r) => s + Number(r.cnt ?? 0), 0);
+  const totalEntries = journalRows.reduce((s, r) => s + Number(r.cnt ?? 0), 0);
 
   const passed =
     globalBalanced &&

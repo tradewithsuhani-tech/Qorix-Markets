@@ -56,9 +56,30 @@ jobs:
               - '.dockerignore'
               - '.github/workflows/deploy.yml'
 
+  typecheck:
+    name: Typecheck monorepo
+    needs: changes
+    if: |
+      (github.event_name == 'workflow_dispatch') ||
+      (github.event_name == 'push' && (needs.changes.outputs.api == 'true' || needs.changes.outputs.web == 'true'))
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Run typecheck
+        run: pnpm run typecheck
+
   deploy-api:
     name: Deploy api-server → qorix-api
-    needs: changes
+    needs: [changes, typecheck]
     if: |
       (github.event_name == 'workflow_dispatch' && (inputs.target == 'both' || inputs.target == 'api')) ||
       (github.event_name == 'push' && needs.changes.outputs.api == 'true')
@@ -81,7 +102,7 @@ jobs:
 
   deploy-web:
     name: Deploy qorix-markets → qorix-markets-web
-    needs: changes
+    needs: [changes, typecheck]
     if: |
       (github.event_name == 'workflow_dispatch' && (inputs.target == 'both' || inputs.target == 'web')) ||
       (github.event_name == 'push' && needs.changes.outputs.web == 'true')

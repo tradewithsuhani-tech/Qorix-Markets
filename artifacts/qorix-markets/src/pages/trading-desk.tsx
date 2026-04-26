@@ -1,6 +1,6 @@
 import { useGetTradingDeskStats, useGetTradingDeskTraders, useGetDashboardSummary, useGetInvestment } from "@workspace/api-client-react";
 import { Layout } from "@/components/layout";
-import { motion } from "framer-motion";
+import { motion, type Variants } from "framer-motion";
 import { Link } from "wouter";
 import {
   Users, Award, TrendingUp, Target, Activity, Zap,
@@ -87,8 +87,8 @@ function TraderAvatar({ name, color }: { name: string; color: string }) {
 }
 
 /* ── Animation variants ──────────────────────────────────────────── */
-const container = { hidden: {}, show: { transition: { staggerChildren: 0.07 } } };
-const item = { hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0, transition: { duration: 0.35, ease: "easeOut" } } };
+const container: Variants = { hidden: {}, show: { transition: { staggerChildren: 0.07 } } };
+const item: Variants = { hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0, transition: { duration: 0.35, ease: "easeOut" } } };
 
 /* ── Main Page ───────────────────────────────────────────────────── */
 export default function TradingDeskPage() {

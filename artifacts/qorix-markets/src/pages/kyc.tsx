@@ -269,8 +269,14 @@ export default function KycPage() {
   });
 
   const handleFile = (f: File, setPrev: (s: string) => void, setN: (s: string) => void) => {
-    if (f.size > MAX_BYTES) return toast({ title: "File too large", description: "Max 4MB", variant: "destructive" });
-    if (!f.type.startsWith("image/")) return toast({ title: "Invalid file", description: "JPG / PNG only", variant: "destructive" });
+    if (f.size > MAX_BYTES) {
+      toast({ title: "File too large", description: "Max 4MB", variant: "destructive" });
+      return;
+    }
+    if (!f.type.startsWith("image/")) {
+      toast({ title: "Invalid file", description: "JPG / PNG only", variant: "destructive" });
+      return;
+    }
     const reader = new FileReader();
     reader.onload = () => {
       setPrev(reader.result as string);

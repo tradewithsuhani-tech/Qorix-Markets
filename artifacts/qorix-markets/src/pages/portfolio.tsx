@@ -707,7 +707,7 @@ function PortfolioInner() {
   const [showStopConfirm, setShowStopConfirm] = useState(false);
   const handleStopTrading = () => setShowStopConfirm(true);
   const confirmStopTrading = () => {
-    stopMutation.mutate({}, { onSettled: () => setShowStopConfirm(false) });
+    stopMutation.mutate(undefined, { onSettled: () => setShowStopConfirm(false) });
   };
   const { data: equity, dataUpdatedAt: equityUpdatedAt } = useGetEquityChart(
     { days: 30 },
@@ -727,7 +727,7 @@ function PortfolioInner() {
   const riskSafe = (["low", "medium", "high"] as RiskKey[]).includes(riskKey) ? riskKey : "low";
   const allocation = ALLOCATION_BY_RISK[riskSafe];
   const daysRunning = daysBetween(investment?.startedAt);
-  const trades = tradesData?.trades ?? [];
+  const trades = tradesData ?? [];
 
   // Daily Return Projection (forex working days, deterministic per user/month)
   const now = new Date();
@@ -1724,7 +1724,7 @@ function PortfolioInner() {
                   <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
                     <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Capital returning</div>
                     <div className="mt-1 text-base font-bold text-white tabular-nums">
-                      ${fmtMoney(Number(investment.principal || 0))}
+                      ${fmtMoney(Number(investment.amount || 0))}
                     </div>
                   </div>
                   <div className="rounded-xl border border-emerald-400/20 bg-emerald-500/[0.06] p-3">
@@ -1775,7 +1775,7 @@ function RecentTradeAttribution() {
     { limit: 5 },
     { query: { refetchInterval: 15000 } },
   );
-  const trades = tradesData?.trades ?? [];
+  const trades = tradesData ?? [];
   return (
     <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-[#0e1828] via-[#0a1322] to-[#070b14] p-5 md:p-6">
       <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-emerald-400/30 to-transparent" />
