@@ -4,30 +4,9 @@ import type { AddressInfo } from "node:net";
 import type { Server } from "node:http";
 import jwt from "jsonwebtoken";
 
-// Importing app.ts transitively pulls in routes that import the shared ioredis
-// client at module load. There is no Redis in the test env, so the client
-// emits ECONNREFUSED on the retry loop. None of these tests touch Redis —
-// silence the noise so the test runner doesn't fail the suite on an
-// "unhandled async activity after test ended" report.
 const { default: app } = await import("../../app");
 const { db, pool, usersTable, systemSettingsTable } = await import("@workspace/db");
 const { eq } = await import("drizzle-orm");
-const { redisConnection } = await import("../redis");
-
-redisConnection.removeAllListeners("error");
-redisConnection.on("error", () => {});
-redisConnection.disconnect(false);
-
-const isExpectedRedisError = (err: unknown): boolean =>
-  !!err &&
-  typeof err === "object" &&
-  "code" in err &&
-  (err as { code?: string }).code === "ECONNREFUSED";
-
-const swallowExpectedRedis = (err: unknown) => {
-  if (isExpectedRedisError(err)) return;
-  throw err;
-};
 
 // SESSION_SECRET is set in the test env; fall back to the same dev default
 // the auth middleware uses so the JWTs we forge here match what authMiddleware
@@ -52,9 +31,6 @@ let prevWhitelist: string | null | undefined;
 let hadWhitelistRow = false;
 
 before(async () => {
-  process.on("unhandledRejection", swallowExpectedRedis);
-  process.on("uncaughtException", swallowExpectedRedis);
-
   // adminMiddleware refuses requests when an `admin_ip_whitelist` is set and
   // the caller's IP isn't on it. The test client connects from 127.0.0.1, so
   // make sure no whitelist is configured for the duration of this suite — and
@@ -156,8 +132,6 @@ after(async () => {
           .where(eq(systemSettingsTable.key, "admin_ip_whitelist"));
       }
     } finally {
-      process.off("unhandledRejection", swallowExpectedRedis);
-      process.off("uncaughtException", swallowExpectedRedis);
       await pool.end();
     }
   }

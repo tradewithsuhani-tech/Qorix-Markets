@@ -29,28 +29,7 @@ const {
   invalidateMaintenanceCache,
   shouldRunBackgroundJobs,
 } = await import("../../middlewares/maintenance");
-const { redisConnection } = await import("../../lib/redis");
 const { inArray } = await import("drizzle-orm");
-
-// Same Redis-noise suppression as maintenance.test.ts: importing app.ts
-// transitively loads routes that grab the shared ioredis client at module
-// load. There is no Redis in the test env, so the client emits ECONNREFUSED
-// on its retry loop. None of these tests touch Redis — silence the default
-// listener and disconnect with no auto-reconnect.
-redisConnection.removeAllListeners("error");
-redisConnection.on("error", () => {});
-redisConnection.disconnect(false);
-
-const isExpectedRedisError = (err: unknown): boolean =>
-  !!err &&
-  typeof err === "object" &&
-  "code" in err &&
-  (err as { code?: string }).code === "ECONNREFUSED";
-
-const swallowExpectedRedis = (err: unknown) => {
-  if (isExpectedRedisError(err)) return;
-  throw err;
-};
 
 let server: Server;
 let baseUrl = "";
@@ -63,9 +42,6 @@ const MAINTENANCE_KEYS = [
 ] as const;
 
 before(async () => {
-  process.on("unhandledRejection", swallowExpectedRedis);
-  process.on("uncaughtException", swallowExpectedRedis);
-
   // Belt-and-braces: clear any stale rows another suite may have left behind
   // before seeding our own. We only ever want `maintenance_mode=true` and
   // nothing else for this fixture so the assertions are unambiguous about
@@ -98,8 +74,6 @@ after(async () => {
     .delete(systemSettingsTable)
     .where(inArray(systemSettingsTable.key, [...MAINTENANCE_KEYS]));
   invalidateMaintenanceCache();
-  process.off("unhandledRejection", swallowExpectedRedis);
-  process.off("uncaughtException", swallowExpectedRedis);
   await pool.end();
 });
 

@@ -2,7 +2,7 @@ import { db, signalTradesTable } from "@workspace/db";
 import { and, eq, gte, isNull, like, lte } from "drizzle-orm";
 import { logger } from "./logger";
 import { createSignalTrade, closeSignalTrade } from "./signal-trade-service";
-import { redisConnection } from "./redis";
+import { getRedisConnection } from "./redis";
 
 /**
  * AUTO SIGNAL ENGINE — v2 (planned daily target)
@@ -381,7 +381,7 @@ const PLAN_TTL_SECONDS = 36 * 60 * 60;
 
 async function loadPlan(dayKey: string): Promise<DailyPlan | null> {
   try {
-    const raw = await redisConnection.get(PLAN_REDIS_KEY_PREFIX + dayKey);
+    const raw = await getRedisConnection().get(PLAN_REDIS_KEY_PREFIX + dayKey);
     if (!raw) return null;
     return JSON.parse(raw) as DailyPlan;
   } catch (err: any) {
@@ -392,7 +392,7 @@ async function loadPlan(dayKey: string): Promise<DailyPlan | null> {
 
 async function savePlan(plan: DailyPlan): Promise<void> {
   try {
-    await redisConnection.set(
+    await getRedisConnection().set(
       PLAN_REDIS_KEY_PREFIX + plan.dayKey,
       JSON.stringify(plan),
       "EX",

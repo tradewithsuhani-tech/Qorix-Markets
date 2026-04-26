@@ -40,7 +40,6 @@ const {
   invalidateMaintenanceCache,
 } = await import("../../middlewares/maintenance");
 const { signToken } = await import("../../middlewares/auth");
-const { redisConnection } = await import("../../lib/redis");
 const { eq, inArray, sql } = await import("drizzle-orm");
 
 // Re-seed the maintenance rows + drop the in-memory cache. node:test runs
@@ -66,26 +65,6 @@ async function reseedHardBlock(): Promise<void> {
   invalidateMaintenanceCache();
 }
 
-// Same Redis-noise suppression as the sibling suites: importing app.ts
-// transitively loads routes that grab the shared ioredis client at module
-// load. There is no Redis in the test env, so the client emits ECONNREFUSED
-// on its retry loop. None of these tests touch Redis — silence the default
-// listener and disconnect with no auto-reconnect.
-redisConnection.removeAllListeners("error");
-redisConnection.on("error", () => {});
-redisConnection.disconnect(false);
-
-const isExpectedRedisError = (err: unknown): boolean =>
-  !!err &&
-  typeof err === "object" &&
-  "code" in err &&
-  (err as { code?: string }).code === "ECONNREFUSED";
-
-const swallowExpectedRedis = (err: unknown) => {
-  if (isExpectedRedisError(err)) return;
-  throw err;
-};
-
 let server: Server;
 let baseUrl = "";
 
@@ -108,9 +87,6 @@ let nonAdminToken = "";
 let adminToken = "";
 
 before(async () => {
-  process.on("unhandledRejection", swallowExpectedRedis);
-  process.on("uncaughtException", swallowExpectedRedis);
-
   // We want `maintenance_mode=true` AND `maintenance_hard_block=true`. Use
   // an upsert (rather than delete-then-insert) because a sibling suite
   // running in parallel may have a row with the same key — racing with
@@ -186,8 +162,6 @@ after(async () => {
     .delete(usersTable)
     .where(inArray(usersTable.email, [NON_ADMIN_EMAIL, ADMIN_EMAIL]));
   invalidateMaintenanceCache();
-  process.off("unhandledRejection", swallowExpectedRedis);
-  process.off("uncaughtException", swallowExpectedRedis);
   await pool.end();
 });
 
