@@ -1,60 +1,37 @@
-# Fly.io app config for the Qorix Markets API server.
+# fly.toml app configuration file generated for qorix-api on 2026-04-26T08:25:11Z
 #
-# Deployed via GitHub Actions on push to `main` (see .github/workflows/deploy.yml).
-# Build context is the monorepo root; the Dockerfile path below is resolved
-# relative to where `flyctl deploy` is invoked (repo root).
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
 
-app            = "qorix-api"
-# Mumbai (bom) so the api-server, Postgres, and Redis all sit in the same
-# AWS Asia-Pacific datacenter. Indian users see ~5-15 ms RTT instead of the
-# ~250 ms they'd pay against a US-East primary. If you change this, also
-# update the Postgres + Redis region in FLY_GO_LIVE_CHECKLIST.md to match.
-primary_region = "bom"
+app = 'qorix-api'
+primary_region = 'bom'
 
-# ─── Build ──────────────────────────────────────────────────────────────────
 [build]
-  dockerfile = "artifacts/api-server/Dockerfile"
+  dockerfile = 'Dockerfile'
 
-# ─── Runtime env ────────────────────────────────────────────────────────────
-# Sensitive values (DATABASE_URL, REDIS_URL, JWT_SECRET, AWS_*, GOOGLE_*,
-# RECAPTCHA_*, SES_*, SMTP_*, TELEGRAM_BOT_TOKEN, PLATFORM_TRON_*) are set
-# with `fly secrets set ...` and never committed.
 [env]
-  NODE_ENV            = "production"
-  PORT                = "8080"
-  # This is the ONLY machine that should run cron + the Telegram poller.
-  # Replit dev should set this to "false" once the cutover lands.
-  RUN_BACKGROUND_JOBS = "true"
-  # Allowed origins for CORS. Comma-separated; the api-server reads this list.
-  # The fly.dev hostnames are kept here so we can smoke-test the deploy on the
-  # raw Fly URLs before the qorixmarkets.com DNS cutover lands.
-  CORS_ORIGIN         = "https://qorixmarkets.com,https://www.qorixmarkets.com,https://qorix-markets-web.fly.dev"
+  CORS_ORIGIN = 'https://qorixmarkets.com,https://www.qorixmarkets.com,https://qorix-markets-web.fly.dev'
+  NODE_ENV = 'production'
+  PORT = '8080'
+  RUN_BACKGROUND_JOBS = 'true'
 
-# ─── HTTP service ───────────────────────────────────────────────────────────
 [http_service]
-  internal_port       = 8080
-  force_https         = true
-  # Cron + Telegram poller require a single, always-on machine. Do NOT enable
-  # auto_stop_machines or scale beyond 1 without first wiring leader-election
-  # for the background jobs (see artifacts/api-server/src/index.ts).
-  auto_stop_machines  = false
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = 'off'
   auto_start_machines = true
   min_machines_running = 1
-  processes            = ["app"]
+  processes = ['app']
 
   [[http_service.checks]]
-    interval     = "15s"
-    timeout      = "5s"
-    grace_period = "30s"
-    method       = "get"
-    path         = "/api/healthz"
-    protocol     = "http"
+    interval = '15s'
+    timeout = '5s'
+    grace_period = '30s'
+    method = 'get'
+    path = '/api/healthz'
+    protocol = 'http'
 
-# ─── Machine sizing ─────────────────────────────────────────────────────────
-# Background workers + Telegram polling + the Express API on one machine — we
-# pick a shared CPU with 1GB so cron / esbuild bundle / Drizzle / BullMQ have
-# headroom without paying for a performance VM.
 [[vm]]
-  size      = "shared-cpu-1x"
-  memory    = "1gb"
-  processes = ["app"]
+  size = 'shared-cpu-1x'
+  memory = '1gb'
+  processes = ['app']
