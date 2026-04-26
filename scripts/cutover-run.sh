@@ -26,6 +26,32 @@ if [[ -z "${PROD_DATABASE_URL:-}" || -z "${NEON_DATABASE_URL:-}" ]]; then
   exit 1
 fi
 
+# Destructive-action guard. Step 2 TRUNCATEs every public table on the
+# target Neon DB (CASCADE, RESTART IDENTITY) before pg_restore. That
+# wipes whatever is currently in the target — irreversible without a
+# backup. Refuse to proceed unless the operator passes the explicit
+# acknowledgement flag, AND require the target DSN to NOT match the
+# production DSN (sanity check against fat-fingering arg order).
+CONFIRMED=0
+KEEP_ARTIFACTS=0
+for arg in "$@"; do
+  case "$arg" in
+    --i-understand-destructive) CONFIRMED=1 ;;
+    --keep-artifacts)           KEEP_ARTIFACTS=1 ;;
+  esac
+done
+if [[ "$CONFIRMED" -ne 1 ]]; then
+  echo "FATAL: refusing to run. This script will TRUNCATE every public" >&2
+  echo "       table on NEON_DATABASE_URL before restoring. Re-run with" >&2
+  echo "       --i-understand-destructive to proceed." >&2
+  exit 2
+fi
+if [[ "$NEON_DATABASE_URL" == "$PROD_DATABASE_URL" ]]; then
+  echo "FATAL: NEON_DATABASE_URL == PROD_DATABASE_URL. Refusing to" >&2
+  echo "       truncate the source. Check argument order." >&2
+  exit 2
+fi
+
 TS="$(date -u +%Y%m%dT%H%M%SZ)"
 DUMP="/tmp/qorix-cutover-${TS}.dump"
 LOG="/tmp/cutover-run-${TS}.log"
@@ -34,10 +60,6 @@ LOG="/tmp/cutover-run-${TS}.log"
 # encrypted TRON private keys. Always shred + remove on exit unless the
 # operator passes --keep-artifacts (e.g. needed for a follow-up forensic
 # review). Log file is metadata only and is kept for the post-mortem.
-KEEP_ARTIFACTS=0
-for arg in "$@"; do
-  if [[ "$arg" == "--keep-artifacts" ]]; then KEEP_ARTIFACTS=1; fi
-done
 
 cleanup() {
   if [[ "$KEEP_ARTIFACTS" -eq 1 ]]; then
