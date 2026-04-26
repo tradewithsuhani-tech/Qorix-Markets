@@ -104,6 +104,7 @@ jobs:
       # the Neon connection works. Retries cover the brief warmup window
       # before Fly's edge routes traffic to the new machine.
       - name: Smoke test api-server
+        id: smoke_api
         run: |
           set -euo pipefail
           API_BASE="https://api.qorixmarkets.com"
@@ -117,6 +118,41 @@ jobs:
             --max-time 15 "${API_BASE}/api/public/market-indicators" \
             | tee /tmp/market.json
           grep -q '"activeInvestors"' /tmp/market.json
+
+      # Auto-rollback: if (and only if) the smoke check above failed, promote
+      # the previous release back so users aren't left on a known-bad build.
+      # We don't trigger on `flyctl deploy` itself failing — in that case the
+      # old release is still live and there's nothing to roll back.
+      - name: Rollback qorix-api to previous release
+        id: rollback_api
+        if: failure() && steps.smoke_api.outcome == 'failure'
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          echo "::warning::Smoke test failed for qorix-api — rolling back to previous release."
+          flyctl releases rollback \
+            --app qorix-api \
+            --yes
+      # Smoke-test the rolled-back release so we don't silently fall back to a
+      # version that's also broken. If this fails the job still ends red (the
+      # original smoke step already failed), but the log will make it obvious
+      # that the rollback target is bad too and a human needs to step in.
+      - name: Smoke test rolled-back api-server
+        if: failure() && steps.smoke_api.outcome == 'failure' && steps.rollback_api.outcome == 'success'
+        run: |
+          set -euo pipefail
+          API_BASE="https://api.qorixmarkets.com"
+          echo "→ (post-rollback) GET ${API_BASE}/api/healthz"
+          curl -fsS --retry 5 --retry-delay 5 --retry-all-errors \
+            --max-time 10 "${API_BASE}/api/healthz" | tee /tmp/healthz-rollback.json
+          grep -q '"status":"ok"' /tmp/healthz-rollback.json
+          echo
+          echo "→ (post-rollback) GET ${API_BASE}/api/public/market-indicators"
+          curl -fsS --retry 5 --retry-delay 5 --retry-all-errors \
+            --max-time 15 "${API_BASE}/api/public/market-indicators" \
+            | tee /tmp/market-rollback.json
+          grep -q '"activeInvestors"' /tmp/market-rollback.json
 
   deploy-web:
     name: Deploy qorix-markets → qorix-markets-web
@@ -144,10 +180,41 @@ jobs:
       # build — `flyctl deploy` returning success only proves the container
       # started, not that traffic is being routed to it.
       - name: Smoke test qorix-markets web
+        id: smoke_web
         run: |
           set -euo pipefail
           WEB_BASE="https://qorixmarkets.com"
           echo "→ GET ${WEB_BASE}/healthz"
+          body=$(curl -fsS --retry 5 --retry-delay 5 --retry-all-errors \
+            --max-time 10 "${WEB_BASE}/healthz")
+          echo "${body}"
+          test "${body}" = "ok"
+
+      # Auto-rollback: if (and only if) the smoke check above failed, promote
+      # the previous release back so users aren't left on a known-bad build.
+      # We don't trigger on `flyctl deploy` itself failing — in that case the
+      # old release is still live and there's nothing to roll back.
+      - name: Rollback qorix-markets-web to previous release
+        id: rollback_web
+        if: failure() && steps.smoke_web.outcome == 'failure'
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          echo "::warning::Smoke test failed for qorix-markets-web — rolling back to previous release."
+          flyctl releases rollback \
+            --app qorix-markets-web \
+            --yes
+      # Smoke-test the rolled-back release so we don't silently fall back to a
+      # version that's also broken. If this fails the job still ends red (the
+      # original smoke step already failed), but the log will make it obvious
+      # that the rollback target is bad too and a human needs to step in.
+      - name: Smoke test rolled-back qorix-markets web
+        if: failure() && steps.smoke_web.outcome == 'failure' && steps.rollback_web.outcome == 'success'
+        run: |
+          set -euo pipefail
+          WEB_BASE="https://qorixmarkets.com"
+          echo "→ (post-rollback) GET ${WEB_BASE}/healthz"
           body=$(curl -fsS --retry 5 --retry-delay 5 --retry-all-errors \
             --max-time 10 "${WEB_BASE}/healthz")
           echo "${body}"
