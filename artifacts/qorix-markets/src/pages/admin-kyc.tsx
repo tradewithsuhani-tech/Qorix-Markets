@@ -52,10 +52,15 @@ export default function AdminKycPage() {
   const [tab, setTab] = useState("pending");
   const [viewing, setViewing] = useState<KycUser | null>(null);
   const [rejectReason, setRejectReason] = useState("");
+  const [showSmokeTest, setShowSmokeTest] = useState(false);
 
   const { data, isLoading } = useQuery<{ users: KycUser[] }>({
-    queryKey: ["admin-kyc-queue", kind, tab],
-    queryFn: () => authFetch(`/api/admin/kyc/queue?status=${tab}&kind=${kind}`),
+    queryKey: ["admin-kyc-queue", kind, tab, showSmokeTest],
+    queryFn: () => {
+      const params = new URLSearchParams({ status: tab, kind });
+      if (showSmokeTest) params.set("includeSmokeTest", "true");
+      return authFetch(`/api/admin/kyc/queue?${params.toString()}`);
+    },
     refetchInterval: 20000,
   });
 
@@ -143,6 +148,18 @@ export default function AdminKycPage() {
               );
             })}
           </div>
+          <label
+            className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none px-2"
+            title="Include the deploy smoke-test account in this queue (for support / debugging only)."
+          >
+            <input
+              type="checkbox"
+              checked={showSmokeTest}
+              onChange={(e) => setShowSmokeTest(e.target.checked)}
+              className="accent-amber-500"
+            />
+            Show smoke-test account
+          </label>
         </div>
 
         <div className="glass-card rounded-2xl overflow-hidden">
