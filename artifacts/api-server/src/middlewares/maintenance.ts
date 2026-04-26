@@ -152,7 +152,30 @@ export async function notifyMaintenanceInvalidation(): Promise<void> {
 let listenerClient: ListenClient | null = null;
 let listenerStopped = false;
 let reconnectTimer: NodeJS.Timeout | null = null;
-const RECONNECT_DELAY_MS = 1_000;
+
+// Bounded exponential backoff for the LISTEN reconnect loop. The floor
+// (1s) keeps single-bounce recovery snappy — a Fly Postgres backend rotation
+// or a brief network blip still re-LISTENs in ~1s like the old flat-1s
+// behaviour. The ceiling (30s) keeps us from hammering the DB-front proxy
+// with a connect attempt every second when Postgres is hard-down for
+// minutes/hours: every API instance would otherwise produce one error log
+// + one socket churn per second, indefinitely. Schedule is 1s, 2s, 4s, 8s,
+// 16s, 30s, 30s, … until either a connect succeeds (which resets the
+// delay back to the floor in connectListener) or the listener is stopped.
+const RECONNECT_DELAY_FLOOR_MS = 1_000;
+const RECONNECT_DELAY_CEILING_MS = 30_000;
+let nextReconnectDelayMs = RECONNECT_DELAY_FLOOR_MS;
+
+// Test-only seam: lets the backoff regression test inject a factory that
+// throws synchronously, simulating a hard-down database without standing up
+// a real failing Postgres. Production callers never touch this — pass `null`
+// to restore the real createListenClient behaviour at the end of a test.
+let listenClientFactoryForTest: (() => ListenClient) | null = null;
+export function __setListenClientFactoryForTest(
+  factory: (() => ListenClient) | null,
+): void {
+  listenClientFactoryForTest = factory;
+}
 
 // Health-of-the-fan-out telemetry. Updated only on a *successful*
 // connectListener() and read by the structured "reconnected" log so ops
@@ -168,9 +191,11 @@ let reconnectCount = 0;
 // Designed to be called once at process boot from index.ts. Returns a stop
 // function used by graceful shutdown to release the connection cleanly.
 //
-// On connection loss the listener auto-reconnects every RECONNECT_DELAY_MS
-// until either it succeeds or stop() is called. We never throw out of the
-// retry loop because the cache TTL fallback already provides eventual
+// On connection loss the listener auto-reconnects with bounded exponential
+// backoff (RECONNECT_DELAY_FLOOR_MS up to RECONNECT_DELAY_CEILING_MS,
+// doubling on each failure, reset to floor on a successful connect) until
+// either it succeeds or stop() is called. We never throw out of the retry
+// loop because the cache TTL fallback already provides eventual
 // consistency; a hard failure would be worse than a temporary pause in
 // cross-instance fan-out.
 export async function startMaintenanceInvalidationListener(): Promise<
@@ -193,6 +218,10 @@ export async function startMaintenanceInvalidationListener(): Promise<
     // "reconnected" line attributed to the previous lifecycle.
     lastConnectedAt = null;
     reconnectCount = 0;
+    // Reset the backoff so a fresh startMaintenanceInvalidationListener()
+    // call dials immediately at the floor delay if it fails, rather than
+    // inheriting a backed-off delay from the previous lifecycle.
+    nextReconnectDelayMs = RECONNECT_DELAY_FLOOR_MS;
     if (c) {
       try {
         await c.end();
@@ -207,7 +236,7 @@ async function connectListener(): Promise<void> {
   if (listenerStopped) return;
   let client: ListenClient | null = null;
   try {
-    client = createListenClient();
+    client = (listenClientFactoryForTest ?? createListenClient)();
     client.on("error", (err: Error) => {
       errorLogger.error(
         { err, channel: MAINTENANCE_NOTIFY_CHANNEL },
@@ -226,6 +255,13 @@ async function connectListener(): Promise<void> {
     await client.connect();
     await client.query(`LISTEN ${MAINTENANCE_NOTIFY_CHANNEL}`);
     listenerClient = client;
+    // Reset the reconnect backoff to the floor: a single transient blip
+    // that recovers on the very first retry should land back in the
+    // "1s if we bounce again" regime, not stay capped at 30s. Doing this
+    // only on a *successful* connect (not just on connect attempt) means
+    // a connect that establishes but immediately drops still counts as a
+    // failure for backoff purposes — which is what we want.
+    nextReconnectDelayMs = RECONNECT_DELAY_FLOOR_MS;
     // pg.Client exposes the backend PID as `processID` after connect(); it's
     // typed as `number | null` on the runtime object but isn't always present
     // on the @types/pg surface. Narrow defensively so the structured log
@@ -287,10 +323,22 @@ function scheduleReconnect(): void {
       // best-effort: client already in error state
     });
   }
+  // Snapshot the delay we'll wait BEFORE doubling for the next attempt:
+  // the next-attempt delay is what the *failed* attempt will leave behind
+  // for the one after it. So a sequence of failures lays down 1s, 2s, 4s,
+  // 8s, 16s, 30s, 30s, … gaps. A successful connect resets
+  // nextReconnectDelayMs back to the floor in connectListener(), which
+  // means a single transient blip still recovers in ~1s like the old
+  // flat-1s loop did.
+  const delayMs = nextReconnectDelayMs;
+  nextReconnectDelayMs = Math.min(
+    nextReconnectDelayMs * 2,
+    RECONNECT_DELAY_CEILING_MS,
+  );
   reconnectTimer = setTimeout(() => {
     reconnectTimer = null;
     void connectListener();
-  }, RECONNECT_DELAY_MS);
+  }, delayMs);
 }
 
 export async function getMaintenanceState(): Promise<MaintenanceState> {
