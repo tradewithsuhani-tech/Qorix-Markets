@@ -43,6 +43,7 @@ import {
 } from "recharts";
 
 import { BannerCarousel } from "@/components/banner-carousel";
+import { DrawdownChartCard } from "@/components/drawdown-chart-card";
 
 const DASHBOARD_BANNERS = [
   { src: `${import.meta.env.BASE_URL}promo/banner-1-manual-trading.png`, alt: "Manual Trading Is Breaking You — Trade Smart with Qorix" },
@@ -1928,6 +1929,20 @@ export function DemoDashboardBody({
           </motion.div>
           )}
           </div>
+        </div>
+
+        {/* Drawdown Chart — same component as the Analytics page so the
+            visual + numbers stay in sync. Full-width row of its own so
+            both lines (Cumulative Return % and Drawdown from Peak %)
+            have room to breathe on mobile. */}
+        <div>
+          <DrawdownChartCard
+            equity={equity as Array<{ date: string; equity: number }> | undefined}
+            investment={investment as any}
+            days={chartDays}
+            loading={equityLoading || investLoading}
+            delay={0.42}
+          />
         </div>
 
         {/* Performance Metrics */}
