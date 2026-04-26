@@ -1004,109 +1004,220 @@ export default function AnalyticsPage() {
             loading={perfLoading || invLoading}
             delay={0.25}
           >
-            <Scatter
-              data={{
-                datasets: [
-                  {
-                    label: "Risk Profiles",
-                    data: riskProfiles.slice(0, 3).map((p) => ({
-                      x: p.drawdown,
-                      y: p.returnPct,
-                    })),
-                    backgroundColor: [
-                      "rgba(96,165,250,0.7)",
-                      "rgba(99,102,241,0.7)",
-                      "rgba(249,115,22,0.7)",
-                    ],
-                    pointBackgroundColor: [
-                      "rgba(96,165,250,0.9)",
-                      "rgba(99,102,241,0.9)",
-                      "rgba(249,115,22,0.9)",
-                    ],
-                    pointBorderColor: "transparent",
-                    pointRadius: 10,
-                    pointHoverRadius: 13,
-                  },
-                  {
-                    label: "Your Profile",
-                    data: [
+            {(() => {
+              // Premium Risk vs Return chart. Three improvements over the
+              // old Scatter:
+              //   1. A faint dashed "efficient frontier" curve connects the
+              //      three preset profiles, giving the chart finance-grade
+              //      visual context instead of three loose bubbles.
+              //   2. Each bubble carries a translucent border-ring (halo)
+              //      with a colour matched to the risk tier; "Your Profile"
+              //      gets an emerald hero treatment with a double-thick
+              //      ring so it visibly pops as the user's marker.
+              //   3. Both axes are data-driven (with sane minimum padding)
+              //      so small 30D returns no longer collapse all bubbles
+              //      onto the x-axis the way they did on the 1D drawdown
+              //      chart before its fix.
+              const profile3 = riskProfiles.slice(0, 3);
+              const yourProfile = riskProfiles[3]!;
+              const xs = riskProfiles.map((p) => p.drawdown);
+              const ys = riskProfiles.map((p) => p.returnPct);
+              // Guarded axis bounds: if riskProfiles is somehow empty (e.g.
+              // the perf hook hasn't returned yet and we're rendered through
+              // the loading branch), fall back to a sensible default frame
+              // (0..10% drawdown, ±1% return) instead of letting Math.min(...[])
+              // produce Infinity and ship NaN bounds to chart.js.
+              const xMinRaw = xs.length ? Math.min(...xs) : 0;
+              const xMaxRaw = xs.length ? Math.max(...xs) : 10;
+              const xSpan = Math.max(xMaxRaw - xMinRaw, 4);
+              const xPad = Math.max(xSpan * 0.18, 1);
+              const yMinRaw = ys.length ? Math.min(...ys, 0) : -1;
+              const yMaxRaw = ys.length ? Math.max(...ys, 0) : 1;
+              const ySpan = Math.max(yMaxRaw - yMinRaw, 1);
+              const yPad = Math.max(ySpan * 0.35, 0.5);
+
+              const profileColors = [
+                "rgba(96,165,250,1)",   // Conservative — sky blue
+                "rgba(167,139,250,1)",  // Balanced — violet
+                "rgba(251,146,60,1)",   // Aggressive — orange
+              ];
+              const profileFills = [
+                "rgba(96,165,250,0.85)",
+                "rgba(167,139,250,0.85)",
+                "rgba(251,146,60,0.85)",
+              ];
+              const profileHalos = [
+                "rgba(96,165,250,0.28)",
+                "rgba(167,139,250,0.28)",
+                "rgba(251,146,60,0.28)",
+              ];
+
+              return (
+                <Scatter
+                  data={{
+                    datasets: [
+                      // 0 — Efficient frontier curve (faint dashed connector
+                      // through the three preset profiles). showLine on a
+                      // scatter dataset gives us a tension'd polyline
+                      // without needing a mixed Chart component.
                       {
-                        x: riskProfiles[3]!.drawdown,
-                        y: riskProfiles[3]!.returnPct,
+                        type: "line" as const,
+                        label: "Efficient Frontier",
+                        data: profile3.map((p) => ({ x: p.drawdown, y: p.returnPct })),
+                        borderColor: "rgba(148,163,184,0.35)",
+                        borderDash: [5, 5],
+                        borderWidth: 1.25,
+                        backgroundColor: "transparent",
+                        pointRadius: 0,
+                        pointHoverRadius: 0,
+                        tension: 0.4,
+                        fill: false,
+                        order: 3,
                       },
+                      // 1 — Risk profile bubbles. Per-point colours +
+                      // matching translucent halo rings.
+                      {
+                        label: "Risk Profiles",
+                        data: profile3.map((p) => ({ x: p.drawdown, y: p.returnPct })),
+                        backgroundColor: profileFills,
+                        pointBackgroundColor: profileFills,
+                        pointBorderColor: profileHalos,
+                        pointBorderWidth: 6,
+                        pointRadius: 11,
+                        pointHoverRadius: 14,
+                        order: 2,
+                      } as any,
+                      // 2 — "Your Profile" hero bubble with double-thick
+                      // emerald halo so the user's marker dominates.
+                      {
+                        label: "Your Profile",
+                        data: [{ x: yourProfile.drawdown, y: yourProfile.returnPct }],
+                        backgroundColor: "rgba(52,211,153,0.95)",
+                        pointBackgroundColor: "rgba(52,211,153,1)",
+                        pointBorderColor: "rgba(52,211,153,0.35)",
+                        pointBorderWidth: 8,
+                        pointRadius: 13,
+                        pointHoverRadius: 16,
+                        order: 1,
+                      } as any,
                     ],
-                    backgroundColor: "rgba(52,211,153,0.9)",
-                    pointBackgroundColor: "rgba(52,211,153,1)",
-                    pointBorderColor: "rgba(52,211,153,0.3)",
-                    pointBorderWidth: 4,
-                    pointRadius: 12,
-                    pointHoverRadius: 15,
-                  },
-                ],
-              }}
-              options={{
-                ...CHART_DEFAULTS,
-                plugins: {
-                  ...CHART_DEFAULTS.plugins,
-                  legend: {
-                    display: true,
-                    position: "top" as const,
-                    labels: {
-                      color: "#64748b",
-                      boxWidth: 10,
-                      boxHeight: 10,
-                      borderRadius: 5,
-                      font: { size: 11 },
-                      padding: 12,
-                    },
-                  },
-                  tooltip: {
-                    ...CHART_DEFAULTS.plugins.tooltip,
-                    callbacks: {
-                      title: (items: any) => {
-                        const idx = items[0]?.dataIndex;
-                        const dsIdx = items[0]?.datasetIndex;
-                        if (dsIdx === 1) return "Your Profile";
-                        return riskProfiles[idx ?? 0]?.label ?? "";
+                  }}
+                  plugins={[
+                    {
+                      // Inline plugin: draw a small text label above each
+                      // bubble so the user can read profile names without
+                      // hovering. Cheaper than pulling in
+                      // chartjs-plugin-datalabels for a single chart.
+                      id: "rrPointLabels",
+                      afterDatasetsDraw(chart: any) {
+                        const ctx = chart.ctx as CanvasRenderingContext2D;
+                        const profilesMeta = chart.getDatasetMeta(1);
+                        const yourMeta = chart.getDatasetMeta(2);
+                        const labels = ["Conservative", "Balanced", "Aggressive"];
+                        ctx.save();
+                        ctx.textAlign = "center";
+                        ctx.font =
+                          '600 10px ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif';
+                        profilesMeta.data.forEach((pt: any, i: number) => {
+                          if (!pt) return;
+                          ctx.fillStyle = profileColors[i] ?? "rgba(148,163,184,0.9)";
+                          ctx.fillText(labels[i] ?? "", pt.x, pt.y - 20);
+                        });
+                        const you = yourMeta.data[0];
+                        if (you) {
+                          ctx.font =
+                            '700 11px ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif';
+                          ctx.fillStyle = "rgba(52,211,153,1)";
+                          ctx.fillText("You", you.x, you.y - 24);
+                        }
+                        ctx.restore();
                       },
-                      label: (ctx: any) =>
-                        [
-                          ` Risk (drawdown): ${ctx.parsed.x}%`,
-                          ` Return (30D): ${ctx.parsed.y >= 0 ? "+" : ""}${Number(ctx.parsed.y).toFixed(2)}%`,
-                        ],
                     },
-                  },
-                },
-                scales: {
-                  x: {
-                    ...CHART_DEFAULTS.scales.x,
-                    title: {
-                      display: true,
-                      text: "Max Drawdown (%)",
-                      color: "#64748b",
-                      font: { size: 11 },
+                  ]}
+                  options={{
+                    ...CHART_DEFAULTS,
+                    layout: {
+                      padding: { top: 28, right: 16, bottom: 4, left: 4 },
                     },
-                    ticks: {
-                      ...CHART_DEFAULTS.scales.x.ticks,
-                      callback: (v: any) => `${v}%`,
+                    plugins: {
+                      ...CHART_DEFAULTS.plugins,
+                      legend: {
+                        display: true,
+                        position: "top" as const,
+                        labels: {
+                          color: "#94a3b8",
+                          boxWidth: 10,
+                          boxHeight: 10,
+                          borderRadius: 5,
+                          font: { size: 11, weight: 600 as const },
+                          padding: 14,
+                          usePointStyle: true,
+                          // Hide the "Efficient Frontier" entry from the
+                          // legend; the dashed line is self-explanatory.
+                          filter: (item: any) => item.text !== "Efficient Frontier",
+                        },
+                      },
+                      tooltip: {
+                        ...CHART_DEFAULTS.plugins.tooltip,
+                        // Suppress hover-on-line tooltip so only bubbles
+                        // are interactive.
+                        filter: (ctx: any) =>
+                          ctx.dataset.label !== "Efficient Frontier",
+                        callbacks: {
+                          title: (items: any) => {
+                            const idx = items[0]?.dataIndex;
+                            const dsIdx = items[0]?.datasetIndex;
+                            if (dsIdx === 2) return "Your Profile";
+                            return riskProfiles[idx ?? 0]?.label ?? "";
+                          },
+                          label: (ctx: any) => [
+                            ` Max Drawdown: ${Number(ctx.parsed.x).toFixed(1)}%`,
+                            ` Expected Return: ${ctx.parsed.y >= 0 ? "+" : ""}${Number(ctx.parsed.y).toFixed(2)}%`,
+                          ],
+                        },
+                      },
                     },
-                  },
-                  y: {
-                    ...CHART_DEFAULTS.scales.y,
-                    title: {
-                      display: true,
-                      text: "Expected Return (%)",
-                      color: "#64748b",
-                      font: { size: 11 },
+                    scales: {
+                      x: {
+                        ...CHART_DEFAULTS.scales.x,
+                        type: "linear" as const,
+                        suggestedMin: Math.max(0, xMinRaw - xPad),
+                        suggestedMax: xMaxRaw + xPad,
+                        title: {
+                          display: true,
+                          text: "Max Drawdown (%)",
+                          color: "#94a3b8",
+                          font: { size: 11, weight: 600 as const },
+                          padding: { top: 8 },
+                        },
+                        ticks: {
+                          ...CHART_DEFAULTS.scales.x.ticks,
+                          maxTicksLimit: 6,
+                          callback: (v: any) => `${Number(v).toFixed(0)}%`,
+                        },
+                      },
+                      y: {
+                        ...CHART_DEFAULTS.scales.y,
+                        suggestedMin: yMinRaw - yPad,
+                        suggestedMax: yMaxRaw + yPad,
+                        title: {
+                          display: true,
+                          text: "Expected Return (%)",
+                          color: "#94a3b8",
+                          font: { size: 11, weight: 600 as const },
+                          padding: { bottom: 8 },
+                        },
+                        ticks: {
+                          ...CHART_DEFAULTS.scales.y.ticks,
+                          maxTicksLimit: 6,
+                          callback: (v: any) => `${Number(v).toFixed(2)}%`,
+                        },
+                      },
                     },
-                    ticks: {
-                      ...CHART_DEFAULTS.scales.y.ticks,
-                      callback: (v: any) => `${Number(v).toFixed(1)}%`,
-                    },
-                  },
-                },
-              }}
-            />
+                  }}
+                />
+              );
+            })()}
           </ChartCard>
         </div>
 
