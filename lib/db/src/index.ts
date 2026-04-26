@@ -64,4 +64,17 @@ export const pool = new Pool({
 });
 export const db = drizzle(pool, { schema });
 
+// Build a dedicated, long-lived Postgres connection suitable for LISTEN.
+// LISTEN binds to a single backend connection — pool clients get recycled and
+// would silently drop subscriptions on release, so callers that need pub/sub
+// (currently the cross-instance maintenance cache invalidation in
+// api-server/src/middlewares/maintenance.ts) must own their own client. The
+// caller is responsible for calling `client.end()` on shutdown.
+export function createListenClient(): pg.Client {
+  return new pg.Client({
+    connectionString: dbUrl,
+    ssl: wantsSsl ? { rejectUnauthorized: !allowInvalidCert } : undefined,
+  });
+}
+
 export * from "./schema";

@@ -4,7 +4,10 @@ import { seedTasks } from "./lib/task-service";
 import { seedSystemSettings } from "./lib/seed-settings";
 import { runWalletEncryptionPreflight } from "./lib/wallet-preflight";
 import { flagSmokeTestAccount } from "./lib/smoke-test-account";
-import { getMaintenanceState } from "./middlewares/maintenance";
+import {
+  getMaintenanceState,
+  startMaintenanceInvalidationListener,
+} from "./middlewares/maintenance";
 import {
   registerBackgroundJobs,
   realBackgroundJobFactories,
@@ -45,6 +48,14 @@ async function main() {
   // safe to run on every boot, no-op if SMOKE_TEST_EMAIL is unset.
   await flagSmokeTestAccount();
 
+  // Open the Postgres LISTEN connection that picks up cross-instance
+  // maintenance cache invalidations BEFORE accepting traffic. Without this,
+  // an admin flipping the toggle on one Fly machine would only invalidate
+  // that machine's cache; every other replica would keep serving the stale
+  // state for up to CACHE_TTL_MS. The listener auto-reconnects on errors and
+  // is closed in gracefulShutdown below.
+  const stopMaintenanceListener = await startMaintenanceInvalidationListener();
+
   const { default: app } = await import("./app");
   const { logger, errorLogger } = await import("./lib/logger");
 
@@ -82,6 +93,9 @@ async function main() {
         jobs.profitEventWorker.close(),
       ]);
     }
+    // Close the LISTEN connection cleanly so we don't leave a zombie
+    // backend connection on the Postgres side during a rolling deploy.
+    await stopMaintenanceListener();
     process.exit(0);
   };
 
