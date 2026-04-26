@@ -11,10 +11,15 @@
 # the Vite proxy handles /api → localhost:8080.
 
 ARG NODE_VERSION=24-alpine
+# Pin the pnpm major to match artifacts/api-server/Dockerfile and avoid
+# `pnpm@latest` silently jumping to a future major that changes install or
+# build behavior. Bump deliberately when the api-server Dockerfile bumps.
+ARG PNPM_VERSION=10
 
 # ─── Build stage: install + vite build ─────────────────────────────────────
 FROM node:${NODE_VERSION} AS build
-RUN corepack enable && corepack prepare pnpm@latest --activate
+ARG PNPM_VERSION
+RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
 WORKDIR /workspace
 
 # Build-time configuration baked into the static bundle.
