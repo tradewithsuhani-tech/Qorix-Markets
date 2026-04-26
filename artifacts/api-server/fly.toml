@@ -22,7 +22,9 @@ primary_region = "iad"
   # Replit dev should set this to "false" once the cutover lands.
   RUN_BACKGROUND_JOBS = "true"
   # Allowed origins for CORS. Comma-separated; the api-server reads this list.
-  CORS_ORIGIN         = "https://qorixmarkets.com,https://www.qorixmarkets.com"
+  # The fly.dev hostnames are kept here so we can smoke-test the deploy on the
+  # raw Fly URLs before the qorixmarkets.com DNS cutover lands.
+  CORS_ORIGIN         = "https://qorixmarkets.com,https://www.qorixmarkets.com,https://qorix-markets-web.fly.dev"
 
 # ─── HTTP service ───────────────────────────────────────────────────────────
 [http_service]

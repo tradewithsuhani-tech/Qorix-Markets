@@ -2,6 +2,7 @@ import { ensureRedisRunning } from "./lib/start-redis";
 import { initSystemAccounts } from "./lib/ledger-service";
 import { seedTasks } from "./lib/task-service";
 import { seedSystemSettings } from "./lib/seed-settings";
+import { runWalletEncryptionPreflight } from "./lib/wallet-preflight";
 
 // Gate single-instance background work (cron, Telegram poller, on-chain
 // watchers, BullMQ workers) behind a single env flag so we can flip it off in
@@ -17,6 +18,12 @@ async function main() {
   await initSystemAccounts();
   await seedTasks();
   await seedSystemSettings();
+  // Hard-fail on wallet-secret mismatch BEFORE we accept any traffic. This is
+  // the safety net for the Fly.io cutover: if the new instance comes up with
+  // a different WALLET_ENC_SECRET than the previous deployment, every existing
+  // user's TRC20 deposit address would silently become un-decryptable. This
+  // call decrypts one known row and exits the process if it can't.
+  await runWalletEncryptionPreflight();
 
   const { default: app } = await import("./app");
   const { logger, errorLogger } = await import("./lib/logger");
