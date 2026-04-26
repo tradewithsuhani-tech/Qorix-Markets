@@ -235,7 +235,19 @@ export default function AnalyticsPage() {
 
   const monthlyData = Array.isArray(monthlyRaw) ? monthlyRaw : [];
 
-  const equityArr = Array.isArray(equityRaw) ? [...equityRaw].reverse() : [];
+  // Sort the equity series strictly ASCENDING by date (oldest → newest).
+  // The Demo Dashboard does the same explicit sort, so both screens see
+  // arr[0] = oldest point and arr[length-1] = newest point regardless of
+  // what order the API returns. The previous .reverse() assumed the API
+  // always returned descending order; when it returned ascending order
+  // (which it currently does for the "All" range), .reverse() inverted
+  // the series and made Period Return show large negative values like
+  // -99.84% on accounts that were actually deeply profitable.
+  const equityArr = Array.isArray(equityRaw)
+    ? [...equityRaw].sort(
+        (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
+      )
+    : [];
 
   const labels = equityArr.map((e) => {
     try {
