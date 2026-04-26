@@ -78,14 +78,27 @@ async function getAdminStatsData() {
   const [profitResult] = await db
     .select({ total: sum(investmentsTable.totalProfit) })
     .from(investmentsTable);
+  // Pending-withdrawal headline counts must match the filtered admin queue:
+  // exclude the deploy smoke-test account so the dashboard badge agrees with
+  // what an admin actually sees on /admin/withdrawals.
   const [pendingResult] = await db
     .select({ count: count() })
     .from(transactionsTable)
-    .where(and(eq(transactionsTable.type, "withdrawal"), eq(transactionsTable.status, "pending")));
+    .innerJoin(usersTable, eq(usersTable.id, transactionsTable.userId))
+    .where(and(
+      eq(transactionsTable.type, "withdrawal"),
+      eq(transactionsTable.status, "pending"),
+      notSmokeTestUser(),
+    ));
   const [pendingAmountResult] = await db
     .select({ total: sum(transactionsTable.amount) })
     .from(transactionsTable)
-    .where(and(eq(transactionsTable.type, "withdrawal"), eq(transactionsTable.status, "pending")));
+    .innerJoin(usersTable, eq(usersTable.id, transactionsTable.userId))
+    .where(and(
+      eq(transactionsTable.type, "withdrawal"),
+      eq(transactionsTable.status, "pending"),
+      notSmokeTestUser(),
+    ));
 
   const [walletTotalsResult] = await db
     .select({
@@ -295,33 +308,48 @@ router.get("/admin/transactions", async (req, res) => {
   const limit = Math.min(getQueryInt(req, "limit", 80), 200);
   const type = getQueryString(req, "type");
   const status = getQueryString(req, "status");
+  // Hide the deploy smoke-test account from the admin transaction list by
+  // default; admins can opt in via `?includeSmokeTest=true` for support /
+  // debugging (mirrors the user list and KYC queue UX).
+  const includeSmoke = shouldIncludeSmokeTest(req.query["includeSmokeTest"]);
   const filters = [
     type && type !== "all" ? eq(transactionsTable.type, type) : undefined,
     status && status !== "all" ? eq(transactionsTable.status, status) : undefined,
+    includeSmoke ? undefined : notSmokeTestUser(),
   ].filter(Boolean) as any[];
 
   const rows = await db
-    .select()
+    .select({
+      id: transactionsTable.id,
+      userId: transactionsTable.userId,
+      userEmail: usersTable.email,
+      userFullName: usersTable.fullName,
+      type: transactionsTable.type,
+      amount: transactionsTable.amount,
+      status: transactionsTable.status,
+      description: transactionsTable.description,
+      walletAddress: transactionsTable.walletAddress,
+      txHash: transactionsTable.txHash,
+      createdAt: transactionsTable.createdAt,
+    })
     .from(transactionsTable)
+    .innerJoin(usersTable, eq(usersTable.id, transactionsTable.userId))
     .where(filters.length ? and(...filters) : undefined)
     .orderBy(desc(transactionsTable.createdAt))
     .limit(limit);
 
-  const data = await Promise.all(rows.map(async (t) => {
-    const user = await db.select({ email: usersTable.email, fullName: usersTable.fullName }).from(usersTable).where(eq(usersTable.id, t.userId)).limit(1);
-    return {
-      id: t.id,
-      userId: t.userId,
-      userEmail: user[0]?.email ?? "",
-      userFullName: user[0]?.fullName ?? "",
-      type: t.type,
-      amount: parseFloat(t.amount as string),
-      status: t.status,
-      description: t.description ?? "",
-      walletAddress: t.walletAddress ?? "",
-      txHash: t.txHash ?? "",
-      createdAt: t.createdAt.toISOString(),
-    };
+  const data = rows.map((t) => ({
+    id: t.id,
+    userId: t.userId,
+    userEmail: t.userEmail ?? "",
+    userFullName: t.userFullName ?? "",
+    type: t.type,
+    amount: parseFloat(t.amount as string),
+    status: t.status,
+    description: t.description ?? "",
+    walletAddress: t.walletAddress ?? "",
+    txHash: t.txHash ?? "",
+    createdAt: t.createdAt.toISOString(),
   }));
 
   res.json({ data });
@@ -712,33 +740,43 @@ router.get("/admin/logs", async (_req: AuthRequest, res) => {
 });
 
 router.get("/admin/withdrawals", async (req, res) => {
+  // Hide the deploy smoke-test account from the pending-withdrawal queue by
+  // default; admins can opt in via `?includeSmokeTest=true` for support /
+  // debugging (mirrors the user list and KYC queue UX).
+  const includeSmoke = shouldIncludeSmokeTest(req.query["includeSmokeTest"]);
+  const filters = [
+    eq(transactionsTable.type, "withdrawal"),
+    eq(transactionsTable.status, "pending"),
+    includeSmoke ? undefined : notSmokeTestUser(),
+  ].filter(Boolean) as any[];
+
   const pending = await db
-    .select()
+    .select({
+      id: transactionsTable.id,
+      userId: transactionsTable.userId,
+      userEmail: usersTable.email,
+      userFullName: usersTable.fullName,
+      amount: transactionsTable.amount,
+      walletAddress: transactionsTable.walletAddress,
+      status: transactionsTable.status,
+      createdAt: transactionsTable.createdAt,
+    })
     .from(transactionsTable)
-    .where(and(eq(transactionsTable.type, "withdrawal"), eq(transactionsTable.status, "pending")))
+    .innerJoin(usersTable, eq(usersTable.id, transactionsTable.userId))
+    .where(and(...filters))
     .orderBy(desc(transactionsTable.createdAt));
 
-  const result = await Promise.all(
-    pending.map(async (tx) => {
-      const users = await db
-        .select()
-        .from(usersTable)
-        .where(eq(usersTable.id, tx.userId))
-        .limit(1);
-      const user = users[0];
-      return {
-        id: tx.id,
-        userId: tx.userId,
-        userEmail: user?.email ?? "",
-        userFullName: user?.fullName ?? "",
-        amount: parseFloat(tx.amount as string),
-        walletAddress: tx.walletAddress ?? "",
-        status: tx.status,
-        requestedAt: tx.createdAt.toISOString(),
-        processedAt: null,
-      };
-    }),
-  );
+  const result = pending.map((tx) => ({
+    id: tx.id,
+    userId: tx.userId,
+    userEmail: tx.userEmail ?? "",
+    userFullName: tx.userFullName ?? "",
+    amount: parseFloat(tx.amount as string),
+    walletAddress: tx.walletAddress ?? "",
+    status: tx.status,
+    requestedAt: tx.createdAt.toISOString(),
+    processedAt: null,
+  }));
 
   res.json(result);
 });

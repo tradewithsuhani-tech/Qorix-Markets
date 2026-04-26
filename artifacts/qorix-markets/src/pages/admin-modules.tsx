@@ -417,19 +417,22 @@ export function AdminTransactionsPage({ mode }: { mode: "deposits" | "withdrawal
   const [status, setStatus] = useState("all");
   const [loading, setLoading] = useState(true);
   const [showManualCredit, setShowManualCredit] = useState(false);
+  const [showSmokeTest, setShowSmokeTest] = useState(false);
   const type = mode === "deposits" ? "deposit" : "withdrawal";
 
   async function load() {
     setLoading(true);
     try {
-      const data = await adminFetch(`/admin/transactions?type=${type}&status=${status}&limit=120`);
+      const params = new URLSearchParams({ type, status, limit: "120" });
+      if (showSmokeTest) params.set("includeSmokeTest", "true");
+      const data = await adminFetch(`/admin/transactions?${params.toString()}`);
       setRows(data.data ?? []);
     } finally {
       setLoading(false);
     }
   }
 
-  useEffect(() => { load(); }, [status, mode]);
+  useEffect(() => { load(); }, [status, mode, showSmokeTest]);
 
   return (
     <Layout>
@@ -455,13 +458,25 @@ export function AdminTransactionsPage({ mode }: { mode: "deposits" | "withdrawal
           <div className="glass-card p-5 rounded-2xl"><div className="text-xs text-muted-foreground">Pending</div><div className="text-2xl font-bold text-amber-400">{rows.filter((r) => r.status === "pending").length}</div></div>
           <div className="glass-card p-5 rounded-2xl"><div className="text-xs text-muted-foreground">Volume</div><div className="text-2xl font-bold">{money(rows.reduce((s, r) => s + r.amount, 0))}</div></div>
         </div>
-        <div className="glass-card p-4 rounded-2xl flex items-center justify-between">
+        <div className="glass-card p-4 rounded-2xl flex items-center justify-between gap-3 flex-wrap">
           <select value={status} onChange={(e) => setStatus(e.target.value)} className="bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-sm">
             <option value="all">All status</option>
             <option value="pending">Pending</option>
             <option value="completed">Completed</option>
             <option value="rejected">Rejected</option>
           </select>
+          <label
+            className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none px-2"
+            title="Include the deploy smoke-test account in this list (for support / debugging only)."
+          >
+            <input
+              type="checkbox"
+              checked={showSmokeTest}
+              onChange={(e) => setShowSmokeTest(e.target.checked)}
+              className="accent-amber-500"
+            />
+            Show smoke-test account
+          </label>
           <div className="text-xs text-muted-foreground">{mode === "withdrawals" ? "Large withdrawals require manual approval." : "Use Manual Credit to apply off-chain deposits."}</div>
         </div>
         <TransactionTable rows={rows} loading={loading} />
