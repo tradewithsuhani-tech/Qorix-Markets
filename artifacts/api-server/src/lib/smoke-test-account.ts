@@ -14,8 +14,32 @@
  */
 
 import { db, usersTable } from "@workspace/db";
-import { eq, sql } from "drizzle-orm";
+import { eq, ne, or, isNull, sql, type SQL } from "drizzle-orm";
 import { logger } from "./logger";
+
+/**
+ * SQL predicate that excludes the smoke-test account from a query against
+ * `usersTable`. Treats NULL as "not a smoke-test account" so older rows
+ * (before the column was added) keep showing up normally.
+ *
+ * Use in admin-facing list/count queries that should not surface the deploy
+ * smoke-test account by default. See docs/smoke-test-account.md.
+ */
+export function notSmokeTestUser(): SQL {
+  return or(ne(usersTable.isSmokeTest, true), isNull(usersTable.isSmokeTest))!;
+}
+
+/**
+ * Parses a request query value (string | string[] | undefined) and returns
+ * true when the admin has opted in to seeing the smoke-test account in a
+ * list/queue. Accepts the common truthy spellings (`1`, `true`, `yes`, `on`).
+ */
+export function shouldIncludeSmokeTest(raw: unknown): boolean {
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  if (typeof value !== "string") return false;
+  const normalized = value.trim().toLowerCase();
+  return normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on";
+}
 
 // ---------------------------------------------------------------------------
 // Tiny in-process cache. The flag is set once at startup and never flips back

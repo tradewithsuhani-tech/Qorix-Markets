@@ -298,19 +298,22 @@ export function AdminUsersPage() {
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [adjustUser, setAdjustUser] = useState<any | null>(null);
+  const [showSmokeTest, setShowSmokeTest] = useState(false);
   const { toast } = useToast();
 
   async function load() {
     setLoading(true);
     try {
-      const data = await adminFetch("/admin/users?limit=100");
+      const params = new URLSearchParams({ limit: "100" });
+      if (showSmokeTest) params.set("includeSmokeTest", "true");
+      const data = await adminFetch(`/admin/users?${params.toString()}`);
       setUsers(data.data ?? []);
     } finally {
       setLoading(false);
     }
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [showSmokeTest]);
 
   const filtered = useMemo(() => {
     const q = query.toLowerCase();
@@ -332,9 +335,18 @@ export function AdminUsersPage() {
       </AnimatePresence>
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
         <ModuleHeader icon={Shield} title="User Management" subtitle="Search users, review balances, KYC, risk and account security controls." />
-        <div className="glass-card p-4 rounded-2xl flex items-center gap-3">
+        <div className="glass-card p-4 rounded-2xl flex items-center gap-3 flex-wrap">
           <Search className="w-4 h-4 text-muted-foreground" />
-          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search by name, email, referral code" className="bg-transparent outline-none flex-1 text-sm" />
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search by name, email, referral code" className="bg-transparent outline-none flex-1 text-sm min-w-[12rem]" />
+          <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none px-2" title="Include the deploy smoke-test account in this list (for support / debugging only).">
+            <input
+              type="checkbox"
+              checked={showSmokeTest}
+              onChange={(e) => setShowSmokeTest(e.target.checked)}
+              className="accent-amber-500"
+            />
+            Show smoke-test account
+          </label>
           <button onClick={load} className="px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-xs flex items-center gap-2"><RefreshCw className="w-3 h-3" /> Refresh</button>
         </div>
         <div className="glass-card rounded-2xl overflow-hidden">

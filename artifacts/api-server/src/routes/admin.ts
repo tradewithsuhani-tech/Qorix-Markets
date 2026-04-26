@@ -35,6 +35,7 @@ import {
   PAIRS as ENGINE_PAIRS,
   getEntryAnchor,
 } from "../lib/auto-signal-engine";
+import { notSmokeTestUser, shouldIncludeSmokeTest } from "../lib/smoke-test-account";
 
 const router = Router();
 router.use("/admin", authMiddleware);
@@ -59,7 +60,12 @@ export async function getSlotData() {
 }
 
 async function getAdminStatsData() {
-  const [totalUsersResult] = await db.select({ count: count() }).from(usersTable);
+  // Exclude the deploy smoke-test account from the headline user count so the
+  // admin dashboard matches the filtered admin user list.
+  const [totalUsersResult] = await db
+    .select({ count: count() })
+    .from(usersTable)
+    .where(notSmokeTestUser());
   const [activeInvResult] = await db
     .select({ count: count() })
     .from(investmentsTable)
@@ -197,10 +203,23 @@ router.get("/admin/users", async (req, res) => {
   const limit = getQueryInt(req, "limit", 20);
   const offset = (page - 1) * limit;
 
-  const [totalResult] = await db.select({ count: count() }).from(usersTable);
+  // Hide the deploy smoke-test account from the admin user list by default,
+  // with an opt-in via `?includeSmokeTest=true` for support/debug.
+  const includeSmoke = shouldIncludeSmokeTest(req.query["includeSmokeTest"]);
+  const usersFilter = includeSmoke ? undefined : notSmokeTestUser();
+
+  const [totalResult] = await db
+    .select({ count: count() })
+    .from(usersTable)
+    .where(usersFilter);
   const total = Number(totalResult?.count ?? 0);
 
-  const allUsers = await db.select().from(usersTable).limit(limit).offset(offset);
+  const allUsers = await db
+    .select()
+    .from(usersTable)
+    .where(usersFilter)
+    .limit(limit)
+    .offset(offset);
 
   const data = await Promise.all(
     allUsers.map(async (u) => {
@@ -1347,7 +1366,11 @@ router.get("/admin/system-health", async (_req: AuthRequest, res) => {
 
   const [pendingTx] = await db.select({ count: count() }).from(transactionsTable).where(eq(transactionsTable.status, "pending"));
   const [completedTx] = await db.select({ count: count() }).from(transactionsTable).where(eq(transactionsTable.status, "completed"));
-  const [totalUsers] = await db.select({ count: count() }).from(usersTable);
+  // Match the headline dashboard count: exclude the deploy smoke-test account.
+  const [totalUsers] = await db
+    .select({ count: count() })
+    .from(usersTable)
+    .where(notSmokeTestUser());
   const [activeInv] = await db.select({ count: count() }).from(investmentsTable).where(eq(investmentsTable.isActive, true));
 
   checks["api"] = { status: "ok", detail: "Express server responding" };

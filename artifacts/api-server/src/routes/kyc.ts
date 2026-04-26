@@ -1,8 +1,9 @@
 import { Router } from "express";
 import { db, usersTable } from "@workspace/db";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { authMiddleware, getQueryString, type AuthRequest } from "../middlewares/auth";
 import { createNotification } from "../lib/notifications";
+import { notSmokeTestUser, shouldIncludeSmokeTest } from "../lib/smoke-test-account";
 
 const router = Router();
 
@@ -201,6 +202,12 @@ router.get("/admin/kyc/queue", authMiddleware, async (req: AuthRequest, res) => 
   const kind = getQueryString(req, "kind", "identity"); // identity | address
   const statusCol = kind === "address" ? usersTable.kycAddressStatus : usersTable.kycStatus;
   const submittedCol = kind === "address" ? usersTable.kycAddressSubmittedAt : usersTable.kycSubmittedAt;
+  // Hide the deploy smoke-test account from the identity / address queues by
+  // default; admins can opt in via `?includeSmokeTest=true` for debugging.
+  const includeSmoke = shouldIncludeSmokeTest(req.query["includeSmokeTest"]);
+  const where = includeSmoke
+    ? eq(statusCol, status)
+    : and(eq(statusCol, status), notSmokeTestUser());
   const rows = await db
     .select({
       id: usersTable.id,
@@ -216,7 +223,7 @@ router.get("/admin/kyc/queue", authMiddleware, async (req: AuthRequest, res) => 
       kycAddressRejectionReason: usersTable.kycAddressRejectionReason,
     })
     .from(usersTable)
-    .where(eq(statusCol, status))
+    .where(where)
     .orderBy(sql`${submittedCol} desc nulls last`)
     .limit(100);
   res.json({ users: rows, kind });
