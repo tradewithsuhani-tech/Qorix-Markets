@@ -101,6 +101,22 @@ export function invalidateMaintenanceCache(): void {
   cached = null;
 }
 
+// Test-only: returns the backend PID of the live LISTEN connection (or null
+// if the listener isn't currently connected). Used by the reconnect
+// regression test to forcibly terminate the LISTEN backend via
+// pg_terminate_backend() and assert that connectListener() re-establishes
+// the subscription. Not used by production callers — `pg_stat_activity` is
+// the right tool for ops introspection. Exported here because in the test
+// environment `track_activities` is off, so the PID isn't surface-able from
+// SQL alone.
+export function __getListenerProcessIdForTest(): number | null {
+  // pg.Client exposes the backend PID as `processID` after connect(). It's
+  // typed as `number | null` on the runtime object but isn't always present
+  // on the @types/pg surface — narrow defensively.
+  const c = listenerClient as unknown as { processID?: number | null } | null;
+  return c?.processID ?? null;
+}
+
 // Fan-out cache invalidation across every running API instance.
 //
 // Called from POST /admin/settings the moment an admin flips a maintenance

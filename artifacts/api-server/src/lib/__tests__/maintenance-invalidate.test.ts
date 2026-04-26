@@ -14,6 +14,8 @@ const {
   getMaintenanceState,
   startMaintenanceInvalidationListener,
   notifyMaintenanceInvalidation,
+  invalidateMaintenanceCache,
+  __getListenerProcessIdForTest,
 } = await import("../../middlewares/maintenance");
 const { eq, inArray } = await import("drizzle-orm");
 
@@ -159,4 +161,99 @@ test("notifyMaintenanceInvalidation invalidates locally AND broadcasts to peers"
     false,
     "notifyMaintenanceInvalidation must drop the local cache so the next read sees the latest DB row",
   );
+});
+
+// Regression: the LISTEN connection auto-reconnects after errors / unexpected
+// disconnects (Fly Postgres restart, network blip, the DB cycling a backend).
+// Without this test, a regression in scheduleReconnect()/connectListener()
+// could leave the reconnect loop *thinking* it succeeded while never actually
+// re-issuing `LISTEN maintenance_invalidate` — and the bug would be silent
+// until users started reporting stale banners on the affected instance.
+//
+// Strategy:
+//   1. Read the LISTEN backend's PID directly off the live pg.Client via
+//      __getListenerProcessIdForTest(). We can't use pg_stat_activity here
+//      because the test Postgres has track_activities off (query column is
+//      always empty), and we want a stable signal that doesn't depend on
+//      cluster GUCs.
+//   2. Force-kill that backend with pg_terminate_backend() from a pool
+//      connection — same effect as Fly Postgres rotating a backend out.
+//   3. Wait for the listener to expose a NEW PID (proves the reconnect
+//      loop actually established a fresh connection, not just that the
+//      old one is still hanging around).
+//   4. Issue a fresh NOTIFY from the pool and assert the cache flips —
+//      proving the reconnected client also re-issued LISTEN, not just
+//      reconnected silently.
+
+test("listener re-LISTENs after the backend is terminated (pg_terminate_backend)", async () => {
+  // Resolve the current listener's backend PID. The before() hook already
+  // started the listener; processID is set synchronously by pg.Client at
+  // connect() time, so it should be available immediately. Poll briefly
+  // anyway in case the previous test's NOTIFY/cache work delayed assignment.
+  const originalPid = await waitFor(
+    () => __getListenerProcessIdForTest(),
+    (pid) => pid !== null && pid > 0,
+    { timeoutMs: 2_000 },
+  );
+  assert.ok(
+    originalPid !== null && originalPid > 0,
+    "expected an active LISTEN client with a backend PID before the disconnect — listener was never established",
+  );
+
+  // Reset any cache state from prior tests so the post-reconnect assertion
+  // can't be satisfied by a stale entry that just happens to be active=true.
+  invalidateMaintenanceCache();
+  await db
+    .delete(systemSettingsTable)
+    .where(eq(systemSettingsTable.key, "maintenance_mode"));
+  const baseline = await getMaintenanceState();
+  assert.equal(
+    baseline.active,
+    false,
+    "baseline must be off so the post-reconnect NOTIFY observably flips it on",
+  );
+
+  // Simulate a Fly Postgres backend rotation / network blip by terminating
+  // the LISTEN backend from another connection.
+  await pool.query("SELECT pg_terminate_backend($1::int)", [originalPid]);
+
+  // The reconnect loop waits RECONNECT_DELAY_MS (1 s) then dials a fresh
+  // client. Wait for a different PID to appear on the listener — that's
+  // the direct proof the reconnect actually established a brand-new
+  // backend (not just that the old socket is still hanging around).
+  const newPid = await waitFor(
+    () => __getListenerProcessIdForTest(),
+    (pid) => pid !== null && pid > 0 && pid !== originalPid,
+    { timeoutMs: 5_000, intervalMs: 50 },
+  );
+  assert.ok(
+    newPid !== null && newPid !== originalPid,
+    `listener must reconnect with a fresh backend PID after pg_terminate_backend; original=${originalPid}, observed=${String(newPid)}. ` +
+      "If this fails, scheduleReconnect()/connectListener() never re-established the LISTEN connection and cross-instance maintenance fan-out is silently broken on this instance.",
+  );
+
+  // End-to-end proof: write the row + NOTIFY from the pool, and confirm
+  // the reconnected listener still drops our local cache. Without the
+  // re-LISTEN, this NOTIFY would never be delivered to the new client and
+  // the cache would keep returning the off-state for up to CACHE_TTL_MS.
+  await db
+    .insert(systemSettingsTable)
+    .values({ key: "maintenance_mode", value: "true" })
+    .onConflictDoUpdate({
+      target: systemSettingsTable.key,
+      set: { value: "true", updatedAt: new Date() },
+    });
+  await pool.query("NOTIFY maintenance_invalidate");
+
+  const after = await waitFor(
+    () => getMaintenanceState(),
+    (s) => s.active === true,
+    { timeoutMs: 2_000 },
+  );
+  assert.equal(
+    after.active,
+    true,
+    "after the LISTEN backend was terminated and the listener reconnected, a peer NOTIFY must still invalidate the cache — otherwise admins would see stale maintenance state on this instance until the 5 s TTL fallback kicks in",
+  );
+  assert.equal(after.source, "db", "DB-only toggle should still report source=db after reconnect");
 });
