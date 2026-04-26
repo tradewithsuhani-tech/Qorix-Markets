@@ -10,7 +10,11 @@
 # (e.g. https://api.qorixmarkets.com). In dev (Replit) this stays unset and
 # the Vite proxy handles /api → localhost:8080.
 
-ARG NODE_VERSION=24-alpine
+# Build stage uses glibc (bookworm-slim) instead of alpine/musl. pnpm v10 +
+# alpine has trouble pulling the platform-specific optional rollup native
+# binary (@rollup/rollup-linux-x64-musl), causing vite build to fail. Runtime
+# stage stays on nginx:alpine — only the static html output ships.
+ARG NODE_VERSION=24-bookworm-slim
 # Pin the pnpm major to match artifacts/api-server/Dockerfile and avoid
 # `pnpm@latest` silently jumping to a future major that changes install or
 # build behavior. Bump deliberately when the api-server Dockerfile bumps.
@@ -24,8 +28,10 @@ WORKDIR /workspace
 
 # Build-time configuration baked into the static bundle.
 ARG VITE_API_URL=""
+ARG VITE_RECAPTCHA_SITE_KEY=""
 ARG BASE_PATH="/"
 ENV VITE_API_URL=$VITE_API_URL \
+    VITE_RECAPTCHA_SITE_KEY=$VITE_RECAPTCHA_SITE_KEY \
     BASE_PATH=$BASE_PATH \
     PORT=8080 \
     NODE_ENV=production
