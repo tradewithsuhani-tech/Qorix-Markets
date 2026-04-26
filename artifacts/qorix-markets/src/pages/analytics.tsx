@@ -472,16 +472,20 @@ export default function AnalyticsPage() {
           </div>
         </div>
 
-        {/* Summary strip — values sourced from the same /api/dashboard/performance
-            and /api/dashboard/summary endpoints the main dashboard uses, so the
-            two screens never disagree. Period Return falls back to the equity-
-            derived figure when the selected window doesn't have a server-side
-            rolling return (server only emits 7D/30D/90D). */}
+        {/* Summary strip — every value here is derived from the SAME inputs
+            the Demo Dashboard uses, so the two screens always agree:
+            • Period Return: local (last - first) / first × 100 on the equity
+              chart for the selected period — identical formula to the
+              dashboard's "Rolling Returns" card. We deliberately do NOT use
+              perf.rollingReturns here: that server endpoint can apply a
+              different baseline/scaling and would re-introduce the
+              mismatch the user reported.
+            • Total P&L: fund-scaled formula identical to the dashboard
+              headline (totalProfitBaseline + summary.totalProfit * equityScale).
+            • Win Rate / Max Drawdown: canonical perf.* fields. */}
         {(() => {
-          const periodKey = `${days}D`;
-          const rollingPick = perf?.rollingReturns?.find((r) => r.period === periodKey)?.return;
           const periodReturnNum =
-            typeof rollingPick === "number" ? rollingPick : Number(equityReturn);
+            firstEquity > 0 ? ((latestEquity - firstEquity) / firstEquity) * 100 : 0;
           const periodReturnStr = `${periodReturnNum >= 0 ? "+" : ""}${periodReturnNum.toFixed(2)}%`;
 
           // Canonical lifetime profit — uses the component-scope fund-scale
