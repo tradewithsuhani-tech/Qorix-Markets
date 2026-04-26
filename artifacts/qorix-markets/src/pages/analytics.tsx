@@ -1078,22 +1078,33 @@ export default function AnalyticsPage() {
                         backgroundColor: profileFills,
                         pointBackgroundColor: profileFills,
                         pointBorderColor: profileHalos,
-                        pointBorderWidth: 6,
-                        pointRadius: 11,
-                        pointHoverRadius: 14,
+                        // Tightened bubble + halo so neighbouring presets
+                        // (e.g. Conservative at 3% and a user marker at
+                        // 5%) don't visually engulf each other or the
+                        // Your-Profile diamond they sit beside.
+                        pointBorderWidth: 4,
+                        pointRadius: 8,
+                        pointHoverRadius: 11,
                         order: 2,
                       } as any,
-                      // 2 — "Your Profile" hero bubble with double-thick
-                      // emerald halo so the user's marker dominates.
+                      // 2 — "Your Profile" hero, drawn as a rotated-square
+                      // (diamond) so it stays visually distinct from the
+                      // round preset benchmarks even when its drawdown
+                      // matches a preset (e.g. user limit 5 % overlapping
+                      // the Balanced 5 % marker — the core overlap the
+                      // user complained about). Smaller halo than before
+                      // so the green glow no longer extends up into the
+                      // Balanced bubble area.
                       {
                         label: "Your Profile",
                         data: [{ x: yourProfile.drawdown, y: yourProfile.returnPct }],
                         backgroundColor: "rgba(52,211,153,0.95)",
                         pointBackgroundColor: "rgba(52,211,153,1)",
                         pointBorderColor: "rgba(52,211,153,0.35)",
-                        pointBorderWidth: 8,
-                        pointRadius: 13,
-                        pointHoverRadius: 16,
+                        pointStyle: "rectRot" as const,
+                        pointBorderWidth: 4,
+                        pointRadius: 9,
+                        pointHoverRadius: 12,
                         order: 1,
                       } as any,
                     ],
@@ -1223,6 +1234,32 @@ export default function AnalyticsPage() {
                           }
                           if (!moved) break;
                         }
+
+                        // Leader lines: thin connector from each label
+                        // back to its bubble centre. Helps the reader
+                        // disambiguate which label belongs to which
+                        // bubble when several markers cluster around the
+                        // same x (e.g. user limit 5 % overlapping the
+                        // Balanced 5 % preset). Drawn first so the label
+                        // text overlays the line endpoint cleanly.
+                        items.forEach((l) => {
+                          ctx.beginPath();
+                          ctx.strokeStyle = l.isUser
+                            ? "rgba(52,211,153,0.45)"
+                            : "rgba(148,163,184,0.35)";
+                          ctx.lineWidth = 1;
+                          ctx.setLineDash([]);
+                          // Start ~6 px short of the bubble centre so the
+                          // line emerges from the bubble's edge, not its
+                          // middle. Stop ~6 px short of the label centre
+                          // for the same reason on the text side.
+                          const dy = l.cy - l.bubbleY;
+                          const startY = l.bubbleY + Math.sign(dy) * 9;
+                          const endY = l.cy - Math.sign(dy) * 6;
+                          ctx.moveTo(l.cx, startY);
+                          ctx.lineTo(l.cx, endY);
+                          ctx.stroke();
+                        });
 
                         items.forEach((l) => {
                           ctx.font = l.font;
