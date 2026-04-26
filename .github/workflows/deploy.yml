@@ -99,6 +99,24 @@ jobs:
             --config artifacts/api-server/fly.toml \
             --dockerfile artifacts/api-server/Dockerfile \
             --wait-timeout 600
+      # Post-deploy smoke check. `flyctl deploy` only proves the container
+      # started — these curls prove the API is actually reachable and that
+      # the Neon connection works. Retries cover the brief warmup window
+      # before Fly's edge routes traffic to the new machine.
+      - name: Smoke test api-server
+        run: |
+          set -euo pipefail
+          API_BASE="https://api.qorixmarkets.com"
+          echo "→ GET ${API_BASE}/api/healthz"
+          curl -fsS --retry 5 --retry-delay 5 --retry-all-errors \
+            --max-time 10 "${API_BASE}/api/healthz" | tee /tmp/healthz.json
+          grep -q '"status":"ok"' /tmp/healthz.json
+          echo
+          echo "→ GET ${API_BASE}/api/public/market-indicators (exercises Neon)"
+          curl -fsS --retry 5 --retry-delay 5 --retry-all-errors \
+            --max-time 15 "${API_BASE}/api/public/market-indicators" \
+            | tee /tmp/market.json
+          grep -q '"activeInvestors"' /tmp/market.json
 
   deploy-web:
     name: Deploy qorix-markets → qorix-markets-web
@@ -122,3 +140,15 @@ jobs:
             --config artifacts/qorix-markets/fly.toml \
             --dockerfile artifacts/qorix-markets/Dockerfile \
             --wait-timeout 600
+      # Post-deploy smoke check. Confirms nginx is actually serving the new
+      # build — `flyctl deploy` returning success only proves the container
+      # started, not that traffic is being routed to it.
+      - name: Smoke test qorix-markets web
+        run: |
+          set -euo pipefail
+          WEB_BASE="https://qorixmarkets.com"
+          echo "→ GET ${WEB_BASE}/healthz"
+          body=$(curl -fsS --retry 5 --retry-delay 5 --retry-all-errors \
+            --max-time 10 "${WEB_BASE}/healthz")
+          echo "${body}"
+          test "${body}" = "ok"
