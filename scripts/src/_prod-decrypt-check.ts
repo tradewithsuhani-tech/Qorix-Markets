@@ -60,10 +60,17 @@ for (const sample of res.rows) {
 console.log("");
 console.log(`Sampled ${res.rows.length} PROD wallets; secret source: ${secretSource}; results: ${okCount} OK / ${failCount} FAIL`);
 console.log("");
-if (okCount === res.rows.length && res.rows.length > 0) {
-  console.log("PARITY CONFIRMED: this Replit env's secret decrypts PROD wallets.");
-  console.log("  -> Fly's qorix-api needs the SAME value as WALLET_ENC_SECRET (or JWT_SECRET).");
-} else {
-  console.log("DO NOT proceed to Phase B until parity is resolved.");
-}
 await c.end();
+
+if (res.rows.length === 0) {
+  console.log("FAIL: no encrypted wallets found in source DB — nothing to verify against.");
+  console.log("DO NOT proceed to Phase B; investigate empty deposit_addresses table.");
+  process.exit(1);
+}
+if (failCount > 0 || okCount !== res.rows.length) {
+  console.log("DO NOT proceed to Phase B until parity is resolved.");
+  process.exit(1);
+}
+console.log("PARITY CONFIRMED: this Replit env's secret decrypts PROD wallets.");
+console.log("  -> Fly's qorix-api needs the SAME value as WALLET_ENC_SECRET (or JWT_SECRET).");
+process.exit(0);
