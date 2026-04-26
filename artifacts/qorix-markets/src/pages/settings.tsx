@@ -425,14 +425,14 @@ export default function SettingsPage() {
       {/* ── Change Password Modal ──────────────────────────────────────────── */}
       {showPwModal && (
         <div
-          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm p-3 sm:p-4"
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm p-3 pb-28 sm:p-4"
           onClick={(e) => { if (e.target === e.currentTarget && !changePassword.isPending) closePwModal(); }}
         >
           <motion.div
             initial={{ opacity: 0, y: 20, scale: 0.97 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             transition={{ duration: 0.2 }}
-            className="glass-card rounded-2xl w-full max-w-md p-5 sm:p-6 space-y-4 max-h-[92vh] overflow-y-auto"
+            className="glass-card rounded-2xl w-full max-w-md p-5 sm:p-6 space-y-4 max-h-[calc(100vh-8rem)] sm:max-h-[92vh] overflow-y-auto"
           >
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-center gap-2.5">
