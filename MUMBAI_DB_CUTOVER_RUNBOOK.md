@@ -595,6 +595,55 @@ schedule a fresh window.
 
 ---
 
+## Maintenance LISTEN bounce rate (post-cutover health)
+
+The api-server holds a long-lived Postgres LISTEN on
+`maintenance_invalidate` so flipping the admin maintenance toggle on one
+Fly machine clears the cached state on every other replica within tens
+of ms (see `artifacts/api-server/src/middlewares/maintenance.ts`,
+`connectListener`). On a healthy connection that line is silent for
+days at a time. When it bounces, every successful re-dial emits:
+
+```
+Maintenance LISTEN reconnected
+  channel=maintenance_invalidate
+  backendPid=<new Postgres backend PID>
+  msSinceLastConnect=<ms since previous successful connect>
+  reconnectCount=<cumulative since this machine booted>
+```
+
+(`backendPid` is the Postgres backend PID, not the api-server OS pid —
+pino already attaches the latter as `pid` on every line.)
+
+What to do with it on-call:
+
+- **0 lines/day** is the expected baseline. If you see one after a
+  network blip, ignore it.
+- **More than ~3/hour, sustained, on a single machine** is a flapping
+  fan-out. Other replicas will start serving stale maintenance state
+  for up to `CACHE_TTL_MS` (5 s) every time the bounce coincides with a
+  toggle. Check `fly logs --app qorix-api | grep 'Maintenance LISTEN'`
+  for the matching `errored — scheduling reconnect` lines just before
+  each reconnect; the `err` field on those tells you why (pool reset,
+  Postgres restart, network).
+- **`msSinceLastConnect` consistently below ~2 s** means the listener
+  is barely staying up. That's almost always a Postgres-side problem
+  (idle-in-transaction kill, connection limit, version-skew restart),
+  not a Fly-side one — page the DB owner, not the platform team.
+- `reconnectCount` is per-process and resets to 0 on every Fly machine
+  restart (`fly secrets set` / deploy). After a deploy, expect to see
+  no "reconnected" lines at all for a healthy fan-out — the first
+  successful dial logs "Maintenance cache invalidation listener
+  active" instead. If a fresh machine starts emitting "reconnected"
+  lines within minutes of boot, that's a real bounce, not a deploy
+  artefact.
+
+Rule of thumb: if `grep -c 'Maintenance LISTEN reconnected'` over the
+last hour is in single digits across the fleet, the fan-out is fine and
+no operator action is needed.
+
+---
+
 ## Critical tables (what to actually care about)
 
 These are the tables where a row-count mismatch or a decrypt failure
