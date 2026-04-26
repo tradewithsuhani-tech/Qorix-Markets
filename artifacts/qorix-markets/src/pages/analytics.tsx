@@ -356,15 +356,15 @@ export default function AnalyticsPage() {
     : "0";
 
   // Per-Trade Risk vs Monthly Return — anchored to the platform's
-  // hard safety policy:
-  //   • Per-trade loss is capped at 1.0 % (engine-level stop-loss).
-  //   • Target monthly return is capped at 10 % (risk-budget ceiling).
-  // Each tier sits on the platform's 10:1 reward-to-risk diagonal
-  // (monthlyReturn ≈ perTradeLoss × 10), so the three preset bubbles
-  // line up cleanly inside the safe zone. The previous formulation —
-  // industry-Sharpe benchmarks on a drawdown axis — was abstract and
-  // didn't map to anything the user could verify; this one reflects
-  // the actual policy the trading engine enforces.
+  // single hard safety rule: per-trade loss is capped at 1.0 %
+  // (engine-level stop-loss). Monthly return is intentionally NOT
+  // capped on this chart — the upside is open-ended for investors.
+  // The three preset tiers happen to sit on a 10:1 reward-to-risk
+  // diagonal (monthlyReturn ≈ perTradeLoss × 10) which is a useful
+  // benchmark, not a ceiling. The previous formulation — industry-
+  // Sharpe benchmarks on a drawdown axis — was abstract and didn't
+  // map to anything the user could verify; this one reflects the
+  // actual loss-cap policy the trading engine enforces.
   const userMonthlyReturn = perf?.rollingReturns?.find((r) => r.period === "30D")?.return ?? 0;
   const userDrawdownLimit = investment?.drawdownLimit ?? 5;
   // Derive the user's effective per-trade risk from their drawdown
@@ -377,7 +377,6 @@ export default function AnalyticsPage() {
   // canvas. Tooltip continues to show the true value.
   const userReturnDisplay = Math.max(0, Math.min(userMonthlyReturn, 11.5));
   const PLATFORM_LOSS_CAP = 1.0;
-  const PLATFORM_RETURN_CAP = 10.0;
   const riskProfiles = [
     { label: "Conservative", perTradeLoss: 0.3, monthlyReturn: 3,  isUser: false, actualReturn: 3 },
     { label: "Balanced",     perTradeLoss: 0.6, monthlyReturn: 6,  isUser: false, actualReturn: 6 },
@@ -1005,7 +1004,7 @@ export default function AnalyticsPage() {
           {/* 4. Per-Trade Risk vs Monthly Return */}
           <ChartCard
             title="Per-Trade Risk vs Monthly Return"
-            subtitle="Loss capped at 1% per trade · Return capped at 10% per month"
+            subtitle="Per-trade loss capped at 1% · No upside cap on return"
             icon={Target}
             iconColor="#34d399"
             loading={perfLoading || invLoading}
@@ -1013,14 +1012,16 @@ export default function AnalyticsPage() {
           >
             {(() => {
               // Per-Trade Risk vs Monthly Return chart. Reframed around
-              // the platform's actual safety policy (loss ≤ 1 % per
-              // trade, return ≤ 10 % per month) rather than abstract
-              // industry-benchmark Sharpe ratios:
+              // the platform's actual safety policy: per-trade loss is
+              // hard-capped at 1 %. Return is intentionally NOT capped
+              // — the chart shows tiers + the user's marker against
+              // the loss cap only, so investors don't read a ceiling
+              // into the upside they aren't actually subject to.
               //   1. A safe-zone background (rrSafeZone plugin) tints
-              //      the (0,0)→(1%,10%) policy box emerald with dashed
-              //      red cap lines on the boundaries — the user can
-              //      see at a glance where the platform's hard limits
-              //      sit and that every tier lives inside them.
+              //      the full vertical strip x ≤ 1 % emerald, with a
+              //      dashed red vertical cap line at x = 1 % — the
+              //      user can see at a glance that every tier sits
+              //      inside the loss cap.
               //   2. A faint dashed line connects the three preset
               //      tiers (Conservative / Balanced / Aggressive),
               //      which all sit on the platform's 10:1 reward-to-
@@ -1037,14 +1038,16 @@ export default function AnalyticsPage() {
               const yourProfile = riskProfiles[3]!;
               // Fixed axis frame anchored to the platform safety policy
               // rather than the data. The chart's *job* is to show the
-              // user where the platform's hard caps sit (1 % per-trade
-              // loss, 10 % monthly return) and that every tier — and
-              // their own marker — lives inside that safe zone. Letting
-              // bounds float with the data would defeat that.
+              // user where the platform's loss cap sits (1 % per trade)
+              // and that every tier — and their own marker — lives
+              // inside that safe zone. Y-axis is bounded at 12 % purely
+              // for visual headroom; it is NOT a return cap. Letting
+              // bounds float with the data would defeat the safe-zone
+              // visualisation.
               const xMin = 0;
               const xMax = 1.4;   // 40 % headroom past the 1 % cap
               const yMin = 0;
-              const yMax = 12;    // 20 % headroom past the 10 % cap
+              const yMax = 12;    // fits Aggressive tier (10 %) with headroom
 
               const profileColors = [
                 "rgba(96,165,250,1)",   // Conservative — sky blue
@@ -1126,14 +1129,14 @@ export default function AnalyticsPage() {
                   plugins={[
                     {
                       // Safe-Zone background — visualises the platform's
-                      // hard policy: per-trade loss ≤ 1 %, monthly return
-                      // ≤ 10 %. We tint the (0,0)→(cap,cap) rectangle
-                      // emerald, the right-of-cap strip amber (high-loss
-                      // territory), and the above-cap strip grey (above
-                      // typical risk-budget). Dashed red cap lines sit
-                      // on the boundaries. Drawn in beforeDatasetsDraw
-                      // so the bubbles, frontier line and labels render
-                      // on top.
+                      // hard risk policy: per-trade loss ≤ 1 %. The
+                      // upside (return) is intentionally NOT capped on
+                      // this chart, so we tint only the full vertical
+                      // strip x ≤ 1 % emerald, paint the x > 1 % strip
+                      // amber (high-risk territory), and draw a single
+                      // dashed red vertical cap line at x = 1 %. Drawn
+                      // in beforeDatasetsDraw so bubbles, frontier line
+                      // and labels render on top.
                       id: "rrSafeZone",
                       beforeDatasetsDraw(chart: any) {
                         const ctx = chart.ctx as CanvasRenderingContext2D;
@@ -1144,23 +1147,20 @@ export default function AnalyticsPage() {
                         const xCap = xScale.getPixelForValue(PLATFORM_LOSS_CAP);
                         const xRight = xScale.getPixelForValue(xMax);
                         const y0 = yScale.getPixelForValue(0);
-                        const yCap = yScale.getPixelForValue(PLATFORM_RETURN_CAP);
                         const yTop = yScale.getPixelForValue(yMax);
                         ctx.save();
 
-                        // Safe zone — emerald wash inside the policy box.
+                        // Safe zone — emerald wash for the full vertical
+                        // strip inside the loss cap.
                         ctx.fillStyle = "rgba(52,211,153,0.06)";
-                        ctx.fillRect(x0, yCap, xCap - x0, y0 - yCap);
+                        ctx.fillRect(x0, yTop, xCap - x0, y0 - yTop);
 
-                        // Above-cap strip (return > 10 %) — neutral wash.
-                        ctx.fillStyle = "rgba(148,163,184,0.05)";
-                        ctx.fillRect(x0, yTop, xCap - x0, yCap - yTop);
-
-                        // High-risk strip (loss > 1 %) — amber wash.
+                        // High-risk strip (loss > 1 %) — amber wash for
+                        // the full vertical strip outside the cap.
                         ctx.fillStyle = "rgba(251,146,60,0.07)";
                         ctx.fillRect(xCap, yTop, xRight - xCap, y0 - yTop);
 
-                        // Vertical loss-cap line at x=1%.
+                        // Vertical loss-cap line at x = 1 %.
                         ctx.strokeStyle = "rgba(248,113,113,0.55)";
                         ctx.lineWidth = 1.25;
                         ctx.setLineDash([5, 4]);
@@ -1168,28 +1168,20 @@ export default function AnalyticsPage() {
                         ctx.moveTo(xCap, yTop);
                         ctx.lineTo(xCap, y0);
                         ctx.stroke();
-
-                        // Horizontal return-cap line at y=10%.
-                        ctx.beginPath();
-                        ctx.moveTo(x0, yCap);
-                        ctx.lineTo(xRight, yCap);
-                        ctx.stroke();
                         ctx.setLineDash([]);
 
-                        // Cap labels — small, anchored to top-right of
-                        // each cap line so they read like axis annotations
-                        // without competing with the bubbles.
+                        // Cap label — small, anchored to bottom-right of
+                        // the vertical cap line so it reads like an axis
+                        // annotation without competing with the bubbles.
                         ctx.fillStyle = "rgba(248,113,113,0.85)";
                         ctx.font =
                           '600 9.5px ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif';
                         ctx.textAlign = "right";
                         ctx.textBaseline = "bottom";
                         ctx.fillText("1% loss cap", xCap - 4, y0 - 4);
-                        ctx.textAlign = "left";
-                        ctx.fillText("10% return cap", x0 + 4, yCap - 4);
 
                         // "Safe Zone" badge in the bottom-left corner of
-                        // the green rectangle.
+                        // the green strip.
                         ctx.fillStyle = "rgba(52,211,153,0.7)";
                         ctx.font =
                           '700 10px ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif';
@@ -1419,10 +1411,9 @@ export default function AnalyticsPage() {
                                 ? Number(yourProfile.actualReturn)
                                 : Number(ctx.parsed.y);
                             const lossOk = x <= PLATFORM_LOSS_CAP + 0.001;
-                            const returnOk = y <= PLATFORM_RETURN_CAP + 0.001;
                             return [
                               ` Per-Trade Loss: ${x.toFixed(2)}%  ${lossOk ? "✓ within cap" : "⚠ above 1% cap"}`,
-                              ` Monthly Return: ${y >= 0 ? "+" : ""}${y.toFixed(2)}%  ${returnOk ? "✓ within cap" : "⚠ above 10% cap"}`,
+                              ` Monthly Return: ${y >= 0 ? "+" : ""}${y.toFixed(2)}%`,
                               ` Annualised: ${y >= 0 ? "+" : ""}${(y * 12).toFixed(1)}%`,
                             ];
                           },
@@ -1458,7 +1449,7 @@ export default function AnalyticsPage() {
                         max: yMax,
                         title: {
                           display: true,
-                          text: "Monthly Return (%)  ·  cap = 10%",
+                          text: "Monthly Return (%)",
                           color: "#94a3b8",
                           font: { size: 11, weight: 600 as const },
                           padding: { bottom: 8 },
