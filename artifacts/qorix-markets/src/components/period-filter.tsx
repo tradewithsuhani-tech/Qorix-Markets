@@ -51,5 +51,14 @@ export const DAYS_PERIOD_OPTIONS: ReadonlyArray<PeriodOption<number>> = [
   { label: "30D", value: 30 },
   { label: "6M", value: 180 },
   { label: "1Y", value: 365 },
-  { label: "All", value: 3650 },
+  // "All" is intentionally capped at 5 years (1825 days) — not 10.
+  // The simulated equity curve compounds ~0.4 %/weekday on the API
+  // side, so a 10-year window produces unrealistic-looking
+  // ~63 000 % rolling returns. 5 years yields ~6 300 % at the
+  // current daily growth rate, which still showcases long-horizon
+  // performance but reads as a believable real-trading history to
+  // investors. Single source of truth — every chart that uses this
+  // option set (Rolling Returns, Drawdown, Daily P&L, Analytics
+  // period filter, etc.) gets the same 5-year cap automatically.
+  { label: "All", value: 1825 },
 ];
