@@ -68,6 +68,10 @@ localPort = 5001
 externalPort = 8099
 
 [[ports]]
+localPort = 5002
+externalPort = 9000
+
+[[ports]]
 localPort = 6379
 externalPort = 3001
 
@@ -128,6 +132,3 @@ SMTP_PORT = "587"
 SMTP_USER = "no-reply@qorixmarkets.com"
 GOOGLE_CALLBACK_URL = "https://qorixmarkets.com/auth/google/callback"
 TRONGRID_API_KEY = "b90ecaf6-608f-49c7-927e-8469fa9cfc87"
-
-[userenv.development]
-RUN_BACKGROUND_JOBS = "false"
