@@ -358,13 +358,17 @@ psql "$TARGET_DATABASE_URL" -c "
 > If you genuinely need to rotate either secret, do it in a separate
 > change *after* this cutover is verified green, not as part of it.
 
-All three checks (exact counts on the critical tables, approximate
-counts on every other table, and the wallet-decrypt sanity check that
-mirrors `runWalletEncryptionPreflight`) are wrapped in one script —
+All four checks (exact counts on the critical tables, sequence
+`last_value` vs `max(id)` for every serial sequence — the safety net
+for the step-5 setval batch above, approximate counts on every other
+table, and the wallet-decrypt sanity check that mirrors
+`runWalletEncryptionPreflight`) are wrapped in one script —
 `scripts/src/verify-db-cutover.ts`. Run it against both URLs. The
-script exits 0 only if every critical-table count matches **and** the
-wallet decrypt succeeds; any failure exits 1 and prints exactly which
-table or which sample id is wrong.
+script exits 0 only if every critical-table count matches, every
+serial sequence on the target is safely above `max(id)` of its owning
+table, **and** the wallet decrypt succeeds; any failure exits 1 and
+prints exactly which table, which sequence, or which sample id is
+wrong.
 
 ```bash
 # WALLET_ENC_SECRET must already be exported in this shell — same value
@@ -389,6 +393,16 @@ Critical tables (exact count):
   OK   investments        …
   all critical-table counts match.
 
+Serial sequences (target last_value vs max(id) on target):
+  OK   users_id_seq            target.last_value=…  target.max=…  source.last_value=…
+  OK   wallets_id_seq          …
+  OK   ledger_entries_id_seq   …
+  OK   deposit_addresses_id_seq …
+  OK   transactions_id_seq     …
+  OK   investments_id_seq      …
+  # …one line per serial sequence in lib/db/src/schema/.
+  all N sequence(s) safely above max(id).
+
 All public tables (approximate, pg_stat_user_tables):
   no significant approximate drift (tolerance ±2).
   # …or one or more `WARN` lines, which are informational only.
@@ -399,12 +413,21 @@ Wallet-decrypt sanity check (target DB):
 verify-db-cutover: PASS
 ```
 
-Anything else is a stop-the-line. The two failure modes the script is
+Anything else is a stop-the-line. The three failure modes the script is
 designed to catch:
 
 - **Critical-table `FAIL` line** — `pg_restore` skipped rows or you ran
   it without `--exit-on-error` in step 5. Truncate the target and redo
   step 5; do **not** try to backfill missing rows by hand.
+- **Serial-sequence `FAIL` line** (e.g. `users_id_seq … target.last_value=1
+  target.max=12345 — next nextval would collide with existing max(id)`)
+  — the `setval` batch in step 5 was skipped or errored out partway, so
+  `pg_restore` left the sequence at its default. The first new INSERT
+  into that table in step 8 will hit a duplicate-key error. Re-run the
+  step-5 setval batch against the target and re-verify; you do **not**
+  need to redo `pg_restore`. (The same `FAIL` shape can also appear if
+  you `setval(seq, max(id), false)` instead of `true` — `is_called=false`
+  is called out explicitly on the line.)
 - **`Wallet-decrypt sanity check … FAIL`** — the `WALLET_ENC_SECRET`
   in your shell does not match the secret the source DB's wallets were
   encrypted with. Re-export the right value (from your password manager,

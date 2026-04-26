@@ -11,12 +11,21 @@
  *     here is a stop-the-line and exits 1 — these are the tables where
  *     a missing row means real user money is at risk.
  *
- *  2. Diffs approximate row counts via `pg_stat_user_tables` for every
+ *  2. Asserts that every serial sequence on the target is at or above
+ *     `max(id)` of its owning table — i.e. that step 5's `setval` batch
+ *     in `MUMBAI_DB_CUTOVER_RUNBOOK.md` actually ran. If a sequence was
+ *     missed, the next user signup / wallet insert / ledger entry in
+ *     step 8 will collide with PK 1 and the API will spew duplicate-key
+ *     500s. The row-count diff in (1) cannot catch this — counts match
+ *     fine; the trap doesn't spring until the next INSERT. Mismatch is
+ *     a hard FAIL, exit 1.
+ *
+ *  3. Diffs approximate row counts via `pg_stat_user_tables` for every
  *     other table. These are advisory only — pg_stat_user_tables is not
  *     transactionally accurate, so a small drift is normal. We only emit
  *     a WARN (never a failure) on those.
  *
- *  3. Runs the same wallet-decrypt sanity check the API does at boot in
+ *  4. Runs the same wallet-decrypt sanity check the API does at boot in
  *     `artifacts/api-server/src/lib/wallet-preflight.ts`: pull one
  *     `deposit_addresses.private_key_enc` from the target DB and try to
  *     decrypt it with the WALLET_ENC_SECRET in this shell. If it can't
@@ -124,6 +133,159 @@ async function exactCounts(
     out.set(t, Number(res.rows[0]!.n));
   }
   return out;
+}
+
+// ----- sequence safety check -----
+//
+// Step 5 of MUMBAI_DB_CUTOVER_RUNBOOK.md does `setval(seq, max(id), true)`
+// on every serial sequence in the public schema. If the operator skips
+// that batch (or it errors out partway), the row counts in (1) still
+// match — but the next nextval() returns 1, and the very first INSERT
+// in step 8 hits a duplicate-key on PK 1. We catch that here.
+//
+// We deliberately read both pg_sequences.last_value AND is_called: a
+// sequence at last_value=N with is_called=false will hand out N on the
+// next nextval (not N+1), so the safety condition is "next value > max".
+//
+// This relies on the connecting role having USAGE/SELECT on the
+// sequences (otherwise pg_sequences.last_value comes back NULL). The
+// runbook uses the DB owner role for both source and target, so this
+// is satisfied in practice.
+
+function quoteIdent(s: string): string {
+  return `"${s.replace(/"/g, '""')}"`;
+}
+
+interface SeqOwnership {
+  // schema/table/column refer to the owning column on the user table
+  // (used by tableMax to compute max(id)).
+  schema: string;
+  table: string;
+  column: string;
+  // sequenceSchema/sequenceName refer to the sequence relation itself
+  // — Postgres allows a sequence to live in a different schema from
+  // its owning table, so we resolve them via pg_class rather than
+  // assuming they match the owning table's schema.
+  sequenceSchema: string;
+  sequenceName: string;
+  // Qualified "schema.name" of the owning sequence — used as the map
+  // key when joining against readSequences() below.
+  sequenceQualified: string;
+}
+
+interface SeqState {
+  // null when the sequence has never been written (fresh CREATE
+  // SEQUENCE with no nextval/setval yet) OR when the role lacks
+  // privileges. Either way, we treat it as "untouched" — for a
+  // non-empty owning table that's a FAIL because nextval will start
+  // from the sequence's start_value (typically 1).
+  lastValue: number | null;
+  isCalled: boolean;
+}
+
+async function listSequenceOwnerships(
+  c: pg.Client,
+): Promise<SeqOwnership[]> {
+  // information_schema.columns + pg_get_serial_sequence is the same
+  // mapping the runbook's setval batch uses, so this script catches
+  // *exactly* the sequences step 5 was supposed to advance — no more,
+  // no less. Resolving via ::regclass + pg_class gets us the
+  // unquoted schema/name pair we need to look up in pg_sequences.
+  const res = await c.query<{
+    schema: string;
+    table: string;
+    column: string;
+    seq_schema: string | null;
+    seq_name: string | null;
+  }>(`
+    with cols as (
+      select
+        c.table_schema as schema,
+        c.table_name   as "table",
+        c.column_name  as "column",
+        pg_get_serial_sequence(
+          format('%I.%I', c.table_schema, c.table_name),
+          c.column_name
+        )::regclass::oid as seq_oid
+      from information_schema.columns c
+      where c.table_schema = 'public'
+        and c.column_default like 'nextval(%'
+    )
+    select
+      cols.schema,
+      cols."table",
+      cols."column",
+      n.nspname as seq_schema,
+      pc.relname as seq_name
+    from cols
+    join pg_class     pc on pc.oid = cols.seq_oid
+    join pg_namespace n  on n.oid  = pc.relnamespace
+    order by cols."table", cols."column"
+  `);
+  return res.rows
+    .filter((r) => r.seq_schema && r.seq_name)
+    .map((r) => ({
+      schema: r.schema,
+      table: r.table,
+      column: r.column,
+      sequenceSchema: r.seq_schema!,
+      sequenceName: r.seq_name!,
+      sequenceQualified: `${r.seq_schema}.${r.seq_name}`,
+    }));
+}
+
+async function readSequences(
+  c: pg.Client,
+  ownerships: readonly SeqOwnership[],
+): Promise<Map<string, SeqState>> {
+  // pg_sequences exposes last_value but NOT is_called (is_called only
+  // lives on the sequence relation itself). Selecting directly from
+  // each sequence relation gives us both in one shot.
+  //
+  // We to_regclass() each candidate first so a sequence that exists on
+  // target but is missing on source (or vice versa — schema drift)
+  // doesn't blow up the whole batch with "relation does not exist".
+  // Missing sequences come back as an absent map entry; the caller
+  // surfaces that as a per-sequence FAIL.
+  const out = new Map<string, SeqState>();
+  for (const own of ownerships) {
+    const ident = `${quoteIdent(own.sequenceSchema)}.${quoteIdent(own.sequenceName)}`;
+    // to_regclass returns NULL (not an error) when the relation is
+    // absent, which is how we detect schema drift without aborting.
+    const exists = await c.query<{ ok: boolean }>(
+      `select to_regclass($1) is not null as ok`,
+      [ident],
+    );
+    if (!exists.rows[0]?.ok) continue;
+    const res = await c.query<{
+      last_value: string | null;
+      is_called: boolean | null;
+    }>(`select last_value::bigint as last_value, is_called from ${ident}`);
+    const r = res.rows[0];
+    if (!r) continue;
+    out.set(own.sequenceQualified, {
+      lastValue: r.last_value === null ? null : Number(r.last_value),
+      isCalled: r.is_called ?? false,
+    });
+  }
+  return out;
+}
+
+async function tableMax(
+  c: pg.Client,
+  schema: string,
+  table: string,
+  column: string,
+): Promise<number | null> {
+  // Identifiers come from information_schema (Postgres-controlled), but
+  // we still quote defensively — Postgres allows weird table names and
+  // hand-rolled DDL could put unusual chars there.
+  const sql =
+    `select max(${quoteIdent(column)})::bigint as v ` +
+    `from ${quoteIdent(schema)}.${quoteIdent(table)}`;
+  const res = await c.query<{ v: string | null }>(sql);
+  if (!res.rows[0] || res.rows[0].v === null) return null;
+  return Number(res.rows[0].v);
 }
 
 async function approxCounts(c: pg.Client): Promise<Map<string, number>> {
@@ -249,8 +411,10 @@ function usage(stream: NodeJS.WriteStream = process.stderr): never {
       `                       artifacts/api-server/src/lib/wallet-crypto.ts)\n` +
       `\n` +
       `Exit status:\n` +
-      `  0  every critical-table count matches and wallet decrypt succeeded\n` +
-      `  1  any critical-table mismatch OR wallet-decrypt failure\n` +
+      `  0  every critical-table count matches, every serial sequence is\n` +
+      `      safely above max(id) on the target, and wallet decrypt succeeded\n` +
+      `  1  any critical-table mismatch, any sequence below max(id) (missed\n` +
+      `      step-5 setval), OR wallet-decrypt failure\n` +
       `  2  bad arguments / connection failure / unexpected error\n`,
   );
   process.exit(2);
@@ -362,7 +526,125 @@ async function main(): Promise<void> {
       console.log(C.green("  all critical-table counts match."));
     }
 
-    // 2. All-tables approximate diff (warnings only)
+    // 2. Serial sequences: target last_value vs target max(id).
+    //    Guards against a missed/partial setval batch in runbook step 5.
+    //    Critical (FAIL → exit 1), because skipping this means the
+    //    first INSERT in step 8 collides on PK.
+    console.log(
+      C.bold("\nSerial sequences (target last_value vs max(id) on target):"),
+    );
+    const ownerships = await listSequenceOwnerships(tgt);
+    const [tgtSeqs, srcSeqs] = await Promise.all([
+      readSequences(tgt, ownerships),
+      readSequences(src, ownerships),
+    ]);
+    if (ownerships.length === 0) {
+      console.log(
+        C.yellow(
+          "  no serial sequences found on the target — schema not pushed " +
+            "yet? (FLY_GO_LIVE_CHECKLIST step 2/3a). Cannot verify the " +
+            "setval batch from runbook step 5.",
+        ),
+      );
+      exitCode = 1;
+    } else {
+      const padS = Math.max(
+        ...ownerships.map((o) => o.sequenceName.length),
+      );
+      let seqFail = 0;
+      let seqDriftWarn = 0;
+      for (const own of ownerships) {
+        const tgtSeq = tgtSeqs.get(own.sequenceQualified);
+        if (!tgtSeq) {
+          console.log(
+            `  ${C.red("FAIL")}  ${own.sequenceName.padEnd(padS)}  ` +
+              `no row in pg_sequences on target — sequence is missing`,
+          );
+          seqFail++;
+          continue;
+        }
+        const maxId = await tableMax(tgt, own.schema, own.table, own.column);
+        const srcSeq = srcSeqs.get(own.sequenceQualified);
+        // The "next value nextval will hand out" depends on is_called:
+        //   is_called=true  → next = last_value + 1
+        //   is_called=false → next = last_value
+        // Empty owning table (max_id=null) is trivially safe.
+        const nextValue =
+          tgtSeq.lastValue === null
+            ? // Untouched sequence: nextval will return start_value
+              // (we can't read start_value cheaply, but it's ≥1, so
+              // any non-empty table is unsafe).
+              1
+            : tgtSeq.isCalled
+              ? tgtSeq.lastValue + 1
+              : tgtSeq.lastValue;
+        const safe = maxId === null || nextValue > maxId;
+        const tag = safe ? C.green("OK  ") : C.red("FAIL");
+        const lvStr =
+          tgtSeq.lastValue === null ? "<unset>" : String(tgtSeq.lastValue);
+        const maxStr = maxId === null ? "<empty>" : String(maxId);
+        const srcStr =
+          srcSeq === undefined || srcSeq.lastValue === null
+            ? "n/a"
+            : String(srcSeq.lastValue);
+        let extra = "";
+        if (tgtSeq.lastValue !== null && !tgtSeq.isCalled) {
+          extra += " is_called=false";
+        }
+        if (!safe) {
+          extra += " — next nextval would collide with existing max(id)";
+        }
+        console.log(
+          `  ${tag}  ${own.sequenceName.padEnd(padS)}  ` +
+            `target.last_value=${lvStr}  target.max=${maxStr}  ` +
+            `source.last_value=${srcStr}${extra}`,
+        );
+        if (!safe) {
+          seqFail++;
+          continue;
+        }
+        // Soft check: target.last_value < source.last_value.
+        // Not a duplicate-key risk (we already verified next > max),
+        // but it does mean the source had handed out IDs higher than
+        // anything that committed (rolled-back txns, deleted rows),
+        // and the target can recycle those. Worth eyeballing for
+        // anything keyed on raw PK externally (e.g. webhook
+        // idempotency keys).
+        if (
+          tgtSeq.lastValue !== null &&
+          srcSeq !== undefined &&
+          srcSeq.lastValue !== null &&
+          tgtSeq.lastValue < srcSeq.lastValue
+        ) {
+          seqDriftWarn++;
+        }
+      }
+      if (seqFail > 0) {
+        console.log(
+          C.red(
+            `\n  ${seqFail} sequence(s) below max(id). The first INSERT ` +
+              `into the affected table(s) in step 8 WILL hit a ` +
+              `duplicate-key error. Re-run the setval batch in runbook ` +
+              `step 5 against the target and re-verify.`,
+          ),
+        );
+        exitCode = 1;
+      } else {
+        const driftNote =
+          seqDriftWarn > 0
+            ? ` (${seqDriftWarn} non-fatal source-vs-target drift; ` +
+              `target.last_value < source.last_value — informational)`
+            : "";
+        console.log(
+          C.green(
+            `  all ${ownerships.length} sequence(s) safely above max(id).` +
+              driftNote,
+          ),
+        );
+      }
+    }
+
+    // 3. All-tables approximate diff (warnings only)
     console.log(
       C.bold("\nAll public tables (approximate, pg_stat_user_tables):"),
     );
