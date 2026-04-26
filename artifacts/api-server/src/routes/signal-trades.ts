@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { authMiddleware, adminMiddleware, getParam, type AuthRequest } from "../middlewares/auth";
+import { authMiddleware, adminMiddleware, getParam, getQueryString, type AuthRequest } from "../middlewares/auth";
 import {
   createSignalTrade,
   closeSignalTrade,
@@ -167,7 +167,9 @@ router.get(
   authMiddleware,
   adminMiddleware,
   async (req: AuthRequest, res) => {
-    const status = (req.query.status as "running" | "closed" | undefined) || undefined;
+    const statusRaw = getQueryString(req, "status");
+    const status =
+      statusRaw === "running" || statusRaw === "closed" ? statusRaw : undefined;
     const trades = await listTrades({ status, limit: 100 });
     res.json({ trades });
   },

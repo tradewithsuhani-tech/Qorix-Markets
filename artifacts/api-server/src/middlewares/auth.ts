@@ -109,3 +109,39 @@ export function getParam(req: Request, name: string): string {
   }
   return raw;
 }
+
+// Same problem as `getParam`, but for query strings: `req.query[key]` is typed
+// as `string | string[] | ParsedQs | ParsedQs[] | undefined`, so handlers
+// were sprinkling `req.query["page"] as string` casts everywhere. These
+// helpers centralize the narrowing + parsing for the scalar query params our
+// routes actually use. Repeated keys (`?x=a&x=b`) and bracket-object syntax
+// (`?x[k]=v`) aren't supported by any current route — fail loudly rather than
+// silently coerce.
+export function getQueryString(req: Request, name: string): string | undefined;
+export function getQueryString(req: Request, name: string, defaultValue: string): string;
+export function getQueryString(
+  req: Request,
+  name: string,
+  defaultValue?: string,
+): string | undefined {
+  const raw = req.query[name];
+  if (raw === undefined) return defaultValue;
+  if (typeof raw !== "string") {
+    throw new Error(`Unexpected non-string value for query param: ${name}`);
+  }
+  // Treat empty-string the same as missing so `?status=` falls back to the
+  // default, matching how `(req.query.status as string) || "pending"` used
+  // to behave.
+  return raw === "" ? defaultValue : raw;
+}
+
+// Mirrors the `parseInt(req.query["X"] as string) || default` idiom that
+// callers used pre-helper: missing, NaN, and zero all fall back to the
+// default. Keeping that semantic avoids surprising regressions for callers
+// that compute `(page - 1) * limit` etc.
+export function getQueryInt(req: Request, name: string, defaultValue: number): number {
+  const raw = getQueryString(req, name);
+  if (raw === undefined) return defaultValue;
+  const parsed = parseInt(raw, 10);
+  return parsed || defaultValue;
+}

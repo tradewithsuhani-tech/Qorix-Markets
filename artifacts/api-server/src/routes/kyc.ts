@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db, usersTable } from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
-import { authMiddleware, type AuthRequest } from "../middlewares/auth";
+import { authMiddleware, getQueryString, type AuthRequest } from "../middlewares/auth";
 import { createNotification } from "../lib/notifications";
 
 const router = Router();
@@ -197,8 +197,8 @@ async function requireAdmin(userId: number): Promise<boolean> {
 
 router.get("/admin/kyc/queue", authMiddleware, async (req: AuthRequest, res) => {
   if (!(await requireAdmin(req.userId!))) { res.status(403).json({ error: "forbidden" }); return; }
-  const status = (req.query.status as string) || "pending";
-  const kind = (req.query.kind as string) || "identity"; // identity | address
+  const status = getQueryString(req, "status", "pending");
+  const kind = getQueryString(req, "kind", "identity"); // identity | address
   const statusCol = kind === "address" ? usersTable.kycAddressStatus : usersTable.kycStatus;
   const submittedCol = kind === "address" ? usersTable.kycAddressSubmittedAt : usersTable.kycSubmittedAt;
   const rows = await db

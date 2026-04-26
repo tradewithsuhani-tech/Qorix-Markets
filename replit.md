@@ -136,6 +136,30 @@ router.get("/widgets/:id", (req, res) => {
 The helper throws if the named param is missing, so handlers don't need to
 sprinkle `!` or `as string` either.
 
+### Reading query strings (Express 5)
+
+`req.query[key]` is typed as `string | string[] | ParsedQs | ParsedQs[] | undefined`,
+which used to force `parseInt(req.query["page"] as string) || 1` and
+`(req.query.status as string) || "pending"` casts. Use the sibling helpers
+from `middlewares/auth.ts` instead — same convention as `getParam`:
+
+```ts
+import { getQueryString, getQueryInt } from "../middlewares/auth";
+
+router.get("/widgets", (req, res) => {
+  const page = getQueryInt(req, "page", 1);            // always returns a number
+  const limit = Math.min(getQueryInt(req, "limit", 20), 50);
+  const status = getQueryString(req, "status", "pending"); // overload returns string
+  const severity = getQueryString(req, "severity");        // returns string | undefined
+  // ...
+});
+```
+
+`getQueryInt` mirrors the old `parseInt(...) || default` semantics (missing,
+NaN, and `0` all fall back to the default) so swapping the helper in doesn't
+change pagination behavior. Both helpers throw if a query param arrives as an
+array or nested object, which our routes never expect.
+
 All routes prefixed with `/api`:
 - POST `/auth/register`, POST `/auth/login`, GET `/auth/me`
 - GET/POST `/wallet`, POST `/wallet/deposit`, POST `/wallet/withdraw`, POST `/wallet/transfer`

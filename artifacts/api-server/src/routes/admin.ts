@@ -14,7 +14,7 @@ import {
 } from "@workspace/db";
 import { loginEventsTable, blockchainDepositsTable } from "@workspace/db/schema";
 import { eq, sum, count, and, or, desc, sql, inArray } from "drizzle-orm";
-import { authMiddleware, adminMiddleware, getParam, type AuthRequest } from "../middlewares/auth";
+import { authMiddleware, adminMiddleware, getParam, getQueryInt, getQueryString, type AuthRequest } from "../middlewares/auth";
 import { SetDailyProfitBody } from "@workspace/api-zod";
 import { transferProfitToMain } from "../lib/profit-service";
 import { sendUsdtFromTreasury, getTreasuryUsdtBalance } from "../lib/crypto-deposit/sweep";
@@ -170,7 +170,7 @@ router.post("/admin/profit", async (req: AuthRequest, res) => {
 });
 
 router.get("/admin/profit/history", async (req, res) => {
-  const limit = Math.min(parseInt(req.query["limit"] as string) || 30, 100);
+  const limit = Math.min(getQueryInt(req, "limit", 30), 100);
 
   const runs = await db
     .select()
@@ -193,8 +193,8 @@ router.get("/admin/profit/history", async (req, res) => {
 });
 
 router.get("/admin/users", async (req, res) => {
-  const page = parseInt(req.query["page"] as string) || 1;
-  const limit = parseInt(req.query["limit"] as string) || 20;
+  const page = getQueryInt(req, "page", 1);
+  const limit = getQueryInt(req, "limit", 20);
   const offset = (page - 1) * limit;
 
   const [totalResult] = await db.select({ count: count() }).from(usersTable);
@@ -272,9 +272,9 @@ router.post("/admin/users/:id/action", async (req: AuthRequest, res) => {
 });
 
 router.get("/admin/transactions", async (req, res) => {
-  const limit = Math.min(parseInt(req.query["limit"] as string) || 80, 200);
-  const type = req.query["type"] as string | undefined;
-  const status = req.query["status"] as string | undefined;
+  const limit = Math.min(getQueryInt(req, "limit", 80), 200);
+  const type = getQueryString(req, "type");
+  const status = getQueryString(req, "status");
   const filters = [
     type && type !== "all" ? eq(transactionsTable.type, type) : undefined,
     status && status !== "all" ? eq(transactionsTable.status, status) : undefined,
@@ -1160,8 +1160,8 @@ router.get("/admin/ledger/accounts", async (_req: AuthRequest, res) => {
 });
 
 router.get("/admin/ledger/journal", async (req: AuthRequest, res) => {
-  const limit = Math.min(parseInt(req.query["limit"] as string) || 50, 200);
-  const offset = parseInt(req.query["offset"] as string) || 0;
+  const limit = Math.min(getQueryInt(req, "limit", 50), 200);
+  const offset = getQueryInt(req, "offset", 0);
 
   const entries = await db
     .select()

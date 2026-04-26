@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db, notificationsTable, systemSettingsTable } from "@workspace/db";
 import { eq, desc, and } from "drizzle-orm";
-import { authMiddleware, getParam, type AuthRequest } from "../middlewares/auth";
+import { authMiddleware, getParam, getQueryInt, type AuthRequest } from "../middlewares/auth";
 
 const router = Router();
 router.use(authMiddleware);
@@ -43,7 +43,7 @@ function fmt(n: typeof notificationsTable.$inferSelect) {
 }
 
 router.get("/notifications", async (req: AuthRequest, res) => {
-  const limit = Math.min(parseInt(req.query["limit"] as string) || 20, 50);
+  const limit = Math.min(getQueryInt(req, "limit", 20), 50);
   const unreadOnly = req.query["unread"] === "true";
 
   const condition = unreadOnly

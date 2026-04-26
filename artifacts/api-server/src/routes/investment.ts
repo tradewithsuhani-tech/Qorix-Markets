@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db, investmentsTable, walletsTable, transactionsTable, tradesTable, equityHistoryTable, usersTable } from "@workspace/db";
 import { eq, desc } from "drizzle-orm";
-import { authMiddleware, type AuthRequest } from "../middlewares/auth";
+import { authMiddleware, getQueryInt, type AuthRequest } from "../middlewares/auth";
 import { StartInvestmentBody, ToggleCompoundingBody } from "@workspace/api-zod";
 import { ensureUserAccounts, postJournalEntry, journalForTransaction } from "../lib/ledger-service";
 import { createNotification } from "../lib/notifications";
@@ -282,7 +282,7 @@ router.patch("/investment/compounding", async (req: AuthRequest, res) => {
 });
 
 router.get("/investment/trades", async (req: AuthRequest, res) => {
-  const limit = parseInt(req.query["limit"] as string) || 10;
+  const limit = getQueryInt(req, "limit", 10);
 
   const trades = await db.select().from(tradesTable)
     .where(eq(tradesTable.userId, req.userId!))
