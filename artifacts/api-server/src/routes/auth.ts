@@ -2,7 +2,8 @@ import { Router } from "express";
 import bcrypt from "bcryptjs";
 import { db, usersTable, walletsTable, investmentsTable, systemSettingsTable, ipSignupsTable } from "@workspace/db";
 import { eq, and, gte, count, sql } from "drizzle-orm";
-import { authMiddleware, signToken, type AuthRequest } from "../middlewares/auth";
+import { authMiddleware, signToken, computeDeviceFingerprint, describeDevice, type AuthRequest } from "../middlewares/auth";
+import { loginAttemptsTable } from "@workspace/db";
 import { RegisterBody, LoginBody } from "@workspace/api-zod";
 import { trackLoginEvent, runFraudChecks } from "../lib/fraud-service";
 import { sendOtp, verifyOtp, getDevOtp, sendEmail } from "../lib/email-service";
@@ -389,8 +390,335 @@ router.post("/auth/login", loginRateLimit, async (req, res) => {
     await runFraudChecks(user.id, ip, ua, null);
   });
 
+  // ─── Single-active-device check ────────────────────────────────────────
+  // If the user already has another device "owning" this account, hold the
+  // login pending until that device approves OR the 60s email-OTP fallback
+  // runs. Admins and the smoke-test account bypass this check (admin
+  // tooling can legitimately span devices, and CI rotates fingerprints
+  // every deploy).
+  const fingerprint = computeDeviceFingerprint(req);
+  const skipDeviceGate = user.isAdmin || user.isSmokeTest;
+  if (
+    !skipDeviceGate &&
+    user.activeSessionFingerprint &&
+    user.activeSessionFingerprint !== fingerprint
+  ) {
+    // Different device wants in. Create a pending attempt and hand back a
+    // poll token; the active device will see it via /auth/login-attempts/
+    // pending and either approve, deny, or time out (→ email OTP).
+    const pollToken = crypto.randomBytes(24).toString("hex");
+    const expiresAt = new Date(Date.now() + LOGIN_APPROVAL_WINDOW_MS);
+    const { browser, os } = describeDevice(req);
+    const [attempt] = await db
+      .insert(loginAttemptsTable)
+      .values({
+        userId: user.id,
+        deviceFingerprint: fingerprint,
+        userAgent: typeof ua === "string" ? ua.slice(0, 500) : null,
+        ipAddress: ip ? ip.slice(0, 64) : null,
+        browserLabel: browser.slice(0, 80),
+        osLabel: os.slice(0, 80),
+        pollToken,
+        status: "pending",
+        expiresAt,
+      })
+      .returning();
+    res.json({
+      requiresApproval: true,
+      attemptId: attempt!.id,
+      pollToken,
+      expiresAt: expiresAt.toISOString(),
+      otpFallbackAfterMs: LOGIN_APPROVAL_OTP_FALLBACK_MS,
+      device: { browser, os },
+    });
+    return;
+  }
+
+  // First login OR same device — claim/refresh the slot and issue token.
+  if (!skipDeviceGate) {
+    await db
+      .update(usersTable)
+      .set({ activeSessionFingerprint: fingerprint, activeSessionLastSeen: new Date() })
+      .where(eq(usersTable.id, user.id));
+  }
   const token = signToken(user.id, user.isAdmin);
   res.json({ token, user: formatUser(user) });
+});
+
+// ─── Single-active-device login: tunables ────────────────────────────────
+// Window during which an attempt stays in "pending" before it expires.
+// Also the upper bound for how long the new device's polling will keep
+// hoping for an answer (the UI pivots to email-OTP fallback at the
+// OTP_FALLBACK mark, well before EXPIRY hits).
+export const LOGIN_APPROVAL_WINDOW_MS = 5 * 60 * 1000;
+export const LOGIN_APPROVAL_OTP_FALLBACK_MS = 60 * 1000;
+
+// ---------------------------------------------------------------------------
+// GET /auth/login-attempts/pending — polled by the currently-active device.
+// Returns any not-yet-decided login attempts on this account, EXCLUDING
+// ones from the requesting device itself (so a tab that's polling doesn't
+// see itself). The active device shows an Approve/Deny modal per row.
+// ---------------------------------------------------------------------------
+router.get("/auth/login-attempts/pending", authMiddleware, async (req: AuthRequest, res) => {
+  const myFp = computeDeviceFingerprint(req);
+  const now = new Date();
+  const rows = await db
+    .select({
+      id: loginAttemptsTable.id,
+      deviceFingerprint: loginAttemptsTable.deviceFingerprint,
+      ipAddress: loginAttemptsTable.ipAddress,
+      browserLabel: loginAttemptsTable.browserLabel,
+      osLabel: loginAttemptsTable.osLabel,
+      createdAt: loginAttemptsTable.createdAt,
+      expiresAt: loginAttemptsTable.expiresAt,
+    })
+    .from(loginAttemptsTable)
+    .where(
+      and(
+        eq(loginAttemptsTable.userId, req.userId!),
+        eq(loginAttemptsTable.status, "pending"),
+        gte(loginAttemptsTable.expiresAt, now),
+      ),
+    );
+  const others = rows.filter((r) => r.deviceFingerprint !== myFp);
+  res.json({
+    attempts: others.map((r) => ({
+      id: r.id,
+      ip: r.ipAddress,
+      browser: r.browserLabel,
+      os: r.osLabel,
+      createdAt: r.createdAt.toISOString(),
+      expiresAt: r.expiresAt.toISOString(),
+    })),
+  });
+});
+
+// ---------------------------------------------------------------------------
+// POST /auth/login-attempts/:id/respond — the active device accepts or
+// denies a pending login attempt. On approve we KICK the active device by
+// bumping forceLogoutAfter (per the user's "single device at a time"
+// choice) and hand the slot to the new device; the new device picks up its
+// JWT on its next /status poll. On deny we just mark the row.
+// ---------------------------------------------------------------------------
+router.post("/auth/login-attempts/:id/respond", authMiddleware, async (req: AuthRequest, res) => {
+  const id = Number(req.params["id"]);
+  if (!Number.isFinite(id) || id <= 0) {
+    res.status(400).json({ error: "Invalid attempt id" });
+    return;
+  }
+  const decision = req.body?.decision;
+  if (decision !== "approve" && decision !== "deny") {
+    res.status(400).json({ error: "decision must be 'approve' or 'deny'" });
+    return;
+  }
+  // Race-safe: only the genuinely-pending row for THIS user gets touched,
+  // and we read back what we updated so a double-tap can't double-issue.
+  const [row] = await db
+    .update(loginAttemptsTable)
+    .set({ status: decision === "approve" ? "approved" : "denied", decidedAt: new Date() })
+    .where(
+      and(
+        eq(loginAttemptsTable.id, id),
+        eq(loginAttemptsTable.userId, req.userId!),
+        eq(loginAttemptsTable.status, "pending"),
+        gte(loginAttemptsTable.expiresAt, new Date()),
+      ),
+    )
+    .returning();
+  if (!row) {
+    res.status(404).json({ error: "Attempt not found, already decided, or expired" });
+    return;
+  }
+  if (decision === "approve") {
+    // Hand the slot to the new device AND kick every existing JWT (the
+    // current device included — that's the "single device at a time"
+    // contract the user picked).
+    await db
+      .update(usersTable)
+      .set({
+        activeSessionFingerprint: row.deviceFingerprint,
+        activeSessionLastSeen: new Date(),
+        forceLogoutAfter: new Date(),
+      })
+      .where(eq(usersTable.id, req.userId!));
+    // Mint the JWT NOW (after forceLogoutAfter is set) so the iat is
+    // strictly later than the kill-switch and the new device's token
+    // stays valid.
+    const userRows = await db
+      .select({ id: usersTable.id, isAdmin: usersTable.isAdmin })
+      .from(usersTable)
+      .where(eq(usersTable.id, req.userId!))
+      .limit(1);
+    const issuedToken = signToken(userRows[0]!.id, userRows[0]!.isAdmin);
+    await db
+      .update(loginAttemptsTable)
+      .set({ issuedToken })
+      .where(eq(loginAttemptsTable.id, id));
+  }
+  res.json({ ok: true, decision });
+});
+
+// ---------------------------------------------------------------------------
+// GET /auth/login-attempts/:id/status — UNAUTHENTICATED endpoint polled by
+// the device that's WAITING for approval. Auth is via the per-attempt
+// pollToken handed back from /auth/login. On approval we hand the JWT
+// over exactly once and clear it from the row so a leaked URL can't reuse
+// it. Treats the smoke-test account's bypass path consistently.
+// ---------------------------------------------------------------------------
+router.get("/auth/login-attempts/:id/status", async (req, res) => {
+  const id = Number(req.params["id"]);
+  const pollToken = (req.query["pollToken"] ?? "") as string;
+  if (!Number.isFinite(id) || id <= 0 || !pollToken) {
+    res.status(400).json({ error: "Invalid request" });
+    return;
+  }
+  const [row] = await db
+    .select()
+    .from(loginAttemptsTable)
+    .where(and(eq(loginAttemptsTable.id, id), eq(loginAttemptsTable.pollToken, pollToken)))
+    .limit(1);
+  if (!row) {
+    res.status(404).json({ error: "Attempt not found" });
+    return;
+  }
+  if (row.status === "approved" && row.issuedToken) {
+    // One-shot hand-off: atomically clear the token so two concurrent
+    // polls can't both mint a session. The conditional WHERE on the
+    // token's current value is the lock — only the winner gets rows
+    // back, the loser sees `consumed`.
+    const claimed = await db
+      .update(loginAttemptsTable)
+      .set({ issuedToken: null })
+      .where(
+        and(
+          eq(loginAttemptsTable.id, id),
+          eq(loginAttemptsTable.pollToken, pollToken),
+          eq(loginAttemptsTable.issuedToken, row.issuedToken),
+        ),
+      )
+      .returning({ id: loginAttemptsTable.id });
+    if (claimed.length === 0) {
+      res.json({ status: "consumed" });
+      return;
+    }
+    const userRows = await db
+      .select()
+      .from(usersTable)
+      .where(eq(usersTable.id, row.userId))
+      .limit(1);
+    res.json({ status: "approved", token: row.issuedToken, user: formatUser(userRows[0]!) });
+    return;
+  }
+  if (row.status === "approved") {
+    // Token was already collected on a previous poll.
+    res.json({ status: "consumed" });
+    return;
+  }
+  if (row.expiresAt.getTime() < Date.now() && row.status === "pending") {
+    res.json({ status: "expired" });
+    return;
+  }
+  res.json({ status: row.status });
+});
+
+// ---------------------------------------------------------------------------
+// POST /auth/login-attempts/:id/request-otp — fallback path for the case
+// the active device never responds within the OTP fallback window
+// (typically because it's offline, the app is closed, or the phone is on
+// silent). UNAUTHENTICATED, gated by pollToken. Sends a 6-digit code to
+// the account's verified email.
+// ---------------------------------------------------------------------------
+router.post("/auth/login-attempts/:id/request-otp", async (req, res) => {
+  const id = Number(req.params["id"]);
+  const { pollToken } = req.body ?? {};
+  if (!Number.isFinite(id) || id <= 0 || !pollToken) {
+    res.status(400).json({ error: "Invalid request" });
+    return;
+  }
+  const [row] = await db
+    .select()
+    .from(loginAttemptsTable)
+    .where(and(eq(loginAttemptsTable.id, id), eq(loginAttemptsTable.pollToken, pollToken)))
+    .limit(1);
+  if (!row || row.status === "denied" || row.status === "approved") {
+    res.status(400).json({ error: "Attempt is not eligible for OTP fallback" });
+    return;
+  }
+  // Only allow the OTP path AFTER the fallback window — otherwise a
+  // determined user could just spam this and skip the active device's
+  // approval entirely.
+  const ageMs = Date.now() - row.createdAt.getTime();
+  if (ageMs < LOGIN_APPROVAL_OTP_FALLBACK_MS) {
+    res.status(425).json({
+      error: "too_early",
+      retryAfterMs: LOGIN_APPROVAL_OTP_FALLBACK_MS - ageMs,
+    });
+    return;
+  }
+  const userRows = await db
+    .select({ email: usersTable.email })
+    .from(usersTable)
+    .where(eq(usersTable.id, row.userId))
+    .limit(1);
+  if (!userRows[0]) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+  await sendOtp(row.userId, userRows[0].email, "device_login_approval");
+  await db
+    .update(loginAttemptsTable)
+    .set({ status: "otp_sent" })
+    .where(eq(loginAttemptsTable.id, id));
+  res.json({ ok: true });
+});
+
+// ---------------------------------------------------------------------------
+// POST /auth/login-attempts/:id/verify-otp — the new device finishes
+// login by entering the 6-digit code from email. Same effect as the
+// active device pressing Approve: kicks all existing sessions, hands
+// the slot to this device, mints a JWT.
+// ---------------------------------------------------------------------------
+router.post("/auth/login-attempts/:id/verify-otp", async (req, res) => {
+  const id = Number(req.params["id"]);
+  const { pollToken, otp } = req.body ?? {};
+  if (!Number.isFinite(id) || id <= 0 || !pollToken || !otp) {
+    res.status(400).json({ error: "Invalid request" });
+    return;
+  }
+  const [row] = await db
+    .select()
+    .from(loginAttemptsTable)
+    .where(and(eq(loginAttemptsTable.id, id), eq(loginAttemptsTable.pollToken, pollToken)))
+    .limit(1);
+  if (!row || row.status === "denied" || row.status === "approved") {
+    res.status(400).json({ error: "Attempt is not eligible" });
+    return;
+  }
+  const otpResult = await verifyOtp(row.userId, otp, "device_login_approval");
+  if (!otpResult.valid) {
+    res.status(400).json({ error: otpResult.error ?? "Invalid or expired code" });
+    return;
+  }
+  // Same kick-and-claim sequence as the approve path.
+  await db
+    .update(usersTable)
+    .set({
+      activeSessionFingerprint: row.deviceFingerprint,
+      activeSessionLastSeen: new Date(),
+      forceLogoutAfter: new Date(),
+    })
+    .where(eq(usersTable.id, row.userId));
+  const userRows = await db
+    .select()
+    .from(usersTable)
+    .where(eq(usersTable.id, row.userId))
+    .limit(1);
+  const token = signToken(userRows[0]!.id, userRows[0]!.isAdmin);
+  await db
+    .update(loginAttemptsTable)
+    .set({ status: "approved", decidedAt: new Date() })
+    .where(eq(loginAttemptsTable.id, id));
+  res.json({ token, user: formatUser(userRows[0]!) });
 });
 
 // ---------------------------------------------------------------------------

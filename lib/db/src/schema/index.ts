@@ -1,4 +1,5 @@
 export * from "./users";
+export * from "./login-attempts";
 export * from "./wallets";
 export * from "./transactions";
 export * from "./investments";
