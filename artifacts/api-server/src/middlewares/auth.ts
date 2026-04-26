@@ -1,8 +1,40 @@
 import type { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
+import crypto from "crypto";
 import { db, systemSettingsTable, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { getMaintenanceState } from "./maintenance";
+
+// ─── Device fingerprint ────────────────────────────────────────────────────
+// SHA-256 of the raw User-Agent header (first 32 hex chars) — stable across
+// IP changes (mobile data → wifi etc.) so we don't false-positive a single
+// browser as "two devices". Two genuinely different devices in the wild
+// almost always have distinct UAs. The fingerprint is paired with the
+// raw IP/UA in the approval popup so the user can sanity-check.
+export function computeDeviceFingerprint(req: Request): string {
+  const ua = (req.headers["user-agent"] ?? "") as string;
+  return crypto.createHash("sha256").update(ua).digest("hex").slice(0, 32);
+}
+
+// Best-effort browser/OS pretty labels for the approval popup. Pure
+// UA-string parsing — no external library, no PII beyond what the UA
+// already exposes.
+export function describeDevice(req: Request): { browser: string; os: string } {
+  const ua = ((req.headers["user-agent"] ?? "") as string).toLowerCase();
+  let browser = "Unknown browser";
+  if (ua.includes("edg/")) browser = "Edge";
+  else if (ua.includes("chrome/") && !ua.includes("chromium/")) browser = "Chrome";
+  else if (ua.includes("firefox/")) browser = "Firefox";
+  else if (ua.includes("safari/")) browser = "Safari";
+  else if (ua.includes("opera") || ua.includes("opr/")) browser = "Opera";
+  let os = "Unknown OS";
+  if (ua.includes("windows")) os = "Windows";
+  else if (ua.includes("android")) os = "Android";
+  else if (ua.includes("iphone") || ua.includes("ipad") || ua.includes("ios")) os = "iOS";
+  else if (ua.includes("mac os") || ua.includes("macintosh")) os = "macOS";
+  else if (ua.includes("linux")) os = "Linux";
+  return { browser, os };
+}
 
 // SESSION_SECRET is the signing key for every Bearer JWT the api hands out.
 // Falling back to a hardcoded value would mean anyone could forge tokens for
@@ -67,6 +99,33 @@ export async function authMiddleware(req: AuthRequest, res: Response, next: Next
       res.status(401).json({ error: "Session expired" });
       return;
     }
+
+    // Single-active-device heartbeat. Only the device whose fingerprint
+    // currently "owns" the account refreshes activeSessionLastSeen, so a
+    // stale tab from a previously-revoked session can't keep the slot
+    // warm. Debounced (>30s old) so we don't write on every API call.
+    // Skipped for accounts that never claimed a fingerprint yet (NULL),
+    // for the smoke-test account (CI rotates fingerprints every deploy),
+    // and for admins (admin tooling can legitimately span devices).
+    if (
+      user.activeSessionFingerprint &&
+      !user.isAdmin &&
+      !user.isSmokeTest
+    ) {
+      const fp = computeDeviceFingerprint(req);
+      if (fp === user.activeSessionFingerprint) {
+        const lastSeenMs = user.activeSessionLastSeen?.getTime() ?? 0;
+        if (Date.now() - lastSeenMs > 30_000) {
+          // Fire-and-forget: never block the request on this update.
+          void db
+            .update(usersTable)
+            .set({ activeSessionLastSeen: new Date() })
+            .where(eq(usersTable.id, decoded.userId))
+            .catch(() => { /* heartbeat is best-effort */ });
+        }
+      }
+    }
+
     req.userId = decoded.userId;
     req.isAdmin = user.isAdmin;
     next();

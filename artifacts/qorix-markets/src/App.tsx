@@ -5,6 +5,7 @@ import { SiteActivityToaster } from "@/components/site-activity-toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
+import { LoginApprovalGate } from "@/components/login-approval-modal";
 import { PWAInstallPrompt } from "@/components/pwa-install-prompt";
 import { SplashScreen, useSplash } from "@/components/splash-screen";
 import { QorixAssistant } from "@/components/qorix-assistant";
@@ -285,6 +286,7 @@ function App() {
         <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
           <AuthProvider>
             <AppContent />
+            <LoginApprovalGate />
           </AuthProvider>
         </WouterRouter>
         <Toaster />

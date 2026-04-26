@@ -3,10 +3,12 @@ import { useLogin, useRegister } from "@workspace/api-client-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useLocation, Link } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
-import { TrendingUp, Lock, Mail, User as UserIcon, ArrowLeft, Eye, EyeOff, ShieldCheck, CheckCircle2 } from "lucide-react";
+import { TrendingUp, Lock, Mail, User as UserIcon, ArrowLeft, Eye, EyeOff, ShieldCheck, CheckCircle2, Loader2 } from "lucide-react";
 import { QorixLogo } from "@/components/qorix-logo";
 import { useToast } from "@/hooks/use-toast";
 import { Recaptcha, CAPTCHA_ENABLED } from "@/components/recaptcha";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
 function apiUrl(path: string) { return `${BASE_URL}/api${path}`; }
@@ -126,6 +128,231 @@ function EmailVerifyStep({
 }
 
 // ────────────────────────────────────────────────────────────────────────────
+// Awaiting-approval step (single-active-device login)
+// Shown when the backend says another device currently owns the account.
+// We poll /auth/login-attempts/:id/status every 3s; once the active device
+// hits Approve we receive the JWT and call onSuccess. If 60s elapse with
+// no answer we surface the email-OTP fallback so the user isn't stuck.
+// ────────────────────────────────────────────────────────────────────────────
+function AwaitingApprovalStep({
+  info,
+  onSuccess,
+  onCancel,
+}: {
+  info: {
+    attemptId: number;
+    pollToken: string;
+    expiresAt: string;
+    otpFallbackAfterMs: number;
+    device: { browser: string; os: string };
+  };
+  onSuccess: (token: string, user: any) => void;
+  onCancel: () => void;
+}) {
+  const [secondsLeft, setSecondsLeft] = useState(() =>
+    Math.max(0, Math.floor((new Date(info.expiresAt).getTime() - Date.now()) / 1000)),
+  );
+  const [otpAvailable, setOtpAvailable] = useState(false);
+  const [otpRequested, setOtpRequested] = useState(false);
+  const [otp, setOtp] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [denied, setDenied] = useState(false);
+  const { toast } = useToast();
+  const startedAt = useRef(Date.now());
+
+  // The parent passes inline arrow functions for onSuccess/onCancel, so
+  // their identity changes on every render. Stash them in refs so the
+  // poll effect below doesn't tear down + recreate its setTimeout chain
+  // every time the parent re-renders (which would also restart the
+  // 3-second poll interval, hammering the API).
+  const onSuccessRef = useRef(onSuccess);
+  const onCancelRef = useRef(onCancel);
+  useEffect(() => { onSuccessRef.current = onSuccess; }, [onSuccess]);
+  useEffect(() => { onCancelRef.current = onCancel; }, [onCancel]);
+
+  // Tick the visible countdown + reveal the OTP fallback option once the
+  // server's fallback window has elapsed.
+  useEffect(() => {
+    const t = setInterval(() => {
+      setSecondsLeft((s) => Math.max(0, s - 1));
+      if (Date.now() - startedAt.current >= info.otpFallbackAfterMs) setOtpAvailable(true);
+    }, 1000);
+    return () => clearInterval(t);
+  }, [info.otpFallbackAfterMs]);
+
+  // Poll the status endpoint. As soon as the active device approves, we
+  // receive a one-shot JWT and complete the login.
+  useEffect(() => {
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const tick = async () => {
+      try {
+        const data = await apiFetch(
+          `/auth/login-attempts/${info.attemptId}/status?pollToken=${encodeURIComponent(info.pollToken)}`,
+        );
+        if (cancelled) return;
+        if (data.status === "approved" && data.token) {
+          onSuccessRef.current(data.token, data.user);
+          return;
+        }
+        if (data.status === "denied") {
+          setDenied(true);
+          return;
+        }
+        if (data.status === "expired") {
+          toast({ title: "Login request expired", description: "Please try signing in again.", variant: "destructive" });
+          onCancelRef.current();
+          return;
+        }
+      } catch {
+        // Network blip — just retry on next tick.
+      } finally {
+        if (!cancelled) timer = setTimeout(tick, 3000);
+      }
+    };
+    tick();
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+    // Intentionally only depend on the stable IDs — callbacks are read
+    // through refs (above) so the poll loop survives parent re-renders.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [info.attemptId, info.pollToken]);
+
+  const requestOtp = async () => {
+    setBusy(true);
+    try {
+      await apiFetch(`/auth/login-attempts/${info.attemptId}/request-otp`, {
+        method: "POST",
+        body: JSON.stringify({ pollToken: info.pollToken }),
+      });
+      setOtpRequested(true);
+      toast({ title: "Code sent", description: "Check your email for the 6-digit code." });
+    } catch (err: any) {
+      toast({ title: "Could not send code", description: err.message || "Try again", variant: "destructive" });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const verifyOtpAndLogin = async () => {
+    if (otp.length !== 6) {
+      toast({ title: "Enter the 6-digit code", variant: "destructive" });
+      return;
+    }
+    setBusy(true);
+    try {
+      const data = await apiFetch(`/auth/login-attempts/${info.attemptId}/verify-otp`, {
+        method: "POST",
+        body: JSON.stringify({ pollToken: info.pollToken, otp }),
+      });
+      if (data?.token && data?.user) onSuccess(data.token, data.user);
+    } catch (err: any) {
+      toast({ title: "Invalid code", description: err.message || "Try again", variant: "destructive" });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen w-full bg-background flex items-center justify-center px-4 relative overflow-hidden">
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[700px] h-[500px] bg-primary/8 rounded-full blur-[120px] pointer-events-none" />
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="w-full max-w-md"
+      >
+        <div className="glass-card rounded-2xl p-7 space-y-5">
+          <div className="text-center space-y-2">
+            <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-primary/10 mx-auto">
+              <ShieldCheck className="w-7 h-7 text-primary" />
+            </div>
+            <h2 className="text-xl font-semibold">Confirm sign-in on your other device</h2>
+            <p className="text-sm text-muted-foreground">
+              For your security, your account can only be active on one device at a time.
+              We've sent a request to your other device — tap <strong>Approve</strong> there to continue.
+            </p>
+          </div>
+
+          {denied ? (
+            <div className="rounded-lg border border-rose-500/40 bg-rose-500/10 p-4 text-sm text-center space-y-3">
+              <p className="font-medium text-rose-200">Sign-in was denied on your other device.</p>
+              <p className="text-rose-200/80">If this wasn't you, change your password right away.</p>
+              <Button variant="outline" size="sm" onClick={onCancel}>Back to login</Button>
+            </div>
+          ) : (
+            <>
+              <div className="rounded-lg bg-muted/40 p-3 text-xs text-center text-muted-foreground">
+                This device: {info.device.browser} on {info.device.os}
+              </div>
+
+              {!otpRequested ? (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-center gap-2 text-sm">
+                    <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                    <span>Waiting for approval…</span>
+                  </div>
+                  {otpAvailable ? (
+                    <div className="space-y-2">
+                      <p className="text-xs text-center text-muted-foreground">
+                        Other device not responding? Get a code by email instead.
+                      </p>
+                      <Button
+                        variant="outline"
+                        className="w-full"
+                        onClick={requestOtp}
+                        disabled={busy}
+                      >
+                        {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : "Send code to my email"}
+                      </Button>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-center text-muted-foreground">
+                      Email backup will become available in {Math.max(0, Math.ceil((info.otpFallbackAfterMs - (Date.now() - startedAt.current)) / 1000))}s
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <Input
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={6}
+                    placeholder="Enter 6-digit code"
+                    value={otp}
+                    onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                    className="text-center text-lg tracking-widest"
+                  />
+                  <Button className="w-full" onClick={verifyOtpAndLogin} disabled={busy || otp.length !== 6}>
+                    {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : "Confirm sign-in"}
+                  </Button>
+                  <button
+                    type="button"
+                    onClick={requestOtp}
+                    disabled={busy}
+                    className="w-full text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    Resend code
+                  </button>
+                </div>
+              )}
+
+              <div className="text-xs text-center text-muted-foreground">
+                Request expires in {Math.floor(secondsLeft / 60)}:{String(secondsLeft % 60).padStart(2, "0")}
+              </div>
+              <Button variant="ghost" size="sm" className="w-full" onClick={onCancel}>
+                Cancel
+              </Button>
+            </>
+          )}
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 // Main login/register page
 // ────────────────────────────────────────────────────────────────────────────
 export default function LoginPage() {
@@ -223,17 +450,58 @@ export default function LoginPage() {
     }
   }, []);
 
-  const loginMutation = useLogin({
-    mutation: {
-      onSuccess: (data) => {
+  // Awaiting-approval state — populated when the backend responds with
+  // `requiresApproval: true` (i.e. another device currently owns this
+  // account). Triggers the polling UI below.
+  const [pendingApproval, setPendingApproval] = useState<{
+    attemptId: number;
+    pollToken: string;
+    expiresAt: string;
+    otpFallbackAfterMs: number;
+    device: { browser: string; os: string };
+  } | null>(null);
+  const [loginInFlight, setLoginInFlight] = useState(false);
+
+  // We bypass the codegen useLogin hook here because the /auth/login
+  // response shape is now a discriminated union (token+user OR
+  // requiresApproval+attemptId). Direct fetch keeps types honest.
+  const submitLogin = async () => {
+    setLoginInFlight(true);
+    try {
+      const data = await apiFetch("/auth/login", {
+        method: "POST",
+        body: JSON.stringify({ email, password, captchaToken }),
+      });
+      if (data?.requiresApproval) {
+        setPendingApproval({
+          attemptId: data.attemptId,
+          pollToken: data.pollToken,
+          expiresAt: data.expiresAt,
+          otpFallbackAfterMs: data.otpFallbackAfterMs,
+          device: data.device,
+        });
+        return;
+      }
+      if (data?.token && data?.user) {
         setAuthData(data.token, data.user);
         setLocation("/dashboard");
-      },
-      onError: (err: any) => {
-        toast({ title: "Login failed", description: err.message || "Invalid credentials", variant: "destructive" });
+        return;
       }
+      throw new Error("Unexpected response from login");
+    } catch (err: any) {
+      toast({
+        title: "Login failed",
+        description: err.message || "Invalid credentials",
+        variant: "destructive",
+      });
+    } finally {
+      setLoginInFlight(false);
     }
-  });
+  };
+
+  // Lightweight shim so the rest of the file (which references
+  // loginMutation.isPending below) keeps working without a wider refactor.
+  const loginMutation = { isPending: loginInFlight };
 
   const registerMutation = useRegister({
     mutation: {
@@ -264,7 +532,7 @@ export default function LoginPage() {
     }
 
     if (isLogin) {
-      loginMutation.mutate({ data: { email, password, captchaToken } as any });
+      void submitLogin();
     } else {
       registerMutation.mutate({
         data: {
@@ -284,6 +552,20 @@ export default function LoginPage() {
 
   const isPending = loginMutation.isPending || registerMutation.isPending;
   const canSubmit = !isPending && (!CAPTCHA_ENABLED || !!captchaToken);
+
+  // ── Awaiting-approval step (shown when another device owns this account) ──
+  if (pendingApproval) {
+    return (
+      <AwaitingApprovalStep
+        info={pendingApproval}
+        onSuccess={(token, user) => {
+          setAuthData(token, user);
+          setLocation("/dashboard");
+        }}
+        onCancel={() => setPendingApproval(null)}
+      />
+    );
+  }
 
   // ── OTP verification step ──
   if (showOtpStep) {

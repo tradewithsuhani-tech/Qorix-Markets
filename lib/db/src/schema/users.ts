@@ -43,6 +43,19 @@ export const usersTable = pgTable("users", {
   // NULL means "never changed in-app" (pre-existing accounts) — those are
   // not locked.
   passwordChangedAt: timestamp("password_changed_at"),
+  // ── Single-active-device login control ────────────────────────────────────
+  // Fingerprint (sha256 of User-Agent, first 32 chars) of the device that
+  // currently "owns" this account. A login attempt from a DIFFERENT
+  // fingerprint is intercepted and held for explicit approval from the
+  // active device (POST /auth/login-attempts/:id/respond) or, after a 60s
+  // timeout, an email OTP fallback. NULL means "no active session yet" —
+  // the next login just claims it (covers pre-existing accounts and fresh
+  // signups, so nobody gets locked out by the rollout).
+  activeSessionFingerprint: varchar("active_session_fingerprint", { length: 64 }),
+  // Last time the active device hit an authenticated endpoint. Used purely
+  // for showing "active 2 minutes ago" in the approval popup — the actual
+  // single-device enforcement is the fingerprint compare, not this.
+  activeSessionLastSeen: timestamp("active_session_last_seen"),
   referralCode: varchar("referral_code", { length: 20 }).notNull().unique(),
   sponsorId: serial("sponsor_id"),
   tronAddress: varchar("tron_address", { length: 64 }),
