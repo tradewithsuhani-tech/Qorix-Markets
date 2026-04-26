@@ -42,6 +42,11 @@ function normalizeIp(ip: string): string {
   return ip.replace(/^::ffff:/, "").trim();
 }
 
+// Hours that withdrawals stay frozen after a successful in-app password
+// change. Surfaced via /auth/security-status and enforced server-side in
+// POST /wallet/withdraw.
+export const WITHDRAWAL_LOCK_HOURS_AFTER_PASSWORD_CHANGE = 24;
+
 function formatUser(user: typeof usersTable.$inferSelect) {
   return {
     id: user.id,
@@ -401,6 +406,146 @@ router.get("/auth/me", authMiddleware, async (req: AuthRequest, res) => {
 });
 
 // ---------------------------------------------------------------------------
+// GET /auth/security-status — exposes password-change history and the
+// resulting 24h post-change withdrawal lock status, so the settings page
+// can render an accurate "Last changed" line and the withdraw page can
+// show a banner when the lock is active. The withdraw endpoint enforces
+// this server-side; this is purely informational for the UI.
+// ---------------------------------------------------------------------------
+router.get("/auth/security-status", authMiddleware, async (req: AuthRequest, res) => {
+  const rows = await db
+    .select({ passwordChangedAt: usersTable.passwordChangedAt })
+    .from(usersTable)
+    .where(eq(usersTable.id, req.userId!))
+    .limit(1);
+  if (rows.length === 0) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+  const passwordChangedAt = rows[0]!.passwordChangedAt;
+  const lockMs = WITHDRAWAL_LOCK_HOURS_AFTER_PASSWORD_CHANGE * 60 * 60 * 1000;
+  const withdrawalLockedUntilMs = passwordChangedAt
+    ? new Date(passwordChangedAt).getTime() + lockMs
+    : null;
+  const now = Date.now();
+  const withdrawalLocked = !!withdrawalLockedUntilMs && withdrawalLockedUntilMs > now;
+  res.json({
+    passwordChangedAt: passwordChangedAt ? new Date(passwordChangedAt).toISOString() : null,
+    withdrawalLockHours: WITHDRAWAL_LOCK_HOURS_AFTER_PASSWORD_CHANGE,
+    withdrawalLockedUntil: withdrawalLockedUntilMs
+      ? new Date(withdrawalLockedUntilMs).toISOString()
+      : null,
+    withdrawalLocked,
+    serverTime: new Date(now).toISOString(),
+  });
+});
+
+// ---------------------------------------------------------------------------
+// POST /auth/change-password — logged-in user updates their own password.
+// Requires the current password to prevent session-hijack abuse. On success
+// stamps `password_changed_at` so /wallet/withdraw will block payouts for
+// the next WITHDRAWAL_LOCK_HOURS_AFTER_PASSWORD_CHANGE hours — gives the
+// real owner a window to react if their account was just taken over.
+// ---------------------------------------------------------------------------
+const changePasswordLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many password change attempts. Try again later." },
+});
+
+router.post(
+  "/auth/change-password",
+  changePasswordLimiter,
+  authMiddleware,
+  async (req: AuthRequest, res) => {
+    const { currentPassword, newPassword } = req.body ?? {};
+    if (typeof currentPassword !== "string" || currentPassword.length === 0) {
+      res.status(400).json({ error: "Current password is required" });
+      return;
+    }
+    if (typeof newPassword !== "string" || newPassword.length < 8 || newPassword.length > 128) {
+      res.status(400).json({ error: "New password must be 8-128 characters long" });
+      return;
+    }
+    if (newPassword === currentPassword) {
+      res.status(400).json({ error: "New password must be different from current password" });
+      return;
+    }
+
+    const users = await db
+      .select({
+        id: usersTable.id,
+        email: usersTable.email,
+        passwordHash: usersTable.passwordHash,
+        isDisabled: usersTable.isDisabled,
+      })
+      .from(usersTable)
+      .where(eq(usersTable.id, req.userId!))
+      .limit(1);
+    if (users.length === 0) {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
+    const user = users[0]!;
+    if (user.isDisabled) {
+      res.status(403).json({ error: "Account is disabled" });
+      return;
+    }
+
+    const valid = await bcrypt.compare(currentPassword, user.passwordHash);
+    if (!valid) {
+      res.status(400).json({ error: "Current password is incorrect" });
+      return;
+    }
+
+    const newHash = await bcrypt.hash(newPassword, 12);
+    const now = new Date();
+    await db
+      .update(usersTable)
+      .set({ passwordHash: newHash, passwordChangedAt: now })
+      .where(eq(usersTable.id, user.id));
+
+    // Notify the user out-of-band that their password was just changed —
+    // gives the real owner a chance to react if this was an attacker.
+    // Failure is non-fatal (the password change itself already succeeded
+    // and is logged), but we DO log it so we can spot a broken email path.
+    setImmediate(async () => {
+      try {
+        const subject = "Your Qorix Markets password was changed";
+        const message =
+          `Your account password was just updated.\n\n` +
+          `For your security, withdrawals from your account are temporarily ` +
+          `paused for the next ${WITHDRAWAL_LOCK_HOURS_AFTER_PASSWORD_CHANGE} hours. ` +
+          `Deposits, trading and all other activity continue as normal.\n\n` +
+          `If you did NOT change your password, contact support immediately ` +
+          `so we can secure your account.`;
+        const html = buildBrandedEmailHtml(subject, message);
+        await sendEmail(user.email, subject, message, html);
+      } catch (err) {
+        try {
+          const { errorLogger } = await import("../lib/logger");
+          errorLogger.error(
+            { err, userId: user.id, route: "/auth/change-password" },
+            "Failed to send password-change confirmation email",
+          );
+        } catch { /* logger import failed — give up silently */ }
+      }
+    });
+
+    const lockMs = WITHDRAWAL_LOCK_HOURS_AFTER_PASSWORD_CHANGE * 60 * 60 * 1000;
+    res.json({
+      success: true,
+      message: "Password updated successfully",
+      passwordChangedAt: now.toISOString(),
+      withdrawalLockedUntil: new Date(now.getTime() + lockMs).toISOString(),
+      withdrawalLockHours: WITHDRAWAL_LOCK_HOURS_AFTER_PASSWORD_CHANGE,
+    });
+  },
+);
+
+// ---------------------------------------------------------------------------
 // POST /auth/send-otp — resend email verification OTP
 // ---------------------------------------------------------------------------
 router.post("/auth/send-otp", authMiddleware, async (req: AuthRequest, res) => {
@@ -564,7 +709,14 @@ router.post("/auth/reset-password", forgotLimiter, async (req, res) => {
     return;
   }
   const passwordHash = await bcrypt.hash(newPassword, 12);
-  await db.update(usersTable).set({ passwordHash }).where(eq(usersTable.id, users[0]!.id));
+  // ALSO stamp passwordChangedAt — same as the in-app change-password
+  // endpoint. Without this, an attacker who hijacks an email inbox could
+  // use the reset flow as a 24h-lock bypass and immediately withdraw.
+  // See WITHDRAWAL_LOCK_HOURS_AFTER_PASSWORD_CHANGE for the freeze window.
+  await db
+    .update(usersTable)
+    .set({ passwordHash, passwordChangedAt: new Date() })
+    .where(eq(usersTable.id, users[0]!.id));
   res.json({ success: true, message: "Password reset successfully" });
 });
 
