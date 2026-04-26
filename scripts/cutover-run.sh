@@ -1,8 +1,24 @@
 #!/usr/bin/env bash
-# One-shot cutover executor. Runs ONLY after qorix-api is scaled to 0
-# (writes frozen). Dumps PROD -> restores NEON -> resets sequences ->
-# runs verify-db-cutover. Exits non-zero on any failure so the operator
-# sees a stop-the-line clearly.
+# =============================================================================
+# EMERGENCY-ONLY one-shot DB cutover executor.
+#
+# Cutover #41 (Replit/Neon-US -> Neon Singapore) is COMPLETE as of
+# 2026-04-26 13:43 UTC. This script is retained ONLY as a reference /
+# disaster-recovery shortcut. The canonical Phase B procedure in
+# MUMBAI_DB_CUTOVER_RUNBOOK.md is MANUAL with human checkpoints between
+# each step (scale-to-zero, dump, restore, sequence reset, verify, secret
+# set, smoke). Do NOT use this script for routine planned cutovers; it
+# bypasses those checkpoints and will hide problems that the runbook is
+# designed to catch.
+#
+# If you must run this in an emergency:
+#   1. Confirm qorix-api is scaled to 0 (writes frozen) FIRST.
+#   2. Have the runbook open and stop the script if any step prints an
+#      unexpected diff or row-count mismatch.
+#   3. Re-read MUMBAI_DB_CUTOVER_RUNBOOK.md "Cutover actuals" before
+#      reusing — Replit-managed Postgres quirks (restricted _system
+#      schema, search_path) may not apply to the next source DB.
+# =============================================================================
 set -euo pipefail
 
 if [[ -z "${PROD_DATABASE_URL:-}" || -z "${NEON_DATABASE_URL:-}" ]]; then
