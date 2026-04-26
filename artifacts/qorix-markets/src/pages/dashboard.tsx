@@ -276,97 +276,51 @@ function CapitalProtectionWidget({
   const bufferLeft = Math.max(0, (amount * drawdownLimit / 100) - drawdown);
 
   return (
-    <div
-      className="relative p-5 rounded-2xl border border-white/[0.08] overflow-hidden"
-      style={{
-        background:
-          "linear-gradient(135deg, rgba(15,23,42,0.6) 0%, rgba(2,6,23,0.7) 60%, rgba(15,23,42,0.6) 100%)",
-        boxShadow:
-          "0 1px 0 rgba(255,255,255,0.04) inset, 0 20px 60px -20px rgba(0,0,0,0.5)",
-      }}
-    >
-      {/* Soft accent glow top-left */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute -top-20 -left-16 w-56 h-56 rounded-full opacity-60"
-        style={{
-          background:
-            "radial-gradient(circle, rgba(59,130,246,0.12) 0%, transparent 70%)",
-        }}
-      />
-
-      {/* Header — icon + status badge on one row, full-width title row below */}
-      <div className="relative">
-        <div className="flex items-center justify-between mb-3">
-          <div
-            className="w-11 h-11 rounded-2xl bg-gradient-to-br from-blue-500/25 via-indigo-500/15 to-blue-500/10 border border-blue-400/30 flex items-center justify-center"
-            style={{ boxShadow: "0 0 24px rgba(59,130,246,0.18), inset 0 1px 0 rgba(255,255,255,0.08)" }}
-          >
-            <Shield style={{ width: 18, height: 18 }} className="text-blue-300" />
+    <div className="glass-card p-5 rounded-2xl">
+      {/* Header */}
+      <div className="flex items-center justify-between gap-2 mb-5">
+        <div className="flex items-center gap-2 min-w-0 flex-1">
+          <div className="w-8 h-8 shrink-0 rounded-xl bg-blue-500/15 border border-blue-500/25 flex items-center justify-center">
+            <Shield style={{ width: 14, height: 14 }} className="text-blue-400" />
           </div>
-          <span
-            className={`text-[10px] uppercase tracking-[0.08em] px-2.5 py-1 rounded-full border font-bold flex items-center gap-1.5 ${statusBg}`}
-          >
-            {isTrading && <span className="live-dot" style={{ width: 5, height: 5 }} />}
-            {isTriggered && <AlertTriangle style={{ width: 10, height: 10 }} />}
-            {statusLabel}
-          </span>
-        </div>
-        <div className="mb-5">
-          <div className="font-semibold text-[15px] text-white tracking-tight">
-            Capital Protection System
-          </div>
-          <div className="text-[11.5px] text-slate-400 mt-0.5 leading-snug">
-            Auto-stops trading at your drawdown limit
+          <div className="min-w-0">
+            <div className="font-semibold text-sm truncate">Capital Protection System</div>
+            <div className="text-[11px] text-muted-foreground truncate">Auto-stops at drawdown limit</div>
           </div>
         </div>
+        <span className={`shrink-0 text-xs px-2.5 py-1 rounded-full border font-semibold flex items-center gap-1.5 ${statusBg}`}>
+          {isTrading && <span className="live-dot" style={{ width: 5, height: 5 }} />}
+          {isTriggered && <AlertTriangle style={{ width: 10, height: 10 }} />}
+          {statusLabel}
+        </span>
       </div>
 
-      <div className="relative grid grid-cols-1 lg:grid-cols-2 gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         {/* Left: Drawdown gauge */}
         <div className="space-y-4">
           <div>
-            <div className="flex justify-between items-baseline text-xs mb-2">
-              <span className="text-slate-400 uppercase tracking-wider text-[10px] font-medium">Current Drawdown</span>
-              <span className={`font-bold tabular-nums text-[13px] ${isTriggered ? "text-red-400" : usagePct > 70 ? "text-orange-400" : "text-green-400"}`}>
-                {drawdownPct.toFixed(2)}% <span className="text-[11px] opacity-80">(${drawdown.toFixed(2)})</span>
+            <div className="flex justify-between text-xs mb-2">
+              <span className="text-muted-foreground">Current Drawdown</span>
+              <span className={`font-bold tabular-nums ${isTriggered ? "text-red-400" : usagePct > 70 ? "text-orange-400" : "text-green-400"}`}>
+                {drawdownPct.toFixed(2)}% (${drawdown.toFixed(2)})
               </span>
             </div>
-            <div
-              className="relative h-2.5 rounded-full overflow-hidden border border-white/[0.06]"
-              style={{ background: "linear-gradient(180deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%)" }}
-            >
-              {/* Quartile ticks for premium feel */}
-              {[25, 50, 75].map((t) => (
-                <div
-                  key={t}
-                  aria-hidden
-                  className="absolute top-0 bottom-0 w-px bg-white/[0.06]"
-                  style={{ left: `${t}%` }}
-                />
-              ))}
+            <div className="relative h-3 bg-white/5 rounded-full overflow-hidden">
               <motion.div
                 initial={{ width: 0 }}
                 animate={{ width: `${usagePct}%` }}
                 transition={{ duration: 1, ease: "easeOut" }}
-                className="h-full rounded-full relative"
-                style={{
-                  background: `linear-gradient(90deg, ${barColor}88, ${barColor})`,
-                  boxShadow: `0 0 10px ${barColor}55, inset 0 1px 0 rgba(255,255,255,0.18)`,
-                }}
+                className="h-full rounded-full"
+                style={{ background: `linear-gradient(90deg, ${barColor}88, ${barColor})` }}
               />
-              {/* End-cap */}
               <div
-                aria-hidden
-                className="absolute top-0 bottom-0 w-[2px] bg-white/25"
-                style={{ right: 0 }}
+                className="absolute top-0 bottom-0 w-px bg-white/20"
+                style={{ left: "100%" }}
               />
             </div>
-            <div className="flex justify-between text-[10px] text-slate-500 mt-2">
+            <div className="flex justify-between text-[10px] text-muted-foreground mt-1.5">
               <span>0%</span>
-              <span className="font-medium text-slate-400">
-                {drawdownLimit}% limit = <span className="text-slate-300">${((amount * drawdownLimit) / 100).toFixed(2)}</span>
-              </span>
+              <span className="font-medium">{drawdownLimit}% limit = ${((amount * drawdownLimit) / 100).toFixed(2)}</span>
             </div>
           </div>
 
