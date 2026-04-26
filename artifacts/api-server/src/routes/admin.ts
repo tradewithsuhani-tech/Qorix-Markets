@@ -15,7 +15,7 @@ import {
 import { loginEventsTable, blockchainDepositsTable } from "@workspace/db/schema";
 import { eq, sum, count, and, or, desc, sql, inArray } from "drizzle-orm";
 import { authMiddleware, adminMiddleware, getParam, getQueryInt, getQueryString, type AuthRequest } from "../middlewares/auth";
-import { invalidateMaintenanceCache, getMaintenanceState } from "../middlewares/maintenance";
+import { notifyMaintenanceInvalidation, getMaintenanceState } from "../middlewares/maintenance";
 import { SetDailyProfitBody } from "@workspace/api-zod";
 import { transferProfitToMain } from "../lib/profit-service";
 import { sendUsdtFromTreasury, getTreasuryUsdtBalance } from "../lib/crypto-deposit/sweep";
@@ -574,14 +574,18 @@ router.post("/admin/settings", async (req: AuthRequest, res) => {
 
   // Drop the in-memory maintenance cache the moment any maintenance-related
   // setting changes, so a freshly-flipped admin toggle takes effect on the
-  // very next request instead of waiting out the TTL.
+  // very next request instead of waiting out the TTL. Use the cross-instance
+  // notifier (Postgres NOTIFY on `maintenance_invalidate`) instead of a local
+  // invalidate so every other API replica drops its cache within a Postgres
+  // round-trip — without this, peers would keep serving the stale state until
+  // CACHE_TTL_MS elapsed.
   if (
     "maintenanceMode" in req.body ||
     "maintenanceMessage" in req.body ||
     "maintenanceHardBlock" in req.body ||
     "maintenanceEndsAt" in req.body
   ) {
-    invalidateMaintenanceCache();
+    await notifyMaintenanceInvalidation();
   }
   transactionLogger.info({ event: "admin_settings_update", adminId: req.userId, keys: Object.keys(req.body) }, "Admin settings updated");
   const rows = await db.select().from(systemSettingsTable);

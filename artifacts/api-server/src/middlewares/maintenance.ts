@@ -1,6 +1,13 @@
 import type { Request, Response, NextFunction } from "express";
-import { db, systemSettingsTable } from "@workspace/db";
+import { db, pool, systemSettingsTable, createListenClient } from "@workspace/db";
 import { inArray } from "drizzle-orm";
+import { errorLogger, logger } from "../lib/logger";
+
+// Derive the LISTEN client type from the factory rather than importing `pg`
+// directly — `pg` is a transitive dependency of @workspace/db and not a
+// direct dependency of api-server, so a direct `import type { Client } from
+// "pg"` here would break tsc resolution in this package.
+type ListenClient = ReturnType<typeof createListenClient>;
 
 // Maintenance has TWO source-of-truth signals that callers should treat as one:
 //
@@ -51,11 +58,20 @@ export type MaintenanceState = {
 };
 
 // In-memory TTL cache so the DB lookup doesn't fire on every /api request.
-// The admin POST /admin/settings handler calls invalidateMaintenanceCache()
-// the moment the operator flips the toggle, so the user-facing latency on
-// enabling/disabling is bounded by the next request, not by the TTL.
+// The admin POST /admin/settings handler calls notifyMaintenanceInvalidation()
+// the moment the operator flips the toggle, which (a) drops THIS instance's
+// cache locally and (b) broadcasts a Postgres NOTIFY on the
+// `maintenance_invalidate` channel that every other API instance receives via
+// startMaintenanceInvalidationListener(). End-to-end the user-facing latency
+// on flipping the toggle is bounded by one Postgres round-trip (~tens of ms),
+// not the per-instance TTL — so a multi-instance Fly deploy stops serving the
+// stale state within a second instead of up to 5.
 let cached: { state: MaintenanceState; at: number } | null = null;
 const CACHE_TTL_MS = 5_000;
+
+// Channel name used for cross-instance cache invalidation. Constant — never
+// interpolate user input into the LISTEN/NOTIFY identifier.
+const MAINTENANCE_NOTIFY_CHANNEL = "maintenance_invalidate";
 
 export function isEnvMaintenanceMode(): boolean {
   return (process.env["MAINTENANCE_MODE"] ?? "").toLowerCase() === "true";
@@ -83,6 +99,134 @@ export const getMaintenanceEndsAt = getEnvMaintenanceEndsAt;
 
 export function invalidateMaintenanceCache(): void {
   cached = null;
+}
+
+// Fan-out cache invalidation across every running API instance.
+//
+// Called from POST /admin/settings the moment an admin flips a maintenance
+// row. We do TWO things:
+//   1. Drop this process's cache immediately so the operator's *next*
+//      request to the same instance reflects the new state with zero RTT
+//      (don't wait on Postgres NOTIFY round-trip for the user driving the
+//      toggle).
+//   2. Issue `NOTIFY maintenance_invalidate` on the shared pool. Every other
+//      API instance has a long-lived LISTEN on the same channel
+//      (startMaintenanceInvalidationListener) and drops its own cache as
+//      soon as the notification arrives — typically tens of milliseconds.
+//
+// NOTIFY failure is logged but never thrown to the caller: the local cache
+// is already cleared, and any peer that misses the notification will
+// reconcile within CACHE_TTL_MS via the existing TTL fallback. We'd rather
+// admins keep being able to flip the toggle than fail their write because
+// LISTEN/NOTIFY is temporarily unavailable.
+export async function notifyMaintenanceInvalidation(): Promise<void> {
+  invalidateMaintenanceCache();
+  try {
+    await pool.query(`NOTIFY ${MAINTENANCE_NOTIFY_CHANNEL}`);
+  } catch (err) {
+    errorLogger.error(
+      { err, channel: MAINTENANCE_NOTIFY_CHANNEL },
+      "Failed to broadcast maintenance cache invalidation NOTIFY — peer instances will reconcile via TTL fallback",
+    );
+  }
+}
+
+// Long-lived LISTEN connection state. Held outside the function so the
+// reconnect loop and the stop handle can see the same client.
+let listenerClient: ListenClient | null = null;
+let listenerStopped = false;
+let reconnectTimer: NodeJS.Timeout | null = null;
+const RECONNECT_DELAY_MS = 1_000;
+
+// Start a dedicated Postgres connection that LISTENs on
+// `maintenance_invalidate` and drops the local cache on every notification.
+// Designed to be called once at process boot from index.ts. Returns a stop
+// function used by graceful shutdown to release the connection cleanly.
+//
+// On connection loss the listener auto-reconnects every RECONNECT_DELAY_MS
+// until either it succeeds or stop() is called. We never throw out of the
+// retry loop because the cache TTL fallback already provides eventual
+// consistency; a hard failure would be worse than a temporary pause in
+// cross-instance fan-out.
+export async function startMaintenanceInvalidationListener(): Promise<
+  () => Promise<void>
+> {
+  listenerStopped = false;
+  await connectListener();
+  return async () => {
+    listenerStopped = true;
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+    }
+    const c = listenerClient;
+    listenerClient = null;
+    if (c) {
+      try {
+        await c.end();
+      } catch {
+        // best-effort close on shutdown
+      }
+    }
+  };
+}
+
+async function connectListener(): Promise<void> {
+  if (listenerStopped) return;
+  let client: ListenClient | null = null;
+  try {
+    client = createListenClient();
+    client.on("error", (err: Error) => {
+      errorLogger.error(
+        { err, channel: MAINTENANCE_NOTIFY_CHANNEL },
+        "Maintenance LISTEN connection errored — scheduling reconnect",
+      );
+      scheduleReconnect();
+    });
+    client.on("end", () => {
+      if (!listenerStopped) scheduleReconnect();
+    });
+    client.on("notification", (msg: { channel: string }) => {
+      if (msg.channel === MAINTENANCE_NOTIFY_CHANNEL) {
+        invalidateMaintenanceCache();
+      }
+    });
+    await client.connect();
+    await client.query(`LISTEN ${MAINTENANCE_NOTIFY_CHANNEL}`);
+    listenerClient = client;
+    logger.info(
+      { channel: MAINTENANCE_NOTIFY_CHANNEL },
+      "Maintenance cache invalidation listener active",
+    );
+  } catch (err) {
+    errorLogger.error(
+      { err, channel: MAINTENANCE_NOTIFY_CHANNEL },
+      "Failed to start maintenance LISTEN — will retry",
+    );
+    if (client) {
+      try {
+        await client.end();
+      } catch {
+        // ignore: connect failure path
+      }
+    }
+    scheduleReconnect();
+  }
+}
+
+function scheduleReconnect(): void {
+  if (listenerStopped || reconnectTimer) return;
+  if (listenerClient) {
+    const c = listenerClient;
+    listenerClient = null;
+    c.end().catch(() => {
+      // best-effort: client already in error state
+    });
+  }
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null;
+    void connectListener();
+  }, RECONNECT_DELAY_MS);
 }
 
 export async function getMaintenanceState(): Promise<MaintenanceState> {
