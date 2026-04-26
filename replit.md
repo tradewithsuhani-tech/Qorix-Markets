@@ -22,7 +22,7 @@ A premium fintech PWA for automated USDT investment and trading. Users deposit U
 
 - `pnpm run typecheck` — full typecheck across all packages
 - `pnpm run build` — typecheck + build all packages
-- `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from OpenAPI spec
+- `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from OpenAPI spec (auto-runs the post-codegen patch — see "API codegen post-patch" below)
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
 - `pnpm --filter @workspace/api-server run dev` — run API server locally
 - `pnpm --filter @workspace/qorix-markets run dev` — run frontend locally
@@ -47,6 +47,22 @@ lib/
   db/                  # Drizzle ORM schema and db connection
     src/schema/        # users, wallets, transactions, investments, trades, equity, settings, notifications
 ```
+
+## API codegen post-patch
+
+The codegen pnpm script auto-runs `lib/api-spec/scripts/patch-generated.mjs` immediately after orval. The patch wraps every `query?: UseQueryOptions<...>` parameter in the generated `lib/api-client-react/src/generated/api.ts` with `Partial<...>` so callers don't have to pass `queryKey` (which the codegen already provides).
+
+Why a post-patch instead of orval config:
+
+- Orval only emits `Partial<UseQueryOptions<...>>` when it detects `@tanstack/react-query` v5 in the closest `package.json`, but `lib/api-spec/package.json` doesn't list it.
+- Forcing it via `override.query.version: 5` also rewrites the `queryKey` return type to `DataTag<QueryKey, TData, TError>` and adds extra `useXxx` overloads — not what we want here.
+
+The patch script is deterministic and idempotent: it walks balanced `<...>` brackets, only matches `query?: UseQueryOptions<...>` (not the `as UseQueryOptions<...>` cast or the import), and skips already-wrapped occurrences. If you rerun codegen, the patch re-applies automatically — no manual fix-up required.
+
+The script has two built-in drift guards (both exit non-zero, breaking codegen loudly so you notice):
+
+1. If it finds zero `query?: UseQueryOptions<` occurrences total (neither wrappable nor already wrapped), orval's output format has likely changed.
+2. If any unwrapped `query?: UseQueryOptions<...>` remains after the pass, the bracket walker failed to handle a new pattern.
 
 ## Features
 
