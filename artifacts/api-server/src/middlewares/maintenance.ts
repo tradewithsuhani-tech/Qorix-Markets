@@ -149,6 +149,18 @@ export async function getMaintenanceState(): Promise<MaintenanceState> {
   return state;
 }
 
+// Boot-time gate for cron / Telegram poller / on-chain watchers / BullMQ
+// workers. Maintenance mode (env var OR admin-toggled DB flag) forces these
+// off so a single freeze freezes writes from every path (HTTP + cron +
+// workers). Also honoured: explicit RUN_BACKGROUND_JOBS=false on a per-
+// instance basis (e.g. Replit dev once Fly is the source of truth). Pure
+// function so the test suite can verify the gating without booting the
+// full process.
+export function shouldRunBackgroundJobs(maintenance: MaintenanceState): boolean {
+  if (maintenance.active) return false;
+  return (process.env["RUN_BACKGROUND_JOBS"] ?? "true").toLowerCase() !== "false";
+}
+
 // Methods that must be blocked while writes are frozen. HEAD/OPTIONS are
 // metadata-only so they pass through alongside GET. Anything that mutates the
 // DB — including custom verbs we might add later — gets caught by the default

@@ -5,6 +5,10 @@ import { seedSystemSettings } from "./lib/seed-settings";
 import { runWalletEncryptionPreflight } from "./lib/wallet-preflight";
 import { flagSmokeTestAccount } from "./lib/smoke-test-account";
 import { getMaintenanceState } from "./middlewares/maintenance";
+import {
+  registerBackgroundJobs,
+  realBackgroundJobFactories,
+} from "./lib/background-jobs";
 
 // Gate single-instance background work (cron, Telegram poller, on-chain
 // watchers, BullMQ workers) behind a single env flag so we can flip it off in
@@ -29,9 +33,6 @@ async function main() {
   // honoured on the very first boot, then use it to decide whether to start
   // background workers below.
   const maintenance = await getMaintenanceState();
-  const RUN_BACKGROUND_JOBS =
-    !maintenance.active &&
-    (process.env["RUN_BACKGROUND_JOBS"] ?? "true").toLowerCase() !== "false";
   // Hard-fail on wallet-secret mismatch BEFORE we accept any traffic. This is
   // the safety net for the Fly.io cutover: if the new instance comes up with
   // a different WALLET_ENC_SECRET than the previous deployment, every existing
@@ -52,30 +53,13 @@ async function main() {
   const port = Number(rawPort);
   if (Number.isNaN(port) || port <= 0) throw new Error(`Invalid PORT value: "${rawPort}"`);
 
-  // Background workers / pollers are only spun up on the designated
-  // background-jobs machine. Other instances still serve HTTP requests but
-  // skip the singletons.
-  let profitDistributionWorker: { close: () => Promise<void> } | null = null;
-  let depositWorker: { close: () => Promise<void> } | null = null;
-  let profitEventWorker: { close: () => Promise<void> } | null = null;
-  let tronMonitor: { stop: () => void } | null = null;
-  let depositWatcher: { stop: () => void } | null = null;
-  let telegramPoller: { stop: () => void } | null = null;
-
-  if (RUN_BACKGROUND_JOBS) {
-    const { startProfitDistributionWorker } = await import("./workers/profit-distribution-worker");
-    const { startDepositWorker } = await import("./workers/deposit-worker");
-    const { startProfitEventWorker } = await import("./workers/profit-event-worker");
-    const { startTronMonitor } = await import("./lib/tron-monitor");
-    const { startDepositWatcher } = await import("./lib/crypto-deposit/depositWatcher");
-    const { startTelegramPoller } = await import("./lib/telegram-poller");
-
-    profitDistributionWorker = startProfitDistributionWorker();
-    depositWorker = startDepositWorker();
-    profitEventWorker = startProfitEventWorker();
-    tronMonitor = startTronMonitor();
-    depositWatcher = startDepositWatcher();
-    telegramPoller = startTelegramPoller();
+  // Background workers / pollers / cron are only spun up on the designated
+  // background-jobs instance. registerBackgroundJobs encapsulates the gating
+  // decision (maintenance OR RUN_BACKGROUND_JOBS=false → skip everything)
+  // AND the actual lazy-loaded factory calls, so the gate is provable from
+  // a test that injects stub factories.
+  const jobs = await registerBackgroundJobs(maintenance, realBackgroundJobFactories);
+  if (jobs) {
     logger.info("Background jobs enabled (cron, Telegram poller, watchers, workers)");
   } else if (maintenance.active) {
     logger.warn(
@@ -88,14 +72,16 @@ async function main() {
 
   const gracefulShutdown = async (signal: string) => {
     logger.info({ signal }, "Received shutdown signal — closing workers and server");
-    tronMonitor?.stop();
-    depositWatcher?.stop();
-    telegramPoller?.stop();
-    await Promise.all([
-      profitDistributionWorker?.close(),
-      depositWorker?.close(),
-      profitEventWorker?.close(),
-    ].filter(Boolean) as Promise<void>[]);
+    jobs?.tronMonitor.stop();
+    jobs?.depositWatcher.stop();
+    jobs?.telegramPoller.stop();
+    if (jobs) {
+      await Promise.all([
+        jobs.profitDistributionWorker.close(),
+        jobs.depositWorker.close(),
+        jobs.profitEventWorker.close(),
+      ]);
+    }
     process.exit(0);
   };
 
@@ -117,13 +103,6 @@ async function main() {
       const msg = "SMTP not fully configured (need SES_FROM_EMAIL + SMTP_PASS) — emails will NOT be delivered";
       if (process.env.NODE_ENV === "production") errorLogger.error(msg);
       else logger.warn(msg);
-    }
-    if (RUN_BACKGROUND_JOBS) {
-      void import("./lib/cron").then(({ initCronJobs }) =>
-        initCronJobs().catch((err) => {
-          console.error("initCronJobs failed:", err);
-        }),
-      );
     }
   });
 }
