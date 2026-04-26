@@ -4,6 +4,29 @@ import { notifyMaintenance } from "@/lib/maintenance-state";
 import App from "./App";
 import "./index.css";
 
+// Strip the `?_v=<ts>` cache-buster that forceReload() (see
+// src/lib/version-check.ts) appends before reloading. By the time this
+// module evaluates the new bundle is already loaded, so the param has
+// done its job and would otherwise stick around forever — leaking a
+// meaningless one-off timestamp into shared/copied URLs and confusing
+// server-side route matching that doesn't expect arbitrary query params.
+// Use replaceState (no reload, no history entry) so the user just sees
+// a clean URL post-update.
+try {
+  const stripUrl = new URL(window.location.href);
+  if (stripUrl.searchParams.has("_v")) {
+    stripUrl.searchParams.delete("_v");
+    const cleanedQuery = stripUrl.searchParams.toString();
+    const cleanedPath =
+      stripUrl.pathname +
+      (cleanedQuery ? `?${cleanedQuery}` : "") +
+      stripUrl.hash;
+    window.history.replaceState(window.history.state, "", cleanedPath);
+  }
+} catch {
+  /* If URL parsing somehow fails, leave the address bar alone. */
+}
+
 // Forward MAINTENANCE_MODE 503s (and read responses tagged with the
 // X-Maintenance-Mode header) into the global maintenance store so the
 // inline banner shows up automatically during the Mumbai-DB cutover.

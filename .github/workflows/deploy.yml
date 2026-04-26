@@ -1162,6 +1162,13 @@ jobs:
             // waitForNavigation) so we ALSO assert the cache-buster
             // query param is present — if forceReload stops appending
             // _v=, this wait times out instead of silently passing.
+            //
+            // The new bundle's bootstrap then strips _v from the URL
+            // via history.replaceState (see src/main.tsx) so users
+            // don't end up with a sticky cache-buster they could
+            // accidentally share. We assert both halves of that
+            // contract: the param must show up post-click, then must
+            // be gone again once the SPA has booted.
             console.log('→ click [data-testid=button-update-app] and wait for cache-busted reload');
             const navPromise = page.waitForURL(
               (url) => /[?&]_v=\d+/.test(url.toString()),
@@ -1169,20 +1176,36 @@ jobs:
             );
             await page.locator('[data-testid="button-update-app"]').click();
             await navPromise;
-
-            const finalURL = page.url();
-            if (!/[?&]_v=\d+/.test(finalURL)) {
-              await fail(
-                `Reloaded URL is missing the ?_v=<ts> cache-buster: ${finalURL}`,
-              );
-            }
-            console.log(`✓ reloaded URL has cache-buster: ${finalURL}`);
+            console.log(`✓ reloaded URL had cache-buster (waitForURL matched ?_v=<ts>)`);
 
             // Wait for the freshly-loaded SPA to settle so the caches
             // API and useVersionCheck have actually had a chance to run.
             await page
               .locator('input[placeholder="Email Address"]')
               .waitFor({ state: 'visible', timeout: 15000 });
+
+            // After the new bundle boots, main.tsx must strip the
+            // cache-buster via history.replaceState so the address bar
+            // is clean again. If that strip regresses (e.g. someone
+            // removes the boot-time replaceState), the param sticks
+            // forever and gets shared by users — fail loudly here.
+            await page.waitForFunction(
+              () => !/[?&]_v=\d+/.test(window.location.href),
+              null,
+              { timeout: 15000 },
+            ).catch(async () => {
+              await fail(
+                `?_v=<ts> cache-buster was never stripped from the URL after the new bundle booted (current URL: ${page.url()}). ` +
+                  `main.tsx must clear it via history.replaceState so users don't end up sharing a sticky one-off cache-buster.`,
+              );
+            });
+            const cleanedURL = page.url();
+            if (/[?&]_v=\d+/.test(cleanedURL)) {
+              await fail(
+                `?_v=<ts> still present after settle: ${cleanedURL}`,
+              );
+            }
+            console.log(`✓ ?_v=<ts> stripped from URL after boot: ${cleanedURL}`);
 
             const keysAfterReload = await page.evaluate(() => caches.keys());
             if (keysAfterReload.length !== 0) {
@@ -1505,7 +1528,11 @@ jobs:
             // Click Update — same wait-for-cache-buster pattern as
             // smoke_web_browser_version_banner_click. Using waitForURL
             // (rather than waitForNavigation) means a regression that
-            // drops the ?_v=<ts> param will time out here too.
+            // drops the ?_v=<ts> param will time out here too. The
+            // new bundle then strips _v from the URL on boot (see
+            // src/main.tsx); we don't re-assert the strip here (the
+            // sibling click-smoke step pins that contract) — this
+            // step's job is the storage-preservation policy.
             console.log('→ click [data-testid=button-update-app] and wait for cache-busted reload');
             const navPromise = page.waitForURL(
               (url) => /[?&]_v=\d+/.test(url.toString()),
