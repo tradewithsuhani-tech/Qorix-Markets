@@ -2,7 +2,7 @@ import { Router } from "express";
 import { db, walletsTable, investmentsTable, equityHistoryTable, tradesTable, monthlyPerformanceTable, systemSettingsTable, pnlHistoryTable } from "@workspace/db";
 import { eq, and, gte, desc, sum, count, sql } from "drizzle-orm";
 import { getSlotData } from "./admin";
-import { authMiddleware, type AuthRequest } from "../middlewares/auth";
+import { authMiddleware, getQueryInt, getQueryString, type AuthRequest } from "../middlewares/auth";
 import { getVipInfo } from "../lib/vip";
 
 const router = Router();
@@ -278,7 +278,7 @@ router.get("/dashboard/summary", async (req: AuthRequest, res) => {
 });
 
 router.get("/dashboard/equity-chart", async (req: AuthRequest, res) => {
-  const days = parseInt(req.query["days"] as string) || 30;
+  const days = getQueryInt(req, "days", 30);
   const userId = req.userId!;
 
   // Always derive the chart's right-edge value from the live displayed equity
@@ -373,7 +373,7 @@ router.get("/dashboard/equity-chart", async (req: AuthRequest, res) => {
 });
 
 router.get("/dashboard/pnl-history", async (req: AuthRequest, res) => {
-  const rawDays = parseInt(req.query["days"] as string) || 30;
+  const rawDays = getQueryInt(req, "days", 30);
   const days = Math.max(1, Math.min(3650, rawDays));
   const userId = req.userId!;
 
@@ -687,7 +687,7 @@ router.get("/dashboard/fund-stats", async (req: AuthRequest, res) => {
 });
 
 router.get("/dashboard/monthly-performance", async (req: AuthRequest, res) => {
-  const filter = (req.query["filter"] as string) || "6m";
+  const filter = getQueryString(req, "filter", "6m");
 
   let since: string | null = null;
   if (filter === "3m") {

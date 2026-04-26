@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db, usersTable, fraudFlagsTable, loginEventsTable } from "@workspace/db";
 import { eq, and, desc, count, ne, gte, inArray } from "drizzle-orm";
-import { authMiddleware, adminMiddleware, getParam, type AuthRequest } from "../middlewares/auth";
+import { authMiddleware, adminMiddleware, getParam, getQueryInt, getQueryString, type AuthRequest } from "../middlewares/auth";
 import { getFraudStats } from "../lib/fraud-service";
 import { errorLogger } from "../lib/logger";
 
@@ -27,11 +27,11 @@ router.get("/admin/fraud/stats", async (_req, res) => {
 // ---------------------------------------------------------------------------
 router.get("/admin/fraud/flags", async (req, res) => {
   try {
-    const page = parseInt(req.query["page"] as string) || 1;
-    const limit = Math.min(parseInt(req.query["limit"] as string) || 25, 100);
+    const page = getQueryInt(req, "page", 1);
+    const limit = Math.min(getQueryInt(req, "limit", 25), 100);
     const offset = (page - 1) * limit;
-    const resolvedParam = req.query["resolved"] as string | undefined;
-    const severityParam = req.query["severity"] as string | undefined;
+    const resolvedParam = getQueryString(req, "resolved");
+    const severityParam = getQueryString(req, "severity");
 
     const flags = await db
       .select()

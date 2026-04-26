@@ -2,7 +2,7 @@ import { Router } from "express";
 import { db, usersTable } from "@workspace/db";
 import { blockchainDepositsTable } from "@workspace/db/schema";
 import { eq, desc } from "drizzle-orm";
-import { authMiddleware, type AuthRequest } from "../middlewares/auth";
+import { authMiddleware, getQueryInt, type AuthRequest } from "../middlewares/auth";
 import { isValidTronAddress } from "../lib/tron-address";
 import { getOrCreateDepositAddress } from "../lib/deposit-address-service";
 import { logger } from "../lib/logger";
@@ -54,7 +54,7 @@ router.post("/deposit/tron-address", async (req: AuthRequest, res) => {
 
 router.get("/deposit/history", async (req: AuthRequest, res) => {
   const userId = req.userId!;
-  const limit = Math.min(parseInt((req.query["limit"] as string) ?? "20", 10), 50);
+  const limit = Math.min(getQueryInt(req, "limit", 20), 50);
 
   const deposits = await db
     .select()

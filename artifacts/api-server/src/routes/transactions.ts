@@ -1,14 +1,14 @@
 import { Router } from "express";
 import { db, transactionsTable } from "@workspace/db";
 import { eq, desc, count } from "drizzle-orm";
-import { authMiddleware, type AuthRequest } from "../middlewares/auth";
+import { authMiddleware, getQueryInt, type AuthRequest } from "../middlewares/auth";
 
 const router = Router();
 router.use(authMiddleware);
 
 router.get("/transactions", async (req: AuthRequest, res) => {
-  const page = parseInt(req.query["page"] as string) || 1;
-  const limit = parseInt(req.query["limit"] as string) || 20;
+  const page = getQueryInt(req, "page", 1);
+  const limit = getQueryInt(req, "limit", 20);
   const offset = (page - 1) * limit;
 
   const [totalResult] = await db.select({ count: count() }).from(transactionsTable)

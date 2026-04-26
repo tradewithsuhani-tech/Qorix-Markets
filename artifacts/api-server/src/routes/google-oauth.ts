@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db, usersTable, walletsTable, investmentsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
-import { signToken } from "../middlewares/auth";
+import { signToken, getQueryString } from "../middlewares/auth";
 import crypto from "crypto";
 import { logger } from "../lib/logger";
 import { sendEmail } from "../lib/email-service";
@@ -59,7 +59,7 @@ router.get("/auth/google", (req, res) => {
 router.get("/auth/google/callback", async (req, res) => {
   const frontend = getFrontendUrl(req);
   try {
-    const code = req.query.code as string | undefined;
+    const code = getQueryString(req, "code");
     if (!code) {
       res.redirect(`${frontend}/login?error=google_no_code`);
       return;
