@@ -285,20 +285,35 @@ export interface ReconciliationResult {
 }
 
 export async function runReconciliation(): Promise<ReconciliationResult> {
-  // 1. Global debit vs credit totals
-  const globalRows = await db
+  // 1. Per-(account_code, entry_type) sums in a single grouped query.
+  // This replaces the per-account N+1 calls to getLedgerBalance() and also
+  // gives us the global debit/credit totals by summing across all accounts.
+  const accountTypeRows = await db
     .select({
+      accountCode: ledgerEntriesTable.accountCode,
       entryType: ledgerEntriesTable.entryType,
       total: sql<string>`sum(${ledgerEntriesTable.amount})`,
     })
     .from(ledgerEntriesTable)
-    .groupBy(ledgerEntriesTable.entryType);
+    .groupBy(ledgerEntriesTable.accountCode, ledgerEntriesTable.entryType);
 
+  const sumsByAccount = new Map<string, { debits: number; credits: number }>();
   let globalDebits = 0;
   let globalCredits = 0;
-  for (const r of globalRows) {
-    if (r.entryType === "debit") globalDebits = parseFloat(r.total ?? "0");
-    else globalCredits = parseFloat(r.total ?? "0");
+  for (const r of accountTypeRows) {
+    const v = parseFloat(r.total ?? "0");
+    let entry = sumsByAccount.get(r.accountCode);
+    if (!entry) {
+      entry = { debits: 0, credits: 0 };
+      sumsByAccount.set(r.accountCode, entry);
+    }
+    if (r.entryType === "debit") {
+      entry.debits += v;
+      globalDebits += v;
+    } else {
+      entry.credits += v;
+      globalCredits += v;
+    }
   }
   const globalBalanced = Math.abs(globalDebits - globalCredits) < 0.01;
 
@@ -329,7 +344,33 @@ export async function runReconciliation(): Promise<ReconciliationResult> {
     }
   }
 
-  // 3. Wallet vs ledger discrepancies
+  // 3. Fetch all GL accounts once. This serves both as the metadata source for
+  // computing per-account balances and as the existence check for wallet codes
+  // (replacing the per-wallet SELECT on gl_accounts).
+  const allAccounts = await db.select().from(glAccountsTable);
+  const accountMetaByCode = new Map<
+    string,
+    { name: string; accountType: string; normalBalance: string }
+  >();
+  for (const acc of allAccounts) {
+    accountMetaByCode.set(acc.code, {
+      name: acc.name,
+      accountType: acc.accountType,
+      normalBalance: acc.normalBalance,
+    });
+  }
+
+  // Compute a balance for an account code using the in-memory grouped sums
+  // and the cached gl_accounts metadata — no further DB calls required.
+  const balanceFor = (code: string): number => {
+    const sums = sumsByAccount.get(code) ?? { debits: 0, credits: 0 };
+    const normalBalance = accountMetaByCode.get(code)?.normalBalance ?? "debit";
+    return normalBalance === "debit"
+      ? sums.debits - sums.credits
+      : sums.credits - sums.debits;
+  };
+
+  // 4. Wallet vs ledger discrepancies — reuse the batch result above.
   const walletDiscrepancies: ReconciliationResult["walletDiscrepancies"] = [];
   const wallets = await db.select().from(walletsTable);
 
@@ -342,15 +383,9 @@ export async function runReconciliation(): Promise<ReconciliationResult> {
     ];
 
     for (const c of checks) {
-      const acctRows = await db
-        .select({ id: glAccountsTable.id })
-        .from(glAccountsTable)
-        .where(eq(glAccountsTable.code, c.code))
-        .limit(1);
+      if (!accountMetaByCode.has(c.code)) continue; // account not created yet — skip
 
-      if (acctRows.length === 0) continue; // account not created yet — skip
-
-      const ledgerBal = await getLedgerBalance(c.code);
+      const ledgerBal = balanceFor(c.code);
       const diff = Math.abs(c.balance - ledgerBal);
       if (diff > 0.01) {
         walletDiscrepancies.push({
@@ -364,17 +399,15 @@ export async function runReconciliation(): Promise<ReconciliationResult> {
     }
   }
 
-  // 4. Account balances
-  const allAccounts = await db.select().from(glAccountsTable);
+  // 5. Account balances — also derived from the same batch result.
   const accountBalances: ReconciliationResult["accountBalances"] = [];
   for (const acc of allAccounts) {
-    const balance = await getLedgerBalance(acc.code);
     accountBalances.push({
       code: acc.code,
       name: acc.name,
       accountType: acc.accountType,
       normalBalance: acc.normalBalance,
-      balance,
+      balance: balanceFor(acc.code),
     });
   }
 
