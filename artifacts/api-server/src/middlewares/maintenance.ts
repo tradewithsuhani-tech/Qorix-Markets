@@ -154,6 +154,15 @@ let listenerStopped = false;
 let reconnectTimer: NodeJS.Timeout | null = null;
 const RECONNECT_DELAY_MS = 1_000;
 
+// Health-of-the-fan-out telemetry. Updated only on a *successful*
+// connectListener() and read by the structured "reconnected" log so ops
+// can chart bounce rate (count) and inter-bounce gap (last successful
+// connect timestamp) without parsing raw stack traces. We deliberately
+// don't surface these via a metrics endpoint — the api-server has no
+// metrics surface today and pino-on-Fly is what on-call already greps.
+let lastConnectedAt: number | null = null;
+let reconnectCount = 0;
+
 // Start a dedicated Postgres connection that LISTENs on
 // `maintenance_invalidate` and drops the local cache on every notification.
 // Designed to be called once at process boot from index.ts. Returns a stop
@@ -177,6 +186,13 @@ export async function startMaintenanceInvalidationListener(): Promise<
     }
     const c = listenerClient;
     listenerClient = null;
+    // Reset the bounce telemetry so a subsequent
+    // startMaintenanceInvalidationListener() (e.g. an integration test
+    // that stops + restarts the listener within one process) treats its
+    // first successful dial as a fresh "active" log, not as a misleading
+    // "reconnected" line attributed to the previous lifecycle.
+    lastConnectedAt = null;
+    reconnectCount = 0;
     if (c) {
       try {
         await c.end();
@@ -210,10 +226,42 @@ async function connectListener(): Promise<void> {
     await client.connect();
     await client.query(`LISTEN ${MAINTENANCE_NOTIFY_CHANNEL}`);
     listenerClient = client;
-    logger.info(
-      { channel: MAINTENANCE_NOTIFY_CHANNEL },
-      "Maintenance cache invalidation listener active",
-    );
+    // pg.Client exposes the backend PID as `processID` after connect(); it's
+    // typed as `number | null` on the runtime object but isn't always present
+    // on the @types/pg surface. Narrow defensively so the structured log
+    // never crashes the listener if the field shape changes. We log it as
+    // `backendPid` rather than `pid` because pino auto-injects the OS
+    // process ID under the top-level key `pid` — using the same name would
+    // silently lose the Postgres backend PID we actually want to chart.
+    const backendPid =
+      (client as unknown as { processID?: number | null }).processID ?? null;
+    const now = Date.now();
+    if (lastConnectedAt === null) {
+      // First connect of this process — emit the existing startup line so the
+      // boot-time log shape doesn't change for log-based smoke tests.
+      logger.info(
+        { channel: MAINTENANCE_NOTIFY_CHANNEL, backendPid },
+        "Maintenance cache invalidation listener active",
+      );
+    } else {
+      // A reconnect succeeded. Emit a structured info log carrying the new
+      // backend PID and the gap since the previous successful connect so
+      // ops can chart bounce rate (count of these lines per hour) and
+      // inter-bounce duration without parsing the preceding error log. The
+      // counter is cumulative since process start; restarts reset it,
+      // which matches Fly's per-machine log lifetime anyway.
+      reconnectCount += 1;
+      logger.info(
+        {
+          channel: MAINTENANCE_NOTIFY_CHANNEL,
+          backendPid,
+          msSinceLastConnect: now - lastConnectedAt,
+          reconnectCount,
+        },
+        "Maintenance LISTEN reconnected",
+      );
+    }
+    lastConnectedAt = now;
   } catch (err) {
     errorLogger.error(
       { err, channel: MAINTENANCE_NOTIFY_CHANNEL },
