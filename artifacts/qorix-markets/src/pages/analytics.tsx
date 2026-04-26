@@ -34,6 +34,7 @@ import {
   Crown,
   Sparkles,
   ArrowUpRight,
+  Clock,
 } from "lucide-react";
 import {
   Chart as ChartJS,
@@ -484,48 +485,68 @@ export default function AnalyticsPage() {
                 ))}
               </div>
 
-              {/* Progress */}
-              <div className="mt-7 max-w-md mx-auto">
-                <div className="flex items-center justify-between text-xs mb-1.5">
-                  <span className="text-muted-foreground">Your fund</span>
-                  <span className="font-bold text-white tabular-nums">
-                    ${investorFund.toLocaleString(undefined, { maximumFractionDigits: 2 })}
-                    <span className="text-muted-foreground"> / ${ANALYTICS_MIN_FUND.toLocaleString()}</span>
+              {analyticsPageHidden ? (
+                /* Force-locked branch — page is in the hidden-features
+                   registry (analytics:page). We deliberately HIDE the
+                   "Your fund / $10,000" progress block and the
+                   "Deposit & Unlock" CTA here:
+                     1. summary.totalBalance includes demoEquityBoost,
+                        so it doesn't reflect the user's real deposited
+                        principal — showing it next to a $10K threshold
+                        is misleading.
+                     2. While force-locked, depositing won't unlock the
+                        page anyway, so the CTA would be a false
+                        promise.
+                   Instead we show a calm "Coming back soon" pill so
+                   users know it's intentional and temporary. */
+                <div className="mt-7 flex justify-center">
+                  <span className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/[0.04] border border-white/10 text-xs font-semibold text-amber-200/90">
+                    <Clock className="w-3.5 h-3.5 text-amber-300" />
+                    Coming back soon — we're polishing this page
                   </span>
                 </div>
-                <div className="h-2 rounded-full bg-white/[0.06] border border-white/10 overflow-hidden">
-                  <motion.div
-                    initial={{ width: 0 }}
-                    animate={{ width: `${progressPct}%` }}
-                    transition={{ duration: 0.8, ease: "easeOut" }}
-                    className="h-full bg-gradient-to-r from-amber-400 via-yellow-300 to-amber-400 shadow-[0_0_12px_rgba(245,158,11,0.6)]"
-                  />
-                </div>
-                <p className="mt-2 text-[11px] text-muted-foreground">
-                  Add{" "}
-                  <span className="text-amber-300 font-semibold">
-                    ${Math.max(0, ANALYTICS_MIN_FUND - investorFund).toLocaleString(undefined, { maximumFractionDigits: 2 })}
-                  </span>{" "}
-                  more to unlock
-                </p>
-              </div>
+              ) : (
+                <>
+                  {/* Progress (only shown when the normal $10K fund gate
+                      is active — i.e. the page is NOT in the registry). */}
+                  <div className="mt-7 max-w-md mx-auto">
+                    <div className="flex items-center justify-between text-xs mb-1.5">
+                      <span className="text-muted-foreground">Your fund</span>
+                      <span className="font-bold text-white tabular-nums">
+                        ${investorFund.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                        <span className="text-muted-foreground"> / ${ANALYTICS_MIN_FUND.toLocaleString()}</span>
+                      </span>
+                    </div>
+                    <div className="h-2 rounded-full bg-white/[0.06] border border-white/10 overflow-hidden">
+                      <motion.div
+                        initial={{ width: 0 }}
+                        animate={{ width: `${progressPct}%` }}
+                        transition={{ duration: 0.8, ease: "easeOut" }}
+                        className="h-full bg-gradient-to-r from-amber-400 via-yellow-300 to-amber-400 shadow-[0_0_12px_rgba(245,158,11,0.6)]"
+                      />
+                    </div>
+                    <p className="mt-2 text-[11px] text-muted-foreground">
+                      Add{" "}
+                      <span className="text-amber-300 font-semibold">
+                        ${Math.max(0, ANALYTICS_MIN_FUND - investorFund).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                      </span>{" "}
+                      more to unlock
+                    </p>
+                  </div>
 
-              {/* CTAs */}
-              <div className="mt-7 flex flex-col sm:flex-row items-center justify-center gap-3">
-                <Link
-                  href="/deposit"
-                  className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-black text-sm font-bold shadow-lg shadow-amber-500/30 transition-all"
-                >
-                  <ArrowUpRight className="w-4 h-4" />
-                  Deposit & Unlock
-                </Link>
-                <Link
-                  href="/invest"
-                  className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/15 text-white text-sm font-semibold transition-all"
-                >
-                  Explore Plans
-                </Link>
-              </div>
+                  {/* CTA — single "Deposit & Unlock" only. The previous
+                      "Explore Plans" link was removed per user request. */}
+                  <div className="mt-7 flex justify-center">
+                    <Link
+                      href="/deposit"
+                      className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-black text-sm font-bold shadow-lg shadow-amber-500/30 transition-all"
+                    >
+                      <ArrowUpRight className="w-4 h-4" />
+                      Deposit & Unlock
+                    </Link>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </motion.div>
