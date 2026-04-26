@@ -261,27 +261,308 @@ jobs:
             --config artifacts/qorix-markets/fly.toml \
             --dockerfile artifacts/qorix-markets/Dockerfile \
             --wait-timeout 600
-      # Post-deploy smoke check. Confirms nginx is actually serving the new
-      # build — `flyctl deploy` returning success only proves the container
-      # started, not that traffic is being routed to it.
+      # Static / network-level smoke check. Confirms nginx is serving the
+      # new build, the bundle has VITE_API_URL baked in, the SPA fallback
+      # is healthy, and an authenticated API call from the web origin works
+      # (so CORS / login / JWT verify are all happy for browser traffic).
+      #
+      # This step is fast diagnostic coverage — it catches the most common
+      # deploy breaks (wrong/missing VITE_API_URL, broken nginx fallback,
+      # CORS_ORIGIN misconfig) in a few seconds with curl, before we pay
+      # the cost of spinning up a real browser. The authoritative
+      # protected-page check is the next step (smoke_web_browser).
       - name: Smoke test qorix-markets web
         id: smoke_web
+        env:
+          SMOKE_TEST_EMAIL: ${{ secrets.SMOKE_TEST_EMAIL }}
+          SMOKE_TEST_PASSWORD: ${{ secrets.SMOKE_TEST_PASSWORD }}
         run: |
           set -euo pipefail
           WEB_BASE="https://qorixmarkets.com"
+          API_BASE="https://api.qorixmarkets.com"
+
           echo "→ GET ${WEB_BASE}/healthz"
           body=$(curl -fsS --retry 5 --retry-delay 5 --retry-all-errors \
             --max-time 10 "${WEB_BASE}/healthz")
           echo "${body}"
           test "${body}" = "ok"
+          echo
 
-      # Auto-rollback: if (and only if) the smoke check above failed, promote
-      # the previous release back so users aren't left on a known-bad build.
-      # We don't trigger on `flyctl deploy` itself failing — in that case the
-      # old release is still live and there's nothing to roll back.
+          # ── 1. Fetch the SPA shell and pull out the main JS bundle URL ──
+          echo "→ GET ${WEB_BASE}/ (SPA shell)"
+          curl -fsS --retry 5 --retry-delay 5 --retry-all-errors \
+            --max-time 15 "${WEB_BASE}/" -o /tmp/index.html
+          grep -q '<div id="root">' /tmp/index.html \
+            || { echo "::error::/ did not return the SPA shell (no #root div)"; head -c 2000 /tmp/index.html; exit 1; }
+          BUNDLE_PATH=$(grep -oE '/assets/index-[A-Za-z0-9_-]+\.js' /tmp/index.html | head -n1 || true)
+          if [ -z "${BUNDLE_PATH}" ]; then
+            echo "::error::Could not find /assets/index-*.js bundle in SPA shell — Vite build output looks wrong."
+            head -c 2000 /tmp/index.html
+            exit 1
+          fi
+          echo "✓ SPA shell served, main bundle = ${BUNDLE_PATH}"
+          echo
+
+          # ── 2. Bundle must have the prod API host baked in ──
+          echo "→ GET ${WEB_BASE}${BUNDLE_PATH} (verify VITE_API_URL is baked in)"
+          curl -fsS --retry 5 --retry-delay 5 --retry-all-errors \
+            --max-time 30 "${WEB_BASE}${BUNDLE_PATH}" -o /tmp/bundle.js
+          if ! grep -qF "${API_BASE}" /tmp/bundle.js; then
+            echo "::error::Main JS bundle does not contain ${API_BASE}." \
+              "VITE_API_URL was not baked in at build time — the deployed SPA will" \
+              "send /api/* calls same-origin and hit the SPA fallback (HTML) instead" \
+              "of the API. Check artifacts/qorix-markets/fly.toml [build.args]."
+            exit 1
+          fi
+          echo "✓ bundle has ${API_BASE} baked in"
+          echo
+
+          # ── 3. SPA fallback works for client-side routes ──
+          for route in /login /dashboard; do
+            echo "→ GET ${WEB_BASE}${route} (nginx SPA fallback → index.html)"
+            curl -fsS --retry 3 --retry-delay 3 --retry-all-errors \
+              --max-time 15 "${WEB_BASE}${route}" -o /tmp/route.html
+            grep -q '<div id="root">' /tmp/route.html \
+              || { echo "::error::${route} did not fall back to the SPA shell — nginx try_files broken?"; head -c 1500 /tmp/route.html; exit 1; }
+          done
+          echo "✓ SPA fallback healthy for /login and /dashboard"
+          echo
+
+          # ── 4. Authenticated check exercised the way the browser does it ──
+          # Reuses the same dedicated smoke-test account as the api-server
+          # smoke step. Setting Origin: https://qorixmarkets.com makes the
+          # API run its CORS check against the real web origin, so a
+          # CORS_ORIGIN misconfig that only breaks browser traffic still
+          # fails the deploy here.
+          if [ -z "${SMOKE_TEST_EMAIL:-}" ] || [ -z "${SMOKE_TEST_PASSWORD:-}" ]; then
+            echo "::error::SMOKE_TEST_EMAIL / SMOKE_TEST_PASSWORD secrets are not set." \
+              "Configure them in repo settings so the deploy can verify the auth pipeline."
+            exit 1
+          fi
+
+          # CORS preflight — the browser sends this before the real POST
+          # because of the JSON content-type. A 4xx here means CORS is
+          # broken for the web origin even if direct curls to the API work.
+          echo "→ OPTIONS ${API_BASE}/api/auth/login (CORS preflight from web origin)"
+          PREFLIGHT_HEADERS=$(curl -fsS --retry 3 --retry-delay 3 --retry-connrefused \
+            --max-time 15 -X OPTIONS \
+            -H "Origin: ${WEB_BASE}" \
+            -H "Access-Control-Request-Method: POST" \
+            -H "Access-Control-Request-Headers: content-type" \
+            -D - -o /dev/null \
+            "${API_BASE}/api/auth/login")
+          if ! echo "${PREFLIGHT_HEADERS}" | grep -iq "^access-control-allow-origin: ${WEB_BASE}"; then
+            echo "::error::CORS preflight from ${WEB_BASE} did not echo back the web origin." \
+              "Check CORS_ORIGIN on the api-server."
+            echo "${PREFLIGHT_HEADERS}"
+            exit 1
+          fi
+          echo "✓ CORS preflight allows ${WEB_BASE}"
+
+          echo "→ POST ${API_BASE}/api/auth/login (with Origin: ${WEB_BASE})"
+          LOGIN_BODY=$(jq -nc \
+            --arg email "${SMOKE_TEST_EMAIL}" \
+            --arg password "${SMOKE_TEST_PASSWORD}" \
+            '{email: $email, password: $password}')
+          curl -fsS --retry 3 --retry-delay 3 --retry-connrefused \
+            --max-time 15 \
+            -H "Content-Type: application/json" \
+            -H "Origin: ${WEB_BASE}" \
+            -d "${LOGIN_BODY}" \
+            "${API_BASE}/api/auth/login" \
+            -o /tmp/web-login.json
+          TOKEN=$(jq -r '.token // empty' /tmp/web-login.json)
+          if [ -z "${TOKEN}" ]; then
+            echo "::error::Login from web origin returned 200 but no token in response body."
+            jq 'del(.token)' /tmp/web-login.json || cat /tmp/web-login.json
+            exit 1
+          fi
+          echo "✓ obtained smoke-test token via web origin"
+
+          # /api/auth/me — strict read, no lazy state mutation. Same
+          # rationale as the api-server smoke step: safe to re-run on
+          # every deploy without dirtying the smoke account.
+          echo "→ GET ${API_BASE}/api/auth/me (authenticated, with Origin: ${WEB_BASE})"
+          curl -fsS --retry 3 --retry-delay 3 --retry-connrefused \
+            --max-time 15 \
+            -H "Authorization: Bearer ${TOKEN}" \
+            -H "Origin: ${WEB_BASE}" \
+            "${API_BASE}/api/auth/me" \
+            -o /tmp/web-me.json
+          jq -e 'has("id") and has("email")' /tmp/web-me.json > /dev/null \
+            || { echo "::error::/api/auth/me from web origin returned 200 but body is not a user"; cat /tmp/web-me.json; exit 1; }
+          echo "✓ authenticated route returned a valid user payload via web origin"
+
+      # Authoritative web smoke check: drive a real headless Chromium
+      # through the deployed login UI and verify a protected page renders.
+      # The previous step proves the API is reachable from the web origin;
+      # this step proves the SPA itself can boot, render the login form,
+      # submit credentials, route to /dashboard, and render authenticated
+      # content — i.e. the failure modes the network-only check cannot see:
+      #   - JS bundle throws on first render (uncaught exception in
+      #     AuthProvider, broken React provider, bad import, etc.)
+      #   - Login page renders but the submit handler / token interceptor
+      #     is broken so login never fires or never stores the token.
+      #   - ProtectedRoute guard sends the user back to /login despite a
+      #     valid session.
+      #   - Authenticated page mounts but immediately crashes (blank page).
+      - name: Set up Node for browser smoke test
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Browser smoke test — login + protected route
+        id: smoke_web_browser
+        env:
+          SMOKE_TEST_EMAIL: ${{ secrets.SMOKE_TEST_EMAIL }}
+          SMOKE_TEST_PASSWORD: ${{ secrets.SMOKE_TEST_PASSWORD }}
+          WEB_BASE: https://qorixmarkets.com
+        run: |
+          set -euo pipefail
+          if [ -z "${SMOKE_TEST_EMAIL:-}" ] || [ -z "${SMOKE_TEST_PASSWORD:-}" ]; then
+            echo "::error::SMOKE_TEST_EMAIL / SMOKE_TEST_PASSWORD secrets are not set."
+            exit 1
+          fi
+          # Self-contained playwright install in a tmp dir so we don't
+          # touch the monorepo's pnpm workspace state.
+          PW_DIR="$(mktemp -d)"
+          cd "${PW_DIR}"
+          npm init -y >/dev/null
+          # Pinned playwright version — bump deliberately, alongside any
+          # change to the smoke script below.
+          npm install --silent playwright@1.55.0
+          npx playwright install --with-deps chromium
+
+          cat > smoke.mjs <<'JS'
+          import { chromium } from 'playwright';
+
+          const WEB_BASE = process.env.WEB_BASE;
+          const EMAIL = process.env.SMOKE_TEST_EMAIL;
+          const PASSWORD = process.env.SMOKE_TEST_PASSWORD;
+
+          const errors = [];
+          const browser = await chromium.launch({ headless: true });
+          const ctx = await browser.newContext({
+            viewport: { width: 1280, height: 800 },
+            // Consistent UA so any UA-gated logic in the SPA behaves the
+            // same way it would for a real Chrome user.
+            userAgent:
+              'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 ' +
+              '(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+          });
+          const page = await ctx.newPage();
+
+          // Uncaught JS exceptions are always a real bug — fail on them.
+          page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
+          // Failed network requests to our own origins (web shell + api)
+          // mean the bundle or backend is broken; ignore third-party noise
+          // (fonts, recaptcha, analytics).
+          page.on('requestfailed', (req) => {
+            const u = req.url();
+            if (u.startsWith(WEB_BASE) || u.startsWith('https://api.qorixmarkets.com')) {
+              errors.push(`requestfailed: ${u} → ${req.failure()?.errorText}`);
+            }
+          });
+          // console.error is informational only — log it so we have it
+          // in the workflow output, but don't fail the deploy on it
+          // (third-party scripts / dev warnings can spam this).
+          page.on('console', (msg) => {
+            if (msg.type() === 'error') {
+              console.log(`[browser console.error] ${msg.text()}`);
+            }
+          });
+
+          const fail = async (reason) => {
+            console.error(`::error::${reason}`);
+            try {
+              const html = await page.content();
+              console.error('--- page HTML (first 2000 chars) ---');
+              console.error(html.slice(0, 2000));
+            } catch {}
+            await browser.close();
+            process.exit(1);
+          };
+
+          try {
+            console.log(`→ goto ${WEB_BASE}/login`);
+            await page.goto(`${WEB_BASE}/login`, {
+              waitUntil: 'domcontentloaded',
+              timeout: 30000,
+            });
+
+            // Login form must actually render — this proves the SPA
+            // booted and the login page component mounted without
+            // throwing. A blank shell would never produce these inputs.
+            console.log('→ wait for login form to render');
+            await page
+              .locator('input[placeholder="Email Address"]')
+              .waitFor({ state: 'visible', timeout: 15000 });
+            await page
+              .locator('input[placeholder="Password"]')
+              .waitFor({ state: 'visible', timeout: 5000 });
+            await page
+              .getByText('Welcome back', { exact: true })
+              .first()
+              .waitFor({ state: 'visible', timeout: 5000 });
+
+            console.log('→ fill credentials and submit');
+            await page.fill('input[placeholder="Email Address"]', EMAIL);
+            await page.fill('input[placeholder="Password"]', PASSWORD);
+            await page.locator('button[type="submit"]:has-text("Sign In")').click();
+
+            // After a successful login the SPA navigates to /dashboard.
+            // If the token interceptor is broken or the guard kicks us
+            // back to /login, this wait will time out.
+            console.log('→ wait for redirect to /dashboard');
+            await page.waitForURL(/\/dashboard(\?|#|\/|$)/, { timeout: 30000 });
+
+            // Authenticated content must actually render — not just the
+            // SPA shell. "Overview" is the dashboard's <h1>; if the page
+            // mounts and immediately crashes, this assertion fails.
+            console.log('→ wait for authenticated dashboard content');
+            await page
+              .locator('h1:has-text("Overview")')
+              .first()
+              .waitFor({ state: 'visible', timeout: 30000 });
+
+            // The token must have been persisted — proves the auth
+            // wiring (useAuth.login → localStorage) executed.
+            const token = await page.evaluate(() =>
+              window.localStorage.getItem('qorix_token'),
+            );
+            if (!token) {
+              await fail(
+                'Logged in and reached /dashboard but localStorage.qorix_token is empty — auth wiring broken.',
+              );
+            }
+            console.log('✓ qorix_token present in localStorage');
+          } catch (err) {
+            await fail(`Browser smoke flow failed: ${err.message}`);
+          }
+
+          if (errors.length) {
+            console.error('::error::Browser smoke test recorded fatal errors:');
+            errors.forEach((e) => console.error('  - ' + e));
+            await browser.close();
+            process.exit(1);
+          }
+
+          await browser.close();
+          console.log('✓ logged in via UI and saw authenticated /dashboard render cleanly');
+          JS
+          node smoke.mjs
+
+      # Auto-rollback: if (and only if) one of the smoke checks above
+      # failed, promote the previous release back so users aren't left on
+      # a known-bad build. We don't trigger on `flyctl deploy` itself
+      # failing — in that case the old release is still live and there's
+      # nothing to roll back.
       - name: Rollback qorix-markets-web to previous release
         id: rollback_web
-        if: failure() && steps.smoke_web.outcome == 'failure'
+        if: |
+          failure() && (
+            steps.smoke_web.outcome == 'failure' ||
+            steps.smoke_web_browser.outcome == 'failure'
+          )
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
         run: |
@@ -294,13 +575,237 @@ jobs:
       # version that's also broken. If this fails the job still ends red (the
       # original smoke step already failed), but the log will make it obvious
       # that the rollback target is bad too and a human needs to step in.
+      # Mirrors the forward smoke step: shell + bundle config + SPA fallback
+      # + authenticated API call from the web origin.
       - name: Smoke test rolled-back qorix-markets web
-        if: failure() && steps.smoke_web.outcome == 'failure' && steps.rollback_web.outcome == 'success'
+        if: |
+          failure() && steps.rollback_web.outcome == 'success' && (
+            steps.smoke_web.outcome == 'failure' ||
+            steps.smoke_web_browser.outcome == 'failure'
+          )
+        env:
+          SMOKE_TEST_EMAIL: ${{ secrets.SMOKE_TEST_EMAIL }}
+          SMOKE_TEST_PASSWORD: ${{ secrets.SMOKE_TEST_PASSWORD }}
         run: |
           set -euo pipefail
           WEB_BASE="https://qorixmarkets.com"
+          API_BASE="https://api.qorixmarkets.com"
+
           echo "→ (post-rollback) GET ${WEB_BASE}/healthz"
           body=$(curl -fsS --retry 5 --retry-delay 5 --retry-all-errors \
             --max-time 10 "${WEB_BASE}/healthz")
           echo "${body}"
           test "${body}" = "ok"
+          echo
+
+          echo "→ (post-rollback) GET ${WEB_BASE}/ (SPA shell)"
+          curl -fsS --retry 5 --retry-delay 5 --retry-all-errors \
+            --max-time 15 "${WEB_BASE}/" -o /tmp/index-rollback.html
+          grep -q '<div id="root">' /tmp/index-rollback.html \
+            || { echo "::error::(post-rollback) / did not return the SPA shell"; head -c 2000 /tmp/index-rollback.html; exit 1; }
+          BUNDLE_PATH=$(grep -oE '/assets/index-[A-Za-z0-9_-]+\.js' /tmp/index-rollback.html | head -n1 || true)
+          if [ -z "${BUNDLE_PATH}" ]; then
+            echo "::error::(post-rollback) could not find /assets/index-*.js bundle in SPA shell."
+            head -c 2000 /tmp/index-rollback.html
+            exit 1
+          fi
+          echo "✓ (post-rollback) SPA shell served, bundle = ${BUNDLE_PATH}"
+          echo
+
+          echo "→ (post-rollback) GET ${WEB_BASE}${BUNDLE_PATH} (verify VITE_API_URL is baked in)"
+          curl -fsS --retry 5 --retry-delay 5 --retry-all-errors \
+            --max-time 30 "${WEB_BASE}${BUNDLE_PATH}" -o /tmp/bundle-rollback.js
+          if ! grep -qF "${API_BASE}" /tmp/bundle-rollback.js; then
+            echo "::error::(post-rollback) main JS bundle does not contain ${API_BASE} —" \
+              "rollback target was also built without VITE_API_URL."
+            exit 1
+          fi
+          echo "✓ (post-rollback) bundle has ${API_BASE} baked in"
+          echo
+
+          for route in /login /dashboard; do
+            echo "→ (post-rollback) GET ${WEB_BASE}${route} (SPA fallback)"
+            curl -fsS --retry 3 --retry-delay 3 --retry-all-errors \
+              --max-time 15 "${WEB_BASE}${route}" -o /tmp/route-rollback.html
+            grep -q '<div id="root">' /tmp/route-rollback.html \
+              || { echo "::error::(post-rollback) ${route} did not fall back to the SPA shell"; head -c 1500 /tmp/route-rollback.html; exit 1; }
+          done
+          echo "✓ (post-rollback) SPA fallback healthy for /login and /dashboard"
+          echo
+
+          echo "→ (post-rollback) Authenticated smoke check from web origin"
+          if [ -z "${SMOKE_TEST_EMAIL:-}" ] || [ -z "${SMOKE_TEST_PASSWORD:-}" ]; then
+            echo "::warning::SMOKE_TEST_EMAIL / SMOKE_TEST_PASSWORD secrets are not set —" \
+              "skipping post-rollback auth check."
+          else
+            PREFLIGHT_HEADERS=$(curl -fsS --retry 3 --retry-delay 3 --retry-connrefused \
+              --max-time 15 -X OPTIONS \
+              -H "Origin: ${WEB_BASE}" \
+              -H "Access-Control-Request-Method: POST" \
+              -H "Access-Control-Request-Headers: content-type" \
+              -D - -o /dev/null \
+              "${API_BASE}/api/auth/login")
+            if ! echo "${PREFLIGHT_HEADERS}" | grep -iq "^access-control-allow-origin: ${WEB_BASE}"; then
+              echo "::error::(post-rollback) CORS preflight from ${WEB_BASE} did not echo back the web origin."
+              echo "${PREFLIGHT_HEADERS}"
+              exit 1
+            fi
+
+            LOGIN_BODY=$(jq -nc \
+              --arg email "${SMOKE_TEST_EMAIL}" \
+              --arg password "${SMOKE_TEST_PASSWORD}" \
+              '{email: $email, password: $password}')
+            curl -fsS --retry 3 --retry-delay 3 --retry-connrefused \
+              --max-time 15 \
+              -H "Content-Type: application/json" \
+              -H "Origin: ${WEB_BASE}" \
+              -d "${LOGIN_BODY}" \
+              "${API_BASE}/api/auth/login" \
+              -o /tmp/web-login-rollback.json
+            TOKEN=$(jq -r '.token // empty' /tmp/web-login-rollback.json)
+            if [ -z "${TOKEN}" ]; then
+              echo "::error::(post-rollback) login from web origin returned 200 but no token."
+              jq 'del(.token)' /tmp/web-login-rollback.json || cat /tmp/web-login-rollback.json
+              exit 1
+            fi
+            curl -fsS --retry 3 --retry-delay 3 --retry-connrefused \
+              --max-time 15 \
+              -H "Authorization: Bearer ${TOKEN}" \
+              -H "Origin: ${WEB_BASE}" \
+              "${API_BASE}/api/auth/me" \
+              -o /tmp/web-me-rollback.json
+            jq -e 'has("id") and has("email")' /tmp/web-me-rollback.json > /dev/null \
+              || { echo "::error::(post-rollback) /api/auth/me returned 200 but body is not a user"; cat /tmp/web-me-rollback.json; exit 1; }
+            echo "✓ (post-rollback) authenticated route healthy via web origin"
+          fi
+
+      # Same headless-browser smoke as the forward path, but against the
+      # rolled-back release. Catches the case where the rollback target
+      # has its own latent SPA bug (e.g. broken AuthProvider) — without
+      # this, a "rollback succeeded" log would mislead operators into
+      # thinking users are back on a working build.
+      - name: Set up Node for post-rollback browser smoke test
+        if: |
+          failure() && steps.rollback_web.outcome == 'success' && (
+            steps.smoke_web.outcome == 'failure' ||
+            steps.smoke_web_browser.outcome == 'failure'
+          )
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Browser smoke test rolled-back qorix-markets web
+        if: |
+          failure() && steps.rollback_web.outcome == 'success' && (
+            steps.smoke_web.outcome == 'failure' ||
+            steps.smoke_web_browser.outcome == 'failure'
+          )
+        env:
+          SMOKE_TEST_EMAIL: ${{ secrets.SMOKE_TEST_EMAIL }}
+          SMOKE_TEST_PASSWORD: ${{ secrets.SMOKE_TEST_PASSWORD }}
+          WEB_BASE: https://qorixmarkets.com
+        run: |
+          set -euo pipefail
+          if [ -z "${SMOKE_TEST_EMAIL:-}" ] || [ -z "${SMOKE_TEST_PASSWORD:-}" ]; then
+            echo "::warning::SMOKE_TEST_EMAIL / SMOKE_TEST_PASSWORD secrets are not set —" \
+              "skipping post-rollback browser smoke check."
+            exit 0
+          fi
+          PW_DIR="$(mktemp -d)"
+          cd "${PW_DIR}"
+          npm init -y >/dev/null
+          npm install --silent playwright@1.55.0
+          npx playwright install --with-deps chromium
+
+          cat > smoke.mjs <<'JS'
+          import { chromium } from 'playwright';
+
+          const WEB_BASE = process.env.WEB_BASE;
+          const EMAIL = process.env.SMOKE_TEST_EMAIL;
+          const PASSWORD = process.env.SMOKE_TEST_PASSWORD;
+
+          const errors = [];
+          const browser = await chromium.launch({ headless: true });
+          const ctx = await browser.newContext({
+            viewport: { width: 1280, height: 800 },
+            userAgent:
+              'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 ' +
+              '(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+          });
+          const page = await ctx.newPage();
+
+          page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
+          page.on('requestfailed', (req) => {
+            const u = req.url();
+            if (u.startsWith(WEB_BASE) || u.startsWith('https://api.qorixmarkets.com')) {
+              errors.push(`requestfailed: ${u} → ${req.failure()?.errorText}`);
+            }
+          });
+          page.on('console', (msg) => {
+            if (msg.type() === 'error') {
+              console.log(`[browser console.error] ${msg.text()}`);
+            }
+          });
+
+          const fail = async (reason) => {
+            console.error(`::error::(post-rollback) ${reason}`);
+            try {
+              const html = await page.content();
+              console.error('--- page HTML (first 2000 chars) ---');
+              console.error(html.slice(0, 2000));
+            } catch {}
+            await browser.close();
+            process.exit(1);
+          };
+
+          try {
+            console.log(`→ (post-rollback) goto ${WEB_BASE}/login`);
+            await page.goto(`${WEB_BASE}/login`, {
+              waitUntil: 'domcontentloaded',
+              timeout: 30000,
+            });
+
+            await page
+              .locator('input[placeholder="Email Address"]')
+              .waitFor({ state: 'visible', timeout: 15000 });
+            await page
+              .locator('input[placeholder="Password"]')
+              .waitFor({ state: 'visible', timeout: 5000 });
+            await page
+              .getByText('Welcome back', { exact: true })
+              .first()
+              .waitFor({ state: 'visible', timeout: 5000 });
+
+            await page.fill('input[placeholder="Email Address"]', EMAIL);
+            await page.fill('input[placeholder="Password"]', PASSWORD);
+            await page.locator('button[type="submit"]:has-text("Sign In")').click();
+
+            await page.waitForURL(/\/dashboard(\?|#|\/|$)/, { timeout: 30000 });
+            await page
+              .locator('h1:has-text("Overview")')
+              .first()
+              .waitFor({ state: 'visible', timeout: 30000 });
+
+            const token = await page.evaluate(() =>
+              window.localStorage.getItem('qorix_token'),
+            );
+            if (!token) {
+              await fail(
+                'Logged in and reached /dashboard but localStorage.qorix_token is empty on rolled-back build.',
+              );
+            }
+          } catch (err) {
+            await fail(`Browser smoke flow failed on rolled-back build: ${err.message}`);
+          }
+
+          if (errors.length) {
+            console.error('::error::(post-rollback) browser smoke recorded fatal errors —' +
+              ' rollback target also has a broken SPA.');
+            errors.forEach((e) => console.error('  - ' + e));
+            await browser.close();
+            process.exit(1);
+          }
+
+          await browser.close();
+          console.log('✓ (post-rollback) login UI + authenticated /dashboard render cleanly');
+          JS
+          node smoke.mjs
