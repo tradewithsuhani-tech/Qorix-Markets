@@ -13,9 +13,31 @@ import {
   journalForTransaction,
 } from "../lib/ledger-service";
 import { verifyOtp, sendTxnEmailToUser } from "../lib/email-service";
+import { isSmokeTestUser } from "../lib/smoke-test-account";
 
 const router = Router();
 router.use(authMiddleware);
+
+// Block real-money flows for the dedicated post-deploy smoke-test account so a
+// stray funded balance can never trigger a real journal entry, on-chain
+// withdrawal, or transfer between balances. The smoke check only ever exercises
+// read endpoints (GET /auth/me); these guards make sure that even if the check
+// is later extended (or someone hits these routes manually with the smoke
+// token) nothing real moves.
+async function blockSmokeTestRealMoney(
+  userId: number,
+  res: import("express").Response,
+  flow: "deposit" | "withdraw" | "transfer",
+): Promise<boolean> {
+  if (await isSmokeTestUser(userId)) {
+    res.status(403).json({
+      error: "smoke_test_account_blocked",
+      message: `The deploy smoke-test account is read-only — ${flow} is disabled.`,
+    });
+    return true;
+  }
+  return false;
+}
 
 function formatWallet(w: typeof walletsTable.$inferSelect, points = 0) {
   return {
@@ -57,6 +79,8 @@ router.post("/wallet/deposit", async (req: AuthRequest, res) => {
     res.status(400).json({ error: "Amount must be positive" });
     return;
   }
+
+  if (await blockSmokeTestRealMoney(req.userId!, res, "deposit")) return;
 
   const wallets = await db.select().from(walletsTable).where(eq(walletsTable.userId, req.userId!)).limit(1);
   const wallet = wallets[0];
@@ -142,6 +166,8 @@ router.post("/wallet/withdraw", async (req: AuthRequest, res) => {
     res.status(400).json({ error: "Invalid request" });
     return;
   }
+
+  if (await blockSmokeTestRealMoney(req.userId!, res, "withdraw")) return;
 
   const { amount, walletAddress } = result.data;
 
@@ -376,6 +402,8 @@ router.post("/wallet/transfer", async (req: AuthRequest, res) => {
     res.status(400).json({ error: "Invalid request" });
     return;
   }
+
+  if (await blockSmokeTestRealMoney(req.userId!, res, "transfer")) return;
 
   const { amount } = result.data;
   const wallets = await db.select().from(walletsTable).where(eq(walletsTable.userId, req.userId!)).limit(1);

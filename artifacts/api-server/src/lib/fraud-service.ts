@@ -1,7 +1,22 @@
 import { db, usersTable, loginEventsTable, fraudFlagsTable, transactionsTable, investmentsTable } from "@workspace/db";
-import { eq, and, ne, inArray, gte, count, sql, desc } from "drizzle-orm";
+import { eq, and, ne, inArray, gte, count, sql, desc, notExists } from "drizzle-orm";
 import { logger } from "./logger";
+import { isSmokeTestUser } from "./smoke-test-account";
 import crypto from "crypto";
+
+// Subquery that excludes the deploy smoke-test account from any login_events
+// peer lookup (multi-account / device-cluster checks). Without this, a real
+// user logging in from the same IP / device fingerprint as the smoke account
+// would get a multi_account fraud flag the first time the deploy smoke check
+// runs against shared CI infra.
+function notSmokeTestPeer() {
+  return notExists(
+    db
+      .select({ one: sql`1` })
+      .from(usersTable)
+      .where(and(eq(usersTable.id, loginEventsTable.userId), eq(usersTable.isSmokeTest, true))),
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -132,6 +147,7 @@ async function checkMultipleAccounts(userId: number, rawIp: string): Promise<voi
         eq(loginEventsTable.ipAddress, ip),
         ne(loginEventsTable.userId, userId),
         gte(loginEventsTable.createdAt, since),
+        notSmokeTestPeer(),
       ),
     )
     .limit(10);
@@ -226,6 +242,7 @@ async function checkDeviceCluster(userId: number, userAgent: string | undefined)
         eq(loginEventsTable.deviceFingerprint, fingerprint),
         ne(loginEventsTable.userId, userId),
         gte(loginEventsTable.createdAt, since),
+        notSmokeTestPeer(),
       ),
     )
     .limit(10);
@@ -290,6 +307,15 @@ export async function runFraudChecks(
   userAgent: string | undefined,
   sponsorId: number | null = null,
 ): Promise<void> {
+  // The deploy smoke-test account logs in on every production deploy from
+  // shared GitHub Actions / Fly infra. Skip all fraud checks for it so its
+  // login pattern (high frequency, shared CI IPs and UAs) never raises a
+  // multi_account / device_cluster / rapid_cycling flag against it OR against
+  // real users that happen to share the same CI IP.
+  if (await isSmokeTestUser(userId)) {
+    logger.debug({ userId }, "fraud-service: skipping fraud checks for smoke-test account");
+    return;
+  }
   try {
     await Promise.all([
       checkMultipleAccounts(userId, rawIp),

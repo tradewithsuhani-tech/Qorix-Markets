@@ -41,6 +41,14 @@ export const usersTable = pgTable("users", {
   tronAddress: varchar("tron_address", { length: 64 }),
   emailVerified: boolean("email_verified").notNull().default(false),
   points: integer("points").notNull().default(0),
+  // ── Deploy smoke-test account flag ────────────────────────────────────────
+  // True for the dedicated account used by the post-deploy smoke check
+  // (SMOKE_TEST_EMAIL in .github/workflows/deploy.yml). The flag is honored
+  // server-side so the account is excluded from leaderboards / referral
+  // payouts / public counters, blocked from real-money flows (deposits,
+  // withdrawals, transfers, starting trading), and skipped by the fraud
+  // detector — see docs/smoke-test-account.md.
+  isSmokeTest: boolean("is_smoke_test").notNull().default(false),
   // ── Telegram Bot link (opt-in personal alerts) ─────────────────────────────
   // chat_id is a Telegram-issued integer (can exceed 2^31 for some chats), so
   // we store it as bigint. NULL means user has not linked Telegram. Once

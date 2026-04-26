@@ -331,6 +331,17 @@ Personal account alerts via Telegram bot. Bot: **@Qorixmarketsbot**.
 - `createNotification` mirrors title+message to Telegram via `setImmediate` (fire-and-forget, never throws, never blocks tx). On 403/400 (user blocked or deleted bot) the binding is auto-cleared.
 - Requires `TELEGRAM_BOT_TOKEN` env var. All code degrades to no-op when token missing — card hides on the frontend via `/status.configured`.
 
+## Smoke-Test Account
+
+The deploy workflow logs in as `SMOKE_TEST_EMAIL` on every push to `main` to verify the auth pipeline. That account has `users.is_smoke_test=true` (set idempotently by `flagSmokeTestAccount()` at api-server boot from `lib/smoke-test-account.ts`). The flag is honored everywhere money or counters move:
+
+- Blocks: deposits, withdrawals, transfers, opening trades, on-chain TRON deposit credits.
+- Excludes: leaderboards (top-10 + rank + rewards), referral downlines/payouts, public + dashboard active-investor counts, signup `active_investors_count` bump.
+- Fraud signals: `runFraudChecks` early-returns; the smoke account is also excluded from peer sets so real users never get false multi-account/device-cluster flags from shared CI infra.
+- `isSmokeTestUser()` is fail-closed (DB error → treat as smoke). Login events are still recorded so the smoke check still exercises the auth pipeline end-to-end.
+
+See `docs/smoke-test-account.md` for full detail and email/password rotation steps.
+
 ## Design
 
 - Dark theme: deep navy/obsidian (HSL 224 71% 4%) + electric blue (#3b82f6)

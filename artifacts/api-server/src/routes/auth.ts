@@ -186,16 +186,20 @@ router.post("/auth/register", async (req, res) => {
 
   // Bump the public "Active Investors" counter by +1 on real signup
   // (counter also auto-increments 5–25 every 30 min via /api/public/market-indicators).
-  try {
-    await db.execute(sql`
-      INSERT INTO system_settings (key, value, updated_at)
-      VALUES ('active_investors_count', '1', NOW())
-      ON CONFLICT (key) DO UPDATE
-      SET value = (COALESCE(NULLIF(system_settings.value, '')::int, 0) + 1)::text,
-          updated_at = NOW()
-    `);
-  } catch (e) {
-    console.error("[INVESTORS] Failed to bump counter on signup", e);
+  // Skip for the deploy smoke-test account so re-creating it on a fresh DB
+  // never inflates the public counter.
+  if (!newUser.isSmokeTest) {
+    try {
+      await db.execute(sql`
+        INSERT INTO system_settings (key, value, updated_at)
+        VALUES ('active_investors_count', '1', NOW())
+        ON CONFLICT (key) DO UPDATE
+        SET value = (COALESCE(NULLIF(system_settings.value, '')::int, 0) + 1)::text,
+            updated_at = NOW()
+      `);
+    } catch (e) {
+      console.error("[INVESTORS] Failed to bump counter on signup", e);
+    }
   }
 
   // Fire-and-forget: track event and run fraud checks

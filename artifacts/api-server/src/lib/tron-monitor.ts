@@ -48,6 +48,23 @@ async function creditUserDeposit(
   txHash: string,
   depositId: number,
 ): Promise<void> {
+  // Hard refuse to credit on-chain deposits to the deploy smoke-test account.
+  // The account should never receive funds, but if someone accidentally sends
+  // USDT to its TRC20 address we mark the row as ignored rather than booking
+  // a real journal entry against a synthetic user.
+  const { isSmokeTestUser } = await import("./smoke-test-account");
+  if (await isSmokeTestUser(userId)) {
+    logger.warn(
+      { userId, amount, txHash, depositId },
+      "Blockchain deposit targeted smoke-test account — ignoring credit (review on-chain tx manually)",
+    );
+    await db
+      .update(blockchainDepositsTable)
+      .set({ status: "ignored_smoke_test", credited: false })
+      .where(eq(blockchainDepositsTable.id, depositId));
+    return;
+  }
+
   const wallets = await db.select().from(walletsTable).where(eq(walletsTable.userId, userId)).limit(1);
   const wallet = wallets[0];
   if (!wallet) {
