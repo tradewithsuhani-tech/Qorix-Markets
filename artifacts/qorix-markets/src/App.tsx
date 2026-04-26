@@ -41,6 +41,7 @@ import KycPage from "@/pages/kyc";
 import AdminKycPage from "@/pages/admin-kyc";
 import {
   AdminAnalyticsPage,
+  AdminHiddenFeaturesPage,
   AdminLogsPage,
   AdminSystemPage,
   AdminTradingPage,
@@ -182,6 +183,7 @@ function Router() {
       <Route path="/admin/communication"><ProtectedRoute component={AdminCommunicationPage} adminOnly={true} /></Route>
       <Route path="/admin/content"><ProtectedRoute component={AdminContentPage} adminOnly={true} /></Route>
       <Route path="/admin/test"><ProtectedRoute component={AdminTestPage} adminOnly={true} /></Route>
+      <Route path="/admin/hidden-features"><ProtectedRoute component={AdminHiddenFeaturesPage} adminOnly={true} /></Route>
       <Route path="/settings"><ProtectedRoute component={SettingsPage} /></Route>
       <Route path="/kyc"><ProtectedRoute component={KycPage} /></Route>
       <Route path="/admin/kyc"><ProtectedRoute component={AdminKycPage} adminOnly={true} /></Route>

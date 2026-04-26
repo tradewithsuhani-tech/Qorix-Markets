@@ -1,0 +1,52 @@
+/**
+ * Hidden-Features Registry
+ *
+ * Single source of truth for any product feature that has been
+ * intentionally hidden from end users while we redesign / rebuild it.
+ * The goal is so that nothing gets "lost" — when we want to bring a
+ * feature back later, we open the admin → Hidden Features page and
+ * see exactly what's hidden, where it lives in the codebase, why it
+ * was hidden, and what's needed to restore it.
+ *
+ * Workflow:
+ *   1. To hide a feature, add an entry here and wrap the feature's
+ *      render with `!isFeatureHidden('<id>')`.
+ *   2. To restore a feature, delete its entry here. Code stays in
+ *      place — the registry is the gate.
+ */
+
+export type HiddenFeature = {
+  /** Stable id used in code: `area:short-name`. */
+  id: string;
+  /** Human-readable name shown in the admin list. */
+  title: string;
+  /** Where in the app this feature was visible. */
+  location: string;
+  /** Source file(s) — for the developer who restores it later. */
+  filePath: string;
+  /** ISO date (YYYY-MM-DD) when it was hidden. */
+  hiddenAt: string;
+  /** Why we hid it. */
+  reason: string;
+  /** Notes on what's needed before showing it again. */
+  restoreNotes: string;
+};
+
+export const HIDDEN_FEATURES: HiddenFeature[] = [
+  {
+    id: "analytics:risk-vs-return",
+    title: "Per-Trade Risk vs Monthly Return chart",
+    location: "Analytics page → Advanced Analytics section (4th chart card, after Drawdown)",
+    filePath: "artifacts/qorix-markets/src/pages/analytics.tsx",
+    hiddenAt: "2026-04-26",
+    reason:
+      "Visual polish still in flux — bubble overlap and the right framing of the loss cap need a redesign before the chart goes back to investors.",
+    restoreNotes:
+      "Remove this entry from HIDDEN_FEATURES (or change isFeatureHidden gate). The chart's full implementation is preserved in analytics.tsx around the {/* 4. Per-Trade Risk vs Monthly Return */} block, including the rrSafeZone background plugin, riskProfiles tier model and collision-aware label plugin. Most recent decisions: per-trade loss cap shown at x = 1 %, no upside cap on return, Conservative/Balanced/Aggressive tiers on a 10:1 reward-to-risk diagonal.",
+  },
+];
+
+/** Returns true when the given feature id is currently hidden. */
+export function isFeatureHidden(id: string): boolean {
+  return HIDDEN_FEATURES.some((f) => f.id === id);
+}
