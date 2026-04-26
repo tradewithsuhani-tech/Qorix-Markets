@@ -700,6 +700,28 @@ function toLocalDateTimeInput(d: Date): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+// Convert an ISO timestamp (or null) coming from /admin/settings into the
+// "YYYY-MM-DDTHH:mm" shape that <input type="datetime-local"> expects, in
+// the admin's local wall clock. Empty string blanks the input, which is
+// what we want when the row is unset.
+function isoToLocalDateTimeInput(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return toLocalDateTimeInput(d);
+}
+
+// Inverse of isoToLocalDateTimeInput. The input emits a tz-less local-time
+// string ("2026-04-26T18:00"); new Date(...) interprets that as local, and
+// toISOString() canonicalises it to UTC for transport. Empty input -> null
+// so the API knows to delete the row (fall back to MAINTENANCE_ETA).
+function localDateTimeInputToIso(local: string): string | null {
+  if (!local) return null;
+  const d = new Date(local);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toISOString();
+}
+
 // India Standard Time offset (UTC+5:30, no DST). All holiday dates in
 // HOLIDAY_TEMPLATES are calendar dates in IST per Indian festival convention,
 // so we anchor windows to IST wall-clock and convert to admin-local times only
@@ -1406,6 +1428,26 @@ export function AdminSystemPage() {
             <div>
               <label className="text-sm text-muted-foreground">Maintenance Message</label>
               <input value={settings?.maintenanceMessage ?? ""} onChange={(e) => setSettings({ ...settings, maintenanceMessage: e.target.value })} onBlur={() => save({ maintenanceMessage: settings?.maintenanceMessage ?? "" })} className="mt-2 w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm" />
+            </div>
+            <div>
+              <label className="text-sm text-muted-foreground">Estimated end time (optional)</label>
+              {/*
+                Drives the countdown in the maintenance banner. Empty string
+                clears the row server-side and the banner falls back to the
+                MAINTENANCE_ETA env var (which is what the cutover runbook
+                sets). The control shows admin-local wall clock; we round-trip
+                via toISOString() so the API stores a canonical UTC ISO.
+              */}
+              <input
+                type="datetime-local"
+                value={isoToLocalDateTimeInput(settings?.maintenanceEndsAt ?? null)}
+                onChange={(e) => setSettings({ ...settings, maintenanceEndsAt: localDateTimeInputToIso(e.target.value) })}
+                onBlur={() => save({ maintenanceEndsAt: settings?.maintenanceEndsAt ?? null })}
+                className="mt-2 w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm font-mono"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Leave blank to clear. While set, the maintenance banner shows a live countdown to this time.
+              </p>
             </div>
             <div>
               <label className="text-sm text-muted-foreground">Auto Withdraw Limit (USDT)</label>
