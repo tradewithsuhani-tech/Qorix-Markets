@@ -366,6 +366,11 @@ router.get("/admin/settings", async (_req: AuthRequest, res) => {
     // working and the friendly inline banner appears. When true, non-admin
     // reads also get a structured 503 (admins always bypass).
     maintenanceHardBlock: settings["maintenance_hard_block"] === "true",
+    // Admin-set ETA (ISO timestamp) for the maintenance banner countdown.
+    // Lives in system_settings.maintenance_ends_at; the env var
+    // MAINTENANCE_ETA still wins at /api/system/status for cutover windows.
+    // Returned as `null` when no row is set so the UI input goes blank.
+    maintenanceEndsAt: settings["maintenance_ends_at"] ?? null,
     registrationEnabled: settings["registration_enabled"] !== "false",
     autoWithdrawLimit: Number(settings["auto_withdraw_limit"] ?? "0"),
     popupTitle: settings["popup_title"] ?? "",
@@ -479,6 +484,41 @@ router.post("/admin/settings", async (req: AuthRequest, res) => {
   const validationError = validatePromoSettings(req.body ?? {});
   if (validationError) {
     return res.status(400).json({ error: validationError });
+  }
+
+  // Maintenance ETA gets bespoke handling because it has THREE behaviours
+  // the generic upsert loop below can't model:
+  //   1. valid timestamp string -> upsert as canonical ISO so the public
+  //      countdown banner reads exactly the same shape regardless of which
+  //      input format the admin typed (datetime-local sends without a TZ).
+  //   2. null / "" -> DELETE the row so getMaintenanceState() falls back to
+  //      the MAINTENANCE_ETA env var (the cutover-runbook source of truth).
+  //      The generic upsert can't represent "absent" — text columns are
+  //      NOT NULL — so we have to actually drop the row.
+  //   3. invalid input -> reject 400 instead of silently writing garbage
+  //      into the public banner.
+  // Done before the main loop so it short-circuits on bad input without
+  // first half-writing other fields.
+  if ("maintenanceEndsAt" in req.body) {
+    const raw = req.body["maintenanceEndsAt"];
+    if (raw === null || raw === undefined || (typeof raw === "string" && raw.trim() === "")) {
+      await db.delete(systemSettingsTable).where(eq(systemSettingsTable.key, "maintenance_ends_at"));
+    } else if (typeof raw === "string") {
+      const ts = Date.parse(raw);
+      if (Number.isNaN(ts)) {
+        return res.status(400).json({ error: "maintenanceEndsAt must be an ISO-8601 timestamp" });
+      }
+      const iso = new Date(ts).toISOString();
+      await db
+        .insert(systemSettingsTable)
+        .values({ key: "maintenance_ends_at", value: iso })
+        .onConflictDoUpdate({
+          target: systemSettingsTable.key,
+          set: { value: iso, updatedAt: new Date() },
+        });
+    } else {
+      return res.status(400).json({ error: "maintenanceEndsAt must be an ISO-8601 timestamp or null" });
+    }
   }
   if ("promoMinPct" in req.body || "promoMaxPct" in req.body) {
     const persisted = await db.select().from(systemSettingsTable);
