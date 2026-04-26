@@ -452,32 +452,65 @@ export default function AnalyticsPage() {
           </div>
         </div>
 
-        {/* Summary strip */}
+        {/* Summary strip — values sourced from the same /api/dashboard/performance
+            and /api/dashboard/summary endpoints the main dashboard uses, so the
+            two screens never disagree. Period Return falls back to the equity-
+            derived figure when the selected window doesn't have a server-side
+            rolling return (server only emits 7D/30D/90D). */}
+        {(() => {
+          const periodKey = `${days}D`;
+          const rollingPick = perf?.rollingReturns?.find((r) => r.period === periodKey)?.return;
+          const periodReturnNum =
+            typeof rollingPick === "number" ? rollingPick : Number(equityReturn);
+          const periodReturnStr = `${periodReturnNum >= 0 ? "+" : ""}${periodReturnNum.toFixed(2)}%`;
+
+          // Canonical lifetime profit shown on the dashboard's headline card.
+          const totalProfitCanonical = Number(summary?.totalProfit ?? 0);
+          const totalProfitDisplay =
+            totalProfitCanonical >= 0
+              ? `+$${totalProfitCanonical.toFixed(2)}`
+              : `-$${Math.abs(totalProfitCanonical).toFixed(2)}`;
+
+          // Reconstruct the W/L counts from the server-blessed win-rate so the
+          // sub-line matches the headline percentage exactly (no rounding drift).
+          const winRateCanonical = Number(perf?.winRate ?? 0);
+          const tradesCanonical = Number(perf?.totalTrades ?? 0);
+          const wins = Math.round((winRateCanonical / 100) * tradesCanonical);
+          const losses = Math.max(0, tradesCanonical - wins);
+
+          const maxDdCanonical = Number(perf?.maxDrawdown ?? 0);
+          const cardsLoading = loading || perfLoading;
+
+          return (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {[
             {
               label: "Period Return",
-              value: `${Number(equityReturn) >= 0 ? "+" : ""}${equityReturn}%`,
-              color: Number(equityReturn) >= 0 ? "#22c55e" : "#ef4444",
+              value: periodReturnStr,
+              color: periodReturnNum >= 0 ? "#22c55e" : "#ef4444",
               sub: `${TIME_FILTERS.find((f) => f.days === days)?.label} performance`,
+              loading: cardsLoading,
             },
             {
               label: "Total P&L",
-              value: totalProfitStr,
-              color: totalProfit >= 0 ? "#22c55e" : "#ef4444",
-              sub: `${profitValues.length} trading days`,
+              value: totalProfitDisplay,
+              color: totalProfitCanonical >= 0 ? "#22c55e" : "#ef4444",
+              sub: tradesCanonical > 0 ? `${tradesCanonical} total trades` : `${profitValues.length} trading days`,
+              loading: cardsLoading,
             },
             {
               label: "Win Rate",
-              value: `${winRate}%`,
+              value: `${winRateCanonical.toFixed(1)}%`,
               color: "#facc15",
-              sub: `${positiveProfit.length}W / ${negativeProfit.length}L`,
+              sub: `${wins}W / ${losses}L`,
+              loading: cardsLoading,
             },
             {
               label: "Max Drawdown",
-              value: `${Math.abs(Math.min(...(drawdownValues.length ? drawdownValues : [0]))).toFixed(2)}%`,
+              value: `${maxDdCanonical.toFixed(2)}%`,
               color: "#ef4444",
               sub: "Peak-to-trough",
+              loading: cardsLoading,
             },
           ].map((s, i) => (
             <motion.div
@@ -490,7 +523,7 @@ export default function AnalyticsPage() {
               <div className="text-xs text-muted-foreground mb-1.5 uppercase tracking-wider">
                 {s.label}
               </div>
-              {loading ? (
+              {s.loading ? (
                 <Skeleton className="h-7 w-24 mb-1" />
               ) : (
                 <div className="text-xl font-bold tabular-nums" style={{ color: s.color }}>
@@ -501,6 +534,8 @@ export default function AnalyticsPage() {
             </motion.div>
           ))}
         </div>
+          );
+        })()}
 
         {/* Charts grid */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
