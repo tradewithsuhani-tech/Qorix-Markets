@@ -18,13 +18,17 @@ echo "[$(date -u +%T)] === CUTOVER START ts=${TS} ==="
 echo "[$(date -u +%T)] dump file: ${DUMP}"
 echo "[$(date -u +%T)] log file:  ${LOG}"
 
-echo "[$(date -u +%T)] step 1/5: pg_dump from PROD (data-only, custom format, -Z 6)..."
+echo "[$(date -u +%T)] step 1/5: pg_dump from PROD (data-only, public schema only, custom format, -Z 6)..."
+# --schema=public excludes the Replit-managed _system schema (only present on
+# Replit-hosted Neon DBs); the target Neon DB does not have it and including
+# it would make pg_restore exit with 'schema "_system" does not exist'.
 pg_dump "$PROD_DATABASE_URL" \
   --format=custom \
   --compress=6 \
   --no-owner \
   --no-privileges \
   --data-only \
+  --schema=public \
   --file="$DUMP" 2>&1 | tee -a "$LOG"
 ls -lh "$DUMP" | tee -a "$LOG"
 
@@ -52,10 +56,13 @@ pg_restore \
   "$DUMP" 2>&1 | tee -a "$LOG"
 
 echo "[$(date -u +%T)] step 4/5: reset all serial sequences on NEON..."
+# Schema-qualify everything: NEON's default search_path is empty (unlike
+# Replit-managed Neon which sets it to public), so unqualified "users" in
+# 'select max(id) from users' fails with 'relation does not exist'.
 psql "$NEON_DATABASE_URL" -v ON_ERROR_STOP=1 -At -c "
   select format(
-    'select setval(pg_get_serial_sequence(%L, %L), coalesce((select max(%I) from %I), 1), true);',
-    table_name, column_name, column_name, table_name
+    'select setval(pg_get_serial_sequence(%L, %L), coalesce((select max(%I) from public.%I), 1), true);',
+    'public.' || table_name, column_name, column_name, table_name
   )
   from information_schema.columns
   where table_schema = 'public'
