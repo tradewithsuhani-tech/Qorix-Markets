@@ -1,7 +1,7 @@
 import {
-  depositEventQueue,
-  profitDistributionEventQueue,
-  profitDistributionQueue,
+  getDepositEventQueue,
+  getProfitDistributionEventQueue,
+  getProfitDistributionQueue,
   type DepositEventJobData,
   type ProfitDistributionEventJobData,
   type ProfitDistributionJobData,
@@ -10,7 +10,7 @@ import {
 export async function emitProfitDistribution(
   data: Omit<ProfitDistributionJobData, "triggeredAt">,
 ): Promise<void> {
-  await profitDistributionQueue.add("run-profit-distribution", {
+  await getProfitDistributionQueue().add("run-profit-distribution", {
     ...data,
     triggeredAt: new Date().toISOString(),
   });
@@ -19,7 +19,7 @@ export async function emitProfitDistribution(
 export async function emitDepositEvent(
   data: Omit<DepositEventJobData, "triggeredAt">,
 ): Promise<void> {
-  await depositEventQueue.add("deposit", {
+  await getDepositEventQueue().add("deposit", {
     ...data,
     triggeredAt: new Date().toISOString(),
   });
@@ -28,7 +28,7 @@ export async function emitDepositEvent(
 export async function emitProfitDistributionEvent(
   data: Omit<ProfitDistributionEventJobData, "triggeredAt">,
 ): Promise<void> {
-  await profitDistributionEventQueue.add("profit-credited", {
+  await getProfitDistributionEventQueue().add("profit-credited", {
     ...data,
     triggeredAt: new Date().toISOString(),
   });

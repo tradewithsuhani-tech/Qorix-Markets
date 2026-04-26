@@ -18,36 +18,8 @@ const {
   invalidateMaintenanceCache,
   shouldRunBackgroundJobs,
 } = await import("../../middlewares/maintenance");
-const { redisConnection } = await import("../../lib/redis");
 const { registerBackgroundJobs } = await import("../../lib/background-jobs");
 import type { BackgroundJobFactories } from "../background-jobs";
-
-// Importing app.ts transitively pulls in routes (wallet/admin) that import
-// the shared ioredis client at module load. There is no Redis in the test
-// env, so the client emits ECONNREFUSED on the retry loop. None of these
-// tests touch Redis — silence the noise so the test runner doesn't fail
-// the suite on an "unhandled async activity after test ended" report.
-//
-// Replace the noisy default error handler in redis.ts with a silent one and
-// kill the connection up-front (false = no auto-reconnect) so ioredis stops
-// retrying in the background while our HTTP-level assertions run. The
-// process-level ECONNREFUSED swallow is then only registered for the
-// duration of these tests (before/after) — narrow enough that a real bug
-// throwing ECONNREFUSED in unrelated test files won't be hidden.
-redisConnection.removeAllListeners("error");
-redisConnection.on("error", () => {});
-redisConnection.disconnect(false);
-
-const isExpectedRedisError = (err: unknown): boolean =>
-  !!err &&
-  typeof err === "object" &&
-  "code" in err &&
-  (err as { code?: string }).code === "ECONNREFUSED";
-
-const swallowExpectedRedis = (err: unknown) => {
-  if (isExpectedRedisError(err)) return;
-  throw err;
-};
 
 let server: Server;
 let baseUrl = "";
@@ -56,8 +28,6 @@ before(async () => {
   // Cache invalidate so the env var we just set is picked up by the very
   // first request (rather than only after the 5s TTL).
   invalidateMaintenanceCache();
-  process.on("unhandledRejection", swallowExpectedRedis);
-  process.on("uncaughtException", swallowExpectedRedis);
   await new Promise<void>((resolve, reject) => {
     server = app.listen(0, (err?: Error) => (err ? reject(err) : resolve()));
   });
@@ -70,8 +40,6 @@ after(async () => {
   delete process.env["MAINTENANCE_MODE"];
   delete process.env["MAINTENANCE_ETA"];
   invalidateMaintenanceCache();
-  process.off("unhandledRejection", swallowExpectedRedis);
-  process.off("uncaughtException", swallowExpectedRedis);
   await pool.end();
 });
 
