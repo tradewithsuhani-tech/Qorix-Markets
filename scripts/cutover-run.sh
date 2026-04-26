@@ -30,8 +30,33 @@ TS="$(date -u +%Y%m%dT%H%M%SZ)"
 DUMP="/tmp/qorix-cutover-${TS}.dump"
 LOG="/tmp/cutover-run-${TS}.log"
 
+# PII safety: the dump contains every users row, every wallet, and the
+# encrypted TRON private keys. Always shred + remove on exit unless the
+# operator passes --keep-artifacts (e.g. needed for a follow-up forensic
+# review). Log file is metadata only and is kept for the post-mortem.
+KEEP_ARTIFACTS=0
+for arg in "$@"; do
+  if [[ "$arg" == "--keep-artifacts" ]]; then KEEP_ARTIFACTS=1; fi
+done
+
+cleanup() {
+  if [[ "$KEEP_ARTIFACTS" -eq 1 ]]; then
+    echo "[$(date -u +%T)] --keep-artifacts set: leaving ${DUMP} in place (contains PII — delete manually after use)"
+    return
+  fi
+  if [[ -f "$DUMP" ]]; then
+    echo "[$(date -u +%T)] cleanup: shredding + removing ${DUMP} (contains PII)"
+    if command -v shred >/dev/null 2>&1; then
+      shred -u "$DUMP" || rm -f "$DUMP"
+    else
+      rm -f "$DUMP"
+    fi
+  fi
+}
+trap cleanup EXIT INT TERM
+
 echo "[$(date -u +%T)] === CUTOVER START ts=${TS} ==="
-echo "[$(date -u +%T)] dump file: ${DUMP}"
+echo "[$(date -u +%T)] dump file: ${DUMP} (auto-deleted on exit unless --keep-artifacts)"
 echo "[$(date -u +%T)] log file:  ${LOG}"
 
 echo "[$(date -u +%T)] step 1/5: pg_dump from PROD (data-only, public schema only, custom format, -Z 6)..."

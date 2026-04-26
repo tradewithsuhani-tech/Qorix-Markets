@@ -1,14 +1,21 @@
 // =============================================================================
 // TEMPORARY preflight tool — Mumbai DB cutover (#41).
 //
-// Purpose: before dump/restore, prove that DEPOSIT_KEY_ENC_HEX still decrypts
-// the AES-GCM-wrapped TRON private keys stored in `deposit_addresses.
-// private_key_enc`. If this fails, the cutover would leave Singapore Neon
-// unable to spend incoming USDT. Run BEFORE swapping DATABASE_URL on Fly.
+// Purpose: before dump/restore, prove that the wallet-encryption secret
+// configured on this host still decrypts the AES-256-GCM-wrapped TRON
+// private keys stored in `deposit_addresses.private_key_enc`. If this
+// fails, the cutover would leave Singapore Neon unable to spend incoming
+// USDT. Run BEFORE swapping DATABASE_URL on Fly.
+//
+// Key derivation: scrypt(secret, "qorix-wallet-v1", 32) — the secret comes
+// from WALLET_ENC_SECRET, falling back to JWT_SECRET (legacy). The Fly app
+// MUST have the same value set, or freshly issued deposit addresses on the
+// new DB host will be unspendable.
 //
 // Required env (run from a host that has access to the source DB only):
 //   PROD_DATABASE_URL          — source Postgres (read-only role is fine)
-//   DEPOSIT_KEY_ENC_HEX        — 32-byte hex AES-256 key currently in Fly
+//   WALLET_ENC_SECRET          — wallet encryption secret (preferred), OR
+//   JWT_SECRET                 — legacy fallback if WALLET_ENC_SECRET unset
 //
 // Usage:
 //   pnpm --filter @workspace/scripts exec tsx src/_prod-decrypt-check.ts
