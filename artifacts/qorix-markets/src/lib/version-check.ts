@@ -29,21 +29,49 @@ export function useVersionCheck(): { updateAvailable: boolean; reload: () => voi
     if (APP_VERSION === "dev") return;
 
     let cancelled = false;
+    let warnedMalformed = false;
+
+    const warnOnce = (reason: string, detail?: unknown) => {
+      if (warnedMalformed) return;
+      warnedMalformed = true;
+      // Reachable but unparseable response — surface once so it shows up in
+      // browser logs / error reporting without spamming every poll.
+      console.warn(`[version-check] /version.json ${reason}`, detail);
+    };
 
     const check = async () => {
+      let res: Response;
       try {
         const url = `/version.json?_=${Date.now()}`;
-        const res = await fetch(url, {
+        res = await fetch(url, {
           cache: "no-store",
           headers: { "Cache-Control": "no-cache" },
         });
-        if (!res.ok) return;
-        const data: ServerVersion = await res.json();
-        if (!cancelled && data.version && data.version !== APP_VERSION) {
-          setUpdateAvailable(true);
-        }
       } catch {
         // Network blip — silently retry on next interval.
+        return;
+      }
+
+      if (!res.ok) {
+        warnOnce(`returned HTTP ${res.status}`);
+        return;
+      }
+
+      let data: ServerVersion;
+      try {
+        data = (await res.json()) as ServerVersion;
+      } catch (err) {
+        warnOnce("response was not valid JSON", err);
+        return;
+      }
+
+      if (!data || typeof data.version !== "string" || !data.version) {
+        warnOnce("response is missing a string `version` field", data);
+        return;
+      }
+
+      if (!cancelled && data.version !== APP_VERSION) {
+        setUpdateAvailable(true);
       }
     };
 
