@@ -714,12 +714,29 @@ export default function AnalyticsPage() {
             const drawdownPctCanonical =
               investAmount > 0 ? (investDrawdownDollars / investAmount) * 100 : 0;
             const drawdownStat = `${drawdownPctCanonical.toFixed(2)}% (-$${investDrawdownDollars.toFixed(2)}) now`;
-            // Secondary "Peak DD" pill: worst historical drawdown WITHIN
-            // the period currently selected by the GLOBAL page filter
-            // (top-right). Moves whenever the user changes 1D/7D/30D/6M/1Y/All
-            // up top, exactly like every other chart on the page.
+            // Display series for the grey "Drawdown" line on the chart.
+            // Historical points keep the peak-to-trough math (truthful — the
+            // account has never been below its prior peak in the equity
+            // series). The LATEST point is overridden with the live
+            // server-tracked drawdown (-drawdownPctCanonical) so that the
+            // tail of the line lands on the same number the headline pill
+            // shows ("0.17% (-$0.85) now"). This includes the unrealized
+            // SL exposure of currently open positions, which the equity
+            // series alone can't surface. Earlier the chart was always
+            // glued to 0% on monotonically growing accounts even though
+            // open trades had a real live drawdown.
+            const drawdownDisplayValues =
+              drawdownValues.length > 0
+                ? [...drawdownValues.slice(0, -1), -drawdownPctCanonical]
+                : drawdownValues;
+            // Secondary "Peak DD" pill: worst drawdown WITHIN the period
+            // currently selected by the GLOBAL page filter (top-right).
+            // Sourced from the same display series so it stays consistent
+            // with the line on the chart and the live headline value.
             const peakDrawdownPct =
-              drawdownValues.length > 0 ? Math.min(...drawdownValues) : 0;
+              drawdownDisplayValues.length > 0
+                ? Math.min(...drawdownDisplayValues)
+                : 0;
             const peakStat =
               equityValues.length > 0
                 ? `Peak DD: ${peakDrawdownPct.toFixed(2)}%`
@@ -777,7 +794,7 @@ export default function AnalyticsPage() {
                     // visually recedes behind the primary return line,
                     // matching the example's two-tone aesthetic.
                     label: "Drawdown from Peak %",
-                    data: drawdownValues,
+                    data: drawdownDisplayValues,
                     borderColor: "rgba(148,163,184,0.85)",
                     borderWidth: 1.75,
                     backgroundColor: "transparent",
