@@ -23,7 +23,11 @@ export async function authFetch<T = any>(url: string, init?: RequestInit): Promi
   const maintenanceBody = data && typeof data === "object" && data.code === "maintenance_mode";
   if (maintenanceHeader || maintenanceBody) {
     const msg = data && typeof data === "object" && typeof data.message === "string" ? data.message : undefined;
-    notifyMaintenance(msg);
+    // ETA travels alongside the marker — header first (set on every read +
+    // 503), body `endsAt` as a fallback for callers that only see JSON.
+    const headerEndsAt = res.headers.get("x-maintenance-ends-at") || undefined;
+    const bodyEndsAt = data && typeof data === "object" && typeof data.endsAt === "string" ? data.endsAt : undefined;
+    notifyMaintenance(msg, headerEndsAt || bodyEndsAt);
   }
   if (!res.ok) {
     const msg = (data && (data.message || data.error)) || `Request failed (${res.status})`;

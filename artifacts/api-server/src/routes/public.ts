@@ -2,7 +2,7 @@ import { Router } from "express";
 import { db, investmentsTable, transactionsTable, dailyProfitRunsTable, systemSettingsTable } from "@workspace/db";
 import { eq, and, gte, avg, count, inArray, sql } from "drizzle-orm";
 import { listTrades } from "../lib/signal-trade-service";
-import { isMaintenanceMode } from "../middlewares/maintenance";
+import { isMaintenanceMode, getMaintenanceEndsAt } from "../middlewares/maintenance";
 
 const router = Router();
 
@@ -23,11 +23,25 @@ router.get("/system/status", async (_req, res) => {
     .where(inArray(systemSettingsTable.key, [
       "maintenance_mode",
       "maintenance_message",
+      "maintenance_ends_at",
       "dashboard_return_label",
     ]));
   const map = Object.fromEntries(rows.map((r) => [r.key, r.value]));
   const dbMaintenance = map["maintenance_mode"] === "true";
   const envMaintenance = isMaintenanceMode();
+  // ETA is taken from the env var first (operator-set during the cutover via
+  // `fly secrets set MAINTENANCE_ETA=...`) and falls back to the admin-settable
+  // `maintenance_ends_at` row. Either value must be a parseable ISO timestamp;
+  // we normalize before exposing so the frontend countdown never has to guess.
+  const envEndsAt = getMaintenanceEndsAt();
+  let maintenanceEndsAt: string | null = envEndsAt;
+  if (!maintenanceEndsAt) {
+    const dbEta = map["maintenance_ends_at"];
+    if (dbEta) {
+      const ts = Date.parse(dbEta);
+      if (!Number.isNaN(ts)) maintenanceEndsAt = new Date(ts).toISOString();
+    }
+  }
   res.json({
     maintenance: dbMaintenance || envMaintenance,
     writesDisabled: envMaintenance,
@@ -36,6 +50,7 @@ router.get("/system/status", async (_req, res) => {
       (envMaintenance
         ? "Brief maintenance in progress — balances will be back shortly."
         : "We are upgrading our platform. Please check back shortly."),
+    maintenanceEndsAt,
     dashboardReturnLabel: map["dashboard_return_label"] || "",
   });
 });

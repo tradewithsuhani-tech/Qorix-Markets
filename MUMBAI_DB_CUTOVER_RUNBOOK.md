@@ -33,10 +33,11 @@ shell with `flyctl`, `psql`, and `pg_dump` in another.
   - [ ] **1.** T-15: pin Fly rollback target (`fly releases`), post
         `[CUTOVER]` start message, raise web maintenance banner.
   - [ ] **2.** Stop writes: `fly secrets set MAINTENANCE_MODE=true
-        --app qorix-api` (the API stays up serving GETs and rejects
-        writes with a 503 the web app shows as a friendly inline banner;
-        background jobs are gated on the same secret), confirm
-        `pg_stat_activity` is quiet.
+        MAINTENANCE_ETA=<ISO ts ~15 min from now> --app qorix-api`
+        (the API stays up serving GETs and rejects writes with a 503 the
+        web app shows as a friendly inline banner with a live "Back in
+        ~Xm" countdown; background jobs are gated on the same secret),
+        confirm `pg_stat_activity` is quiet.
   - [ ] **3.** Snapshot source row counts to `/tmp/cutover-source-*.txt`
         and grab one `deposit_addresses` ciphertext sample.
   - [ ] **4.** `pg_dump --format=custom --data-only --no-owner
@@ -51,10 +52,12 @@ shell with `flyctl`, `psql`, and `pg_dump` in another.
         `fly mpg attach` already set it). No DNS changes needed for this
         cutover (see step 7 for the conditional).
   - [ ] **8.** Re-enable: `fly secrets unset MAINTENANCE_MODE
-        --app qorix-api` (background jobs come back automatically when
-        the secret is gone), smoke `curl /api/healthz`, drop maintenance
-        banner, post `[CUTOVER] complete`. Keep source DB up read-only
-        for 7 days.
+        MAINTENANCE_ETA --app qorix-api` (background jobs come back
+        automatically when the secret is gone; clearing the ETA stops
+        the banner countdown from re-arming if the secret gets re-set
+        later), smoke `curl /api/healthz`, drop maintenance banner,
+        post `[CUTOVER] complete`. Keep source DB up read-only for 7
+        days.
   - [ ] **9.** (Only if smoke fails / first-hour errors) execute
         back-out: re-freeze, point `DATABASE_URL` at source, scale up,
         smoke, post `[INCIDENT]`.
@@ -143,7 +146,21 @@ freezing the source via the in-app maintenance mode.
 #        already-in-flight HTTP requests, which drain in a few seconds.
 #    Setting this secret restarts the machine, which is what causes the
 #    background-job gate to take effect.
-fly secrets set MAINTENANCE_MODE=true --app qorix-api
+#
+#    Set MAINTENANCE_ETA at the same time so the inline banner shows a
+#    live "Back in ~Xm" countdown instead of a static message — gives
+#    traders confidence the platform is coming back and cuts panic
+#    support tickets. The value is an ISO-8601 timestamp; pick a time
+#    ~15 min out (your target end of step 8). It's read by
+#    /api/system/status and surfaced as the X-Maintenance-Ends-At
+#    response header on every read. The countdown alone never clears
+#    the banner — only MAINTENANCE_MODE going away does — so it's safe
+#    to over-estimate; if the cutover over-runs the banner just flips
+#    to "Wrapping up maintenance…".
+fly secrets set \
+  MAINTENANCE_MODE=true \
+  MAINTENANCE_ETA="$(date -u -d '+15 min' +%Y-%m-%dT%H:%M:%SZ)" \
+  --app qorix-api
 
 # 2. If background jobs are still running on Replit (they shouldn't be —
 #    step 8 of FLY_GO_LIVE_CHECKLIST.md disabled them), turn them off
@@ -438,16 +455,17 @@ in DNS changes.
 ## 8. Re-enable writes and bring the API back
 
 ```bash
-# Drop MAINTENANCE_MODE. This single command undoes step 2: the
-# maintenance middleware stops returning 503s and starts forwarding
-# writes again, AND background jobs (cron, Telegram poller, TRON
-# watcher, BullMQ workers) start up again on the next boot. Setting or
-# unsetting a secret restarts the machine.
+# Drop MAINTENANCE_MODE (and MAINTENANCE_ETA so a future re-arm of the
+# mode doesn't pick up a stale countdown). This single command undoes
+# step 2: the maintenance middleware stops returning 503s and starts
+# forwarding writes again, AND background jobs (cron, Telegram poller,
+# TRON watcher, BullMQ workers) start up again on the next boot.
+# Setting or unsetting a secret restarts the machine.
 #
 # Make sure Replit still has RUN_BACKGROUND_JOBS=false from
 # FLY_GO_LIVE_CHECKLIST step 8 — two pollers will fight over Telegram
 # updates and double-process trades.
-fly secrets unset MAINTENANCE_MODE --app qorix-api
+fly secrets unset MAINTENANCE_MODE MAINTENANCE_ETA --app qorix-api
 fly status --app qorix-api            # wait for "started" + healthchecks passing
 
 # Smoke test (same checks as the GitHub Actions deploy)
@@ -499,8 +517,13 @@ much shorter because the source has not been written to since step 2.
 
 ```bash
 # 1. Stop writes again — same as step 2. Reads keep serving so users see
-#    the inline maintenance banner instead of a dead site.
-fly secrets set MAINTENANCE_MODE=true --app qorix-api
+#    the inline maintenance banner instead of a dead site. Re-set
+#    MAINTENANCE_ETA so the banner countdown reflects the back-out
+#    window, not the (now-elapsed) original cutover ETA.
+fly secrets set \
+  MAINTENANCE_MODE=true \
+  MAINTENANCE_ETA="$(date -u -d '+10 min' +%Y-%m-%dT%H:%M:%SZ)" \
+  --app qorix-api
 
 # 2. Point DATABASE_URL back at the source.
 #    (Option A: if you migrated FROM Fly MPG TO another provider, you'll
@@ -509,9 +532,9 @@ fly secrets set MAINTENANCE_MODE=true --app qorix-api
 #    the previous URL.)
 fly secrets set DATABASE_URL="$SOURCE_DATABASE_URL" --app qorix-api
 
-# 3. Drop MAINTENANCE_MODE to bring writes and background jobs back up
-#    (one machine restart, same as step 8).
-fly secrets unset MAINTENANCE_MODE --app qorix-api
+# 3. Drop MAINTENANCE_MODE (and MAINTENANCE_ETA) to bring writes and
+#    background jobs back up (one machine restart, same as step 8).
+fly secrets unset MAINTENANCE_MODE MAINTENANCE_ETA --app qorix-api
 
 # 4. Re-run the step 8 smoke tests against the API. Login + dashboard
 #    + deposit address + ledger query must all pass.
