@@ -267,17 +267,33 @@ test("/admin/stats totalUsers matches the default (filtered) /admin/users.total"
   // must agree to the row. Catches the regression where /admin/stats stops
   // applying the filter and the badge starts disagreeing with the visible
   // list (e.g. shows N+1 because the smoke account is silently included).
-  const usersRes = await authedFetch(`/api/admin/users?page=1&limit=1`);
-  assert.equal(usersRes.status, 200);
-  const usersBody = (await usersRes.json()) as { total: number };
-
-  const statsRes = await authedFetch(`/api/admin/stats`);
-  assert.equal(statsRes.status, 200);
-  const statsBody = (await statsRes.json()) as { totalUsers: number };
-
+  //
+  // node --test runs each test file in its own subprocess in parallel, so
+  // sibling smoke-filter suites can insert / delete users between two
+  // sequential fetches. Issue both calls in Promise.all to tighten the
+  // window, and retry a few times so a single concurrent insert/delete
+  // doesn't false-positive the assertion.
+  const maxAttempts = 8;
+  let lastUsersTotal = 0;
+  let lastStatsTotal = 0;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const [usersRes, statsRes] = await Promise.all([
+      authedFetch(`/api/admin/users?page=1&limit=1`),
+      authedFetch(`/api/admin/stats`),
+    ]);
+    assert.equal(usersRes.status, 200);
+    assert.equal(statsRes.status, 200);
+    const usersBody = (await usersRes.json()) as { total: number };
+    const statsBody = (await statsRes.json()) as { totalUsers: number };
+    lastUsersTotal = usersBody.total;
+    lastStatsTotal = statsBody.totalUsers;
+    if (statsBody.totalUsers === usersBody.total) return;
+  }
   assert.equal(
-    statsBody.totalUsers,
-    usersBody.total,
-    `dashboard totalUsers (${statsBody.totalUsers}) must equal filtered /admin/users.total (${usersBody.total})`,
+    lastStatsTotal,
+    lastUsersTotal,
+    `dashboard totalUsers (${lastStatsTotal}) must equal filtered /admin/users.total (${lastUsersTotal}) ` +
+      `after ${maxAttempts} retries — if they consistently disagree, /admin/stats has stopped applying ` +
+      `the notSmokeTestUser() filter (or has applied a different one) and the badge will mismatch the list`,
   );
 });
