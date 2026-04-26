@@ -6,6 +6,9 @@ auth, or two machines running cron at once.
 
 Apps: `qorix-api` (artifacts/api-server) and `qorix-markets-web` (artifacts/qorix-markets).
 Domains: `api.qorixmarkets.com` and `qorixmarkets.com`.
+**Region: `bom` (Mumbai)** — both `fly.toml` files pin `primary_region = "bom"`.
+Pick Postgres and Redis providers in the **same region** or you give back all
+the latency you just paid Fly to save.
 
 ---
 
@@ -16,18 +19,41 @@ Domains: `api.qorixmarkets.com` and `qorixmarkets.com`.
   brew install flyctl   # or: curl -L https://fly.io/install.sh | sh
   fly auth login
   ```
-- [ ] **Neon** (Postgres) — create a project at https://console.neon.tech, copy
-      the pooled connection string (this is `DATABASE_URL`). It should look like
-      `postgresql://USER:PASSWORD@ep-xxxx-pooler.REGION.aws.neon.tech/neondb?sslmode=require`.
-- [ ] **Upstash** (Redis) — create a database at https://console.upstash.com,
-      copy the **TLS** connection string (this is `REDIS_URL`). It should start
-      with `rediss://` (note the double `s`).
 
-## 2. Push the Drizzle schema to Neon
+- [ ] **Postgres** — pick **one** of the options below. They're listed in order
+      of latency from the `bom` Fly app. Whichever you pick, the result is a
+      single connection string assigned to `DATABASE_URL`.
 
-From the repo root, with `DATABASE_URL` pointed at the new Neon DB:
+  **Option A — Fly Managed Postgres in `bom` (recommended, lowest latency).**
+  Single bill, sub-millisecond RTT from the app, automatic SSL. Created in
+  step 3 below — for now just decide you're using it and skip ahead.
+
+  **Option B — Supabase Mumbai.** Create a project at https://supabase.com,
+  pick region **Asia Pacific (Mumbai) `ap-south-1`**, then Project Settings →
+  Database → Connection string → **URI** (use the *pooled* "Transaction" mode
+  string, port 6543). Looks like
+  `postgresql://postgres.PROJECT:PASSWORD@aws-0-ap-south-1.pooler.supabase.com:6543/postgres?sslmode=require`.
+
+  **Option C — Neon Singapore (fallback only).** Neon has no India region;
+  `ap-southeast-1` (Singapore) is the closest at ~50 ms RTT. Only pick this
+  if A and B are unavailable. Connection string format:
+  `postgresql://USER:PASSWORD@ep-xxxx-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require`.
+
+- [ ] **Redis (Upstash Mumbai)** — create a database at
+      https://console.upstash.com, region **AWS Mumbai `ap-south-1`**,
+      eviction enabled. Copy the **TLS** connection string (this is
+      `REDIS_URL`). It must start with `rediss://` (double `s`). Upstash is
+      the only managed Redis with a Mumbai region — don't pick anything else
+      here or you'll add 200+ ms to every BullMQ job.
+
+## 2. Push the Drizzle schema to Postgres
+
+Skip this step if you picked **Option A** above — Fly Managed Postgres
+doesn't exist yet. You'll come back here after step 3.
+
+For Options B/C, with `DATABASE_URL` pointed at the new DB:
 ```bash
-DATABASE_URL='postgresql://...neon.tech/neondb?sslmode=require' \
+DATABASE_URL='postgresql://...?sslmode=require' \
   pnpm --filter @workspace/db run push
 ```
 
@@ -37,9 +63,34 @@ DATABASE_URL='postgresql://...neon.tech/neondb?sslmode=require' \
 fly launch --no-deploy --copy-config --config artifacts/api-server/fly.toml --name qorix-api
 fly launch --no-deploy --copy-config --config artifacts/qorix-markets/fly.toml --name qorix-markets-web
 ```
-Answer **No** if asked to add Postgres/Redis (we use Neon + Upstash) and **No**
-to deploying now. The `app` and `primary_region` lines in each `fly.toml` are
-already correct — don't let `fly launch` overwrite them.
+
+> ⚠️ **Keep `--copy-config`.** Without it, `fly launch` rewrites `fly.toml`
+> from scratch and silently picks a region based on your laptop's location
+> (so you'll end up in `iad` or `sin` instead of `bom`). With `--copy-config`
+> the `app` and `primary_region = "bom"` lines from the file in this repo
+> are preserved as-is. If `flyctl` still prompts for a region, answer with
+> `bom`.
+
+Answer **No** if asked to add Postgres/Redis here (we provision Postgres
+explicitly in 3a below, and Redis is on Upstash) and **No** to deploying
+now.
+
+### 3a. (Option A only) Provision Fly Managed Postgres in `bom`
+
+```bash
+fly mpg create --name qorix-pg --region bom        # follow the prompts for size
+fly mpg attach qorix-pg --app qorix-api            # injects DATABASE_URL as a Fly secret
+fly mpg connect qorix-pg                           # opens a psql shell — exit when it works
+```
+Then push the schema using the same connection string Fly just attached
+(visible in `fly secrets list --app qorix-api` as `DATABASE_URL`):
+```bash
+DATABASE_URL='<copy from fly secrets / fly mpg status>' \
+  pnpm --filter @workspace/db run push
+```
+After this, **omit** `DATABASE_URL` from the `fly secrets set` block in
+step 4 — `fly mpg attach` already set it. Setting it again with the wrong
+value will break the api on the next deploy.
 
 ## 4. Set every required secret
 
@@ -50,6 +101,14 @@ already correct — don't let `fly launch` overwrite them.
 > `WALLET_ENC_SECRET` decrypts existing on-chain wallet keys — rotating it
 > makes every wallet stored in the DB undecryptable. Copy the exact current
 > values from the Replit project secrets.
+
+> 🚨 **Option A users (Fly Managed Postgres): DO NOT set `DATABASE_URL` here.**
+> `fly mpg attach` in step 3a already injected the correct value as a Fly
+> secret. Setting it again overwrites Fly's value with a wrong/stale one
+> and the API will fail to connect on the next deploy. Use the **Option A
+> command** below instead.
+
+**Options B/C (Supabase / Neon) — sets `DATABASE_URL` from your provider:**
 
 ```bash
 fly secrets set --app qorix-api \
@@ -76,10 +135,38 @@ fly secrets set --app qorix-api \
   PLATFORM_TRON_PRIVATE_KEY='...'
 ```
 
+**Option A (Fly Managed Postgres) — same block, with `DATABASE_URL` removed:**
+
+```bash
+fly secrets set --app qorix-api \
+  REDIS_URL='...' \
+  CORS_ORIGIN='https://qorixmarkets.com,https://www.qorixmarkets.com,https://qorix-markets-web.fly.dev' \
+  RUN_BACKGROUND_JOBS='true' \
+  SESSION_SECRET='...' \
+  WALLET_ENC_SECRET='...' \
+  AWS_ACCESS_KEY_ID='...' \
+  AWS_SECRET_ACCESS_KEY='...' \
+  AWS_REGION='...' \
+  GOOGLE_CLIENT_ID='...' \
+  GOOGLE_CLIENT_SECRET='...' \
+  RECAPTCHA_SITE_KEY='...' \
+  RECAPTCHA_SECRET_KEY='...' \
+  SES_FROM_EMAIL='...' \
+  SMTP_HOST='...' \
+  SMTP_PORT='...' \
+  SMTP_USER='...' \
+  SMTP_PASS='...' \
+  TELEGRAM_BOT_TOKEN='...' \
+  PLATFORM_TRON_ADDRESS='...' \
+  PLATFORM_TRON_PRIVATE_KEY='...'
+```
+
 **Web app (`qorix-markets-web`)** — no runtime secrets; the API URL is baked
 into the bundle via the `VITE_API_URL` build arg in `artifacts/qorix-markets/fly.toml`.
 
-Verify with `fly secrets list --app qorix-api`.
+Verify with `fly secrets list --app qorix-api`. Sanity-check that
+`DATABASE_URL` and `REDIS_URL` are both present (regardless of which path
+you took) before moving to step 5.
 
 ## 5. DNS and TLS certificates
 
