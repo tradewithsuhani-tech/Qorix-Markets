@@ -332,6 +332,8 @@ const GUARD_UNKNOWN_J = `test:guard:${RUN_TAG}:unknown`;
 const GUARD_FUND_J = `test:guard:${RUN_TAG}:fund`;
 const GUARD_OK_J = `test:guard:${RUN_TAG}:ok`;
 const GUARD_OVERDRAW_J = `test:guard:${RUN_TAG}:overdraw`;
+const GUARD_EMPTY_J = `test:guard:${RUN_TAG}:empty`;
+const GUARD_SINGLE_J = `test:guard:${RUN_TAG}:single`;
 const GUARD_ALL_ACCOUNTS = [GUARD_ACCT_ASSET, GUARD_ACCT_LIAB];
 const GUARD_ALL_JOURNALS = [
   GUARD_UNBALANCED_J,
@@ -339,6 +341,8 @@ const GUARD_ALL_JOURNALS = [
   GUARD_FUND_J,
   GUARD_OK_J,
   GUARD_OVERDRAW_J,
+  GUARD_EMPTY_J,
+  GUARD_SINGLE_J,
 ];
 
 async function ensureGuardAccounts() {
@@ -371,6 +375,64 @@ async function cleanupGuardArtifacts() {
     .delete(glAccountsTable)
     .where(inArray(glAccountsTable.code, GUARD_ALL_ACCOUNTS));
 }
+
+test("postJournalEntry rejects a journal with fewer than 2 lines", async (t) => {
+  await ensureGuardAccounts();
+  t.after(cleanupGuardArtifacts);
+
+  // 1. An empty journal (zero lines) must be rejected with the
+  //    "must have at least 2 lines" error.
+  await assert.rejects(
+    () => postJournalEntry(GUARD_EMPTY_J, []),
+    (err: unknown) => {
+      assert.ok(err instanceof Error, "error should be an Error");
+      assert.match(
+        err.message,
+        /must have at least 2 lines/,
+        `error should mention "must have at least 2 lines", got: ${err.message}`,
+      );
+      assert.ok(
+        err.message.includes(GUARD_EMPTY_J),
+        `error should reference journal id, got: ${err.message}`,
+      );
+      return true;
+    },
+  );
+
+  // 2. A single-line journal (one debit, no matching credit) must also be
+  //    rejected with the same error — the guard fires before the
+  //    debits-vs-credits balance check.
+  await assert.rejects(
+    () =>
+      postJournalEntry(GUARD_SINGLE_J, [
+        { accountCode: GUARD_ACCT_ASSET, entryType: "debit", amount: 10 },
+      ]),
+    (err: unknown) => {
+      assert.ok(err instanceof Error, "error should be an Error");
+      assert.match(
+        err.message,
+        /must have at least 2 lines/,
+        `error should mention "must have at least 2 lines", got: ${err.message}`,
+      );
+      assert.ok(
+        err.message.includes(GUARD_SINGLE_J),
+        `error should reference journal id, got: ${err.message}`,
+      );
+      return true;
+    },
+  );
+
+  // No ledger rows must have been written for either rejected journal.
+  const written = await db
+    .select({ id: ledgerEntriesTable.id })
+    .from(ledgerEntriesTable)
+    .where(inArray(ledgerEntriesTable.journalId, [GUARD_EMPTY_J, GUARD_SINGLE_J]));
+  assert.equal(
+    written.length,
+    0,
+    `journals with fewer than 2 lines must not insert any ledger rows, got ${written.length}`,
+  );
+});
 
 test("postJournalEntry rejects an unbalanced journal (debits ≠ credits)", async (t) => {
   await ensureGuardAccounts();
