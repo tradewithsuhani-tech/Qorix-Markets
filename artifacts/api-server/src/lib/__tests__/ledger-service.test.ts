@@ -1,6 +1,6 @@
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
-import { sql, inArray } from "drizzle-orm";
+import { sql, inArray, eq } from "drizzle-orm";
 import {
   db,
   pool,
@@ -35,9 +35,16 @@ function pickTestUserId(): number {
 }
 const DRIFT_USER_ID = pickTestUserId();
 const MATCH_USER_ID = pickTestUserId();
+const ENSURE_FRESH_USER_ID = pickTestUserId();
+const ENSURE_IDEMPOTENT_USER_ID = pickTestUserId();
 const DRIFT_J = `test:recon:${RUN_TAG}:wallet-drift`;
 const MATCH_J = `test:recon:${RUN_TAG}:wallet-match`;
-const ALL_WALLET_TEST_USER_IDS = [DRIFT_USER_ID, MATCH_USER_ID];
+const ALL_WALLET_TEST_USER_IDS = [
+  DRIFT_USER_ID,
+  MATCH_USER_ID,
+  ENSURE_FRESH_USER_ID,
+  ENSURE_IDEMPOTENT_USER_ID,
+];
 const ALL_WALLET_TEST_JOURNALS = [DRIFT_J, MATCH_J];
 
 async function ensureTestAccounts() {
@@ -603,5 +610,147 @@ test("runReconciliation does not flag a user when wallet matches ledger exactly"
     ours.length,
     0,
     `user ${MATCH_USER_ID} should NOT appear in walletDiscrepancies, got ${JSON.stringify(ours)}`,
+  );
+});
+
+// ---------------------------------------------------------------------------
+// ensureUserAccounts tests — direct coverage of the lazy per-user GL account
+// creation that deposits/trades/withdrawals all depend on.
+// ---------------------------------------------------------------------------
+
+test("ensureUserAccounts creates the four wallet GL accounts for a fresh user", async () => {
+  const userId = ENSURE_FRESH_USER_ID;
+
+  // Sanity: this user must not already have any GL accounts. If a previous
+  // failing run left rows behind for this exact userId (extremely unlikely
+  // because we randomize per-process), wipe them so the assertion is meaningful.
+  await db
+    .delete(glAccountsTable)
+    .where(eq(glAccountsTable.userId, userId));
+
+  await ensureUserAccounts(userId);
+
+  const rows = await db
+    .select({
+      code: glAccountsTable.code,
+      name: glAccountsTable.name,
+      accountType: glAccountsTable.accountType,
+      normalBalance: glAccountsTable.normalBalance,
+      userId: glAccountsTable.userId,
+      isSystem: glAccountsTable.isSystem,
+    })
+    .from(glAccountsTable)
+    .where(eq(glAccountsTable.userId, userId));
+
+  // Exactly four accounts must have been created — no more, no fewer.
+  assert.equal(
+    rows.length,
+    4,
+    `expected exactly 4 GL accounts for user ${userId}, got ${rows.length}: ${JSON.stringify(rows.map((r) => r.code))}`,
+  );
+
+  // Codes must be the four expected suffixes for this user.
+  const expectedCodes = [
+    `user:${userId}:main`,
+    `user:${userId}:trading`,
+    `user:${userId}:profit`,
+    `user:${userId}:locked`,
+  ].sort();
+  const actualCodes = rows.map((r) => r.code).sort();
+  assert.deepEqual(
+    actualCodes,
+    expectedCodes,
+    `account codes for user ${userId} should match expected set`,
+  );
+
+  // Every created account must be a credit-normal liability owned by this user
+  // and flagged as non-system. These properties are what postJournalEntry's
+  // negative-balance guard and the reconciliation reports rely on.
+  const byCode = new Map(rows.map((r) => [r.code, r]));
+  const expectedMeta: Array<{ suffix: string; name: string }> = [
+    { suffix: "main", name: "Main Wallet" },
+    { suffix: "trading", name: "Trading Wallet" },
+    { suffix: "profit", name: "Profit Wallet" },
+    { suffix: "locked", name: "Locked Funds" },
+  ];
+  for (const { suffix, name } of expectedMeta) {
+    const code = `user:${userId}:${suffix}`;
+    const row = byCode.get(code);
+    assert.ok(row, `row for ${code} must exist`);
+    assert.equal(
+      row.accountType,
+      "liability",
+      `${code} should be a liability account, got ${row.accountType}`,
+    );
+    assert.equal(
+      row.normalBalance,
+      "credit",
+      `${code} should be credit-normal, got ${row.normalBalance}`,
+    );
+    assert.equal(
+      row.userId,
+      userId,
+      `${code} should be owned by user ${userId}, got ${row.userId}`,
+    );
+    assert.equal(
+      row.isSystem,
+      false,
+      `${code} should not be flagged as a system account`,
+    );
+    assert.equal(
+      row.name,
+      `User ${userId} ${name}`,
+      `${code} should have human-readable name "User ${userId} ${name}", got "${row.name}"`,
+    );
+  }
+});
+
+test("ensureUserAccounts is idempotent on a second call", async () => {
+  const userId = ENSURE_IDEMPOTENT_USER_ID;
+
+  // Start clean.
+  await db
+    .delete(glAccountsTable)
+    .where(eq(glAccountsTable.userId, userId));
+
+  // First call: should create the four accounts.
+  await ensureUserAccounts(userId);
+
+  const firstRows = await db
+    .select({ id: glAccountsTable.id, code: glAccountsTable.code })
+    .from(glAccountsTable)
+    .where(eq(glAccountsTable.userId, userId));
+  assert.equal(
+    firstRows.length,
+    4,
+    `first call must create 4 accounts, got ${firstRows.length}`,
+  );
+
+  // Second call: must not throw, must not duplicate any accounts, and must
+  // preserve the original row IDs (no delete-and-recreate).
+  await assert.doesNotReject(
+    () => ensureUserAccounts(userId),
+    "second ensureUserAccounts call must not throw",
+  );
+
+  const secondRows = await db
+    .select({ id: glAccountsTable.id, code: glAccountsTable.code })
+    .from(glAccountsTable)
+    .where(eq(glAccountsTable.userId, userId));
+
+  assert.equal(
+    secondRows.length,
+    4,
+    `second call must remain at 4 accounts (no duplicates), got ${secondRows.length}`,
+  );
+
+  // Row IDs must match exactly between the two snapshots — same rows, not
+  // recreated rows. Compare as sorted (id, code) tuples.
+  const norm = (rs: Array<{ id: number; code: string }>) =>
+    rs.map((r) => `${r.id}|${r.code}`).sort();
+  assert.deepEqual(
+    norm(secondRows),
+    norm(firstRows),
+    "second ensureUserAccounts call must not insert new rows or change existing ids",
   );
 });
