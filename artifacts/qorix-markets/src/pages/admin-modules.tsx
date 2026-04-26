@@ -1380,6 +1380,13 @@ export function AdminSystemPage() {
           <div className="glass-card p-6 rounded-2xl space-y-5">
             <h2 className="text-xl font-bold">Platform Access</h2>
             <ToggleRow icon={Lock} label="Maintenance Mode" value={!!settings?.maintenanceMode} onToggle={(v) => save({ maintenanceMode: v })} />
+            <p className="text-xs text-muted-foreground -mt-2 ml-9">
+              Soft freeze: writes (deposits, trades, withdrawals) return a friendly banner; balances and charts keep loading.
+            </p>
+            <ToggleRow icon={Lock} label="Hard Block (legacy)" value={!!settings?.maintenanceHardBlock} onToggle={(v) => save({ maintenanceHardBlock: v })} />
+            <p className="text-xs text-muted-foreground -mt-2 ml-9">
+              Optional: also blocks reads for non-admin users. Only enable for full outages — most maintenance windows should use the soft freeze above.
+            </p>
             <ToggleRow icon={CheckCircle} label="Registration Enabled" value={settings?.registrationEnabled !== false} onToggle={(v) => save({ registrationEnabled: v })} />
             <div>
               <label className="text-sm text-muted-foreground">Maintenance Message</label>

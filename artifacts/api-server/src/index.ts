@@ -4,6 +4,7 @@ import { seedTasks } from "./lib/task-service";
 import { seedSystemSettings } from "./lib/seed-settings";
 import { runWalletEncryptionPreflight } from "./lib/wallet-preflight";
 import { flagSmokeTestAccount } from "./lib/smoke-test-account";
+import { getMaintenanceState } from "./middlewares/maintenance";
 
 // Gate single-instance background work (cron, Telegram poller, on-chain
 // watchers, BullMQ workers) behind a single env flag so we can flip it off in
@@ -12,19 +13,25 @@ import { flagSmokeTestAccount } from "./lib/smoke-test-account";
 // Defaults to "true" to preserve current Replit-dev behaviour; set
 // RUN_BACKGROUND_JOBS=false on the Replit side once Fly is the source of truth.
 //
-// MAINTENANCE_MODE=true also forces background jobs off so the Mumbai-DB
-// cutover runbook only has to flip ONE secret to freeze writes from every
-// path (HTTP + cron + workers).
-const MAINTENANCE_MODE = (process.env["MAINTENANCE_MODE"] ?? "").toLowerCase() === "true";
-const RUN_BACKGROUND_JOBS =
-  !MAINTENANCE_MODE &&
-  (process.env["RUN_BACKGROUND_JOBS"] ?? "true").toLowerCase() !== "false";
+// Maintenance mode (env var OR admin-toggled DB flag) also forces background
+// jobs off so a single freeze freezes writes from every path
+// (HTTP + cron + workers). Boot-time check only — flipping the admin toggle
+// after boot won't stop already-running workers, by design: the freeze is a
+// soft user-write freeze, not a process-level kill switch. Operators who
+// need to stop workers mid-flight should restart the API.
 
 async function main() {
   await ensureRedisRunning();
   await initSystemAccounts();
   await seedTasks();
   await seedSystemSettings();
+  // Resolve maintenance state AFTER seed-settings so the admin DB toggle is
+  // honoured on the very first boot, then use it to decide whether to start
+  // background workers below.
+  const maintenance = await getMaintenanceState();
+  const RUN_BACKGROUND_JOBS =
+    !maintenance.active &&
+    (process.env["RUN_BACKGROUND_JOBS"] ?? "true").toLowerCase() !== "false";
   // Hard-fail on wallet-secret mismatch BEFORE we accept any traffic. This is
   // the safety net for the Fly.io cutover: if the new instance comes up with
   // a different WALLET_ENC_SECRET than the previous deployment, every existing
@@ -70,9 +77,10 @@ async function main() {
     depositWatcher = startDepositWatcher();
     telegramPoller = startTelegramPoller();
     logger.info("Background jobs enabled (cron, Telegram poller, watchers, workers)");
-  } else if (MAINTENANCE_MODE) {
+  } else if (maintenance.active) {
     logger.warn(
-      "MAINTENANCE_MODE=true — API is read-only, writes will return 503; cron, Telegram poller, watchers, and workers are DISABLED",
+      { source: maintenance.source, hardBlock: maintenance.hardBlock },
+      "Maintenance mode active — API is read-only, writes will return 503; cron, Telegram poller, watchers, and workers are DISABLED",
     );
   } else {
     logger.warn("RUN_BACKGROUND_JOBS=false — cron, Telegram poller, watchers, and workers are DISABLED on this instance");
