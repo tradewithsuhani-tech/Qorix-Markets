@@ -1,4 +1,5 @@
 import { Layout } from "@/components/layout";
+import { isFeatureHidden } from "@/lib/hidden-features";
 import { Link } from "wouter";
 import { DemoDashboardBody } from "@/pages/demo-dashboard";
 import {
@@ -1889,6 +1890,14 @@ export default function PortfolioPage() {
   return (
     <Layout>
       <PortfolioInner />
+      {/* Performance Insights — temporarily hidden via the
+          hidden-features registry (`portfolio:performance-insights`).
+          The block stays in code so we can bring it back later
+          unchanged; just remove the registry entry. While hidden,
+          we suppress BOTH the lock-mask card AND the blurred
+          DemoDashboardBody underneath, so users see no half-finished
+          section regardless of whether they've invested. */}
+      {!isFeatureHidden("portfolio:performance-insights") && (
       <div className="relative">
         {isLocked && (
           <div className="absolute inset-0 z-20 flex flex-col items-center justify-center pointer-events-none">
@@ -1945,6 +1954,7 @@ export default function PortfolioPage() {
           </div>
         </div>
       </div>
+      )}
       {summary?.vip && (
         <div className="px-4 md:px-8 pb-8 max-w-7xl mx-auto">
           <div className="flex items-center gap-2 mb-3">
