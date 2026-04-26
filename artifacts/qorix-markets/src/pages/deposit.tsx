@@ -521,9 +521,11 @@ export default function DepositPage() {
                           <div className="text-[11px] text-muted-foreground mb-1.5 uppercase tracking-wider font-semibold">
                             Platform Wallet Address
                           </div>
-                          <div className="bg-white/4 border border-white/10 rounded-xl px-3 py-2.5 flex items-center justify-between gap-2">
-                            <span className="text-xs font-mono text-white break-all leading-relaxed">{platformAddress}</span>
-                            <CopyButton text={platformAddress} />
+                          <div className="bg-white/4 border border-white/10 rounded-xl px-3 py-2.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                            <span className="min-w-0 flex-1 text-xs font-mono text-white break-all leading-relaxed">{platformAddress}</span>
+                            <div className="self-end sm:self-auto">
+                              <CopyButton text={platformAddress} />
+                            </div>
                           </div>
                         </div>
 
