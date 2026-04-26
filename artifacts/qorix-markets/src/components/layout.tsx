@@ -727,15 +727,14 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   {children}
                 </div>
               </div>
-              {/* Hard spacer: ~120px clearance above the bottom nav on mobile (nav + safe-area + small breathing room),
-                  zero on desktop. Tight enough to not look empty, generous enough that nothing gets cut. */}
+              {/* Hard spacer: clears BOTH the bottom-nav pill AND the chat FAB
+                  that floats above it on mobile, plus 24px breathing room.
+                  Driven by --mobile-bottom-clearance so the nav/FAB geometry
+                  lives in exactly one place (see index.css). Zero on desktop. */}
               <div
                 aria-hidden
                 className="md:hidden w-full"
-                style={{
-                  height:
-                    "calc(72px + env(safe-area-inset-bottom, 0px) + 1.5rem)",
-                }}
+                style={{ height: "var(--mobile-bottom-clearance)" }}
               />
             </motion.div>
           </AnimatePresence>
