@@ -17,6 +17,7 @@ const DEFAULT_JSON_ACCEPT = "application/json, application/problem+json";
 
 let _baseUrl: string | null = null;
 let _authTokenGetter: AuthTokenGetter | null = null;
+let _maintenanceHandler: ((message: string | undefined) => void) | null = null;
 
 /**
  * Set a base URL that is prepended to every relative request URL
@@ -42,6 +43,21 @@ export function setBaseUrl(url: string | null): void {
  */
 export function setAuthTokenGetter(getter: AuthTokenGetter | null): void {
   _authTokenGetter = getter;
+}
+
+/**
+ * Register a handler that fires whenever the API responds with a structured
+ * "maintenance mode" 503 (body `{ code: "maintenance_mode", ... }`) — flipped
+ * by the Fly secret `MAINTENANCE_MODE=true` during the Mumbai-DB cutover. The
+ * web app uses this to raise a friendly inline banner instead of letting
+ * dozens of failed mutations spawn generic toast errors.
+ *
+ * Pass `null` to clear.
+ */
+export function setMaintenanceHandler(
+  handler: ((message: string | undefined) => void) | null,
+): void {
+  _maintenanceHandler = handler;
 }
 
 function isRequest(input: RequestInfo | URL): input is Request {
@@ -389,7 +405,36 @@ export async function customFetch<T = unknown>(
 
   if (!response.ok) {
     const errorData = await parseErrorBody(response, method);
+    // Surface MAINTENANCE_MODE 503s to the registered handler before throwing
+    // so the web app can show its inline banner instead of (only) letting
+    // each failed mutation toast a generic error.
+    if (
+      response.status === 503 &&
+      _maintenanceHandler &&
+      (response.headers.get("x-maintenance-mode") === "true" ||
+        getStringField(errorData, "code") === "maintenance_mode")
+    ) {
+      try {
+        _maintenanceHandler(getStringField(errorData, "message"));
+      } catch {
+        // Handler errors must never mask the original API error.
+      }
+    }
     throw new ApiError(response, errorData, requestInfo);
+  }
+
+  // GETs during the cutover come back 200 OK with the X-Maintenance-Mode
+  // header; raise the same banner so users get context even when nothing has
+  // failed yet.
+  if (
+    _maintenanceHandler &&
+    response.headers.get("x-maintenance-mode") === "true"
+  ) {
+    try {
+      _maintenanceHandler(undefined);
+    } catch {
+      /* see above */
+    }
   }
 
   return (await parseSuccessBody(response, responseType, requestInfo)) as T;

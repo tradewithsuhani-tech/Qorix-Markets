@@ -2,10 +2,20 @@ import { Router } from "express";
 import { db, investmentsTable, transactionsTable, dailyProfitRunsTable, systemSettingsTable } from "@workspace/db";
 import { eq, and, gte, avg, count, inArray, sql } from "drizzle-orm";
 import { listTrades } from "../lib/signal-trade-service";
+import { isMaintenanceMode } from "../middlewares/maintenance";
 
 const router = Router();
 
 // Public: system status (maintenance mode + dynamic dashboard return)
+//
+// Two distinct maintenance signals get merged into the single `maintenance`
+// flag the web app polls:
+//   1. system_settings.maintenance_mode — admin-toggled full-app freeze that
+//      shows the existing blocking overlay. Used for non-cutover incidents.
+//   2. MAINTENANCE_MODE env var — flipped via Fly secret during the Mumbai-DB
+//      cutover window (runbook step 2). Reads still work; only writes 503.
+//      Surfaced separately as `writesDisabled` so the frontend can render the
+//      lighter inline banner instead of the full overlay.
 router.get("/system/status", async (_req, res) => {
   const rows = await db
     .select()
@@ -16,11 +26,16 @@ router.get("/system/status", async (_req, res) => {
       "dashboard_return_label",
     ]));
   const map = Object.fromEntries(rows.map((r) => [r.key, r.value]));
+  const dbMaintenance = map["maintenance_mode"] === "true";
+  const envMaintenance = isMaintenanceMode();
   res.json({
-    maintenance: map["maintenance_mode"] === "true",
+    maintenance: dbMaintenance || envMaintenance,
+    writesDisabled: envMaintenance,
     maintenanceMessage:
       map["maintenance_message"] ||
-      "We are upgrading our platform. Please check back shortly.",
+      (envMaintenance
+        ? "Brief maintenance in progress — balances will be back shortly."
+        : "We are upgrading our platform. Please check back shortly."),
     dashboardReturnLabel: map["dashboard_return_label"] || "",
   });
 });

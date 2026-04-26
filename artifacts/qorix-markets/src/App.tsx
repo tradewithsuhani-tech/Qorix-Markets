@@ -54,6 +54,7 @@ import VerifyPage from "@/pages/verify";
 import MarketInsightsPage from "@/pages/market-insights";
 import { HighImpactNotificationBanner } from "@/components/economic-news-widget";
 import { UpdateBanner } from "@/components/update-banner";
+import { MaintenanceBanner } from "@/components/maintenance-banner";
 import TermsPage from "@/pages/legal/terms";
 import PrivacyPage from "@/pages/legal/privacy";
 import RiskDisclosurePage from "@/pages/legal/risk-disclosure";
@@ -207,7 +208,12 @@ function MaintenanceGate({ children }: { children: React.ReactNode }) {
         const r = await fetch(`${import.meta.env.BASE_URL}api/system/status`);
         if (!r.ok) return;
         const d = await r.json();
-        if (!cancelled) setState({ on: !!d.maintenance, msg: d.maintenanceMessage || "" });
+        // The full-screen overlay is reserved for the admin-toggled
+        // `system_settings.maintenance_mode` flag (long planned outages).
+        // The env-var `MAINTENANCE_MODE` (cutover) is shown via the lighter
+        // inline `<MaintenanceBanner />` instead, so reads can keep rendering.
+        const overlayActive = !!d.maintenance && !d.writesDisabled;
+        if (!cancelled) setState({ on: overlayActive, msg: d.maintenanceMessage || "" });
       } catch { /* ignore */ }
     };
     fetchStatus();
@@ -267,6 +273,7 @@ function AppContent() {
       {!isAdminArea && <QorixAssistant />}
       {!isAdminArea && <PWAInstallPrompt />}
       <UpdateBanner />
+      <MaintenanceBanner />
     </MaintenanceGate>
   );
 }

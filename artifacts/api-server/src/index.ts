@@ -11,7 +11,13 @@ import { flagSmokeTestAccount } from "./lib/smoke-test-account";
 // edits and without double-firing the Telegram bot or duplicating cron.
 // Defaults to "true" to preserve current Replit-dev behaviour; set
 // RUN_BACKGROUND_JOBS=false on the Replit side once Fly is the source of truth.
+//
+// MAINTENANCE_MODE=true also forces background jobs off so the Mumbai-DB
+// cutover runbook only has to flip ONE secret to freeze writes from every
+// path (HTTP + cron + workers).
+const MAINTENANCE_MODE = (process.env["MAINTENANCE_MODE"] ?? "").toLowerCase() === "true";
 const RUN_BACKGROUND_JOBS =
+  !MAINTENANCE_MODE &&
   (process.env["RUN_BACKGROUND_JOBS"] ?? "true").toLowerCase() !== "false";
 
 async function main() {
@@ -64,6 +70,10 @@ async function main() {
     depositWatcher = startDepositWatcher();
     telegramPoller = startTelegramPoller();
     logger.info("Background jobs enabled (cron, Telegram poller, watchers, workers)");
+  } else if (MAINTENANCE_MODE) {
+    logger.warn(
+      "MAINTENANCE_MODE=true — API is read-only, writes will return 503; cron, Telegram poller, watchers, and workers are DISABLED",
+    );
   } else {
     logger.warn("RUN_BACKGROUND_JOBS=false — cron, Telegram poller, watchers, and workers are DISABLED on this instance");
   }
