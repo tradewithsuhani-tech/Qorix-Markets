@@ -1239,6 +1239,327 @@ jobs:
           JS
           node update-click.mjs
 
+      # Pins the persistence policy for forceReload() in
+      # artifacts/qorix-markets/src/lib/version-check.ts. forceReload
+      # today wipes Cache Storage + service workers but deliberately
+      # leaves IndexedDB and localStorage alone — and it MUST stay
+      # that way, because the auth token (`qorix_token`) lives in
+      # localStorage (see use-auth.tsx). If a future change starts
+      # blowing those stores away (e.g. someone adds
+      # `localStorage.clear()` to forceReload, or wraps it with a
+      # Workbox helper that wipes IDB), every user would be silently
+      # logged out on every "Update" tap and any offline draft state
+      # in IndexedDB would vanish. This step seeds a sentinel into
+      # both stores, drives the banner-triggered reload, and asserts
+      # both sentinels survive the cache-busted navigation. If the
+      # team ever flips the policy to "wipe everything", flip the
+      # assertions below in the same PR — that way the contract is
+      # always pinned in one direction or the other and never drifts
+      # silently.
+      - name: Browser smoke test — Update click preserves IndexedDB + localStorage
+        id: smoke_web_browser_version_banner_storage
+        # WEB_BASE / API_BASE inherited from workflow-level env so this
+        # step exercises the same hostnames as every other web smoke step.
+        run: |
+          set -euo pipefail
+          # Self-contained playwright install in a tmp dir so we don't
+          # touch the monorepo's pnpm workspace state. Pinned to the
+          # same version as the other browser smoke steps — bump
+          # deliberately together.
+          PW_DIR="$(mktemp -d)"
+          cd "${PW_DIR}"
+          npm init -y >/dev/null
+          npm install --silent playwright@1.55.0
+          npx playwright install --with-deps chromium
+
+          cat > update-storage.mjs <<'JS'
+          import { chromium } from 'playwright';
+
+          const WEB_BASE = process.env.WEB_BASE;
+          const API_BASE = process.env.API_BASE;
+
+          // Synthetic version that can never match the bundle's baked-in
+          // __APP_VERSION__ — guarantees the banner appears.
+          const SYNTHETIC_VERSION = `playwright-smoke-storage-${Date.now()}`;
+          // Unique names so the assertions can't accidentally pass on
+          // leftover state from some unrelated session.
+          const LS_KEY = `qorix-smoke-ls-sentinel-${Date.now()}`;
+          const LS_VALUE = `preserved-${Date.now()}`;
+          const IDB_NAME = `qorix-smoke-idb-${Date.now()}`;
+          const IDB_STORE = 'sentinels';
+          const IDB_KEY = 'forceReload-must-not-wipe-me';
+          const IDB_VALUE = `preserved-${Date.now()}`;
+
+          let versionRequests = 0;
+          const errors = [];
+
+          const browser = await chromium.launch({ headless: true });
+          const ctx = await browser.newContext({
+            viewport: { width: 1280, height: 800 },
+            userAgent:
+              'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 ' +
+              '(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+          });
+
+          await ctx.route('**/version.json**', async (route) => {
+            versionRequests++;
+            await route.fulfill({
+              status: 200,
+              headers: {
+                'content-type': 'application/json',
+                'cache-control': 'no-store, no-cache, must-revalidate',
+              },
+              body: JSON.stringify({
+                version: SYNTHETIC_VERSION,
+                builtAt: new Date().toISOString(),
+              }),
+            });
+          });
+
+          const page = await ctx.newPage();
+          page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
+          page.on('requestfailed', (req) => {
+            const u = req.url();
+            if (u.startsWith(WEB_BASE) || (API_BASE && u.startsWith(API_BASE))) {
+              errors.push(`requestfailed: ${u} → ${req.failure()?.errorText}`);
+            }
+          });
+          page.on('console', (msg) => {
+            if (msg.type() === 'error') {
+              console.log(`[browser console.error] ${msg.text()}`);
+            }
+          });
+
+          const fail = async (reason) => {
+            console.error(`::error::${reason}`);
+            try {
+              const html = await page.content();
+              console.error('--- page HTML (first 2000 chars) ---');
+              console.error(html.slice(0, 2000));
+            } catch {}
+            await browser.close();
+            process.exit(1);
+          };
+
+          try {
+            // Use /login (public) so this check stays isolated from the
+            // auth pipeline — the banner is mounted globally so it
+            // renders on every route.
+            console.log(`→ goto ${WEB_BASE}/login (with /version.json intercepted → ${SYNTHETIC_VERSION})`);
+            await page.goto(`${WEB_BASE}/login`, {
+              waitUntil: 'domcontentloaded',
+              timeout: 30000,
+            });
+            await page
+              .locator('input[placeholder="Email Address"]')
+              .waitFor({ state: 'visible', timeout: 15000 });
+
+            console.log('→ wait for [data-testid=banner-update-available]');
+            await page
+              .locator('[data-testid="banner-update-available"]')
+              .waitFor({ state: 'visible', timeout: 30000 });
+
+            // Seed BOTH stores with sentinel values. Without seeding,
+            // a "still present after reload" assertion would trivially
+            // pass on a fresh page that never had anything in those
+            // stores to begin with.
+            console.log(`→ seed localStorage["${LS_KEY}"]="${LS_VALUE}"`);
+            await page.evaluate(
+              ([key, value]) => {
+                localStorage.setItem(key, value);
+              },
+              [LS_KEY, LS_VALUE],
+            );
+
+            console.log(`→ seed IndexedDB ${IDB_NAME}/${IDB_STORE}["${IDB_KEY}"]="${IDB_VALUE}"`);
+            await page.evaluate(
+              async ([dbName, storeName, key, value]) => {
+                await new Promise((resolve, reject) => {
+                  const open = indexedDB.open(dbName, 1);
+                  open.onupgradeneeded = () => {
+                    open.result.createObjectStore(storeName);
+                  };
+                  open.onerror = () => reject(open.error);
+                  open.onsuccess = () => {
+                    const db = open.result;
+                    const tx = db.transaction(storeName, 'readwrite');
+                    tx.objectStore(storeName).put(value, key);
+                    tx.oncomplete = () => {
+                      db.close();
+                      resolve();
+                    };
+                    tx.onerror = () => reject(tx.error);
+                  };
+                });
+              },
+              [IDB_NAME, IDB_STORE, IDB_KEY, IDB_VALUE],
+            );
+
+            // Verify the seed actually landed before clicking, so a
+            // failure later can only mean forceReload wiped it (not
+            // that the seed never happened).
+            const seededLs = await page.evaluate((k) => localStorage.getItem(k), LS_KEY);
+            if (seededLs !== LS_VALUE) {
+              await fail(
+                `localStorage seed never landed (have ${JSON.stringify(seededLs)}, expected ${JSON.stringify(LS_VALUE)}).`,
+              );
+            }
+            const seededIdb = await page.evaluate(
+              async ([dbName, storeName, key]) => {
+                return await new Promise((resolve, reject) => {
+                  const open = indexedDB.open(dbName, 1);
+                  open.onerror = () => reject(open.error);
+                  open.onsuccess = () => {
+                    const db = open.result;
+                    const tx = db.transaction(storeName, 'readonly');
+                    const req = tx.objectStore(storeName).get(key);
+                    req.onsuccess = () => {
+                      db.close();
+                      resolve(req.result ?? null);
+                    };
+                    req.onerror = () => reject(req.error);
+                  };
+                });
+              },
+              [IDB_NAME, IDB_STORE, IDB_KEY],
+            );
+            if (seededIdb !== IDB_VALUE) {
+              await fail(
+                `IndexedDB seed never landed (have ${JSON.stringify(seededIdb)}, expected ${JSON.stringify(IDB_VALUE)}).`,
+              );
+            }
+            console.log('✓ pre-click sentinels present in localStorage and IndexedDB');
+
+            const versionRequestsBeforeClick = versionRequests;
+
+            // Click Update — same wait-for-cache-buster pattern as
+            // smoke_web_browser_version_banner_click. Using waitForURL
+            // (rather than waitForNavigation) means a regression that
+            // drops the ?_v=<ts> param will time out here too.
+            console.log('→ click [data-testid=button-update-app] and wait for cache-busted reload');
+            const navPromise = page.waitForURL(
+              (url) => /[?&]_v=\d+/.test(url.toString()),
+              { timeout: 30000 },
+            );
+            await page.locator('[data-testid="button-update-app"]').click();
+            await navPromise;
+
+            // Wait for the freshly-loaded SPA to settle so any reload-
+            // time wipe (e.g. a clear-storage call inside the new
+            // bundle's bootstrap) has had a chance to run before we
+            // read the stores again.
+            await page
+              .locator('input[placeholder="Email Address"]')
+              .waitFor({ state: 'visible', timeout: 15000 });
+
+            // Confirm we genuinely hard-reloaded (not a SPA pushState).
+            // If versionRequests didn't grow after the click, the old
+            // JS module graph is still alive and the storage check
+            // below would be measuring the pre-reload state — which
+            // would let a real regression slip through.
+            const deadline = Date.now() + 15000;
+            while (versionRequests <= versionRequestsBeforeClick && Date.now() < deadline) {
+              await new Promise((r) => setTimeout(r, 250));
+            }
+            if (versionRequests <= versionRequestsBeforeClick) {
+              await fail(
+                `/version.json was not re-requested after Update (before=${versionRequestsBeforeClick}, after=${versionRequests}) — page did not actually hard-reload, so the persistence assertions below would be meaningless.`,
+              );
+            }
+
+            // ── Pinned policy: forceReload PRESERVES both stores. ──
+            // If you intentionally flip the policy to "wipe", invert
+            // these assertions in the same PR so the contract stays
+            // pinned.
+            const lsAfter = await page.evaluate((k) => localStorage.getItem(k), LS_KEY);
+            if (lsAfter !== LS_VALUE) {
+              await fail(
+                `localStorage["${LS_KEY}"] was ${JSON.stringify(lsAfter)} after Update; expected ${JSON.stringify(LS_VALUE)}. ` +
+                  `forceReload() now wipes localStorage — every user would be logged out on every Update tap (qorix_token lives there). ` +
+                  `If this wipe was intentional, flip this assertion AND audit the auth flow to re-login users automatically.`,
+              );
+            }
+            console.log(`✓ localStorage["${LS_KEY}"] survived the Update reload`);
+
+            const idbAfter = await page.evaluate(
+              async ([dbName, storeName, key]) => {
+                // Detect a wiped-database case explicitly: if the DB
+                // was deleted, opening it with version 1 will fire
+                // onupgradeneeded and the object store won't exist
+                // yet, so re-create it on the fly to read cleanly.
+                return await new Promise((resolve, reject) => {
+                  const open = indexedDB.open(dbName, 1);
+                  let recreated = false;
+                  open.onupgradeneeded = () => {
+                    recreated = true;
+                    if (!open.result.objectStoreNames.contains(storeName)) {
+                      open.result.createObjectStore(storeName);
+                    }
+                  };
+                  open.onerror = () => reject(open.error);
+                  open.onsuccess = () => {
+                    const db = open.result;
+                    if (recreated) {
+                      db.close();
+                      resolve({ wiped: true });
+                      return;
+                    }
+                    const tx = db.transaction(storeName, 'readonly');
+                    const req = tx.objectStore(storeName).get(key);
+                    req.onsuccess = () => {
+                      db.close();
+                      resolve({ wiped: false, value: req.result ?? null });
+                    };
+                    req.onerror = () => reject(req.error);
+                  };
+                });
+              },
+              [IDB_NAME, IDB_STORE, IDB_KEY],
+            );
+            if (idbAfter.wiped) {
+              await fail(
+                `IndexedDB database "${IDB_NAME}" was deleted by forceReload(). ` +
+                  `Any offline drafts or persisted query cache (e.g. a future TanStack Query persistor) would vanish on every Update tap. ` +
+                  `If this wipe was intentional, flip this assertion in the same PR.`,
+              );
+            }
+            if (idbAfter.value !== IDB_VALUE) {
+              await fail(
+                `IndexedDB ${IDB_NAME}/${IDB_STORE}["${IDB_KEY}"] was ${JSON.stringify(idbAfter.value)} after Update; expected ${JSON.stringify(IDB_VALUE)}.`,
+              );
+            }
+            console.log(`✓ IndexedDB ${IDB_NAME}/${IDB_STORE}["${IDB_KEY}"] survived the Update reload`);
+
+            // Cleanup so we don't leave sentinels around in shared
+            // browser state (mostly cosmetic — the context is
+            // discarded with browser.close() anyway).
+            await page.evaluate((k) => localStorage.removeItem(k), LS_KEY);
+            await page.evaluate(
+              (dbName) =>
+                new Promise((resolve) => {
+                  const req = indexedDB.deleteDatabase(dbName);
+                  req.onsuccess = () => resolve();
+                  req.onerror = () => resolve();
+                  req.onblocked = () => resolve();
+                }),
+              IDB_NAME,
+            );
+          } catch (err) {
+            await fail(`Update-click storage-policy smoke flow failed: ${err.message}`);
+          }
+
+          if (errors.length) {
+            console.error('::error::Update-click storage-policy smoke recorded fatal errors:');
+            errors.forEach((e) => console.error('  - ' + e));
+            await browser.close();
+            process.exit(1);
+          }
+
+          await browser.close();
+          console.log('✓ tapping Update preserves IndexedDB and localStorage across the cache-busted reload');
+          JS
+          node update-storage.mjs
+
       # Auto-rollback: if (and only if) one of the smoke checks above
       # failed, promote the previous release back so users aren't left on
       # a known-bad build. We don't trigger on `flyctl deploy` itself
@@ -1252,7 +1573,8 @@ jobs:
             steps.smoke_web_version.outcome == 'failure' ||
             steps.smoke_web_browser.outcome == 'failure' ||
             steps.smoke_web_browser_version_banner.outcome == 'failure' ||
-            steps.smoke_web_browser_version_banner_click.outcome == 'failure'
+            steps.smoke_web_browser_version_banner_click.outcome == 'failure' ||
+            steps.smoke_web_browser_version_banner_storage.outcome == 'failure'
           )
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
@@ -1275,7 +1597,8 @@ jobs:
             steps.smoke_web_version.outcome == 'failure' ||
             steps.smoke_web_browser.outcome == 'failure' ||
             steps.smoke_web_browser_version_banner.outcome == 'failure' ||
-            steps.smoke_web_browser_version_banner_click.outcome == 'failure'
+            steps.smoke_web_browser_version_banner_click.outcome == 'failure' ||
+            steps.smoke_web_browser_version_banner_storage.outcome == 'failure'
           )
         env:
           SMOKE_TEST_EMAIL: ${{ secrets.SMOKE_TEST_EMAIL }}
@@ -1434,7 +1757,8 @@ jobs:
             steps.smoke_web_version.outcome == 'failure' ||
             steps.smoke_web_browser.outcome == 'failure' ||
             steps.smoke_web_browser_version_banner.outcome == 'failure' ||
-            steps.smoke_web_browser_version_banner_click.outcome == 'failure'
+            steps.smoke_web_browser_version_banner_click.outcome == 'failure' ||
+            steps.smoke_web_browser_version_banner_storage.outcome == 'failure'
           )
         uses: actions/setup-node@v4
         with:
@@ -1446,7 +1770,8 @@ jobs:
             steps.smoke_web_version.outcome == 'failure' ||
             steps.smoke_web_browser.outcome == 'failure' ||
             steps.smoke_web_browser_version_banner.outcome == 'failure' ||
-            steps.smoke_web_browser_version_banner_click.outcome == 'failure'
+            steps.smoke_web_browser_version_banner_click.outcome == 'failure' ||
+            steps.smoke_web_browser_version_banner_storage.outcome == 'failure'
           )
         env:
           SMOKE_TEST_EMAIL: ${{ secrets.SMOKE_TEST_EMAIL }}
