@@ -34,6 +34,18 @@ export type HiddenFeature = {
 
 export const HIDDEN_FEATURES: HiddenFeature[] = [
   {
+    id: "portfolio:performance-insights",
+    title: "Portfolio → Performance Insights section",
+    location:
+      "Portfolio page, bottom block (lock-mask card + blurred Equity Curve / Daily P&L / Rolling Returns / Performance Metrics + Recent Trade Attribution).",
+    filePath: "artifacts/qorix-markets/src/pages/portfolio.tsx",
+    hiddenAt: "2026-04-27",
+    reason:
+      "Section still needs significant work — copy, layout and the underlying DemoDashboardBody embed all need a redesign before investors see it. The current 'Performance Insights Locked' blur-mask was firing even after users had invested, which was confusing. Hiding the entire block (mask + content) so no one sees a half-finished view; we'll bring it back when ready.",
+    restoreNotes:
+      "Remove this entry from HIDDEN_FEATURES. The block is wrapped in a single `{!isFeatureHidden('portfolio:performance-insights') && (...)}` gate around the `<div className=\"relative\">...</div>` that contains the Performance Insights lock overlay and the embedded DemoDashboardBody + RecentTradeAttribution — un-hiding restores the previous behavior verbatim (lock mask shown for users with no active investment, blurred section underneath).",
+  },
+  {
     id: "analytics:page",
     title: "Advanced Analytics page (entire route)",
     location: "Sidebar → Analytics  ·  Route: /analytics",
