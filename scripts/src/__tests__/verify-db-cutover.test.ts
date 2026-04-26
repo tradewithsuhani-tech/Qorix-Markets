@@ -443,6 +443,118 @@ test("exits 0 with a SKIPPED line when --skip-decrypt is passed", async () => {
   assert.match(res.stdout, /verify-db-cutover: PASS/);
 });
 
+test("exits 1 when a serial sequence on the target was reset to 1 with is_called=false (missed setval batch)", async () => {
+  // Reproduces the exact failure mode runbook step 5 is supposed to
+  // prevent: rows have been copied across so counts match, but the
+  // setval batch that bumps each sequence past max(id) on the target
+  // was missed (or only partially applied — e.g. the operator's psql
+  // session died mid-batch and they re-ran the COPY but not the setval).
+  //
+  // Concretely: target has 3 users with ids 1..3, but users_id_seq has
+  // been knocked back to last_value=1, is_called=false — so the next
+  // nextval() returns 1, which collides with the existing PK 1 the
+  // moment the API does its first signup INSERT in step 8.
+  //
+  // The verify script's sequence-safety branch is the ONLY thing that
+  // catches this before the duplicate-key 500s start; if a future
+  // refactor flips the comparison or stops honouring is_called=false,
+  // this test will go red.
+  const enc = encryptWithSecret("0xprivatekeyplaintextlongenough0123", TEST_SECRET);
+  await seed(urlFor(pgInstance!, "source"), { rows: 3, encryptedKey: enc });
+  await seed(urlFor(pgInstance!, "target"), { rows: 3, encryptedKey: enc });
+
+  // Simulate the half-finished setval batch on target only. We rewind
+  // users_id_seq specifically so we can assert on its name in the
+  // output — every other critical sequence stays correctly bumped.
+  await withClient(urlFor(pgInstance!, "target"), async (c) => {
+    await c.query("select setval('users_id_seq', 1, false)");
+  });
+
+  const res = runScript(
+    [
+      "--source",
+      urlFor(pgInstance!, "source"),
+      "--target",
+      urlFor(pgInstance!, "target"),
+    ],
+    { WALLET_ENC_SECRET: TEST_SECRET },
+  );
+
+  assert.equal(
+    res.status,
+    1,
+    `expected exit 1, got ${res.status}\nstdout:\n${res.stdout}\nstderr:\n${res.stderr}`,
+  );
+  // The script formats the failing line as "FAIL  users_id_seq …", so
+  // pin both the tag and the specific sequence name.
+  assert.match(res.stdout, /FAIL\s+users_id_seq/);
+  // The "next nextval would collide" hint is the operator-facing
+  // explanation of *why* this is unsafe — pin it so a refactor can't
+  // quietly drop the diagnostic and leave the operator staring at a
+  // bare FAIL line at 3am.
+  assert.match(
+    res.stdout,
+    /next nextval would collide with existing max\(id\)/,
+  );
+  // is_called=false should be surfaced too — that's the nuance that
+  // makes last_value=1 dangerous (next nextval returns 1, not 2).
+  assert.match(res.stdout, /is_called=false/);
+  // Top-line remediation: the script must point at the correct
+  // runbook step, otherwise a panicked operator may hand-fix the
+  // wrong table.
+  assert.match(res.stdout, /Re-run the setval batch in runbook step 5/);
+  assert.match(res.stdout, /verify-db-cutover: FAIL/);
+  // Critical-table counts must NOT be flagged — this regression is
+  // specifically the case where row counts agree but sequences lie.
+  assert.match(res.stdout, /all critical-table counts match/);
+});
+
+test("exits 0 when a sequence has is_called=false but last_value is genuinely above max(id) (still safe)", async () => {
+  // Positive control for the nuance the previous test exercises in the
+  // failing direction. setval(seq, N, false) means "next nextval
+  // returns N" (NOT N+1). If N > max(id) the sequence is still safe —
+  // the very next INSERT lands on a fresh PK. The script must NOT
+  // false-positive here, otherwise every operator who calls setval
+  // with is_called=false (a perfectly legal Postgres idiom — it's
+  // what `pg_dump --data-only` emits) will get a spurious cutover
+  // abort.
+  const enc = encryptWithSecret("0xprivatekeyplaintextlongenough0123", TEST_SECRET);
+  await seed(urlFor(pgInstance!, "source"), { rows: 3, encryptedKey: enc });
+  await seed(urlFor(pgInstance!, "target"), { rows: 3, encryptedKey: enc });
+
+  // max(users.id) = 3 after the seed. Park last_value at 4 with
+  // is_called=false → next nextval = 4, which is > 3, so safe.
+  await withClient(urlFor(pgInstance!, "target"), async (c) => {
+    await c.query("select setval('users_id_seq', 4, false)");
+  });
+
+  const res = runScript(
+    [
+      "--source",
+      urlFor(pgInstance!, "source"),
+      "--target",
+      urlFor(pgInstance!, "target"),
+    ],
+    { WALLET_ENC_SECRET: TEST_SECRET },
+  );
+
+  assert.equal(
+    res.status,
+    0,
+    `expected exit 0, got ${res.status}\nstdout:\n${res.stdout}\nstderr:\n${res.stderr}`,
+  );
+  // The line for users_id_seq should still note is_called=false (so
+  // an operator reading the log sees what state the sequence is in)
+  // but must be tagged OK, not FAIL.
+  assert.match(res.stdout, /OK\s+users_id_seq[^\n]*is_called=false/);
+  assert.doesNotMatch(res.stdout, /FAIL\s+users_id_seq/);
+  assert.doesNotMatch(
+    res.stdout,
+    /next nextval would collide with existing max\(id\)/,
+  );
+  assert.match(res.stdout, /verify-db-cutover: PASS/);
+});
+
 test("exits 2 when required arguments are missing", async () => {
   const res = runScript(["--source", urlFor(pgInstance!, "source")], {
     WALLET_ENC_SECRET: TEST_SECRET,
