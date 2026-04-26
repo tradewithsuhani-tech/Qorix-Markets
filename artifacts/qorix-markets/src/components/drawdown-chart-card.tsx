@@ -162,7 +162,15 @@ export function DrawdownChartCard({
       transition={{ delay, duration: 0.4 }}
       className="glass-card p-5 rounded-2xl flex flex-col"
     >
-      <div className="flex items-start justify-between mb-2 gap-3">
+      {/* Header: on narrow viewports (iPhone) the headline pill
+          ("0.17% (-$0.85) now") was crowding the title row and forcing
+          "Drawdown Chart" / "Drawdown vs cumulative return — underwater
+          view" to truncate to "Drawdown C…" / "Drawdown vs cu…". On
+          screens < sm we stack the title row over the stat pills so the
+          title gets the full width and the pills sit on their own row
+          underneath, right-aligned. From sm upwards we keep the
+          original side-by-side layout. */}
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between mb-2 gap-2 sm:gap-3">
         <div className="flex items-center gap-2.5 min-w-0">
           <div
             className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0"
@@ -178,9 +186,9 @@ export function DrawdownChartCard({
           </div>
         </div>
         {!loading && (drawdownStat || peakStat) && (
-          <div className="flex flex-col items-end gap-1 shrink-0">
+          <div className="flex flex-row sm:flex-col flex-wrap items-center sm:items-end gap-1.5 sm:gap-1 shrink-0 self-start sm:self-auto">
             <span
-              className="text-xs font-bold tabular-nums px-2.5 py-1 rounded-full"
+              className="text-xs font-bold tabular-nums px-2.5 py-1 rounded-full whitespace-nowrap"
               style={{
                 background: "#ef444418",
                 color: "#ef4444",
@@ -191,7 +199,7 @@ export function DrawdownChartCard({
             </span>
             {peakStat && (
               <span
-                className="text-[10px] font-semibold tabular-nums px-2 py-0.5 rounded-full"
+                className="text-[10px] font-semibold tabular-nums px-2 py-0.5 rounded-full whitespace-nowrap"
                 style={{
                   background: "#fb923c14",
                   color: "#fb923c",
