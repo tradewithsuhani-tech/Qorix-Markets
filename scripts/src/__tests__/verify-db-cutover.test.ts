@@ -555,6 +555,82 @@ test("exits 0 when a sequence has is_called=false but last_value is genuinely ab
   assert.match(res.stdout, /verify-db-cutover: PASS/);
 });
 
+test("exits 1 with the empty-sequences diagnostic when the target schema was never pushed", async () => {
+  // Reproduces the failure mode where the operator points the cutover
+  // verify at a target Postgres on which FLY_GO_LIVE_CHECKLIST step
+  // 2/3a (the schema push) was skipped — no nextval defaults exist
+  // on any column in public, so the runbook step-5 setval batch can't
+  // even be checked. The empty-ownerships branch around lines 541-549
+  // of verify-db-cutover.ts is the ONLY line of defence here: if a
+  // future refactor drops the explicit `if (ownerships.length === 0)`
+  // FAIL, the for-loop below it simply iterates over zero sequences,
+  // emits no per-sequence FAILs, and the script exits 0 — which would
+  // green-light a cutover into a fresh Postgres that has no sequences
+  // at all and 500 on the very first INSERT in step 8.
+  //
+  // To isolate that branch as the sole reason for the FAIL we need
+  // exactCounts() to succeed (otherwise the script bails earlier with
+  // exit 2 from `relation "users" does not exist`), so target keeps
+  // the bare critical tables but with `int` id columns instead of
+  // `serial` — same row-count surface, no sequences. Source stays at
+  // 0 rows in every critical table so the row-count diff matches
+  // 0=0 and the empty-sequences branch is the sole reason for the
+  // FAIL. If the count check ever started failing for an unrelated
+  // reason this test would go red for the wrong reason, hence the
+  // explicit "all critical-table counts match" assertion below.
+  await withClient(urlFor(pgInstance!, "target"), async (c) => {
+    await c.query("drop schema public cascade");
+    await c.query("create schema public");
+    await c.query("grant all on schema public to public");
+    await c.query(`
+      create table users              (id int primary key, name text);
+      create table wallets            (id int primary key, user_id int);
+      create table ledger_entries     (id int primary key, wallet_id int);
+      create table deposit_addresses  (
+        id int primary key,
+        address text,
+        private_key_enc text not null default ''
+      );
+      create table transactions       (id int primary key);
+      create table investments        (id int primary key);
+    `);
+  });
+
+  const res = runScript(
+    [
+      "--source",
+      urlFor(pgInstance!, "source"),
+      "--target",
+      urlFor(pgInstance!, "target"),
+    ],
+    { WALLET_ENC_SECRET: TEST_SECRET },
+  );
+
+  assert.equal(
+    res.status,
+    1,
+    `expected exit 1, got ${res.status}\nstdout:\n${res.stdout}\nstderr:\n${res.stderr}`,
+  );
+  // Pin the exact operator-facing diagnostic so a refactor can't
+  // soften it into a yellow WARN or quietly drop it. The em-dash and
+  // the trailing "?" are both part of the live string in the script.
+  assert.match(
+    res.stdout,
+    /no serial sequences found on the target — schema not pushed yet\?/,
+  );
+  // The remediation MUST point at the precise checklist step that was
+  // skipped — without this, a panicked operator in the maintenance
+  // window won't know which setup step to re-run.
+  assert.match(res.stdout, /FLY_GO_LIVE_CHECKLIST step 2\/3a/);
+  assert.match(res.stdout, /verify-db-cutover: FAIL/);
+  // Critical-table counts MUST NOT be flagged — the regression we're
+  // guarding is specifically "tables look fine, sequences don't
+  // exist". If counts ever started mismatching here, the FAIL would
+  // be for the wrong reason and the empty-sequences branch could be
+  // silently removed without this test noticing.
+  assert.match(res.stdout, /all critical-table counts match/);
+});
+
 test("exits 2 when required arguments are missing", async () => {
   const res = runScript(["--source", urlFor(pgInstance!, "source")], {
     WALLET_ENC_SECRET: TEST_SECRET,
