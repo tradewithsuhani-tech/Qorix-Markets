@@ -53,6 +53,12 @@ ENV NODE_ENV=production \
     PORT=8080 \
     RUN_BACKGROUND_JOBS=true
 
+# Install redis-server + redis-cli so start-redis.ts can spawn an embedded
+# instance when REDIS_URL is unset (matches Replit/Nix behavior). When
+# REDIS_URL points at a remote (Upstash, Fly Redis, etc.) this binary is
+# unused and start-redis.ts skips the bootstrap.
+RUN apk add --no-cache redis
+
 # Copy the deploy bundle (package.json + node_modules + freshly-built dist/)
 COPY --from=deploy /deploy ./
 
