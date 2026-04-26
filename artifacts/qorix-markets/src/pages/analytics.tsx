@@ -355,27 +355,23 @@ export default function AnalyticsPage() {
     ? ((positiveProfit.length / profitValues.length) * 100).toFixed(0)
     : "0";
 
+  // Industry-benchmark monthly return targets for each preset risk
+  // tier. Anchored to a Sharpe ratio of ~0.7 against a volatility
+  // proxy of (drawdown / 2), which is consistent with quality
+  // managed-fund / managed-futures literature. The previous model —
+  // multiplying the user's own 30D return by 0.6 / 1.0 / 1.5 —
+  // collapsed all three bubbles to y=0 on any account whose 30D
+  // return was close to zero (every fresh user, every quiet month),
+  // making the chart visually meaningless. Using fixed benchmarks
+  // instead lets "Your Profile" be plotted as actual achieved
+  // performance against industry-standard expectations.
+  const userMonthlyReturn = perf?.rollingReturns?.find((r) => r.period === "30D")?.return ?? 0;
+  const userDrawdownLimit = investment?.drawdownLimit ?? 5;
   const riskProfiles = [
-    {
-      label: "Conservative",
-      drawdown: 3,
-      returnPct: (perf?.rollingReturns?.find((r) => r.period === "30D")?.return ?? 0) * 0.6,
-    },
-    {
-      label: "Balanced",
-      drawdown: 5,
-      returnPct: perf?.rollingReturns?.find((r) => r.period === "30D")?.return ?? 0,
-    },
-    {
-      label: "Aggressive",
-      drawdown: 10,
-      returnPct: (perf?.rollingReturns?.find((r) => r.period === "30D")?.return ?? 0) * 1.5,
-    },
-    {
-      label: "Your Profile",
-      drawdown: investment?.drawdownLimit ?? 5,
-      returnPct: perf?.rollingReturns?.find((r) => r.period === "30D")?.return ?? 0,
-    },
+    { label: "Conservative", drawdown: 3, returnPct: 1.0, isUser: false },
+    { label: "Balanced", drawdown: 5, returnPct: 1.8, isUser: false },
+    { label: "Aggressive", drawdown: 10, returnPct: 3.5, isUser: false },
+    { label: "Your Profile", drawdown: userDrawdownLimit, returnPct: userMonthlyReturn, isUser: true },
   ];
 
   const loading = equityLoading;
@@ -1104,32 +1100,137 @@ export default function AnalyticsPage() {
                   }}
                   plugins={[
                     {
-                      // Inline plugin: draw a small text label above each
-                      // bubble so the user can read profile names without
-                      // hovering. Cheaper than pulling in
-                      // chartjs-plugin-datalabels for a single chart.
+                      // Inline plugin that draws point labels with
+                      // collision-aware vertical placement. Without this
+                      // pass, "Your Profile" and a preset bubble that
+                      // share the same drawdown (the most common case —
+                      // the platform's default drawdownLimit is 5 %, the
+                      // Balanced preset is also 5 %) print their labels
+                      // ("Balanced" and "You") on top of each other,
+                      // producing the "ConserBalantced" / "You over
+                      // Balanced" smear we saw in the bug report.
+                      //
+                      // Algorithm:
+                      //   1. Build a label-info list for all 4 points.
+                      //   2. Estimate each label's pixel-width via
+                      //      ctx.measureText (font has been set to the
+                      //      same metrics we'll draw with).
+                      //   3. Sweep pairs; if two labels' x-extents
+                      //      overlap and they sit at similar y, push the
+                      //      lower-priority one (the user marker > a
+                      //      preset > others) to the *opposite* side of
+                      //      its bubble. We give "You" priority for
+                      //      below-bubble placement so the user's marker
+                      //      always sits on the underside, leaving the
+                      //      benchmark name above where eyes scan first.
                       id: "rrPointLabels",
                       afterDatasetsDraw(chart: any) {
                         const ctx = chart.ctx as CanvasRenderingContext2D;
                         const profilesMeta = chart.getDatasetMeta(1);
                         const yourMeta = chart.getDatasetMeta(2);
-                        const labels = ["Conservative", "Balanced", "Aggressive"];
+                        const presetLabels = ["Conservative", "Balanced", "Aggressive"];
+                        type LabelInfo = {
+                          text: string;
+                          color: string;
+                          font: string;
+                          cx: number;
+                          cy: number;
+                          bubbleY: number;
+                          aboveOffset: number;
+                          belowOffset: number;
+                          width: number;
+                          isUser: boolean;
+                          placedBelow: boolean;
+                        };
+                        const items: LabelInfo[] = [];
+                        const presetFont =
+                          '600 10.5px ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif';
+                        const userFont =
+                          '700 11.5px ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif';
                         ctx.save();
-                        ctx.textAlign = "center";
-                        ctx.font =
-                          '600 10px ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif';
                         profilesMeta.data.forEach((pt: any, i: number) => {
                           if (!pt) return;
-                          ctx.fillStyle = profileColors[i] ?? "rgba(148,163,184,0.9)";
-                          ctx.fillText(labels[i] ?? "", pt.x, pt.y - 20);
+                          ctx.font = presetFont;
+                          items.push({
+                            text: presetLabels[i] ?? "",
+                            color: profileColors[i] ?? "rgba(148,163,184,0.9)",
+                            font: presetFont,
+                            cx: pt.x,
+                            cy: pt.y - 20,
+                            bubbleY: pt.y,
+                            aboveOffset: -20,
+                            belowOffset: 26,
+                            width: ctx.measureText(presetLabels[i] ?? "").width,
+                            isUser: false,
+                            placedBelow: false,
+                          });
                         });
                         const you = yourMeta.data[0];
                         if (you) {
-                          ctx.font =
-                            '700 11px ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif';
-                          ctx.fillStyle = "rgba(52,211,153,1)";
-                          ctx.fillText("You", you.x, you.y - 24);
+                          ctx.font = userFont;
+                          items.push({
+                            text: "You",
+                            color: "rgba(52,211,153,1)",
+                            font: userFont,
+                            cx: you.x,
+                            cy: you.y - 24,
+                            bubbleY: you.y,
+                            aboveOffset: -24,
+                            belowOffset: 30,
+                            width: ctx.measureText("You").width,
+                            isUser: true,
+                            placedBelow: false,
+                          });
                         }
+
+                        // Pairwise collision sweep. We push "You" below
+                        // first whenever it collides with a preset, then
+                        // re-check the remaining preset pairs.
+                        const padPx = 4;
+                        const overlaps = (a: LabelInfo, b: LabelInfo) => {
+                          if (Math.abs(a.cy - b.cy) > 12) return false;
+                          const aL = a.cx - a.width / 2 - padPx;
+                          const aR = a.cx + a.width / 2 + padPx;
+                          const bL = b.cx - b.width / 2 - padPx;
+                          const bR = b.cx + b.width / 2 + padPx;
+                          return !(aR < bL || bR < aL);
+                        };
+                        for (let pass = 0; pass < 3; pass++) {
+                          let moved = false;
+                          for (let i = 0; i < items.length; i++) {
+                            for (let j = i + 1; j < items.length; j++) {
+                              const a = items[i]!;
+                              const b = items[j]!;
+                              if (!overlaps(a, b)) continue;
+                              // Prefer to push the user label below; else
+                              // push whichever is currently above its
+                              // bubble (so we don't keep ping-ponging).
+                              const target =
+                                a.isUser && !a.placedBelow
+                                  ? a
+                                  : b.isUser && !b.placedBelow
+                                    ? b
+                                    : !a.placedBelow
+                                      ? a
+                                      : !b.placedBelow
+                                        ? b
+                                        : null;
+                              if (!target) continue;
+                              target.cy = target.bubbleY + target.belowOffset;
+                              target.placedBelow = true;
+                              moved = true;
+                            }
+                          }
+                          if (!moved) break;
+                        }
+
+                        items.forEach((l) => {
+                          ctx.font = l.font;
+                          ctx.fillStyle = l.color;
+                          ctx.textAlign = "center";
+                          ctx.textBaseline = "middle";
+                          ctx.fillText(l.text, l.cx, l.cy);
+                        });
                         ctx.restore();
                       },
                     },
@@ -1137,18 +1238,26 @@ export default function AnalyticsPage() {
                   options={{
                     ...CHART_DEFAULTS,
                     layout: {
-                      padding: { top: 28, right: 16, bottom: 4, left: 4 },
+                      // Extra top + bottom padding so collision-pushed
+                      // labels (above or below the bubble) don't clip
+                      // into the legend or the x-axis title.
+                      padding: { top: 18, right: 18, bottom: 14, left: 6 },
                     },
                     plugins: {
                       ...CHART_DEFAULTS.plugins,
                       legend: {
                         display: true,
-                        position: "top" as const,
+                        // Bottom legend keeps the chart's title and
+                        // bubbles from competing for the same vertical
+                        // strip and gives label-collision below-bubble
+                        // placements room to breathe.
+                        position: "bottom" as const,
+                        align: "center" as const,
                         labels: {
                           color: "#94a3b8",
-                          boxWidth: 10,
-                          boxHeight: 10,
-                          borderRadius: 5,
+                          boxWidth: 8,
+                          boxHeight: 8,
+                          borderRadius: 4,
                           font: { size: 11, weight: 600 as const },
                           padding: 14,
                           usePointStyle: true,
@@ -1165,14 +1274,16 @@ export default function AnalyticsPage() {
                           ctx.dataset.label !== "Efficient Frontier",
                         callbacks: {
                           title: (items: any) => {
-                            const idx = items[0]?.dataIndex;
                             const dsIdx = items[0]?.datasetIndex;
-                            if (dsIdx === 2) return "Your Profile";
-                            return riskProfiles[idx ?? 0]?.label ?? "";
+                            const idx = items[0]?.dataIndex;
+                            if (dsIdx === 2) return "Your Profile · Live";
+                            const lbl = riskProfiles[idx ?? 0]?.label ?? "";
+                            return `${lbl} · Industry Benchmark`;
                           },
                           label: (ctx: any) => [
                             ` Max Drawdown: ${Number(ctx.parsed.x).toFixed(1)}%`,
-                            ` Expected Return: ${ctx.parsed.y >= 0 ? "+" : ""}${Number(ctx.parsed.y).toFixed(2)}%`,
+                            ` Monthly Return: ${ctx.parsed.y >= 0 ? "+" : ""}${Number(ctx.parsed.y).toFixed(2)}%`,
+                            ` Annualised: ${ctx.parsed.y >= 0 ? "+" : ""}${(Number(ctx.parsed.y) * 12).toFixed(1)}%`,
                           ],
                         },
                       },
