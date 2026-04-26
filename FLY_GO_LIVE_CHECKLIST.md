@@ -195,25 +195,62 @@ Save. Changes can take a few minutes to propagate.
 
 ## 7. Wire up GitHub Actions
 
-`.github/workflows/deploy.yml` uses **one** secret (`FLY_API_TOKEN`) to deploy
-**both** apps. A `fly tokens create deploy --app ...` token is app-scoped and
-will fail authorization on the other app, so create an **org-scoped** token
-that can deploy any app in the org:
+`.github/workflows/deploy.yml` deploys **both** apps to Fly on every push to
+`main`. It also runs post-deploy smoke checks (health, Neon round-trip, login
++ JWT verify, CORS preflight, headless-browser login UI) and **auto-rolls
+back** to the previous release if any smoke check fails.
+
+### Required repository **secrets**
+
+GitHub → repo → Settings → Secrets and variables → Actions → **Secrets** tab
+→ **New repository secret** for each of:
+
+| Name                       | What it is                                                                                                                                       |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `FLY_API_TOKEN`            | Org-scoped Fly token (see below). Used to deploy both apps.                                                                                      |
+| `SMOKE_TEST_EMAIL`         | Email of the dedicated smoke-test user (`is_smoke_test=true` in the DB).                                                                         |
+| `SMOKE_TEST_PASSWORD`      | Password for that user. Rotated out-of-band — never lands in workflow logs.                                                                      |
+| `VITE_RECAPTCHA_SITE_KEY`  | Google reCAPTCHA v3 site key. Public (browser sends it to Google) but stored as a secret to keep one source of truth. Without it, login breaks. |
+
+`SMOKE_TEST_EMAIL` is flagged in the database by `flagSmokeTestAccount()` at
+api-server boot; that flag blocks deposits/withdrawals/transfers/trading and
+excludes the account from leaderboards, referrals, public stats, and fraud
+signals. See `docs/smoke-test-account.md`.
+
+**Generate the org-scoped Fly token** — a `fly tokens create deploy --app ...`
+token is app-scoped and will fail authorization on the other app, so create an
+**org-scoped** token that can deploy any app in the org:
 
 ```bash
 fly orgs list                               # find your org slug
 fly tokens create org --name github-actions-qorix --expiry 8760h
 ```
 
-Copy the token (starts with `FlyV1 ...`) and add it in GitHub → repo →
-Settings → Secrets and variables → Actions → **New repository secret**:
-- Name: `FLY_API_TOKEN`
-- Value: the token from above
+### Optional repository **variables** — smoke-test target hostnames
+
+GitHub → repo → Settings → Secrets and variables → Actions → **Variables**
+tab. These are **not secrets** (they're public hostnames) and have safe
+pre-cutover defaults baked into the workflow:
+
+| Name       | Pre-cutover default (in workflow)        | Set this AFTER DNS cutover         |
+| ---------- | ---------------------------------------- | ---------------------------------- |
+| `WEB_BASE` | `https://qorix-markets-web.fly.dev`      | `https://qorixmarkets.com`         |
+| `API_BASE` | `https://qorix-api.fly.dev`              | `https://api.qorixmarkets.com`     |
+
+**Why**: until DNS is moved (step 5), `qorixmarkets.com` and
+`api.qorixmarkets.com` still resolve to the **old Replit deployment**, so
+smoke-testing those domains would just be hitting an unrelated stack and
+giving us false confidence in Fly. The defaults make every CI deploy validate
+the actual Fly machines. Once DNS is on Fly, set the two variables above and
+no code change is needed.
+
+### First push
 
 Push a no-op commit to `main` (or run the workflow via **Actions → Deploy to
 Fly.io → Run workflow**) and confirm **both** `deploy-api` and `deploy-web`
 jobs go green. If only one passes, the token is app-scoped — recreate it with
-`fly tokens create org` as above.
+`fly tokens create org` as above. If smoke checks fail with auth errors,
+double-check `SMOKE_TEST_EMAIL` / `SMOKE_TEST_PASSWORD` are set.
 
 ## 8. Stop cron from running in two places
 
