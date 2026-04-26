@@ -1256,6 +1256,20 @@ jobs:
       # assertions below in the same PR — that way the contract is
       # always pinned in one direction or the other and never drifts
       # silently.
+      #
+      # On top of the random-named sentinels (which catch a *broad*
+      # `localStorage.clear()` / `indexedDB.databases().forEach(delete)`
+      # regression), we also seed and assert the *known* keys the app
+      # actually uses today — currently just `qorix_token`. A future
+      # regression like `localStorage.removeItem("qorix_token")` inside
+      # forceReload would slip past the random sentinels but is the
+      # single highest-impact failure mode: it would silently log every
+      # user out on every Update tap. The known-key assertion below
+      # makes that regression fail loudly with a message that names the
+      # key and explains the user-facing consequence. When a known
+      # IndexedDB store gets adopted (e.g. a TanStack Query persistor
+      # or an offline-drafts DB), add it to the same list so its
+      # targeted deletion is also caught.
       - name: Browser smoke test — Update click preserves IndexedDB + localStorage
         id: smoke_web_browser_version_banner_storage
         # WEB_BASE / API_BASE inherited from workflow-level env so this
@@ -1290,6 +1304,17 @@ jobs:
           const IDB_KEY = 'forceReload-must-not-wipe-me';
           const IDB_VALUE = `preserved-${Date.now()}`;
 
+          // Known-key assertion: the actual localStorage key the app
+          // reads on every page load (artifacts/qorix-markets/src/hooks/use-auth.tsx).
+          // We seed it with a benign throwaway value (NOT a real JWT)
+          // and assert it survives forceReload. This catches a
+          // *targeted* `localStorage.removeItem("qorix_token")` inside
+          // forceReload that the random LS sentinel above would miss.
+          // Keep the value clearly synthetic so anything that ever
+          // logs it is obviously a smoke run, not a real user token.
+          const AUTH_LS_KEY = 'qorix_token';
+          const AUTH_LS_VALUE = `qorix-smoke-throwaway-token-${Date.now()}`;
+
           let versionRequests = 0;
           const errors = [];
 
@@ -1312,6 +1337,33 @@ jobs:
               body: JSON.stringify({
                 version: SYNTHETIC_VERSION,
                 builtAt: new Date().toISOString(),
+              }),
+            });
+          });
+
+          // We're going to seed `localStorage["qorix_token"]` with a
+          // throwaway value so we can prove forceReload doesn't wipe
+          // it. On the post-reload page load, the AuthProvider in
+          // use-auth.tsx will see that token and call /api/auth/me to
+          // validate it; the real API would 401 (the value is not a
+          // valid JWT) and the AuthProvider's `isError` effect would
+          // call logout() — which itself does
+          // `localStorage.removeItem("qorix_token")`. That would
+          // poison the post-reload assertion: a forceReload that
+          // correctly preserved the token would still appear to have
+          // wiped it, falsely failing the deploy. Intercept /api/auth/me
+          // and return a synthetic 200 user so the bootstrap auth path
+          // never trips logout for the seeded throwaway token. We
+          // match BOTH the API_BASE host (prod build) and same-origin
+          // (dev/preview fallback) so this works regardless of how
+          // VITE_API_URL was baked in.
+          await ctx.route('**/api/auth/me', async (route) => {
+            await route.fulfill({
+              status: 200,
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({
+                id: 'smoke-test-synthetic-user',
+                email: 'smoke-test-synthetic@qorixmarkets.invalid',
               }),
             });
           });
@@ -1371,6 +1423,18 @@ jobs:
               [LS_KEY, LS_VALUE],
             );
 
+            // Seed the *known* auth-token key the app actually uses.
+            // The random LS_KEY above only catches a broad
+            // `localStorage.clear()`; this catches a targeted
+            // `localStorage.removeItem("qorix_token")` regression.
+            console.log(`→ seed localStorage["${AUTH_LS_KEY}"]="${AUTH_LS_VALUE}" (throwaway, not a real JWT)`);
+            await page.evaluate(
+              ([key, value]) => {
+                localStorage.setItem(key, value);
+              },
+              [AUTH_LS_KEY, AUTH_LS_VALUE],
+            );
+
             console.log(`→ seed IndexedDB ${IDB_NAME}/${IDB_STORE}["${IDB_KEY}"]="${IDB_VALUE}"`);
             await page.evaluate(
               async ([dbName, storeName, key, value]) => {
@@ -1404,6 +1468,12 @@ jobs:
                 `localStorage seed never landed (have ${JSON.stringify(seededLs)}, expected ${JSON.stringify(LS_VALUE)}).`,
               );
             }
+            const seededAuthLs = await page.evaluate((k) => localStorage.getItem(k), AUTH_LS_KEY);
+            if (seededAuthLs !== AUTH_LS_VALUE) {
+              await fail(
+                `localStorage["${AUTH_LS_KEY}"] seed never landed (have ${JSON.stringify(seededAuthLs)}, expected ${JSON.stringify(AUTH_LS_VALUE)}).`,
+              );
+            }
             const seededIdb = await page.evaluate(
               async ([dbName, storeName, key]) => {
                 return await new Promise((resolve, reject) => {
@@ -1428,7 +1498,7 @@ jobs:
                 `IndexedDB seed never landed (have ${JSON.stringify(seededIdb)}, expected ${JSON.stringify(IDB_VALUE)}).`,
               );
             }
-            console.log('✓ pre-click sentinels present in localStorage and IndexedDB');
+            console.log('✓ pre-click sentinels present in localStorage (random + qorix_token) and IndexedDB');
 
             const versionRequestsBeforeClick = versionRequests;
 
@@ -1480,6 +1550,22 @@ jobs:
               );
             }
             console.log(`✓ localStorage["${LS_KEY}"] survived the Update reload`);
+
+            // Targeted-wipe assertion. The random-named LS_KEY above
+            // already catches `localStorage.clear()`, but a future
+            // change like `localStorage.removeItem("qorix_token")`
+            // inside forceReload would slip past it and silently log
+            // out every user on every Update tap. Asserting the known
+            // key by name catches that exact regression.
+            const authLsAfter = await page.evaluate((k) => localStorage.getItem(k), AUTH_LS_KEY);
+            if (authLsAfter !== AUTH_LS_VALUE) {
+              await fail(
+                `localStorage["${AUTH_LS_KEY}"] was ${JSON.stringify(authLsAfter)} after Update; expected ${JSON.stringify(AUTH_LS_VALUE)}. ` +
+                  `forceReload() targeted-wiped the "${AUTH_LS_KEY}" key — this is the auth token (see use-auth.tsx), so every signed-in user would be silently logged out on every Update tap. ` +
+                  `If this removal was intentional (e.g. a deliberate "force re-login on update" UX), flip this assertion AND make sure the user is automatically routed to /login (and any in-flight authenticated requests are aborted) so the experience isn't a silent failure.`,
+              );
+            }
+            console.log(`✓ localStorage["${AUTH_LS_KEY}"] (auth token) survived the Update reload`);
 
             const idbAfter = await page.evaluate(
               async ([dbName, storeName, key]) => {
@@ -1534,6 +1620,7 @@ jobs:
             // browser state (mostly cosmetic — the context is
             // discarded with browser.close() anyway).
             await page.evaluate((k) => localStorage.removeItem(k), LS_KEY);
+            await page.evaluate((k) => localStorage.removeItem(k), AUTH_LS_KEY);
             await page.evaluate(
               (dbName) =>
                 new Promise((resolve) => {
@@ -1556,7 +1643,7 @@ jobs:
           }
 
           await browser.close();
-          console.log('✓ tapping Update preserves IndexedDB and localStorage across the cache-busted reload');
+          console.log('✓ tapping Update preserves IndexedDB and localStorage (random sentinel + qorix_token) across the cache-busted reload');
           JS
           node update-storage.mjs
 
