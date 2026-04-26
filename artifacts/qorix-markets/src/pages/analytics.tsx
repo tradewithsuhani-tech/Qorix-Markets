@@ -7,6 +7,7 @@ import {
   useGetMonthlyPerformance,
   useGenerateReport,
   useGetDashboardSummary,
+  useGetDashboardFundStats,
 } from "@workspace/api-client-react";
 import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
@@ -300,8 +301,27 @@ export default function AnalyticsPage() {
 
   const loading = equityLoading;
 
-  // Premium gate — Analytics is for large fund investors only
-  const { data: summary } = useGetDashboardSummary({ query: { refetchInterval: 30000 } });
+  // Premium gate — Analytics is for large fund investors only.
+  // We also fetch fundStats here so the summary strip below can apply the
+  // same scaling formula the Demo Dashboard uses (totalAUM-based equityScale
+  // + admin-controlled baseline). Without this, the Total P&L on Analytics
+  // would show the raw per-user $ figure while the dashboard's headline shows
+  // the much larger fund-scaled figure — making the two screens disagree.
+  const { data: summary, isLoading: summaryLoading } = useGetDashboardSummary({ query: { refetchInterval: 30000 } });
+  const { data: fundStats, isLoading: fundStatsLoading } = useGetDashboardFundStats({ query: { refetchInterval: 30000 } });
+
+  // Fund-scaling primitives — derived once at the component level so every
+  // dollar figure on this page (summary strip, monthly KPI, per-month table)
+  // reflects the same scale the Demo Dashboard headline shows. Percentages
+  // (returns, win rate, drawdown) are equity-invariant and need NO scaling.
+  const totalEquityValue =
+    (fundStats as any)?.totalAUM ?? summary?.totalBalance ?? 0;
+  const equityScale =
+    (summary?.totalBalance ?? 0) > 0
+      ? totalEquityValue / (summary?.totalBalance ?? 1)
+      : 1;
+  const totalProfitBaseline =
+    Number((fundStats as any)?.totalProfitBaseline ?? 0) || 0;
   const ANALYTICS_MIN_FUND = 10000;
   const investorFund = Math.max(
     Number(summary?.totalBalance ?? 0),
@@ -464,8 +484,12 @@ export default function AnalyticsPage() {
             typeof rollingPick === "number" ? rollingPick : Number(equityReturn);
           const periodReturnStr = `${periodReturnNum >= 0 ? "+" : ""}${periodReturnNum.toFixed(2)}%`;
 
-          // Canonical lifetime profit shown on the dashboard's headline card.
-          const totalProfitCanonical = Number(summary?.totalProfit ?? 0);
+          // Canonical lifetime profit — uses the component-scope fund-scale
+          // primitives (totalEquityValue / equityScale / totalProfitBaseline)
+          // so this card shows exactly what the Demo Dashboard headline shows
+          // for the same user at the same moment.
+          const totalProfitCanonical =
+            totalProfitBaseline + Number(summary?.totalProfit ?? 0) * equityScale;
           const totalProfitDisplay =
             totalProfitCanonical >= 0
               ? `+$${totalProfitCanonical.toFixed(2)}`
@@ -479,7 +503,13 @@ export default function AnalyticsPage() {
           const losses = Math.max(0, tradesCanonical - wins);
 
           const maxDdCanonical = Number(perf?.maxDrawdown ?? 0);
-          const cardsLoading = loading || perfLoading;
+          // Include summary + fundStats loading so the Total P&L card shows a
+          // skeleton until we have BOTH inputs to the scaling formula. Without
+          // this gate, the card would briefly render the unscaled raw figure
+          // while fundStats is in-flight, transiently disagreeing with the
+          // dashboard.
+          const cardsLoading =
+            loading || perfLoading || summaryLoading || fundStatsLoading;
 
           return (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -893,7 +923,11 @@ export default function AnalyticsPage() {
             const totalReturn = monthlyData.reduce((a, m) => a + m.monthlyReturn, 0);
             const avgWinRate = monthlyData.reduce((a, m) => a + m.winRate, 0) / monthlyData.length;
             const worstDrawdown = Math.max(...monthlyData.map((m) => m.maxDrawdown));
-            const totalProfit = monthlyData.reduce((a, m) => a + m.totalProfit, 0);
+            // Apply equityScale so the cumulative $ figure matches the dashboard's
+            // fund-scaled totals. No baseline added here — baseline is a one-time
+            // floor on the lifetime card, not a monthly accumulation.
+            const totalProfit =
+              monthlyData.reduce((a, m) => a + m.totalProfit, 0) * equityScale;
             return (
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 {[
@@ -1191,7 +1225,7 @@ export default function AnalyticsPage() {
                               {m.winRate.toFixed(1)}%
                             </td>
                             <td className={`py-2 text-right tabular-nums font-semibold ${m.totalProfit >= 0 ? "text-green-400" : "text-red-400"}`}>
-                              {m.totalProfit >= 0 ? "+" : ""}${Math.abs(m.totalProfit).toFixed(2)}
+                              {m.totalProfit >= 0 ? "+" : ""}${Math.abs(m.totalProfit * equityScale).toFixed(2)}
                             </td>
                             <td className="py-2 text-right">
                               {existingHash ? (
