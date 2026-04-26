@@ -578,14 +578,14 @@ export default function SettingsPage() {
                   type="button"
                   onClick={closePwModal}
                   disabled={changePassword.isPending}
-                  className="flex-1 px-4 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-sm font-medium transition-all disabled:opacity-50"
+                  className="px-5 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-sm font-medium transition-all disabled:opacity-50 whitespace-nowrap"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={changePassword.isPending}
-                  className="flex-1 px-4 py-2.5 rounded-xl bg-blue-500 hover:bg-blue-600 disabled:bg-blue-500/50 text-white text-sm font-semibold transition-all flex items-center justify-center gap-2"
+                  className="flex-1 px-4 py-2.5 rounded-xl bg-blue-500 hover:bg-blue-600 disabled:bg-blue-500/50 text-white text-sm font-semibold transition-all flex items-center justify-center gap-2 whitespace-nowrap"
                 >
                   {changePassword.isPending ? (
                     <>
