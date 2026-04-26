@@ -230,6 +230,28 @@ function weekStart(): Date {
 }
 
 // ---------------------------------------------------------------------------
+// Anti-fraud check for "weekly_referral_signup".
+// Without this, ANY user could click "Claim" once a week and pocket 100 pts
+// even if they had zero referrals — pure scam vector. Here we count rows in
+// `users` where sponsor_id == this user AND the new account was created on
+// or after the current ISO-week boundary (Monday 00:00 UTC).
+// Returns true only if at least one real, week-fresh referral exists.
+// ---------------------------------------------------------------------------
+async function hasReferralSignedUpThisWeek(userId: number): Promise<boolean> {
+  const since = weekStart();
+  const [row] = await db
+    .select({ cnt: count() })
+    .from(usersTable)
+    .where(
+      and(
+        eq(usersTable.sponsorId, userId),
+        gte(usersTable.createdAt, since),
+      ),
+    );
+  return Number(row?.cnt ?? 0) > 0;
+}
+
+// ---------------------------------------------------------------------------
 // Check how many points a user earned today
 // ---------------------------------------------------------------------------
 async function dailyPointsEarned(userId: number): Promise<number> {
@@ -412,6 +434,19 @@ export async function completeTask(
       if (Number(depCount?.cnt ?? 0) === 0) {
         return { success: false, error: "Make your first deposit to claim this reward" };
       }
+    }
+  }
+
+  // Per-task anti-fraud verification. Some tasks describe an event that
+  // must have ACTUALLY HAPPENED before the user can claim — not just a
+  // self-reported click. Check those here BEFORE the repetition gate so
+  // a failed verification doesn't burn the period slot.
+  if (task.slug === "weekly_referral_signup") {
+    if (!(await hasReferralSignedUpThisWeek(userId))) {
+      return {
+        success: false,
+        error: "No referral signed up this week. Share your referral link and try again once someone joins.",
+      };
     }
   }
 
