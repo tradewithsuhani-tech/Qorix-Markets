@@ -4,7 +4,10 @@
 # root; VITE_API_URL is baked into the static bundle at Docker build time.
 
 app            = "qorix-markets-web"
-primary_region = "iad"
+# Mumbai (bom) — keep the static-file server in the same region as the api
+# so the first byte of the SPA + the first /api/* call both come from
+# India. See artifacts/api-server/fly.toml for the rationale.
+primary_region = "bom"
 
 # ─── Build ──────────────────────────────────────────────────────────────────
 [build]

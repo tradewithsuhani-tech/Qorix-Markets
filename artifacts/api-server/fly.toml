@@ -5,7 +5,11 @@
 # relative to where `flyctl deploy` is invoked (repo root).
 
 app            = "qorix-api"
-primary_region = "iad"
+# Mumbai (bom) so the api-server, Postgres, and Redis all sit in the same
+# AWS Asia-Pacific datacenter. Indian users see ~5-15 ms RTT instead of the
+# ~250 ms they'd pay against a US-East primary. If you change this, also
+# update the Postgres + Redis region in FLY_GO_LIVE_CHECKLIST.md to match.
+primary_region = "bom"
 
 # ─── Build ──────────────────────────────────────────────────────────────────
 [build]
