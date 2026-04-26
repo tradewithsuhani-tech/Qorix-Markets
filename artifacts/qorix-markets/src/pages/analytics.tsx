@@ -113,6 +113,9 @@ function ChartCard({
   loading,
   stat,
   statColor,
+  secondaryStat,
+  secondaryStatColor,
+  controls,
   children,
   delay = 0,
 }: {
@@ -123,6 +126,15 @@ function ChartCard({
   loading: boolean;
   stat?: string;
   statColor?: string;
+  // Optional secondary stat pill (e.g. "Peak DD: -3.40%") rendered below
+  // the main stat. Keeps the headline number prominent while still letting
+  // hedge-fund-style charts surface a second metric without crowding the row.
+  secondaryStat?: string;
+  secondaryStatColor?: string;
+  // Optional controls slot for the header (e.g. a per-chart PeriodFilter).
+  // Rendered on a second row beneath the title so the title/stat row stays
+  // compact and mobile-friendly.
+  controls?: React.ReactNode;
   children: React.ReactNode;
   delay?: number;
 }) {
@@ -133,32 +145,53 @@ function ChartCard({
       transition={{ delay, duration: 0.4 }}
       className="glass-card p-5 rounded-2xl flex flex-col"
     >
-      <div className="flex items-start justify-between mb-4">
-        <div className="flex items-center gap-2.5">
+      <div className="flex items-start justify-between mb-2">
+        <div className="flex items-center gap-2.5 min-w-0">
           <div
-            className="w-8 h-8 rounded-xl flex items-center justify-center"
+            className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0"
             style={{ background: `${iconColor}18`, border: `1px solid ${iconColor}28` }}
           >
             <Icon style={{ width: 14, height: 14, color: iconColor }} />
           </div>
-          <div>
-            <div className="font-semibold text-sm">{title}</div>
-            <div className="text-[11px] text-muted-foreground">{subtitle}</div>
+          <div className="min-w-0">
+            <div className="font-semibold text-sm truncate">{title}</div>
+            <div className="text-[11px] text-muted-foreground truncate">{subtitle}</div>
           </div>
         </div>
-        {stat && (
-          <span
-            className="text-xs font-bold tabular-nums px-2.5 py-1 rounded-full"
-            style={{
-              background: `${statColor ?? "#22c55e"}18`,
-              color: statColor ?? "#22c55e",
-              border: `1px solid ${statColor ?? "#22c55e"}28`,
-            }}
-          >
-            {stat}
-          </span>
+        {(stat || secondaryStat) && (
+          <div className="flex flex-col items-end gap-1 shrink-0">
+            {stat && (
+              <span
+                className="text-xs font-bold tabular-nums px-2.5 py-1 rounded-full"
+                style={{
+                  background: `${statColor ?? "#22c55e"}18`,
+                  color: statColor ?? "#22c55e",
+                  border: `1px solid ${statColor ?? "#22c55e"}28`,
+                }}
+              >
+                {stat}
+              </span>
+            )}
+            {secondaryStat && (
+              <span
+                className="text-[10px] font-semibold tabular-nums px-2 py-0.5 rounded-full"
+                style={{
+                  background: `${secondaryStatColor ?? "#64748b"}14`,
+                  color: secondaryStatColor ?? "#94a3b8",
+                  border: `1px solid ${secondaryStatColor ?? "#64748b"}22`,
+                }}
+              >
+                {secondaryStat}
+              </span>
+            )}
+          </div>
         )}
       </div>
+      {controls && (
+        <div className="mb-3 -mx-1 px-1 overflow-x-auto scrollbar-hide sm:mx-0 sm:px-0 sm:overflow-visible">
+          {controls}
+        </div>
+      )}
       <div className="flex-1" style={{ minHeight: 220 }}>
         {loading ? (
           <div className="flex items-end gap-1 h-full pb-2">
@@ -180,6 +213,11 @@ function ChartCard({
 
 export default function AnalyticsPage() {
   const [days, setDays] = useState(30);
+  // Independent period filter for the Drawdown Chart so users can scope
+  // the historical drawdown view (1D / 7D / 1M / 3M / All) without
+  // touching the page-level filter that drives the Equity Curve and the
+  // shared P&L distribution chart. Hedge-fund-style per-chart controls.
+  const [ddDays, setDdDays] = useState(30);
   const [perfFilter, setPerfFilter] = useState<"3m" | "6m" | "all">("6m");
   const [generatedMap, setGeneratedMap] = useState<Record<string, string>>({});
   const [generatingMonth, setGeneratingMonth] = useState<string | null>(null);
@@ -220,6 +258,13 @@ export default function AnalyticsPage() {
 
   const { data: equityRaw, isLoading: equityLoading } = useGetEquityChart(
     { days },
+    { query: { refetchInterval: 30000 } },
+  );
+  // Drawdown Chart pulls its own equity series scoped to ddDays. React-Query
+  // dedupes by queryKey, so when ddDays === days both calls share the same
+  // cache entry and there is no extra network traffic.
+  const { data: equityRawDD, isLoading: equityLoadingDD } = useGetEquityChart(
+    { days: ddDays },
     { query: { refetchInterval: 30000 } },
   );
   const { data: perf, isLoading: perfLoading } = useGetDashboardPerformance({
@@ -267,6 +312,36 @@ export default function AnalyticsPage() {
       return peak > 0 ? -((peak - eq) / peak) * 100 : 0;
     });
   })();
+
+  // Drawdown-Chart-scoped derivations. Same shape as `equityArr`/`labels`/
+  // `drawdownValues` above but driven by `ddDays` instead of `days`, so the
+  // Drawdown Chart's own period filter (1D/7D/1M/3M/All) can move the line
+  // independently of the page-level filter.
+  const equityArrDD = Array.isArray(equityRawDD)
+    ? [...equityRawDD].sort(
+        (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
+      )
+    : [];
+  const labelsDD = equityArrDD.map((e) => {
+    try {
+      return format(parseISO(e.date), ddDays <= 7 ? "EEE" : "MMM d");
+    } catch {
+      return e.date;
+    }
+  });
+  const equityValuesDD = equityArrDD.map((e) => e.equity);
+  const drawdownValuesDD = (() => {
+    let peak = 0;
+    return equityValuesDD.map((eq) => {
+      if (eq > peak) peak = eq;
+      return peak > 0 ? -((peak - eq) / peak) * 100 : 0;
+    });
+  })();
+  // Worst (most negative) drawdown across the selected window — surfaced as
+  // the secondary "Peak DD" pill so users can see both the live-now value
+  // (server-tracked from investment) and the historical worst-of-period.
+  const peakDrawdownPctDD =
+    drawdownValuesDD.length > 0 ? Math.min(...drawdownValuesDD) : 0;
 
   const totalProfit = profitValues.reduce((a, b) => a + b, 0);
   const totalProfitStr =
@@ -659,12 +734,32 @@ export default function AnalyticsPage() {
               from equity points — that's a useful timeline view, just not
               the right number to put on the headline stat. */}
           {(() => {
+            // Headline stat: server-tracked live drawdown — independent of
+            // ddDays, mirrors Demo Dashboard's "Current Drawdown" exactly.
             const investAmount = Number(investment?.amount ?? 0);
             const investDrawdownDollars = Number(investment?.drawdown ?? 0);
             const drawdownPctCanonical =
               investAmount > 0 ? (investDrawdownDollars / investAmount) * 100 : 0;
             const drawdownStat = `${drawdownPctCanonical.toFixed(2)}% (-$${investDrawdownDollars.toFixed(2)}) now`;
-            const ddLoading = loading || invLoading;
+            // Secondary "Peak DD" pill: worst historical drawdown WITHIN
+            // the selected DD period — moves as the user changes the
+            // 1D/7D/1M/3M/All filter, so the chart pill always reflects
+            // what's actually being plotted.
+            const peakStat =
+              equityValuesDD.length > 0
+                ? `Peak DD: ${peakDrawdownPctDD.toFixed(2)}%`
+                : undefined;
+            const ddLoading = equityLoadingDD || invLoading;
+            // Per-chart period filter options. Hedge-fund standard:
+            // intraday (1D), week (7D), month (1M), quarter (3M), full
+            // history (All).
+            const ddPeriodOptions = [
+              { label: "1D", value: 1 },
+              { label: "7D", value: 7 },
+              { label: "1M", value: 30 },
+              { label: "3M", value: 90 },
+              { label: "All", value: 3650 },
+            ] as const;
             return (
           <ChartCard
             title="Drawdown Chart"
@@ -674,38 +769,50 @@ export default function AnalyticsPage() {
             loading={ddLoading}
             stat={ddLoading ? undefined : drawdownStat}
             statColor="#ef4444"
+            secondaryStat={ddLoading ? undefined : peakStat}
+            secondaryStatColor="#fb923c"
+            controls={
+              <PeriodFilter
+                options={ddPeriodOptions}
+                selected={ddDays}
+                onChange={(v) => setDdDays(v)}
+                ariaLabel="Drawdown chart period"
+              />
+            }
             delay={0.15}
           >
             <Line
               data={{
-                labels,
+                labels: labelsDD,
                 datasets: [
                   {
                     label: "Drawdown %",
-                    data: drawdownValues,
-                    borderColor: "rgba(239,68,68,0.9)",
+                    data: drawdownValuesDD,
+                    borderColor: "rgba(239,68,68,0.95)",
                     borderWidth: 2,
                     backgroundColor: (ctx: any) => {
                       const chart = ctx.chart;
                       const { ctx: c, chartArea } = chart;
                       if (!chartArea) return "transparent";
                       const grad = c.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
-                      grad.addColorStop(0, "rgba(239,68,68,0.25)");
+                      grad.addColorStop(0, "rgba(239,68,68,0.30)");
                       grad.addColorStop(1, "rgba(239,68,68,0.02)");
                       return grad;
                     },
                     fill: true,
-                    tension: 0.4,
-                    pointRadius: days <= 7 ? 4 : 0,
+                    tension: 0.35,
+                    pointRadius: ddDays <= 7 ? 3 : 0,
                     pointHoverRadius: 5,
                     pointBackgroundColor: "rgba(239,68,68,1)",
+                    pointBorderColor: "rgba(15,23,42,0.9)",
+                    pointBorderWidth: 1,
                   },
                   ...(investment?.drawdownLimit
                     ? [
                         {
                           label: "Protection Limit",
-                          data: labels.map(() => -(investment.drawdownLimit)),
-                          borderColor: "rgba(249,115,22,0.6)",
+                          data: labelsDD.map(() => -(investment.drawdownLimit)),
+                          borderColor: "rgba(249,115,22,0.7)",
                           borderWidth: 1.5,
                           borderDash: [6, 4],
                           pointRadius: 0,
@@ -722,10 +829,14 @@ export default function AnalyticsPage() {
                   ...CHART_DEFAULTS.plugins,
                   legend: {
                     display: !!investment?.drawdownLimit,
+                    position: "bottom" as const,
                     labels: {
-                      color: "#64748b",
+                      color: "#94a3b8",
                       boxWidth: 12,
-                      font: { size: 11 },
+                      boxHeight: 2,
+                      padding: 12,
+                      font: { size: 10, weight: 600 as const },
+                      usePointStyle: true,
                     },
                   },
                   tooltip: {
