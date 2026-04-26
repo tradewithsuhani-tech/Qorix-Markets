@@ -327,6 +327,33 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: superfly/flyctl-actions/setup-flyctl@master
+      # Snapshot the currently-deployed /version.json BEFORE we ship the new
+      # build. The smoke step below uses this as the "previous deploy"
+      # baseline so it can prove the new release actually regenerated the
+      # version stamp (catches the case where the build pipeline silently
+      # re-serves a stale dist/ and leaves clients stuck on the old bundle
+      # with no update prompt). Treats first-ever deploys (no prior
+      # /version.json) as "unknown baseline" rather than failing.
+      - name: Record currently-deployed /version.json (pre-deploy baseline)
+        id: prev_version
+        run: |
+          set -euo pipefail
+          # WEB_BASE is inherited from the workflow-level env block.
+          if curl -fsS --max-time 10 "${WEB_BASE}/version.json" -o /tmp/prev-version.json; then
+            if PREVIOUS_VERSION=$(jq -er '.version' /tmp/prev-version.json 2>/dev/null); then
+              echo "previous_version=${PREVIOUS_VERSION}" >> "$GITHUB_OUTPUT"
+              echo "Recorded previous deploy version: ${PREVIOUS_VERSION}"
+            else
+              echo "previous_version=" >> "$GITHUB_OUTPUT"
+              echo "::warning::Existing /version.json on ${WEB_BASE} is malformed —" \
+                "treating as unknown baseline. Post-deploy check will still require" \
+                "the new build to ship a well-formed /version.json."
+            fi
+          else
+            echo "previous_version=" >> "$GITHUB_OUTPUT"
+            echo "::warning::No /version.json reachable at ${WEB_BASE} (first deploy?)" \
+              "— skipping baseline diff but still requiring new build to ship one."
+          fi
       - name: Deploy qorix-markets web
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
@@ -489,6 +516,110 @@ jobs:
           jq -e 'has("id") and has("email")' /tmp/web-me.json > /dev/null \
             || { echo "::error::/api/auth/me from web origin returned 200 but body is not a user"; cat /tmp/web-me.json; exit 1; }
           echo "✓ authenticated route returned a valid user payload via web origin"
+
+      # Verify the new build actually regenerated /version.json and that it
+      # is internally consistent with the JS bundle being served. Without
+      # this, a deploy that ships a stale dist/ (or a build that forgot to
+      # re-run the version-stamp plugin) would leave the runtime update
+      # checker permanently silent — every existing tab in the wild would
+      # keep running the old bundle against the new API and never get the
+      # "refresh" prompt. See artifacts/qorix-markets/src/lib/version-check.ts
+      # and the qorix-build-version plugin in vite.config.ts.
+      - name: Smoke test qorix-markets web /version.json
+        id: smoke_web_version
+        env:
+          PREVIOUS_VERSION: ${{ steps.prev_version.outputs.previous_version }}
+        run: |
+          set -euo pipefail
+          # WEB_BASE inherited from workflow-level env.
+          echo "→ GET ${WEB_BASE}/version.json (with response headers)"
+          # Capture both body and headers so we can assert on Cache-Control
+          # in addition to the JSON shape. -D writes the response headers
+          # to a file for later grep; -o writes the body.
+          curl -fsS --retry 5 --retry-delay 5 --retry-all-errors \
+            --max-time 10 \
+            -D /tmp/version-headers.txt \
+            -o /tmp/version-new.json \
+            "${WEB_BASE}/version.json"
+          cat /tmp/version-new.json
+          echo
+
+          # ── 1. Must be valid JSON with a version string ──
+          if ! NEW_VERSION=$(jq -er '.version' /tmp/version-new.json 2>/dev/null); then
+            echo "::error::/version.json is missing or malformed —" \
+              "the build pipeline did not emit a valid version stamp." \
+              "Clients will never see the update prompt and will be" \
+              "stuck on whatever bundle they cached."
+            cat /tmp/version-new.json
+            exit 1
+          fi
+          if [ -z "${NEW_VERSION}" ]; then
+            echo "::error::/version.json has an empty .version field."
+            exit 1
+          fi
+          echo "✓ /version.json reports version=${NEW_VERSION}"
+
+          # ── 2. Must NOT be cached (otherwise the update poll is useless) ──
+          # nginx.conf sets `Cache-Control: no-store, no-cache, ...` on
+          # /version.json. If a future config change drops that header,
+          # browsers (and intermediaries) will cache the file and the
+          # version checker will keep seeing the old version forever.
+          if ! grep -iE '^cache-control:.*(no-store|no-cache)' /tmp/version-headers.txt > /dev/null; then
+            echo "::error::/version.json is being served without no-store/no-cache —" \
+              "the runtime update checker will see cached responses and never" \
+              "detect new deploys."
+            cat /tmp/version-headers.txt
+            exit 1
+          fi
+          echo "✓ /version.json carries no-cache headers"
+
+          # ── 3. Must differ from what was deployed before this run ──
+          # Skipped only when there was no reachable baseline (first deploy).
+          if [ -n "${PREVIOUS_VERSION:-}" ]; then
+            if [ "${NEW_VERSION}" = "${PREVIOUS_VERSION}" ]; then
+              echo "::error::/version.json did not change between the previous" \
+                "deploy (${PREVIOUS_VERSION}) and this one (${NEW_VERSION})." \
+                "Either the build did not run the version-stamp plugin, or" \
+                "this deploy shipped a stale dist/. Existing browser tabs" \
+                "will never see the update prompt for this release."
+              exit 1
+            fi
+            echo "✓ /version.json changed: ${PREVIOUS_VERSION} → ${NEW_VERSION}"
+          else
+            echo "(no pre-deploy baseline recorded — skipping change check)"
+          fi
+
+          # ── 4. version.json must correlate with the bundle being served ──
+          # Vite's `define: { __APP_VERSION__: JSON.stringify(BUILD_VERSION) }`
+          # bakes the same version string into the JS bundle as a string
+          # literal. If /version.json reports a version that the current
+          # /assets/index-*.js doesn't contain, then /version.json was
+          # regenerated by some out-of-band step and the user's bundle has
+          # a stale __APP_VERSION__ — the version check would fire forever.
+          echo "→ GET ${WEB_BASE}/ (re-fetch SPA shell for bundle path)"
+          curl -fsS --retry 5 --retry-delay 5 --retry-all-errors \
+            --max-time 15 "${WEB_BASE}/" -o /tmp/index-version-check.html
+          BUNDLE_PATH=$(grep -oE '/assets/index-[A-Za-z0-9_-]+\.js' /tmp/index-version-check.html | head -n1 || true)
+          if [ -z "${BUNDLE_PATH}" ]; then
+            echo "::error::Could not extract /assets/index-*.js from SPA shell" \
+              "during version correlation check."
+            head -c 2000 /tmp/index-version-check.html
+            exit 1
+          fi
+          echo "→ GET ${WEB_BASE}${BUNDLE_PATH} (verify ${NEW_VERSION} is baked in)"
+          curl -fsS --retry 5 --retry-delay 5 --retry-all-errors \
+            --max-time 30 "${WEB_BASE}${BUNDLE_PATH}" -o /tmp/bundle-version-check.js
+          # JSON.stringify(BUILD_VERSION) renders as "1234567890" inside the
+          # bundle — match with the surrounding quotes to avoid colliding
+          # with any unrelated 13-digit number that might appear in code.
+          if ! grep -qF "\"${NEW_VERSION}\"" /tmp/bundle-version-check.js; then
+            echo "::error::/version.json reports ${NEW_VERSION} but the deployed" \
+              "JS bundle (${BUNDLE_PATH}) does not contain that version string." \
+              "version.json and the bundle are out of sync — clients will" \
+              "either never see an update prompt or see one that never clears."
+            exit 1
+          fi
+          echo "✓ ${NEW_VERSION} is baked into ${BUNDLE_PATH}"
 
       # Authoritative web smoke check: drive a real headless Chromium
       # through the deployed login UI and verify a protected page renders.
@@ -660,6 +791,7 @@ jobs:
         if: |
           failure() && (
             steps.smoke_web.outcome == 'failure' ||
+            steps.smoke_web_version.outcome == 'failure' ||
             steps.smoke_web_browser.outcome == 'failure'
           )
         env:
@@ -680,6 +812,7 @@ jobs:
         if: |
           failure() && steps.rollback_web.outcome == 'success' && (
             steps.smoke_web.outcome == 'failure' ||
+            steps.smoke_web_version.outcome == 'failure' ||
             steps.smoke_web_browser.outcome == 'failure'
           )
         env:
@@ -719,6 +852,56 @@ jobs:
             exit 1
           fi
           echo "✓ (post-rollback) bundle has ${API_BASE} baked in"
+          echo
+
+          # Twin of the forward /version.json check. The rolled-back build
+          # must still ship a well-formed, no-cache version.json that is
+          # consistent with its bundle — otherwise rollback "succeeds" but
+          # leaves the version checker in a broken state, and any future
+          # forward deploy will trip the change-detection check on a
+          # baseline it can't trust.
+          echo "→ (post-rollback) GET ${WEB_BASE}/version.json"
+          curl -fsS --retry 5 --retry-delay 5 --retry-all-errors \
+            --max-time 10 \
+            -D /tmp/version-headers-rollback.txt \
+            -o /tmp/version-rollback.json \
+            "${WEB_BASE}/version.json"
+          cat /tmp/version-rollback.json
+          echo
+          if ! ROLLED_VERSION=$(jq -er '.version' /tmp/version-rollback.json 2>/dev/null); then
+            echo "::error::(post-rollback) /version.json is missing or malformed —" \
+              "the rollback target also has a broken version stamp."
+            cat /tmp/version-rollback.json
+            exit 1
+          fi
+          if [ -z "${ROLLED_VERSION}" ]; then
+            echo "::error::(post-rollback) /version.json has an empty .version field."
+            exit 1
+          fi
+          if ! grep -iE '^cache-control:.*(no-store|no-cache)' /tmp/version-headers-rollback.txt > /dev/null; then
+            echo "::error::(post-rollback) /version.json is missing no-store/no-cache headers" \
+              "— the runtime update checker would see a cached response."
+            cat /tmp/version-headers-rollback.txt
+            exit 1
+          fi
+          if ! grep -qF "\"${ROLLED_VERSION}\"" /tmp/bundle-rollback.js; then
+            echo "::error::(post-rollback) /version.json reports ${ROLLED_VERSION}" \
+              "but the rolled-back bundle (${BUNDLE_PATH}) does not contain that" \
+              "version string — version.json and the bundle are out of sync on" \
+              "the rollback target."
+            exit 1
+          fi
+          # Sanity warning (not fatal): a Fly rollback should restore the
+          # release that was live before this deploy. If the version
+          # doesn't match the pre-deploy baseline we recorded, something
+          # unexpected happened (e.g. concurrent deploy from elsewhere).
+          PREVIOUS_VERSION="${{ steps.prev_version.outputs.previous_version }}"
+          if [ -n "${PREVIOUS_VERSION}" ] && [ "${ROLLED_VERSION}" != "${PREVIOUS_VERSION}" ]; then
+            echo "::warning::(post-rollback) /version.json reports ${ROLLED_VERSION}" \
+              "but the pre-deploy baseline was ${PREVIOUS_VERSION}. Fly rolled" \
+              "to a release other than the one that was live before this run."
+          fi
+          echo "✓ (post-rollback) /version.json is well-formed, no-cache, and matches bundle"
           echo
 
           for route in /login /dashboard; do
@@ -786,6 +969,7 @@ jobs:
         if: |
           failure() && steps.rollback_web.outcome == 'success' && (
             steps.smoke_web.outcome == 'failure' ||
+            steps.smoke_web_version.outcome == 'failure' ||
             steps.smoke_web_browser.outcome == 'failure'
           )
         uses: actions/setup-node@v4
@@ -795,6 +979,7 @@ jobs:
         if: |
           failure() && steps.rollback_web.outcome == 'success' && (
             steps.smoke_web.outcome == 'failure' ||
+            steps.smoke_web_version.outcome == 'failure' ||
             steps.smoke_web_browser.outcome == 'failure'
           )
         env:
