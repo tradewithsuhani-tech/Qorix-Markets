@@ -1,3 +1,23 @@
+// =============================================================================
+// TEMPORARY preflight tool — Mumbai DB cutover (#41).
+//
+// Purpose: before dump/restore, prove that DEPOSIT_KEY_ENC_HEX still decrypts
+// the AES-GCM-wrapped TRON private keys stored in `deposit_addresses.
+// private_key_enc`. If this fails, the cutover would leave Singapore Neon
+// unable to spend incoming USDT. Run BEFORE swapping DATABASE_URL on Fly.
+//
+// Required env (run from a host that has access to the source DB only):
+//   PROD_DATABASE_URL          — source Postgres (read-only role is fine)
+//   DEPOSIT_KEY_ENC_HEX        — 32-byte hex AES-256 key currently in Fly
+//
+// Usage:
+//   pnpm --filter @workspace/scripts exec tsx src/_prod-decrypt-check.ts
+//
+// Status: kept after cutover for rerun safety on any future migration. Not
+// wired into package.json scripts on purpose — it talks to PROD and should
+// be invoked deliberately, not by accident. Remove once the legacy Replit
+// Postgres is decommissioned (post 7-day grace period).
+// =============================================================================
 import pg from "pg";
 import crypto from "node:crypto";
 const { Client } = pg;
