@@ -15,7 +15,12 @@ import fraudRouter from "./fraud";
 import leaderboardRouter from "./leaderboard";
 import chatRouter from "./chat";
 import depositRouter from "./deposit";
-import cryptoDepositRouter from "./crypto-deposit";
+// DISABLED: legacy in-memory crypto-deposit router (POST /create-wallet,
+// GET /balance/:address) issued addresses backed only by an in-process Map
+// and a memory-only watcher. After disabling that watcher in
+// background-jobs.ts, any address minted here would never get credited.
+// The frontend uses /deposit/address (DB-backed, watched by tron-monitor).
+// import cryptoDepositRouter from "./crypto-deposit";
 import testModeRouter from "./test-mode";
 import tasksRouter from "./tasks";
 import adminTasksRouter from "./admin-tasks";
@@ -36,7 +41,7 @@ const router: IRouter = Router();
 // with 401 Unauthorized before ever reaching the intended handler.
 router.use(healthRouter);
 router.use(publicRouter);
-router.use(cryptoDepositRouter);
+// router.use(cryptoDepositRouter); // DISABLED — see import comment above
 router.use(authRouter);
 router.use(googleOauthRouter); // public OAuth — must be before auth-gated routers
 router.use(kycRouter); // per-route authMiddleware — must be before router-level auth gates

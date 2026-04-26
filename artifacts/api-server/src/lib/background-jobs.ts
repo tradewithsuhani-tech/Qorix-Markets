@@ -56,8 +56,16 @@ export const realBackgroundJobFactories: BackgroundJobFactories = {
     return startTronMonitor();
   },
   startDepositWatcher: async () => {
-    const { startDepositWatcher } = await import("./crypto-deposit/depositWatcher");
-    return startDepositWatcher();
+    // DISABLED: legacy in-memory deposit watcher caused double-credits on
+    // restart because it deduped via an in-process Set instead of the DB.
+    // The DB-backed `tron-monitor.ts` is the sole source of truth for
+    // crediting blockchain deposits. Returning a no-op stoppable so the
+    // background-jobs contract (and tests) stay intact.
+    // eslint-disable-next-line no-console
+    console.warn(
+      "[depositWatcher] DISABLED — superseded by tron-monitor (DB-backed dedup). See background-jobs.ts.",
+    );
+    return { stop: () => {} };
   },
   startTelegramPoller: async () => {
     const { startTelegramPoller } = await import("./telegram-poller");
