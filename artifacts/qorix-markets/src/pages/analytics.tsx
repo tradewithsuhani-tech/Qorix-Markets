@@ -1,4 +1,5 @@
 import { Layout } from "@/components/layout";
+import { isFeatureHidden } from "@/lib/hidden-features";
 import { PeriodFilter, DAYS_PERIOD_OPTIONS } from "@/components/period-filter";
 import {
   useGetEquityChart,
@@ -1001,7 +1002,12 @@ export default function AnalyticsPage() {
             />
           </ChartCard>
 
-          {/* 4. Per-Trade Risk vs Monthly Return */}
+          {/* 4. Per-Trade Risk vs Monthly Return — currently HIDDEN
+               from end users while we redesign it. Implementation is
+               preserved below; the gate is the single source of truth in
+               src/lib/hidden-features.ts (id: analytics:risk-vs-return).
+               To restore: remove that entry from HIDDEN_FEATURES. */}
+          {!isFeatureHidden("analytics:risk-vs-return") && (
           <ChartCard
             title="Per-Trade Risk vs Monthly Return"
             subtitle="Per-trade loss capped at 1% · No upside cap on return"
@@ -1467,6 +1473,7 @@ export default function AnalyticsPage() {
               );
             })()}
           </ChartCard>
+          )}
         </div>
 
         {/* Performance Dashboard — Monthly History */}

@@ -10,7 +10,11 @@ import {
   CheckCircle,
   Clock,
   Database,
+  Eye,
+  EyeOff,
+  FileCode,
   Lock,
+  MapPin,
   PauseCircle,
   RefreshCw,
   Search,
@@ -37,6 +41,7 @@ import {
   Power,
   PartyPopper,
 } from "lucide-react";
+import { HIDDEN_FEATURES } from "@/lib/hidden-features";
 import { AddressDisplay } from "@/components/address-display";
 import { useToast } from "@/hooks/use-toast";
 
@@ -1925,6 +1930,99 @@ export function AdminAnalyticsPage() {
           <h2 className="text-xl font-bold">Analytics available in Intelligence</h2>
           <p className="text-muted-foreground mt-2">The dedicated Intelligence module contains live charts for flows, risk exposure, top investors and profit history.</p>
         </div>
+      </motion.div>
+    </Layout>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Hidden Features registry — admin-only memo of every product feature
+// we've intentionally hidden from end users while we redesign / rebuild
+// it. Lets us come back later and remember exactly what to restore.
+// Source of truth: src/lib/hidden-features.ts.
+// ─────────────────────────────────────────────────────────────────────
+export function AdminHiddenFeaturesPage() {
+  const items = HIDDEN_FEATURES;
+  return (
+    <Layout>
+      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+        <ModuleHeader
+          icon={EyeOff}
+          title="Hidden Features"
+          subtitle="Features intentionally hidden from end users — track here so we can rebuild and restore them later."
+        />
+
+        <div className="glass-card rounded-2xl p-5 flex items-start gap-3 bg-amber-500/5 border-amber-500/20">
+          <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+          <div className="text-sm text-muted-foreground">
+            Edit <code className="px-1.5 py-0.5 rounded bg-white/10 text-xs font-mono">src/lib/hidden-features.ts</code> to add or remove entries.
+            To restore a feature, delete its entry from the registry — the underlying code is preserved in place.
+          </div>
+        </div>
+
+        {items.length === 0 ? (
+          <div className="glass-card rounded-2xl p-10 text-center">
+            <Eye className="w-10 h-10 text-emerald-400 mx-auto mb-3" />
+            <h2 className="text-xl font-bold">Nothing hidden right now</h2>
+            <p className="text-muted-foreground mt-2 text-sm">All product features are currently visible to end users.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {items.map((f) => (
+              <div key={f.id} className="glass-card rounded-2xl p-5 space-y-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-9 h-9 rounded-xl bg-amber-500/15 border border-amber-500/25 flex items-center justify-center shrink-0">
+                      <EyeOff className="w-4 h-4 text-amber-400" />
+                    </div>
+                    <div>
+                      <div className="font-bold text-base leading-tight">{f.title}</div>
+                      <div className="text-[11px] font-mono text-muted-foreground mt-0.5">{f.id}</div>
+                    </div>
+                  </div>
+                  <div className="text-[11px] text-muted-foreground shrink-0 flex items-center gap-1.5">
+                    <Calendar className="w-3 h-3" />
+                    {f.hiddenAt}
+                  </div>
+                </div>
+
+                <div className="space-y-2.5 text-sm">
+                  <div className="flex items-start gap-2">
+                    <MapPin className="w-3.5 h-3.5 text-blue-400 shrink-0 mt-0.5" />
+                    <div>
+                      <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Location</div>
+                      <div className="text-sm">{f.location}</div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-2">
+                    <FileCode className="w-3.5 h-3.5 text-violet-400 shrink-0 mt-0.5" />
+                    <div className="min-w-0">
+                      <div className="text-[11px] uppercase tracking-wider text-muted-foreground">File</div>
+                      <div className="text-xs font-mono break-all">{f.filePath}</div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                    <div>
+                      <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Why hidden</div>
+                      <div className="text-sm text-muted-foreground">{f.reason}</div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-2 pt-2 border-t border-white/5">
+                    <CheckCircle className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
+                    <div>
+                      <div className="text-[11px] uppercase tracking-wider text-muted-foreground">How to restore</div>
+                      <div className="text-sm text-muted-foreground">{f.restoreNotes}</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </motion.div>
     </Layout>
   );
