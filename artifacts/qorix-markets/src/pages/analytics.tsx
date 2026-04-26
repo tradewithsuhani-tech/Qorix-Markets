@@ -282,9 +282,30 @@ export default function AnalyticsPage() {
       )
     : [];
 
+  // Time-aware label formatter. The equity-chart endpoint returns
+  // intraday points for 1D, daily points for 7D/30D, and longer
+  // aggregates beyond. Using "EEE" (day name) for everything inside
+  // 7 days collapsed every intraday point on the 1D view to the same
+  // weekday string ("Sun, Sun, Sun…"), making the x-axis useless.
+  // Now we pick the format from `days`:
+  //   ≤1d → "HH:mm" (intraday)
+  //   ≤2d → "EEE HH:mm"
+  //   ≤7d → "EEE d"
+  //   ≤90d → "MMM d"
+  //   >90d → "MMM yy"
+  const labelFmt =
+    days <= 1
+      ? "HH:mm"
+      : days <= 2
+        ? "EEE HH:mm"
+        : days <= 7
+          ? "EEE d"
+          : days <= 90
+            ? "MMM d"
+            : "MMM yy";
   const labels = equityArr.map((e) => {
     try {
-      return format(parseISO(e.date), days <= 7 ? "EEE" : days <= 30 ? "MMM d" : "MMM d");
+      return format(parseISO(e.date), labelFmt);
     } catch {
       return e.date;
     }
@@ -807,22 +828,35 @@ export default function AnalyticsPage() {
                     pointBorderWidth: 1,
                     order: 1,
                   },
-                  ...(investment?.drawdownLimit
-                    ? [
-                        {
-                          label: "Protection Limit",
-                          data: labels.map(() => -(investment.drawdownLimit)),
-                          borderColor: "rgba(239,68,68,0.65)",
-                          borderWidth: 1.25,
-                          borderDash: [6, 4],
-                          pointRadius: 0,
-                          pointHoverRadius: 0,
-                          fill: false,
-                          tension: 0,
-                          order: 0,
-                        },
-                      ]
-                    : []),
+                  // Protection Limit dashed reference. Only included when
+                  // it's within ~2x of the actual data range — otherwise
+                  // pinning a -5% line on a chart whose data lives between
+                  // -0.2% and +0.5% (e.g. the 1D view) collapses every
+                  // real series into a flat smear at the top of the panel.
+                  // The headline pill still surfaces the live drawdown so
+                  // the limit context is never lost.
+                  ...((() => {
+                    const lim = Number(investment?.drawdownLimit ?? 0);
+                    if (!lim) return [];
+                    const series = [...gainPctValues, ...drawdownDisplayValues];
+                    const dataMin = series.length ? Math.min(...series) : 0;
+                    const showLimit = -lim >= dataMin - lim * 0.5;
+                    if (!showLimit) return [];
+                    return [
+                      {
+                        label: "Protection Limit",
+                        data: labels.map(() => -lim),
+                        borderColor: "rgba(239,68,68,0.65)",
+                        borderWidth: 1.25,
+                        borderDash: [6, 4],
+                        pointRadius: 0,
+                        pointHoverRadius: 0,
+                        fill: false,
+                        tension: 0,
+                        order: 0,
+                      },
+                    ];
+                  })()),
                 ],
               }}
               options={{
@@ -856,12 +890,44 @@ export default function AnalyticsPage() {
                   },
                 },
                 scales: {
-                  x: CHART_DEFAULTS.scales.x,
+                  x: {
+                    ...CHART_DEFAULTS.scales.x,
+                    ticks: {
+                      ...CHART_DEFAULTS.scales.x.ticks,
+                      // Cap visible x-tick labels so 1D's ~30 intraday
+                      // points don't print "10:0010:0510:10…" on top of
+                      // each other. Chart.js auto-skips with this hint.
+                      maxTicksLimit: 8,
+                      maxRotation: 0,
+                      autoSkip: true,
+                    },
+                  },
                   y: {
                     ...CHART_DEFAULTS.scales.y,
+                    // Data-driven y-axis bounds. Without this Chart.js
+                    // expanded the axis to fit the -5% protection line
+                    // (when included), squashing the actual return /
+                    // drawdown lines into a 1-pixel band at the top of
+                    // the panel — exactly the "bahut chipka hai" the
+                    // user reported on the 1D view. We add 25% padding
+                    // (with sane min absolute padding of 0.25%) so the
+                    // line never touches the top/bottom edge.
+                    ...((() => {
+                      const series = [...gainPctValues, ...drawdownDisplayValues];
+                      if (!series.length) return {};
+                      const rawMin = Math.min(...series, 0);
+                      const rawMax = Math.max(...series, 0);
+                      const span = Math.max(rawMax - rawMin, 0.5);
+                      const pad = Math.max(span * 0.25, 0.25);
+                      return {
+                        suggestedMin: rawMin - pad,
+                        suggestedMax: rawMax + pad,
+                      };
+                    })()),
                     ticks: {
                       ...CHART_DEFAULTS.scales.y.ticks,
-                      callback: (v: any) => `${Number(v).toFixed(1)}%`,
+                      maxTicksLimit: 6,
+                      callback: (v: any) => `${Number(v).toFixed(2)}%`,
                     },
                   },
                 },
