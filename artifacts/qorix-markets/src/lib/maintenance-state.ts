@@ -9,13 +9,28 @@
 //
 // The banner auto-clears once `/api/system/status` reports `writesDisabled:
 // false` again, so the cutover end-of-window doesn't leave a stale banner up.
+//
+// Operators can also attach an ETA (env var MAINTENANCE_ETA or admin setting
+// `maintenance_ends_at`). When present it travels in the X-Maintenance-Ends-At
+// header / `endsAt` body field, gets stored here as `endsAt`, and powers a
+// live "Back in ~Xm" countdown in the banner. The ETA passing on its own does
+// NOT clear the banner — only the API confirming `writesDisabled:false` does,
+// which means an over-running cutover keeps the banner up rather than telling
+// users everything's fine when it isn't.
 
 type Listener = () => void;
 
 const DEFAULT_MESSAGE = "Brief maintenance in progress — balances will be back shortly.";
 
+export type MaintenanceSnapshot = {
+  active: boolean;
+  message: string;
+  endsAt: string | null;
+};
+
 let _active = false;
 let _message = DEFAULT_MESSAGE;
+let _endsAt: string | null = null;
 let _listeners = new Set<Listener>();
 let _pollTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -23,14 +38,24 @@ let _pollTimer: ReturnType<typeof setInterval> | null = null;
 // We MUST return a stable object reference between mutations or React will
 // think state has changed on every render and loop forever. Update the
 // cached snapshot only inside `emit()` (i.e. when something actually changes).
-let _snapshot: { active: boolean; message: string } = {
+let _snapshot: MaintenanceSnapshot = {
   active: _active,
   message: _message,
+  endsAt: _endsAt,
 };
 
 function emit() {
-  _snapshot = { active: _active, message: _message };
+  _snapshot = { active: _active, message: _message, endsAt: _endsAt };
   for (const l of _listeners) l();
+}
+
+function normalizeEndsAt(raw: string | undefined | null): string | null {
+  if (!raw) return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  const ts = Date.parse(trimmed);
+  if (Number.isNaN(ts)) return null;
+  return new Date(ts).toISOString();
 }
 
 function startPolling() {
@@ -45,13 +70,27 @@ function startPolling() {
       if (!r.ok) return;
       const d = await r.json();
       if (!d.writesDisabled) {
+        // Source of truth for "is the window over?" is the API, not the ETA.
+        // An over-running cutover (ETA elapsed, writes still disabled) keeps
+        // the banner up; a clean finish drops it as soon as we hear about it.
         clearMaintenance();
-      } else if (typeof d.maintenanceMessage === "string" && d.maintenanceMessage) {
-        if (d.maintenanceMessage !== _message) {
-          _message = d.maintenanceMessage;
-          emit();
-        }
+        return;
       }
+      let changed = false;
+      const nextMessage =
+        typeof d.maintenanceMessage === "string" && d.maintenanceMessage
+          ? d.maintenanceMessage
+          : _message;
+      if (nextMessage !== _message) {
+        _message = nextMessage;
+        changed = true;
+      }
+      const nextEndsAt = normalizeEndsAt(d.maintenanceEndsAt);
+      if (nextEndsAt !== _endsAt) {
+        _endsAt = nextEndsAt;
+        changed = true;
+      }
+      if (changed) emit();
     } catch {
       // Network errors during the cutover are expected — keep polling.
     }
@@ -65,11 +104,13 @@ function stopPolling() {
   }
 }
 
-export function notifyMaintenance(message?: string): void {
-  const next = message && message.trim() ? message : DEFAULT_MESSAGE;
-  if (_active && next === _message) return;
+export function notifyMaintenance(message?: string, endsAt?: string): void {
+  const nextMessage = message && message.trim() ? message : DEFAULT_MESSAGE;
+  const nextEndsAt = normalizeEndsAt(endsAt);
+  if (_active && nextMessage === _message && nextEndsAt === _endsAt) return;
   _active = true;
-  _message = next;
+  _message = nextMessage;
+  _endsAt = nextEndsAt;
   startPolling();
   emit();
 }
@@ -78,11 +119,12 @@ export function clearMaintenance(): void {
   if (!_active) return;
   _active = false;
   _message = DEFAULT_MESSAGE;
+  _endsAt = null;
   stopPolling();
   emit();
 }
 
-export function getMaintenanceState(): { active: boolean; message: string } {
+export function getMaintenanceState(): MaintenanceSnapshot {
   return _snapshot;
 }
 

@@ -17,7 +17,12 @@ const DEFAULT_JSON_ACCEPT = "application/json, application/problem+json";
 
 let _baseUrl: string | null = null;
 let _authTokenGetter: AuthTokenGetter | null = null;
-let _maintenanceHandler: ((message: string | undefined) => void) | null = null;
+export type MaintenanceHandler = (
+  message: string | undefined,
+  endsAt?: string | undefined,
+) => void;
+
+let _maintenanceHandler: MaintenanceHandler | null = null;
 
 /**
  * Set a base URL that is prepended to every relative request URL
@@ -55,7 +60,7 @@ export function setAuthTokenGetter(getter: AuthTokenGetter | null): void {
  * Pass `null` to clear.
  */
 export function setMaintenanceHandler(
-  handler: ((message: string | undefined) => void) | null,
+  handler: MaintenanceHandler | null,
 ): void {
   _maintenanceHandler = handler;
 }
@@ -415,7 +420,15 @@ export async function customFetch<T = unknown>(
         getStringField(errorData, "code") === "maintenance_mode")
     ) {
       try {
-        _maintenanceHandler(getStringField(errorData, "message"));
+        // ETA can come either as an X-Maintenance-Ends-At response header
+        // (set on every maintenance-mode response) or inside the JSON body
+        // as `endsAt` for callers that only inspect the body. Header wins.
+        const headerEndsAt = response.headers.get("x-maintenance-ends-at") || undefined;
+        const bodyEndsAt = getStringField(errorData, "endsAt");
+        _maintenanceHandler(
+          getStringField(errorData, "message"),
+          headerEndsAt || bodyEndsAt,
+        );
       } catch {
         // Handler errors must never mask the original API error.
       }
@@ -431,7 +444,8 @@ export async function customFetch<T = unknown>(
     response.headers.get("x-maintenance-mode") === "true"
   ) {
     try {
-      _maintenanceHandler(undefined);
+      const headerEndsAt = response.headers.get("x-maintenance-ends-at") || undefined;
+      _maintenanceHandler(undefined, headerEndsAt);
     } catch {
       /* see above */
     }
