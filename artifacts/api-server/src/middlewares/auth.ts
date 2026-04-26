@@ -3,7 +3,20 @@ import jwt from "jsonwebtoken";
 import { db, systemSettingsTable, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 
-const JWT_SECRET = process.env["SESSION_SECRET"] || "qorix-markets-secret";
+// SESSION_SECRET is the signing key for every Bearer JWT the api hands out.
+// Falling back to a hardcoded value would mean anyone could forge tokens for
+// any user, so in production we hard-fail at module load instead of silently
+// running with the dev fallback. The dev value is only acceptable on Replit /
+// localhost where NODE_ENV is "development" or unset.
+const SESSION_SECRET_ENV = process.env["SESSION_SECRET"];
+if (!SESSION_SECRET_ENV && process.env.NODE_ENV === "production") {
+  throw new Error(
+    "SESSION_SECRET environment variable is required in production. " +
+      "Set the same value on Fly that the current Replit deployment uses, " +
+      "otherwise every existing user JWT becomes invalid and everyone is logged out.",
+  );
+}
+const JWT_SECRET = SESSION_SECRET_ENV || "qorix-markets-secret";
 
 export interface AuthRequest extends Request {
   userId?: number;

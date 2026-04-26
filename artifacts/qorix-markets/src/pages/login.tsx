@@ -504,7 +504,18 @@ export default function LoginPage() {
             </div>
             <button
               type="button"
-              onClick={() => { window.location.href = `${import.meta.env.BASE_URL}api/auth/google`; }}
+              onClick={() => {
+                // Google OAuth needs a hard browser navigation to the API host.
+                // window.location.href bypasses the main.tsx fetch shim, so on
+                // Fly prod (web on qorixmarkets.com, api on api.qorixmarkets.com)
+                // we must use the absolute API URL. In Replit dev VITE_API_URL
+                // is unset and the same-origin /api/* path works via Vite proxy.
+                const apiBase = (import.meta.env.VITE_API_URL ?? "").replace(/\/+$/, "");
+                const target = apiBase
+                  ? `${apiBase}/api/auth/google`
+                  : `${import.meta.env.BASE_URL}api/auth/google`;
+                window.location.href = target;
+              }}
               className="w-full inline-flex items-center justify-center gap-2.5 h-10 rounded-lg bg-white/[0.04] hover:bg-white/[0.07] text-white font-medium text-sm border border-white/10 hover:border-white/20 active:scale-[0.99] transition-all"
             >
               <svg width="16" height="16" viewBox="0 0 48 48" aria-hidden="true">

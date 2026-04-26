@@ -2,12 +2,30 @@ import crypto from "crypto";
 
 const ALGO = "aes-256-gcm";
 
+// In production we MUST use an explicit secret because every TRON deposit
+// address private key in the wallets table is encrypted with this key. If a
+// new instance comes up with the dev fallback (or a different secret), every
+// existing deposit address becomes undecryptable — the platform sweep stops
+// working and user funds get stuck. Hard-fail at module load instead of
+// silently corrupting future encrypted data with a mismatched key.
+const WALLET_ENC_FALLBACK = "dev-only-fallback-do-not-use-in-production";
+const WALLET_ENC_RESOLVED =
+  process.env["WALLET_ENC_SECRET"] ??
+  process.env["JWT_SECRET"] ??
+  WALLET_ENC_FALLBACK;
+if (
+  WALLET_ENC_RESOLVED === WALLET_ENC_FALLBACK &&
+  process.env.NODE_ENV === "production"
+) {
+  throw new Error(
+    "WALLET_ENC_SECRET (or JWT_SECRET as fallback) is required in production. " +
+      "It MUST be the same value the existing deployment uses, otherwise " +
+      "previously encrypted deposit-address private keys cannot be decrypted.",
+  );
+}
+
 function getKey(): Buffer {
-  const secret =
-    process.env["WALLET_ENC_SECRET"] ??
-    process.env["JWT_SECRET"] ??
-    "dev-only-fallback-do-not-use-in-production";
-  return crypto.scryptSync(secret, "qorix-wallet-v1", 32);
+  return crypto.scryptSync(WALLET_ENC_RESOLVED, "qorix-wallet-v1", 32);
 }
 
 export function encryptPrivateKey(plain: string): string {

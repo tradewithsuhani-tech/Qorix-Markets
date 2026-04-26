@@ -214,6 +214,44 @@ If push has already been attempted and the index failed, drop the bad index, run
 - **AWS SES**: sender email must be verified; request production access to leave sandbox
 - **reCAPTCHA**: live domain `qorix-markets-1.replit.app` must be added in the reCAPTCHA console
 
+## Fly.io deploy — required secrets (api-server)
+
+When `fly secrets set --app qorix-api ...` runs, every value below must be supplied with the SAME value the current Replit deployment uses unless marked NEW. Mismatches on the bold ones cause data loss / lockouts.
+
+| Secret | Required | Why it must match Replit |
+|---|---|---|
+| `DATABASE_URL` | NEW | Neon Postgres connection string with `?sslmode=require` |
+| `REDIS_URL` | NEW | Upstash `rediss://...` URL (TLS required) |
+| **`SESSION_SECRET`** | YES | Signs every Bearer JWT — mismatch logs every existing user out |
+| **`WALLET_ENC_SECRET`** | YES | AES-GCM key for TRON deposit wallet private keys — mismatch makes every existing deposit address undecryptable, sweep stops, user funds get stuck |
+| `JWT_SECRET` | YES | Fallback for wallet encryption + signs promo redemption links |
+| `PROMO_SECRET` | YES | HMAC for rotating promo offer codes |
+| `TELEGRAM_BOT_TOKEN` | YES | Telegram poller; ONLY one process can poll — set Replit's `RUN_BACKGROUND_JOBS=false` after Fly comes up |
+| `TRONGRID_API_KEY` | YES | Avoids public rate limit (~5 req/s) on deposit polling |
+| `MAIN_WALLET` / `MAIN_PRIVATE_KEY` | YES | Receives swept USDT + sends gas TRX |
+| `PLATFORM_TRON_ADDRESS` / `PLATFORM_TRON_PRIVATE_KEY` | YES | Public deposit address shown to users + signing key |
+| `USDT_CONTRACT` | YES | TRC20 USDT contract address (`TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t`) |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | YES | Add `https://api.qorixmarkets.com/api/auth/google/callback` to authorized redirect URIs in Google Console |
+| `BACKEND_PUBLIC_URL` | NEW | `https://api.qorixmarkets.com` (used to build OAuth redirect URI) |
+| `FRONTEND_PUBLIC_URL` | NEW | `https://qorixmarkets.com` (where OAuth redirects user back) |
+| `RECAPTCHA_SECRET_KEY` | YES | reCAPTCHA console must allow-list `qorixmarkets.com` |
+| `SES_FROM_EMAIL` / `SMTP_PASS` | YES | Email OTP delivery; `SMTP_USER`/`SMTP_HOST`/`SMTP_PORT` optional overrides |
+| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_REGION` | YES | S3 object storage |
+| `ZERO_BALANCES_TOKEN` | YES | Admin endpoint guard token |
+| `RUN_BACKGROUND_JOBS` | preset to `true` in fly.toml | Cron + Telegram poller + BullMQ workers + Tron monitor |
+| `CORS_ORIGIN` | preset in fly.toml | Comma-separated allow-list of web origins |
+| `EMAIL_LOGO_URL` / `EMAIL_DEBUG_OTP` / `LOG_LEVEL` / `AUTO_SIGNAL_ENGINE_ENABLED` | optional | Tuning |
+
+Web app secret (qorix-markets-web): `VITE_RECAPTCHA_SITE_KEY` — baked at build time, can also be set as a fly secret if rebuilds are triggered via the GH Action.
+
+### Cutover order
+1. Deploy api on Fly with all secrets set, verify `https://qorix-api.fly.dev/api/healthz`.
+2. Deploy web on Fly with `--build-arg VITE_API_URL=https://api.qorixmarkets.com`, verify on `https://qorix-markets-web.fly.dev`.
+3. Add `https://api.qorixmarkets.com/api/auth/google/callback` to Google OAuth client.
+4. Point DNS — apex + www → web Fly IPs, `api.` subdomain → api Fly IPs, then `fly certs add` on both apps.
+5. On Replit dev set `RUN_BACKGROUND_JOBS=false` so only Fly polls Telegram (avoids `409 Conflict`).
+6. Smoke-test login (email + Google), deposit address generation, signal-trade Cleanup button, withdrawal flow.
+
 ## Promotions System
 
 Two layered offer sources, both gated by ONE-redemption-per-user-lifetime in `promo_redemptions`:
