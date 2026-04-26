@@ -104,15 +104,78 @@ function stopPolling() {
   }
 }
 
+// Verify-before-show guard. The bare X-Maintenance-Mode header / 503-with-
+// maintenance_mode body can show up spuriously (CDN/proxy holding a stale
+// response, Service-Worker replay, an old tab from a real cutover, etc.).
+// When that happens the polling loop *would* clear the banner after 15s, but
+// the next stale response would re-trigger immediately, producing the
+// "popup keeps coming back" bug we hit in dev. Before we actually flip the
+// banner on, do a one-shot verification against /api/system/status — the
+// authoritative source of truth — and only show the banner if that endpoint
+// agrees writes are frozen. Cheap (single GET, ~1ms locally) and defends
+// against every false-positive path without changing the legit cutover UX:
+// during a real freeze /api/system/status reports writesDisabled:true and the
+// banner shows on the very first verification.
+let _verifyInFlight = false;
+let _lastVerifyAt = 0;
+let _lastVerifySaidClean = false;
+const VERIFY_TTL_MS = 5_000;
+
+async function verifyAndApply(message: string, endsAt: string | null): Promise<void> {
+  if (typeof window === "undefined") return;
+  if (_verifyInFlight) return;
+  // Symmetric dedup: trust ANY verify result (clean or active) for VERIFY_TTL_MS
+  // so a burst of stale-marker responses can't spam /api/system/status, but a
+  // legitimate server-state transition still gets re-checked within 5s instead
+  // of waiting for the 15s polling loop.
+  if (Date.now() - _lastVerifyAt < VERIFY_TTL_MS) {
+    // Last verify said no maintenance: clear if a stale signal flipped us on.
+    if (_lastVerifySaidClean && _active) clearMaintenance();
+    return;
+  }
+  _verifyInFlight = true;
+  try {
+    const r = await fetch(`${import.meta.env.BASE_URL}api/system/status`);
+    if (!r.ok) return;
+    const d = await r.json();
+    _lastVerifyAt = Date.now();
+    if (!d.writesDisabled) {
+      // Authoritative source says writes are NOT frozen — refuse to show the
+      // banner (and clear it if it was already up from a previous false signal).
+      _lastVerifySaidClean = true;
+      if (_active) clearMaintenance();
+      return;
+    }
+    _lastVerifySaidClean = false;
+    // Server confirms maintenance. Prefer the server-side message/ETA over the
+    // values we got from the triggering response — the status endpoint is
+    // always the freshest copy.
+    const serverMessage =
+      typeof d.maintenanceMessage === "string" && d.maintenanceMessage.trim()
+        ? d.maintenanceMessage
+        : message;
+    const serverEndsAt = normalizeEndsAt(d.maintenanceEndsAt) ?? endsAt;
+    if (_active && serverMessage === _message && serverEndsAt === _endsAt) return;
+    _active = true;
+    _message = serverMessage;
+    _endsAt = serverEndsAt;
+    startPolling();
+    emit();
+  } catch {
+    // Network blip — don't show the banner on speculative signal alone.
+    // The next legitimate trigger will retry the verify.
+  } finally {
+    _verifyInFlight = false;
+  }
+}
+
 export function notifyMaintenance(message?: string, endsAt?: string): void {
   const nextMessage = message && message.trim() ? message : DEFAULT_MESSAGE;
   const nextEndsAt = normalizeEndsAt(endsAt);
-  if (_active && nextMessage === _message && nextEndsAt === _endsAt) return;
-  _active = true;
-  _message = nextMessage;
-  _endsAt = nextEndsAt;
-  startPolling();
-  emit();
+  // Always route through verifyAndApply — its TTL-based dedup handles the
+  // "burst of identical stale signals" case without an early-return that
+  // could otherwise pin a stale banner up until the 15s polling tick.
+  void verifyAndApply(nextMessage, nextEndsAt);
 }
 
 export function clearMaintenance(): void {
