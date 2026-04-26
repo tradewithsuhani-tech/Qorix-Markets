@@ -355,23 +355,34 @@ export default function AnalyticsPage() {
     ? ((positiveProfit.length / profitValues.length) * 100).toFixed(0)
     : "0";
 
-  // Industry-benchmark monthly return targets for each preset risk
-  // tier. Anchored to a Sharpe ratio of ~0.7 against a volatility
-  // proxy of (drawdown / 2), which is consistent with quality
-  // managed-fund / managed-futures literature. The previous model —
-  // multiplying the user's own 30D return by 0.6 / 1.0 / 1.5 —
-  // collapsed all three bubbles to y=0 on any account whose 30D
-  // return was close to zero (every fresh user, every quiet month),
-  // making the chart visually meaningless. Using fixed benchmarks
-  // instead lets "Your Profile" be plotted as actual achieved
-  // performance against industry-standard expectations.
+  // Per-Trade Risk vs Monthly Return — anchored to the platform's
+  // hard safety policy:
+  //   • Per-trade loss is capped at 1.0 % (engine-level stop-loss).
+  //   • Target monthly return is capped at 10 % (risk-budget ceiling).
+  // Each tier sits on the platform's 10:1 reward-to-risk diagonal
+  // (monthlyReturn ≈ perTradeLoss × 10), so the three preset bubbles
+  // line up cleanly inside the safe zone. The previous formulation —
+  // industry-Sharpe benchmarks on a drawdown axis — was abstract and
+  // didn't map to anything the user could verify; this one reflects
+  // the actual policy the trading engine enforces.
   const userMonthlyReturn = perf?.rollingReturns?.find((r) => r.period === "30D")?.return ?? 0;
   const userDrawdownLimit = investment?.drawdownLimit ?? 5;
+  // Derive the user's effective per-trade risk from their drawdown
+  // limit: a 5 % drawdown allowance roughly tolerates 5 consecutive
+  // 1 % losses, so perTradeLoss ≈ drawdownLimit / 5. Visually clamped
+  // to the same x-domain as the chart (0–1.4 %) so the marker stays
+  // on-canvas even for unusually high drawdown limits.
+  const userPerTradeLoss = Math.max(0.05, Math.min(userDrawdownLimit / 5, 1.3));
+  // Y is clamped to the chart's y-domain so the user marker stays on
+  // canvas. Tooltip continues to show the true value.
+  const userReturnDisplay = Math.max(0, Math.min(userMonthlyReturn, 11.5));
+  const PLATFORM_LOSS_CAP = 1.0;
+  const PLATFORM_RETURN_CAP = 10.0;
   const riskProfiles = [
-    { label: "Conservative", drawdown: 3, returnPct: 1.0, isUser: false },
-    { label: "Balanced", drawdown: 5, returnPct: 1.8, isUser: false },
-    { label: "Aggressive", drawdown: 10, returnPct: 3.5, isUser: false },
-    { label: "Your Profile", drawdown: userDrawdownLimit, returnPct: userMonthlyReturn, isUser: true },
+    { label: "Conservative", perTradeLoss: 0.3, monthlyReturn: 3,  isUser: false, actualReturn: 3 },
+    { label: "Balanced",     perTradeLoss: 0.6, monthlyReturn: 6,  isUser: false, actualReturn: 6 },
+    { label: "Aggressive",   perTradeLoss: 1.0, monthlyReturn: 10, isUser: false, actualReturn: 10 },
+    { label: "Your Profile", perTradeLoss: userPerTradeLoss, monthlyReturn: userReturnDisplay, isUser: true, actualReturn: userMonthlyReturn },
   ];
 
   const loading = equityLoading;
@@ -991,46 +1002,49 @@ export default function AnalyticsPage() {
             />
           </ChartCard>
 
-          {/* 4. Risk vs Return */}
+          {/* 4. Per-Trade Risk vs Monthly Return */}
           <ChartCard
-            title="Risk vs Return"
-            subtitle="Drawdown limit vs projected monthly return"
+            title="Per-Trade Risk vs Monthly Return"
+            subtitle="Loss capped at 1% per trade · Return capped at 10% per month"
             icon={Target}
             iconColor="#34d399"
             loading={perfLoading || invLoading}
             delay={0.25}
           >
             {(() => {
-              // Premium Risk vs Return chart. Three improvements over the
-              // old Scatter:
-              //   1. A faint dashed "efficient frontier" curve connects the
-              //      three preset profiles, giving the chart finance-grade
-              //      visual context instead of three loose bubbles.
-              //   2. Each bubble carries a translucent border-ring (halo)
-              //      with a colour matched to the risk tier; "Your Profile"
-              //      gets an emerald hero treatment with a double-thick
-              //      ring so it visibly pops as the user's marker.
-              //   3. Both axes are data-driven (with sane minimum padding)
-              //      so small 30D returns no longer collapse all bubbles
-              //      onto the x-axis the way they did on the 1D drawdown
-              //      chart before its fix.
+              // Per-Trade Risk vs Monthly Return chart. Reframed around
+              // the platform's actual safety policy (loss ≤ 1 % per
+              // trade, return ≤ 10 % per month) rather than abstract
+              // industry-benchmark Sharpe ratios:
+              //   1. A safe-zone background (rrSafeZone plugin) tints
+              //      the (0,0)→(1%,10%) policy box emerald with dashed
+              //      red cap lines on the boundaries — the user can
+              //      see at a glance where the platform's hard limits
+              //      sit and that every tier lives inside them.
+              //   2. A faint dashed line connects the three preset
+              //      tiers (Conservative / Balanced / Aggressive),
+              //      which all sit on the platform's 10:1 reward-to-
+              //      risk diagonal.
+              //   3. Each bubble carries a translucent halo matched to
+              //      its tier; "Your Profile" is a green diamond so it
+              //      stays visually distinct from preset circles even
+              //      when overlapping.
+              //   4. Axes are FIXED at x:0–1.4, y:0–12 (not data-
+              //      driven) so the safe zone and cap lines render at
+              //      stable pixel positions regardless of what the
+              //      user's 30D return looks like.
               const profile3 = riskProfiles.slice(0, 3);
               const yourProfile = riskProfiles[3]!;
-              const xs = riskProfiles.map((p) => p.drawdown);
-              const ys = riskProfiles.map((p) => p.returnPct);
-              // Guarded axis bounds: if riskProfiles is somehow empty (e.g.
-              // the perf hook hasn't returned yet and we're rendered through
-              // the loading branch), fall back to a sensible default frame
-              // (0..10% drawdown, ±1% return) instead of letting Math.min(...[])
-              // produce Infinity and ship NaN bounds to chart.js.
-              const xMinRaw = xs.length ? Math.min(...xs) : 0;
-              const xMaxRaw = xs.length ? Math.max(...xs) : 10;
-              const xSpan = Math.max(xMaxRaw - xMinRaw, 4);
-              const xPad = Math.max(xSpan * 0.18, 1);
-              const yMinRaw = ys.length ? Math.min(...ys, 0) : -1;
-              const yMaxRaw = ys.length ? Math.max(...ys, 0) : 1;
-              const ySpan = Math.max(yMaxRaw - yMinRaw, 1);
-              const yPad = Math.max(ySpan * 0.35, 0.5);
+              // Fixed axis frame anchored to the platform safety policy
+              // rather than the data. The chart's *job* is to show the
+              // user where the platform's hard caps sit (1 % per-trade
+              // loss, 10 % monthly return) and that every tier — and
+              // their own marker — lives inside that safe zone. Letting
+              // bounds float with the data would defeat that.
+              const xMin = 0;
+              const xMax = 1.4;   // 40 % headroom past the 1 % cap
+              const yMin = 0;
+              const yMax = 12;    // 20 % headroom past the 10 % cap
 
               const profileColors = [
                 "rgba(96,165,250,1)",   // Conservative — sky blue
@@ -1059,7 +1073,7 @@ export default function AnalyticsPage() {
                       {
                         type: "line" as const,
                         label: "Efficient Frontier",
-                        data: profile3.map((p) => ({ x: p.drawdown, y: p.returnPct })),
+                        data: profile3.map((p) => ({ x: p.perTradeLoss, y: p.monthlyReturn })),
                         borderColor: "rgba(148,163,184,0.35)",
                         borderDash: [5, 5],
                         borderWidth: 1.25,
@@ -1074,7 +1088,7 @@ export default function AnalyticsPage() {
                       // matching translucent halo rings.
                       {
                         label: "Risk Profiles",
-                        data: profile3.map((p) => ({ x: p.drawdown, y: p.returnPct })),
+                        data: profile3.map((p) => ({ x: p.perTradeLoss, y: p.monthlyReturn })),
                         backgroundColor: profileFills,
                         pointBackgroundColor: profileFills,
                         pointBorderColor: profileHalos,
@@ -1097,7 +1111,7 @@ export default function AnalyticsPage() {
                       // Balanced bubble area.
                       {
                         label: "Your Profile",
-                        data: [{ x: yourProfile.drawdown, y: yourProfile.returnPct }],
+                        data: [{ x: yourProfile.perTradeLoss, y: yourProfile.monthlyReturn }],
                         backgroundColor: "rgba(52,211,153,0.95)",
                         pointBackgroundColor: "rgba(52,211,153,1)",
                         pointBorderColor: "rgba(52,211,153,0.35)",
@@ -1110,6 +1124,82 @@ export default function AnalyticsPage() {
                     ],
                   }}
                   plugins={[
+                    {
+                      // Safe-Zone background — visualises the platform's
+                      // hard policy: per-trade loss ≤ 1 %, monthly return
+                      // ≤ 10 %. We tint the (0,0)→(cap,cap) rectangle
+                      // emerald, the right-of-cap strip amber (high-loss
+                      // territory), and the above-cap strip grey (above
+                      // typical risk-budget). Dashed red cap lines sit
+                      // on the boundaries. Drawn in beforeDatasetsDraw
+                      // so the bubbles, frontier line and labels render
+                      // on top.
+                      id: "rrSafeZone",
+                      beforeDatasetsDraw(chart: any) {
+                        const ctx = chart.ctx as CanvasRenderingContext2D;
+                        const xScale = chart.scales.x;
+                        const yScale = chart.scales.y;
+                        if (!xScale || !yScale) return;
+                        const x0 = xScale.getPixelForValue(0);
+                        const xCap = xScale.getPixelForValue(PLATFORM_LOSS_CAP);
+                        const xRight = xScale.getPixelForValue(xMax);
+                        const y0 = yScale.getPixelForValue(0);
+                        const yCap = yScale.getPixelForValue(PLATFORM_RETURN_CAP);
+                        const yTop = yScale.getPixelForValue(yMax);
+                        ctx.save();
+
+                        // Safe zone — emerald wash inside the policy box.
+                        ctx.fillStyle = "rgba(52,211,153,0.06)";
+                        ctx.fillRect(x0, yCap, xCap - x0, y0 - yCap);
+
+                        // Above-cap strip (return > 10 %) — neutral wash.
+                        ctx.fillStyle = "rgba(148,163,184,0.05)";
+                        ctx.fillRect(x0, yTop, xCap - x0, yCap - yTop);
+
+                        // High-risk strip (loss > 1 %) — amber wash.
+                        ctx.fillStyle = "rgba(251,146,60,0.07)";
+                        ctx.fillRect(xCap, yTop, xRight - xCap, y0 - yTop);
+
+                        // Vertical loss-cap line at x=1%.
+                        ctx.strokeStyle = "rgba(248,113,113,0.55)";
+                        ctx.lineWidth = 1.25;
+                        ctx.setLineDash([5, 4]);
+                        ctx.beginPath();
+                        ctx.moveTo(xCap, yTop);
+                        ctx.lineTo(xCap, y0);
+                        ctx.stroke();
+
+                        // Horizontal return-cap line at y=10%.
+                        ctx.beginPath();
+                        ctx.moveTo(x0, yCap);
+                        ctx.lineTo(xRight, yCap);
+                        ctx.stroke();
+                        ctx.setLineDash([]);
+
+                        // Cap labels — small, anchored to top-right of
+                        // each cap line so they read like axis annotations
+                        // without competing with the bubbles.
+                        ctx.fillStyle = "rgba(248,113,113,0.85)";
+                        ctx.font =
+                          '600 9.5px ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif';
+                        ctx.textAlign = "right";
+                        ctx.textBaseline = "bottom";
+                        ctx.fillText("1% loss cap", xCap - 4, y0 - 4);
+                        ctx.textAlign = "left";
+                        ctx.fillText("10% return cap", x0 + 4, yCap - 4);
+
+                        // "Safe Zone" badge in the bottom-left corner of
+                        // the green rectangle.
+                        ctx.fillStyle = "rgba(52,211,153,0.7)";
+                        ctx.font =
+                          '700 10px ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif';
+                        ctx.textAlign = "left";
+                        ctx.textBaseline = "bottom";
+                        ctx.fillText("SAFE ZONE", x0 + 6, y0 - 6);
+
+                        ctx.restore();
+                      },
+                    },
                     {
                       // Inline plugin that draws point labels with
                       // collision-aware vertical placement. Without this
@@ -1315,13 +1405,27 @@ export default function AnalyticsPage() {
                             const idx = items[0]?.dataIndex;
                             if (dsIdx === 2) return "Your Profile · Live";
                             const lbl = riskProfiles[idx ?? 0]?.label ?? "";
-                            return `${lbl} · Industry Benchmark`;
+                            return `${lbl} · Platform Tier`;
                           },
-                          label: (ctx: any) => [
-                            ` Max Drawdown: ${Number(ctx.parsed.x).toFixed(1)}%`,
-                            ` Monthly Return: ${ctx.parsed.y >= 0 ? "+" : ""}${Number(ctx.parsed.y).toFixed(2)}%`,
-                            ` Annualised: ${ctx.parsed.y >= 0 ? "+" : ""}${(Number(ctx.parsed.y) * 12).toFixed(1)}%`,
-                          ],
+                          label: (ctx: any) => {
+                            const dsIdx = ctx.datasetIndex;
+                            const x = Number(ctx.parsed.x);
+                            // For "Your Profile" we display the *true*
+                            // monthly return (riskProfiles[3].actualReturn)
+                            // even though the bubble is visually clamped
+                            // to the 0–11.5 % chart band.
+                            const y =
+                              dsIdx === 2
+                                ? Number(yourProfile.actualReturn)
+                                : Number(ctx.parsed.y);
+                            const lossOk = x <= PLATFORM_LOSS_CAP + 0.001;
+                            const returnOk = y <= PLATFORM_RETURN_CAP + 0.001;
+                            return [
+                              ` Per-Trade Loss: ${x.toFixed(2)}%  ${lossOk ? "✓ within cap" : "⚠ above 1% cap"}`,
+                              ` Monthly Return: ${y >= 0 ? "+" : ""}${y.toFixed(2)}%  ${returnOk ? "✓ within cap" : "⚠ above 10% cap"}`,
+                              ` Annualised: ${y >= 0 ? "+" : ""}${(y * 12).toFixed(1)}%`,
+                            ];
+                          },
                         },
                       },
                     },
@@ -1329,36 +1433,41 @@ export default function AnalyticsPage() {
                       x: {
                         ...CHART_DEFAULTS.scales.x,
                         type: "linear" as const,
-                        suggestedMin: Math.max(0, xMinRaw - xPad),
-                        suggestedMax: xMaxRaw + xPad,
+                        // Hard bounds (not suggested) so the safe-zone
+                        // rectangle and cap lines render at predictable
+                        // pixel positions regardless of the user's data.
+                        min: xMin,
+                        max: xMax,
                         title: {
                           display: true,
-                          text: "Max Drawdown (%)",
+                          text: "Per-Trade Loss (%)  ·  cap = 1%",
                           color: "#94a3b8",
                           font: { size: 11, weight: 600 as const },
                           padding: { top: 8 },
                         },
                         ticks: {
                           ...CHART_DEFAULTS.scales.x.ticks,
-                          maxTicksLimit: 6,
-                          callback: (v: any) => `${Number(v).toFixed(0)}%`,
+                          maxTicksLimit: 8,
+                          stepSize: 0.2,
+                          callback: (v: any) => `${Number(v).toFixed(1)}%`,
                         },
                       },
                       y: {
                         ...CHART_DEFAULTS.scales.y,
-                        suggestedMin: yMinRaw - yPad,
-                        suggestedMax: yMaxRaw + yPad,
+                        min: yMin,
+                        max: yMax,
                         title: {
                           display: true,
-                          text: "Expected Return (%)",
+                          text: "Monthly Return (%)  ·  cap = 10%",
                           color: "#94a3b8",
                           font: { size: 11, weight: 600 as const },
                           padding: { bottom: 8 },
                         },
                         ticks: {
                           ...CHART_DEFAULTS.scales.y.ticks,
-                          maxTicksLimit: 6,
-                          callback: (v: any) => `${Number(v).toFixed(2)}%`,
+                          maxTicksLimit: 7,
+                          stepSize: 2,
+                          callback: (v: any) => `${Number(v).toFixed(0)}%`,
                         },
                       },
                     },
