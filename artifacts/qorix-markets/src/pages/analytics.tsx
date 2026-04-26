@@ -213,11 +213,6 @@ function ChartCard({
 
 export default function AnalyticsPage() {
   const [days, setDays] = useState(30);
-  // Independent period filter for the Drawdown Chart so users can scope
-  // the historical drawdown view (1D / 7D / 1M / 3M / All) without
-  // touching the page-level filter that drives the Equity Curve and the
-  // shared P&L distribution chart. Hedge-fund-style per-chart controls.
-  const [ddDays, setDdDays] = useState(30);
   const [perfFilter, setPerfFilter] = useState<"3m" | "6m" | "all">("6m");
   const [generatedMap, setGeneratedMap] = useState<Record<string, string>>({});
   const [generatingMonth, setGeneratingMonth] = useState<string | null>(null);
@@ -258,13 +253,6 @@ export default function AnalyticsPage() {
 
   const { data: equityRaw, isLoading: equityLoading } = useGetEquityChart(
     { days },
-    { query: { refetchInterval: 30000 } },
-  );
-  // Drawdown Chart pulls its own equity series scoped to ddDays. React-Query
-  // dedupes by queryKey, so when ddDays === days both calls share the same
-  // cache entry and there is no extra network traffic.
-  const { data: equityRawDD, isLoading: equityLoadingDD } = useGetEquityChart(
-    { days: ddDays },
     { query: { refetchInterval: 30000 } },
   );
   const { data: perf, isLoading: perfLoading } = useGetDashboardPerformance({
@@ -313,35 +301,6 @@ export default function AnalyticsPage() {
     });
   })();
 
-  // Drawdown-Chart-scoped derivations. Same shape as `equityArr`/`labels`/
-  // `drawdownValues` above but driven by `ddDays` instead of `days`, so the
-  // Drawdown Chart's own period filter (1D/7D/1M/3M/All) can move the line
-  // independently of the page-level filter.
-  const equityArrDD = Array.isArray(equityRawDD)
-    ? [...equityRawDD].sort(
-        (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
-      )
-    : [];
-  const labelsDD = equityArrDD.map((e) => {
-    try {
-      return format(parseISO(e.date), ddDays <= 7 ? "EEE" : "MMM d");
-    } catch {
-      return e.date;
-    }
-  });
-  const equityValuesDD = equityArrDD.map((e) => e.equity);
-  const drawdownValuesDD = (() => {
-    let peak = 0;
-    return equityValuesDD.map((eq) => {
-      if (eq > peak) peak = eq;
-      return peak > 0 ? -((peak - eq) / peak) * 100 : 0;
-    });
-  })();
-  // Worst (most negative) drawdown across the selected window — surfaced as
-  // the secondary "Peak DD" pill so users can see both the live-now value
-  // (server-tracked from investment) and the historical worst-of-period.
-  const peakDrawdownPctDD =
-    drawdownValuesDD.length > 0 ? Math.min(...drawdownValuesDD) : 0;
 
   const totalProfit = profitValues.reduce((a, b) => a + b, 0);
   const totalProfitStr =
@@ -734,32 +693,26 @@ export default function AnalyticsPage() {
               from equity points — that's a useful timeline view, just not
               the right number to put on the headline stat. */}
           {(() => {
-            // Headline stat: server-tracked live drawdown — independent of
-            // ddDays, mirrors Demo Dashboard's "Current Drawdown" exactly.
+            // Headline stat: server-tracked live drawdown — mirrors Demo
+            // Dashboard's "Current Drawdown" exactly. Independent of the
+            // page-level period filter (it's a real-time figure, not a
+            // historical one).
             const investAmount = Number(investment?.amount ?? 0);
             const investDrawdownDollars = Number(investment?.drawdown ?? 0);
             const drawdownPctCanonical =
               investAmount > 0 ? (investDrawdownDollars / investAmount) * 100 : 0;
             const drawdownStat = `${drawdownPctCanonical.toFixed(2)}% (-$${investDrawdownDollars.toFixed(2)}) now`;
             // Secondary "Peak DD" pill: worst historical drawdown WITHIN
-            // the selected DD period — moves as the user changes the
-            // 1D/7D/1M/3M/All filter, so the chart pill always reflects
-            // what's actually being plotted.
+            // the period currently selected by the GLOBAL page filter
+            // (top-right). Moves whenever the user changes 1D/7D/30D/6M/1Y/All
+            // up top, exactly like every other chart on the page.
+            const peakDrawdownPct =
+              drawdownValues.length > 0 ? Math.min(...drawdownValues) : 0;
             const peakStat =
-              equityValuesDD.length > 0
-                ? `Peak DD: ${peakDrawdownPctDD.toFixed(2)}%`
+              equityValues.length > 0
+                ? `Peak DD: ${peakDrawdownPct.toFixed(2)}%`
                 : undefined;
-            const ddLoading = equityLoadingDD || invLoading;
-            // Per-chart period filter options. Hedge-fund standard:
-            // intraday (1D), week (7D), month (1M), quarter (3M), full
-            // history (All).
-            const ddPeriodOptions = [
-              { label: "1D", value: 1 },
-              { label: "7D", value: 7 },
-              { label: "1M", value: 30 },
-              { label: "3M", value: 90 },
-              { label: "All", value: 3650 },
-            ] as const;
+            const ddLoading = loading || invLoading;
             return (
           <ChartCard
             title="Drawdown Chart"
@@ -771,23 +724,15 @@ export default function AnalyticsPage() {
             statColor="#ef4444"
             secondaryStat={ddLoading ? undefined : peakStat}
             secondaryStatColor="#fb923c"
-            controls={
-              <PeriodFilter
-                options={ddPeriodOptions}
-                selected={ddDays}
-                onChange={(v) => setDdDays(v)}
-                ariaLabel="Drawdown chart period"
-              />
-            }
             delay={0.15}
           >
             <Line
               data={{
-                labels: labelsDD,
+                labels,
                 datasets: [
                   {
                     label: "Drawdown %",
-                    data: drawdownValuesDD,
+                    data: drawdownValues,
                     borderColor: "rgba(239,68,68,0.95)",
                     borderWidth: 2,
                     backgroundColor: (ctx: any) => {
@@ -801,7 +746,7 @@ export default function AnalyticsPage() {
                     },
                     fill: true,
                     tension: 0.35,
-                    pointRadius: ddDays <= 7 ? 3 : 0,
+                    pointRadius: days <= 7 ? 3 : 0,
                     pointHoverRadius: 5,
                     pointBackgroundColor: "rgba(239,68,68,1)",
                     pointBorderColor: "rgba(15,23,42,0.9)",
@@ -811,7 +756,7 @@ export default function AnalyticsPage() {
                     ? [
                         {
                           label: "Protection Limit",
-                          data: labelsDD.map(() => -(investment.drawdownLimit)),
+                          data: labels.map(() => -(investment.drawdownLimit)),
                           borderColor: "rgba(249,115,22,0.7)",
                           borderWidth: 1.5,
                           borderDash: [6, 4],
