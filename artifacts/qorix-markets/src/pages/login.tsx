@@ -353,6 +353,120 @@ function AwaitingApprovalStep({
 }
 
 // ────────────────────────────────────────────────────────────────────────────
+// Two-Factor prompt step (shown after successful password when user has 2FA on)
+// ────────────────────────────────────────────────────────────────────────────
+interface TwoFactorVerifySuccess {
+  // Success path — same shape as a normal /auth/login success
+  token?: string;
+  user?: any;
+  // OR the device-fingerprint pending-approval branch
+  requiresApproval?: boolean;
+  attemptId?: number;
+  pollToken?: string;
+  expiresAt?: string;
+  otpFallbackAfterMs?: number;
+  device?: { browser: string; os: string };
+}
+
+function TwoFactorPromptStep({
+  twoFactorToken,
+  onSuccess,
+  onCancel,
+}: {
+  twoFactorToken: string;
+  onSuccess: (data: TwoFactorVerifySuccess) => void;
+  onCancel: () => void;
+}) {
+  const [code, setCode] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const { toast } = useToast();
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = code.trim();
+    if (!trimmed) {
+      toast({ title: "Enter your 2FA code", variant: "destructive" });
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const data = await apiFetch("/auth/2fa/login-verify", {
+        method: "POST",
+        body: JSON.stringify({ twoFactorToken, code: trimmed }),
+      });
+      onSuccess(data);
+    } catch (err: any) {
+      toast({
+        title: "Verification failed",
+        description: err.message || "Please check your code and try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen w-full bg-background flex items-center justify-center px-4 relative overflow-hidden">
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[700px] h-[500px] bg-primary/8 rounded-full blur-[120px] pointer-events-none" />
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="w-full max-w-md"
+      >
+        <div className="glass-card rounded-2xl p-7">
+          <div className="flex flex-col items-center text-center mb-5">
+            <div className="p-3 rounded-2xl bg-blue-500/15 text-blue-400 mb-3">
+              <ShieldCheck style={{ width: 28, height: 28 }} />
+            </div>
+            <h2 className="text-xl font-semibold">Two-Factor Authentication</h2>
+            <p className="text-sm text-muted-foreground mt-1">
+              Enter the 6-digit code from your authenticator app, or one of your backup codes.
+            </p>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <input
+              type="text"
+              inputMode="text"
+              autoComplete="one-time-code"
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              placeholder="123456"
+              className="w-full px-4 py-3 rounded-xl bg-white/[0.04] border border-white/10 text-center text-lg font-mono tracking-[0.3em] focus:outline-none focus:border-blue-500/50"
+              autoFocus
+              maxLength={16}
+            />
+            <Button
+              type="submit"
+              disabled={submitting || !code.trim()}
+              className="w-full h-11"
+            >
+              {submitting ? (
+                <Loader2 className="animate-spin" style={{ width: 16, height: 16 }} />
+              ) : (
+                "Verify & Sign in"
+              )}
+            </Button>
+            <button
+              type="button"
+              onClick={onCancel}
+              className="w-full text-xs text-muted-foreground hover:text-white transition-colors py-2"
+            >
+              Cancel and start over
+            </button>
+          </form>
+
+          <p className="text-[11px] text-center text-muted-foreground/70 mt-4">
+            Lost access? Each backup code (XXXX-XXXX) works once.
+          </p>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 // Main login/register page
 // ────────────────────────────────────────────────────────────────────────────
 export default function LoginPage() {
@@ -462,9 +576,20 @@ export default function LoginPage() {
   } | null>(null);
   const [loginInFlight, setLoginInFlight] = useState(false);
 
+  // ── Two-Factor challenge state ───────────────────────────────────────
+  // Set when the backend returns { requires2FA, twoFactorToken } after a
+  // successful password check. Triggers the TwoFactorPromptStep below,
+  // which collects the 6-digit code and POSTs to /auth/2fa/login-verify
+  // — that response can then be ANOTHER discriminated branch (success
+  // OR pending-approval), so we route it through the same setters.
+  const [pendingTwoFactor, setPendingTwoFactor] = useState<{
+    twoFactorToken: string;
+  } | null>(null);
+
   // We bypass the codegen useLogin hook here because the /auth/login
   // response shape is now a discriminated union (token+user OR
-  // requiresApproval+attemptId). Direct fetch keeps types honest.
+  // requiresApproval+attemptId OR requires2FA+twoFactorToken). Direct
+  // fetch keeps types honest.
   const submitLogin = async () => {
     setLoginInFlight(true);
     try {
@@ -472,6 +597,10 @@ export default function LoginPage() {
         method: "POST",
         body: JSON.stringify({ email, password, captchaToken }),
       });
+      if (data?.requires2FA && data?.twoFactorToken) {
+        setPendingTwoFactor({ twoFactorToken: data.twoFactorToken });
+        return;
+      }
       if (data?.requiresApproval) {
         setPendingApproval({
           attemptId: data.attemptId,
@@ -552,6 +681,36 @@ export default function LoginPage() {
 
   const isPending = loginMutation.isPending || registerMutation.isPending;
   const canSubmit = !isPending && (!CAPTCHA_ENABLED || !!captchaToken);
+
+  // ── Two-Factor prompt step (shown when password OK but 2FA enabled) ──
+  // Comes BEFORE the awaiting-approval check because /auth/2fa/login-verify
+  // is what triggers the device-fingerprint logic — until that succeeds,
+  // we don't know whether to show the approval flow.
+  if (pendingTwoFactor) {
+    return (
+      <TwoFactorPromptStep
+        twoFactorToken={pendingTwoFactor.twoFactorToken}
+        onSuccess={(data) => {
+          setPendingTwoFactor(null);
+          if (data.requiresApproval) {
+            setPendingApproval({
+              attemptId: data.attemptId,
+              pollToken: data.pollToken,
+              expiresAt: data.expiresAt,
+              otpFallbackAfterMs: data.otpFallbackAfterMs,
+              device: data.device,
+            });
+            return;
+          }
+          if (data.token && data.user) {
+            setAuthData(data.token, data.user);
+            setLocation("/dashboard");
+          }
+        }}
+        onCancel={() => setPendingTwoFactor(null)}
+      />
+    );
+  }
 
   // ── Awaiting-approval step (shown when another device owns this account) ──
   if (pendingApproval) {

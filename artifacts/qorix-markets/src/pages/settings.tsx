@@ -13,6 +13,7 @@ import type { VipInfo } from "@workspace/api-client-react";
 import { useEffect, useMemo, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { TelegramAlertsCard } from "@/components/telegram-alerts-card";
+import { TwoFactorCard } from "@/components/two-factor-card";
 
 interface SecurityStatus {
   passwordChangedAt: string | null;
@@ -269,29 +270,7 @@ export default function SettingsPage() {
               </button>
             </div>
 
-            <div className="flex items-center justify-between p-3.5 rounded-xl bg-white/[0.03] border border-white/[0.06] gap-3">
-              <div className="min-w-0 pr-1 flex-1">
-                {/* Title row — `flex-wrap` lets the "Coming soon" pill
-                    drop to a second line on narrow screens (iPhone)
-                    instead of crushing the title into "Two-Factor /
-                    Auth" while the pill itself wraps to "COMING /
-                    SOON". `whitespace-nowrap` + `shrink-0` on the
-                    pill prevents it from breaking mid-word. */}
-                <div className="text-sm font-medium flex flex-wrap items-center gap-x-2 gap-y-1">
-                  <span className="whitespace-nowrap">Two-Factor Auth</span>
-                  <span className="text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-white/[0.06] text-muted-foreground border border-white/10 whitespace-nowrap shrink-0">
-                    Coming soon
-                  </span>
-                </div>
-                <div className="text-xs text-muted-foreground mt-0.5">Adds extra login protection</div>
-              </div>
-              <button
-                disabled
-                className="btn btn-ghost text-xs px-3 py-1.5 shrink-0 opacity-40 cursor-not-allowed"
-              >
-                Enable
-              </button>
-            </div>
+            <TwoFactorCard />
           </div>
         </motion.div>
 

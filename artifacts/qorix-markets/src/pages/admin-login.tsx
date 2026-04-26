@@ -33,8 +33,21 @@ export default function AdminLoginPage() {
 
   const loginMutation = useLogin({
     mutation: {
-      onSuccess: (data) => {
-        if (!data.user.isAdmin) {
+      onSuccess: (data: any) => {
+        // 2FA-enabled admins land on the regular /login page (which has the
+        // full TOTP prompt UI). The codegen useLogin shape doesn't know
+        // about the 2FA-challenge branch, so we sniff it defensively here
+        // before touching `data.user`.
+        if (data?.requires2FA) {
+          toast({
+            title: "Use the main login page",
+            description: "Your account has Two-Factor Auth enabled. Sign in via the regular login.",
+            variant: "destructive",
+          });
+          setLocation("/login");
+          return;
+        }
+        if (!data.user || !data.user.isAdmin) {
           toast({
             title: "Admin access only",
             description: "This login is only for admin accounts.",

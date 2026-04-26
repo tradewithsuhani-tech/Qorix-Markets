@@ -24,6 +24,7 @@ import googleOauthRouter from "./google-oauth";
 import kycRouter from "./kyc";
 import promoRouter from "./promo";
 import telegramRouter from "./telegram";
+import twoFactorRouter from "./two-factor";
 
 const router: IRouter = Router();
 
@@ -58,5 +59,6 @@ router.use(adminTasksRouter);
 router.use(signalTradesRouter);
 router.use(promoRouter);
 router.use(telegramRouter);
+router.use(twoFactorRouter);
 
 export default router;

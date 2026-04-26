@@ -9,6 +9,11 @@ import { trackLoginEvent, runFraudChecks } from "../lib/fraud-service";
 import { sendOtp, verifyOtp, getDevOtp, sendEmail } from "../lib/email-service";
 import { buildBrandedEmailHtml } from "../lib/email-template";
 import { verifyCaptcha } from "../lib/captcha-service";
+import {
+  signTwoFactorChallenge,
+  verifyTwoFactorChallenge,
+  consumeAuthCodeForUser,
+} from "./two-factor";
 import crypto from "crypto";
 import rateLimit from "express-rate-limit";
 
@@ -390,12 +395,38 @@ router.post("/auth/login", loginRateLimit, async (req, res) => {
     await runFraudChecks(user.id, ip, ua, null);
   });
 
-  // ─── Single-active-device check ────────────────────────────────────────
-  // If the user already has another device "owning" this account, hold the
-  // login pending until that device approves OR the 60s email-OTP fallback
-  // runs. Admins and the smoke-test account bypass this check (admin
-  // tooling can legitimately span devices, and CI rotates fingerprints
-  // every deploy).
+  // ─── Two-Factor Authentication gate ────────────────────────────────────
+  // If the user has TOTP 2FA enabled, halt the login here and hand back
+  // a short-lived challenge token. The frontend will collect a 6-digit
+  // code (or 8-char backup code) and POST to /auth/2fa/login-verify,
+  // which will run the SAME single-device + session-token logic below
+  // once the code checks out. We skip this for admins ONLY if they
+  // haven't enrolled — once an admin opts in, they get the prompt too.
+  if (user.twoFactorEnabled && user.twoFactorSecret) {
+    const twoFactorToken = signTwoFactorChallenge(user.id);
+    res.json({
+      requires2FA: true,
+      twoFactorToken,
+      ttlSeconds: 5 * 60,
+    });
+    return;
+  }
+
+  await issueSessionAfterAuth(user, req, res);
+});
+
+// ─── Helper: post-password session issuance ─────────────────────────────
+// Extracted so /auth/2fa/login-verify can reuse the EXACT same single-
+// active-device + session-token logic the password-only login path uses.
+// Anything written into res here ends the request — caller must return
+// immediately after calling.
+async function issueSessionAfterAuth(
+  user: typeof usersTable.$inferSelect,
+  req: any,
+  res: any,
+): Promise<void> {
+  const ip = getClientIp(req);
+  const ua = req.headers["user-agent"];
   const fingerprint = computeDeviceFingerprint(req);
   const skipDeviceGate = user.isAdmin || user.isSmokeTest;
   if (
@@ -403,9 +434,6 @@ router.post("/auth/login", loginRateLimit, async (req, res) => {
     user.activeSessionFingerprint &&
     user.activeSessionFingerprint !== fingerprint
   ) {
-    // Different device wants in. Create a pending attempt and hand back a
-    // poll token; the active device will see it via /auth/login-attempts/
-    // pending and either approve, deny, or time out (→ email OTP).
     const pollToken = crypto.randomBytes(24).toString("hex");
     const expiresAt = new Date(Date.now() + LOGIN_APPROVAL_WINDOW_MS);
     const { browser, os } = describeDevice(req);
@@ -434,7 +462,6 @@ router.post("/auth/login", loginRateLimit, async (req, res) => {
     return;
   }
 
-  // First login OR same device — claim/refresh the slot and issue token.
   if (!skipDeviceGate) {
     await db
       .update(usersTable)
@@ -443,6 +470,59 @@ router.post("/auth/login", loginRateLimit, async (req, res) => {
   }
   const token = signToken(user.id, user.isAdmin);
   res.json({ token, user: formatUser(user) });
+}
+
+// ---------------------------------------------------------------------------
+// POST /auth/2fa/login-verify
+// Second leg of the 2FA-gated login. Body: { twoFactorToken, code } where
+// `code` is a 6-digit TOTP code OR an 8-char backup code. On success we
+// hand the user off to issueSessionAfterAuth() — same single-device + JWT
+// path the password-only login uses.
+// ---------------------------------------------------------------------------
+router.post("/auth/2fa/login-verify", loginRateLimit, async (req, res) => {
+  const token: unknown = req.body?.twoFactorToken;
+  const code: unknown = req.body?.code;
+  if (typeof token !== "string" || typeof code !== "string") {
+    res.status(400).json({ error: "Validation failed" });
+    return;
+  }
+  const decoded = verifyTwoFactorChallenge(token);
+  if (!decoded) {
+    res.status(401).json({ error: "Two-factor session expired. Please log in again." });
+    return;
+  }
+  const users = await db.select().from(usersTable).where(eq(usersTable.id, decoded.userId)).limit(1);
+  const user = users[0];
+  if (!user) {
+    res.status(401).json({ error: "Invalid session" });
+    return;
+  }
+  if (user.isDisabled || (user.isFrozen && !user.isAdmin)) {
+    res.status(403).json({ error: "Account access is restricted" });
+    return;
+  }
+  if (!user.twoFactorEnabled || !user.twoFactorSecret) {
+    // Race: 2FA was disabled between login and verify. Treat as success — the
+    // user proved password already. Most apps just log in here.
+    await issueSessionAfterAuth(user, req, res);
+    return;
+  }
+
+  // Atomic verify+consume: row lock + verify against fresh state +
+  // persist consumed backup-code state, all inside one transaction.
+  // Prevents two concurrent login-verify requests from both burning
+  // the same backup code.
+  const consumed = await consumeAuthCodeForUser(user.id, code.trim());
+  if (!consumed.ok) {
+    if (consumed.reason === "not-enabled") {
+      // Race: 2FA was disabled between password check and verify.
+      await issueSessionAfterAuth(user, req, res);
+      return;
+    }
+    res.status(400).json({ error: "Invalid code. Please try again." });
+    return;
+  }
+  await issueSessionAfterAuth(user, req, res);
 });
 
 // ─── Single-active-device login: tunables ────────────────────────────────
