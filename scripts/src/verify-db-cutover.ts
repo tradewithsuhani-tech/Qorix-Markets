@@ -96,6 +96,11 @@ async function connect(url: string, label: string): Promise<pg.Client> {
   });
   try {
     await client.connect();
+    // Some hosted Postgres providers (raw Neon, plain RDS) ship an empty
+    // default search_path, so unqualified "users" / "wallets" in the count
+    // queries below resolve to 'relation does not exist'. Replit-managed
+    // Neon defaults to 'public, "$user"' so this is a no-op there.
+    await client.query("set search_path to public");
   } catch (err) {
     throw new Error(
       `connect to ${label} failed: ${(err as Error).message}`,
