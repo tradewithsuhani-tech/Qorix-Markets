@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db, notificationsTable, systemSettingsTable } from "@workspace/db";
 import { eq, desc, and } from "drizzle-orm";
-import { authMiddleware, type AuthRequest } from "../middlewares/auth";
+import { authMiddleware, getParam, type AuthRequest } from "../middlewares/auth";
 
 const router = Router();
 router.use(authMiddleware);
@@ -68,7 +68,7 @@ router.get("/notifications", async (req: AuthRequest, res) => {
 });
 
 router.patch("/notifications/:id/read", async (req: AuthRequest, res) => {
-  const id = parseInt(req.params["id"]! as string);
+  const id = parseInt(getParam(req, "id"));
   if (isNaN(id)) {
     res.status(400).json({ error: "Invalid id" });
     return;
@@ -98,7 +98,7 @@ router.patch("/notifications/read-all", async (req: AuthRequest, res) => {
 });
 
 router.delete("/notifications/:id", async (req: AuthRequest, res) => {
-  const id = parseInt(req.params["id"]! as string);
+  const id = parseInt(getParam(req, "id"));
   if (isNaN(id)) {
     res.status(400).json({ error: "Invalid id" });
     return;

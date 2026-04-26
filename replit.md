@@ -117,6 +117,25 @@ Self-contained on-chain deposit pipeline in `artifacts/api-server/src/lib/crypto
 
 ## API Routes
 
+### Reading route params (Express 5)
+
+With `@types/express` 5, `req.params[key]` is typed as `string | string[]`,
+which forced every `parseInt(req.params.id)` call to add an `as string` cast.
+Use the `getParam(req, "id")` helper from `middlewares/auth.ts` instead of
+reaching into `req.params` directly:
+
+```ts
+import { getParam } from "../middlewares/auth";
+
+router.get("/widgets/:id", (req, res) => {
+  const id = parseInt(getParam(req, "id"), 10);
+  // ...
+});
+```
+
+The helper throws if the named param is missing, so handlers don't need to
+sprinkle `!` or `as string` either.
+
 All routes prefixed with `/api`:
 - POST `/auth/register`, POST `/auth/login`, GET `/auth/me`
 - GET/POST `/wallet`, POST `/wallet/deposit`, POST `/wallet/withdraw`, POST `/wallet/transfer`

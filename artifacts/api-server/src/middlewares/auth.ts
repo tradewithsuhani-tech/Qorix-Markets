@@ -89,3 +89,23 @@ export async function adminMiddleware(req: AuthRequest, res: Response, next: Nex
 export function signToken(userId: number, isAdmin: boolean): string {
   return jwt.sign({ userId, isAdmin }, JWT_SECRET, { expiresIn: "7d" });
 }
+
+// With @types/express 5, `req.params[key]` is typed as `string | string[]`
+// (see ParamsDictionary in express-serve-static-core), which forced every
+// route handler to write `req.params.id as string`. Express only ever
+// produces string values for matched route params (the array form is for
+// wildcard routes we don't use), so this helper centralizes the narrowing
+// in one place. New routes should call `getParam(req, "id")` instead of
+// reaching into `req.params` directly.
+export function getParam(req: Request, name: string): string {
+  const raw = req.params[name];
+  if (raw === undefined) {
+    throw new Error(`Missing required route param: ${name}`);
+  }
+  // We don't use wildcard routes (`*foo`), so an array here is unexpected
+  // and almost certainly a bug — fail loudly rather than silently coerce.
+  if (Array.isArray(raw)) {
+    throw new Error(`Unexpected array value for route param: ${name}`);
+  }
+  return raw;
+}

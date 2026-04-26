@@ -2,7 +2,7 @@ import { Router } from "express";
 import { db } from "@workspace/db";
 import { chatSessionsTable, chatMessagesTable, usersTable } from "@workspace/db/schema";
 import { eq, desc, and } from "drizzle-orm";
-import { authMiddleware, adminMiddleware, type AuthRequest } from "../middlewares/auth";
+import { authMiddleware, adminMiddleware, getParam, type AuthRequest } from "../middlewares/auth";
 import type { Response } from "express";
 
 const router = Router();
@@ -33,7 +33,7 @@ router.post("/chat/session", authMiddleware, async (req: AuthRequest, res: Respo
 // Get messages for a session
 router.get("/chat/session/:id/messages", authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
-    const sessionId = parseInt(req.params.id as string);
+    const sessionId = parseInt(getParam(req, "id"));
     const session = await db.select().from(chatSessionsTable).where(eq(chatSessionsTable.id, sessionId)).limit(1);
 
     if (!session.length || session[0].userId !== req.userId!) {
@@ -104,7 +104,7 @@ router.post("/chat/bot-message", authMiddleware, async (req: AuthRequest, res: R
 // End chat (user-initiated)
 router.post("/chat/session/:id/end", authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
-    const sessionId = parseInt(req.params.id as string);
+    const sessionId = parseInt(getParam(req, "id"));
     const session = await db.select().from(chatSessionsTable).where(eq(chatSessionsTable.id, sessionId)).limit(1);
 
     if (!session.length || session[0].userId !== req.userId!) {
@@ -178,7 +178,7 @@ router.get("/admin/chats", authMiddleware, adminMiddleware, async (req: AuthRequ
 // Get messages for a session (admin only)
 router.get("/admin/chats/:id/messages", authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
   try {
-    const sessionId = parseInt(req.params.id as string);
+    const sessionId = parseInt(getParam(req, "id"));
     const messages = await db
       .select()
       .from(chatMessagesTable)
@@ -195,7 +195,7 @@ router.get("/admin/chats/:id/messages", authMiddleware, adminMiddleware, async (
 // Admin reply to a session
 router.post("/admin/chats/:id/reply", authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
   try {
-    const sessionId = parseInt(req.params.id as string);
+    const sessionId = parseInt(getParam(req, "id"));
     const adminId = req.userId!;
     const { content } = req.body;
 
@@ -220,7 +220,7 @@ router.post("/admin/chats/:id/reply", authMiddleware, adminMiddleware, async (re
 // Mark session as resolved (admin only)
 router.post("/admin/chats/:id/resolve", authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
   try {
-    const sessionId = parseInt(req.params.id as string);
+    const sessionId = parseInt(getParam(req, "id"));
     await db.update(chatSessionsTable).set({ status: "resolved" }).where(eq(chatSessionsTable.id, sessionId));
     res.json({ success: true });
   } catch (err) {
