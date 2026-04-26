@@ -43,9 +43,10 @@ shell with `flyctl`, `psql`, and `pg_dump` in another.
         --no-privileges` to `/tmp/qorix-cutover-*.dump`.
   - [ ] **5.** Truncate target, `pg_restore --exit-on-error`, **reset
         sequences** (the `setval` batch — don't skip).
-  - [ ] **6.** Diff source/target counts (must be empty), run
-        wallet-decrypt preflight (must say `OK`). Reminder:
-        **`WALLET_ENC_SECRET` and `SESSION_SECRET` do NOT change.**
+  - [ ] **6.** Run `pnpm --filter @workspace/scripts run verify-db-cutover
+        -- --source "$SOURCE_DATABASE_URL" --target "$TARGET_DATABASE_URL"`
+        — exit 0 = all critical counts match and wallet decrypt OK.
+        Reminder: **`WALLET_ENC_SECRET` and `SESSION_SECRET` do NOT change.**
   - [ ] **7.** `fly secrets set DATABASE_URL=...` (skip on Fly MPG —
         `fly mpg attach` already set it). No DNS changes needed for this
         cutover (see step 7 for the conditional).
@@ -340,97 +341,77 @@ psql "$TARGET_DATABASE_URL" -c "
 > If you genuinely need to rotate either secret, do it in a separate
 > change *after* this cutover is verified green, not as part of it.
 
-Re-run the counts on the **target** and diff:
+All three checks (exact counts on the critical tables, approximate
+counts on every other table, and the wallet-decrypt sanity check that
+mirrors `runWalletEncryptionPreflight`) are wrapped in one script —
+`scripts/src/verify-db-cutover.ts`. Run it against both URLs. The
+script exits 0 only if every critical-table count matches **and** the
+wallet decrypt succeeds; any failure exits 1 and prints exactly which
+table or which sample id is wrong.
 
 ```bash
-psql "$TARGET_DATABASE_URL" -c "
-  select 'users'              as t, count(*) from users
-  union all select 'wallets',           count(*) from wallets
-  union all select 'ledger_entries',    count(*) from ledger_entries
-  union all select 'deposit_addresses', count(*) from deposit_addresses
-  union all select 'transactions',      count(*) from transactions
-  union all select 'investments',       count(*) from investments;
-" | tee /tmp/cutover-target-exact.txt
-
-diff -u /tmp/cutover-source-exact.txt /tmp/cutover-target-exact.txt
+# WALLET_ENC_SECRET must already be exported in this shell — same value
+# the source app uses (JWT_SECRET is accepted as a fallback, mirroring
+# artifacts/api-server/src/lib/wallet-crypto.ts). Without it the script
+# refuses to run the decrypt check.
+pnpm --filter @workspace/scripts run verify-db-cutover \
+  -- --source "$SOURCE_DATABASE_URL" \
+     --target "$TARGET_DATABASE_URL" \
+  2>&1 | tee /tmp/cutover-verify.log
 ```
 
-The diff must be **empty**. Any row-count mismatch on `users`, `wallets`,
-`ledger_entries`, or `deposit_addresses` is a stop-the-line — go to the
-back-out path in step 9.
-
-For the broader table list (settings, signal trades, scheduled promos,
-etc.), eyeball `/tmp/cutover-source-counts.csv` against:
-
-```bash
-psql "$TARGET_DATABASE_URL" -At -F',' -c "
-  select relname, n_live_tup
-  from pg_stat_user_tables
-  order by relname;
-" > /tmp/cutover-target-counts.csv
-
-diff -u /tmp/cutover-source-counts.csv /tmp/cutover-target-counts.csv
-```
-
-`pg_stat_user_tables` counts are approximate, so a small drift here
-(±1–2 on busy queue tables) is OK — but anything more than that on
-a financial table is not.
-
-**Wallet decrypt sanity check.** This is the same code path the API
-runs at boot (`runWalletEncryptionPreflight` in
-`artifacts/api-server/src/lib/wallet-preflight.ts`). We run it with the
-target DB so we catch a bad key *before* users hit the API:
-
-```bash
-# Point a one-shot machine at the new DB and let it run the preflight.
-# The API exits 1 in production if the preflight fails — so a successful
-# 'started' line in the logs == green.
-DATABASE_URL="$TARGET_DATABASE_URL" \
-  fly machine run . \
-    --app qorix-api \
-    --rm \
-    --env DATABASE_URL="$TARGET_DATABASE_URL" \
-    --command 'node dist/index.js' \
-  2>&1 | tee /tmp/cutover-preflight.log
-
-grep -E '\[wallet-preflight\] (OK|FATAL)' /tmp/cutover-preflight.log
-```
-
-You want to see:
+You want to see, in order:
 
 ```
-[wallet-preflight] OK — wallet encryption secret matches existing data
+Critical tables (exact count):
+  OK   users              source=… target=… diff=0
+  OK   wallets            …
+  OK   ledger_entries     …
+  OK   deposit_addresses  …
+  OK   transactions       …
+  OK   investments        …
+  all critical-table counts match.
+
+All public tables (approximate, pg_stat_user_tables):
+  no significant approximate drift (tolerance ±2).
+  # …or one or more `WARN` lines, which are informational only.
+
+Wallet-decrypt sanity check (target DB):
+  OK   wallet encryption secret matches existing data (sample id=…)
+
+verify-db-cutover: PASS
 ```
 
-If you see `FATAL — cannot decrypt existing wallet ciphertext`, the
-`WALLET_ENC_SECRET` on `qorix-api` does not match the secret the source
-DB's wallets were encrypted with. **Stop, fix the secret to match
-Replit's value, and re-run this step.** Do *not* proceed to step 7.
+Anything else is a stop-the-line. The two failure modes the script is
+designed to catch:
 
-  > 💡 **Fallback verification path** if `fly machine run` is unavailable
-  > or behaves unexpectedly in your version of `flyctl` (the one-shot
-  > command and its flags have shifted between flyctl releases). You can
-  > exercise the *same* preflight against the new DB without a one-shot
-  > machine, by piggy-backing on the regular boot:
-  >
-  > 1. Temporarily set `DATABASE_URL` on `qorix-api` to the new target,
-  >    but **leave the API scaled to 0** so no real users hit it:
-  >    `fly secrets set DATABASE_URL="$TARGET_DATABASE_URL" --app qorix-api`
-  > 2. Bring exactly one machine up briefly:
-  >    `fly scale count 1 --app qorix-api`
-  > 3. Tail `fly logs --app qorix-api` and look for the
-  >    `[wallet-preflight] OK` line within ~10 s of startup. If you see
-  >    `[wallet-preflight] FATAL` and the machine exits, the API will
-  >    crashloop — that is the desired behavior, it is telling you the
-  >    secret is wrong before any user is exposed.
-  > 4. Scale back to 0 (`fly scale count 0 --app qorix-api`) and continue
-  >    to step 7. The `DATABASE_URL` you just set is the one you want for
-  >    step 7 anyway, so this is not wasted work — just keep step 7's
-  >    `fly secrets set` for documentation but you can skip re-running it.
-  >
-  > Either path is acceptable. The one-shot machine is cleaner because it
-  > never brings the API into the load balancer; the boot-and-tail method
-  > is more robust against `flyctl` version drift.
+- **Critical-table `FAIL` line** — `pg_restore` skipped rows or you ran
+  it without `--exit-on-error` in step 5. Truncate the target and redo
+  step 5; do **not** try to backfill missing rows by hand.
+- **`Wallet-decrypt sanity check … FAIL`** — the `WALLET_ENC_SECRET`
+  in your shell does not match the secret the source DB's wallets were
+  encrypted with. Re-export the right value (from your password manager,
+  per step 0) and re-run. Do *not* proceed to step 7 until the script
+  exits 0.
+
+The `WARN` lines under "All public tables" come from
+`pg_stat_user_tables`, which is updated lazily by autovacuum / ANALYZE.
+A small drift on busy queue tables (signals, notifications, BullMQ
+state) is normal; a 1000-row drift on `chat_messages` is not. Eyeball
+them, but do not block the cutover on warnings alone.
+
+  > 💡 **Don't skip the wallet decrypt.** The script supports a
+  > `--skip-decrypt` flag, but it exists only for connectivity smoke
+  > tests against an empty DB. A real cutover *must* run the decrypt
+  > check — it's the cheapest way to catch a wrong `WALLET_ENC_SECRET`
+  > on the new host before users hit the API and discover their TRC20
+  > sweeps don't work.
+
+  > 🧪 **Dry-run friendly.** Because the script takes any two
+  > `postgres://` URLs, you can — and should — point it at a throwaway
+  > target the day before the real cutover (restore the dump into a
+  > scratch DB, then run the script). A green dry-run gives you high
+  > confidence step 6 will pass during the live window.
 
 ## 7. Point the API at the new DB
 
