@@ -19,6 +19,7 @@ import {
   ArrowLeft,
   Loader2,
   ShieldCheck,
+  ShieldAlert,
 } from "lucide-react";
 import { Layout } from "@/components/layout";
 import { cn } from "@/lib/utils";
@@ -518,14 +519,30 @@ export default function DepositPage() {
                       {/* Address + info */}
                       <div className="flex-1 w-full space-y-4">
                         <div>
-                          <div className="text-[11px] text-muted-foreground mb-1.5 uppercase tracking-wider font-semibold">
-                            Platform Wallet Address
-                          </div>
-                          <div className="bg-white/4 border border-white/10 rounded-xl px-3 py-2.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                            <span className="min-w-0 flex-1 text-xs font-mono text-white break-all leading-relaxed">{platformAddress}</span>
-                            <div className="self-end sm:self-auto">
-                              <CopyButton text={platformAddress} />
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground uppercase tracking-wider font-semibold">
+                              <span className="relative flex h-1.5 w-1.5">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-60" />
+                                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-400" />
+                              </span>
+                              Platform Wallet Address
                             </div>
+                            <span className="text-[9px] font-semibold text-emerald-400/90 uppercase tracking-wider">Live</span>
+                          </div>
+                          <div className="relative group">
+                            {/* Soft outer glow that strengthens on hover for that
+                                "this is a real, premium address" vibe. */}
+                            <div className="absolute -inset-px rounded-xl bg-gradient-to-r from-blue-500/30 via-purple-500/20 to-emerald-500/30 opacity-40 blur-md group-hover:opacity-70 transition-opacity duration-500 pointer-events-none" />
+                            <div className="relative bg-gradient-to-br from-white/[0.06] via-white/[0.03] to-white/[0.05] border border-white/10 rounded-xl px-4 py-3.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 backdrop-blur-sm">
+                              <span className="min-w-0 flex-1 text-[13px] sm:text-sm font-mono font-medium text-white break-all leading-relaxed tracking-wide select-all">{platformAddress}</span>
+                              <div className="self-end sm:self-auto shrink-0">
+                                <CopyButton text={platformAddress} />
+                              </div>
+                            </div>
+                          </div>
+                          <div className="mt-2 flex items-start gap-1.5 text-[10px] text-amber-400/80 leading-relaxed">
+                            <ShieldAlert className="w-3 h-3 mt-px shrink-0" />
+                            <span>Send only USDT on TRON (TRC20). Wrong network = funds lost.</span>
                           </div>
                         </div>
 
