@@ -781,6 +781,191 @@ jobs:
           JS
           node smoke.mjs
 
+      # Runtime side of the version-stamp contract. The earlier
+      # smoke_web_version step proves the SERVER ships a fresh
+      # /version.json, but says nothing about whether the CLIENT actually
+      # notices and surfaces the refresh prompt. This step drives a real
+      # browser, intercepts /version.json with a synthetic newer version,
+      # and waits for <UpdateBanner> (data-testid="banner-update-available")
+      # to appear. Catches the failure modes the network check cannot:
+      #   - <UpdateBanner> removed / unmounted from <App>.
+      #   - useVersionCheck stops being mounted (no fetch fires).
+      #   - Hook's fetch URL changes and stops hitting /version.json.
+      #   - Version compare logic regresses (e.g. always returns false).
+      #   - Banner renders but its user-visible copy is gone.
+      - name: Browser smoke test — update banner appears on version change
+        id: smoke_web_browser_version_banner
+        # WEB_BASE / API_BASE inherited from workflow-level env so this
+        # step exercises the same hostnames as every other web smoke step.
+        run: |
+          set -euo pipefail
+          # Self-contained playwright install in a tmp dir so we don't
+          # touch the monorepo's pnpm workspace state. Pinned to the same
+          # version as smoke_web_browser — bump deliberately.
+          PW_DIR="$(mktemp -d)"
+          cd "${PW_DIR}"
+          npm init -y >/dev/null
+          npm install --silent playwright@1.55.0
+          npx playwright install --with-deps chromium
+
+          cat > banner.mjs <<'JS'
+          import { chromium } from 'playwright';
+
+          const WEB_BASE = process.env.WEB_BASE;
+          const API_BASE = process.env.API_BASE;
+
+          // Synthetic version that is guaranteed not to match the bundle's
+          // baked-in __APP_VERSION__ (a Date.now() at build time). The
+          // `playwright-smoke-` prefix makes it obvious in any log capture
+          // that the value came from this test, not a real deploy.
+          const SYNTHETIC_VERSION = `playwright-smoke-${Date.now()}`;
+
+          // Track every /version.json hit so we can tell the difference
+          // between "banner stayed hidden because the hook never polled"
+          // (fetch URL changed / hook unmounted) and "hook polled but
+          // version compare logic is broken" — both look the same from a
+          // pure visibility check.
+          let versionRequests = 0;
+
+          const errors = [];
+          const browser = await chromium.launch({ headless: true });
+          const ctx = await browser.newContext({
+            viewport: { width: 1280, height: 800 },
+            userAgent:
+              'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 ' +
+              '(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+          });
+
+          // Intercept BEFORE the page loads so the very first poll the
+          // useVersionCheck hook fires on mount sees the synthetic value.
+          // Match the URL the hook actually requests:
+          // `${origin}/version.json?_=<ts>` (cache-buster query param).
+          await ctx.route('**/version.json**', async (route) => {
+            versionRequests++;
+            await route.fulfill({
+              status: 200,
+              headers: {
+                'content-type': 'application/json',
+                // Mirror the server's no-store posture so any future
+                // client-side cache check behaves identically to prod.
+                'cache-control': 'no-store, no-cache, must-revalidate',
+              },
+              body: JSON.stringify({
+                version: SYNTHETIC_VERSION,
+                builtAt: new Date().toISOString(),
+              }),
+            });
+          });
+
+          const page = await ctx.newPage();
+
+          // Uncaught JS exceptions are real bugs — fail on them.
+          page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
+          // Failed requests to our own origins (web shell + api) mean the
+          // bundle or backend is broken; ignore third-party noise.
+          page.on('requestfailed', (req) => {
+            const u = req.url();
+            if (u.startsWith(WEB_BASE) || (API_BASE && u.startsWith(API_BASE))) {
+              errors.push(`requestfailed: ${u} → ${req.failure()?.errorText}`);
+            }
+          });
+          page.on('console', (msg) => {
+            if (msg.type() === 'error') {
+              console.log(`[browser console.error] ${msg.text()}`);
+            }
+          });
+
+          const fail = async (reason) => {
+            console.error(`::error::${reason}`);
+            try {
+              const html = await page.content();
+              console.error('--- page HTML (first 2000 chars) ---');
+              console.error(html.slice(0, 2000));
+            } catch {}
+            await browser.close();
+            process.exit(1);
+          };
+
+          try {
+            // Use a public route so we don't need the smoke-test login to
+            // exercise the banner — keeps this check isolated from any
+            // auth-pipeline flake. <UpdateBanner /> is mounted globally in
+            // App.tsx so it renders on every route, including /login.
+            console.log(`→ goto ${WEB_BASE}/login (with /version.json intercepted → ${SYNTHETIC_VERSION})`);
+            await page.goto(`${WEB_BASE}/login`, {
+              waitUntil: 'domcontentloaded',
+              timeout: 30000,
+            });
+
+            // Confirm the SPA actually booted (login form is the same
+            // baseline smoke_web_browser uses). If the SPA crashed at
+            // boot, the banner would also never render and we'd otherwise
+            // emit a confusing "banner missing" error instead of the real
+            // root cause.
+            await page
+              .locator('input[placeholder="Email Address"]')
+              .waitFor({ state: 'visible', timeout: 15000 });
+
+            // The hook fires its first poll immediately on mount (no need
+            // to wait the full 60s POLL_INTERVAL_MS). Allow ~30s to cover
+            // SPA boot + initial fetch + framer-motion enter animation.
+            console.log('→ wait for [data-testid=banner-update-available] to become visible');
+            await page
+              .locator('[data-testid="banner-update-available"]')
+              .waitFor({ state: 'visible', timeout: 30000 });
+
+            // The user-visible copy must still read "New version
+            // available" — catches a refactor that keeps the banner
+            // testid but replaces the message with something unrelated
+            // (e.g. a generic toast or empty placeholder).
+            const bannerText = await page
+              .locator('[data-testid="banner-update-available"]')
+              .innerText();
+            if (!/new version available/i.test(bannerText)) {
+              await fail(
+                `Banner appeared but its copy is unexpected: "${bannerText.replace(/\s+/g, ' ').trim()}"`,
+              );
+            }
+
+            // The "Update" button must still wire into the reload flow.
+            // We don't click it (that would tear down the page mid-test),
+            // but its presence proves the banner is fully rendered, not
+            // a half-hydrated stub.
+            const updateBtn = page.locator('[data-testid="button-update-app"]');
+            if ((await updateBtn.count()) === 0) {
+              await fail('Banner is visible but the Update button is missing — banner partially rendered.');
+            }
+
+            // Sanity: the hook actually requested /version.json. If
+            // versionRequests is 0 the banner only "passed" because of
+            // some unrelated DOM node — the test didn't meaningfully
+            // exercise useVersionCheck. This catches the case where the
+            // hook gets unmounted, the fetch URL is changed, or polling
+            // is broken entirely.
+            if (versionRequests === 0) {
+              await fail(
+                'useVersionCheck hook never requested /version.json — fetch URL changed, hook is unmounted, or polling is broken.',
+              );
+            }
+            console.log(
+              `✓ update banner surfaced after ${versionRequests} /version.json poll(s)`,
+            );
+          } catch (err) {
+            await fail(`Update banner smoke flow failed: ${err.message}`);
+          }
+
+          if (errors.length) {
+            console.error('::error::Update banner smoke recorded fatal errors:');
+            errors.forEach((e) => console.error('  - ' + e));
+            await browser.close();
+            process.exit(1);
+          }
+
+          await browser.close();
+          console.log('✓ /version.json bump produced a visible "New version available" banner');
+          JS
+          node banner.mjs
+
       # Auto-rollback: if (and only if) one of the smoke checks above
       # failed, promote the previous release back so users aren't left on
       # a known-bad build. We don't trigger on `flyctl deploy` itself
@@ -792,7 +977,8 @@ jobs:
           failure() && (
             steps.smoke_web.outcome == 'failure' ||
             steps.smoke_web_version.outcome == 'failure' ||
-            steps.smoke_web_browser.outcome == 'failure'
+            steps.smoke_web_browser.outcome == 'failure' ||
+            steps.smoke_web_browser_version_banner.outcome == 'failure'
           )
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
@@ -813,7 +999,8 @@ jobs:
           failure() && steps.rollback_web.outcome == 'success' && (
             steps.smoke_web.outcome == 'failure' ||
             steps.smoke_web_version.outcome == 'failure' ||
-            steps.smoke_web_browser.outcome == 'failure'
+            steps.smoke_web_browser.outcome == 'failure' ||
+            steps.smoke_web_browser_version_banner.outcome == 'failure'
           )
         env:
           SMOKE_TEST_EMAIL: ${{ secrets.SMOKE_TEST_EMAIL }}
@@ -970,7 +1157,8 @@ jobs:
           failure() && steps.rollback_web.outcome == 'success' && (
             steps.smoke_web.outcome == 'failure' ||
             steps.smoke_web_version.outcome == 'failure' ||
-            steps.smoke_web_browser.outcome == 'failure'
+            steps.smoke_web_browser.outcome == 'failure' ||
+            steps.smoke_web_browser_version_banner.outcome == 'failure'
           )
         uses: actions/setup-node@v4
         with:
@@ -980,7 +1168,8 @@ jobs:
           failure() && steps.rollback_web.outcome == 'success' && (
             steps.smoke_web.outcome == 'failure' ||
             steps.smoke_web_version.outcome == 'failure' ||
-            steps.smoke_web_browser.outcome == 'failure'
+            steps.smoke_web_browser.outcome == 'failure' ||
+            steps.smoke_web_browser_version_banner.outcome == 'failure'
           )
         env:
           SMOKE_TEST_EMAIL: ${{ secrets.SMOKE_TEST_EMAIL }}
