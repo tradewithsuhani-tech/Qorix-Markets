@@ -1,5 +1,5 @@
 import React from "react";
-import { Link } from "wouter";
+// Link replaced with <a> for sandbox
 
 export default function CinematicDark() {
   return (
@@ -58,12 +58,12 @@ export default function CinematicDark() {
         </div>
         
         <div className="flex items-center gap-6">
-          <Link href="/login" className="text-sm font-medium text-gray-300 hover:text-white transition-colors">
+          <a href="/login" className="text-sm font-medium text-gray-300 hover:text-white transition-colors">
             Sign In
-          </Link>
-          <Link href="/register" className="text-sm font-medium px-5 py-2.5 rounded-full bg-white/10 hover:bg-white/15 text-white border border-white/10 transition-all shadow-[0_0_20px_rgba(59,130,246,0.15)] hover:shadow-[0_0_25px_rgba(59,130,246,0.3)]">
+          </a>
+          <a href="/register" className="text-sm font-medium px-5 py-2.5 rounded-full bg-white/10 hover:bg-white/15 text-white border border-white/10 transition-all shadow-[0_0_20px_rgba(59,130,246,0.15)] hover:shadow-[0_0_25px_rgba(59,130,246,0.3)]">
             Reserve Slot
-          </Link>
+          </a>
         </div>
       </nav>
 

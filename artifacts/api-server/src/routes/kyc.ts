@@ -55,7 +55,7 @@ router.get("/kyc/status", authMiddleware, async (req: AuthRequest, res) => {
     .from(usersTable)
     .where(eq(usersTable.id, req.userId!))
     .limit(1);
-  if (!rows.length) return res.status(404).json({ error: "user_not_found" });
+  if (!rows.length) { res.status(404).json({ error: "user_not_found" }); return; }
   res.json(rows[0]);
 });
 
@@ -63,17 +63,20 @@ router.get("/kyc/status", authMiddleware, async (req: AuthRequest, res) => {
 router.post("/kyc/personal", authMiddleware, async (req: AuthRequest, res) => {
   const { phoneNumber, dateOfBirth } = req.body ?? {};
   if (typeof phoneNumber !== "string" || phoneNumber.trim().length < 6 || phoneNumber.length > 32) {
-    return res.status(400).json({ error: "invalid_phone" });
+    res.status(400).json({ error: "invalid_phone" });
+    return;
   }
   if (typeof dateOfBirth !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(dateOfBirth)) {
-    return res.status(400).json({ error: "invalid_dob", message: "Use YYYY-MM-DD" });
+    res.status(400).json({ error: "invalid_dob", message: "Use YYYY-MM-DD" });
+    return;
   }
   // Age check: must be 18+
   const dob = new Date(dateOfBirth);
   const ageMs = Date.now() - dob.getTime();
   const ageYears = ageMs / (1000 * 60 * 60 * 24 * 365.25);
   if (Number.isNaN(ageYears) || ageYears < 18 || ageYears > 120) {
-    return res.status(400).json({ error: "invalid_age", message: "You must be 18 or older" });
+    res.status(400).json({ error: "invalid_age", message: "You must be 18 or older" });
+    return;
   }
   await db
     .update(usersTable)
@@ -93,18 +96,20 @@ router.post("/kyc/submit", authMiddleware, async (req: AuthRequest, res) => {
   const body = req.body ?? {};
   const { documentType, documentUrl, documentUrlBack } = body;
   if (!ALLOWED_DOC_TYPES.includes(documentType as DocType)) {
-    return res.status(400).json({ error: "invalid_document_type" });
+    res.status(400).json({ error: "invalid_document_type" });
+    return;
   }
   const front = validateImageDataUrl(documentUrl);
-  if (!front.ok) return res.status(400).json(front);
+  if (!front.ok) { res.status(400).json(front); return; }
   const requiresBack = documentType === "national_id" || documentType === "drivers_license";
   let back: string | null = null;
   if (documentUrlBack != null && documentUrlBack !== "") {
     const v = validateImageDataUrl(documentUrlBack);
-    if (!v.ok) return res.status(400).json({ error: `back_${v.error}` });
+    if (!v.ok) { res.status(400).json({ error: `back_${v.error}` }); return; }
     back = documentUrlBack;
   } else if (requiresBack) {
-    return res.status(400).json({ error: "back_image_required" });
+    res.status(400).json({ error: "back_image_required" });
+    return;
   }
   const u = (
     await db
@@ -113,12 +118,13 @@ router.post("/kyc/submit", authMiddleware, async (req: AuthRequest, res) => {
       .where(eq(usersTable.id, req.userId!))
       .limit(1)
   )[0];
-  if (!u) return res.status(404).json({ error: "user_not_found" });
+  if (!u) { res.status(404).json({ error: "user_not_found" }); return; }
   if (u.kycPersonalStatus !== "approved") {
-    return res.status(400).json({ error: "personal_required", message: "Complete personal details first" });
+    res.status(400).json({ error: "personal_required", message: "Complete personal details first" });
+    return;
   }
-  if (u.kycStatus === "approved") return res.status(400).json({ error: "already_approved" });
-  if (u.kycStatus === "pending") return res.status(400).json({ error: "already_pending" });
+  if (u.kycStatus === "approved") { res.status(400).json({ error: "already_approved" }); return; }
+  if (u.kycStatus === "pending") { res.status(400).json({ error: "already_pending" }); return; }
   await db
     .update(usersTable)
     .set({
@@ -141,14 +147,13 @@ router.post("/kyc/address", authMiddleware, async (req: AuthRequest, res) => {
   const { addressLine1, addressCity, addressState, addressCountry, addressPostalCode, documentUrl } = body;
   const reqStr = (v: unknown, max: number) =>
     typeof v === "string" && v.trim().length >= 2 && v.length <= max;
-  if (!reqStr(addressLine1, 500)) return res.status(400).json({ error: "invalid_address_line1" });
-  if (!reqStr(addressCity, 100)) return res.status(400).json({ error: "invalid_city" });
-  if (!reqStr(addressState, 100)) return res.status(400).json({ error: "invalid_state" });
-  if (!reqStr(addressCountry, 100)) return res.status(400).json({ error: "invalid_country" });
-  if (!reqStr(addressPostalCode, 20)) return res.status(400).json({ error: "invalid_postal_code" });
+  if (!reqStr(addressLine1, 500)) { res.status(400).json({ error: "invalid_address_line1" }); return; }
+  if (!reqStr(addressCity, 100)) { res.status(400).json({ error: "invalid_city" }); return; }
+  if (!reqStr(addressState, 100)) { res.status(400).json({ error: "invalid_state" }); return; }
+  if (!reqStr(addressCountry, 100)) { res.status(400).json({ error: "invalid_country" }); return; }
+  if (!reqStr(addressPostalCode, 20)) { res.status(400).json({ error: "invalid_postal_code" }); return; }
   const doc = validateImageDataUrl(documentUrl);
-  if (!doc.ok) return res.status(400).json(doc);
-
+  if (!doc.ok) { res.status(400).json(doc); return; }
   const u = (
     await db
       .select({ kycAddressStatus: usersTable.kycAddressStatus, kycStatus: usersTable.kycStatus })
@@ -156,13 +161,13 @@ router.post("/kyc/address", authMiddleware, async (req: AuthRequest, res) => {
       .where(eq(usersTable.id, req.userId!))
       .limit(1)
   )[0];
-  if (!u) return res.status(404).json({ error: "user_not_found" });
+  if (!u) { res.status(404).json({ error: "user_not_found" }); return; }
   if (u.kycStatus !== "approved") {
-    return res.status(400).json({ error: "identity_required", message: "Complete identity verification first" });
+    res.status(400).json({ error: "identity_required", message: "Complete identity verification first" });
+    return;
   }
-  if (u.kycAddressStatus === "approved") return res.status(400).json({ error: "already_approved" });
-  if (u.kycAddressStatus === "pending") return res.status(400).json({ error: "already_pending" });
-
+  if (u.kycAddressStatus === "approved") { res.status(400).json({ error: "already_approved" }); return; }
+  if (u.kycAddressStatus === "pending") { res.status(400).json({ error: "already_pending" }); return; }
   await db
     .update(usersTable)
     .set({
@@ -191,7 +196,7 @@ async function requireAdmin(userId: number): Promise<boolean> {
 }
 
 router.get("/admin/kyc/queue", authMiddleware, async (req: AuthRequest, res) => {
-  if (!(await requireAdmin(req.userId!))) return res.status(403).json({ error: "forbidden" });
+  if (!(await requireAdmin(req.userId!))) { res.status(403).json({ error: "forbidden" }); return; }
   const status = (req.query.status as string) || "pending";
   const kind = (req.query.kind as string) || "identity"; // identity | address
   const statusCol = kind === "address" ? usersTable.kycAddressStatus : usersTable.kycStatus;
@@ -218,10 +223,9 @@ router.get("/admin/kyc/queue", authMiddleware, async (req: AuthRequest, res) => 
 });
 
 router.get("/admin/kyc/document/:userId", authMiddleware, async (req: AuthRequest, res) => {
-  if (!(await requireAdmin(req.userId!))) return res.status(403).json({ error: "forbidden" });
+  if (!(await requireAdmin(req.userId!))) { res.status(403).json({ error: "forbidden" }); return; }
   const targetId = Number(req.params.userId);
-  if (!Number.isInteger(targetId) || targetId <= 0) return res.status(400).json({ error: "invalid_user_id" });
-
+  if (!Number.isInteger(targetId) || targetId <= 0) { res.status(400).json({ error: "invalid_user_id" }); return; }
   const row = (
     await db
       .select({
@@ -241,7 +245,7 @@ router.get("/admin/kyc/document/:userId", authMiddleware, async (req: AuthReques
       .where(eq(usersTable.id, targetId))
       .limit(1)
   )[0];
-  if (!row) return res.status(404).json({ error: "not_found" });
+  if (!row) { res.status(404).json({ error: "not_found" }); return; }
   const safe = (v: string | null) => (v && DATA_URL_RE.test(v) ? v : null);
   res.json({
     documentUrl: safe(row.documentUrl),
@@ -259,12 +263,12 @@ router.get("/admin/kyc/document/:userId", authMiddleware, async (req: AuthReques
 });
 
 router.post("/admin/kyc/review", authMiddleware, async (req: AuthRequest, res) => {
-  if (!(await requireAdmin(req.userId!))) return res.status(403).json({ error: "forbidden" });
+  if (!(await requireAdmin(req.userId!))) { res.status(403).json({ error: "forbidden" }); return; }
   const { userId, action, reason, kind } = req.body ?? {};
-  if (!Number.isInteger(userId) || userId <= 0) return res.status(400).json({ error: "invalid_user_id" });
-  if (action !== "approve" && action !== "reject") return res.status(400).json({ error: "invalid_action" });
-  if (kind !== "identity" && kind !== "address") return res.status(400).json({ error: "invalid_kind" });
-  if (reason != null && (typeof reason !== "string" || reason.length > 500)) return res.status(400).json({ error: "invalid_reason" });
+  if (!Number.isInteger(userId) || userId <= 0) { res.status(400).json({ error: "invalid_user_id" }); return; }
+  if (action !== "approve" && action !== "reject") { res.status(400).json({ error: "invalid_action" }); return; }
+  if (kind !== "identity" && kind !== "address") { res.status(400).json({ error: "invalid_kind" }); return; }
+  if (reason != null && (typeof reason !== "string" || reason.length > 500)) { res.status(400).json({ error: "invalid_reason" }); return; }
   const isAddress = kind === "address";
 
   const target = (
@@ -274,10 +278,11 @@ router.post("/admin/kyc/review", authMiddleware, async (req: AuthRequest, res) =
       .where(eq(usersTable.id, userId))
       .limit(1)
   )[0];
-  if (!target) return res.status(404).json({ error: "user_not_found" });
+  if (!target) { res.status(404).json({ error: "user_not_found" }); return; }
   const currentStatus = isAddress ? target.kycAddressStatus : target.kycStatus;
   if (currentStatus !== "pending") {
-    return res.status(400).json({ error: "not_pending", message: `Current status is ${currentStatus}` });
+    res.status(400).json({ error: "not_pending", message: `Current status is ${currentStatus}` });
+    return;
   }
 
   const newStatus = action === "approve" ? "approved" : "rejected";

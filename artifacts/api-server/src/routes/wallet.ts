@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, walletsTable, transactionsTable, investmentsTable, usersTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { eq, and, gte } from "drizzle-orm";
 import { authMiddleware, type AuthRequest } from "../middlewares/auth";
 import { DepositBody, WithdrawBody, TransferToTradingBody } from "@workspace/api-zod";
 import { createNotification } from "../lib/notifications";

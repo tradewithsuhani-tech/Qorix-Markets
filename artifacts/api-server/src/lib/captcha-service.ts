@@ -34,9 +34,9 @@ export async function verifyCaptcha(
 
   try {
     const form = new URLSearchParams();
-    form.set("secret", secret);
-    form.set("response", token);
-    if (ip) form.set("remoteip", ip);
+    form.set("secret", secret as string);
+    form.set("response", token as string);
+    if (ip) form.set("remoteip", ip as string);
 
     const res = await fetch(RECAPTCHA_VERIFY_URL, {
       method: "POST",
@@ -56,7 +56,7 @@ export async function verifyCaptcha(
     }
 
     // Optional v3 score threshold (0.0 = bot, 1.0 = human). Skip if absent (v2 checkbox).
-    if (typeof data.score === "number" && data.score < 0.5) {
+    if (typeof data.score === "number" && (data.score as number) < 0.5) {
       logger.warn({ score: data.score }, "[captcha-service] reCAPTCHA score below threshold");
       return { ok: false, error: "Captcha verification failed" };
     }

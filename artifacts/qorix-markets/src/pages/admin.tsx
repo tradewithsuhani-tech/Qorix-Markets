@@ -316,7 +316,7 @@ export default function AdminPage() {
                         <td className="px-4 py-3 text-right">
                           <div className="flex items-center gap-2 justify-end">
                             <button
-                              onClick={() => approveMutation.mutate({ id: req.id, data: {} })}
+                              onClick={() => approveMutation.mutate({ id: req.id })}
                               disabled={approveMutation.isPending || rejectMutation.isPending}
                               className="p-1.5 bg-green-500/10 text-green-500 hover:bg-green-500/20 rounded disabled:opacity-50 transition-colors"
                               title="Approve"
@@ -324,7 +324,7 @@ export default function AdminPage() {
                               <CheckCircle className="w-4 h-4" />
                             </button>
                             <button
-                              onClick={() => rejectMutation.mutate({ id: req.id, data: {} })}
+                              onClick={() => rejectMutation.mutate({ id: req.id })}
                               disabled={approveMutation.isPending || rejectMutation.isPending}
                               className="p-1.5 bg-red-500/10 text-red-500 hover:bg-red-500/20 rounded disabled:opacity-50 transition-colors"
                               title="Reject"

@@ -1,7 +1,7 @@
 import { useGetReferral, useGetReferredUsers } from "@workspace/api-client-react";
 import { Layout } from "@/components/layout";
 import { AnimatedCounter } from "@/components/animated-counter";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, type Variants } from "framer-motion";
 import {
   Copy, Users, DollarSign, Link2, Hash, TrendingUp, CheckCircle2,
   ArrowRight, MessageSquare, Send, Twitter, Facebook, ExternalLink,
@@ -12,8 +12,8 @@ import { format } from "date-fns";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 
-const container = { hidden: {}, show: { transition: { staggerChildren: 0.06 } } };
-const item = { hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0, transition: { duration: 0.32, ease: "easeOut" } } };
+const container: Variants = { hidden: {}, show: { transition: { staggerChildren: 0.06 } } };
+const item: Variants = { hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0, transition: { duration: 0.32, ease: "easeOut" } } };
 
 function StatSkeleton() {
   return (

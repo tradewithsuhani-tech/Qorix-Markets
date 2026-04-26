@@ -4,7 +4,7 @@ import { useNotificationSoundOnNew } from "@/hooks/use-notification-sound";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { QorixLogo } from "@/components/qorix-logo";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, type Variants, type Transition } from "framer-motion";
 import {
   LayoutDashboard,
   Wallet,
@@ -532,14 +532,14 @@ function MoreSheet({
   );
 }
 
-const pageVariants = {
+const pageVariants: Variants = {
   initial: { opacity: 0, y: 10 },
   animate: { opacity: 1, y: 0 },
   exit: { opacity: 0, y: -6 },
 };
 
-const pageTransition = {
-  type: "tween" as const,
+const pageTransition: Transition = {
+  type: "tween",
   ease: [0.25, 0.46, 0.45, 0.94],
   duration: 0.25,
 };

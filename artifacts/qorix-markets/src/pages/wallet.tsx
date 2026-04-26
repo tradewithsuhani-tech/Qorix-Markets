@@ -2,7 +2,7 @@ import { useGetWallet, useTransferToTrading, useGetDashboardSummary } from "@wor
 import { Layout } from "@/components/layout";
 import { AnimatedCounter } from "@/components/animated-counter";
 import { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, type Variants } from "framer-motion";
 import {
   Wallet as WalletIcon, ArrowUpFromLine,
   ArrowRightLeft, Info, AlertCircle, Mail, ShieldCheck, X,
@@ -43,11 +43,11 @@ function BalanceSkeleton() {
   );
 }
 
-const container = {
+const container: Variants = {
   hidden: {},
   show: { transition: { staggerChildren: 0.07 } },
 };
-const item = {
+const item: Variants = {
   hidden: { opacity: 0, y: 16 },
   show: { opacity: 1, y: 0, transition: { duration: 0.35, ease: "easeOut" } },
 };

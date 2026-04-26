@@ -434,7 +434,7 @@ function HeroDashboardMock() {
           {/* Live trade strip — XAUUSD BUY rotating */}
           <AnimatePresence mode="wait">
             <motion.div
-              key={`${trade.entry}-${trade.isClosed ? "c" : "r"}`}
+              key={`${trade.pnl}-${trade.runningMin}-${trade.isClosed ? "c" : "r"}`}
               initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -6 }}

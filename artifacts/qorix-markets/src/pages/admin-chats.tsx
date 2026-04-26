@@ -115,6 +115,7 @@ export default function AdminChatsPage() {
       const timer = setInterval(() => loadMessages(selectedSession.id), 5000);
       return () => clearInterval(timer);
     }
+    return undefined;
   }, [selectedSession]);
 
   async function handleSelectSession(session: Session) {

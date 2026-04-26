@@ -304,7 +304,6 @@ export async function closeSignalTrade(input: CloseTradeInput, actorUserId?: num
             totalProfit: sql`${investmentsTable.totalProfit}::numeric + ${appliedDelta.toString()}::numeric` as any,
             dailyProfit: sql`${investmentsTable.dailyProfit}::numeric + ${appliedDelta.toString()}::numeric` as any,
             isActive: true,
-            updatedAt: new Date(),
           })
           .where(eq(investmentsTable.userId, w.userId));
       } else {
@@ -325,7 +324,6 @@ export async function closeSignalTrade(input: CloseTradeInput, actorUserId?: num
         direction: t.direction === "BUY" ? "LONG" : "SHORT",
         entryPrice: t.entryPrice as any,
         exitPrice: realizedExit.toString(),
-        amount: basis.toString(),
         profit: appliedDelta.toString(),
         profitPercent: realizedPct.toString(),
         executedAt: new Date(),

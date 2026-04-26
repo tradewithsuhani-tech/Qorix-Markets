@@ -58,7 +58,7 @@ router.get("/admin/task-proofs", async (req: AuthRequest, res) => {
 // POST /admin/task-proofs/:id/approve — approve a proof and award points
 // ---------------------------------------------------------------------------
 router.post("/admin/task-proofs/:id/approve", async (req: AuthRequest, res) => {
-  const proofId = parseInt(req.params.id, 10);
+  const proofId = parseInt(req.params.id as string, 10);
   const { adminNote } = req.body;
 
   const proofs = await db
@@ -130,7 +130,7 @@ router.post("/admin/task-proofs/:id/approve", async (req: AuthRequest, res) => {
 // POST /admin/task-proofs/:id/reject — reject a proof
 // ---------------------------------------------------------------------------
 router.post("/admin/task-proofs/:id/reject", async (req: AuthRequest, res) => {
-  const proofId = parseInt(req.params.id, 10);
+  const proofId = parseInt(req.params.id as string, 10);
   const { adminNote } = req.body;
 
   const proofs = await db
@@ -176,7 +176,7 @@ router.post("/admin/task-proofs/:id/reject", async (req: AuthRequest, res) => {
 // POST /admin/users/:id/points — manually adjust a user's points
 // ---------------------------------------------------------------------------
 router.post("/admin/users/:id/points", async (req: AuthRequest, res) => {
-  const userId = parseInt(req.params.id, 10);
+  const userId = parseInt(req.params.id as string, 10);
   const { amount, reason } = req.body;
   if (typeof amount !== "number" || isNaN(amount)) {
     res.status(400).json({ error: "Invalid amount" });

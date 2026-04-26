@@ -697,7 +697,7 @@ export default function InvestPage() {
             className={`flex items-center justify-between gap-3 px-4 py-3 rounded-2xl border ${
               fundStats.isFull
                 ? "bg-red-500/8 border-red-500/25"
-                : fundStats.availableSlots !== null && fundStats.availableSlots <= Math.ceil(fundStats.maxSlots * 0.2)
+                : fundStats.availableSlots != null && fundStats.availableSlots <= Math.ceil(fundStats.maxSlots * 0.2)
                 ? "bg-red-500/8 border-red-500/20"
                 : "bg-amber-500/8 border-amber-500/20"
             }`}
@@ -846,7 +846,7 @@ export default function InvestPage() {
                     )}
                   </div>
                   <button
-                    onClick={() => stopMutation.mutate({})}
+                    onClick={() => stopMutation.mutate()}
                     disabled={stopMutation.isPending}
                     className="flex items-center gap-2 px-5 py-2.5 bg-red-500/10 text-red-400 hover:bg-red-500/15 border border-red-500/25 rounded-xl font-medium transition-all text-sm disabled:opacity-50"
                   >

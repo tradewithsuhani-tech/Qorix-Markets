@@ -308,7 +308,7 @@ export function generateMonthlyReport(data: ReportData): void {
 
     drawRoundedRect(doc, 14, y, W - 28, 10, 1.5, BRAND.card);
 
-    doc.setTextColor(isTotal ? BRAND.text : BRAND.muted);
+    doc.setTextColor(...(isTotal ? BRAND.text : BRAND.muted));
     doc.setFontSize(8);
     doc.setFont(isTotal ? "helvetica" : "helvetica", isTotal ? "bold" : "normal");
     doc.text(row[0] as string, 18, y + 7);

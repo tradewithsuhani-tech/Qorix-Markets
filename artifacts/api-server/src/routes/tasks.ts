@@ -26,7 +26,7 @@ router.get("/tasks", async (req: AuthRequest, res) => {
 // POST /tasks/:slug/complete — complete a no-proof task
 // ---------------------------------------------------------------------------
 router.post("/tasks/:slug/complete", async (req: AuthRequest, res) => {
-  const { slug } = req.params;
+  const slug = req.params.slug as string;
   const result = await completeTask(req.userId!, slug);
 
   if (!result.success) {
@@ -50,7 +50,7 @@ router.post("/tasks/:slug/complete", async (req: AuthRequest, res) => {
 // POST /tasks/:slug/proof — submit proof for a social task
 // ---------------------------------------------------------------------------
 router.post("/tasks/:slug/proof", async (req: AuthRequest, res) => {
-  const { slug } = req.params;
+  const slug = req.params.slug as string;
   const { proofType, proofContent } = req.body;
 
   if (!proofContent || typeof proofContent !== "string" || proofContent.trim().length < 3) {
