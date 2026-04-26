@@ -135,6 +135,45 @@ async function exactCounts(
   return out;
 }
 
+// Returns the subset of `tables` that actually exist in the public
+// schema of the connected database. Used as a preflight before
+// exactCounts() so that a target where the schema migration was never
+// run (no public.users at all) gets the same friendly "schema not
+// pushed yet?" diagnostic the empty-sequences branch already emits,
+// instead of crashing exactCounts with `relation "users" does not
+// exist` and falling out the top-level main().catch as a generic
+// "unexpected error" + exit 2.
+//
+// information_schema.tables is the standards-compliant view; it lists
+// both regular tables and views and works on any Postgres role that
+// can connect, so this also catches the "public schema dropped
+// entirely" case (no rows for any of the names — same empty result).
+async function listExistingTables(
+  c: pg.Client,
+  tables: readonly string[],
+): Promise<Set<string>> {
+  const res = await c.query<{ table_name: string }>(
+    `select table_name
+       from information_schema.tables
+      where table_schema = 'public'
+        and table_name = any($1::text[])`,
+    [tables as readonly string[]],
+  );
+  return new Set(res.rows.map((r) => r.table_name));
+}
+
+// Sentinel thrown by the schema preflight below so the rest of the
+// checks (exact counts, sequences, approximate counts, wallet decrypt)
+// can be skipped without re-indenting them under an `else`. Caught
+// inside main()'s try/catch and converted to exitCode=1; anything else
+// still propagates to the top-level main().catch as before.
+class TargetSchemaMissingError extends Error {
+  constructor() {
+    super("target schema not pushed");
+    this.name = "TargetSchemaMissingError";
+  }
+}
+
 // ----- sequence safety check -----
 //
 // Step 5 of MUMBAI_DB_CUTOVER_RUNBOOK.md does `setval(seq, max(id), true)`
@@ -496,6 +535,29 @@ async function main(): Promise<void> {
   try {
     // 1. Critical-table exact counts
     console.log(C.bold("Critical tables (exact count):"));
+
+    // Preflight: detect "target schema was never pushed" before
+    // exactCounts() walks the critical tables. Without this, pointing
+    // verify-db-cutover at a target Postgres where FLY_GO_LIVE_CHECKLIST
+    // step 2/3a was skipped entirely (no public.users at all) crashes
+    // the very first count query with `relation "users" does not
+    // exist`, falls out the top-level main().catch as a generic
+    // "unexpected error" stack trace, and exits 2 — so the operator
+    // sees a scary trace at 3am instead of the same friendly "schema
+    // not pushed yet?" hint the empty-sequences branch below already
+    // emits for the partial case.
+    const tgtCriticalPresent = await listExistingTables(tgt, CRITICAL_TABLES);
+    if (tgtCriticalPresent.size === 0) {
+      console.log(
+        C.yellow(
+          "  no critical tables found on the target — schema not " +
+            "pushed yet? (FLY_GO_LIVE_CHECKLIST step 2/3a). Cannot " +
+            "diff row counts.",
+        ),
+      );
+      throw new TargetSchemaMissingError();
+    }
+
     const [srcExact, tgtExact] = await Promise.all([
       exactCounts(src, CRITICAL_TABLES),
       exactCounts(tgt, CRITICAL_TABLES),
@@ -706,6 +768,16 @@ async function main(): Promise<void> {
         exitCode = 1;
       }
     }
+  } catch (err) {
+    // The schema-preflight short-circuit above throws this sentinel
+    // after it has already printed the "schema not pushed yet?" hint.
+    // Convert to exit 1 (same as the empty-sequences branch) and let
+    // the FAIL summary below run. Anything else is genuinely
+    // unexpected and re-raises to the top-level main().catch.
+    if (!(err instanceof TargetSchemaMissingError)) {
+      throw err;
+    }
+    exitCode = 1;
   } finally {
     await src.end().catch(() => undefined);
     await tgt.end().catch(() => undefined);

@@ -631,6 +631,64 @@ test("exits 1 with the empty-sequences diagnostic when the target schema was nev
   assert.match(res.stdout, /all critical-table counts match/);
 });
 
+test("exits 1 with the schema-not-pushed diagnostic when the target has no critical tables at all", async () => {
+  // Sibling of the empty-sequences test above, but one rung earlier
+  // in the verify pipeline: this is the case where FLY_GO_LIVE_CHECKLIST
+  // step 2/3a was skipped *entirely* on the target, so public.users
+  // doesn't even exist. Without the schema preflight in
+  // verify-db-cutover.ts, the very first exactCounts() query crashes
+  // with `relation "users" does not exist`, falls out of the top-level
+  // main().catch as a generic "unexpected error" stack trace, and
+  // exits 2 — leaving a 3am operator staring at a Node trace instead
+  // of the same friendly hint the empty-sequences branch already
+  // emits for the partial case. This test pins the friendly diagnostic
+  // and the exit-1 contract so a future refactor can't regress it
+  // back into the noisy crash.
+  await withClient(urlFor(pgInstance!, "target"), async (c) => {
+    await c.query("drop schema public cascade");
+    await c.query("create schema public");
+    await c.query("grant all on schema public to public");
+  });
+
+  const res = runScript(
+    [
+      "--source",
+      urlFor(pgInstance!, "source"),
+      "--target",
+      urlFor(pgInstance!, "target"),
+    ],
+    { WALLET_ENC_SECRET: TEST_SECRET },
+  );
+
+  assert.equal(
+    res.status,
+    1,
+    `expected exit 1, got ${res.status}\nstdout:\n${res.stdout}\nstderr:\n${res.stderr}`,
+  );
+  // Pin the operator-facing diagnostic so a refactor can't soften it
+  // into a generic message or quietly drop it.
+  assert.match(
+    res.stdout,
+    /no critical tables found on the target — schema not pushed yet\?/,
+  );
+  // Remediation MUST point at the precise checklist step that was
+  // skipped — otherwise a panicked operator won't know which setup
+  // step to re-run.
+  assert.match(res.stdout, /FLY_GO_LIVE_CHECKLIST step 2\/3a/);
+  assert.match(res.stdout, /verify-db-cutover: FAIL/);
+  // The whole point of this fix is that the script must NOT fall out
+  // of the top-level catch as an "unexpected error" stack trace, and
+  // must NOT leak the raw `relation "users" does not exist` Postgres
+  // error. If either of those reappears, this test goes red — meaning
+  // the schema preflight has been bypassed and the script is back to
+  // crashing instead of diagnosing.
+  assert.doesNotMatch(res.stderr, /unexpected error/);
+  assert.doesNotMatch(
+    res.stdout + res.stderr,
+    /relation "users" does not exist/,
+  );
+});
+
 test("exits 2 when required arguments are missing", async () => {
   const res = runScript(["--source", urlFor(pgInstance!, "source")], {
     WALLET_ENC_SECRET: TEST_SECRET,
