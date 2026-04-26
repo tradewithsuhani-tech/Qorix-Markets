@@ -648,13 +648,31 @@ export default function AnalyticsPage() {
           </ChartCard>
 
           {/* 2. Drawdown Chart */}
+          {/* Stat ("X% now") mirrors the Demo Dashboard's Capital Protection
+              "Current Drawdown" line exactly:
+                drawdownPct = investment.drawdown / investment.amount * 100
+              displayed as "5.20% (-$156.40) now". Previously the stat was
+              derived from the equity-chart's peak-to-trough math, which
+              shows 0% on monotonically growing accounts and disagreed with
+              the dashboard's server-tracked drawdown. The chart LINE itself
+              continues to visualize the historical peak-to-trough series
+              from equity points — that's a useful timeline view, just not
+              the right number to put on the headline stat. */}
+          {(() => {
+            const investAmount = Number(investment?.amount ?? 0);
+            const investDrawdownDollars = Number(investment?.drawdown ?? 0);
+            const drawdownPctCanonical =
+              investAmount > 0 ? (investDrawdownDollars / investAmount) * 100 : 0;
+            const drawdownStat = `${drawdownPctCanonical.toFixed(2)}% (-$${investDrawdownDollars.toFixed(2)}) now`;
+            const ddLoading = loading || invLoading;
+            return (
           <ChartCard
             title="Drawdown Chart"
             subtitle="Peak-to-trough portfolio decline"
             icon={BarChart2}
             iconColor="#ef4444"
-            loading={loading}
-            stat={loading ? undefined : `${Math.abs(currentDrawdownPct).toFixed(2)}% now`}
+            loading={ddLoading}
+            stat={ddLoading ? undefined : drawdownStat}
             statColor="#ef4444"
             delay={0.15}
           >
@@ -734,6 +752,8 @@ export default function AnalyticsPage() {
               }}
             />
           </ChartCard>
+            );
+          })()}
 
           {/* 3. Profit Distribution */}
           <ChartCard
