@@ -1416,9 +1416,58 @@ export function AdminSystemPage() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="glass-card p-6 rounded-2xl space-y-5">
             <h2 className="text-xl font-bold">Platform Access</h2>
+            {/*
+              Effective maintenance state surfaces *which* switch is currently
+              freezing the site. The admin toggle below is just one of two
+              sources — `MAINTENANCE_MODE` set on Fly produces the same banner
+              and 503s but won't clear when the toggle is flipped off. Without
+              this row admins see "toggle off" and assume the freeze is over.
+              Source values come straight from getMaintenanceState() on the API.
+            */}
+            {(() => {
+              const eff = settings?.maintenanceEffective;
+              if (!eff) return null;
+              const source = eff.source as "env" | "db" | "both" | null;
+              const active = !!eff.active;
+              const tone = active
+                ? source === "env"
+                  ? { bg: "bg-amber-500/10", border: "border-amber-500/30", text: "text-amber-300", dot: "bg-amber-400" }
+                  : source === "both"
+                    ? { bg: "bg-rose-500/10", border: "border-rose-500/30", text: "text-rose-300", dot: "bg-rose-400" }
+                    : { bg: "bg-orange-500/10", border: "border-orange-500/30", text: "text-orange-300", dot: "bg-orange-400" }
+                : { bg: "bg-emerald-500/10", border: "border-emerald-500/30", text: "text-emerald-300", dot: "bg-emerald-400" };
+              const sourceLabel = !active
+                ? "No freeze active"
+                : source === "env"
+                  ? "Frozen by ops env var (MAINTENANCE_MODE on Fly)"
+                  : source === "db"
+                    ? "Frozen by admin toggle (this panel)"
+                    : "Frozen by BOTH ops env var and admin toggle";
+              return (
+                <div className={`rounded-xl border ${tone.border} ${tone.bg} px-4 py-3 flex items-start gap-3`} data-testid="maintenance-effective-status">
+                  <span className={`mt-1 inline-block w-2.5 h-2.5 rounded-full ${tone.dot} ${active ? "animate-pulse" : ""}`} />
+                  <div className="flex-1 min-w-0">
+                    <div className={`text-sm font-semibold ${tone.text}`}>
+                      {active ? "Maintenance ACTIVE" : "Maintenance OFF"}
+                      {active && eff.hardBlock ? <span className="ml-2 text-[11px] uppercase tracking-wide bg-black/30 px-2 py-0.5 rounded">hard-block</span> : null}
+                    </div>
+                    <div className="text-xs text-muted-foreground mt-0.5">{sourceLabel}</div>
+                    {active && (source === "env" || source === "both") ? (
+                      <div className="text-[11px] text-amber-200/90 mt-1 flex items-start gap-1.5">
+                        <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                        <span>Flipping the admin toggle off will <strong>not</strong> clear maintenance. Unset the Fly secret with <code className="font-mono">fly secrets unset MAINTENANCE_MODE --app qorix-api</code>.</span>
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              );
+            })()}
             <ToggleRow icon={Lock} label="Maintenance Mode" value={!!settings?.maintenanceMode} onToggle={(v) => save({ maintenanceMode: v })} />
             <p className="text-xs text-muted-foreground -mt-2 ml-9">
               Soft freeze: writes (deposits, trades, withdrawals) return a friendly banner; balances and charts keep loading.
+              {settings?.maintenanceEffective?.active && (settings.maintenanceEffective.source === "env" || settings.maintenanceEffective.source === "both") ? (
+                <span className="block mt-1 text-amber-300/90">Note: the ops <code className="font-mono">MAINTENANCE_MODE</code> env var is also on, so turning this toggle off won't fully clear maintenance.</span>
+              ) : null}
             </p>
             <ToggleRow icon={Lock} label="Hard Block (legacy)" value={!!settings?.maintenanceHardBlock} onToggle={(v) => save({ maintenanceHardBlock: v })} />
             <p className="text-xs text-muted-foreground -mt-2 ml-9">
