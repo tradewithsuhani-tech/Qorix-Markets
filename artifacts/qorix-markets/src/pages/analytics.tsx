@@ -301,6 +301,18 @@ export default function AnalyticsPage() {
     });
   })();
 
+  // Cumulative return from the start of the selected period, expressed as
+  // a percentage. Rises (or falls) from 0% as equity moves away from the
+  // first point in the window. Used as the second line on the Drawdown
+  // Chart's underwater-style view so the chart has real movement to
+  // contextualize the drawdown line — exactly the way professional fund
+  // tearsheets pair "% gain" against "drawdown from peak".
+  const gainPctValues = (() => {
+    const base = equityValues[0] ?? 0;
+    if (base <= 0) return equityValues.map(() => 0);
+    return equityValues.map((eq) => ((eq - base) / base) * 100);
+  })();
+
 
   const totalProfit = profitValues.reduce((a, b) => a + b, 0);
   const totalProfitStr =
@@ -716,7 +728,7 @@ export default function AnalyticsPage() {
             return (
           <ChartCard
             title="Drawdown Chart"
-            subtitle="Peak-to-trough portfolio decline"
+            subtitle="Drawdown vs cumulative return — underwater view"
             icon={BarChart2}
             iconColor="#ef4444"
             loading={ddLoading}
@@ -731,38 +743,66 @@ export default function AnalyticsPage() {
                 labels,
                 datasets: [
                   {
-                    label: "Drawdown %",
-                    data: drawdownValues,
-                    borderColor: "rgba(239,68,68,0.95)",
-                    borderWidth: 2,
+                    // Primary line — % gain from the start of the selected
+                    // period. Always has movement (rises with profit), so
+                    // the chart never reads as "empty" even when the
+                    // account has never been below its peak. Painted in
+                    // amber/orange to match the reference design.
+                    label: "Cumulative Return %",
+                    data: gainPctValues,
+                    borderColor: "rgba(245,158,11,0.95)",
+                    borderWidth: 2.25,
                     backgroundColor: (ctx: any) => {
                       const chart = ctx.chart;
                       const { ctx: c, chartArea } = chart;
                       if (!chartArea) return "transparent";
                       const grad = c.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
-                      grad.addColorStop(0, "rgba(239,68,68,0.30)");
-                      grad.addColorStop(1, "rgba(239,68,68,0.02)");
+                      grad.addColorStop(0, "rgba(245,158,11,0.28)");
+                      grad.addColorStop(1, "rgba(245,158,11,0.02)");
                       return grad;
                     },
                     fill: true,
                     tension: 0.35,
                     pointRadius: days <= 7 ? 3 : 0,
                     pointHoverRadius: 5,
-                    pointBackgroundColor: "rgba(239,68,68,1)",
+                    pointBackgroundColor: "rgba(245,158,11,1)",
                     pointBorderColor: "rgba(15,23,42,0.9)",
                     pointBorderWidth: 1,
+                    order: 2,
+                  },
+                  {
+                    // Secondary line — peak-to-trough drawdown (always
+                    // ≤ 0). Stays at 0% on monotonic accounts, dips into
+                    // negative territory on real losses. Slate/grey so it
+                    // visually recedes behind the primary return line,
+                    // matching the example's two-tone aesthetic.
+                    label: "Drawdown from Peak %",
+                    data: drawdownValues,
+                    borderColor: "rgba(148,163,184,0.85)",
+                    borderWidth: 1.75,
+                    backgroundColor: "transparent",
+                    fill: false,
+                    tension: 0.3,
+                    pointRadius: days <= 7 ? 2.5 : 0,
+                    pointHoverRadius: 4,
+                    pointBackgroundColor: "rgba(148,163,184,1)",
+                    pointBorderColor: "rgba(15,23,42,0.9)",
+                    pointBorderWidth: 1,
+                    order: 1,
                   },
                   ...(investment?.drawdownLimit
                     ? [
                         {
                           label: "Protection Limit",
                           data: labels.map(() => -(investment.drawdownLimit)),
-                          borderColor: "rgba(249,115,22,0.7)",
-                          borderWidth: 1.5,
+                          borderColor: "rgba(239,68,68,0.65)",
+                          borderWidth: 1.25,
                           borderDash: [6, 4],
                           pointRadius: 0,
+                          pointHoverRadius: 0,
                           fill: false,
                           tension: 0,
+                          order: 0,
                         },
                       ]
                     : []),
@@ -773,7 +813,7 @@ export default function AnalyticsPage() {
                 plugins: {
                   ...CHART_DEFAULTS.plugins,
                   legend: {
-                    display: !!investment?.drawdownLimit,
+                    display: true,
                     position: "bottom" as const,
                     labels: {
                       color: "#94a3b8",
@@ -788,9 +828,12 @@ export default function AnalyticsPage() {
                     ...CHART_DEFAULTS.plugins.tooltip,
                     callbacks: {
                       label: (ctx: any) => {
+                        const v = Number(ctx.raw);
                         if (ctx.dataset.label === "Protection Limit")
                           return ` Limit: -${investment?.drawdownLimit}%`;
-                        return ` Drawdown: ${Number(ctx.raw).toFixed(2)}%`;
+                        if (ctx.dataset.label === "Cumulative Return %")
+                          return ` Return: ${v >= 0 ? "+" : ""}${v.toFixed(2)}%`;
+                        return ` Drawdown: ${v.toFixed(2)}%`;
                       },
                     },
                   },
