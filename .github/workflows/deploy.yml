@@ -73,9 +73,57 @@ jobs:
               - '.dockerignore'
               - '.github/workflows/deploy.yml'
 
+  # Fail fast if any required secret is missing, BEFORE we spend 3-5 minutes
+  # building Docker images only to have flyctl reject auth at the very end.
+  # This job runs in ~10s and prints a clear message + a clickable link to
+  # the GitHub secrets page, which is the single most common reason a fresh
+  # checkout's first deploy fails. See FLY_GO_LIVE_CHECKLIST.md section 7
+  # for the full required-secrets table.
+  preflight:
+    name: Verify required secrets are configured
+    needs: changes
+    if: |
+      (github.event_name == 'workflow_dispatch') ||
+      (github.event_name == 'push' && (needs.changes.outputs.api == 'true' || needs.changes.outputs.web == 'true'))
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check required GitHub secrets
+        env:
+          # We never echo these — only test for emptiness. Listing them as env
+          # vars (rather than referencing secrets.X inside the script) is the
+          # GitHub-recommended pattern for secret presence checks because it
+          # keeps the secret values out of the rendered run script.
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          SMOKE_TEST_EMAIL: ${{ secrets.SMOKE_TEST_EMAIL }}
+          SMOKE_TEST_PASSWORD: ${{ secrets.SMOKE_TEST_PASSWORD }}
+          VITE_RECAPTCHA_SITE_KEY: ${{ secrets.VITE_RECAPTCHA_SITE_KEY }}
+        run: |
+          set -u
+          missing=()
+          [ -z "${FLY_API_TOKEN:-}" ]            && missing+=("FLY_API_TOKEN")
+          [ -z "${SMOKE_TEST_EMAIL:-}" ]         && missing+=("SMOKE_TEST_EMAIL")
+          [ -z "${SMOKE_TEST_PASSWORD:-}" ]      && missing+=("SMOKE_TEST_PASSWORD")
+          [ -z "${VITE_RECAPTCHA_SITE_KEY:-}" ]  && missing+=("VITE_RECAPTCHA_SITE_KEY")
+          if [ ${#missing[@]} -gt 0 ]; then
+            {
+              echo "### Deploy preflight failed"
+              echo ""
+              echo "Missing required repository secrets:"
+              for s in "${missing[@]}"; do echo "- \`$s\`"; done
+              echo ""
+              echo "Add them at: https://github.com/${{ github.repository }}/settings/secrets/actions"
+              echo ""
+              echo "See \`FLY_GO_LIVE_CHECKLIST.md\` section 7 for the full required-secrets table."
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::error::Missing required GitHub secrets: ${missing[*]} (see job summary)"
+            exit 1
+          fi
+          echo "All required secrets present."
+          echo "Smoke targets — WEB_BASE=$WEB_BASE  API_BASE=$API_BASE"
+
   typecheck:
     name: Typecheck monorepo
-    needs: changes
+    needs: [changes, preflight]
     if: |
       (github.event_name == 'workflow_dispatch') ||
       (github.event_name == 'push' && (needs.changes.outputs.api == 'true' || needs.changes.outputs.web == 'true'))
