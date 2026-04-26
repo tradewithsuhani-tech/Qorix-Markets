@@ -279,7 +279,7 @@ When `fly secrets set --app qorix-api ...` runs, every value below must be suppl
 
 | Secret | Required | Why it must match Replit |
 |---|---|---|
-| `DATABASE_URL` | NEW | Neon Postgres connection string with `?sslmode=require` |
+| `DATABASE_URL` | NEW | Neon Postgres connection string with `?sslmode=require` (cert is verified against the system CA bundle — Neon's chain is publicly trusted; do NOT set `PGSSL_ALLOW_INVALID_CERT=true` in normal operation) |
 | `REDIS_URL` | NEW | Upstash `rediss://...` URL (TLS required) |
 | **`SESSION_SECRET`** | YES | Signs every Bearer JWT — mismatch logs every existing user out |
 | **`WALLET_ENC_SECRET`** | YES | AES-GCM key for TRON deposit wallet private keys — mismatch makes every existing deposit address undecryptable, sweep stops, user funds get stuck |
