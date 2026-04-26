@@ -3,6 +3,15 @@ import { initSystemAccounts } from "./lib/ledger-service";
 import { seedTasks } from "./lib/task-service";
 import { seedSystemSettings } from "./lib/seed-settings";
 
+// Gate single-instance background work (cron, Telegram poller, on-chain
+// watchers, BullMQ workers) behind a single env flag so we can flip it off in
+// Replit dev and on in Fly prod during the cutover window — without code
+// edits and without double-firing the Telegram bot or duplicating cron.
+// Defaults to "true" to preserve current Replit-dev behaviour; set
+// RUN_BACKGROUND_JOBS=false on the Replit side once Fly is the source of truth.
+const RUN_BACKGROUND_JOBS =
+  (process.env["RUN_BACKGROUND_JOBS"] ?? "true").toLowerCase() !== "false";
+
 async function main() {
   await ensureRedisRunning();
   await initSystemAccounts();
@@ -11,36 +20,51 @@ async function main() {
 
   const { default: app } = await import("./app");
   const { logger, errorLogger } = await import("./lib/logger");
-  const { initCronJobs } = await import("./lib/cron");
-  const { startProfitDistributionWorker } = await import("./workers/profit-distribution-worker");
-  const { startDepositWorker } = await import("./workers/deposit-worker");
-  const { startProfitEventWorker } = await import("./workers/profit-event-worker");
-  const { startTronMonitor } = await import("./lib/tron-monitor");
-  const { startDepositWatcher } = await import("./lib/crypto-deposit/depositWatcher");
-  const { startTelegramPoller } = await import("./lib/telegram-poller");
 
   const rawPort = process.env["PORT"];
   if (!rawPort) throw new Error("PORT environment variable is required but was not provided.");
   const port = Number(rawPort);
   if (Number.isNaN(port) || port <= 0) throw new Error(`Invalid PORT value: "${rawPort}"`);
 
-  const profitDistributionWorker = startProfitDistributionWorker();
-  const depositWorker = startDepositWorker();
-  const profitEventWorker = startProfitEventWorker();
-  const tronMonitor = startTronMonitor();
-  const depositWatcher = startDepositWatcher();
-  const telegramPoller = startTelegramPoller();
+  // Background workers / pollers are only spun up on the designated
+  // background-jobs machine. Other instances still serve HTTP requests but
+  // skip the singletons.
+  let profitDistributionWorker: { close: () => Promise<void> } | null = null;
+  let depositWorker: { close: () => Promise<void> } | null = null;
+  let profitEventWorker: { close: () => Promise<void> } | null = null;
+  let tronMonitor: { stop: () => void } | null = null;
+  let depositWatcher: { stop: () => void } | null = null;
+  let telegramPoller: { stop: () => void } | null = null;
+
+  if (RUN_BACKGROUND_JOBS) {
+    const { startProfitDistributionWorker } = await import("./workers/profit-distribution-worker");
+    const { startDepositWorker } = await import("./workers/deposit-worker");
+    const { startProfitEventWorker } = await import("./workers/profit-event-worker");
+    const { startTronMonitor } = await import("./lib/tron-monitor");
+    const { startDepositWatcher } = await import("./lib/crypto-deposit/depositWatcher");
+    const { startTelegramPoller } = await import("./lib/telegram-poller");
+
+    profitDistributionWorker = startProfitDistributionWorker();
+    depositWorker = startDepositWorker();
+    profitEventWorker = startProfitEventWorker();
+    tronMonitor = startTronMonitor();
+    depositWatcher = startDepositWatcher();
+    telegramPoller = startTelegramPoller();
+    logger.info("Background jobs enabled (cron, Telegram poller, watchers, workers)");
+  } else {
+    logger.warn("RUN_BACKGROUND_JOBS=false — cron, Telegram poller, watchers, and workers are DISABLED on this instance");
+  }
 
   const gracefulShutdown = async (signal: string) => {
     logger.info({ signal }, "Received shutdown signal — closing workers and server");
-    tronMonitor.stop();
-    depositWatcher.stop();
-    telegramPoller.stop();
+    tronMonitor?.stop();
+    depositWatcher?.stop();
+    telegramPoller?.stop();
     await Promise.all([
-      profitDistributionWorker.close(),
-      depositWorker.close(),
-      profitEventWorker.close(),
-    ]);
+      profitDistributionWorker?.close(),
+      depositWorker?.close(),
+      profitEventWorker?.close(),
+    ].filter(Boolean) as Promise<void>[]);
     process.exit(0);
   };
 
@@ -63,9 +87,13 @@ async function main() {
       if (process.env.NODE_ENV === "production") errorLogger.error(msg);
       else logger.warn(msg);
     }
-    void initCronJobs().catch((err) => {
-      console.error("initCronJobs failed:", err);
-    });
+    if (RUN_BACKGROUND_JOBS) {
+      void import("./lib/cron").then(({ initCronJobs }) =>
+        initCronJobs().catch((err) => {
+          console.error("initCronJobs failed:", err);
+        }),
+      );
+    }
   });
 }
 

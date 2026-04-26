@@ -1,0 +1,46 @@
+# Fly.io app config for the Qorix Markets web app.
+#
+# Deployed via GitHub Actions on push to `main`. Build context is the repo
+# root; VITE_API_URL is baked into the static bundle at Docker build time.
+
+app            = "qorix-markets-web"
+primary_region = "iad"
+
+# ─── Build ──────────────────────────────────────────────────────────────────
+[build]
+  dockerfile = "artifacts/qorix-markets/Dockerfile"
+
+  # Build-time args baked into the Vite bundle. To change the api host,
+  # update this value (or override via `flyctl deploy --build-arg`).
+  [build.args]
+    VITE_API_URL = "https://api.qorixmarkets.com"
+    BASE_PATH    = "/"
+
+# ─── Runtime env ────────────────────────────────────────────────────────────
+[env]
+  NODE_ENV = "production"
+  PORT     = "8080"
+
+# ─── HTTP service ───────────────────────────────────────────────────────────
+[http_service]
+  internal_port       = 8080
+  force_https         = true
+  # Stateless static-file server — fine to scale to zero between requests.
+  auto_stop_machines  = true
+  auto_start_machines = true
+  min_machines_running = 0
+  processes            = ["app"]
+
+  [[http_service.checks]]
+    interval     = "30s"
+    timeout      = "5s"
+    grace_period = "10s"
+    method       = "get"
+    path         = "/healthz"
+    protocol     = "http"
+
+# ─── Machine sizing ─────────────────────────────────────────────────────────
+[[vm]]
+  size      = "shared-cpu-1x"
+  memory    = "256mb"
+  processes = ["app"]
