@@ -18,9 +18,19 @@ import {
   Repeat2,
   Cpu,
   Clock,
+  Smartphone,
+  Tablet,
+  Laptop,
+  Apple,
+  Globe,
+  ShieldOff,
+  Server,
+  Wifi,
+  MapPin,
+  Info,
 } from "lucide-react";
 import { useState } from "react";
-import { format, parseISO } from "date-fns";
+import { format, parseISO, formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
@@ -65,7 +75,40 @@ type LoginEvent = {
   deviceFingerprint: string | null;
   eventType: string;
   userAgent: string | null;
+  browserLabel: string | null;
+  osLabel: string | null;
+  city: string | null;
+  country: string | null;
   createdAt: string;
+};
+
+type IpIntel = {
+  isProxy: boolean;
+  isHosting: boolean;
+  isMobile: boolean;
+  suspicious: boolean;
+  isp: string | null;
+  org: string | null;
+  asn: string | null;
+  region: string | null;
+  country: string | null;
+  city: string | null;
+};
+
+type UserDevice = {
+  id: string;
+  deviceFingerprint: string;
+  userAgent: string | null;
+  browserLabel: string | null;
+  osLabel: string | null;
+  firstSeenIp: string | null;
+  firstSeenAt: string;
+  lastSeenIp: string | null;
+  lastSeenAt: string;
+  lastCity: string | null;
+  lastCountry: string | null;
+  alertSentAt: string | null;
+  ipIntel: IpIntel | null;
 };
 
 // ---------------------------------------------------------------------------
@@ -196,13 +239,130 @@ function ResolveModal({
 }
 
 // ---------------------------------------------------------------------------
-// Login events drawer
+// Device-kind classification — derive icon + label from the os_label string
+// stored on user_devices. We only care about broad categories: phone, tablet,
+// Mac, Windows PC, Linux, ChromeOS — what an admin needs to see at a glance.
+// ---------------------------------------------------------------------------
+type DeviceKind = "phone" | "tablet" | "mac" | "windows" | "linux" | "chromeos" | "unknown";
+
+function classifyDevice(osLabel: string | null, userAgent: string | null): {
+  kind: DeviceKind;
+  label: string;
+  Icon: React.ElementType;
+  color: string;
+} {
+  const haystack = `${osLabel ?? ""} ${userAgent ?? ""}`.toLowerCase();
+  if (/ipad|tablet/.test(haystack)) {
+    return { kind: "tablet", label: "Tablet", Icon: Tablet, color: "text-purple-400" };
+  }
+  if (/iphone|ios/.test(haystack) || /android/.test(haystack)) {
+    return {
+      kind: "phone",
+      label: /iphone|ios/.test(haystack) ? "iPhone" : "Android phone",
+      Icon: Smartphone,
+      color: "text-emerald-400",
+    };
+  }
+  if (/mac\s*os|macos|os\s*x|macintosh/.test(haystack)) {
+    return { kind: "mac", label: "Mac", Icon: Apple, color: "text-blue-300" };
+  }
+  if (/windows|win32|win64/.test(haystack)) {
+    return { kind: "windows", label: "Windows PC", Icon: Laptop, color: "text-cyan-400" };
+  }
+  if (/cros|chromeos|chrome\s*os/.test(haystack)) {
+    return { kind: "chromeos", label: "Chromebook", Icon: Laptop, color: "text-yellow-400" };
+  }
+  if (/linux/.test(haystack)) {
+    return { kind: "linux", label: "Linux", Icon: Monitor, color: "text-orange-400" };
+  }
+  return { kind: "unknown", label: osLabel ?? "Unknown device", Icon: Monitor, color: "text-muted-foreground" };
+}
+
+function relTime(iso: string): string {
+  try { return formatDistanceToNow(parseISO(iso), { addSuffix: true }); } catch { return iso; }
+}
+
+// ---------------------------------------------------------------------------
+// IP intelligence pill — surfaces VPN / proxy / datacenter (hosting) / mobile
+// flags from ip-api.com so an admin can spot scripted or anonymized access.
+// ---------------------------------------------------------------------------
+function IpIntelBadges({ intel }: { intel: IpIntel | null }) {
+  if (!intel) return null;
+  const badges: { label: string; Icon: React.ElementType; cls: string; title: string }[] = [];
+  if (intel.isProxy) {
+    badges.push({
+      label: "VPN / Proxy",
+      Icon: ShieldOff,
+      cls: "text-red-300 bg-red-500/15 border-red-500/30",
+      title: "IP flagged as a known proxy, VPN exit node, or Tor relay.",
+    });
+  }
+  if (intel.isHosting) {
+    badges.push({
+      label: "Datacenter",
+      Icon: Server,
+      cls: "text-amber-300 bg-amber-500/15 border-amber-500/30",
+      title: "IP belongs to a hosting / cloud provider — typical for bots, scripts, or API-driven access (not a real consumer ISP).",
+    });
+  }
+  if (intel.isMobile) {
+    badges.push({
+      label: "Mobile network",
+      Icon: Wifi,
+      cls: "text-emerald-300 bg-emerald-500/10 border-emerald-500/20",
+      title: "IP belongs to a mobile carrier (4G/5G).",
+    });
+  }
+  if (badges.length === 0) {
+    badges.push({
+      label: "Residential",
+      Icon: ShieldCheck,
+      cls: "text-emerald-300 bg-emerald-500/10 border-emerald-500/20",
+      title: "IP looks like a normal home/business connection — no proxy, VPN, or hosting flags.",
+    });
+  }
+  return (
+    <div className="flex items-center gap-1 flex-wrap">
+      {badges.map((b) => (
+        <span
+          key={b.label}
+          title={b.title}
+          className={cn(
+            "inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-medium border",
+            b.cls,
+          )}
+        >
+          <b.Icon style={{ width: 10, height: 10 }} />
+          {b.label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Account Security drawer — devices + recent logins for one user
 // ---------------------------------------------------------------------------
 function LoginEventsDrawer({ userId, email, onClose }: { userId: number; email: string; onClose: () => void }) {
-  const { data, isLoading } = useQuery<LoginEvent[]>({
+  const [tab, setTab] = useState<"devices" | "logins">("devices");
+
+  const { data: events, isLoading: loadingEvents } = useQuery<LoginEvent[]>({
     queryKey: ["login-events", userId],
     queryFn: () => authFetch(`/api/admin/fraud/users/${userId}/events`),
   });
+
+  const { data: devices, isLoading: loadingDevices } = useQuery<UserDevice[]>({
+    queryKey: ["user-devices", userId],
+    queryFn: () => authFetch(`/api/admin/fraud/users/${userId}/devices`),
+  });
+
+  // Summary stats
+  const lastLogin = events?.[0];
+  const distinctIps = new Set((events ?? []).map((e) => e.ipAddress).filter(Boolean));
+  const distinctCountries = new Set(
+    (devices ?? []).map((d) => d.lastCountry).filter((c): c is string => !!c),
+  );
+  const suspiciousDeviceCount = (devices ?? []).filter((d) => d.ipIntel?.suspicious).length;
 
   return (
     <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center p-4">
@@ -210,53 +370,181 @@ function LoginEventsDrawer({ userId, email, onClose }: { userId: number; email: 
       <motion.div
         initial={{ opacity: 0, y: 30 }}
         animate={{ opacity: 1, y: 0 }}
-        className="relative z-10 w-full max-w-lg rounded-2xl bg-[#0d1525] border border-white/10 shadow-2xl overflow-hidden"
+        className="relative z-10 w-full max-w-2xl max-h-[90vh] flex flex-col rounded-2xl bg-[#0d1525] border border-white/10 shadow-2xl overflow-hidden"
       >
-        <div className="flex items-center justify-between p-5 border-b border-white/8">
+        {/* Header */}
+        <div className="flex items-center justify-between p-5 border-b border-white/8 shrink-0">
           <div>
-            <h3 className="font-bold text-white">Login Events</h3>
+            <h3 className="font-bold text-white flex items-center gap-2">
+              <ShieldAlert className="w-4 h-4 text-amber-400" />
+              Account Security
+            </h3>
             <p className="text-xs text-muted-foreground mt-0.5">{email}</p>
           </div>
           <button onClick={onClose} className="p-1.5 rounded-lg text-muted-foreground hover:text-white hover:bg-white/5 transition-all">
             <X className="w-4 h-4" />
           </button>
         </div>
-        <div className="max-h-96 overflow-y-auto p-4 space-y-2">
-          {isLoading ? (
-            <div className="py-10 flex items-center justify-center">
-              <div className="w-5 h-5 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" />
+
+        {/* Summary KPI strip */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 p-4 border-b border-white/8 bg-white/[0.015] shrink-0">
+          <div className="rounded-lg bg-white/[0.03] border border-white/8 p-2.5">
+            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Last login</div>
+            <div className="text-xs font-semibold text-white mt-0.5 truncate">
+              {lastLogin ? relTime(lastLogin.createdAt) : "—"}
             </div>
-          ) : !data?.length ? (
-            <div className="py-10 text-center text-muted-foreground text-sm">No login events recorded yet</div>
-          ) : (
-            data.map((ev) => (
-              <div key={ev.id} className="flex items-start gap-3 p-3 rounded-xl bg-white/[0.03] border border-white/5">
-                <div className={cn(
-                  "w-7 h-7 rounded-lg flex items-center justify-center shrink-0 mt-0.5",
-                  ev.eventType === "register" ? "bg-emerald-500/15" : "bg-blue-500/15"
-                )}>
-                  {ev.eventType === "register" ? (
-                    <Users style={{ width: 13, height: 13 }} className="text-emerald-400" />
-                  ) : (
-                    <Monitor style={{ width: 13, height: 13 }} className="text-blue-400" />
-                  )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-xs font-medium text-white capitalize">{ev.eventType}</span>
-                    <span className="font-mono text-[10px] text-muted-foreground bg-white/5 px-1.5 py-0.5 rounded">{ev.ipAddress}</span>
-                  </div>
-                  {ev.deviceFingerprint && (
-                    <div className="text-[10px] text-muted-foreground mt-0.5 font-mono">
-                      Device: {ev.deviceFingerprint}
-                    </div>
-                  )}
-                  <div className="text-[10px] text-muted-foreground/60 mt-0.5">
-                    {format(parseISO(ev.createdAt), "MMM d, yyyy HH:mm")}
-                  </div>
-                </div>
+          </div>
+          <div className="rounded-lg bg-white/[0.03] border border-white/8 p-2.5">
+            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Devices</div>
+            <div className="text-xs font-semibold text-white mt-0.5">{devices?.length ?? 0}</div>
+          </div>
+          <div className="rounded-lg bg-white/[0.03] border border-white/8 p-2.5">
+            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Distinct IPs</div>
+            <div className="text-xs font-semibold text-white mt-0.5">{distinctIps.size}</div>
+          </div>
+          <div className={cn(
+            "rounded-lg border p-2.5",
+            suspiciousDeviceCount > 0 ? "bg-red-500/8 border-red-500/30" : "bg-white/[0.03] border-white/8",
+          )}>
+            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">VPN / datacenter</div>
+            <div className={cn(
+              "text-xs font-semibold mt-0.5",
+              suspiciousDeviceCount > 0 ? "text-red-300" : "text-white",
+            )}>
+              {suspiciousDeviceCount} {suspiciousDeviceCount === 1 ? "device" : "devices"}
+            </div>
+          </div>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex border-b border-white/8 shrink-0">
+          {(["devices", "logins"] as const).map((t) => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className={cn(
+                "flex-1 px-4 py-2.5 text-xs font-medium transition-all border-b-2",
+                tab === t
+                  ? "text-white border-blue-400 bg-white/[0.03]"
+                  : "text-muted-foreground border-transparent hover:text-white",
+              )}
+            >
+              {t === "devices" ? `Devices (${devices?.length ?? 0})` : `Recent logins (${events?.length ?? 0})`}
+            </button>
+          ))}
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-2 min-h-0">
+          {tab === "devices" ? (
+            loadingDevices ? (
+              <div className="py-10 flex items-center justify-center">
+                <div className="w-5 h-5 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" />
               </div>
-            ))
+            ) : !devices?.length ? (
+              <div className="py-10 text-center text-muted-foreground text-sm">No devices recorded yet</div>
+            ) : (
+              devices.map((d) => {
+                const cls = classifyDevice(d.osLabel, d.userAgent);
+                const Icon = cls.Icon;
+                const location = [d.lastCity, d.lastCountry].filter(Boolean).join(", ") || "Location unknown";
+                return (
+                  <div
+                    key={d.id}
+                    className={cn(
+                      "p-3 rounded-xl border space-y-2",
+                      d.ipIntel?.suspicious
+                        ? "bg-red-500/[0.04] border-red-500/25"
+                        : "bg-white/[0.03] border-white/8",
+                    )}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className={cn(
+                        "w-9 h-9 rounded-lg flex items-center justify-center shrink-0 bg-white/5 border border-white/8",
+                        cls.color,
+                      )}>
+                        <Icon style={{ width: 18, height: 18 }} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-sm font-semibold text-white">{cls.label}</span>
+                          <span className="text-xs text-muted-foreground">· {d.browserLabel ?? "Unknown browser"}</span>
+                        </div>
+                        <div className="flex items-center gap-1 text-[11px] text-muted-foreground mt-1">
+                          <Clock className="w-3 h-3" />
+                          Last seen {relTime(d.lastSeenAt)}
+                          <span className="text-muted-foreground/50">·</span>
+                          <span>First seen {relTime(d.firstSeenAt)}</span>
+                        </div>
+                      </div>
+                    </div>
+                    {/* Location + IP + intel */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pl-12">
+                      <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                        <MapPin className="w-3 h-3 text-blue-400" />
+                        <span className="text-white/80">{location}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                        <Globe className="w-3 h-3 text-blue-400" />
+                        <span className="font-mono text-white/80 truncate">{d.lastSeenIp ?? "—"}</span>
+                      </div>
+                    </div>
+                    <div className="pl-12">
+                      <IpIntelBadges intel={d.ipIntel} />
+                      {d.ipIntel?.isp && (
+                        <div className="text-[10px] text-muted-foreground/70 mt-1 truncate">
+                          ISP: {d.ipIntel.isp}{d.ipIntel.asn ? ` · ${d.ipIntel.asn}` : ""}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })
+            )
+          ) : (
+            loadingEvents ? (
+              <div className="py-10 flex items-center justify-center">
+                <div className="w-5 h-5 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" />
+              </div>
+            ) : !events?.length ? (
+              <div className="py-10 text-center text-muted-foreground text-sm">No login events recorded yet</div>
+            ) : (
+              events.map((ev) => {
+                const cls = classifyDevice(ev.osLabel, ev.userAgent);
+                const Icon = cls.Icon;
+                const location = [ev.city, ev.country].filter(Boolean).join(", ");
+                return (
+                  <div key={ev.id} className="flex items-start gap-3 p-3 rounded-xl bg-white/[0.03] border border-white/5">
+                    <div className={cn(
+                      "w-7 h-7 rounded-lg flex items-center justify-center shrink-0 mt-0.5 bg-white/5",
+                      cls.color,
+                    )}>
+                      <Icon style={{ width: 13, height: 13 }} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs font-semibold text-white capitalize">{ev.eventType}</span>
+                        <span className="text-[11px] text-muted-foreground">
+                          {cls.label}{ev.browserLabel ? ` · ${ev.browserLabel}` : ""}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 mt-1 flex-wrap">
+                        <span className="font-mono text-[10px] text-muted-foreground bg-white/5 px-1.5 py-0.5 rounded">{ev.ipAddress}</span>
+                        {location && (
+                          <span className="text-[10px] text-muted-foreground inline-flex items-center gap-1">
+                            <MapPin className="w-2.5 h-2.5" />
+                            {location}
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-[10px] text-muted-foreground/60 mt-1">
+                        {format(parseISO(ev.createdAt), "MMM d, yyyy HH:mm")} · {relTime(ev.createdAt)}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            )
           )}
         </div>
       </motion.div>

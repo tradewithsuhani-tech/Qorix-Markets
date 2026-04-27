@@ -1,8 +1,9 @@
 import { Router } from "express";
-import { db, usersTable, fraudFlagsTable, loginEventsTable } from "@workspace/db";
+import { db, usersTable, fraudFlagsTable, loginEventsTable, userDevicesTable } from "@workspace/db";
 import { eq, and, desc, count, ne, gte, inArray } from "drizzle-orm";
 import { authMiddleware, adminMiddleware, getParam, getQueryInt, getQueryString, type AuthRequest } from "../middlewares/auth";
 import { getFraudStats } from "../lib/fraud-service";
+import { lookupGeoFull, type GeoFullResult } from "../lib/geo-ip";
 import { errorLogger } from "../lib/logger";
 
 const router = Router();
@@ -149,7 +150,9 @@ router.post("/admin/fraud/flags/:id/reopen", async (_req: AuthRequest, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// GET /admin/fraud/users/:userId/events — login history for a user
+// GET /admin/fraud/users/:userId/events — login history for a user, enriched
+// with browser/os labels and city/country (looked up via the matched
+// user_devices row by fingerprint, no extra geo API hits).
 // ---------------------------------------------------------------------------
 router.get("/admin/fraud/users/:userId/events", async (req, res) => {
   try {
@@ -161,20 +164,129 @@ router.get("/admin/fraud/users/:userId/events", async (req, res) => {
       .orderBy(desc(loginEventsTable.createdAt))
       .limit(50);
 
+    // Pull all known devices for this user once, then index by fingerprint.
+    // Most events will match an existing device row (since the same fingerprint
+    // is used for both tables). This avoids a per-event lookup or geo call.
+    const devices = await db
+      .select({
+        deviceFingerprint: userDevicesTable.deviceFingerprint,
+        browserLabel: userDevicesTable.browserLabel,
+        osLabel: userDevicesTable.osLabel,
+        lastCity: userDevicesTable.lastCity,
+        lastCountry: userDevicesTable.lastCountry,
+      })
+      .from(userDevicesTable)
+      .where(eq(userDevicesTable.userId, userId));
+    const byFp = new Map(devices.map((d) => [d.deviceFingerprint, d]));
+
     res.json(
-      events.map((e) => ({
-        id: e.id,
-        userId: e.userId,
-        ipAddress: e.ipAddress,
-        deviceFingerprint: e.deviceFingerprint,
-        eventType: e.eventType,
-        userAgent: e.userAgent,
-        createdAt: e.createdAt.toISOString(),
-      })),
+      events.map((e) => {
+        const dev = e.deviceFingerprint ? byFp.get(e.deviceFingerprint) : undefined;
+        return {
+          id: e.id,
+          userId: e.userId,
+          ipAddress: e.ipAddress,
+          deviceFingerprint: e.deviceFingerprint,
+          eventType: e.eventType,
+          userAgent: e.userAgent,
+          browserLabel: dev?.browserLabel ?? null,
+          osLabel: dev?.osLabel ?? null,
+          city: dev?.lastCity ?? null,
+          country: dev?.lastCountry ?? null,
+          createdAt: e.createdAt.toISOString(),
+        };
+      }),
     );
   } catch (err) {
     errorLogger.error({ err }, "fraud: failed to get user events");
     res.status(500).json({ error: "Failed to get login events" });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /admin/fraud/users/:userId/devices — every device this user has ever
+// successfully logged in from, with VPN / proxy / hosting (datacenter / bot)
+// intelligence on the last-seen IP. The geo lookup hits the free ip-api.com
+// endpoint with a per-IP cache, so repeat views of the same user are cheap.
+// ---------------------------------------------------------------------------
+router.get("/admin/fraud/users/:userId/devices", async (req, res) => {
+  try {
+    const userId = parseInt(getParam(req, "userId"));
+    if (!Number.isInteger(userId) || userId <= 0) {
+      res.status(400).json({ error: "invalid_user_id" });
+      return;
+    }
+
+    const devices = await db
+      .select({
+        id: userDevicesTable.id,
+        deviceFingerprint: userDevicesTable.deviceFingerprint,
+        userAgent: userDevicesTable.userAgent,
+        browserLabel: userDevicesTable.browserLabel,
+        osLabel: userDevicesTable.osLabel,
+        firstSeenIp: userDevicesTable.firstSeenIp,
+        firstSeenAt: userDevicesTable.firstSeenAt,
+        lastSeenIp: userDevicesTable.lastSeenIp,
+        lastSeenAt: userDevicesTable.lastSeenAt,
+        lastCity: userDevicesTable.lastCity,
+        lastCountry: userDevicesTable.lastCountry,
+        alertSentAt: userDevicesTable.alertSentAt,
+      })
+      .from(userDevicesTable)
+      .where(eq(userDevicesTable.userId, userId))
+      .orderBy(desc(userDevicesTable.lastSeenAt))
+      .limit(50);
+
+    // Resolve unique IPs in parallel (cached, so re-views are essentially
+    // free). Bound concurrency by deduping at the IP level.
+    const uniqueIps = Array.from(
+      new Set(devices.map((d) => d.lastSeenIp).filter((ip): ip is string => !!ip)),
+    );
+    const ipIntel = new Map<string, GeoFullResult>();
+    await Promise.all(
+      uniqueIps.map(async (ip) => {
+        const intel = await lookupGeoFull(ip);
+        ipIntel.set(ip, intel);
+      }),
+    );
+
+    res.json(
+      devices.map((d) => {
+        const intel = d.lastSeenIp ? ipIntel.get(d.lastSeenIp) ?? null : null;
+        return {
+          id: String(d.id),
+          deviceFingerprint: d.deviceFingerprint,
+          userAgent: d.userAgent,
+          browserLabel: d.browserLabel,
+          osLabel: d.osLabel,
+          firstSeenIp: d.firstSeenIp,
+          firstSeenAt: d.firstSeenAt.toISOString(),
+          lastSeenIp: d.lastSeenIp,
+          lastSeenAt: d.lastSeenAt.toISOString(),
+          lastCity: d.lastCity,
+          lastCountry: d.lastCountry,
+          alertSentAt: d.alertSentAt?.toISOString() ?? null,
+          // VPN / proxy / hosting / mobile + ISP / ASN, from ip-api.com.
+          ipIntel: intel
+            ? {
+                isProxy: intel.isProxy,
+                isHosting: intel.isHosting,
+                isMobile: intel.isMobile,
+                suspicious: intel.suspicious,
+                isp: intel.isp,
+                org: intel.org,
+                asn: intel.asn,
+                region: intel.region,
+                country: intel.country,
+                city: intel.city,
+              }
+            : null,
+        };
+      }),
+    );
+  } catch (err) {
+    errorLogger.error({ err }, "fraud: failed to get user devices");
+    res.status(500).json({ error: "Failed to get user devices" });
   }
 });
 
