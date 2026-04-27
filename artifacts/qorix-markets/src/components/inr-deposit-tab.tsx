@@ -537,35 +537,37 @@ export function InrDepositTab() {
 
                 <div className="text-[11px] text-muted-foreground font-semibold mb-2">Receiving Account Details:</div>
 
-                <div className="rounded-xl bg-black/30 border border-white/8 p-3 space-y-2 relative">
-                  {selected.type === "bank" ? (
-                    <>
-                      {selected.accountHolder && (
-                        <Row label="Name" value={selected.accountHolder} valueClass="text-emerald-300 font-bold" />
-                      )}
-                      {selected.bankName && (
-                        <Row label="Bank" value={selected.bankName} />
-                      )}
-                      {selected.accountNumber && (
-                        <Row label="A/C Number" value={selected.accountNumber} mono />
-                      )}
-                      {selected.ifsc && (
-                        <Row label="IFSC" value={selected.ifsc} mono />
-                      )}
-                    </>
-                  ) : (
-                    <>
-                      {selected.accountHolder && (
-                        <Row label="Name" value={selected.accountHolder} valueClass="text-emerald-300 font-bold" />
-                      )}
-                      {selected.upiId && (
-                        <Row label="UPI ID" value={selected.upiId} valueClass="text-emerald-300 font-semibold" mono />
-                      )}
-                    </>
-                  )}
+                <div className="rounded-xl bg-black/30 border border-white/8 p-4 flex gap-4">
+                  <div className="flex-1 min-w-0 divide-y divide-white/5">
+                    {selected.type === "bank" ? (
+                      <>
+                        {selected.accountHolder && (
+                          <Row label="Name" value={selected.accountHolder} valueClass="text-emerald-300 font-bold" />
+                        )}
+                        {selected.bankName && (
+                          <Row label="Bank" value={selected.bankName} />
+                        )}
+                        {selected.accountNumber && (
+                          <Row label="A/C Number" value={selected.accountNumber} mono />
+                        )}
+                        {selected.ifsc && (
+                          <Row label="IFSC" value={selected.ifsc} mono />
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        {selected.accountHolder && (
+                          <Row label="Name" value={selected.accountHolder} valueClass="text-emerald-300 font-bold" />
+                        )}
+                        {selected.upiId && (
+                          <Row label="UPI ID" value={selected.upiId} valueClass="text-emerald-300 font-semibold" mono />
+                        )}
+                      </>
+                    )}
+                  </div>
 
                   {selected.qrImageBase64 && (
-                    <div className="absolute top-3 right-3 w-20 h-20 rounded bg-white border border-white/15 p-1 shadow-sm">
+                    <div className="w-24 h-24 shrink-0 rounded-lg bg-white border border-white/15 p-1 shadow-sm self-start">
                       <img
                         src={selected.qrImageBase64}
                         alt="QR"
@@ -827,20 +829,30 @@ function Row({
   valueClass?: string;
 }) {
   return (
-    <div className="flex items-center justify-between gap-3 pr-24">
-      <div className="text-[10px] text-muted-foreground uppercase tracking-wider">{label}</div>
-      <div className="flex items-center gap-2 min-w-0">
-        <div className={cn("text-xs text-white truncate", mono && "font-mono", valueClass)}>{value}</div>
+    <div className="flex items-start justify-between gap-3 py-2 first:pt-0 last:pb-0">
+      <div className="text-[10px] text-muted-foreground uppercase tracking-wider w-20 shrink-0 pt-0.5">
+        {label}
+      </div>
+      <div className="flex items-start gap-2 flex-1 min-w-0 justify-end">
+        <div
+          className={cn(
+            "text-sm text-white text-right",
+            mono ? "font-mono break-all leading-snug" : "break-words leading-snug",
+            valueClass,
+          )}
+        >
+          {value}
+        </div>
         <button
           type="button"
           onClick={(e) => {
             e.stopPropagation();
             navigator.clipboard.writeText(value);
           }}
-          className="w-6 h-6 rounded inline-flex items-center justify-center text-muted-foreground hover:text-white hover:bg-white/10 shrink-0"
+          className="w-7 h-7 rounded-md inline-flex items-center justify-center text-muted-foreground hover:text-white hover:bg-white/10 shrink-0 transition-colors"
           aria-label="Copy"
         >
-          <Copy className="w-3 h-3" />
+          <Copy className="w-3.5 h-3.5" />
         </button>
       </div>
     </div>
