@@ -7,6 +7,7 @@ import { loginAttemptsTable } from "@workspace/db";
 import { RegisterBody, LoginBody } from "@workspace/api-zod";
 import { trackLoginEvent, runFraudChecks } from "../lib/fraud-service";
 import { sendOtp, verifyOtp, getDevOtp, sendEmail } from "../lib/email-service";
+import { trackLoginDevice } from "../lib/device-tracking";
 import { buildBrandedEmailHtml } from "../lib/email-template";
 import { verifyCaptcha } from "../lib/captcha-service";
 import {
@@ -469,6 +470,10 @@ async function issueSessionAfterAuth(
       .where(eq(usersTable.id, user.id));
   }
   const token = signToken(user.id, user.isAdmin);
+  // Track this device + fire "new device detected" email if it's the first
+  // time we've seen this fingerprint for the user (and they have other
+  // known devices already). Fire-and-forget — never blocks the response.
+  trackLoginDevice(user, req);
   res.json({ token, user: formatUser(user) });
 }
 
@@ -625,7 +630,7 @@ router.post("/auth/login-attempts/:id/respond", authMiddleware, async (req: Auth
     // strictly later than the kill-switch and the new device's token
     // stays valid.
     const userRows = await db
-      .select({ id: usersTable.id, isAdmin: usersTable.isAdmin })
+      .select()
       .from(usersTable)
       .where(eq(usersTable.id, req.userId!))
       .limit(1);
@@ -634,6 +639,17 @@ router.post("/auth/login-attempts/:id/respond", authMiddleware, async (req: Auth
       .update(loginAttemptsTable)
       .set({ issuedToken })
       .where(eq(loginAttemptsTable.id, id));
+    // Record the now-approved device + fire alert email. We use the row
+    // data (not req) because `req` is from the OLD device that just
+    // approved — the device we want to track is the NEW one waiting in
+    // the loginAttempts row.
+    trackLoginDevice(userRows[0]!, {
+      fingerprint: row.deviceFingerprint,
+      ip: row.ipAddress,
+      userAgent: row.userAgent,
+      browser: row.browserLabel || "Unknown",
+      os: row.osLabel || "Unknown",
+    });
   }
   res.json({ ok: true, decision });
 });
@@ -798,6 +814,8 @@ router.post("/auth/login-attempts/:id/verify-otp", async (req, res) => {
     .update(loginAttemptsTable)
     .set({ status: "approved", decidedAt: new Date() })
     .where(eq(loginAttemptsTable.id, id));
+  // Track this device — req IS the new device (it submitted the OTP).
+  trackLoginDevice(userRows[0]!, req);
   res.json({ token, user: formatUser(userRows[0]!) });
 });
 

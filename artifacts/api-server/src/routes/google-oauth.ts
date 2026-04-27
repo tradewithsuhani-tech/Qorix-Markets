@@ -6,6 +6,7 @@ import crypto from "crypto";
 import { logger } from "../lib/logger";
 import { sendEmail } from "../lib/email-service";
 import { buildBrandedEmailHtml } from "../lib/email-template";
+import { trackLoginDevice } from "../lib/device-tracking";
 
 const router = Router();
 
@@ -178,6 +179,19 @@ router.get("/auth/google/callback", async (req, res) => {
     }
 
     const token = signToken(userId, isAdmin);
+    // Track this device + fire "new device detected" email if this fingerprint
+    // is brand-new for the user (and they have other known devices already).
+    // Re-fetch a fresh user row so we have email + fullName for the alert.
+    try {
+      const fullUser = await db
+        .select()
+        .from(usersTable)
+        .where(eq(usersTable.id, userId))
+        .limit(1);
+      if (fullUser[0]) trackLoginDevice(fullUser[0], req);
+    } catch (err: any) {
+      logger.warn({ err: err?.message, userId }, "[google-oauth] device tracking skipped");
+    }
     // Redirect to frontend login page with token — frontend captures and stores it
     res.redirect(`${frontend}/login?token=${encodeURIComponent(token)}`);
   } catch (err) {
