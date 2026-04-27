@@ -36,6 +36,13 @@ import AdminFraudPage from "@/pages/admin-fraud";
 import AdminPaymentMethodsPage from "@/pages/admin-payment-methods";
 import AdminSubscriptionsPage from "@/pages/admin-subscriptions";
 import AdminSubAdminsPage from "@/pages/admin-sub-admins";
+import AdminMerchantsPage from "@/pages/admin-merchants";
+import MerchantLoginPage from "@/pages/merchant-login";
+import MerchantDashboardPage from "@/pages/merchant-dashboard";
+import MerchantPaymentMethodsPage from "@/pages/merchant-payment-methods";
+import MerchantDepositsPage from "@/pages/merchant-deposits";
+import MerchantWithdrawalsPage from "@/pages/merchant-withdrawals";
+import MerchantSettingsPage from "@/pages/merchant-settings";
 import AdminTaskProofsPage from "@/pages/admin-task-proofs";
 import AdminSignalTradesPage from "@/pages/admin-signal-trades";
 import SignalHistoryPage from "@/pages/signal-history";
@@ -184,6 +191,13 @@ function Router() {
       <Route path="/admin/payment-methods"><ProtectedRoute component={AdminPaymentMethodsPage} adminOnly={true} /></Route>
       <Route path="/admin/subscriptions"><ProtectedRoute component={AdminSubscriptionsPage} adminOnly={true} /></Route>
       <Route path="/admin/sub-admins"><ProtectedRoute component={AdminSubAdminsPage} adminOnly={true} /></Route>
+      <Route path="/admin/merchants"><ProtectedRoute component={AdminMerchantsPage} adminOnly={true} /></Route>
+      <Route path="/merchant/login" component={MerchantLoginPage} />
+      <Route path="/merchant" component={MerchantDashboardPage} />
+      <Route path="/merchant/methods" component={MerchantPaymentMethodsPage} />
+      <Route path="/merchant/deposits" component={MerchantDepositsPage} />
+      <Route path="/merchant/withdrawals" component={MerchantWithdrawalsPage} />
+      <Route path="/merchant/settings" component={MerchantSettingsPage} />
       <Route path="/admin/task-proofs"><ProtectedRoute component={AdminTaskProofsPage} adminOnly={true} /></Route>
       <Route path="/admin/chats"><ProtectedRoute component={AdminChatsPage} adminOnly={true} /></Route>
       <Route path="/admin/communication"><ProtectedRoute component={AdminCommunicationPage} adminOnly={true} /></Route>

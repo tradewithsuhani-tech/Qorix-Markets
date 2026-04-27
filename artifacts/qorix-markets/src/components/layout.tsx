@@ -41,6 +41,7 @@ import {
   Zap,
   Landmark,
   ShieldCheck,
+  Store,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -579,6 +580,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
     { href: "/admin/users", label: "Users", icon: Users },
     { href: "/admin/sub-admins", label: "Sub-Admins", icon: ShieldCheck },
+    { href: "/admin/merchants", label: "Merchants", icon: Store },
     { href: "/admin/deposits", label: "Deposits", icon: ArrowDownCircle },
     { href: "/admin/withdrawals", label: "Withdrawals", icon: ArrowUpCircle },
     { href: "/admin/payment-methods", label: "INR / Payments", icon: Landmark },
