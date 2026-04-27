@@ -365,6 +365,18 @@ router.post("/wallet/withdraw", async (req: AuthRequest, res) => {
         throw new Error("INSUFFICIENT_BALANCE");
       }
 
+      // --- Channel cap re-check INSIDE the txn (anti-fraud) ---
+      // After the debit, total remaining balance must still cover whatever is
+      // owed to the INR channel (i.e., USDT-equivalent of net INR deposits
+      // not yet withdrawn back via INR). Without this, a user who deposits
+      // via INR could drain everything via USDT/TRC20 and bypass the
+      // "withdraw via the same channel you deposited via" rule.
+      const { getWithdrawalCaps } = await import("../lib/withdrawal-caps");
+      const capsAfter = await getWithdrawalCaps(req.userId!, tx);
+      if (capsAfter.totalBalance < capsAfter.inrChannelOwed) {
+        throw new Error("INR_CHANNEL_CAP_EXCEEDED");
+      }
+
       const userAccountCode = `user:${req.userId!}:${source}`;
 
       // --- Atomic guarded points debit (prevents double-spend under concurrency) ---
@@ -442,6 +454,30 @@ router.post("/wallet/withdraw", async (req: AuthRequest, res) => {
     }
     if (err?.message === "INSUFFICIENT_POINTS") {
       res.status(400).json({ error: "Insufficient points balance" });
+      return;
+    }
+    if (err?.message === "INR_CHANNEL_CAP_EXCEEDED") {
+      // Anti-fraud: net INR-deposited funds must exit via INR. Block here so
+      // the client can show a "withdraw via INR for that portion" message.
+      try {
+        const { getWithdrawalCaps } = await import("../lib/withdrawal-caps");
+        const caps = await getWithdrawalCaps(req.userId!);
+        res.status(400).json({
+          error: "inr_channel_cap_exceeded",
+          message:
+            `This USDT withdrawal would leave less than $${caps.inrChannelOwed.toFixed(2)} in your wallet, ` +
+            `which is reserved to be withdrawn back via INR (you deposited that amount via INR). ` +
+            `Reduce the amount, or withdraw the INR-locked portion via the INR tab first.`,
+          inrChannelOwed: caps.inrChannelOwed,
+          totalBalance: caps.totalBalance,
+          maxUsdtWithdrawable: caps.usdtChannelMax,
+        });
+      } catch {
+        res.status(400).json({
+          error: "inr_channel_cap_exceeded",
+          message: "USDT withdrawal blocked: a portion of your balance is reserved for INR withdrawal.",
+        });
+      }
       return;
     }
     if (err?.message === "WITHDRAWAL_LOCKED_PASSWORD_CHANGE") {
