@@ -903,11 +903,11 @@ export function InrDepositTab() {
                 )}
               </div>
 
-              <div className="w-full bg-white rounded-2xl p-4 shadow-2xl">
+              <div className="w-full rounded-2xl p-3 bg-gradient-to-br from-emerald-950/50 via-slate-900/70 to-slate-950/80 border border-emerald-500/25 shadow-[0_0_60px_-15px_rgba(16,185,129,0.4)] backdrop-blur-xl">
                 <img
                   src={selected.qrImageBase64}
                   alt="UPI QR code"
-                  className="w-full h-auto object-contain"
+                  className="w-full h-auto object-contain rounded-xl"
                 />
               </div>
 
