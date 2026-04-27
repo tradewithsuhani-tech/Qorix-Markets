@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
   db,
   walletsTable,
+  usersTable,
   inrWithdrawalsTable,
   systemSettingsTable,
 } from "@workspace/db";
@@ -82,6 +83,23 @@ router.post("/inr-withdrawals", authMiddleware, async (req: AuthRequest, res) =>
       .json({ error: "smoke_test_account_blocked", message: "INR withdrawals are disabled for the smoke-test account." });
     return;
   }
+
+  // --- User status / KYC checks (mirror USDT withdraw) ---
+  const userRows = await db.select().from(usersTable).where(eq(usersTable.id, req.userId!)).limit(1);
+  const user = userRows[0];
+  if (!user) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+  if (user.isDisabled || user.isFrozen) {
+    res.status(403).json({ error: "account_restricted", message: "Withdrawals are blocked for restricted accounts" });
+    return;
+  }
+  if (user.kycStatus !== "approved") {
+    res.status(403).json({ error: "kyc_required", message: "Complete KYC verification before withdrawing" });
+    return;
+  }
+
   const body = req.body ?? {};
   const amountInr = Number(body.amountInr);
   const payoutMethod = String(body.payoutMethod ?? "").toLowerCase();
@@ -123,29 +141,31 @@ router.post("/inr-withdrawals", authMiddleware, async (req: AuthRequest, res) =>
   const rate = await getInrRate();
   const amountUsdt = +(amountInr / rate).toFixed(6);
 
-  // --- Channel cap check ---
-  const caps = await getWithdrawalCaps(req.userId!);
-  if (amountUsdt > caps.inrChannelMax) {
-    const allowedInr = +(caps.inrChannelMax * rate).toFixed(2);
-    res.status(400).json({
-      error: "channel_cap_exceeded",
-      message:
-        `INR withdrawal limit exceeded. You can withdraw at most ₹${allowedInr.toFixed(2)} via INR right now ` +
-        `($${caps.usdtChannelOwed.toFixed(2)} of your balance is reserved to be withdrawn back via USDT/TRC20).`,
-      allowedInr,
-      caps,
-    });
-    return;
-  }
-  if (amountUsdt > caps.mainBalance) {
-    res.status(400).json({
-      error: "insufficient_main_balance",
-      message: `INR withdrawals are paid from Main Balance. You have $${caps.mainBalance.toFixed(2)} available, this request needs $${amountUsdt.toFixed(2)}.`,
-    });
-    return;
+  // --- Pre-flight cap check (cheap reject; authoritative re-check happens inside the txn) ---
+  {
+    const preCaps = await getWithdrawalCaps(req.userId!);
+    if (amountUsdt > preCaps.inrChannelMax) {
+      const allowedInr = +(preCaps.inrChannelMax * rate).toFixed(2);
+      res.status(400).json({
+        error: "channel_cap_exceeded",
+        message:
+          `INR withdrawal limit exceeded. You can withdraw at most ₹${allowedInr.toFixed(2)} via INR right now ` +
+          `($${preCaps.usdtChannelOwed.toFixed(2)} of your balance is reserved to be withdrawn back via USDT/TRC20).`,
+        allowedInr,
+        caps: preCaps,
+      });
+      return;
+    }
+    if (amountUsdt > preCaps.mainBalance) {
+      res.status(400).json({
+        error: "insufficient_main_balance",
+        message: `INR withdrawals are paid from Main Balance. You have $${preCaps.mainBalance.toFixed(2)} available, this request needs $${amountUsdt.toFixed(2)}.`,
+      });
+      return;
+    }
   }
 
-  // --- Atomic guarded debit + insert ---
+  // --- Atomic: re-check caps inside txn, guarded debit, insert ---
   let created: typeof inrWithdrawalsTable.$inferSelect | undefined;
   try {
     created = await db.transaction(async (tx) => {
@@ -161,6 +181,12 @@ router.post("/inr-withdrawals", authMiddleware, async (req: AuthRequest, res) =>
         .returning({ id: walletsTable.id });
       if (debit.length === 0) {
         throw new Error("INSUFFICIENT_BALANCE");
+      }
+
+      // Authoritative cap re-check (after debit, before insert) — defeats concurrent-request race
+      const txCaps = await getWithdrawalCaps(req.userId!, tx);
+      if (amountUsdt > txCaps.inrChannelMax) {
+        throw new Error("INR_CHANNEL_CAP_EXCEEDED");
       }
 
       const [row] = await tx
@@ -183,6 +209,19 @@ router.post("/inr-withdrawals", authMiddleware, async (req: AuthRequest, res) =>
   } catch (err: any) {
     if (err?.message === "INSUFFICIENT_BALANCE") {
       res.status(400).json({ error: "insufficient_main_balance", message: "Insufficient main balance" });
+      return;
+    }
+    if (err?.message === "INR_CHANNEL_CAP_EXCEEDED") {
+      const caps = await getWithdrawalCaps(req.userId!);
+      const allowedInr = +(caps.inrChannelMax * rate).toFixed(2);
+      res.status(400).json({
+        error: "channel_cap_exceeded",
+        message:
+          `INR withdrawal limit exceeded. You can withdraw at most ₹${allowedInr.toFixed(2)} via INR right now ` +
+          `($${caps.usdtChannelOwed.toFixed(2)} of your balance is reserved to be withdrawn back via USDT/TRC20).`,
+        allowedInr,
+        caps,
+      });
       return;
     }
     errorLogger.error({ err, userId: req.userId }, "[inr-withdrawal] create failed");
