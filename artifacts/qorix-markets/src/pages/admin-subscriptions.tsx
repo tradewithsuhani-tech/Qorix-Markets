@@ -161,6 +161,7 @@ export default function AdminSubscriptionsPage() {
       qc.invalidateQueries({ queryKey: ["admin-subscriptions"] });
       toast({ title: "Deleted" });
     },
+    onError: (e: any) => toast({ title: "Delete failed", description: e?.message ?? "Unknown error", variant: "destructive" }),
   });
 
   const markPaidMutation = useMutation({
@@ -173,6 +174,7 @@ export default function AdminSubscriptionsPage() {
       qc.invalidateQueries({ queryKey: ["admin-subscriptions"] });
       toast({ title: "Marked as paid", description: "Next due date advanced" });
     },
+    onError: (e: any) => toast({ title: "Mark-paid failed", description: e?.message ?? "Unknown error", variant: "destructive" }),
   });
 
   // Summary stats

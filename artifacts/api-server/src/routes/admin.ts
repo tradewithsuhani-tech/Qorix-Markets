@@ -1915,17 +1915,26 @@ function advanceDueDate(current: string | null, cycle: string): string | null {
   // Roll the next-due date forward by one billing cycle from `current`
   // (or today if current is null/past). Returns ISO YYYY-MM-DD or null
   // for one-time subscriptions.
+  //
+  // Calendar-safe month math: naive `setUTCMonth(+1)` overflows from Jan 31
+  // into March (skipping February). We instead clamp to the last valid day
+  // of the target month, so a Jan-31 monthly bill rolls to Feb-28/29, then
+  // Mar-31, etc. — preserving end-of-month semantics.
   if (cycle === "one-time") return null;
   const today = new Date();
   today.setUTCHours(0, 0, 0, 0);
   let base = current ? new Date(current + "T00:00:00Z") : today;
   if (base < today) base = today;
-  if (cycle === "yearly") {
-    base.setUTCFullYear(base.getUTCFullYear() + 1);
-  } else {
-    base.setUTCMonth(base.getUTCMonth() + 1);
-  }
-  return base.toISOString().slice(0, 10);
+  const day = base.getUTCDate();
+  let year = base.getUTCFullYear();
+  let month = base.getUTCMonth();
+  if (cycle === "yearly") year += 1;
+  else month += 1;
+  if (month > 11) { year += Math.floor(month / 12); month = month % 12; }
+  const lastDayOfTargetMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+  const clampedDay = Math.min(day, lastDayOfTargetMonth);
+  const result = new Date(Date.UTC(year, month, clampedDay));
+  return result.toISOString().slice(0, 10);
 }
 
 router.get("/subscriptions", authMiddleware, adminMiddleware, async (_req: AuthRequest, res) => {
