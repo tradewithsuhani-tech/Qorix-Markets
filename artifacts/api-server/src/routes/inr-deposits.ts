@@ -16,6 +16,7 @@ import { transactionLogger, errorLogger } from "../lib/logger";
 import { ensureUserAccounts, postJournalEntry, journalForTransaction } from "../lib/ledger-service";
 import { sendTxnEmailToUser } from "../lib/email-service";
 import { isSmokeTestUser } from "../lib/smoke-test-account";
+import { notifyOwnerMerchantOfNewDeposit } from "../lib/escalation-cron";
 
 const router = Router();
 
@@ -170,6 +171,10 @@ router.post("/inr-deposits", authMiddleware, async (req: AuthRequest, res) => {
       "INR deposit submitted",
       `Your INR deposit of ₹${amountInr.toFixed(2)} (≈$${amountUsdt.toFixed(2)} USDT) is awaiting admin review.`,
     );
+    // Fire-and-forget T=0 alert to the merchant who owns this payment method.
+    // The 10/15-min escalation steps are handled by the per-minute cron in
+    // escalation-cron.ts; this is just the instant heads-up.
+    void notifyOwnerMerchantOfNewDeposit(row!.id);
     res.json({ deposit: formatInrDeposit(row!) });
   } catch (err: any) {
     if (String(err?.message ?? "").toLowerCase().includes("unique")) {
