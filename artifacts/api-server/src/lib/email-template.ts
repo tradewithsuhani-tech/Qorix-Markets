@@ -76,18 +76,6 @@ export function buildBrandedEmailHtml(title: string, message: string): string {
   <tr>
     <td align="center">
 
-      <!-- TOP RAIL -->
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;margin-bottom:12px;">
-        <tr>
-          <td align="left" style="padding:0 4px 14px;font-size:12px;letter-spacing:5px;color:#64748B;font-weight:600;">
-            <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#22D3EE;margin-right:8px;vertical-align:middle;box-shadow:0 0 12px #22D3EE;"></span>QORIX&nbsp;MARKETS
-          </td>
-          <td align="right" style="padding:0 4px 14px;font-size:10px;color:#475569;letter-spacing:1px;text-transform:uppercase;white-space:nowrap;">
-            Institutional · Live
-          </td>
-        </tr>
-      </table>
-
       <!-- MAIN CARD -->
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="qx-card" style="max-width:600px;background:#0A0F1C;border:1px solid rgba(99,102,241,0.18);border-radius:24px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,0.6);">
 
