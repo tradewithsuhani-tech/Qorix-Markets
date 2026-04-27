@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq } from "drizzle-orm";
+import { eq, and, ne, isNotNull } from "drizzle-orm";
 import { db, usersTable } from "@workspace/db";
 import { authMiddleware, type AuthRequest } from "../middlewares/auth";
 import { createNotification } from "../lib/notifications";
@@ -62,6 +62,28 @@ router.post("/phone-otp/send", authMiddleware, async (req: AuthRequest, res) => 
   // Daily limit
   if ((user.phoneOtpSendCount ?? 0) >= MAX_SENDS_PER_DAY) {
     res.status(429).json({ error: "daily_limit", message: "Daily voice OTP limit reached. Try again tomorrow." });
+    return;
+  }
+
+  // KYC integrity guard: reject if this number is already verified on a
+  // different account. Without this, one person could verify the same phone
+  // across many accounts (multi-account fraud, signup-bonus farming, deposit
+  // limit bypass). Pre-check here saves a wasted voice call + the user gets
+  // a clear error instead of seeing a phantom OTP.
+  const conflicts = await db
+    .select({ id: usersTable.id })
+    .from(usersTable)
+    .where(and(
+      eq(usersTable.phoneNumber, normalized),
+      isNotNull(usersTable.phoneVerifiedAt),
+      ne(usersTable.id, req.userId!),
+    ))
+    .limit(1);
+  if (conflicts.length > 0) {
+    res.status(409).json({
+      error: "phone_already_verified",
+      message: "This number is already verified on another account. Use a different number or contact support.",
+    });
     return;
   }
 
@@ -186,14 +208,64 @@ router.post("/phone-otp/verify", authMiddleware, async (req: AuthRequest, res) =
     return;
   }
 
-  await db
-    .update(usersTable)
-    .set({
-      phoneVerifiedAt: new Date(),
-      phoneOtpSessionId: null,
-      phoneOtpExpiresAt: null,
-    })
-    .where(eq(usersTable.id, req.userId!));
+  // Re-fetch the current phone the user submitted (set by /send) and final
+  // race-condition guard: between /send and /verify another account could
+  // have raced to verify the same number. The DB unique partial index is
+  // the ultimate fence, but we surface a clean 409 instead of a raw 500
+  // when that happens.
+  const [me] = await db
+    .select({ phoneNumber: usersTable.phoneNumber })
+    .from(usersTable)
+    .where(eq(usersTable.id, req.userId!))
+    .limit(1);
+  if (me?.phoneNumber) {
+    const conflicts = await db
+      .select({ id: usersTable.id })
+      .from(usersTable)
+      .where(and(
+        eq(usersTable.phoneNumber, me.phoneNumber),
+        isNotNull(usersTable.phoneVerifiedAt),
+        ne(usersTable.id, req.userId!),
+      ))
+      .limit(1);
+    if (conflicts.length > 0) {
+      // Clear the dangling otp state so the user gets a clean error path.
+      await db
+        .update(usersTable)
+        .set({ phoneOtpSessionId: null, phoneOtpExpiresAt: null })
+        .where(eq(usersTable.id, req.userId!));
+      res.status(409).json({
+        error: "phone_already_verified",
+        message: "This number was just verified on another account. Use a different number or contact support.",
+      });
+      return;
+    }
+  }
+
+  try {
+    await db
+      .update(usersTable)
+      .set({
+        phoneVerifiedAt: new Date(),
+        phoneOtpSessionId: null,
+        phoneOtpExpiresAt: null,
+      })
+      .where(eq(usersTable.id, req.userId!));
+  } catch (err: any) {
+    // Last-line defence: the partial unique index will throw if a true race
+    // slipped past the pre-check. Translate to a clean 409.
+    const msg = String(err?.message || "");
+    if (/unique|duplicate/i.test(msg)) {
+      res.status(409).json({
+        error: "phone_already_verified",
+        message: "This number is already verified on another account.",
+      });
+      return;
+    }
+    console.error("[phone-otp] verify final update failed", { userId: req.userId, err: msg });
+    res.status(500).json({ error: "verify_failed", message: "Could not save verification. Please retry." });
+    return;
+  }
 
   await createNotification(req.userId!, "system", "Phone verified", "Your mobile number has been verified via voice OTP.");
   res.json({ success: true, verified: true });

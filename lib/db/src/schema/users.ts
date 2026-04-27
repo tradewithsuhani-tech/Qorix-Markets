@@ -1,4 +1,5 @@
 import { pgTable, serial, integer, text, boolean, timestamp, varchar, bigint, jsonb, uniqueIndex } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -107,6 +108,12 @@ export const usersTable = pgTable("users", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 }, (t) => [
   uniqueIndex("users_telegram_chat_id_uidx").on(t.telegramChatId),
+  // Partial unique index: a phone number can be verified on at most one
+  // account. NULL phone or unverified rows are excluded from the constraint
+  // so users mid-flow don't collide. Enforces the KYC integrity guard
+  // surfaced in /api/phone-otp/send + /verify (clean 409s in routes,
+  // hard fence here).
+  uniqueIndex("users_phone_verified_uidx").on(t.phoneNumber).where(sql`phone_verified_at IS NOT NULL`),
 ]);
 
 export const insertUserSchema = createInsertSchema(usersTable).omit({ id: true, createdAt: true });
