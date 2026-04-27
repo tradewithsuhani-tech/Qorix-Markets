@@ -693,12 +693,16 @@ export default function LoginPage() {
         onSuccess={(data) => {
           setPendingTwoFactor(null);
           if (data.requiresApproval) {
+            // When requiresApproval is true, the API contract guarantees the
+            // approval-branch fields below are present. Asserting non-null
+            // here keeps the call-site simple without modelling a discriminated
+            // union across the whole TwoFactorVerifySuccess shape.
             setPendingApproval({
-              attemptId: data.attemptId,
-              pollToken: data.pollToken,
-              expiresAt: data.expiresAt,
-              otpFallbackAfterMs: data.otpFallbackAfterMs,
-              device: data.device,
+              attemptId: data.attemptId!,
+              pollToken: data.pollToken!,
+              expiresAt: data.expiresAt!,
+              otpFallbackAfterMs: data.otpFallbackAfterMs!,
+              device: data.device!,
             });
             return;
           }
