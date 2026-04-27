@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
 import { db, usersTable } from "@workspace/db";
-import { authMiddleware, type AuthRequest } from "../middleware/auth";
+import { authMiddleware, type AuthRequest } from "../middlewares/auth";
 import { createNotification } from "../lib/notifications";
 
 const router: IRouter = Router();
