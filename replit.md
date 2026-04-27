@@ -298,6 +298,30 @@ If push has already been attempted and the index failed, drop the bad index, run
 - **AWS SES**: sender email must be verified; request production access to leave sandbox
 - **reCAPTCHA**: live domain `qorix-markets-1.replit.app` must be added in the reCAPTCHA console
 
+## Database environments (CRITICAL — read before touching any DB)
+
+Two databases only. No third one. Anything else is rogue / legacy and must be ignored.
+
+| Env | What | Where set | Used by |
+|---|---|---|---|
+| **Dev DB** | Replit-managed local Postgres (`helium/heliumdb`) | Replit `DATABASE_URL` secret (auto) | Replit `artifacts/api-server: API Server` workflow when running locally |
+| **Live DB** | Neon — `ep-falling-night-aozw4x09-pooler.c-2.ap-southeast-1.aws.neon.tech` (Singapore, `/neondb`) | Replit `NEON_DATABASE_URL` (for one-off psql / DDL) AND Fly `qorix-api` `DATABASE_URL` secret | LIVE production app (qorix-api on Fly bom) — every user signup, deposit, withdrawal, trade hits this DB |
+
+### `PROD_DATABASE_URL` is DEPRECATED — do NOT use it
+`PROD_DATABASE_URL` (host `ep-hidden-math-ajsgzanr.c-3.us-east-2.aws.neon.tech`, US East 2) is an old Neon project that is NOT connected to the live Fly app. Some unknown rogue process was still writing deposits to it (root-cause not yet identified — possibly an old Heroku/Render/EC2 instance or a forgotten cron). **Action: delete this secret from Replit env once verified that nothing critical depends on it.** If anyone reports "deposit not credited", check `NEON_DATABASE_URL` first, NOT `PROD_DATABASE_URL`.
+
+### Manual credit pattern when scanner misses a deposit
+1. Verify on-chain: `curl https://apilist.tronscanapi.com/api/transaction-info?hash=<TX_HASH>` — confirm `confirmed:true`, correct `to_address` matches the user's `deposit_addresses.trc20_address`, and `amount_str / 10^decimals` is the USDT amount.
+2. Run a single transaction on `NEON_DATABASE_URL`:
+   - INSERT into `blockchain_deposits` (status=`confirmed`, credited=`true`, all on-chain fields)
+   - UPDATE `wallets.main_balance += amount` for that user
+   - INSERT into `transactions` (type=`deposit`, status=`completed`, description includes "manually credited" and the tx hash)
+3. The `tx_hash` UNIQUE constraint on `blockchain_deposits` prevents the auto-scanner from double-crediting later.
+
+### Why the scanner sometimes misses deposits
+- Fly secret `TRONGRID_API_KEY` is currently UNSET → free-tier rate limit (~5 req/s) → with 10+ user deposit addresses polled every 15 s, calls hit 429 and get silently dropped. **Fix: `fly secrets set --app qorix-api TRONGRID_API_KEY=<key>`** (get a free key from https://www.trongrid.io/).
+- Without an API key the scanner WILL eventually pick up missed deposits via subsequent polls, but it can drop a single tx if rate-limited at the exact moment.
+
 ## Fly.io deploy — required secrets (api-server)
 
 When `fly secrets set --app qorix-api ...` runs, every value below must be supplied with the SAME value the current Replit deployment uses unless marked NEW. Mismatches on the bold ones cause data loss / lockouts.
