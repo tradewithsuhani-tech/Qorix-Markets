@@ -26,3 +26,5 @@ export * from "./payment-methods";
 export * from "./inr-deposits";
 export * from "./inr-withdrawals";
 export * from "./service-subscriptions";
+export * from "./admin-permissions";
+export * from "./admin-audit-log";
