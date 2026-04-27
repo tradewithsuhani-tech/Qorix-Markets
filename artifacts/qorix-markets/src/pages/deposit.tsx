@@ -25,6 +25,8 @@ import { cn } from "@/lib/utils";
 import QRCode from "qrcode";
 import { BannerCarousel } from "@/components/banner-carousel";
 import { PromoBonusBanner } from "@/components/promo-bonus-banner";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { InrDepositTab } from "@/components/inr-deposit-tab";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { authFetch } from "@/lib/auth-fetch";
 import { useToast } from "@/hooks/use-toast";
@@ -262,9 +264,9 @@ export default function DepositPage() {
 
         {/* Header */}
         <div>
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight gradient-text">Deposit USDT</h1>
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight gradient-text">Deposit Funds</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Send USDT via TRC20. Deposits are detected automatically and credited to your balance.
+            Choose USDT (TRC20) for instant auto-credit, or INR (Bank/UPI) for admin-verified deposits.
           </p>
         </div>
 
@@ -278,6 +280,14 @@ export default function DepositPage() {
           intervalMs={4500}
           maxWidth={640}
         />
+
+        <Tabs defaultValue="usdt" className="space-y-6">
+          <TabsList className="grid grid-cols-2 w-full">
+            <TabsTrigger value="usdt">USDT (TRC20)</TabsTrigger>
+            <TabsTrigger value="inr">INR (Bank/UPI)</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="usdt" className="space-y-6 mt-0">
 
         {/* Stepper Card */}
         <motion.div
@@ -744,6 +754,13 @@ export default function DepositPage() {
             </div>
           )}
         </motion.div>
+
+          </TabsContent>
+
+          <TabsContent value="inr" className="space-y-6 mt-0">
+            <InrDepositTab />
+          </TabsContent>
+        </Tabs>
 
       </div>
     </Layout>

@@ -30,6 +30,7 @@ import kycRouter from "./kyc";
 import promoRouter from "./promo";
 import telegramRouter from "./telegram";
 import twoFactorRouter from "./two-factor";
+import inrDepositsRouter from "./inr-deposits";
 
 const router: IRouter = Router();
 
@@ -65,5 +66,6 @@ router.use(signalTradesRouter);
 router.use(promoRouter);
 router.use(telegramRouter);
 router.use(twoFactorRouter);
+router.use(inrDepositsRouter);
 
 export default router;
