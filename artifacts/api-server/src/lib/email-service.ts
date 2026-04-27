@@ -10,7 +10,7 @@ import nodemailer, { type Transporter } from "nodemailer";
 // 403/SPA-fallback). The PNG is base64-bundled into the build by esbuild
 // (see build.mjs `loader: { ".png": "base64" }`) so there's no runtime
 // disk read.
-import logoBase64 from "../assets/qorix-email-logo.png";
+import logoBase64 from "../assets/qorix-email-logo.base64";
 const LOGO_BUFFER = Buffer.from(logoBase64, "base64");
 
 // ---------------------------------------------------------------------------
@@ -179,7 +179,7 @@ function renderOtpHtml(opts: {
 export async function sendOtp(
   userId: number,
   email: string,
-  purpose: "verify_email" | "withdrawal_confirm",
+  purpose: "verify_email" | "withdrawal_confirm" | "device_login_approval",
 ): Promise<{ otp: string; expiresAt: Date }> {
   const otp = generateOtp(6);
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
@@ -198,11 +198,18 @@ export async function sendOtp(
 
   await db.insert(emailOtpsTable).values({ userId, email, otp, purpose, expiresAt });
 
-  const purposeLabel = purpose === "verify_email" ? "Email Verification" : "Withdrawal Confirmation";
+  const purposeLabel =
+    purpose === "verify_email"
+      ? "Email Verification"
+      : purpose === "withdrawal_confirm"
+        ? "Withdrawal Confirmation"
+        : "New Device Login";
   const intro =
     purpose === "verify_email"
       ? "Welcome to Qorix Markets. Use the code below to verify your email and finish creating your account."
-      : "You're confirming a withdrawal request. Use the code below to authorize and complete this transaction.";
+      : purpose === "withdrawal_confirm"
+        ? "You're confirming a withdrawal request. Use the code below to authorize and complete this transaction."
+        : "A new device is trying to sign in to your Qorix Markets account. If this was you, use the code below to approve the login. If not, ignore this email and change your password immediately.";
   const noteLines = [
     "<strong style=\"color:#cbd5e1;\">Never share this code</strong> with anyone — Qorix staff will never ask for it.",
     "If you did not initiate this request, please secure your account and contact support immediately.",
@@ -264,7 +271,7 @@ export function sendTxnEmailToUser(
 export async function verifyOtp(
   userId: number,
   otp: string,
-  purpose: "verify_email" | "withdrawal_confirm",
+  purpose: "verify_email" | "withdrawal_confirm" | "device_login_approval",
 ): Promise<{ valid: boolean; error?: string }> {
   const now = new Date();
 
