@@ -33,6 +33,7 @@ import TasksPage from "@/pages/tasks";
 import AdminPage from "@/pages/admin";
 import AdminIntelligencePage from "@/pages/admin-intelligence";
 import AdminFraudPage from "@/pages/admin-fraud";
+import AdminPaymentMethodsPage from "@/pages/admin-payment-methods";
 import AdminTaskProofsPage from "@/pages/admin-task-proofs";
 import AdminSignalTradesPage from "@/pages/admin-signal-trades";
 import SignalHistoryPage from "@/pages/signal-history";
@@ -178,6 +179,7 @@ function Router() {
       <Route path="/admin/logs"><ProtectedRoute component={AdminLogsPage} adminOnly={true} /></Route>
       <Route path="/admin/intelligence"><ProtectedRoute component={AdminIntelligencePage} adminOnly={true} /></Route>
       <Route path="/admin/fraud"><ProtectedRoute component={AdminFraudPage} adminOnly={true} /></Route>
+      <Route path="/admin/payment-methods"><ProtectedRoute component={AdminPaymentMethodsPage} adminOnly={true} /></Route>
       <Route path="/admin/task-proofs"><ProtectedRoute component={AdminTaskProofsPage} adminOnly={true} /></Route>
       <Route path="/admin/chats"><ProtectedRoute component={AdminChatsPage} adminOnly={true} /></Route>
       <Route path="/admin/communication"><ProtectedRoute component={AdminCommunicationPage} adminOnly={true} /></Route>

@@ -22,3 +22,5 @@ export * from "./signal-trades";
 export * from "./pnl-history";
 export * from "./promo-redemptions";
 export * from "./scheduled-promos";
+export * from "./payment-methods";
+export * from "./inr-deposits";
