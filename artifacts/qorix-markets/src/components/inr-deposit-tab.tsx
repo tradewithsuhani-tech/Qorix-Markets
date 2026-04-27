@@ -486,7 +486,7 @@ export function InrDepositTab() {
               type="button"
               onClick={goToTransfer}
               disabled={!agreed || !amountValid}
-              className="w-full py-3.5 rounded-full bg-white text-gray-900 font-bold text-sm hover:bg-gray-100 disabled:bg-white/10 disabled:text-white/40 transition-all"
+              className="w-full py-3.5 rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-bold text-sm hover:from-emerald-400 hover:to-teal-400 shadow-[0_0_24px_-6px_rgba(16,185,129,0.6)] disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none transition-all"
             >
               Confirm &amp; Pay
             </button>
