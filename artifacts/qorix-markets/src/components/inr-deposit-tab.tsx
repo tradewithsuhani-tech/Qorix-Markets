@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -11,12 +11,18 @@ import {
   Loader2,
   Copy,
   CheckCheck,
-  Info,
   ImageIcon,
   X,
+  ChevronLeft,
+  ChevronRight,
+  AlertTriangle,
+  Building2,
+  Sparkles,
+  ShieldCheck,
 } from "lucide-react";
 import { authFetch } from "@/lib/auth-fetch";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
 
 const BASE_URL = import.meta.env.BASE_URL ?? "/";
@@ -54,21 +60,27 @@ interface InrDeposit {
   createdAt: string;
 }
 
-function CopyChip({ text }: { text: string }) {
+const COUNTDOWN_SECS = 15 * 60;
+
+function CopyBtn({ text, className }: { text: string; className?: string }) {
   const [copied, setCopied] = useState(false);
   return (
     <button
       type="button"
-      onClick={() => {
+      onClick={(e) => {
+        e.stopPropagation();
         navigator.clipboard.writeText(text).then(() => {
           setCopied(true);
-          setTimeout(() => setCopied(false), 1400);
+          setTimeout(() => setCopied(false), 1500);
         });
       }}
-      className="ml-2 inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-white/5 hover:bg-white/10 text-muted-foreground hover:text-white transition-colors"
+      className={cn(
+        "inline-flex items-center justify-center w-7 h-7 rounded-md bg-white/5 hover:bg-white/15 text-muted-foreground hover:text-white transition-colors shrink-0",
+        className,
+      )}
+      aria-label="Copy"
     >
-      {copied ? <CheckCheck className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-      {copied ? "Copied" : "Copy"}
+      {copied ? <CheckCheck className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
     </button>
   );
 }
@@ -81,16 +93,57 @@ function StatusPill({ status }: { status: InrDeposit["status"] }) {
   } as const;
   const { icon: Icon, cls, label } = map[status];
   return (
-    <span className={cn("inline-flex items-center gap-1 text-[10px] font-bold border px-1.5 py-0.5 rounded-full uppercase tracking-wider", cls)}>
+    <span className={cn("inline-flex items-center gap-1 text-[10px] font-bold border px-2 py-0.5 rounded-full uppercase tracking-wider", cls)}>
       <Icon className="w-3 h-3" />
       {label}
     </span>
   );
 }
 
+function MethodIcon({ type, size = "md" }: { type: "bank" | "upi"; size?: "sm" | "md" | "lg" }) {
+  const dim = size === "lg" ? "w-12 h-12" : size === "sm" ? "w-9 h-9" : "w-11 h-11";
+  const icon = size === "lg" ? "w-6 h-6" : "w-5 h-5";
+  return (
+    <div className={cn(dim, "rounded-full flex items-center justify-center shrink-0 bg-gradient-to-br from-teal-500/25 to-cyan-600/15 border border-teal-400/20 text-teal-300")}>
+      {type === "bank" ? <Building2 className={icon} /> : <Smartphone className={icon} />}
+    </div>
+  );
+}
+
+function UpiAppLogos() {
+  // Brand-styled text chips for UPI apps. Using text avoids extra image assets.
+  const apps = [
+    { name: "PhonePe", bg: "bg-[#5f259f]", fg: "text-white" },
+    { name: "GPay", bg: "bg-white", fg: "text-gray-900" },
+    { name: "Paytm", bg: "bg-[#00B9F1]", fg: "text-white" },
+    { name: "BHIM", bg: "bg-[#F37335]", fg: "text-white" },
+  ];
+  return (
+    <div className="flex items-center gap-1.5 flex-wrap">
+      {apps.map((a) => (
+        <span
+          key={a.name}
+          className={cn("text-[9px] font-bold px-1.5 py-0.5 rounded", a.bg, a.fg)}
+        >
+          {a.name}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function formatTime(s: number) {
+  const m = Math.floor(s / 60).toString().padStart(2, "0");
+  const sec = (s % 60).toString().padStart(2, "0");
+  return `${m}:${sec}`;
+}
+
+type Step = "list" | "amount" | "transfer" | "success";
+
 export function InrDepositTab() {
   const { toast } = useToast();
   const qc = useQueryClient();
+  const { user } = useAuth();
 
   const { data: methodsResp, isLoading: methodsLoading } = useQuery<{ methods: PaymentMethod[]; rate: number }>({
     queryKey: ["inr-payment-methods"],
@@ -106,40 +159,89 @@ export function InrDepositTab() {
   const methods = methodsResp?.methods ?? [];
   const rate = methodsResp?.rate ?? 85;
 
+  const [step, setStep] = useState<Step>("list");
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [amount, setAmount] = useState("");
+  const [agreed, setAgreed] = useState(false);
   const [utr, setUtr] = useState("");
+  const [payerName, setPayerName] = useState("");
   const [proof, setProof] = useState<string | null>(null);
+  const [orderNo, setOrderNo] = useState<string>("");
+  const [secsLeft, setSecsLeft] = useState(COUNTDOWN_SECS);
+  const [submittedDepositId, setSubmittedDepositId] = useState<number | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const selected = methods.find((m) => m.id === selectedId) ?? null;
   const amountNum = Number(amount);
   const min = selected ? Number(selected.minAmount) : 0;
   const max = selected ? Number(selected.maxAmount) : 0;
-  const amountValid = selected && amountNum >= min && amountNum <= max;
-  const usdtPreview = amountNum > 0 && rate > 0 ? (amountNum / rate).toFixed(2) : "0.00";
+  const amountValid = !!selected && amountNum >= min && amountNum <= max;
+  const usdtPreview = useMemo(() => (amountNum > 0 && rate > 0 ? (amountNum / rate).toFixed(2) : "0.00"), [amountNum, rate]);
+
+  // Countdown when on transfer step
+  useEffect(() => {
+    if (step !== "transfer") return;
+    if (secsLeft <= 0) {
+      toast({ title: "Time expired", description: "Please start the deposit again.", variant: "destructive" });
+      resetFlow();
+      return;
+    }
+    const id = window.setTimeout(() => setSecsLeft((s) => s - 1), 1000);
+    return () => window.clearTimeout(id);
+  }, [step, secsLeft]);
+
+  function resetFlow() {
+    setStep("list");
+    setSelectedId(null);
+    setAmount("");
+    setAgreed(false);
+    setUtr("");
+    setPayerName("");
+    setProof(null);
+    setOrderNo("");
+    setSecsLeft(COUNTDOWN_SECS);
+    setSubmittedDepositId(null);
+  }
+
+  function goToAmount(id: number) {
+    setSelectedId(id);
+    setStep("amount");
+  }
+
+  function goToTransfer() {
+    if (!agreed || !amountValid) return;
+    const order = `QM-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+    setOrderNo(order);
+    setSecsLeft(COUNTDOWN_SECS);
+    setStep("transfer");
+  }
 
   const submit = useMutation({
-    mutationFn: () =>
-      authFetch(getApiUrl("/inr-deposits"), {
+    mutationFn: () => {
+      // Append payer name + order ref to UTR if provided so admins can match
+      // the payment slip without backend schema changes.
+      const trimmedUtr = utr.trim();
+      const trimmedPayer = payerName.trim();
+      const utrWithMeta = trimmedPayer
+        ? `${trimmedUtr} | ${trimmedPayer} | ${orderNo}`
+        : `${trimmedUtr} | ${orderNo}`;
+      return authFetch(getApiUrl("/inr-deposits"), {
         method: "POST",
         body: JSON.stringify({
           paymentMethodId: selectedId,
           amountInr: amount,
-          utr: utr.trim(),
+          utr: utrWithMeta,
           proofImageBase64: proof,
         }),
-      }),
-    onSuccess: () => {
-      toast({ title: "Deposit submitted", description: "Admin will verify and credit your wallet shortly." });
-      setSelectedId(null);
-      setAmount("");
-      setUtr("");
-      setProof(null);
+      });
+    },
+    onSuccess: (resp: any) => {
+      setSubmittedDepositId(resp?.deposit?.id ?? null);
+      setStep("success");
       qc.invalidateQueries({ queryKey: ["inr-deposits-mine"] });
     },
     onError: (e: any) => {
-      toast({ title: "Failed", description: e?.message ?? "Could not submit", variant: "destructive" });
+      toast({ title: "Submission failed", description: e?.message ?? "Could not submit deposit", variant: "destructive" });
     },
   });
 
@@ -171,246 +273,480 @@ export function InrDepositTab() {
     );
   }
 
+  // —— Step renderers ——
   return (
-    <div className="space-y-6">
-      {/* Rate banner */}
-      <div className="glass-card rounded-2xl px-4 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Info className="w-4 h-4 text-blue-400" />
-          <span className="text-xs text-muted-foreground">Conversion rate</span>
-        </div>
-        <div className="text-sm font-bold text-white">
-          1 USDT = ₹{rate}
-        </div>
-      </div>
-
-      {/* Step 1: Select method */}
-      {!selected && (
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="glass-card rounded-2xl p-5"
-        >
-          <div className="text-sm font-semibold text-white mb-3">Choose payment method</div>
-          <div className="grid gap-3">
-            {methods.map((m) => (
-              <button
-                key={m.id}
-                onClick={() => setSelectedId(m.id)}
-                className="w-full text-left p-4 rounded-xl border border-white/10 bg-white/[0.02] hover:bg-white/[0.06] hover:border-white/20 transition-all flex items-center gap-3"
-              >
-                <div className={cn(
-                  "w-10 h-10 rounded-lg flex items-center justify-center shrink-0",
-                  m.type === "bank" ? "bg-blue-500/15 text-blue-400" : "bg-violet-500/15 text-violet-400"
-                )}>
-                  {m.type === "bank" ? <Banknote className="w-5 h-5" /> : <Smartphone className="w-5 h-5" />}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-semibold text-white truncate">{m.displayName}</div>
-                  <div className="text-[11px] text-muted-foreground mt-0.5">
-                    ₹{Number(m.minAmount).toLocaleString("en-IN")} – ₹{Number(m.maxAmount).toLocaleString("en-IN")}
-                  </div>
-                </div>
-                <span className="text-[10px] font-bold text-muted-foreground uppercase">{m.type}</span>
-              </button>
-            ))}
-          </div>
-        </motion.div>
-      )}
-
-      {/* Step 2: Selected method details + form */}
-      {selected && (
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="space-y-4"
-        >
-          <div className="glass-card rounded-2xl p-5 space-y-4">
-            <div className="flex items-center justify-between">
+    <div className="space-y-5">
+      <AnimatePresence mode="wait">
+        {step === "list" && (
+          <motion.div
+            key="list"
+            initial={{ opacity: 0, x: -12 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -12 }}
+            transition={{ duration: 0.2 }}
+            className="space-y-4"
+          >
+            {/* Rate banner */}
+            <div className="rounded-2xl px-4 py-3 bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-cyan-500/10 border border-emerald-500/20 flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <div className={cn(
-                  "w-8 h-8 rounded-lg flex items-center justify-center",
-                  selected.type === "bank" ? "bg-blue-500/15 text-blue-400" : "bg-violet-500/15 text-violet-400"
-                )}>
-                  {selected.type === "bank" ? <Banknote className="w-4 h-4" /> : <Smartphone className="w-4 h-4" />}
-                </div>
-                <div className="text-sm font-semibold text-white">{selected.displayName}</div>
+                <Sparkles className="w-4 h-4 text-emerald-300" />
+                <span className="text-xs text-emerald-100/80">Live rate</span>
               </div>
-              <button
-                onClick={() => { setSelectedId(null); setAmount(""); setUtr(""); setProof(null); }}
-                className="text-[11px] text-muted-foreground hover:text-white"
-              >
-                Change
-              </button>
+              <div className="text-sm font-bold text-white">
+                1 USDT = <span className="text-emerald-300">₹{rate}</span>
+              </div>
             </div>
 
-            {/* Bank or UPI details */}
-            {selected.type === "bank" && (
-              <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3 space-y-2 text-xs">
-                {selected.bankName && (
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Bank</span>
-                    <span className="text-white font-medium">{selected.bankName}</span>
-                  </div>
-                )}
-                {selected.accountHolder && (
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Account holder</span>
-                    <span className="text-white font-medium">{selected.accountHolder}</span>
-                  </div>
-                )}
-                {selected.accountNumber && (
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">A/C number</span>
-                    <span className="text-white font-mono">
-                      {selected.accountNumber}
-                      <CopyChip text={selected.accountNumber} />
-                    </span>
-                  </div>
-                )}
-                {selected.ifsc && (
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">IFSC</span>
-                    <span className="text-white font-mono">
-                      {selected.ifsc}
-                      <CopyChip text={selected.ifsc} />
-                    </span>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {selected.type === "upi" && (
-              <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3 space-y-3">
-                {selected.upiId && (
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-muted-foreground">UPI ID</span>
-                    <span className="text-white font-mono">
-                      {selected.upiId}
-                      <CopyChip text={selected.upiId} />
-                    </span>
-                  </div>
-                )}
-                {selected.qrImageBase64 && (
-                  <div className="flex flex-col items-center gap-2 pt-2">
-                    <img
-                      src={selected.qrImageBase64}
-                      alt="UPI QR"
-                      className="w-44 h-44 rounded-xl border border-white/10 object-contain bg-white p-2"
-                    />
-                    <span className="text-[10px] text-muted-foreground">Scan with any UPI app</span>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {selected.instructions && (
-              <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-3 text-[11px] text-blue-100/80 leading-relaxed">
-                {selected.instructions}
-              </div>
-            )}
-          </div>
-
-          {/* Amount + UTR + Proof */}
-          <div className="glass-card rounded-2xl p-5 space-y-4">
-            <div>
-              <label className="text-xs text-muted-foreground font-medium mb-1.5 block">
-                Amount (INR)
-              </label>
-              <input
-                type="number"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                className="field-input"
-                placeholder={`Between ₹${Number(selected.minAmount)} and ₹${Number(selected.maxAmount)}`}
-                min={Number(selected.minAmount)}
-                max={Number(selected.maxAmount)}
-              />
-              {amount && !amountValid && (
-                <p className="text-[11px] text-red-400 mt-1">
-                  Amount must be between ₹{Number(selected.minAmount).toLocaleString("en-IN")} and ₹{Number(selected.maxAmount).toLocaleString("en-IN")}
-                </p>
-              )}
-              {amountValid && (
-                <p className="text-[11px] text-emerald-400 mt-1">
-                  You will receive ≈ <span className="font-bold">{usdtPreview} USDT</span> after approval
-                </p>
-              )}
+            <div className="text-xs text-muted-foreground font-semibold uppercase tracking-wider px-1">
+              Local Bank Transfer
             </div>
 
-            <div>
-              <label className="text-xs text-muted-foreground font-medium mb-1.5 block">
-                UTR / Transaction reference
-              </label>
-              <input
-                type="text"
-                value={utr}
-                onChange={(e) => setUtr(e.target.value)}
-                className="field-input"
-                placeholder="12-digit UTR or transaction ID"
-              />
-              <p className="text-[10px] text-muted-foreground mt-1">
-                Found in your bank/UPI app after payment. Required for verification.
-              </p>
-            </div>
-
-            <div>
-              <label className="text-xs text-muted-foreground font-medium mb-1.5 block">
-                Payment screenshot <span className="text-muted-foreground/70">(optional, max 2 MB)</span>
-              </label>
-              {!proof ? (
-                <button
-                  type="button"
-                  onClick={() => fileRef.current?.click()}
-                  className="w-full border border-dashed border-white/15 hover:border-white/30 rounded-xl p-4 flex flex-col items-center gap-2 transition-colors"
+            <div className="space-y-2.5">
+              {methods.map((m, idx) => (
+                <motion.button
+                  key={m.id}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: idx * 0.04 }}
+                  onClick={() => goToAmount(m.id)}
+                  className="w-full text-left p-4 rounded-2xl border border-white/8 bg-white/[0.02] hover:bg-white/[0.05] hover:border-white/15 transition-all flex items-center gap-3 group"
                 >
-                  <Upload className="w-5 h-5 text-muted-foreground" />
-                  <span className="text-xs text-muted-foreground">Click to upload screenshot</span>
-                </button>
-              ) : (
-                <div className="relative inline-block">
-                  <img src={proof} alt="proof" className="max-h-40 rounded-xl border border-white/10" />
-                  <button
-                    type="button"
-                    onClick={() => setProof(null)}
-                    className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-red-500 text-white flex items-center justify-center hover:bg-red-600"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                </div>
-              )}
-              <input
-                ref={fileRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f) handleFile(f);
-                }}
-              />
+                  <MethodIcon type={m.type} />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-bold text-white truncate">{m.displayName}</div>
+                    <div className="text-[11px] text-muted-foreground mt-0.5 flex items-center gap-2">
+                      <span className="text-emerald-400 font-semibold">No Fees</span>
+                      <span className="text-white/20">|</span>
+                      <span>1-3 Hours</span>
+                      <span className="text-white/20">|</span>
+                      <span>₹{Number(m.minAmount).toLocaleString("en-IN")} – ₹{Number(m.maxAmount).toLocaleString("en-IN")}</span>
+                    </div>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-white transition-colors" />
+                </motion.button>
+              ))}
             </div>
+          </motion.div>
+        )}
+
+        {step === "amount" && selected && (
+          <motion.div
+            key="amount"
+            initial={{ opacity: 0, x: 12 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -12 }}
+            transition={{ duration: 0.2 }}
+            className="space-y-4"
+          >
+            <button
+              onClick={() => setStep("list")}
+              className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-white transition-colors"
+            >
+              <ChevronLeft className="w-3.5 h-3.5" /> Back
+            </button>
+
+            {/* Big amount header */}
+            <div className="text-center py-2">
+              <div className="relative">
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  placeholder="0"
+                  min={min}
+                  max={max}
+                  className="w-full bg-transparent text-center text-4xl sm:text-5xl font-extrabold text-white outline-none placeholder:text-white/15"
+                />
+                <div className="text-xs text-muted-foreground mt-1 font-semibold">Enter INR Amount</div>
+              </div>
+              <div className="mt-3 inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10">
+                <span className="text-[11px] text-muted-foreground">≈</span>
+                <span className="text-sm font-bold text-emerald-300">{usdtPreview} USDT</span>
+              </div>
+              <div className="text-[10px] text-muted-foreground mt-1.5">Payment Amount</div>
+            </div>
+
+            {/* Summary card */}
+            <div className="rounded-2xl bg-white/[0.04] border border-white/8 p-4 space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="text-xs text-muted-foreground">Deposit Amount</div>
+                <div className="text-right">
+                  <div className="text-sm font-bold text-white">
+                    {amount ? `₹${Number(amount).toLocaleString("en-IN")}` : "—"}
+                  </div>
+                  <div className="text-[10px] text-muted-foreground">1 USDT ≈ ₹{rate}</div>
+                </div>
+              </div>
+              <div className="border-t border-white/5"></div>
+              <div className="flex items-center justify-between">
+                <div className="text-xs text-muted-foreground">You Receive</div>
+                <div className="text-sm font-bold text-emerald-300">{usdtPreview} USDT</div>
+              </div>
+              <div className="border-t border-white/5"></div>
+              <div className="flex items-center justify-between">
+                <div className="text-xs text-muted-foreground">Pay With</div>
+                <div className="flex items-center gap-2">
+                  <MethodIcon type={selected.type} size="sm" />
+                  <span className="text-sm font-bold text-white">{selected.displayName}</span>
+                </div>
+              </div>
+              {selected.type === "bank" && selected.accountNumber && (
+                <>
+                  <div className="border-t border-white/5"></div>
+                  <div className="flex items-center justify-between">
+                    <div className="text-xs text-muted-foreground">Pay To Account</div>
+                    <div className="text-sm font-mono text-white">
+                      …{selected.accountNumber.slice(-4)}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {amount && !amountValid && (
+              <div className="rounded-xl border border-red-500/25 bg-red-500/10 p-3 text-[11px] text-red-200 flex items-start gap-2">
+                <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                <span>
+                  Amount must be between ₹{Number(selected.minAmount).toLocaleString("en-IN")} and ₹{Number(selected.maxAmount).toLocaleString("en-IN")} for this method.
+                </span>
+              </div>
+            )}
+
+            {/* Important notes */}
+            <div className="rounded-2xl border border-white/8 p-4">
+              <div className="text-sm font-bold text-white mb-2">*Important</div>
+              <ol className="space-y-1.5 text-[11px] text-muted-foreground list-decimal list-outside ml-4">
+                <li>Confirm the details and click 'Confirm &amp; Continue'.</li>
+                <li>Make payment using the UPI ID, account details, or QR shown next.</li>
+                <li>Pay the EXACT amount shown — any difference may delay or reject the credit.</li>
+                <li>Save the UTR / Transaction ID from your bank or UPI app.</li>
+                <li>Strictly no third-party deposits accepted. The payer's name must match your registered name.</li>
+              </ol>
+            </div>
+
+            {/* Agreement */}
+            <label className="flex items-start gap-3 p-3 rounded-xl border border-white/8 hover:bg-white/[0.02] cursor-pointer transition-colors">
+              <input
+                type="checkbox"
+                checked={agreed}
+                onChange={(e) => setAgreed(e.target.checked)}
+                className="mt-0.5 w-4 h-4 rounded border-white/20 bg-white/5 accent-emerald-500"
+              />
+              <span className="text-[11px] text-muted-foreground leading-relaxed">
+                I agree to follow the instructions, COPY the displayed UPI ID or SCAN the QR code for EVERY payment, and ensure the Payee Name is correct so my deposit is processed accurately.
+              </span>
+            </label>
 
             <button
               type="button"
-              onClick={() => submit.mutate()}
-              disabled={!amountValid || !utr.trim() || submit.isPending}
-              className="btn-primary w-full"
+              onClick={goToTransfer}
+              disabled={!agreed || !amountValid}
+              className="w-full py-3.5 rounded-full bg-white text-gray-900 font-bold text-sm hover:bg-gray-100 disabled:bg-white/10 disabled:text-white/40 transition-all"
             >
-              {submit.isPending ? (
-                <span className="inline-flex items-center gap-2">
-                  <Loader2 className="w-4 h-4 animate-spin" /> Submitting…
-                </span>
-              ) : (
-                "Submit deposit for review"
-              )}
+              Confirm &amp; Pay
             </button>
-          </div>
-        </motion.div>
-      )}
+          </motion.div>
+        )}
+
+        {step === "transfer" && selected && (
+          <motion.div
+            key="transfer"
+            initial={{ opacity: 0, x: 12 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -12 }}
+            transition={{ duration: 0.2 }}
+            className="space-y-4 -mx-1"
+          >
+            {/* Gradient header */}
+            <div className="relative rounded-2xl overflow-hidden bg-gradient-to-br from-orange-400 via-pink-500 to-purple-600 px-5 pt-5 pb-6 text-white">
+              <button
+                onClick={() => setStep("amount")}
+                className="absolute top-3 left-3 inline-flex items-center gap-1 text-[11px] text-white/80 hover:text-white"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" /> Back
+              </button>
+              <button
+                onClick={resetFlow}
+                className="absolute top-3 right-3 text-white/80 hover:text-white"
+                aria-label="Cancel"
+              >
+                <X className="w-4 h-4" />
+              </button>
+              <div className="text-center pt-3">
+                <div className="text-lg font-bold">Transfer Confirmation</div>
+                <div className="text-xs text-white/80 mt-0.5">
+                  Remaining time to pay <span className="font-mono font-bold">{formatTime(secsLeft)}</span>
+                </div>
+                <div className="mt-3 flex items-center justify-center gap-2">
+                  <div className="text-3xl font-extrabold">₹ {Number(amount).toLocaleString("en-IN")}</div>
+                  <CopyBtn text={amount} className="bg-white/15 hover:bg-white/25 text-white" />
+                </div>
+                <div className="text-[10px] text-white/80 mt-0.5">≈ {usdtPreview} USDT will be credited after verification</div>
+              </div>
+            </div>
+
+            {/* Order number */}
+            <div className="rounded-xl bg-white/[0.04] border border-white/8 px-4 py-3 flex items-center justify-between">
+              <div className="text-[11px] text-muted-foreground">Order No.</div>
+              <div className="flex items-center gap-2">
+                <div className="text-xs font-mono text-white">{orderNo}</div>
+                <CopyBtn text={orderNo} />
+              </div>
+            </div>
+
+            {/* Step 1: Send Payment */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <span className="w-6 h-6 rounded-full bg-amber-400 text-gray-900 text-xs font-bold flex items-center justify-center">1</span>
+                <span className="text-sm font-bold text-white">Send Payment</span>
+              </div>
+              <ul className="text-[11px] text-muted-foreground space-y-1 ml-8 list-disc">
+                <li>Leave this page and send the payment using your UPI app or bank.</li>
+                <li>Take a screenshot of the payment confirmation, then return to this page.</li>
+                <li>Pay the EXACT amount shown above. Discrepancies may cause delays or loss of funds.</li>
+              </ul>
+
+              {/* Payment Method card */}
+              <div className="rounded-2xl bg-white text-gray-900 p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="text-xs font-bold text-gray-700">Payment Method</div>
+                  <div className="flex items-center gap-1.5">
+                    <span className={cn(
+                      "text-[9px] font-bold px-1.5 py-0.5 rounded",
+                      selected.type === "upi" ? "bg-orange-500 text-white" : "bg-blue-600 text-white"
+                    )}>
+                      {selected.type === "upi" ? "UPI" : "BANK"}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="text-[11px] text-gray-500 font-semibold mb-2">Receiving Account Details:</div>
+
+                <div className="rounded-xl bg-gray-50 border border-gray-200 p-3 space-y-2 relative">
+                  {selected.type === "bank" ? (
+                    <>
+                      {selected.accountHolder && (
+                        <Row label="Name" value={selected.accountHolder} valueClass="text-purple-700 font-bold" />
+                      )}
+                      {selected.bankName && (
+                        <Row label="Bank" value={selected.bankName} />
+                      )}
+                      {selected.accountNumber && (
+                        <Row label="A/C Number" value={selected.accountNumber} mono />
+                      )}
+                      {selected.ifsc && (
+                        <Row label="IFSC" value={selected.ifsc} mono />
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      {selected.accountHolder && (
+                        <Row label="Name" value={selected.accountHolder} valueClass="text-purple-700 font-bold" />
+                      )}
+                      {selected.upiId && (
+                        <Row label="UPI ID" value={selected.upiId} valueClass="text-purple-700 font-semibold" mono />
+                      )}
+                    </>
+                  )}
+
+                  {selected.qrImageBase64 && (
+                    <div className="absolute top-3 right-3 w-20 h-20 rounded bg-white border border-gray-200 p-1 shadow-sm">
+                      <img
+                        src={selected.qrImageBase64}
+                        alt="QR"
+                        className="w-full h-full object-contain"
+                      />
+                    </div>
+                  )}
+                </div>
+
+                <div className="mt-3 flex items-center justify-between">
+                  <UpiAppLogos />
+                  <span className="text-[9px] text-gray-400">Use any UPI app</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Step 2: Confirm Payment */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <span className="w-6 h-6 rounded-full bg-amber-400 text-gray-900 text-xs font-bold flex items-center justify-center">2</span>
+                <span className="text-sm font-bold text-white">Confirm Payment</span>
+              </div>
+              <p className="text-[11px] text-muted-foreground ml-8">
+                Enter the UTR / Transaction Reference and upload your payment slip to confirm.
+              </p>
+
+              <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-[11px] text-red-200 flex items-start gap-2">
+                <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                <span>
+                  The payer's name must match your registered name <span className="font-bold">{user?.fullName ?? ""}</span>. Third-party payments will be rejected.
+                </span>
+              </div>
+
+              <div>
+                <label className="text-[11px] text-muted-foreground font-medium mb-1.5 block">
+                  Payer's Name (as on bank account)
+                </label>
+                <input
+                  type="text"
+                  value={payerName}
+                  onChange={(e) => setPayerName(e.target.value)}
+                  className="field-input"
+                  placeholder={user?.fullName ?? "Your full name"}
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] text-muted-foreground font-medium mb-1.5 block">
+                  UTR / Transaction Reference *
+                </label>
+                <input
+                  type="text"
+                  value={utr}
+                  onChange={(e) => setUtr(e.target.value)}
+                  className="field-input"
+                  placeholder="12-digit UTR or UPI reference"
+                />
+                <p className="text-[10px] text-muted-foreground mt-1">
+                  You'll find this in your bank/UPI app right after payment.
+                </p>
+              </div>
+
+              <div>
+                <label className="text-[11px] text-muted-foreground font-medium mb-1.5 block">
+                  Upload Payment Proof * <span className="text-muted-foreground/60">(max 2 MB)</span>
+                </label>
+                {!proof ? (
+                  <button
+                    type="button"
+                    onClick={() => fileRef.current?.click()}
+                    className="w-full border-2 border-dashed border-white/15 hover:border-white/30 rounded-xl p-6 flex flex-col items-center gap-2 transition-colors"
+                  >
+                    <Upload className="w-6 h-6 text-muted-foreground" />
+                    <span className="text-xs text-muted-foreground font-semibold">Tap to upload screenshot</span>
+                    <span className="text-[10px] text-muted-foreground/60">PNG, JPG up to 2 MB</span>
+                  </button>
+                ) : (
+                  <div className="relative inline-block">
+                    <img src={proof} alt="proof" className="max-h-48 rounded-xl border border-white/10" />
+                    <button
+                      type="button"
+                      onClick={() => setProof(null)}
+                      className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-red-500 text-white flex items-center justify-center hover:bg-red-600 shadow-lg"
+                      aria-label="Remove image"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                )}
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) handleFile(f);
+                  }}
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 pt-2">
+              <button
+                type="button"
+                onClick={resetFlow}
+                disabled={submit.isPending}
+                className="flex-1 py-3 rounded-full border border-white/15 text-white/80 hover:text-white hover:border-white/30 font-semibold text-sm transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => submit.mutate()}
+                disabled={!utr.trim() || !proof || submit.isPending}
+                className="flex-[2] py-3 rounded-full bg-gradient-to-r from-amber-300 to-orange-400 text-gray-900 font-bold text-sm hover:from-amber-200 hover:to-orange-300 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+              >
+                {submit.isPending ? (
+                  <span className="inline-flex items-center justify-center gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin" /> Submitting…
+                  </span>
+                ) : (
+                  "Submit Deposit"
+                )}
+              </button>
+            </div>
+
+            <button className="w-full text-center text-[11px] text-muted-foreground hover:text-white py-2">
+              Recharge not received? Contact support
+            </button>
+          </motion.div>
+        )}
+
+        {step === "success" && (
+          <motion.div
+            key="success"
+            initial={{ opacity: 0, scale: 0.96 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.96 }}
+            transition={{ duration: 0.25 }}
+            className="space-y-4"
+          >
+            <div className="rounded-2xl bg-gradient-to-br from-emerald-500/15 to-teal-500/10 border border-emerald-500/25 p-6 text-center">
+              <motion.div
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                transition={{ type: "spring", stiffness: 200, damping: 12 }}
+                className="w-16 h-16 mx-auto mb-3 rounded-full bg-emerald-500/20 flex items-center justify-center"
+              >
+                <CheckCircle2 className="w-9 h-9 text-emerald-400" />
+              </motion.div>
+              <div className="text-lg font-bold text-white">Deposit Submitted</div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Order <span className="text-white font-mono">{orderNo}</span>
+              </p>
+              <div className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10">
+                <ShieldCheck className="w-4 h-4 text-emerald-300" />
+                <span className="text-xs text-white">
+                  ₹{Number(amount).toLocaleString("en-IN")} → <span className="text-emerald-300 font-bold">{usdtPreview} USDT</span>
+                </span>
+              </div>
+              <p className="text-[11px] text-muted-foreground mt-4 leading-relaxed max-w-sm mx-auto">
+                Your deposit is queued for admin review. Verification usually takes 1-3 hours during business hours. You'll get a notification once approved.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <button
+                onClick={resetFlow}
+                className="flex-1 py-3 rounded-full border border-white/15 text-white/80 hover:text-white hover:border-white/30 font-semibold text-sm transition-all"
+              >
+                New Deposit
+              </button>
+              <button
+                onClick={() => {
+                  resetFlow();
+                  document.getElementById("inr-history")?.scrollIntoView({ behavior: "smooth" });
+                }}
+                className="flex-1 py-3 rounded-full bg-white text-gray-900 font-bold text-sm hover:bg-gray-100 transition-all"
+              >
+                View History
+              </button>
+            </div>
+
+            {submittedDepositId && (
+              <p className="text-[10px] text-center text-muted-foreground">
+                Reference ID: #{submittedDepositId}
+              </p>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* History */}
-      <div className="glass-card rounded-2xl overflow-hidden">
+      <div id="inr-history" className="glass-card rounded-2xl overflow-hidden mt-6">
         <div className="px-5 pt-4 pb-3 border-b border-white/8 flex items-center justify-between">
           <span className="text-sm font-semibold text-white">Your INR deposits</span>
           <span className="text-[11px] text-muted-foreground">
@@ -431,7 +767,7 @@ export function InrDepositTab() {
                   animate={{ opacity: 1 }}
                   className="px-5 py-3 flex items-center gap-3"
                 >
-                  <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center shrink-0">
+                  <div className="w-9 h-9 rounded-lg bg-white/5 flex items-center justify-center shrink-0">
                     {d.proofImageBase64 ? (
                       <ImageIcon className="w-4 h-4 text-muted-foreground" />
                     ) : (
@@ -460,6 +796,38 @@ export function InrDepositTab() {
             </AnimatePresence>
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+function Row({
+  label,
+  value,
+  mono,
+  valueClass,
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+  valueClass?: string;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3 pr-24">
+      <div className="text-[10px] text-gray-500 uppercase tracking-wider">{label}</div>
+      <div className="flex items-center gap-2 min-w-0">
+        <div className={cn("text-xs text-gray-900 truncate", mono && "font-mono", valueClass)}>{value}</div>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            navigator.clipboard.writeText(value);
+          }}
+          className="w-6 h-6 rounded inline-flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 shrink-0"
+          aria-label="Copy"
+        >
+          <Copy className="w-3 h-3" />
+        </button>
       </div>
     </div>
   );
