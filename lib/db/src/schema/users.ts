@@ -29,6 +29,18 @@ export const usersTable = pgTable("users", {
   phoneOtpExpiresAt: timestamp("phone_otp_expires_at"),
   phoneOtpSendCount: integer("phone_otp_send_count").notNull().default(0),
   phoneOtpLastSentAt: timestamp("phone_otp_last_sent_at"),
+  // Phone-change wizard staging: hold the new phone the user wants to switch
+  // to until both the OLD-phone OTP and the NEW-phone OTP are verified.
+  // Reusing phoneNumber/phoneVerifiedAt mid-flow would leave the account in
+  // a broken state (claiming a verified number the user can't actually
+  // receive calls on) if the new-phone step fails. These two columns let
+  // us keep the existing verified phone untouched until the swap is final.
+  phoneChangeNewPhone: varchar("phone_change_new_phone", { length: 32 }),
+  // When the OLD-phone OTP was successfully verified. Acts as a 10-min
+  // capability window — only inside that window can the user submit the
+  // new number + new-phone OTP. After it expires they have to start over,
+  // so a stolen session can't sit on a half-verified change forever.
+  phoneChangeOldVerifiedAt: timestamp("phone_change_old_verified_at"),
   // Lv.3 — Address verification
   kycAddressStatus: varchar("kyc_address_status", { length: 30 }).notNull().default("not_submitted"),
   addressLine1: text("address_line1"),
