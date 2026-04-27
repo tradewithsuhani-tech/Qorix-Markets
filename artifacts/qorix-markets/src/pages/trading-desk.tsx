@@ -1,5 +1,6 @@
 import { useGetTradingDeskStats, useGetTradingDeskTraders, useGetDashboardSummary, useGetInvestment } from "@workspace/api-client-react";
 import { Layout } from "@/components/layout";
+import { isFeatureHidden } from "@/lib/hidden-features";
 import { motion, type Variants } from "framer-motion";
 import { Link } from "wouter";
 import {
@@ -101,7 +102,11 @@ export default function TradingDeskPage() {
     Number(summary?.activeInvestment ?? 0),
     Number(investment?.amount ?? 0),
   );
-  const hasAccess = investorFund >= TRADING_DESK_MIN_FUND;
+  // Force-lock for everyone while the page is in the hidden-features
+  // registry (see src/lib/hidden-features.ts → 'trading-desk:page').
+  // Once that entry is removed, the $10K fund gate below takes over.
+  const tradingDeskHidden = isFeatureHidden("trading-desk:page");
+  const hasAccess = !tradingDeskHidden && investorFund >= TRADING_DESK_MIN_FUND;
   const progressPct = Math.min(100, (investorFund / TRADING_DESK_MIN_FUND) * 100);
 
   const { data: stats, isLoading: statsLoading } = useGetTradingDeskStats({ query: { enabled: hasAccess } });
