@@ -831,6 +831,114 @@ import { buildBrandedEmailHtml } from "../lib/email-template";
 const buildBroadcastHtml = buildBrandedEmailHtml;
 
 // ---------------------------------------------------------------------------
+// POST /admin/users/:id/send-email
+// Send a one-off branded email to a single user. The admin picks (or edits)
+// any of the email templates from the communication page (announcement,
+// promotion, alert, info, maintenance, trade_alert, next_trade) and the
+// payload is the final { subject, message } that gets rendered through the
+// same brand wrapper as /admin/broadcast.
+// ---------------------------------------------------------------------------
+const ALLOWED_DIRECT_EMAIL_TEMPLATE_IDS = new Set([
+  "announcement",
+  "promotion",
+  "alert",
+  "info",
+  "maintenance",
+  "trade_alert",
+  "next_trade",
+]);
+const DIRECT_EMAIL_SUBJECT_MAX = 200;
+const DIRECT_EMAIL_MESSAGE_MAX = 10_000;
+
+router.post("/admin/users/:id/send-email", async (req: AuthRequest, res) => {
+  const userId = parseInt(getParam(req, "id"));
+  if (!Number.isFinite(userId)) {
+    res.status(400).json({ error: "Invalid user id" });
+    return;
+  }
+
+  const { subject, message, templateId } = (req.body ?? {}) as {
+    subject?: string;
+    message?: string;
+    templateId?: string | null;
+  };
+
+  if (!subject || !subject.trim() || !message || !message.trim()) {
+    res.status(400).json({ error: "Subject and message are required" });
+    return;
+  }
+  if (subject.length > DIRECT_EMAIL_SUBJECT_MAX) {
+    res.status(400).json({ error: `Subject must be ${DIRECT_EMAIL_SUBJECT_MAX} characters or fewer` });
+    return;
+  }
+  if (message.length > DIRECT_EMAIL_MESSAGE_MAX) {
+    res.status(400).json({ error: `Message must be ${DIRECT_EMAIL_MESSAGE_MAX} characters or fewer` });
+    return;
+  }
+  if (templateId != null && templateId !== "" && !ALLOWED_DIRECT_EMAIL_TEMPLATE_IDS.has(templateId)) {
+    res.status(400).json({ error: "Unknown templateId" });
+    return;
+  }
+
+  // Refuse early if SMTP isn't configured — sendEmail() silently no-ops in
+  // that case and would otherwise return a misleading "success" + write a
+  // false audit entry.
+  if (!process.env.SES_FROM_EMAIL || !process.env.SMTP_PASS) {
+    errorLogger.error(
+      { adminId: req.userId, targetUserId: userId },
+      "Admin direct email — SMTP not configured (SES_FROM_EMAIL / SMTP_PASS missing)",
+    );
+    res.status(503).json({ error: "Email service is not configured on this server" });
+    return;
+  }
+
+  const [user] = await db
+    .select({
+      id: usersTable.id,
+      email: usersTable.email,
+      fullName: usersTable.fullName,
+    })
+    .from(usersTable)
+    .where(eq(usersTable.id, userId))
+    .limit(1);
+
+  if (!user) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+  if (!user.email) {
+    res.status(400).json({ error: "User has no email address on file" });
+    return;
+  }
+
+  try {
+    const html = buildBrandedEmailHtml(subject, message);
+    await sendEmail(user.email, subject, message, html);
+  } catch (err: any) {
+    errorLogger.error(
+      { err, to: user.email, targetUserId: userId, adminId: req.userId },
+      "Admin direct email — send failed",
+    );
+    // Don't leak provider error details to the client — keep them in logs.
+    res.status(502).json({ error: "Email send failed" });
+    return;
+  }
+
+  transactionLogger.info(
+    {
+      event: "admin_direct_email",
+      adminId: req.userId,
+      targetUserId: userId,
+      templateId: templateId ?? null,
+      subject,
+    },
+    "Admin sent direct email to user",
+  );
+
+  res.json({ success: true, sentTo: user.email });
+});
+
+// ---------------------------------------------------------------------------
 // POST /admin/kyc-reminder
 // Send a branded KYC reminder email to all users who have signed up but not
 // yet completed KYC verification. By default targets users with kycStatus
