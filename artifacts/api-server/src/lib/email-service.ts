@@ -1,7 +1,7 @@
 import { db, emailOtpsTable, usersTable } from "@workspace/db";
 import { eq, and, gt } from "drizzle-orm";
 import { logger } from "./logger";
-import { buildBrandedEmailHtml, BRAND_LOGO_CID } from "./email-template";
+import { buildBrandedEmailHtml, BRAND_LOGO_CID, escapeHtml } from "./email-template";
 import crypto from "crypto";
 import nodemailer, { type Transporter } from "nodemailer";
 // Premium 3D Q brand logo, embedded as a CID inline attachment so the
@@ -382,4 +382,70 @@ export async function getDevOtp(email: string, purpose: string): Promise<string 
     .limit(1);
 
   return rows[0]?.otp ?? null;
+}
+
+// ---------------------------------------------------------------------------
+// New-device login alert (Exness/Vantage style). Fires the FIRST time a
+// user signs in from a fingerprint that's never been seen before for them.
+// Caller decides when to fire — see lib/device-tracking.ts.
+// ---------------------------------------------------------------------------
+export async function sendNewDeviceLoginAlert(args: {
+  to: string;
+  name: string;
+  ip: string;
+  city: string | null;
+  country: string | null;
+  browser: string;
+  os: string;
+  whenUtc: Date;
+}): Promise<void> {
+  const { to, name, ip, city, country, browser, os, whenUtc } = args;
+  const cityLine = city
+    ? country
+      ? `${city}, ${country}`
+      : city
+    : country || "Unknown";
+  const whenStr = whenUtc.toISOString().replace("T", " ").slice(0, 19) + " (UTC)";
+  const safeName = escapeHtml(name);
+  const safeBrowser = escapeHtml(browser);
+  const safeOs = escapeHtml(os);
+
+  const intro = `<p style="margin:0 0 16px 0;font-size:15px;line-height:1.6;color:#cbd5e1;">
+      Dear ${safeName},
+    </p>
+    <p style="margin:0 0 20px 0;font-size:15px;line-height:1.6;color:#cbd5e1;">
+      We have detected a sign-in to your Qorix Markets account from a device
+      you've never used before. If this was you, no further action is needed.
+      If you don't recognise this activity, please change your password
+      immediately and contact support.
+    </p>
+    <table cellpadding="0" cellspacing="0" border="0" role="presentation" style="border-collapse:separate;border-spacing:0;width:100%;background:rgba(15,23,42,0.6);border:1px solid rgba(148,163,184,0.18);border-radius:12px;margin:0 0 20px 0;">
+      <tr><td style="padding:14px 18px 4px 18px;font-size:13px;color:#94a3b8;">City</td>
+          <td style="padding:14px 18px 4px 18px;font-size:14px;color:#e2e8f0;text-align:right;font-weight:600;">${escapeHtml(cityLine)}</td></tr>
+      <tr><td style="padding:8px 18px;font-size:13px;color:#94a3b8;">IP address</td>
+          <td style="padding:8px 18px;font-size:14px;color:#e2e8f0;text-align:right;font-family:'SF Mono',Menlo,Consolas,monospace;font-weight:600;">${escapeHtml(ip)}</td></tr>
+      <tr><td style="padding:8px 18px;font-size:13px;color:#94a3b8;">Device</td>
+          <td style="padding:8px 18px;font-size:14px;color:#e2e8f0;text-align:right;font-weight:600;">${safeBrowser} · ${safeOs}</td></tr>
+      <tr><td style="padding:8px 18px 14px 18px;font-size:13px;color:#94a3b8;">Login time</td>
+          <td style="padding:8px 18px 14px 18px;font-size:14px;color:#e2e8f0;text-align:right;font-weight:600;">${escapeHtml(whenStr)}</td></tr>
+    </table>
+    <p style="margin:0 0 8px 0;font-size:13px;line-height:1.6;color:#94a3b8;">
+      <strong style="color:#fca5a5;">Wasn't you?</strong> Open
+      <a href="https://qorixmarkets.com/settings" style="color:#60a5fa;text-decoration:none;font-weight:600;">Settings → Security</a>
+      and change your password right away.
+    </p>`;
+
+  const html = buildBrandedEmailHtml("Login from a new device detected", intro);
+  const text =
+    `Login from a new device detected\n\n` +
+    `Dear ${name},\n\n` +
+    `A sign-in to your Qorix Markets account was detected from a device you've never used before.\n\n` +
+    `City: ${cityLine}\n` +
+    `IP address: ${ip}\n` +
+    `Device: ${browser} on ${os}\n` +
+    `Login time: ${whenStr}\n\n` +
+    `If this wasn't you, change your password immediately at https://qorixmarkets.com/settings.\n\n` +
+    `— Qorix Markets`;
+
+  await sendEmail(to, "Qorix Markets — Login from a new device detected", text, html);
 }
