@@ -339,12 +339,24 @@ router.post("/merchant/inr-deposits/:id/approve", async (req: MerchantAuthReques
         .returning();
       if (!claimed) throw new Error("ALREADY_REVIEWED");
       approvedDep = claimed;
-      const amountUsdt =
-        overrideUsdt != null && overrideUsdt > 0
-          ? overrideUsdt
-          : parseFloat(claimed.amountUsdt as string);
+      // Bound the merchant override: they can credit *less* than the
+      // originally computed USDT amount (e.g. partial INR landed) but never
+      // more — that would let a rogue/compromised merchant over-credit a
+      // user. Cap at the value computed from the platform rate at submit
+      // time. Also reject zero/negative overrides.
+      const computed = parseFloat(claimed.amountUsdt as string);
+      let amountUsdt = computed;
+      if (overrideUsdt != null) {
+        if (!Number.isFinite(overrideUsdt) || overrideUsdt <= 0) {
+          throw new Error("BAD_OVERRIDE");
+        }
+        if (overrideUsdt > computed + 1e-6) {
+          throw new Error("OVER_CREDIT_BLOCKED");
+        }
+        amountUsdt = overrideUsdt;
+      }
       creditedUsdt = amountUsdt;
-      if (overrideUsdt != null && overrideUsdt > 0) {
+      if (overrideUsdt != null && Math.abs(overrideUsdt - computed) > 1e-6) {
         await tx
           .update(inrDepositsTable)
           .set({ amountUsdt: amountUsdt.toFixed(6) })
@@ -391,8 +403,20 @@ router.post("/merchant/inr-deposits/:id/approve", async (req: MerchantAuthReques
       );
     });
   } catch (err: unknown) {
-    if ((err as Error).message === "ALREADY_REVIEWED") {
+    const msg = (err as Error).message;
+    if (msg === "ALREADY_REVIEWED") {
       res.status(409).json({ error: "Deposit was already reviewed" });
+      return;
+    }
+    if (msg === "BAD_OVERRIDE") {
+      res.status(400).json({ error: "USDT override must be a positive number" });
+      return;
+    }
+    if (msg === "OVER_CREDIT_BLOCKED") {
+      res.status(400).json({
+        error:
+          "USDT override cannot exceed the originally quoted amount. Credit less if user paid less, never more.",
+      });
       return;
     }
     errorLogger.error({ err, id }, "[merchant] approve deposit failed");

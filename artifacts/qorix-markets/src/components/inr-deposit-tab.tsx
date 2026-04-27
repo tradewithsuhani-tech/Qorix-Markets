@@ -805,6 +805,30 @@ export function InrDepositTab() {
         )}
       </AnimatePresence>
 
+      {/* High-load delay banner: shows when any pending deposit is older
+           than 30 minutes — this is the user-facing tail of the merchant
+           escalation chain (10m → call merchant, 15m → call admin, 30m →
+           tell user there's a backlog). */}
+      {(() => {
+        const stuck = (historyResp?.deposits ?? []).some(
+          (d) =>
+            d.status === "pending" &&
+            Date.now() - new Date(d.createdAt).getTime() > 30 * 60 * 1000,
+        );
+        return stuck ? (
+          <div className="mt-6 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs text-amber-200 flex items-start gap-2">
+            <Clock className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+            <div>
+              <div className="font-semibold">Heavy load — review delayed</div>
+              <div className="opacity-80 mt-0.5">
+                Our payment team is processing a high volume of requests. Your deposit is queued and
+                will be approved shortly. No action needed from your side.
+              </div>
+            </div>
+          </div>
+        ) : null;
+      })()}
+
       {/* History */}
       <div id="inr-history" className="glass-card rounded-2xl overflow-hidden mt-6">
         <div className="px-5 pt-4 pb-3 border-b border-white/8 flex items-center justify-between">

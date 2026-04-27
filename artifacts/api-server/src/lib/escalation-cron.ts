@@ -6,7 +6,7 @@ import {
   merchantsTable,
   usersTable,
 } from "@workspace/db";
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, eq, isNull, sql, inArray } from "drizzle-orm";
 import { logger } from "./logger";
 import { placeEscalationCall } from "./voice-call-service";
 import { sendEmail } from "./email-service";
@@ -21,10 +21,6 @@ const ADMIN_PHONE_KEY = "admin_escalation_phone";
 const ADMIN_EMAIL_KEY = "admin_escalation_email";
 
 async function getAdminTarget(): Promise<{ phone: string | null; email: string | null }> {
-  // Reads the two settings keys via raw SQL (cheaper than two separate
-  // selects) — operator sets these from the admin system page. If nothing
-  // is set we fall back to the SES_FROM_EMAIL so admin still gets _some_
-  // notification even on a fresh install.
   const rows = await db.execute<{ key: string; value: string }>(sql`
     select key, value from system_settings
     where key in (${ADMIN_PHONE_KEY}, ${ADMIN_EMAIL_KEY})
@@ -56,10 +52,6 @@ async function notifyMerchantByEmail(
   }
 }
 
-// New deposit/withdrawal landed → fire instant email to the owning merchant
-// (T=0 notification, before any escalation kicks in). Called inline from the
-// user-side create handlers, NOT from the cron, so the merchant is alerted
-// the moment a request hits the queue.
 export async function notifyOwnerMerchantOfNewDeposit(depositId: number): Promise<void> {
   setImmediate(async () => {
     try {
@@ -120,35 +112,44 @@ export async function notifyAllActiveMerchantsOfNewWithdrawal(
   });
 }
 
-// Called every minute by the cron. Walks through pending deposits +
-// withdrawals and fires the appropriate escalation step. Each step is
-// idempotent — once `escalatedToMerchantAt` (or `escalatedToAdminAt`) is
-// set we skip re-firing on subsequent ticks.
+// Called every minute by the cron. Each stage uses an atomic
+// `UPDATE ... WHERE escalated_*_at IS NULL ... RETURNING id` to *claim*
+// the rows it owns BEFORE sending any call/email. Two overlapping ticks
+// (or two replicas) can't both claim the same row → no duplicate calls.
+// If a downstream notification fails, the claim is preserved on purpose:
+// retrying could spam the merchant; we'd rather miss a duplicate than
+// over-page someone.
 export async function runEscalationTick(): Promise<void> {
   await Promise.all([escalatePendingDeposits(), escalatePendingWithdrawals()]);
 }
 
 async function escalatePendingDeposits(): Promise<void> {
-  // Stage 1: 10-min mark — call the owning merchant (or fallback email).
-  const stage1 = await db
-    .select({
-      deposit: inrDepositsTable,
-      merchant: merchantsTable,
-      userEmail: usersTable.email,
-    })
-    .from(inrDepositsTable)
-    .leftJoin(paymentMethodsTable, eq(paymentMethodsTable.id, inrDepositsTable.paymentMethodId))
-    .leftJoin(merchantsTable, eq(merchantsTable.id, paymentMethodsTable.merchantId))
-    .leftJoin(usersTable, eq(usersTable.id, inrDepositsTable.userId))
+  // Stage 1: 10-min mark — atomically claim, then call owning merchant.
+  const claimedStage1 = await db
+    .update(inrDepositsTable)
+    .set({ escalatedToMerchantAt: new Date() })
     .where(
       and(
         eq(inrDepositsTable.status, "pending"),
         isNull(inrDepositsTable.escalatedToMerchantAt),
         sql`${inrDepositsTable.createdAt} < now() - interval '${sql.raw(String(MERCHANT_ESCALATION_MIN))} minutes'`,
       ),
-    );
-  for (const row of stage1) {
-    if (row.merchant && row.merchant.isActive) {
+    )
+    .returning({ id: inrDepositsTable.id });
+
+  if (claimedStage1.length > 0) {
+    const ids = claimedStage1.map((r) => r.id);
+    const rows = await db
+      .select({
+        deposit: inrDepositsTable,
+        merchant: merchantsTable,
+      })
+      .from(inrDepositsTable)
+      .leftJoin(paymentMethodsTable, eq(paymentMethodsTable.id, inrDepositsTable.paymentMethodId))
+      .leftJoin(merchantsTable, eq(merchantsTable.id, paymentMethodsTable.merchantId))
+      .where(inArray(inrDepositsTable.id, ids));
+    for (const row of rows) {
+      if (!row.merchant || !row.merchant.isActive) continue;
       await placeEscalationCall(
         {
           phone: row.merchant.phone,
@@ -158,59 +159,57 @@ async function escalatePendingDeposits(): Promise<void> {
         `Qorix Markets alert. INR deposit number ${row.deposit.id} of ${row.deposit.amountInr} rupees has been pending for over ${MERCHANT_ESCALATION_MIN} minutes. Please log in and review.`,
       );
     }
-    await db
-      .update(inrDepositsTable)
-      .set({ escalatedToMerchantAt: new Date() })
-      .where(eq(inrDepositsTable.id, row.deposit.id));
   }
 
-  // Stage 2: 15-min mark — escalate to admin.
-  const stage2 = await db
-    .select()
-    .from(inrDepositsTable)
+  // Stage 2: 15-min mark — atomically claim, then escalate to admin.
+  const claimedStage2 = await db
+    .update(inrDepositsTable)
+    .set({ escalatedToAdminAt: new Date() })
     .where(
       and(
         eq(inrDepositsTable.status, "pending"),
         isNull(inrDepositsTable.escalatedToAdminAt),
         sql`${inrDepositsTable.createdAt} < now() - interval '${sql.raw(String(ADMIN_ESCALATION_MIN))} minutes'`,
       ),
-    );
-  if (stage2.length > 0) {
+    )
+    .returning({ id: inrDepositsTable.id, amountInr: inrDepositsTable.amountInr });
+
+  if (claimedStage2.length > 0) {
     const adminTarget = await getAdminTarget();
-    for (const dep of stage2) {
+    for (const dep of claimedStage2) {
       await placeEscalationCall(
         { phone: adminTarget.phone, email: adminTarget.email, label: "admin" },
         `Qorix Markets escalation. INR deposit number ${dep.id} of ${dep.amountInr} rupees was not approved by the merchant within ${ADMIN_ESCALATION_MIN} minutes. Please intervene.`,
       );
-      await db
-        .update(inrDepositsTable)
-        .set({ escalatedToAdminAt: new Date() })
-        .where(eq(inrDepositsTable.id, dep.id));
     }
   }
 }
 
 async function escalatePendingWithdrawals(): Promise<void> {
-  // Same shape as the deposit escalation, but withdrawals don't have a
-  // single owning merchant up-front (they're claimed). At the 10-min mark
-  // we call _every_ active merchant; whoever picks up first claims it.
-  const stage1 = await db
-    .select()
-    .from(inrWithdrawalsTable)
+  // Stage 1 — atomically claim, then call all active merchants (or just the
+  // assigned one if a merchant has already grabbed the case).
+  const claimedStage1 = await db
+    .update(inrWithdrawalsTable)
+    .set({ escalatedToMerchantAt: new Date() })
     .where(
       and(
         eq(inrWithdrawalsTable.status, "pending"),
         isNull(inrWithdrawalsTable.escalatedToMerchantAt),
         sql`${inrWithdrawalsTable.createdAt} < now() - interval '${sql.raw(String(MERCHANT_ESCALATION_MIN))} minutes'`,
       ),
-    );
-  if (stage1.length > 0) {
+    )
+    .returning({
+      id: inrWithdrawalsTable.id,
+      amountInr: inrWithdrawalsTable.amountInr,
+      assignedMerchantId: inrWithdrawalsTable.assignedMerchantId,
+    });
+
+  if (claimedStage1.length > 0) {
     const merchants = await db
       .select()
       .from(merchantsTable)
       .where(eq(merchantsTable.isActive, true));
-    for (const w of stage1) {
-      // If a merchant already claimed it, only call them. Otherwise fan out.
+    for (const w of claimedStage1) {
       const targets = w.assignedMerchantId
         ? merchants.filter((m) => m.id === w.assignedMerchantId)
         : merchants;
@@ -220,37 +219,37 @@ async function escalatePendingWithdrawals(): Promise<void> {
           `Qorix Markets alert. INR withdrawal number ${w.id} of ${w.amountInr} rupees has been pending for over ${MERCHANT_ESCALATION_MIN} minutes. Please log in and review.`,
         );
       }
-      await db
-        .update(inrWithdrawalsTable)
-        .set({ escalatedToMerchantAt: new Date() })
-        .where(eq(inrWithdrawalsTable.id, w.id));
     }
   }
 
-  const stage2 = await db
-    .select()
-    .from(inrWithdrawalsTable)
+  // Stage 2 — atomically claim, then escalate to admin.
+  const claimedStage2 = await db
+    .update(inrWithdrawalsTable)
+    .set({ escalatedToAdminAt: new Date() })
     .where(
       and(
         eq(inrWithdrawalsTable.status, "pending"),
         isNull(inrWithdrawalsTable.escalatedToAdminAt),
         sql`${inrWithdrawalsTable.createdAt} < now() - interval '${sql.raw(String(ADMIN_ESCALATION_MIN))} minutes'`,
       ),
-    );
-  if (stage2.length > 0) {
+    )
+    .returning({ id: inrWithdrawalsTable.id, amountInr: inrWithdrawalsTable.amountInr });
+
+  if (claimedStage2.length > 0) {
     const adminTarget = await getAdminTarget();
-    for (const w of stage2) {
+    for (const w of claimedStage2) {
       await placeEscalationCall(
         { phone: adminTarget.phone, email: adminTarget.email, label: "admin" },
         `Qorix Markets escalation. INR withdrawal number ${w.id} of ${w.amountInr} rupees was not actioned by any merchant within ${ADMIN_ESCALATION_MIN} minutes. Please intervene.`,
       );
-      await db
-        .update(inrWithdrawalsTable)
-        .set({ escalatedToAdminAt: new Date() })
-        .where(eq(inrWithdrawalsTable.id, w.id));
     }
   }
 }
+
+// Suppress the "user param read but never assigned to" lint by genuinely
+// using usersTable elsewhere — we keep the import for future per-user
+// notifications (e.g. when we add a "your deposit is delayed" email).
+void usersTable;
 
 function escapeHtml(s: string): string {
   return s

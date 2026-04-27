@@ -411,6 +411,21 @@ export function InrWithdrawTab({ kycApproved, onKycRequired }: { kycApproved: bo
         </span>
       </div>
 
+      {/* High-load delay banner: any pending withdrawal older than 30 min
+           means the merchant + admin escalation chain has fired and we owe
+           the user a heads-up so they don't keep refreshing. */}
+      {history.some(
+        (w) => w.status === "pending" && Date.now() - new Date(w.createdAt).getTime() > 30 * 60 * 1000,
+      ) && (
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-[11px] text-amber-200 flex items-start gap-2">
+          <Clock className="w-3 h-3 mt-0.5 shrink-0" />
+          <span>
+            <b>Heavy load — payout delayed.</b> Our team is working through a backlog. Your INR
+            withdrawal will be paid out shortly; no action needed.
+          </span>
+        </div>
+      )}
+
       {/* History */}
       {history.length > 0 && (
         <div className="space-y-2">
