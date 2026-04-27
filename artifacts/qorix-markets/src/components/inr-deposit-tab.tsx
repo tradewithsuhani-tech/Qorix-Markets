@@ -605,20 +605,17 @@ export function InrDepositTab() {
                     <button
                       type="button"
                       onClick={() => setQrModalOpen(true)}
-                      className="group relative w-24 h-24 shrink-0 rounded-lg bg-white border border-white/15 p-1 shadow-sm self-start overflow-hidden focus:outline-none focus:ring-2 focus:ring-emerald-400/60"
+                      className="group relative w-24 h-24 shrink-0 rounded-lg bg-gradient-to-br from-emerald-950/60 via-slate-900/70 to-slate-950/80 border border-emerald-500/25 p-1.5 shadow-[0_0_18px_-6px_rgba(16,185,129,0.45)] self-start overflow-hidden focus:outline-none focus:ring-2 focus:ring-emerald-400/60"
                       aria-label="View QR full screen"
                     >
                       <img
                         src={selected.qrImageBase64}
                         alt="QR"
-                        className="w-full h-full object-contain"
+                        className="w-full h-full object-contain rounded-md"
                       />
-                      <span className="absolute inset-0 bg-black/55 opacity-0 group-hover:opacity-100 group-active:opacity-100 transition-opacity flex flex-col items-center justify-center gap-1">
+                      <span className="absolute inset-0 bg-black/65 opacity-0 group-hover:opacity-100 group-active:opacity-100 transition-opacity flex flex-col items-center justify-center gap-1">
                         <Maximize2 className="w-4 h-4 text-white" />
                         <span className="text-[9px] font-semibold text-white uppercase tracking-wider">View</span>
-                      </span>
-                      <span className="absolute bottom-0.5 right-0.5 inline-flex items-center justify-center w-5 h-5 rounded-full bg-emerald-500 text-white shadow-md group-hover:opacity-0 transition-opacity">
-                        <Maximize2 className="w-3 h-3" />
                       </span>
                     </button>
                   )}
