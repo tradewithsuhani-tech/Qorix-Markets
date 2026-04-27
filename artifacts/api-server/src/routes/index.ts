@@ -31,6 +31,7 @@ import promoRouter from "./promo";
 import telegramRouter from "./telegram";
 import twoFactorRouter from "./two-factor";
 import inrDepositsRouter from "./inr-deposits";
+import inrWithdrawalsRouter from "./inr-withdrawals";
 
 const router: IRouter = Router();
 
@@ -67,5 +68,6 @@ router.use(promoRouter);
 router.use(telegramRouter);
 router.use(twoFactorRouter);
 router.use(inrDepositsRouter);
+router.use(inrWithdrawalsRouter);
 
 export default router;

@@ -14,6 +14,7 @@ import { Link } from "wouter";
 import { getGetWalletQueryKey } from "@workspace/api-client-react";
 import { VipBadge } from "@/components/vip-badge";
 import { AddressDisplay, maskAddress } from "@/components/address-display";
+import { InrWithdrawTab } from "@/components/inr-withdraw-tab";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
 function apiUrl(path: string) { return `${BASE_URL}/api${path}`; }
@@ -63,6 +64,7 @@ export default function WalletPage() {
   const withdrawalFeePercent = (withdrawalFee * 100).toFixed(1);
   const { toast } = useToast();
 
+  const [withdrawTab, setWithdrawTab] = useState<"usdt" | "inr">("usdt");
   const [withdrawAmount, setWithdrawAmount] = useState("");
   const [withdrawAddress, setWithdrawAddress] = useState("");
   const [withdrawSource, setWithdrawSource] = useState<"profit" | "main">("profit");
@@ -328,6 +330,34 @@ export default function WalletPage() {
               <VipBadge tier={vipTier} size="xs" />
             </div>
 
+            {/* Tab switcher: USDT (TRC20) vs INR (UPI/Bank) */}
+            <div className="grid grid-cols-2 gap-1 p-1 bg-black/30 rounded-xl">
+              <button
+                onClick={() => setWithdrawTab("usdt")}
+                className={`px-3 py-2 rounded-lg text-xs font-semibold transition-all ${
+                  withdrawTab === "usdt"
+                    ? "bg-emerald-500/20 text-emerald-300 shadow-sm"
+                    : "text-muted-foreground hover:text-white"
+                }`}
+              >
+                USDT (TRC20)
+              </button>
+              <button
+                onClick={() => setWithdrawTab("inr")}
+                className={`px-3 py-2 rounded-lg text-xs font-semibold transition-all ${
+                  withdrawTab === "inr"
+                    ? "bg-violet-500/20 text-violet-300 shadow-sm"
+                    : "text-muted-foreground hover:text-white"
+                }`}
+              >
+                INR (UPI/Bank)
+              </button>
+            </div>
+
+            {withdrawTab === "inr" ? (
+              <InrWithdrawTab kycApproved={kycApproved} onKycRequired={() => setShowKycPrompt(true)} />
+            ) : (
+              <>
             {withdrawStep !== "success" && (
               <div className="grid grid-cols-2 gap-2">
                 <button
@@ -613,6 +643,8 @@ export default function WalletPage() {
                 )}
               </AnimatePresence>
             </div>
+              </>
+            )}
           </div>
 
         </motion.div>
