@@ -229,6 +229,11 @@ export default function SettingsPage() {
           </div>
         </motion.div>
 
+        {/* Phone Number (change wizard) */}
+        <motion.div variants={item}>
+          <PhoneChangeCard />
+        </motion.div>
+
         {/* Security */}
         <motion.div variants={item} className="glass-card rounded-2xl p-5 space-y-4">
           <div className="flex items-center gap-2.5 mb-1">

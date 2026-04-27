@@ -36,6 +36,8 @@ router.post("/phone-otp/send", authMiddleware, async (req: AuthRequest, res) => 
   const [user] = await db
     .select({
       id: usersTable.id,
+      phoneNumber: usersTable.phoneNumber,
+      phoneVerifiedAt: usersTable.phoneVerifiedAt,
       phoneOtpSendCount: usersTable.phoneOtpSendCount,
       phoneOtpLastSentAt: usersTable.phoneOtpLastSentAt,
     })
@@ -43,6 +45,21 @@ router.post("/phone-otp/send", authMiddleware, async (req: AuthRequest, res) => 
     .where(eq(usersTable.id, req.userId!))
     .limit(1);
   if (!user) { res.status(404).json({ error: "user_not_found" }); return; }
+
+  // SECURITY GUARD: this legacy endpoint is for INITIAL phone verification
+  // (KYC flow). If the user already has a verified phone, changing it MUST
+  // go through the /phone-change/* wizard which requires old-phone OTP
+  // proof first. Otherwise a hijacked authenticated session could silently
+  // re-bind the account to an attacker number using just this single
+  // endpoint, defeating the whole purpose of the change wizard.
+  // Allowed exception: re-verifying the SAME number (no-op semantically).
+  if (user.phoneVerifiedAt && user.phoneNumber && normalized !== user.phoneNumber) {
+    res.status(403).json({
+      error: "use_phone_change_flow",
+      message: "Your phone is already verified. Use the change-number flow in Settings to switch to a new number.",
+    });
+    return;
+  }
 
   // Cooldown check
   if (user.phoneOtpLastSentAt) {
@@ -142,6 +159,7 @@ router.post("/phone-otp/verify", authMiddleware, async (req: AuthRequest, res) =
   const [user] = await db
     .select({
       id: usersTable.id,
+      phoneVerifiedAt: usersTable.phoneVerifiedAt,
       phoneOtpSessionId: usersTable.phoneOtpSessionId,
       phoneOtpExpiresAt: usersTable.phoneOtpExpiresAt,
     })
@@ -149,6 +167,24 @@ router.post("/phone-otp/verify", authMiddleware, async (req: AuthRequest, res) =
     .where(eq(usersTable.id, req.userId!))
     .limit(1);
   if (!user) { res.status(404).json({ error: "user_not_found" }); return; }
+
+  // SECURITY GUARD (mirrors /phone-otp/send): if the user already has a
+  // verified phone, this legacy verify endpoint must not flip the number.
+  // A pending OTP session created BEFORE the new send-side guard could
+  // otherwise still slip through and silently re-bind to an attacker's
+  // candidate. Force the change wizard, which carries old-phone proof.
+  if (user.phoneVerifiedAt) {
+    // Best-effort cleanup of any dangling session so the wizard can claim it.
+    await db.update(usersTable)
+      .set({ phoneOtpSessionId: null, phoneOtpExpiresAt: null })
+      .where(eq(usersTable.id, req.userId!));
+    res.status(403).json({
+      error: "use_phone_change_flow",
+      message: "Your phone is already verified. Use the change-number flow in Settings to switch to a new number.",
+    });
+    return;
+  }
+
   if (!user.phoneOtpSessionId) {
     res.status(400).json({ error: "no_active_otp", message: "Request a voice OTP first" });
     return;

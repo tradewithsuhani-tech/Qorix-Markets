@@ -13,7 +13,8 @@ import {
   signalTradesTable,
 } from "@workspace/db";
 import { loginEventsTable, blockchainDepositsTable, serviceSubscriptionsTable } from "@workspace/db/schema";
-import { eq, sum, count, and, or, desc, sql, inArray } from "drizzle-orm";
+import { eq, ne, sum, count, and, or, desc, sql, inArray, isNotNull } from "drizzle-orm";
+import { createNotification } from "../lib/notifications";
 import { authMiddleware, adminMiddleware, getParam, getQueryInt, getQueryString, type AuthRequest } from "../middlewares/auth";
 import { notifyMaintenanceInvalidation, getMaintenanceState } from "../middlewares/maintenance";
 import { SetDailyProfitBody } from "@workspace/api-zod";

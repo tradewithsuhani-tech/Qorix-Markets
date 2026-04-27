@@ -51,7 +51,7 @@ async function callVoiceAutogen(phone: string): Promise<{ ok: boolean; sessionId
   try {
     const url = `https://2factor.in/API/V1/${encodeURIComponent(TWO_FACTOR_KEY)}/VOICE/${encodeURIComponent(phone)}/AUTOGEN`;
     const r = await fetch(url);
-    const data: TwoFactorResp = await r.json().catch(() => ({}));
+    const data = (await r.json().catch(() => ({}))) as TwoFactorResp;
     if (!r.ok || data?.Status !== "Success" || !data?.Details) {
       return { ok: false, error: data?.Details || `voice send failed (${r.status})` };
     }
