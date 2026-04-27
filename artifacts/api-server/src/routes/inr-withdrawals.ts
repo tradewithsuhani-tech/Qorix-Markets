@@ -8,6 +8,7 @@ import {
 } from "@workspace/db";
 import { eq, and, desc, sql, inArray, gte } from "drizzle-orm";
 import { authMiddleware, adminMiddleware, type AuthRequest } from "../middlewares/auth";
+import { auditAdminRequest, requireAdminPermission } from "../middlewares/admin-rbac";
 import { createNotification } from "../lib/notifications";
 import { transactionLogger, errorLogger } from "../lib/logger";
 import { sendTxnEmailToUser } from "../lib/email-service";
@@ -245,7 +246,7 @@ router.post("/inr-withdrawals", authMiddleware, async (req: AuthRequest, res) =>
 // ---------------------------------------------------------------------------
 // ADMIN
 // ---------------------------------------------------------------------------
-router.use("/admin/inr-withdrawals", authMiddleware, adminMiddleware);
+router.use("/admin/inr-withdrawals", authMiddleware, adminMiddleware, requireAdminPermission, auditAdminRequest);
 
 router.get("/admin/inr-withdrawals", async (req, res) => {
   const status = typeof req.query["status"] === "string" ? req.query["status"] : undefined;

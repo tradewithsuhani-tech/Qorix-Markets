@@ -10,6 +10,7 @@ import {
 } from "@workspace/db";
 import { eq, and, desc, sql } from "drizzle-orm";
 import { authMiddleware, adminMiddleware, type AuthRequest } from "../middlewares/auth";
+import { auditAdminRequest, requireAdminPermission } from "../middlewares/admin-rbac";
 import { createNotification } from "../lib/notifications";
 import { transactionLogger, errorLogger } from "../lib/logger";
 import { ensureUserAccounts, postJournalEntry, journalForTransaction } from "../lib/ledger-service";
@@ -185,6 +186,8 @@ router.post("/inr-deposits", authMiddleware, async (req: AuthRequest, res) => {
 // ---------------------------------------------------------------------------
 router.use("/admin", authMiddleware);
 router.use("/admin", adminMiddleware);
+router.use("/admin", requireAdminPermission);
+router.use("/admin", auditAdminRequest);
 
 // Rate setting
 router.get("/admin/inr-rate", async (_req, res) => {
