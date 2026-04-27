@@ -3,6 +3,7 @@ import { db, usersTable } from "@workspace/db";
 import { and, eq, sql } from "drizzle-orm";
 import { authMiddleware, getQueryString, type AuthRequest } from "../middlewares/auth";
 import { createNotification } from "../lib/notifications";
+import { sendTxnEmailToUser } from "../lib/email-service";
 import { notSmokeTestUser, shouldIncludeSmokeTest } from "../lib/smoke-test-account";
 
 const router = Router();
@@ -100,6 +101,11 @@ router.post("/kyc/personal", authMiddleware, async (req: AuthRequest, res) => {
     })
     .where(eq(usersTable.id, req.userId!));
   await createNotification(req.userId!, "system", "Personal details verified", "Lv.1 verification complete.");
+  sendTxnEmailToUser(
+    req.userId!,
+    "Personal details verified — Qorix Markets",
+    "Your personal details (Lv.1) have been verified successfully. You can now proceed to identity verification (Lv.2).",
+  );
   res.json({ success: true, status: "approved" });
 });
 
@@ -150,6 +156,11 @@ router.post("/kyc/submit", authMiddleware, async (req: AuthRequest, res) => {
     })
     .where(eq(usersTable.id, req.userId!));
   await createNotification(req.userId!, "system", "Identity submitted", "Your ID is under review. We'll notify you within 24 hours.");
+  sendTxnEmailToUser(
+    req.userId!,
+    "Identity verification submitted — Qorix Markets",
+    "We've received your identity document (Lv.2). Our team will review it within 24 hours and notify you once a decision is made. No further action is needed from your side right now.",
+  );
   res.json({ success: true, status: "pending" });
 });
 
@@ -196,6 +207,11 @@ router.post("/kyc/address", authMiddleware, async (req: AuthRequest, res) => {
     })
     .where(eq(usersTable.id, req.userId!));
   await createNotification(req.userId!, "system", "Address submitted", "Your address proof is under review.");
+  sendTxnEmailToUser(
+    req.userId!,
+    "Address verification submitted — Qorix Markets",
+    "We've received your address proof (Lv.3). Our team will review it within 24 hours and notify you once a decision is made.",
+  );
   res.json({ success: true, status: "pending" });
 });
 
@@ -316,16 +332,28 @@ router.post("/admin/kyc/review", authMiddleware, async (req: AuthRequest, res) =
         kycRejectionReason: action === "reject" ? (reason ?? "Document not acceptable") : null,
       };
   await db.update(usersTable).set(set).where(eq(usersTable.id, userId));
-  await createNotification(
-    userId,
-    "system",
+  const notifTitle =
     action === "approve"
       ? (isAddress ? "Address verified" : "KYC approved")
-      : (isAddress ? "Address rejected" : "KYC rejected"),
+      : (isAddress ? "Address rejected" : "KYC rejected");
+  const notifBody =
     action === "approve"
       ? (isAddress ? "Lv.3 verification complete." : "Identity verified — withdrawals enabled.")
-      : `${isAddress ? "Address" : "KYC"} rejected. ${reason ?? "Please re-submit."}`,
-  );
+      : `${isAddress ? "Address" : "KYC"} rejected. ${reason ?? "Please re-submit."}`;
+  await createNotification(userId, "system", notifTitle, notifBody);
+  const emailSubject =
+    action === "approve"
+      ? (isAddress ? "Address verified — Qorix Markets" : "Identity verified — Qorix Markets")
+      : (isAddress ? "Address verification rejected — Qorix Markets" : "Identity verification rejected — Qorix Markets");
+  const emailBody =
+    action === "approve"
+      ? (isAddress
+          ? "Great news! Your address proof (Lv.3) has been verified. Your account is now fully verified."
+          : "Great news! Your identity (Lv.2) has been verified. Withdrawals are now enabled on your account. You can proceed to Lv.3 (address) verification if not already done.")
+      : (isAddress
+          ? `Your address verification was rejected.\n\nReason: ${reason ?? "Document not acceptable"}\n\nPlease re-submit a clearer copy of an accepted address proof from your dashboard.`
+          : `Your identity verification was rejected.\n\nReason: ${reason ?? "Document not acceptable"}\n\nPlease re-submit a clearer copy of an accepted ID document from your dashboard.`);
+  sendTxnEmailToUser(userId, emailSubject, emailBody);
   res.json({ success: true, status: newStatus });
 });
 
