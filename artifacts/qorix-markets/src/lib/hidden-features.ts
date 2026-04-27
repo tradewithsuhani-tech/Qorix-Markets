@@ -46,6 +46,17 @@ export const HIDDEN_FEATURES: HiddenFeature[] = [
       "Remove this entry from HIDDEN_FEATURES. The block is wrapped in a single `{!isFeatureHidden('portfolio:performance-insights') && (...)}` gate around the `<div className=\"relative\">...</div>` that contains the Performance Insights lock overlay and the embedded DemoDashboardBody + RecentTradeAttribution — un-hiding restores the previous behavior verbatim (lock mask shown for users with no active investment, blurred section underneath).",
   },
   {
+    id: "trading-desk:page",
+    title: "Institutional Trading Desk page (entire route)",
+    location: "Sidebar → Trading Desk  ·  Route: /trading-desk",
+    filePath: "artifacts/qorix-markets/src/pages/trading-desk.tsx",
+    hiddenAt: "2026-04-27",
+    reason:
+      "Page is being polished — trader profiles, strategy allocation breakdown and live desk metrics still need a redesign. Locked for everyone (including investors above the $10K threshold) until the redesign ships, so no one sees a half-finished view.",
+    restoreNotes:
+      "Remove this entry from HIDDEN_FEATURES. The page-level fund gate ($10K via TRADING_DESK_MIN_FUND in trading-desk.tsx) will then take over again — same Crown/Lock 'Premium Tier' card that was already in place. Sidebar nav entry stays as-is; no layout changes were made.",
+  },
+  {
     id: "analytics:page",
     title: "Advanced Analytics page (entire route)",
     location: "Sidebar → Analytics  ·  Route: /analytics",
