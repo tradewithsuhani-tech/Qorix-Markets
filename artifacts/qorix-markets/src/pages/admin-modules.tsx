@@ -42,10 +42,13 @@ import {
   PartyPopper,
   Pencil,
   Loader2,
+  Mail,
+  FileText,
 } from "lucide-react";
 import { HIDDEN_FEATURES } from "@/lib/hidden-features";
 import { AddressDisplay } from "@/components/address-display";
 import { useToast } from "@/hooks/use-toast";
+import { EMAIL_TEMPLATES } from "@/lib/email-templates";
 
 function token() {
   try { return localStorage.getItem("qorix_token"); } catch { return null; }
@@ -387,12 +390,158 @@ function EditProfileModal({ user, onClose, onDone }: { user: any; onClose: () =>
   );
 }
 
+function SendEmailModal({ user, onClose }: { user: any; onClose: () => void }) {
+  const { toast } = useToast();
+  const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
+  const [subject, setSubject] = useState<string>("");
+  const [message, setMessage] = useState<string>("");
+  const [sending, setSending] = useState(false);
+
+  function applyTemplate(templateId: string) {
+    const tpl = EMAIL_TEMPLATES.find((t) => t.id === templateId);
+    if (!tpl) return;
+    setSelectedTemplate(templateId);
+    setSubject(tpl.defaultTitle);
+    setMessage(tpl.defaultMessage);
+  }
+
+  function clearTemplate() {
+    setSelectedTemplate(null);
+    setSubject("");
+    setMessage("");
+  }
+
+  async function send() {
+    if (!subject.trim() || !message.trim()) {
+      toast({ title: "Subject and message are required", variant: "destructive" });
+      return;
+    }
+    setSending(true);
+    try {
+      const result = await adminFetch(`/admin/users/${user.id}/send-email`, {
+        method: "POST",
+        body: JSON.stringify({
+          subject: subject.trim(),
+          message: message,
+          templateId: selectedTemplate,
+        }),
+      });
+      toast({
+        title: "Email sent",
+        description: `Delivered to ${result.sentTo ?? user.email}`,
+      });
+      onClose();
+    } catch (e: any) {
+      let msg = e?.message ?? "Send failed";
+      try { const parsed = JSON.parse(msg); if (parsed?.error) msg = parsed.error; } catch { /* not json */ }
+      toast({ title: "Failed to send", description: msg, variant: "destructive" });
+    } finally {
+      setSending(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center p-3" onClick={onClose}>
+      <motion.div
+        initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }}
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-2xl glass-card rounded-2xl p-5 space-y-4 max-h-[90vh] overflow-y-auto"
+      >
+        <div className="flex items-start justify-between">
+          <div>
+            <h3 className="font-semibold text-base flex items-center gap-2">
+              <Mail className="w-4 h-4 text-violet-400" /> Send Email to User
+            </h3>
+            <p className="text-xs text-muted-foreground mt-1">
+              {user.fullName} · <span className="font-mono">{user.email ?? "no email"}</span> · ID #{user.id}
+            </p>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/10 text-muted-foreground"><X className="w-4 h-4" /></button>
+        </div>
+
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs uppercase tracking-wider text-muted-foreground font-semibold flex items-center gap-1.5">
+              <FileText className="w-3 h-3" /> Email Templates
+            </span>
+            {selectedTemplate && (
+              <button
+                onClick={clearTemplate}
+                className="text-[11px] text-muted-foreground hover:text-white underline-offset-2 hover:underline"
+              >
+                Clear template
+              </button>
+            )}
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            {EMAIL_TEMPLATES.map((tpl) => {
+              const Icon = tpl.icon;
+              const active = selectedTemplate === tpl.id;
+              return (
+                <button
+                  key={tpl.id}
+                  onClick={() => applyTemplate(tpl.id)}
+                  className={`flex items-center gap-2 p-2.5 rounded-xl border text-left text-xs transition-all ${
+                    active
+                      ? "border-violet-500/50 bg-violet-500/10 text-white"
+                      : "border-white/10 bg-white/[0.02] hover:bg-white/5 text-muted-foreground hover:text-white"
+                  }`}
+                >
+                  <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${tpl.color}`}>
+                    <Icon className="w-3.5 h-3.5" />
+                  </div>
+                  <span className="truncate">{tpl.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          <label className="block">
+            <span className="text-xs text-muted-foreground">Subject</span>
+            <input
+              value={subject}
+              onChange={(e) => setSubject(e.target.value)}
+              placeholder="Email subject line"
+              className="mt-1 w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-sm focus:ring-1 focus:ring-violet-500/50"
+            />
+          </label>
+          <label className="block">
+            <span className="text-xs text-muted-foreground">Message</span>
+            <textarea
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              rows={10}
+              placeholder="Write your message here. Pick a template above, or write fresh — both will be wrapped in the Qorix brand email."
+              className="mt-1 w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-sm font-mono leading-relaxed focus:ring-1 focus:ring-violet-500/50 resize-y"
+            />
+          </label>
+        </div>
+
+        <div className="flex gap-3 pt-1">
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-muted-foreground hover:text-white text-sm transition-all">Cancel</button>
+          <button
+            onClick={send}
+            disabled={sending || !subject.trim() || !message.trim() || !user.email}
+            className="flex-1 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium transition-all flex items-center justify-center gap-2"
+          >
+            {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+            {sending ? "Sending..." : "Send Email"}
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
 export function AdminUsersPage() {
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [adjustUser, setAdjustUser] = useState<any | null>(null);
   const [editUser, setEditUser] = useState<any | null>(null);
+  const [emailUser, setEmailUser] = useState<any | null>(null);
   const [showSmokeTest, setShowSmokeTest] = useState(false);
   const { toast } = useToast();
 
@@ -429,6 +578,9 @@ export function AdminUsersPage() {
         )}
         {editUser && (
           <EditProfileModal user={editUser} onClose={() => setEditUser(null)} onDone={load} />
+        )}
+        {emailUser && (
+          <SendEmailModal user={emailUser} onClose={() => setEmailUser(null)} />
         )}
       </AnimatePresence>
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
@@ -498,6 +650,14 @@ export function AdminUsersPage() {
                         <button onClick={() => action(u.id, "force_logout")} className="px-2 py-1 rounded-lg bg-blue-500/10 text-blue-400 text-xs hover:bg-blue-500/20 transition-colors">Force logout</button>
                         <button onClick={() => setAdjustUser(u)} className="px-2 py-1 rounded-lg bg-emerald-500/10 text-emerald-400 text-xs hover:bg-emerald-500/20 transition-colors flex items-center gap-1"><Wallet className="w-3 h-3" /> Balance</button>
                         <button onClick={() => setEditUser(u)} className="px-2 py-1 rounded-lg bg-blue-500/10 text-blue-400 text-xs hover:bg-blue-500/20 transition-colors flex items-center gap-1"><Pencil className="w-3 h-3" /> Edit Profile</button>
+                        <button
+                          onClick={() => setEmailUser(u)}
+                          disabled={!u.email}
+                          title={u.email ? "Send email to this user" : "User has no email on file"}
+                          className="px-2 py-1 rounded-lg bg-violet-500/10 text-violet-400 text-xs hover:bg-violet-500/20 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center gap-1"
+                        >
+                          <Mail className="w-3 h-3" /> Send Mail
+                        </button>
                       </div>
                     </td>
                   </tr>

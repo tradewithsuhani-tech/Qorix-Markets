@@ -831,6 +831,79 @@ import { buildBrandedEmailHtml } from "../lib/email-template";
 const buildBroadcastHtml = buildBrandedEmailHtml;
 
 // ---------------------------------------------------------------------------
+// POST /admin/users/:id/send-email
+// Send a one-off branded email to a single user. The admin picks (or edits)
+// any of the email templates from the communication page (announcement,
+// promotion, alert, info, maintenance, trade_alert, next_trade) and the
+// payload is the final { subject, message } that gets rendered through the
+// same brand wrapper as /admin/broadcast.
+// ---------------------------------------------------------------------------
+router.post("/admin/users/:id/send-email", async (req: AuthRequest, res) => {
+  const userId = parseInt(req.params.id, 10);
+  if (!Number.isFinite(userId)) {
+    res.status(400).json({ error: "Invalid user id" });
+    return;
+  }
+
+  const { subject, message, templateId } = (req.body ?? {}) as {
+    subject?: string;
+    message?: string;
+    templateId?: string | null;
+  };
+
+  if (!subject || !subject.trim() || !message || !message.trim()) {
+    res.status(400).json({ error: "Subject and message are required" });
+    return;
+  }
+
+  const [user] = await db
+    .select({
+      id: usersTable.id,
+      email: usersTable.email,
+      fullName: usersTable.fullName,
+    })
+    .from(usersTable)
+    .where(eq(usersTable.id, userId))
+    .limit(1);
+
+  if (!user) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+  if (!user.email) {
+    res.status(400).json({ error: "User has no email address on file" });
+    return;
+  }
+
+  try {
+    const html = buildBrandedEmailHtml(subject, message);
+    await sendEmail(user.email, subject, message, html);
+  } catch (err: any) {
+    errorLogger.error(
+      { err, to: user.email, targetUserId: userId, adminId: req.userId },
+      "Admin direct email — send failed",
+    );
+    res
+      .status(502)
+      .json({ error: "Email send failed", detail: err?.message ?? String(err) });
+    return;
+  }
+
+  transactionLogger.info(
+    {
+      event: "admin_direct_email",
+      adminId: req.userId,
+      targetUserId: userId,
+      templateId: templateId ?? null,
+      subject,
+    },
+    "Admin sent direct email to user",
+  );
+
+  res.json({ success: true, sentTo: user.email });
+});
+
+// ---------------------------------------------------------------------------
 // POST /admin/kyc-reminder
 // Send a branded KYC reminder email to all users who have signed up but not
 // yet completed KYC verification. By default targets users with kycStatus
