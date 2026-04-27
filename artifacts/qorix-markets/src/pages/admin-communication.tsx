@@ -18,6 +18,7 @@ import {
   Info,
   ShieldAlert,
   Wrench,
+  TrendingUp,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -106,6 +107,28 @@ const EMAIL_TEMPLATES = [
       "✅  Everything resumes the moment we're back\n\n" +
       "You'll receive an instant notification as soon as trading goes live again.\n\n" +
       "Thank you for your patience.\n\n" +
+      "Qorix Markets\n" +
+      "AI-Powered Trading System",
+  },
+  {
+    id: "trade_alert",
+    icon: TrendingUp,
+    label: "Trade Alert (FOMO)",
+    color: "text-rose-400 bg-rose-500/10",
+    defaultTitle: "🚨 Trade Alert — Profit Just Booked. You're Not In.",
+    defaultMessage:
+      "⚡ A trade just executed on Qorix.\n\n" +
+      "💰 Active users booked profit in minutes.\n" +
+      "📉 Your account is sitting idle.\n\n" +
+      "🔍 Next signal: scanning the market right now\n" +
+      "⏳ Window: closes the moment it fires\n" +
+      "🔒 Only funded accounts participate\n\n" +
+      "Your seat is reserved — your balance isn't.\n\n" +
+      "👉 Top up in under 2 minutes and ride the next move.\n\n" +
+      "✔ Start from as low as $10\n" +
+      "✔ Fully automated — zero work\n" +
+      "✔ Withdraw anytime\n\n" +
+      "Don't watch the next profit happen to someone else.\n\n" +
       "Qorix Markets\n" +
       "AI-Powered Trading System",
   },
