@@ -3,7 +3,6 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Banknote,
-  Smartphone,
   Upload,
   CheckCircle2,
   Clock,
@@ -16,7 +15,7 @@ import {
   ChevronLeft,
   ChevronRight,
   AlertTriangle,
-  Building2,
+  Landmark,
   Sparkles,
   ShieldCheck,
 } from "lucide-react";
@@ -100,12 +99,41 @@ function StatusPill({ status }: { status: InrDeposit["status"] }) {
   );
 }
 
+function UpiBrandIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 32 32" className={className} xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <path d="M3 16 L11 5 L11 27 Z" fill="#fb7e1c" />
+      <path d="M29 16 L21 5 L21 27 Z" fill="#0eb04b" />
+      <text
+        x="16"
+        y="20"
+        textAnchor="middle"
+        fontSize="8"
+        fontWeight="900"
+        fill="#0d1842"
+        fontFamily="system-ui, sans-serif"
+      >
+        UPI
+      </text>
+    </svg>
+  );
+}
+
 function MethodIcon({ type, size = "md" }: { type: "bank" | "upi"; size?: "sm" | "md" | "lg" }) {
   const dim = size === "lg" ? "w-12 h-12" : size === "sm" ? "w-9 h-9" : "w-11 h-11";
-  const icon = size === "lg" ? "w-6 h-6" : "w-5 h-5";
+  const inner = size === "lg" ? "w-7 h-7" : size === "sm" ? "w-5 h-5" : "w-6 h-6";
+
+  if (type === "upi") {
+    return (
+      <div className={cn(dim, "rounded-full flex items-center justify-center shrink-0 bg-white shadow-sm border border-gray-200")}>
+        <UpiBrandIcon className={inner} />
+      </div>
+    );
+  }
+
   return (
     <div className={cn(dim, "rounded-full flex items-center justify-center shrink-0 bg-gradient-to-br from-teal-500/25 to-cyan-600/15 border border-teal-400/20 text-teal-300")}>
-      {type === "bank" ? <Building2 className={icon} /> : <Smartphone className={icon} />}
+      <Landmark className={inner} />
     </div>
   );
 }
