@@ -1031,6 +1031,17 @@ router.post("/admin/withdrawals/:id/reject", async (req: AuthRequest, res) => {
     .where(eq(usersTable.id, updated.userId))
     .limit(1);
 
+  // Detect the original withdrawal source ("main" or "profit") so we refund
+  // back to the SAME balance the user debited from. The source is encoded in
+  // the description by wallet.ts as "Withdrawal from main to ..." or
+  // "Withdrawal from profit to ...". Fall back to "profit" for legacy rows
+  // whose description does not match the modern format (preserves prior
+  // behaviour and never crashes the reject flow).
+  const desc = updated.description ?? "";
+  const refundSource: "main" | "profit" = /^Withdrawal from main\b/i.test(desc)
+    ? "main"
+    : "profit";
+
   if (txUser.length > 0) {
     const wallets = await db
       .select()
@@ -1038,11 +1049,19 @@ router.post("/admin/withdrawals/:id/reject", async (req: AuthRequest, res) => {
       .where(eq(walletsTable.userId, updated.userId))
       .limit(1);
     if (wallets.length > 0) {
-      const profitBalance = parseFloat(wallets[0]!.profitBalance as string);
       const refundAmount = parseFloat(updated.amount as string);
+      const refundCol =
+        refundSource === "main" ? walletsTable.mainBalance : walletsTable.profitBalance;
+      const refundColName = refundSource === "main" ? "mainBalance" : "profitBalance";
+
+      // Atomic increment via SQL so concurrent balance reads/writes can't
+      // produce a stale read-modify-write (matches the pattern in wallet.ts).
       await db
         .update(walletsTable)
-        .set({ profitBalance: (profitBalance + refundAmount).toString(), updatedAt: new Date() })
+        .set({
+          [refundColName]: sql`${refundCol} + ${refundAmount}`,
+          updatedAt: new Date(),
+        })
         .where(eq(walletsTable.userId, updated.userId));
 
       await ensureUserAccounts(updated.userId);
@@ -1050,7 +1069,7 @@ router.post("/admin/withdrawals/:id/reject", async (req: AuthRequest, res) => {
         journalForSystem(`refund:${id}`),
         [
           { accountCode: "platform:usdt_pool", entryType: "debit", amount: refundAmount, description: `Withdrawal reversal (rejected txn #${id})` },
-          { accountCode: `user:${updated.userId}:profit`, entryType: "credit", amount: refundAmount, description: `Refund credited on withdrawal rejection` },
+          { accountCode: `user:${updated.userId}:${refundSource}`, entryType: "credit", amount: refundAmount, description: `Refund credited on withdrawal rejection (${refundSource} balance)` },
         ],
         null,
       );
@@ -1064,7 +1083,7 @@ router.post("/admin/withdrawals/:id/reject", async (req: AuthRequest, res) => {
     "Withdrawal Rejected — Funds Refunded",
     `We were unable to process your recent withdrawal request. The full amount has been refunded back to your account.\n\n` +
       `Refunded Amount: $${parseFloat(updated.amount as string).toFixed(2)} USDT\n` +
-      `Credited to: Profit Balance\n` +
+      `Credited to: ${refundSource === "main" ? "Main Balance" : "Profit Balance"}\n` +
       `Request ID: #${id}\n\n` +
       `Common reasons for rejection include incomplete KYC verification, suspicious activity flags, ` +
       `invalid destination wallet, or risk-management holds.\n\n` +
