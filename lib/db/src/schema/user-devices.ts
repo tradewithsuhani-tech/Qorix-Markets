@@ -8,7 +8,7 @@ import {
   index,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
-import { usersTable } from "./users.js";
+import { usersTable } from "./users";
 
 /**
  * Tracks every device a user has EVER successfully logged in from. Combined

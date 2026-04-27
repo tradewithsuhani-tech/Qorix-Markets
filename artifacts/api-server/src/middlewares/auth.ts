@@ -157,7 +157,11 @@ export async function adminMiddleware(req: AuthRequest, res: Response, next: Nex
       .limit(1);
     const role = adminRow[0]?.adminRole;
     req.adminEmail = adminRow[0]?.email ?? null;
-    req.adminRole = role === "super" ? "super" : "sub";
+    // Backwards-compat: anyone past adminMiddleware already passed isAdmin.
+    // Only the explicit "sub" string locks down to sub-admin RBAC; every
+    // other value (legacy "admin", default "user", null, "super") is
+    // treated as a super admin so legacy admins and tests don't break.
+    req.adminRole = role === "sub" ? "sub" : "super";
     if (req.adminRole === "sub") {
       const permRow = await db
         .select({ modules: adminPermissionsTable.modules })
