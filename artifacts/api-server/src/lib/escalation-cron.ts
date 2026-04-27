@@ -24,7 +24,12 @@ const ADMIN_EMAIL_KEY = "admin_escalation_email";
 interface AdminContactTarget {
   phone: string;
   email: string | null;
+  // Used for log lines / debugging.
   label: string;
+  // What we say in the TTS message — e.g. "Prem" or just "Admin".
+  // Comes from the `label` column on admin_escalation_contacts when set;
+  // otherwise we say "Admin" so the call still sounds personal.
+  friendlyName: string;
 }
 
 // Returns the ordered admin contact chain for the cascade. Prefers the
@@ -43,6 +48,7 @@ async function getAdminContacts(): Promise<AdminContactTarget[]> {
       phone: r.phone,
       email: r.email,
       label: r.label ? `admin:${r.label}` : `admin#${idx + 1}`,
+      friendlyName: (r.label ?? "").trim() || "Admin",
     }));
   }
   // Legacy single-contact fallback.
@@ -57,15 +63,20 @@ async function getAdminContacts(): Promise<AdminContactTarget[]> {
     if (r.key === ADMIN_EMAIL_KEY) email = r.value || null;
   }
   if (!email) email = process.env["SES_FROM_EMAIL"] ?? null;
-  return phone ? [{ phone, email, label: "admin" }] : [];
+  return phone ? [{ phone, email, label: "admin", friendlyName: "Admin" }] : [];
 }
 
 // Walks the admin contacts in priority order, calling each one and waiting
 // to learn whether the call was answered. Stops at the first contact that
-// picks up. If no provider is configured (email-fallback path) we cannot
-// detect "answered", so the loop will email every contact in turn — that
-// matches the user expectation of "make sure SOMEONE gets it".
-async function runAdminCascade(message: string): Promise<void> {
+// picks up. The caller passes a message *builder* (not a fixed string) so
+// each admin in the chain hears their own name in the greeting — e.g.
+// "Hello dear Prem, …" for contact #1 and "Hello dear Suhani, …" for #2.
+// If no provider is configured (email-fallback path) we cannot detect
+// "answered", so the loop will email every contact in turn — that matches
+// the user expectation of "make sure SOMEONE gets it".
+async function runAdminCascade(
+  buildMessage: (contactName: string) => string,
+): Promise<void> {
   const contacts = await getAdminContacts();
   if (contacts.length === 0) {
     logger.warn("[escalation] admin cascade: no contacts configured, dropping");
@@ -73,7 +84,10 @@ async function runAdminCascade(message: string): Promise<void> {
   }
   for (const c of contacts) {
     try {
-      const outcome = await placeEscalationCallAndAwaitOutcome(c, message);
+      const outcome = await placeEscalationCallAndAwaitOutcome(
+        c,
+        buildMessage(c.friendlyName),
+      );
       if (outcome.answered) {
         logger.info(
           { label: c.label, finalStatus: outcome.finalStatus },
@@ -206,20 +220,31 @@ async function escalatePendingDeposits(): Promise<void> {
       .select({
         deposit: inrDepositsTable,
         merchant: merchantsTable,
+        user: usersTable,
       })
       .from(inrDepositsTable)
       .leftJoin(paymentMethodsTable, eq(paymentMethodsTable.id, inrDepositsTable.paymentMethodId))
       .leftJoin(merchantsTable, eq(merchantsTable.id, paymentMethodsTable.merchantId))
+      .leftJoin(usersTable, eq(usersTable.id, inrDepositsTable.userId))
       .where(inArray(inrDepositsTable.id, ids));
     for (const row of rows) {
       if (!row.merchant || !row.merchant.isActive) continue;
+      const merchantName = firstName(row.merchant.fullName) || "merchant";
+      const userName = firstName(row.user?.fullName) || "ek user";
+      const amount = fmtAmount(row.deposit.amountInr);
+      const utrSpoken = spellOut(row.deposit.utr);
+      const message =
+        `Hello dear ${merchantName}. Qorix Markets se message hai. ` +
+        `Aapko user ${userName} se ${amount} rupee ka deposit request aaya hai. ` +
+        `UTR number ${utrSpoken} hai. ` +
+        `Kripya payment check karne ke baad approve kare. Dhanyawaad.`;
       await placeEscalationCall(
         {
           phone: row.merchant.phone,
           email: row.merchant.email,
           label: `merchant#${row.merchant.id}`,
         },
-        `Qorix Markets alert. INR deposit number ${row.deposit.id} of ${row.deposit.amountInr} rupees has been pending for over ${MERCHANT_ESCALATION_MIN} minutes. Please log in and review.`,
+        message,
       );
     }
   }
@@ -239,16 +264,46 @@ async function escalatePendingDeposits(): Promise<void> {
         sql`${inrDepositsTable.createdAt} < now() - interval '${sql.raw(String(ADMIN_ESCALATION_MIN))} minutes'`,
       ),
     )
-    .returning({ id: inrDepositsTable.id, amountInr: inrDepositsTable.amountInr });
+    .returning({ id: inrDepositsTable.id });
 
   if (claimedStage2.length > 0) {
+    // Pull the full row + joined user + merchant so the cascade message can
+    // include user name, amount, UTR and merchant name — exactly what the
+    // person picking up the phone needs to act on the case.
+    const ids = claimedStage2.map((r) => r.id);
+    const rows = await db
+      .select({
+        deposit: inrDepositsTable,
+        merchant: merchantsTable,
+        user: usersTable,
+      })
+      .from(inrDepositsTable)
+      .leftJoin(paymentMethodsTable, eq(paymentMethodsTable.id, inrDepositsTable.paymentMethodId))
+      .leftJoin(merchantsTable, eq(merchantsTable.id, paymentMethodsTable.merchantId))
+      .leftJoin(usersTable, eq(usersTable.id, inrDepositsTable.userId))
+      .where(inArray(inrDepositsTable.id, ids));
     // Fire-and-forget the cascade per claimed row so the cron tick stays
     // fast (each cascade can take up to ~270s for 3 contacts × 90s wait).
-    for (const dep of claimedStage2) {
-      const msg = `Qorix Markets escalation. INR deposit number ${dep.id} of ${dep.amountInr} rupees was not approved by the merchant within ${ADMIN_ESCALATION_MIN} minutes. Please intervene.`;
+    for (const row of rows) {
+      const userName = firstName(row.user?.fullName) || "ek user";
+      const merchantName = firstName(row.merchant?.fullName) || null;
+      const amount = fmtAmount(row.deposit.amountInr);
+      const utrSpoken = spellOut(row.deposit.utr);
+      const merchantPart = merchantName
+        ? ` Merchant ${merchantName} ne 15 minute me approve nahi kiya.`
+        : ` 15 minute me kisi merchant ne approve nahi kiya.`;
+      const buildMsg = (adminName: string) =>
+        `Hello dear ${adminName}. Qorix Markets escalation alert. ` +
+        `User ${userName} ne ${amount} rupee ka deposit kiya hai. ` +
+        `UTR number ${utrSpoken} hai.` +
+        merchantPart +
+        ` Kripya jaldi intervene kare. Dhanyawaad.`;
       setImmediate(() => {
-        runAdminCascade(msg).catch((err) =>
-          logger.warn({ err: (err as Error).message, depositId: dep.id }, "[escalation] cascade failed"),
+        runAdminCascade(buildMsg).catch((err) =>
+          logger.warn(
+            { err: (err as Error).message, depositId: row.deposit.id },
+            "[escalation] cascade failed",
+          ),
         );
       });
     }
@@ -279,14 +334,34 @@ async function escalatePendingWithdrawals(): Promise<void> {
       .select()
       .from(merchantsTable)
       .where(eq(merchantsTable.isActive, true));
+    // Hydrate each claimed withdrawal with its requesting user so the call
+    // can name them. We also pull accountHolder back from the row itself.
+    const ids = claimedStage1.map((r) => r.id);
+    const fullRows = await db
+      .select({ w: inrWithdrawalsTable, user: usersTable })
+      .from(inrWithdrawalsTable)
+      .leftJoin(usersTable, eq(usersTable.id, inrWithdrawalsTable.userId))
+      .where(inArray(inrWithdrawalsTable.id, ids));
+    const byId = new Map(fullRows.map((r) => [r.w.id, r] as const));
     for (const w of claimedStage1) {
       const targets = w.assignedMerchantId
         ? merchants.filter((m) => m.id === w.assignedMerchantId)
         : merchants;
+      const ctx = byId.get(w.id);
+      const userName = firstName(ctx?.user?.fullName) || "ek user";
+      const amount = fmtAmount(w.amountInr);
+      const acctHolder = ctx?.w.accountHolder?.trim();
+      const acctPart = acctHolder ? ` Account holder ka naam ${acctHolder} hai.` : "";
       for (const m of targets) {
+        const merchantName = firstName(m.fullName) || "merchant";
+        const message =
+          `Hello dear ${merchantName}. Qorix Markets se message hai. ` +
+          `User ${userName} ne ${amount} rupee ka withdrawal request kiya hai.` +
+          acctPart +
+          ` Kripya jaldi action lekar process kare. Dhanyawaad.`;
         await placeEscalationCall(
           { phone: m.phone, email: m.email, label: `merchant#${m.id}` },
-          `Qorix Markets alert. INR withdrawal number ${w.id} of ${w.amountInr} rupees has been pending for over ${MERCHANT_ESCALATION_MIN} minutes. Please log in and review.`,
+          message,
         );
       }
     }
@@ -305,24 +380,37 @@ async function escalatePendingWithdrawals(): Promise<void> {
         sql`${inrWithdrawalsTable.createdAt} < now() - interval '${sql.raw(String(ADMIN_ESCALATION_MIN))} minutes'`,
       ),
     )
-    .returning({ id: inrWithdrawalsTable.id, amountInr: inrWithdrawalsTable.amountInr });
+    .returning({ id: inrWithdrawalsTable.id });
 
   if (claimedStage2.length > 0) {
-    for (const w of claimedStage2) {
-      const msg = `Qorix Markets escalation. INR withdrawal number ${w.id} of ${w.amountInr} rupees was not actioned by any merchant within ${ADMIN_ESCALATION_MIN} minutes. Please intervene.`;
+    const ids = claimedStage2.map((r) => r.id);
+    const rows = await db
+      .select({ w: inrWithdrawalsTable, user: usersTable })
+      .from(inrWithdrawalsTable)
+      .leftJoin(usersTable, eq(usersTable.id, inrWithdrawalsTable.userId))
+      .where(inArray(inrWithdrawalsTable.id, ids));
+    for (const row of rows) {
+      const userName = firstName(row.user?.fullName) || "ek user";
+      const amount = fmtAmount(row.w.amountInr);
+      const acctHolder = row.w.accountHolder?.trim();
+      const acctPart = acctHolder ? ` Account holder ka naam ${acctHolder} hai.` : "";
+      const buildMsg = (adminName: string) =>
+        `Hello dear ${adminName}. Qorix Markets escalation alert. ` +
+        `User ${userName} ne ${amount} rupee ka withdrawal request kiya hai.` +
+        acctPart +
+        ` 15 minute me kisi merchant ne action nahi liya. ` +
+        `Kripya jaldi intervene kare. Dhanyawaad.`;
       setImmediate(() => {
-        runAdminCascade(msg).catch((err) =>
-          logger.warn({ err: (err as Error).message, withdrawalId: w.id }, "[escalation] cascade failed"),
+        runAdminCascade(buildMsg).catch((err) =>
+          logger.warn(
+            { err: (err as Error).message, withdrawalId: row.w.id },
+            "[escalation] cascade failed",
+          ),
         );
       });
     }
   }
 }
-
-// Suppress the "user param read but never assigned to" lint by genuinely
-// using usersTable elsewhere — we keep the import for future per-user
-// notifications (e.g. when we add a "your deposit is delayed" email).
-void usersTable;
 
 function escapeHtml(s: string): string {
   return s
@@ -330,4 +418,37 @@ function escapeHtml(s: string): string {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+// "Prem Kumar" → "Prem". Calling someone by their first name in a TTS
+// greeting feels personal without being awkwardly long. Returns null if
+// the input is empty/whitespace so the caller can substitute a generic
+// fallback like "ek user" / "merchant".
+function firstName(s: string | null | undefined): string | null {
+  if (!s) return null;
+  const trimmed = s.trim();
+  if (!trimmed) return null;
+  const first = trimmed.split(/\s+/)[0];
+  return first ? first : null;
+}
+
+// "5000.00" → "5000", "1234.50" → "1234.50". Whole-rupee amounts shouldn't
+// be read as "five thousand point zero zero" by the TTS engine.
+function fmtAmount(s: string | number | null | undefined): string {
+  if (s === null || s === undefined) return "0";
+  const n = typeof s === "number" ? s : Number(s);
+  if (!Number.isFinite(n)) return String(s);
+  return Number.isInteger(n) ? String(n) : n.toFixed(2);
+}
+
+// "ABC1234567" → "A B C 1 2 3 4 5 6 7". Forces the TTS engine to read each
+// character individually instead of treating long digit runs as a single
+// number ("twelve million three hundred forty…"). Spaces are pronounced as
+// brief pauses by both the alice and Polly voices.
+function spellOut(s: string | null | undefined): string {
+  if (!s) return "";
+  return String(s)
+    .split("")
+    .filter((c) => c.trim() !== "")
+    .join(" ");
 }
