@@ -24,6 +24,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
 import upiLogoUrl from "@/assets/upi-logo.png";
+import phonepeLogoUrl from "@/assets/phonepe-logo.png";
+import paytmLogoUrl from "@/assets/paytm-logo.png";
 
 const BASE_URL = import.meta.env.BASE_URL ?? "/";
 function getApiUrl(path: string) {
@@ -120,16 +122,7 @@ function MethodIcon({ type, size = "md" }: { type: "bank" | "upi"; size?: "sm" |
 }
 
 function UpiAppLogos() {
-  // Brand chips for UPI apps with small inline SVG brand marks.
-  const PhonePeIcon = (
-    <svg viewBox="0 0 24 24" className="w-3 h-3" aria-hidden="true">
-      <circle cx="12" cy="12" r="12" fill="#fff" />
-      <path
-        d="M14.5 8.6h-2v6.2c0 .55-.45 1-1 1h-1.1V9.8H8.3l3.3-3.3 3.3 3.3h-.4z"
-        fill="#5f259f"
-      />
-    </svg>
-  );
+  // Brand chips for UPI apps. PhonePe + Paytm use real brand PNGs; GPay uses inline 4-color G.
   const GPayIcon = (
     <svg viewBox="0 0 24 24" className="w-3 h-3" aria-hidden="true">
       <path d="M22 12.2c0-.7-.06-1.4-.18-2.05H12v3.88h5.62c-.24 1.3-.98 2.4-2.08 3.14v2.6h3.36C20.86 18.05 22 15.4 22 12.2z" fill="#4285F4" />
@@ -138,29 +131,26 @@ function UpiAppLogos() {
       <path d="M12 5.95c1.46 0 2.78.5 3.81 1.49l2.86-2.86C16.96 2.97 14.7 2 12 2 7.83 2 4.16 4.21 2.5 7.7l4.12 2.5C7.38 7.94 9.5 5.95 12 5.95z" fill="#EA4335" />
     </svg>
   );
-  const PaytmIcon = (
-    <svg viewBox="0 0 24 24" className="w-3 h-3" aria-hidden="true">
-      <circle cx="12" cy="12" r="12" fill="#fff" />
-      <path
-        d="M9 7h3.6c1.9 0 3.4 1.3 3.4 3.1 0 1.8-1.5 3.1-3.4 3.1H10.6V17H9V7zm1.6 1.5v3.2H12c1.1 0 1.9-.6 1.9-1.6S13.1 8.5 12 8.5h-1.4z"
-        fill="#00B9F1"
-      />
-    </svg>
-  );
-  const BhimIcon = (
-    <svg viewBox="0 0 24 24" className="w-3 h-3" aria-hidden="true">
-      <rect width="24" height="8" fill="#FF9933" />
-      <rect y="8" width="24" height="8" fill="#fff" />
-      <rect y="16" width="24" height="8" fill="#138808" />
-      <circle cx="12" cy="12" r="2.4" fill="none" stroke="#000080" strokeWidth="0.6" />
-    </svg>
-  );
 
-  const apps = [
-    { name: "PhonePe", bg: "bg-[#5f259f]", fg: "text-white", icon: PhonePeIcon },
-    { name: "GPay", bg: "bg-white", fg: "text-gray-900", icon: GPayIcon },
-    { name: "Paytm", bg: "bg-[#00B9F1]", fg: "text-white", icon: PaytmIcon },
-    { name: "BHIM", bg: "bg-[#F37335]", fg: "text-white", icon: BhimIcon },
+  const apps: Array<{ name: string; bg: string; fg: string; icon: React.ReactNode }> = [
+    {
+      name: "PhonePe",
+      bg: "bg-[#5f259f]",
+      fg: "text-white",
+      icon: <img src={phonepeLogoUrl} alt="" className="w-full h-full object-contain" />,
+    },
+    {
+      name: "GPay",
+      bg: "bg-white",
+      fg: "text-gray-900",
+      icon: GPayIcon,
+    },
+    {
+      name: "Paytm",
+      bg: "bg-white",
+      fg: "text-[#002970]",
+      icon: <img src={paytmLogoUrl} alt="" className="w-full h-full object-contain" />,
+    },
   ];
   return (
     <div className="flex items-center gap-1.5 flex-wrap">
