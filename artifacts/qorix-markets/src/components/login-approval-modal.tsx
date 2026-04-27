@@ -85,6 +85,19 @@ export function LoginApprovalGate() {
     if (!attempt || responding) return;
     const handledId = attempt.id;
     setResponding(true);
+
+    // Helper: drop local auth state and hard-reload to /login. We use a
+    // full navigation (not wouter's setLocation) so React state, the
+    // dialog, all React-Query caches and the auth poll loops are wiped
+    // — leaving zero chance of the modal getting stuck on the page after
+    // the server has already killed our JWT.
+    const bounceToLogin = () => {
+      handledIds.current.add(handledId);
+      setAttempt(null);
+      try { logout(); } catch { /* ignore */ }
+      window.location.assign(`${BASE_URL}/login`);
+    };
+
     try {
       await authFetch(`/auth/login-attempts/${handledId}/respond`, {
         method: "POST",
@@ -94,18 +107,27 @@ export function LoginApprovalGate() {
       if (decision === "approve") {
         toast({
           title: "Login approved",
-          description: "You'll be signed out of this device. The other device can continue.",
+          description: "Signing you out of this device…",
         });
         // Per the user's "single active device" rule, approving a new
-        // device kicks this one. Drop the local token immediately so we
-        // don't keep firing requests with a JWT the server already
-        // killed via forceLogoutAfter.
-        setTimeout(() => logout(), 1500);
+        // device kicks this one. Bounce to /login right away so the
+        // modal can never sit on a "stuck" stale page after the server
+        // has already invalidated our session via forceLogoutAfter.
+        setAttempt(null);
+        setTimeout(bounceToLogin, 600);
       } else {
         toast({ title: "Login denied", description: "The other device was blocked." });
         setAttempt(null);
       }
     } catch (err: any) {
+      // 401 here means our JWT is already dead — typically because the
+      // other device was approved earlier (or our session was rotated).
+      // The page is effectively signed-out, so just bounce instead of
+      // leaving the user staring at a dialog that can no longer act.
+      if (err?.status === 401) {
+        bounceToLogin();
+        return;
+      }
       toast({
         title: "Could not record your choice",
         description: err.message || "Please try again",
