@@ -13,8 +13,10 @@ import {
   IdCard,
   Home,
   Lock,
+  Loader2,
+  AlertCircle,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { authFetch } from "@/lib/auth-fetch";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -245,6 +247,47 @@ export default function KycPage() {
   const [addrState, setAddrState] = useState("");
   const [addrCountry, setAddrCountry] = useState("");
   const [addrZip, setAddrZip] = useState("");
+  const [pinStatus, setPinStatus] = useState<"idle" | "loading" | "verified" | "error">("idle");
+  const [pinError, setPinError] = useState<string>("");
+
+  useEffect(() => {
+    const pin = addrZip.trim();
+    if (!/^[1-9][0-9]{5}$/.test(pin)) {
+      setPinStatus("idle");
+      setPinError("");
+      return;
+    }
+    setPinStatus("loading");
+    const ctrl = new AbortController();
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`https://api.postalpincode.in/pincode/${pin}`, { signal: ctrl.signal });
+        if (!res.ok) {
+          setPinStatus("error");
+          setPinError("Could not verify PIN code");
+          return;
+        }
+        const data = await res.json();
+        const entry = Array.isArray(data) ? data[0] : null;
+        const post = entry?.PostOffice?.[0];
+        if (entry?.Status === "Success" && post) {
+          setAddrCity(String(post.District ?? post.Name ?? "").trim());
+          setAddrState(String(post.State ?? "").trim());
+          setAddrCountry(String(post.Country ?? "India").trim());
+          setPinStatus("verified");
+          setPinError("");
+        } else {
+          setPinStatus("error");
+          setPinError("PIN code not found");
+        }
+      } catch (err: any) {
+        if (err?.name === "AbortError") return;
+        setPinStatus("error");
+        setPinError("Network error verifying PIN");
+      }
+    }, 400);
+    return () => { clearTimeout(timer); ctrl.abort(); };
+  }, [addrZip]);
   const [addrDocPreview, setAddrDocPreview] = useState<string | null>(null);
   const [addrDocName, setAddrDocName] = useState<string | null>(null);
 
@@ -590,49 +633,82 @@ export default function KycPage() {
                               className="mt-2 w-full px-3 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-sm focus:outline-none focus:border-blue-500/40"
                             />
                           </div>
+                          <div>
+                            <label className="text-[11px] uppercase tracking-wider font-medium text-muted-foreground flex items-center gap-1.5">
+                              Postal code <span className="text-rose-400">*</span>
+                              {pinStatus === "loading" && <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />}
+                              {pinStatus === "verified" && (
+                                <span className="inline-flex items-center gap-0.5 text-emerald-400 normal-case tracking-normal">
+                                  <CheckCircle2 className="w-3 h-3" />
+                                  <span className="text-[10px] font-semibold">Verified</span>
+                                </span>
+                              )}
+                              {pinStatus === "error" && (
+                                <span className="inline-flex items-center gap-0.5 text-red-400 normal-case tracking-normal">
+                                  <AlertCircle className="w-3 h-3" />
+                                  <span className="text-[10px] font-semibold">Invalid</span>
+                                </span>
+                              )}
+                            </label>
+                            <input
+                              value={addrZip}
+                              onChange={(e) => setAddrZip(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                              placeholder="6-digit PIN code (e.g. 110001)"
+                              inputMode="numeric"
+                              maxLength={6}
+                              className={`mt-2 w-full px-3 py-2.5 rounded-xl bg-white/[0.03] border text-sm focus:outline-none ${
+                                pinStatus === "verified" ? "border-emerald-500/40" :
+                                pinStatus === "error" ? "border-red-500/40" :
+                                "border-white/10 focus:border-blue-500/40"
+                              }`}
+                            />
+                            {pinError && pinStatus === "error" && (
+                              <p className="mt-1.5 text-[11px] text-red-300">{pinError}</p>
+                            )}
+                            {pinStatus === "idle" && (
+                              <p className="mt-1.5 text-[11px] text-muted-foreground">Enter your 6-digit PIN — city, state &amp; country will auto-fill.</p>
+                            )}
+                          </div>
                           <div className="grid grid-cols-2 gap-3">
                             <div>
-                              <label className="text-[11px] uppercase tracking-wider font-medium text-muted-foreground">
+                              <label className="text-[11px] uppercase tracking-wider font-medium text-muted-foreground flex items-center gap-1.5">
                                 City <span className="text-rose-400">*</span>
+                                {pinStatus === "verified" && <CheckCircle2 className="w-3 h-3 text-emerald-400" />}
                               </label>
                               <input
                                 value={addrCity}
                                 onChange={(e) => setAddrCity(e.target.value)}
-                                className="mt-2 w-full px-3 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-sm focus:outline-none focus:border-blue-500/40"
+                                className={`mt-2 w-full px-3 py-2.5 rounded-xl bg-white/[0.03] border text-sm focus:outline-none focus:border-blue-500/40 ${
+                                  pinStatus === "verified" ? "border-emerald-500/30 bg-emerald-500/5" : "border-white/10"
+                                }`}
                               />
                             </div>
                             <div>
-                              <label className="text-[11px] uppercase tracking-wider font-medium text-muted-foreground">
+                              <label className="text-[11px] uppercase tracking-wider font-medium text-muted-foreground flex items-center gap-1.5">
                                 State <span className="text-rose-400">*</span>
+                                {pinStatus === "verified" && <CheckCircle2 className="w-3 h-3 text-emerald-400" />}
                               </label>
                               <input
                                 value={addrState}
                                 onChange={(e) => setAddrState(e.target.value)}
-                                className="mt-2 w-full px-3 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-sm focus:outline-none focus:border-blue-500/40"
+                                className={`mt-2 w-full px-3 py-2.5 rounded-xl bg-white/[0.03] border text-sm focus:outline-none focus:border-blue-500/40 ${
+                                  pinStatus === "verified" ? "border-emerald-500/30 bg-emerald-500/5" : "border-white/10"
+                                }`}
                               />
                             </div>
                           </div>
-                          <div className="grid grid-cols-2 gap-3">
-                            <div>
-                              <label className="text-[11px] uppercase tracking-wider font-medium text-muted-foreground">
-                                Country <span className="text-rose-400">*</span>
-                              </label>
-                              <input
-                                value={addrCountry}
-                                onChange={(e) => setAddrCountry(e.target.value)}
-                                className="mt-2 w-full px-3 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-sm focus:outline-none focus:border-blue-500/40"
-                              />
-                            </div>
-                            <div>
-                              <label className="text-[11px] uppercase tracking-wider font-medium text-muted-foreground">
-                                Postal code <span className="text-rose-400">*</span>
-                              </label>
-                              <input
-                                value={addrZip}
-                                onChange={(e) => setAddrZip(e.target.value)}
-                                className="mt-2 w-full px-3 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-sm focus:outline-none focus:border-blue-500/40"
-                              />
-                            </div>
+                          <div>
+                            <label className="text-[11px] uppercase tracking-wider font-medium text-muted-foreground flex items-center gap-1.5">
+                              Country <span className="text-rose-400">*</span>
+                              {pinStatus === "verified" && <CheckCircle2 className="w-3 h-3 text-emerald-400" />}
+                            </label>
+                            <input
+                              value={addrCountry}
+                              onChange={(e) => setAddrCountry(e.target.value)}
+                              className={`mt-2 w-full px-3 py-2.5 rounded-xl bg-white/[0.03] border text-sm focus:outline-none focus:border-blue-500/40 ${
+                                pinStatus === "verified" ? "border-emerald-500/30 bg-emerald-500/5" : "border-white/10"
+                              }`}
+                            />
                           </div>
                           <FileUpload
                             preview={addrDocPreview}
