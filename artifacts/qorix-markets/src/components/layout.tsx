@@ -39,6 +39,7 @@ import {
   ListChecks,
   ClipboardCheck,
   Zap,
+  Landmark,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -578,6 +579,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/admin/users", label: "Users", icon: Users },
     { href: "/admin/deposits", label: "Deposits", icon: ArrowDownCircle },
     { href: "/admin/withdrawals", label: "Withdrawals", icon: ArrowUpCircle },
+    { href: "/admin/payment-methods", label: "INR / Payments", icon: Landmark },
     { href: "/admin/trading", label: "Trading", icon: TrendingUp },
     { href: "/admin/signal-trades", label: "Signal Trades", icon: Activity },
     { href: "/admin/wallet", label: "Wallet", icon: Wallet },
