@@ -316,63 +316,108 @@ router.post("/admin/inr-deposits/:id/approve", async (req: AuthRequest, res) => 
     res.status(400).json({ error: "Invalid id" });
     return;
   }
-  const [dep] = await db.select().from(inrDepositsTable).where(eq(inrDepositsTable.id, id)).limit(1);
-  if (!dep) {
+  // Capture deposit details for the post-tx email/notification, but do NOT
+  // act on its `status` here — the actual race-safe state transition happens
+  // inside the transaction with a conditional UPDATE.
+  const [depPreview] = await db.select().from(inrDepositsTable).where(eq(inrDepositsTable.id, id)).limit(1);
+  if (!depPreview) {
     res.status(404).json({ error: "Deposit not found" });
     return;
   }
-  if (dep.status !== "pending") {
-    res.status(400).json({ error: `Deposit already ${dep.status}` });
+  if (depPreview.status !== "pending") {
+    res.status(400).json({ error: `Deposit already ${depPreview.status}` });
     return;
   }
-  const amountUsdt = overrideUsdt != null && overrideUsdt > 0 ? overrideUsdt : parseFloat(dep.amountUsdt as string);
 
+  let approvedDep: typeof depPreview | null = null;
+  let creditedUsdt = 0;
   try {
     await db.transaction(async (tx) => {
-      await ensureUserAccounts(dep.userId, tx);
-      const [w] = await tx.select().from(walletsTable).where(eq(walletsTable.userId, dep.userId)).limit(1);
-      if (!w) throw new Error("Wallet not found for user");
-      const newMain = parseFloat(w.mainBalance as string) + amountUsdt;
-      await tx
+      // Atomic claim: only the FIRST concurrent admin call flips pending →
+      // approved. Subsequent attempts (or a concurrent reject) get 0 rows
+      // back and the whole transaction is rolled back without touching the
+      // wallet, ledger, or transactions table.
+      const [claimed] = await tx
+        .update(inrDepositsTable)
+        .set({
+          status: "approved",
+          reviewedBy: req.userId!,
+          reviewedAt: new Date(),
+          adminNote: req.body?.adminNote ?? null,
+        })
+        .where(and(eq(inrDepositsTable.id, id), eq(inrDepositsTable.status, "pending")))
+        .returning();
+      if (!claimed) {
+        throw new Error("ALREADY_REVIEWED");
+      }
+      approvedDep = claimed;
+
+      const amountUsdt = overrideUsdt != null && overrideUsdt > 0
+        ? overrideUsdt
+        : parseFloat(claimed.amountUsdt as string);
+      creditedUsdt = amountUsdt;
+
+      // Persist the (possibly overridden) credited amount on the deposit row
+      // so the user sees the actual credited value, not the pre-rate USDT.
+      if (overrideUsdt != null && overrideUsdt > 0) {
+        await tx
+          .update(inrDepositsTable)
+          .set({ amountUsdt: amountUsdt.toFixed(6) })
+          .where(eq(inrDepositsTable.id, id));
+      }
+
+      await ensureUserAccounts(claimed.userId, tx);
+
+      // Atomic balance increment via raw SQL — no read-modify-write window,
+      // safe under any concurrent wallet mutation. The numeric column accepts
+      // the +/- arithmetic directly and Postgres handles row locking.
+      const updRes = await tx
         .update(walletsTable)
-        .set({ mainBalance: newMain.toString(), updatedAt: new Date() })
-        .where(eq(walletsTable.userId, dep.userId));
+        .set({
+          mainBalance: sql`${walletsTable.mainBalance} + ${amountUsdt.toFixed(6)}::numeric`,
+          updatedAt: new Date(),
+        })
+        .where(eq(walletsTable.userId, claimed.userId))
+        .returning({ id: walletsTable.id });
+      if (!updRes[0]) throw new Error("Wallet not found for user");
+
       const [txn] = await tx
         .insert(transactionsTable)
         .values({
-          userId: dep.userId,
+          userId: claimed.userId,
           type: "deposit",
           amount: amountUsdt.toString(),
           status: "completed",
-          description: `INR deposit ₹${parseFloat(dep.amountInr as string).toFixed(2)} (UTR ${dep.utr}) approved → $${amountUsdt.toFixed(2)} USDT`,
+          description: `INR deposit ₹${parseFloat(claimed.amountInr as string).toFixed(2)} (UTR ${claimed.utr}) approved → $${amountUsdt.toFixed(2)} USDT`,
         })
         .returning();
       await postJournalEntry(
         journalForTransaction(txn!.id),
         [
-          { accountCode: "platform:usdt_pool", entryType: "debit", amount: amountUsdt, description: `INR deposit approved for user ${dep.userId}` },
-          { accountCode: `user:${dep.userId}:main`, entryType: "credit", amount: amountUsdt, description: `INR deposit credited (UTR ${dep.utr})` },
+          { accountCode: "platform:usdt_pool", entryType: "debit", amount: amountUsdt, description: `INR deposit approved for user ${claimed.userId}` },
+          { accountCode: `user:${claimed.userId}:main`, entryType: "credit", amount: amountUsdt, description: `INR deposit credited (UTR ${claimed.utr})` },
         ],
         txn!.id,
         tx,
       );
-      await tx
-        .update(inrDepositsTable)
-        .set({
-          status: "approved",
-          amountUsdt: amountUsdt.toFixed(6),
-          reviewedBy: req.userId!,
-          reviewedAt: new Date(),
-          adminNote: req.body?.adminNote ?? null,
-        })
-        .where(eq(inrDepositsTable.id, id));
     });
-  } catch (err) {
+  } catch (err: any) {
+    if (err?.message === "ALREADY_REVIEWED") {
+      res.status(409).json({ error: "Deposit was already reviewed by another admin" });
+      return;
+    }
     errorLogger.error({ err, id }, "[inr-deposit] approve failed");
     res.status(500).json({ error: "Failed to approve deposit" });
     return;
   }
 
+  if (!approvedDep) {
+    res.status(500).json({ error: "Approve handler reached an inconsistent state" });
+    return;
+  }
+
+  const dep = approvedDep as typeof depPreview;
+  const amountUsdt = creditedUsdt;
   transactionLogger.info({ event: "inr_deposit_approved", id, userId: dep.userId, amountUsdt }, "INR deposit approved");
   await createNotification(
     dep.userId,
@@ -399,19 +444,23 @@ router.post("/admin/inr-deposits/:id/reject", async (req: AuthRequest, res) => {
     res.status(400).json({ error: "Invalid id" });
     return;
   }
-  const [dep] = await db.select().from(inrDepositsTable).where(eq(inrDepositsTable.id, id)).limit(1);
-  if (!dep) {
-    res.status(404).json({ error: "Deposit not found" });
-    return;
-  }
-  if (dep.status !== "pending") {
-    res.status(400).json({ error: `Deposit already ${dep.status}` });
-    return;
-  }
-  await db
+  // Atomic claim: if a concurrent admin already approved/rejected, this
+  // returns 0 rows and we surface the conflict instead of stomping state.
+  const [rejected] = await db
     .update(inrDepositsTable)
     .set({ status: "rejected", reviewedBy: req.userId!, reviewedAt: new Date(), adminNote: note || null })
-    .where(eq(inrDepositsTable.id, id));
+    .where(and(eq(inrDepositsTable.id, id), eq(inrDepositsTable.status, "pending")))
+    .returning();
+  if (!rejected) {
+    const [existing] = await db.select().from(inrDepositsTable).where(eq(inrDepositsTable.id, id)).limit(1);
+    if (!existing) {
+      res.status(404).json({ error: "Deposit not found" });
+      return;
+    }
+    res.status(409).json({ error: `Deposit already ${existing.status}` });
+    return;
+  }
+  const dep = rejected;
   await createNotification(
     dep.userId,
     "deposit",
