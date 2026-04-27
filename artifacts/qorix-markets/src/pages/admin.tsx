@@ -5,7 +5,7 @@ import { motion } from "framer-motion";
 import {
   Users, Activity, Wallet, CheckCircle, XCircle, ArrowUpFromLine, Layers,
   Server, Cpu, HardDrive, Zap, Bell, Globe, Shield, ShieldCheck, TrendingUp, MessageCircle, Brain,
-  ChevronRight, FlaskConical,
+  ChevronRight, FlaskConical, Calendar,
 } from "lucide-react";
 import { AddressDisplay } from "@/components/address-display";
 import { useToast } from "@/hooks/use-toast";
@@ -33,6 +33,7 @@ const QUICK_LINKS = [
   { href: "/admin/users", icon: Users, label: "Users", color: "text-blue-400 bg-blue-500/10 border-blue-500/20" },
   { href: "/admin/deposits", icon: ArrowUpFromLine, label: "Deposits", color: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20" },
   { href: "/admin/payment-methods", icon: Wallet, label: "INR Payments", color: "text-amber-400 bg-amber-500/10 border-amber-500/20" },
+  { href: "/admin/subscriptions", icon: Calendar, label: "Subscriptions", color: "text-purple-400 bg-purple-500/10 border-purple-500/20" },
   { href: "/admin/withdrawals", icon: Wallet, label: "Withdrawals", color: "text-amber-400 bg-amber-500/10 border-amber-500/20" },
   { href: "/admin/kyc", icon: ShieldCheck, label: "KYC Queue", color: "text-blue-400 bg-blue-500/10 border-blue-500/20" },
   { href: "/admin/intelligence", icon: Brain, label: "Intelligence", color: "text-violet-400 bg-violet-500/10 border-violet-500/20" },
