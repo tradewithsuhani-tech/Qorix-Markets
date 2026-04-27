@@ -106,8 +106,9 @@ export function LoginApprovalGate() {
       handledIds.current.add(handledId);
       if (decision === "approve") {
         toast({
+          variant: "success",
           title: "Login approved",
-          description: "Signing you out of this device…",
+          description: "Signing you out of this device — the other device can continue.",
         });
         // Per the user's "single active device" rule, approving a new
         // device kicks this one. Bounce to /login right away so the
@@ -116,22 +117,66 @@ export function LoginApprovalGate() {
         setAttempt(null);
         setTimeout(bounceToLogin, 600);
       } else {
-        toast({ title: "Login denied", description: "The other device was blocked." });
+        toast({
+          variant: "success",
+          title: "Login denied",
+          description: "The other device has been blocked.",
+        });
         setAttempt(null);
       }
     } catch (err: any) {
-      // 401 here means our JWT is already dead — typically because the
-      // other device was approved earlier (or our session was rotated).
-      // The page is effectively signed-out, so just bounce instead of
-      // leaving the user staring at a dialog that can no longer act.
-      if (err?.status === 401) {
-        bounceToLogin();
+      const status: number | undefined = err?.status;
+      // Map common backend failure modes to clear, user-friendly alerts
+      // with the right variant (warning vs destructive) rather than
+      // surfacing raw "Unauthorized" / 5xx text in a generic red toast.
+      if (status === 401) {
+        // Our JWT is already dead — typically because the other device
+        // was approved earlier (or our session was rotated). Show a
+        // warning, then bounce to /login instead of leaving the user
+        // staring at a dialog that can no longer act.
+        toast({
+          variant: "warning",
+          title: "Session expired",
+          description: "You've been signed out on this device. Redirecting to login…",
+        });
+        setTimeout(bounceToLogin, 800);
         return;
       }
+      if (status === 404) {
+        // Attempt row was already decided/expired by the time we
+        // clicked — close the modal cleanly and tell the user why.
+        toast({
+          variant: "warning",
+          title: "Request expired",
+          description: "This login request has already been answered or has timed out.",
+        });
+        handledIds.current.add(handledId);
+        setAttempt(null);
+        return;
+      }
+      if (status === 400) {
+        toast({
+          variant: "destructive",
+          title: "Could not record your choice",
+          description: "The request looked invalid. Please reload and try again.",
+        });
+        return;
+      }
+      if (typeof status === "number" && status >= 500) {
+        toast({
+          variant: "destructive",
+          title: "Server is having trouble",
+          description: "We couldn't reach the server. Please try again in a moment.",
+        });
+        return;
+      }
+      // Network failure / unknown status
       toast({
-        title: "Could not record your choice",
-        description: err.message || "Please try again",
         variant: "destructive",
+        title: "Could not record your choice",
+        description: err?.message
+          ? `Please try again. (${err.message})`
+          : "Please check your connection and try again.",
       });
     } finally {
       setResponding(false);
