@@ -1,4 +1,4 @@
-import express, { type Express } from "express";
+import express, { type Express, type Request, type Response, type NextFunction } from "express";
 import cors from "cors";
 import pinoHttp from "pino-http";
 import router from "./routes";
@@ -67,5 +67,31 @@ app.use(express.urlencoded({ extended: true }));
 // "scale to zero machines → raw 503 on every request" approach in
 // MUMBAI_DB_CUTOVER_RUNBOOK.md step 2.
 app.use("/api", maintenanceMiddleware, router);
+
+// ─── Centralised error logger ─────────────────────────────────────────────
+// Express's built-in 500 handler swallows the underlying exception (sends a
+// generic "Internal Server Error" HTML page and only writes to stderr in
+// dev). When something inside an async route rejects we want the FULL stack
+// trace surfaced through pino so it shows up in `fly logs` — without that,
+// a route handler that throws appears in logs only as pino-http's outer
+// "request errored, statusCode: 500" entry, which is useless for debugging.
+//
+// Mounted AFTER the routes so it only catches errors that propagated up
+// from a handler. Must take 4 args for Express to recognise it as an error
+// middleware. `_next` is unused but the signature is required.
+app.use(
+  (err: unknown, req: Request, res: Response, _next: NextFunction) => {
+    const e = err instanceof Error ? err : new Error(String(err));
+    logger.error(
+      {
+        err: { type: e.constructor.name, message: e.message, stack: e.stack },
+        route: `${req.method} ${req.path}`,
+      },
+      "unhandled route error",
+    );
+    if (res.headersSent) return;
+    res.status(500).json({ error: "Internal Server Error" });
+  },
+);
 
 export default app;
