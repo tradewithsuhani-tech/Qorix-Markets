@@ -18,6 +18,8 @@ import {
   Landmark,
   Sparkles,
   ShieldCheck,
+  Download,
+  Maximize2,
 } from "lucide-react";
 import { authFetch } from "@/lib/auth-fetch";
 import { useToast } from "@/hooks/use-toast";
@@ -210,6 +212,7 @@ export function InrDepositTab() {
   const [orderNo, setOrderNo] = useState<string>("");
   const [secsLeft, setSecsLeft] = useState(COUNTDOWN_SECS);
   const [submittedDepositId, setSubmittedDepositId] = useState<number | null>(null);
+  const [qrModalOpen, setQrModalOpen] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const selected = methods.find((m) => m.id === selectedId) ?? null;
@@ -599,13 +602,25 @@ export function InrDepositTab() {
                   </div>
 
                   {selected.qrImageBase64 && (
-                    <div className="w-24 h-24 shrink-0 rounded-lg bg-white border border-white/15 p-1 shadow-sm self-start">
+                    <button
+                      type="button"
+                      onClick={() => setQrModalOpen(true)}
+                      className="group relative w-24 h-24 shrink-0 rounded-lg bg-white border border-white/15 p-1 shadow-sm self-start overflow-hidden focus:outline-none focus:ring-2 focus:ring-emerald-400/60"
+                      aria-label="View QR full screen"
+                    >
                       <img
                         src={selected.qrImageBase64}
                         alt="QR"
                         className="w-full h-full object-contain"
                       />
-                    </div>
+                      <span className="absolute inset-0 bg-black/55 opacity-0 group-hover:opacity-100 group-active:opacity-100 transition-opacity flex flex-col items-center justify-center gap-1">
+                        <Maximize2 className="w-4 h-4 text-white" />
+                        <span className="text-[9px] font-semibold text-white uppercase tracking-wider">View</span>
+                      </span>
+                      <span className="absolute bottom-0.5 right-0.5 inline-flex items-center justify-center w-5 h-5 rounded-full bg-emerald-500 text-white shadow-md group-hover:opacity-0 transition-opacity">
+                        <Maximize2 className="w-3 h-3" />
+                      </span>
+                    </button>
                   )}
                 </div>
 
@@ -845,6 +860,74 @@ export function InrDepositTab() {
           </div>
         )}
       </div>
+
+      <AnimatePresence>
+        {qrModalOpen && selected?.qrImageBase64 && (
+          <motion.div
+            key="qr-modal"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.18 }}
+            className="fixed inset-0 z-[200] bg-black/85 backdrop-blur-md flex flex-col items-center justify-center p-5"
+            onClick={() => setQrModalOpen(false)}
+          >
+            <button
+              type="button"
+              onClick={() => setQrModalOpen(false)}
+              className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 text-white inline-flex items-center justify-center transition-colors"
+              aria-label="Close"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="w-full max-w-sm flex flex-col items-center gap-5"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="text-center">
+                <div className="text-[10px] uppercase tracking-[0.2em] text-emerald-300 font-semibold mb-1">
+                  Scan to Pay
+                </div>
+                <div className="text-base font-bold text-white">
+                  {selected.displayName || (selected.type === "upi" ? "UPI" : "Bank")}
+                </div>
+                {selected.type === "upi" && selected.upiId && (
+                  <div className="text-xs font-mono text-emerald-300 mt-1 break-all">
+                    {selected.upiId}
+                  </div>
+                )}
+              </div>
+
+              <div className="w-full bg-white rounded-2xl p-4 shadow-2xl">
+                <img
+                  src={selected.qrImageBase64}
+                  alt="UPI QR code"
+                  className="w-full h-auto object-contain"
+                />
+              </div>
+
+              <a
+                href={selected.qrImageBase64}
+                download={`qorix-${selected.type === "upi" ? "upi" : "bank"}-qr.png`}
+                onClick={(e) => e.stopPropagation()}
+                className="w-full py-3 rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-bold text-sm hover:from-emerald-400 hover:to-teal-400 shadow-[0_0_24px_-6px_rgba(16,185,129,0.6)] transition-all inline-flex items-center justify-center gap-2"
+              >
+                <Download className="w-4 h-4" />
+                Save QR to Phone
+              </a>
+
+              <p className="text-[11px] text-white/60 text-center px-4">
+                Open any UPI app → scan this QR → enter exact amount → pay.
+              </p>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
