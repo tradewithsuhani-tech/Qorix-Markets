@@ -861,15 +861,15 @@ function Row({
   valueClass?: string;
 }) {
   return (
-    <div className="flex items-start justify-between gap-3 py-2 first:pt-0 last:pb-0">
-      <div className="text-[10px] text-muted-foreground uppercase tracking-wider w-20 shrink-0 pt-0.5">
+    <div className="py-2 first:pt-0 last:pb-0">
+      <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">
         {label}
       </div>
-      <div className="flex items-start gap-2 flex-1 min-w-0 justify-end">
+      <div className="flex items-start justify-between gap-2">
         <div
           className={cn(
-            "text-sm text-white text-right",
-            mono ? "font-mono break-all leading-snug" : "break-words leading-snug",
+            "text-sm text-white flex-1 min-w-0 leading-snug",
+            mono ? "font-mono break-all" : "break-words",
             valueClass,
           )}
         >
@@ -881,7 +881,7 @@ function Row({
             e.stopPropagation();
             navigator.clipboard.writeText(value);
           }}
-          className="w-7 h-7 rounded-md inline-flex items-center justify-center text-muted-foreground hover:text-white hover:bg-white/10 shrink-0 transition-colors"
+          className="w-7 h-7 rounded-md inline-flex items-center justify-center text-muted-foreground hover:text-white hover:bg-white/10 shrink-0 transition-colors -mt-0.5"
           aria-label="Copy"
         >
           <Copy className="w-3.5 h-3.5" />
