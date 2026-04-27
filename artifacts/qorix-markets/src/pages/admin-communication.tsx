@@ -17,6 +17,7 @@ import {
   AlertTriangle,
   Info,
   ShieldAlert,
+  Wrench,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -89,6 +90,24 @@ const EMAIL_TEMPLATES = [
     color: "text-emerald-400 bg-emerald-500/10",
     defaultTitle: "Platform Update",
     defaultMessage: "Dear Investor,\n\nHere is a brief update on platform performance and upcoming changes...",
+  },
+  {
+    id: "maintenance",
+    icon: Wrench,
+    label: "Maintenance",
+    color: "text-orange-400 bg-orange-500/10",
+    defaultTitle: "🛠 Scheduled Maintenance — Brief Service Pause",
+    defaultMessage:
+      "Dear Investor,\n\n" +
+      "We're briefly upgrading the Qorix Markets platform to serve you better.\n\n" +
+      "⏸  Trading temporarily paused\n" +
+      "🔒  Your funds are 100% safe\n" +
+      "💸  Deposits & withdrawals will queue automatically\n" +
+      "✅  Everything resumes the moment we're back\n\n" +
+      "You'll receive an instant notification as soon as trading goes live again.\n\n" +
+      "Thank you for your patience.\n\n" +
+      "Qorix Markets\n" +
+      "AI-Powered Trading System",
   },
   {
     id: "next_trade",
