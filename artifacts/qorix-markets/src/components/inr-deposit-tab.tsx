@@ -106,7 +106,7 @@ function MethodIcon({ type, size = "md" }: { type: "bank" | "upi"; size?: "sm" |
 
   if (type === "upi") {
     return (
-      <div className={cn(dim, "rounded-full flex items-center justify-center shrink-0 bg-white shadow-sm border border-gray-200")}>
+      <div className={cn(dim, "rounded-full flex items-center justify-center shrink-0 bg-gradient-to-br from-teal-500/25 to-cyan-600/15 border border-teal-400/20")}>
         <img src={upiLogoUrl} alt="UPI" className={cn(inner, "object-contain")} />
       </div>
     );
