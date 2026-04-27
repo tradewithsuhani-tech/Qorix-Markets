@@ -15,6 +15,12 @@ import { sendEmail } from "./email-service";
 //   EXOTEL_SID, EXOTEL_API_KEY, EXOTEL_API_TOKEN, EXOTEL_FROM_NUMBER
 //     → uses Exotel Connect-Applet endpoint (preferred for India numbers).
 // If both are configured, Exotel wins (cheaper for IN→IN routes).
+//
+// `placeEscalationCallAndAwaitOutcome` extends `placeEscalationCall` for
+// the admin cascade (1 → 2 → 3 fallback). It places the call, then polls
+// Twilio every few seconds to learn whether it was answered, busy, or
+// went unanswered. Caller can use the `answered` flag to decide whether
+// to try the next contact in the chain.
 
 interface CallTarget {
   phone: string | null;
@@ -26,6 +32,15 @@ export interface CallResult {
   ok: boolean;
   provider: "twilio" | "exotel" | "email-fallback" | "skipped";
   reason?: string;
+  callSid?: string;
+}
+
+export interface CallOutcome extends CallResult {
+  // True when the recipient (or their voicemail) picked up. False on
+  // no-answer, busy, failed, canceled, or when the provider was unable
+  // to even place the call.
+  answered: boolean;
+  finalStatus?: string;
 }
 
 export async function placeEscalationCall(
@@ -62,6 +77,72 @@ export async function placeEscalationCall(
     });
   }
   return await fallbackToEmail(target, message, "no_provider_configured");
+}
+
+// Place a call AND wait for the outcome. Used by the admin cascade so we
+// can decide whether to ring the next contact. For email-fallback (no
+// provider configured) we cannot detect a human answer and treat it as
+// "not answered" so the chain continues to the next contact. For Twilio
+// we poll the call status endpoint until the call reaches a terminal
+// state (or the wait window expires).
+export async function placeEscalationCallAndAwaitOutcome(
+  target: CallTarget,
+  message: string,
+  opts: { maxWaitMs?: number; pollIntervalMs?: number } = {},
+): Promise<CallOutcome> {
+  const placed = await placeEscalationCall(target, message);
+  if (!placed.ok || placed.provider !== "twilio" || !placed.callSid) {
+    return { ...placed, answered: false };
+  }
+  const twilioSid = process.env["TWILIO_ACCOUNT_SID"];
+  const twilioToken = process.env["TWILIO_AUTH_TOKEN"];
+  if (!twilioSid || !twilioToken) {
+    return { ...placed, answered: false };
+  }
+  const maxWaitMs = opts.maxWaitMs ?? 90_000;
+  const pollIntervalMs = opts.pollIntervalMs ?? 5_000;
+  const start = Date.now();
+  let lastStatus: string | undefined;
+  while (Date.now() - start < maxWaitMs) {
+    await sleep(pollIntervalMs);
+    const status = await getTwilioCallStatus(twilioSid, twilioToken, placed.callSid);
+    if (!status) continue;
+    lastStatus = status;
+    // Terminal states. Twilio reports either an answered terminal
+    // ("completed") or a not-answered terminal ("no-answer", "busy",
+    // "failed", "canceled"). We also exit early on "in-progress" — once
+    // someone (or voicemail) picks up, the cascade should stop.
+    if (status === "completed" || status === "in-progress" || status === "answered") {
+      return { ...placed, answered: true, finalStatus: status };
+    }
+    if (status === "no-answer" || status === "busy" || status === "failed" || status === "canceled") {
+      return { ...placed, answered: false, finalStatus: status };
+    }
+  }
+  // Wait window expired without a terminal status — be conservative and
+  // call this "not answered" so the next contact gets tried.
+  return { ...placed, answered: false, finalStatus: lastStatus ?? "timeout" };
+}
+
+async function getTwilioCallStatus(
+  sid: string,
+  token: string,
+  callSid: string,
+): Promise<string | undefined> {
+  const url = `https://api.twilio.com/2010-04-01/Accounts/${sid}/Calls/${callSid}.json`;
+  const auth = Buffer.from(`${sid}:${token}`).toString("base64");
+  try {
+    const r = await fetch(url, { headers: { Authorization: `Basic ${auth}` } });
+    if (!r.ok) return undefined;
+    const j = (await r.json()) as { status?: string };
+    return j.status;
+  } catch {
+    return undefined;
+  }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((res) => setTimeout(res, ms));
 }
 
 async function fallbackToEmail(
@@ -130,7 +211,8 @@ async function callViaTwilio(opts: {
       );
       return { ok: false, provider: "twilio", reason: `${r.status}` };
     }
-    return { ok: true, provider: "twilio" };
+    const j = (await r.json()) as { sid?: string };
+    return { ok: true, provider: "twilio", callSid: j.sid };
   } catch (err) {
     return { ok: false, provider: "twilio", reason: (err as Error).message };
   }

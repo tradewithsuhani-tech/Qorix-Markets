@@ -42,6 +42,7 @@ import {
   Landmark,
   ShieldCheck,
   Store,
+  PhoneCall,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -589,6 +590,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/admin/wallet", label: "Wallet", icon: Wallet },
     { href: "/admin/intelligence", label: "Intelligence", icon: Brain },
     { href: "/admin/communication", label: "Communication", icon: Bell },
+    { href: "/admin/escalation-contacts", label: "Escalation", icon: PhoneCall },
     { href: "/admin/content", label: "Content", icon: Globe },
     { href: "/admin/system", label: "System", icon: Settings },
     { href: "/admin/logs", label: "Logs", icon: Database },
