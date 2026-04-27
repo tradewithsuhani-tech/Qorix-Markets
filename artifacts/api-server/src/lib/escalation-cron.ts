@@ -6,7 +6,7 @@ import {
   merchantsTable,
   usersTable,
 } from "@workspace/db";
-import { and, eq, isNull, sql, inArray } from "drizzle-orm";
+import { and, eq, isNull, isNotNull, sql, inArray } from "drizzle-orm";
 import { logger } from "./logger";
 import { placeEscalationCall } from "./voice-call-service";
 import { sendEmail } from "./email-service";
@@ -162,6 +162,9 @@ async function escalatePendingDeposits(): Promise<void> {
   }
 
   // Stage 2: 15-min mark — atomically claim, then escalate to admin.
+  // SQL invariant: stage-2 can only fire if stage-1 already claimed
+  // (escalatedToMerchantAt IS NOT NULL). This makes "merchant first, admin
+  // second" a database-enforced rule rather than relying on call order.
   const claimedStage2 = await db
     .update(inrDepositsTable)
     .set({ escalatedToAdminAt: new Date() })
@@ -169,6 +172,7 @@ async function escalatePendingDeposits(): Promise<void> {
       and(
         eq(inrDepositsTable.status, "pending"),
         isNull(inrDepositsTable.escalatedToAdminAt),
+        isNotNull(inrDepositsTable.escalatedToMerchantAt),
         sql`${inrDepositsTable.createdAt} < now() - interval '${sql.raw(String(ADMIN_ESCALATION_MIN))} minutes'`,
       ),
     )
@@ -222,7 +226,8 @@ async function escalatePendingWithdrawals(): Promise<void> {
     }
   }
 
-  // Stage 2 — atomically claim, then escalate to admin.
+  // Stage 2 — atomically claim, then escalate to admin. Same SQL invariant
+  // as deposits: admin escalation requires prior merchant-stage claim.
   const claimedStage2 = await db
     .update(inrWithdrawalsTable)
     .set({ escalatedToAdminAt: new Date() })
@@ -230,6 +235,7 @@ async function escalatePendingWithdrawals(): Promise<void> {
       and(
         eq(inrWithdrawalsTable.status, "pending"),
         isNull(inrWithdrawalsTable.escalatedToAdminAt),
+        isNotNull(inrWithdrawalsTable.escalatedToMerchantAt),
         sql`${inrWithdrawalsTable.createdAt} < now() - interval '${sql.raw(String(ADMIN_ESCALATION_MIN))} minutes'`,
       ),
     )
