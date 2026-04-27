@@ -20,7 +20,14 @@ export const inrWithdrawalsTable = pgTable(
     adminNote: text("admin_note"),
     payoutReference: varchar("payout_reference", { length: 100 }),
     reviewedBy: integer("reviewed_by"),
+    // "admin" or "merchant" — see inr_deposits for rationale.
+    reviewedByKind: varchar("reviewed_by_kind", { length: 20 }),
+    // First merchant to "claim" the withdrawal owns it from then on. Optional
+    // — admin may also approve directly without a claim, leaving this NULL.
+    assignedMerchantId: integer("assigned_merchant_id"),
     reviewedAt: timestamp("reviewed_at"),
+    escalatedToMerchantAt: timestamp("escalated_to_merchant_at"),
+    escalatedToAdminAt: timestamp("escalated_to_admin_at"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },
   (t) => ({
@@ -34,9 +41,13 @@ export const insertInrWithdrawalSchema = createInsertSchema(inrWithdrawalsTable)
   createdAt: true,
   reviewedAt: true,
   reviewedBy: true,
+  reviewedByKind: true,
+  assignedMerchantId: true,
   status: true,
   adminNote: true,
   payoutReference: true,
+  escalatedToMerchantAt: true,
+  escalatedToAdminAt: true,
 });
 export type InsertInrWithdrawal = z.infer<typeof insertInrWithdrawalSchema>;
 export type InrWithdrawal = typeof inrWithdrawalsTable.$inferSelect;

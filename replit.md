@@ -427,3 +427,35 @@ See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and pa
 ### Local working tree drift (unstaged, fine to leave)
 - M deploy.yml + email-service.ts + login.tsx — already pushed via API; local git index just stale.
 - M package.json + pnpm-lock.yaml — libsodium-wrappers temp add/remove (already removed from package.json).
+
+## 2026-04-27 — Merchant Panel (multi-operator)
+
+### What it is
+A self-serve operator console at `qorixmarkets.com/merchant` (separate token from user/admin). Admin creates merchants from `/admin/merchants` — no signup, no forgot-password. Each merchant manages their own UPI/bank/QR payment methods, sets the platform INR→USDT rate, and approves/rejects INR deposits posted to *their* methods. Withdrawals are first-come: any active merchant can claim and process.
+
+### Escalation chain (cron tick every minute)
+- T+0     : email to owning merchant (deposits) / all active merchants (withdrawals)
+- T+10min: voice call to merchant (Twilio/Exotel — credentials pending; falls back to email)
+- T+15min: voice call to platform admin
+- T+30min: user sees "Heavy load — review delayed" amber banner on their deposit/withdraw page
+Each stage uses an atomic `UPDATE … RETURNING` claim so two cron ticks/replicas can never double-call.
+
+### DB additions (all additive nullable; PKs preserved as `serial`)
+- New `merchants` table (id serial, email uniq, passwordHash, fullName, phone, isActive, createdBy, lastLoginAt)
+- `payment_methods.merchant_id` (nullable int FK → merchants.id)
+- `inr_deposits.escalated_to_merchant_at`, `escalated_to_admin_at`, `reviewed_by_kind`
+- `inr_withdrawals.escalated_to_merchant_at`, `escalated_to_admin_at`, `reviewed_by_kind`, `assigned_merchant_id`
+
+### Routes
+- API: `/api/merchant/auth/login`, `/me`, `/dashboard`, `/payment-methods` (CRUD), `/inr-deposits` + `/:id/approve|reject`, `/inr-withdrawals` + `/:id/claim|approve|reject`, `/inr-rate` (read+write).
+- Admin: `/api/admin/merchants` (CRUD), `/admin/merchants/:id/assign-method`, `/admin/payment-methods/unassigned`.
+- Frontend: `/merchant/login`, `/merchant`, `/merchant/methods`, `/merchant/deposits`, `/merchant/withdrawals`, `/merchant/settings`, `/admin/merchants`.
+
+### Financial guardrails
+- Approve/reject paths use `UPDATE … WHERE status='pending' RETURNING` inside a transaction; double-credit/refund impossible.
+- Merchant USDT-on-approval override is bounded: must be `> 0` and `≤` the originally quoted amount (rate × INR). Over-credit returns HTTP 400. Merchants can credit *less* (partial payment) but never more.
+- Merchant JWT carries `type:"merchant"`; middleware blocks user/admin tokens cross-tenant. Frontend uses `qorix_merchant_token` localStorage key (separate from `qorix_token`).
+
+### Pending operator setup (no code change needed)
+- Twilio/Exotel credentials → set `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER` (or `EXOTEL_*`) on Fly to enable real voice calls. Voice service stubs to email-only until then.
+- Admin escalation contact: insert `admin_escalation_phone` + `admin_escalation_email` rows into `system_settings` (no UI yet).

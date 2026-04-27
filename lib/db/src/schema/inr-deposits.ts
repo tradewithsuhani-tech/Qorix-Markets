@@ -16,7 +16,14 @@ export const inrDepositsTable = pgTable(
     status: varchar("status", { length: 20 }).notNull().default("pending"),
     adminNote: text("admin_note"),
     reviewedBy: integer("reviewed_by"),
+    // Which actor approved/rejected: "admin" or "merchant". Lets the user
+    // history surface "Approved by merchant" without an extra join.
+    reviewedByKind: varchar("reviewed_by_kind", { length: 20 }),
     reviewedAt: timestamp("reviewed_at"),
+    // Escalation timestamps populated by the 1-minute escalation cron. Once
+    // set, the cron skips re-firing the same escalation step.
+    escalatedToMerchantAt: timestamp("escalated_to_merchant_at"),
+    escalatedToAdminAt: timestamp("escalated_to_admin_at"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },
   (t) => ({
@@ -31,8 +38,11 @@ export const insertInrDepositSchema = createInsertSchema(inrDepositsTable).omit(
   createdAt: true,
   reviewedAt: true,
   reviewedBy: true,
+  reviewedByKind: true,
   status: true,
   adminNote: true,
+  escalatedToMerchantAt: true,
+  escalatedToAdminAt: true,
 });
 export type InsertInrDeposit = z.infer<typeof insertInrDepositSchema>;
 export type InrDeposit = typeof inrDepositsTable.$inferSelect;
