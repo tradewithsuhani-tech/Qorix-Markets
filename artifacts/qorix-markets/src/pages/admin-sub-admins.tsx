@@ -15,7 +15,7 @@ import { Layout } from "@/components/layout";
 import { authFetch } from "@/lib/auth-fetch";
 import { useToast } from "@/hooks/use-toast";
 import { useAdminPermissions } from "@/hooks/use-admin-permissions";
-import { GRANTABLE_MODULES } from "@/lib/admin-modules";
+import { ADMIN_MODULES, GRANTABLE_MODULES } from "@/lib/admin-modules";
 import { cn } from "@/lib/utils";
 
 const BASE_URL = import.meta.env.BASE_URL ?? "/";
