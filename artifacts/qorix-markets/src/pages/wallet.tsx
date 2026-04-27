@@ -6,7 +6,7 @@ import { motion, AnimatePresence, type Variants } from "framer-motion";
 import {
   Wallet as WalletIcon, ArrowUpFromLine,
   ArrowRightLeft, Info, AlertCircle, Mail, ShieldCheck, X,
-  CheckCircle2, Clock,
+  CheckCircle2, Clock, Coins, Landmark,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
@@ -334,22 +334,26 @@ export default function WalletPage() {
             <div className="grid grid-cols-2 gap-1 p-1 bg-black/30 rounded-xl">
               <button
                 onClick={() => setWithdrawTab("usdt")}
-                className={`px-3 py-2 rounded-lg text-xs font-semibold transition-all ${
+                className={`px-3 py-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5 ${
                   withdrawTab === "usdt"
                     ? "bg-emerald-500/20 text-emerald-300 shadow-sm"
                     : "text-muted-foreground hover:text-white"
                 }`}
               >
+                <span className={`inline-flex items-center justify-center w-4 h-4 rounded-full text-[9px] font-bold ${
+                  withdrawTab === "usdt" ? "bg-emerald-400 text-emerald-950" : "bg-white/10 text-white/70"
+                }`}>$</span>
                 USDT (TRC20)
               </button>
               <button
                 onClick={() => setWithdrawTab("inr")}
-                className={`px-3 py-2 rounded-lg text-xs font-semibold transition-all ${
+                className={`px-3 py-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5 ${
                   withdrawTab === "inr"
                     ? "bg-violet-500/20 text-violet-300 shadow-sm"
                     : "text-muted-foreground hover:text-white"
                 }`}
               >
+                <Landmark className="w-3.5 h-3.5" />
                 INR (UPI/Bank)
               </button>
             </div>
