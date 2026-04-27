@@ -22,6 +22,12 @@ export const usersTable = pgTable("users", {
   phoneNumber: varchar("phone_number", { length: 32 }),
   dateOfBirth: varchar("date_of_birth", { length: 20 }),
   kycPersonalSubmittedAt: timestamp("kyc_personal_submitted_at"),
+  // Voice OTP verification (2Factor.in)
+  phoneVerifiedAt: timestamp("phone_verified_at"),
+  phoneOtpSessionId: varchar("phone_otp_session_id", { length: 64 }),
+  phoneOtpExpiresAt: timestamp("phone_otp_expires_at"),
+  phoneOtpSendCount: integer("phone_otp_send_count").notNull().default(0),
+  phoneOtpLastSentAt: timestamp("phone_otp_last_sent_at"),
   // Lv.3 — Address verification
   kycAddressStatus: varchar("kyc_address_status", { length: 30 }).notNull().default("not_submitted"),
   addressLine1: text("address_line1"),

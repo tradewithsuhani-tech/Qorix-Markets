@@ -202,11 +202,80 @@ export default function KycPage() {
   // ─── Lv.1 personal form ───
   const [phone, setPhone] = useState("");
   const [dob, setDob] = useState("");
+  const [otpCode, setOtpCode] = useState("");
+  const [otpExpiresAt, setOtpExpiresAt] = useState<number | null>(null);
+  const [otpCooldownUntil, setOtpCooldownUntil] = useState<number | null>(null);
+  const [otpTickNow, setOtpTickNow] = useState(Date.now());
+
+  const phoneStatus = useQuery<{
+    phoneNumber: string | null;
+    verified: boolean;
+    verifiedAt: string | null;
+    pendingOtp: boolean;
+    otpExpiresAt: string | null;
+  }>({
+    queryKey: ["phone-otp-status"],
+    queryFn: () => authFetch("/api/phone-otp/status"),
+    refetchOnWindowFocus: false,
+  });
+
+  // Hydrate phone field & OTP state from server status
+  useEffect(() => {
+    if (phoneStatus.data?.phoneNumber && !phone) {
+      setPhone(phoneStatus.data.phoneNumber);
+    }
+    if (phoneStatus.data?.pendingOtp && phoneStatus.data.otpExpiresAt) {
+      setOtpExpiresAt(new Date(phoneStatus.data.otpExpiresAt).getTime());
+    }
+  }, [phoneStatus.data]);
+
+  // Tick every second for countdown displays
+  useEffect(() => {
+    if (!otpExpiresAt && !otpCooldownUntil) return;
+    const t = setInterval(() => setOtpTickNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [otpExpiresAt, otpCooldownUntil]);
+
+  const otpSecondsLeft = otpExpiresAt ? Math.max(0, Math.ceil((otpExpiresAt - otpTickNow) / 1000)) : 0;
+  const cooldownSecLeft = otpCooldownUntil ? Math.max(0, Math.ceil((otpCooldownUntil - otpTickNow) / 1000)) : 0;
+  const phoneVerified = !!phoneStatus.data?.verified;
+
+  const sendOtp = useMutation({
+    mutationFn: () =>
+      authFetch("/api/phone-otp/send", {
+        method: "POST",
+        body: JSON.stringify({ phone }),
+      }),
+    onSuccess: (data: any) => {
+      toast({ title: "Voice OTP sent", description: "You will get a call in a few seconds. Pick up & note the digits." });
+      setOtpExpiresAt(data?.expiresAt ? new Date(data.expiresAt).getTime() : Date.now() + 5 * 60 * 1000);
+      setOtpCooldownUntil(Date.now() + (data?.cooldownSec ?? 60) * 1000);
+      setOtpCode("");
+      qc.invalidateQueries({ queryKey: ["phone-otp-status"] });
+    },
+    onError: (e: any) => toast({ title: "Could not send OTP", description: e?.message ?? "Try again", variant: "destructive" }),
+  });
+
+  const verifyOtp = useMutation({
+    mutationFn: () =>
+      authFetch("/api/phone-otp/verify", {
+        method: "POST",
+        body: JSON.stringify({ otp: otpCode }),
+      }),
+    onSuccess: () => {
+      toast({ title: "Phone verified ✓", description: "Mobile number successfully verified." });
+      setOtpExpiresAt(null);
+      setOtpCode("");
+      qc.invalidateQueries({ queryKey: ["phone-otp-status"] });
+    },
+    onError: (e: any) => toast({ title: "Wrong OTP", description: e?.message ?? "Try again", variant: "destructive" }),
+  });
+
   const personalSubmit = useMutation({
     mutationFn: () =>
       authFetch("/api/kyc/personal", {
         method: "POST",
-        body: JSON.stringify({ phoneNumber: phone, dateOfBirth: dob }),
+        body: JSON.stringify({ dateOfBirth: dob }),
       }),
     onSuccess: () => {
       toast({ title: "Personal details verified" });
@@ -436,16 +505,79 @@ export default function KycPage() {
                         </div>
                       ) : (
                         <div className="space-y-3">
-                          <div>
-                            <label className="text-[11px] uppercase tracking-wider font-medium text-muted-foreground">
+                          {/* Phone + Voice OTP block */}
+                          <div className="space-y-2">
+                            <label className="text-[11px] uppercase tracking-wider font-medium text-muted-foreground flex items-center gap-1.5">
                               Phone number <span className="text-rose-400">*</span>
+                              {phoneVerified && (
+                                <span className="inline-flex items-center gap-0.5 text-emerald-400 normal-case tracking-normal">
+                                  <CheckCircle2 className="w-3 h-3" />
+                                  <span className="text-[10px] font-semibold">Verified</span>
+                                </span>
+                              )}
                             </label>
-                            <input
-                              value={phone}
-                              onChange={(e) => setPhone(e.target.value)}
-                              placeholder="+91 98765 43210"
-                              className="mt-2 w-full px-3 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-sm focus:outline-none focus:border-blue-500/40"
-                            />
+                            <div className="flex gap-2">
+                              <input
+                                value={phone}
+                                onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                                placeholder="10-digit mobile (e.g. 9876543210)"
+                                inputMode="numeric"
+                                maxLength={10}
+                                disabled={phoneVerified}
+                                className={`flex-1 px-3 py-2.5 rounded-xl bg-white/[0.03] border text-sm focus:outline-none focus:border-blue-500/40 disabled:opacity-70 ${
+                                  phoneVerified ? "border-emerald-500/40 bg-emerald-500/5" : "border-white/10"
+                                }`}
+                              />
+                              {!phoneVerified && (
+                                <button
+                                  type="button"
+                                  disabled={!/^[6-9]\d{9}$/.test(phone) || sendOtp.isPending || cooldownSecLeft > 0}
+                                  onClick={() => sendOtp.mutate()}
+                                  className="px-3 py-2.5 rounded-xl bg-blue-500/15 border border-blue-500/30 text-blue-300 text-xs font-semibold disabled:opacity-40 hover:bg-blue-500/25 transition-all whitespace-nowrap"
+                                >
+                                  {sendOtp.isPending ? "Calling…" :
+                                   cooldownSecLeft > 0 ? `Resend ${cooldownSecLeft}s` :
+                                   otpExpiresAt ? "Resend Call" : "Send Voice OTP"}
+                                </button>
+                              )}
+                            </div>
+                            {!phoneVerified && !otpExpiresAt && (
+                              <p className="text-[11px] text-muted-foreground">
+                                We will place an automated voice call to your phone with a 6-digit OTP.
+                              </p>
+                            )}
+
+                            {/* OTP entry — visible after sending */}
+                            {!phoneVerified && otpExpiresAt && otpSecondsLeft > 0 && (
+                              <div className="rounded-xl bg-blue-500/[0.06] border border-blue-500/20 p-3 space-y-2">
+                                <div className="text-[11px] text-blue-200 leading-snug">
+                                  📞 Pick up the call & enter the digits the bot speaks. Code expires in <span className="font-semibold">{Math.floor(otpSecondsLeft / 60)}:{String(otpSecondsLeft % 60).padStart(2, "0")}</span>.
+                                </div>
+                                <div className="flex gap-2">
+                                  <input
+                                    value={otpCode}
+                                    onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, "").slice(0, 8))}
+                                    placeholder="Enter OTP"
+                                    inputMode="numeric"
+                                    maxLength={8}
+                                    className="flex-1 px-3 py-2.5 rounded-xl bg-white/[0.05] border border-white/15 text-sm font-mono tracking-[0.3em] text-center focus:outline-none focus:border-blue-500/40"
+                                  />
+                                  <button
+                                    type="button"
+                                    disabled={!/^\d{4,8}$/.test(otpCode) || verifyOtp.isPending}
+                                    onClick={() => verifyOtp.mutate()}
+                                    className="px-4 py-2.5 rounded-xl bg-emerald-500 text-emerald-950 text-xs font-semibold disabled:opacity-40 hover:brightness-110 transition-all"
+                                  >
+                                    {verifyOtp.isPending ? "Verifying…" : "Verify"}
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                            {!phoneVerified && otpExpiresAt && otpSecondsLeft === 0 && (
+                              <div className="text-[11px] text-rose-300 flex items-center gap-1.5">
+                                <AlertCircle className="w-3 h-3" /> OTP expired. Click Resend Call.
+                              </div>
+                            )}
                           </div>
                           <div>
                             <label className="text-[11px] uppercase tracking-wider font-medium text-muted-foreground">
@@ -459,11 +591,13 @@ export default function KycPage() {
                             />
                           </div>
                           <button
-                            disabled={!phone || !dob || personalSubmit.isPending}
+                            disabled={!phoneVerified || !dob || personalSubmit.isPending}
                             onClick={() => personalSubmit.mutate()}
                             className="w-full py-2.5 rounded-xl bg-gradient-to-r from-blue-500 to-indigo-600 text-white text-sm font-semibold disabled:opacity-50 hover:brightness-110 transition-all"
                           >
-                            {personalSubmit.isPending ? "Saving…" : "Save & Verify"}
+                            {personalSubmit.isPending ? "Saving…" :
+                             !phoneVerified ? "Verify Phone First" :
+                             "Save & Continue"}
                           </button>
                         </div>
                       )}

@@ -32,6 +32,7 @@ import telegramRouter from "./telegram";
 import twoFactorRouter from "./two-factor";
 import inrDepositsRouter from "./inr-deposits";
 import inrWithdrawalsRouter from "./inr-withdrawals";
+import phoneVerifyRouter from "./phone-verify";
 
 const router: IRouter = Router();
 
@@ -69,5 +70,6 @@ router.use(telegramRouter);
 router.use(twoFactorRouter);
 router.use(inrDepositsRouter);
 router.use(inrWithdrawalsRouter);
+router.use(phoneVerifyRouter);
 
 export default router;
