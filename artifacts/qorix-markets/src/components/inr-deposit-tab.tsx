@@ -120,20 +120,62 @@ function MethodIcon({ type, size = "md" }: { type: "bank" | "upi"; size?: "sm" |
 }
 
 function UpiAppLogos() {
-  // Brand-styled text chips for UPI apps. Using text avoids extra image assets.
+  // Brand chips for UPI apps with small inline SVG brand marks.
+  const PhonePeIcon = (
+    <svg viewBox="0 0 24 24" className="w-3 h-3" aria-hidden="true">
+      <circle cx="12" cy="12" r="12" fill="#fff" />
+      <path
+        d="M14.5 8.6h-2v6.2c0 .55-.45 1-1 1h-1.1V9.8H8.3l3.3-3.3 3.3 3.3h-.4z"
+        fill="#5f259f"
+      />
+    </svg>
+  );
+  const GPayIcon = (
+    <svg viewBox="0 0 24 24" className="w-3 h-3" aria-hidden="true">
+      <path d="M22 12.2c0-.7-.06-1.4-.18-2.05H12v3.88h5.62c-.24 1.3-.98 2.4-2.08 3.14v2.6h3.36C20.86 18.05 22 15.4 22 12.2z" fill="#4285F4" />
+      <path d="M12 22c2.7 0 4.96-.9 6.62-2.43l-3.36-2.6c-.93.62-2.12.99-3.26.99-2.5 0-4.62-1.69-5.38-3.96H2.5v2.5C4.16 19.79 7.83 22 12 22z" fill="#34A853" />
+      <path d="M6.62 14c-.2-.6-.32-1.24-.32-1.9 0-.66.12-1.3.32-1.9V7.7H2.5C1.83 9.04 1.5 10.5 1.5 12s.33 2.96 1 4.3l3.12-2.3z" fill="#FBBC04" />
+      <path d="M12 5.95c1.46 0 2.78.5 3.81 1.49l2.86-2.86C16.96 2.97 14.7 2 12 2 7.83 2 4.16 4.21 2.5 7.7l4.12 2.5C7.38 7.94 9.5 5.95 12 5.95z" fill="#EA4335" />
+    </svg>
+  );
+  const PaytmIcon = (
+    <svg viewBox="0 0 24 24" className="w-3 h-3" aria-hidden="true">
+      <circle cx="12" cy="12" r="12" fill="#fff" />
+      <path
+        d="M9 7h3.6c1.9 0 3.4 1.3 3.4 3.1 0 1.8-1.5 3.1-3.4 3.1H10.6V17H9V7zm1.6 1.5v3.2H12c1.1 0 1.9-.6 1.9-1.6S13.1 8.5 12 8.5h-1.4z"
+        fill="#00B9F1"
+      />
+    </svg>
+  );
+  const BhimIcon = (
+    <svg viewBox="0 0 24 24" className="w-3 h-3" aria-hidden="true">
+      <rect width="24" height="8" fill="#FF9933" />
+      <rect y="8" width="24" height="8" fill="#fff" />
+      <rect y="16" width="24" height="8" fill="#138808" />
+      <circle cx="12" cy="12" r="2.4" fill="none" stroke="#000080" strokeWidth="0.6" />
+    </svg>
+  );
+
   const apps = [
-    { name: "PhonePe", bg: "bg-[#5f259f]", fg: "text-white" },
-    { name: "GPay", bg: "bg-white", fg: "text-gray-900" },
-    { name: "Paytm", bg: "bg-[#00B9F1]", fg: "text-white" },
-    { name: "BHIM", bg: "bg-[#F37335]", fg: "text-white" },
+    { name: "PhonePe", bg: "bg-[#5f259f]", fg: "text-white", icon: PhonePeIcon },
+    { name: "GPay", bg: "bg-white", fg: "text-gray-900", icon: GPayIcon },
+    { name: "Paytm", bg: "bg-[#00B9F1]", fg: "text-white", icon: PaytmIcon },
+    { name: "BHIM", bg: "bg-[#F37335]", fg: "text-white", icon: BhimIcon },
   ];
   return (
     <div className="flex items-center gap-1.5 flex-wrap">
       {apps.map((a) => (
         <span
           key={a.name}
-          className={cn("text-[9px] font-bold px-1.5 py-0.5 rounded", a.bg, a.fg)}
+          className={cn(
+            "inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-md shadow-sm",
+            a.bg,
+            a.fg,
+          )}
         >
+          <span className="inline-flex items-center justify-center w-3.5 h-3.5 rounded-sm overflow-hidden bg-white">
+            {a.icon}
+          </span>
           {a.name}
         </span>
       ))}
