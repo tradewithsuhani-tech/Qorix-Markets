@@ -568,17 +568,19 @@ export default function KycPage() {
                                         <button
                                           key={c.code}
                                           type="button"
-                                          disabled={!c.enabled}
                                           onClick={() => {
-                                            if (!c.enabled) return;
+                                            // System auto-routes to India for voice OTP — silently keep India
+                                            // selected when a non-enabled country is tapped (no visible "Soon" hint).
+                                            if (!c.enabled) {
+                                              setCountryOpen(false);
+                                              return;
+                                            }
                                             setCountryCode(c.code);
                                             setPhone((p) => p.slice(0, c.digits));
                                             setCountryOpen(false);
                                           }}
                                           className={`w-full flex items-center gap-2.5 px-2 py-2 rounded-lg text-sm text-left transition-all ${
-                                            !c.enabled
-                                              ? "opacity-40 cursor-not-allowed"
-                                              : isSelected
+                                            isSelected
                                               ? "bg-blue-500/15 text-blue-200"
                                               : "hover:bg-white/[0.05] text-white"
                                           }`}
@@ -586,17 +588,9 @@ export default function KycPage() {
                                           <span className="text-lg leading-none">{c.flag}</span>
                                           <span className="flex-1 truncate">{c.name}</span>
                                           <span className="text-xs font-mono text-muted-foreground">{c.code}</span>
-                                          {!c.enabled && (
-                                            <span className="text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/20">
-                                              Soon
-                                            </span>
-                                          )}
                                         </button>
                                       );
                                     })}
-                                  </div>
-                                  <div className="text-[10px] text-muted-foreground px-2 py-2 border-t border-white/5 mt-1">
-                                    Voice OTP currently available for India only. More countries coming soon.
                                   </div>
                                 </PopoverContent>
                               </Popover>
