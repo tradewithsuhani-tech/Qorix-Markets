@@ -1,6 +1,6 @@
 import { db, walletsTable, transactionsTable, usersTable, systemSettingsTable } from "@workspace/db";
 import { blockchainDepositsTable, promoRedemptionsTable } from "@workspace/db/schema";
-import { eq, isNotNull, or, isNull, sql } from "drizzle-orm";
+import { eq, and, isNotNull, or, isNull, sql, lte } from "drizzle-orm";
 import { logger, errorLogger } from "./logger";
 import { createNotification } from "./notifications";
 import { sendTxnEmailToUser } from "./email-service";
@@ -15,6 +15,35 @@ const TRONGRID_API_KEY = process.env["TRONGRID_API_KEY"] ?? "";
 const PLATFORM_TRON_ADDRESS = process.env["PLATFORM_TRON_ADDRESS"] ?? "";
 const MIN_AMOUNT_USDT = 1;
 const POLL_INTERVAL_MS = 15_000;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Confirmation gate
+//
+// TRON block time is ~3s and the network reaches irreversible finality at 19
+// Super-Representative confirmations (~1 minute). Crediting on the very first
+// TronGrid sighting risks accepting a tx that gets dropped/replaced (rare on
+// DPoS but non-zero), or a tx that hasn't finalised yet. We therefore require
+// the block to be at least N "block-times" old before we credit. Env override
+// `TRON_MIN_CONFIRMATIONS` lets ops dial this up/down without a redeploy.
+//
+// Effect: new deposits land in the DB immediately as `awaiting_conf` (so
+// the dedup unique-constraint on tx_hash kicks in), and the next poll cycle
+// (every 15s) re-evaluates them. Once enough block-time has elapsed, the
+// idempotent `creditUserDeposit` runs and flips the row to `confirmed`.
+// ─────────────────────────────────────────────────────────────────────────────
+const MIN_CONFIRMATIONS_BLOCKS = (() => {
+  const raw = parseInt(process.env["TRON_MIN_CONFIRMATIONS"] ?? "19", 10);
+  return Number.isFinite(raw) && raw >= 0 ? raw : 19;
+})();
+const TRON_BLOCK_TIME_MS = 3_000;
+const MIN_CONFIRMATION_AGE_MS = MIN_CONFIRMATIONS_BLOCKS * TRON_BLOCK_TIME_MS;
+
+function confirmationsFor(blockTimestampMs: number): number {
+  return Math.max(0, Math.floor((Date.now() - blockTimestampMs) / TRON_BLOCK_TIME_MS));
+}
+function hasEnoughConfirmations(blockTimestampMs: number): boolean {
+  return Date.now() - blockTimestampMs >= MIN_CONFIRMATION_AGE_MS;
+}
 
 function tronHeaders(): Record<string, string> {
   const h: Record<string, string> = { "Content-Type": "application/json" };
@@ -75,6 +104,13 @@ export async function creditUserDeposit(
     return;
   }
 
+  // Captured out of the transaction so we can short-circuit ALL post-tx
+  // side effects (notification, email, event emission) when another
+  // concurrent caller (poller retry, DB sweep, admin claim) won the race.
+  // Without this, duplicate emails/events fire even though balances stay
+  // correct — bad UX for a money flow.
+  let didClaim = false;
+
   await db.transaction(async (tx) => {
     // ── IDEMPOTENCY GUARD ────────────────────────────────────────────────
     // Atomically claim the deposit row by flipping `credited` from false to
@@ -100,6 +136,7 @@ export async function creditUserDeposit(
       );
       return;
     }
+    didClaim = true;
 
     await ensureUserAccounts(userId, tx);
 
@@ -212,6 +249,24 @@ export async function creditUserDeposit(
     }
   });
 
+  // If we lost the idempotency race (another path credited this row first),
+  // bail out BEFORE side effects — otherwise the user gets duplicate
+  // notifications, emails, and a duplicate balance-update event for what
+  // is the same on-chain deposit.
+  if (!didClaim) return;
+
+  // Re-read the wallet AFTER the transaction commits so the email + event
+  // payload show the authoritative post-credit balance. We can't compute
+  // this inside the tx because the atomic SQL increment doesn't return
+  // the new value, and pre-tx (`wallet.mainBalance + amount`) is stale
+  // under concurrency. One extra SELECT per credit is cheap (rare path).
+  const post = await db
+    .select({ mainBalance: walletsTable.mainBalance })
+    .from(walletsTable)
+    .where(eq(walletsTable.userId, userId))
+    .limit(1);
+  const newMain = post[0] ? Number(post[0].mainBalance) : Number(wallet.mainBalance) + amount;
+
   await createNotification(
     userId,
     "deposit",
@@ -236,6 +291,51 @@ export async function creditUserDeposit(
   });
 
   logger.info({ userId, amount, txHash }, "Blockchain USDT deposit credited");
+}
+
+// ---------------------------------------------------------------------------
+// DB-driven promotion of stale `awaiting_conf` rows.
+//
+// TronGrid endpoints used by the pollers return only `limit=20` recent
+// transactions (`only_to=true`). Under burst traffic, an unconfirmed tx
+// can fall out of that window before the ~57-second confirmation gate
+// elapses, leaving its `blockchain_deposits` row stuck at
+// `awaiting_conf` forever. This sweep runs once per poll cycle and
+// promotes any such row whose blockTimestamp is now old enough,
+// independent of TronGrid's current snapshot.
+// ---------------------------------------------------------------------------
+async function promoteAwaitingConfirmations(): Promise<void> {
+  const cutoff = new Date(Date.now() - MIN_CONFIRMATION_AGE_MS);
+  const due = await db
+    .select({
+      id: blockchainDepositsTable.id,
+      userId: blockchainDepositsTable.userId,
+      txHash: blockchainDepositsTable.txHash,
+      amount: blockchainDepositsTable.amount,
+    })
+    .from(blockchainDepositsTable)
+    .where(
+      and(
+        eq(blockchainDepositsTable.credited, false),
+        eq(blockchainDepositsTable.status, "awaiting_conf"),
+        lte(blockchainDepositsTable.blockTimestamp, cutoff),
+      ),
+    )
+    .limit(50); // bound per cycle to avoid runaway batches
+
+  for (const row of due) {
+    if (!row.userId) continue; // safety: unmatched rows are not auto-promoted
+    try {
+      const amt = Number(row.amount);
+      if (!Number.isFinite(amt) || amt <= 0) continue;
+      await creditUserDeposit(row.userId, amt, row.txHash, row.id);
+    } catch (err) {
+      errorLogger.error(
+        { err, depositId: row.id, userId: row.userId, txHash: row.txHash },
+        "promoteAwaitingConfirmations: credit failed — will retry next cycle",
+      );
+    }
+  }
 }
 
 async function pollPlatformAddress(): Promise<void> {
@@ -270,26 +370,45 @@ async function pollPlatformAddress(): Promise<void> {
 
     const txHash = t.transaction_id;
 
+    const enoughConfs = hasEnoughConfirmations(t.block_timestamp);
+
     // Check if already processed
     const existing = await db
-      .select({ id: blockchainDepositsTable.id, credited: blockchainDepositsTable.credited })
+      .select({
+        id: blockchainDepositsTable.id,
+        credited: blockchainDepositsTable.credited,
+        userId: blockchainDepositsTable.userId,
+        status: blockchainDepositsTable.status,
+      })
       .from(blockchainDepositsTable)
       .where(eq(blockchainDepositsTable.txHash, txHash))
       .limit(1);
 
     if (existing.length > 0) {
-      if (!existing[0]!.credited) {
-        const rec = existing[0]!;
-        const dep = await db.select().from(blockchainDepositsTable).where(eq(blockchainDepositsTable.id, rec.id)).limit(1);
-        if (dep[0]?.userId) {
-          await creditUserDeposit(dep[0].userId, amount, txHash, rec.id);
-        }
+      const rec = existing[0]!;
+      if (!rec.credited && rec.userId && enoughConfs && rec.status !== "unmatched") {
+        // Promote previously-unconfirmed row to confirmed + credit it.
+        // We skip rows still flagged 'unmatched' because they need an admin
+        // claim to assign a userId before crediting (idempotency in
+        // creditUserDeposit also enforces this).
+        await creditUserDeposit(rec.userId, amount, txHash, rec.id);
       }
+      // Otherwise: either already credited (no-op), still awaiting confs
+      // (next 15s cycle re-checks), or unmatched (admin claim path).
       continue;
     }
 
     // Match sender to a registered user
     const userId = senderMap.get(t.from.toLowerCase()) ?? null;
+
+    // Determine initial status: unmatched > awaiting_conf > pending.
+    // Rows always land in DB so the unique tx_hash constraint dedups
+    // future polls; the confirmation gate just delays the credit.
+    const initialStatus = !userId
+      ? "unmatched"
+      : enoughConfs
+        ? "pending"
+        : "awaiting_conf";
 
     const [inserted] = await db
       .insert(blockchainDepositsTable)
@@ -299,15 +418,24 @@ async function pollPlatformAddress(): Promise<void> {
         fromAddress: t.from,
         toAddress: t.to,
         amount: amount.toString(),
-        status: userId ? "pending" : "unmatched",
+        status: initialStatus,
         credited: false,
         blockTimestamp: new Date(t.block_timestamp),
       })
       .returning({ id: blockchainDepositsTable.id });
 
-    if (userId) {
+    if (userId && enoughConfs) {
       logger.info({ userId, txHash, amount, from: t.from }, "New USDT deposit detected — auto-crediting matched user");
       await creditUserDeposit(userId, amount, txHash, inserted!.id);
+    } else if (userId) {
+      logger.info(
+        {
+          userId, txHash, amount, from: t.from,
+          confirmations: confirmationsFor(t.block_timestamp),
+          required: MIN_CONFIRMATIONS_BLOCKS,
+        },
+        "New USDT deposit detected — awaiting confirmations before credit",
+      );
     } else {
       logger.warn({ txHash, amount, from: t.from }, "New USDT deposit detected — no matching user (needs admin review)");
     }
@@ -341,6 +469,7 @@ async function pollUserDepositAddresses(): Promise<void> {
       if (amount < MIN_AMOUNT_USDT) continue;
 
       const txHash = t.transaction_id;
+      const enoughConfs = hasEnoughConfirmations(t.block_timestamp);
 
       const existing = await db
         .select({ id: blockchainDepositsTable.id, credited: blockchainDepositsTable.credited })
@@ -349,10 +478,12 @@ async function pollUserDepositAddresses(): Promise<void> {
         .limit(1);
 
       if (existing.length > 0) {
-        if (!existing[0]!.credited) {
+        if (!existing[0]!.credited && enoughConfs) {
+          // Confs accrued since the row was first seen — credit + sweep now.
           await creditUserDeposit(rec.userId, amount, txHash, existing[0]!.id);
           triggerSweep(rec.address, rec.privateKeyEnc, amount);
         }
+        // else: still awaiting confs OR already credited — skip silently.
         continue;
       }
 
@@ -364,18 +495,29 @@ async function pollUserDepositAddresses(): Promise<void> {
           fromAddress: t.from,
           toAddress: t.to,
           amount: amount.toString(),
-          status: "pending",
+          status: enoughConfs ? "pending" : "awaiting_conf",
           credited: false,
           blockTimestamp: new Date(t.block_timestamp),
         })
         .returning({ id: blockchainDepositsTable.id });
 
-      logger.info(
-        { userId: rec.userId, txHash, amount, from: t.from, depositAddress: rec.address },
-        "New USDT deposit detected on per-user address — auto-crediting",
-      );
-      await creditUserDeposit(rec.userId, amount, txHash, inserted!.id);
-      triggerSweep(rec.address, rec.privateKeyEnc, amount);
+      if (enoughConfs) {
+        logger.info(
+          { userId: rec.userId, txHash, amount, from: t.from, depositAddress: rec.address },
+          "New USDT deposit detected on per-user address — auto-crediting",
+        );
+        await creditUserDeposit(rec.userId, amount, txHash, inserted!.id);
+        triggerSweep(rec.address, rec.privateKeyEnc, amount);
+      } else {
+        logger.info(
+          {
+            userId: rec.userId, txHash, amount, from: t.from, depositAddress: rec.address,
+            confirmations: confirmationsFor(t.block_timestamp),
+            required: MIN_CONFIRMATIONS_BLOCKS,
+          },
+          "New USDT deposit detected on per-user address — awaiting confirmations before credit",
+        );
+      }
     }
   }
 }
@@ -513,6 +655,10 @@ async function runPollCycle(): Promise<void> {
       if (PLATFORM_TRON_ADDRESS) {
         await pollPlatformAddress();
       }
+      // Promote any awaiting_conf rows whose blockTimestamp has aged past
+      // the confirmation gate, regardless of whether they still appear in
+      // TronGrid's narrow snapshot. This guarantees no deposit is stranded.
+      await promoteAwaitingConfirmations();
       // Retry any deposits that were credited but never swept to treasury.
       await retryStuckSweeps();
       // Sweep any leftover TRX gas at deposit addresses back to treasury.
