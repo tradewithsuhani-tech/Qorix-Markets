@@ -520,16 +520,19 @@ export function InrDepositTab() {
               <div className="rounded-2xl bg-white/[0.04] border border-white/10 text-white p-4">
                 <div className="flex items-center justify-between mb-3">
                   <div className="text-xs font-bold text-white">Payment Method</div>
-                  <div className="flex items-center gap-1.5">
-                    <span className={cn(
-                      "text-[9px] font-bold px-1.5 py-0.5 rounded",
-                      selected.type === "upi"
-                        ? "bg-orange-500/20 border border-orange-500/40 text-orange-300"
-                        : "bg-blue-500/20 border border-blue-500/40 text-blue-300"
-                    )}>
-                      {selected.type === "upi" ? "UPI" : "BANK"}
-                    </span>
-                  </div>
+                  <span className={cn(
+                    "inline-flex items-center gap-1.5 text-[10px] font-bold tracking-wide px-2 py-1 rounded-md",
+                    selected.type === "upi"
+                      ? "bg-orange-500/15 border border-orange-500/40 text-orange-300"
+                      : "bg-blue-500/15 border border-blue-500/40 text-blue-300"
+                  )}>
+                    {selected.type === "upi" ? (
+                      <img src={upiLogoUrl} alt="" className="w-3.5 h-3.5 object-contain" />
+                    ) : (
+                      <Landmark className="w-3.5 h-3.5" strokeWidth={2.4} />
+                    )}
+                    {selected.type === "upi" ? "UPI" : "BANK"}
+                  </span>
                 </div>
 
                 <div className="text-[11px] text-muted-foreground font-semibold mb-2">Receiving Account Details:</div>
