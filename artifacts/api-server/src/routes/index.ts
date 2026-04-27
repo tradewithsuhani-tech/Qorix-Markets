@@ -37,6 +37,7 @@ import phoneVerifyRouter from "./phone-verify";
 import phoneChangeRouter from "./phone-change";
 import merchantRouter from "./merchant";
 import adminMerchantsRouter from "./admin-merchants";
+import adminEscalationRouter from "./admin-escalation";
 
 const router: IRouter = Router();
 
@@ -81,5 +82,6 @@ router.use(phoneChangeRouter);
 // only public endpoint; everything else is gated by merchantAuthMiddleware.
 router.use(merchantRouter);
 router.use(adminMerchantsRouter);
+router.use(adminEscalationRouter);
 
 export default router;

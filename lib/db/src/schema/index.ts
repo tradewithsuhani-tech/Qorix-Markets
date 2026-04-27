@@ -30,3 +30,4 @@ export * from "./service-subscriptions";
 export * from "./admin-permissions";
 export * from "./admin-audit-log";
 export * from "./user-devices";
+export * from "./admin-escalation-contacts";

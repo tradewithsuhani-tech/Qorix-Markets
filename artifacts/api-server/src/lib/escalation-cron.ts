@@ -5,10 +5,11 @@ import {
   paymentMethodsTable,
   merchantsTable,
   usersTable,
+  adminEscalationContactsTable,
 } from "@workspace/db";
-import { and, eq, isNull, isNotNull, sql, inArray } from "drizzle-orm";
+import { and, asc, eq, isNull, isNotNull, sql, inArray } from "drizzle-orm";
 import { logger } from "./logger";
-import { placeEscalationCall } from "./voice-call-service";
+import { placeEscalationCall, placeEscalationCallAndAwaitOutcome } from "./voice-call-service";
 import { sendEmail } from "./email-service";
 
 // Thresholds — kept here as constants so we can dial them in without chasing
@@ -20,19 +21,81 @@ const ADMIN_ESCALATION_MIN = 15;
 const ADMIN_PHONE_KEY = "admin_escalation_phone";
 const ADMIN_EMAIL_KEY = "admin_escalation_email";
 
-async function getAdminTarget(): Promise<{ phone: string | null; email: string | null }> {
-  const rows = await db.execute<{ key: string; value: string }>(sql`
+interface AdminContactTarget {
+  phone: string;
+  email: string | null;
+  label: string;
+}
+
+// Returns the ordered admin contact chain for the cascade. Prefers the
+// `admin_escalation_contacts` table (multiple numbers, priority-ordered).
+// Falls back to the legacy single contact in `system_settings` for
+// backwards compatibility — that way nothing breaks for installs that
+// haven't populated the new table yet.
+async function getAdminContacts(): Promise<AdminContactTarget[]> {
+  const rows = await db
+    .select()
+    .from(adminEscalationContactsTable)
+    .where(eq(adminEscalationContactsTable.isActive, true))
+    .orderBy(asc(adminEscalationContactsTable.priority), asc(adminEscalationContactsTable.id));
+  if (rows.length > 0) {
+    return rows.map((r, idx) => ({
+      phone: r.phone,
+      email: r.email,
+      label: r.label ? `admin:${r.label}` : `admin#${idx + 1}`,
+    }));
+  }
+  // Legacy single-contact fallback.
+  const settings = await db.execute<{ key: string; value: string }>(sql`
     select key, value from system_settings
     where key in (${ADMIN_PHONE_KEY}, ${ADMIN_EMAIL_KEY})
   `);
   let phone: string | null = null;
   let email: string | null = null;
-  for (const r of rows.rows ?? []) {
+  for (const r of settings.rows ?? []) {
     if (r.key === ADMIN_PHONE_KEY) phone = r.value || null;
     if (r.key === ADMIN_EMAIL_KEY) email = r.value || null;
   }
   if (!email) email = process.env["SES_FROM_EMAIL"] ?? null;
-  return { phone, email };
+  return phone ? [{ phone, email, label: "admin" }] : [];
+}
+
+// Walks the admin contacts in priority order, calling each one and waiting
+// to learn whether the call was answered. Stops at the first contact that
+// picks up. If no provider is configured (email-fallback path) we cannot
+// detect "answered", so the loop will email every contact in turn — that
+// matches the user expectation of "make sure SOMEONE gets it".
+async function runAdminCascade(message: string): Promise<void> {
+  const contacts = await getAdminContacts();
+  if (contacts.length === 0) {
+    logger.warn("[escalation] admin cascade: no contacts configured, dropping");
+    return;
+  }
+  for (const c of contacts) {
+    try {
+      const outcome = await placeEscalationCallAndAwaitOutcome(c, message);
+      if (outcome.answered) {
+        logger.info(
+          { label: c.label, finalStatus: outcome.finalStatus },
+          "[escalation] admin cascade — answered, stopping",
+        );
+        return;
+      }
+      logger.warn(
+        { label: c.label, reason: outcome.reason ?? outcome.finalStatus },
+        "[escalation] admin cascade — no answer, trying next",
+      );
+    } catch (err) {
+      logger.warn(
+        { label: c.label, err: (err as Error).message },
+        "[escalation] admin cascade — call threw, trying next",
+      );
+    }
+  }
+  logger.error(
+    { tried: contacts.length },
+    "[escalation] admin cascade — exhausted, no admin picked up",
+  );
 }
 
 async function notifyMerchantByEmail(
@@ -179,12 +242,15 @@ async function escalatePendingDeposits(): Promise<void> {
     .returning({ id: inrDepositsTable.id, amountInr: inrDepositsTable.amountInr });
 
   if (claimedStage2.length > 0) {
-    const adminTarget = await getAdminTarget();
+    // Fire-and-forget the cascade per claimed row so the cron tick stays
+    // fast (each cascade can take up to ~270s for 3 contacts × 90s wait).
     for (const dep of claimedStage2) {
-      await placeEscalationCall(
-        { phone: adminTarget.phone, email: adminTarget.email, label: "admin" },
-        `Qorix Markets escalation. INR deposit number ${dep.id} of ${dep.amountInr} rupees was not approved by the merchant within ${ADMIN_ESCALATION_MIN} minutes. Please intervene.`,
-      );
+      const msg = `Qorix Markets escalation. INR deposit number ${dep.id} of ${dep.amountInr} rupees was not approved by the merchant within ${ADMIN_ESCALATION_MIN} minutes. Please intervene.`;
+      setImmediate(() => {
+        runAdminCascade(msg).catch((err) =>
+          logger.warn({ err: (err as Error).message, depositId: dep.id }, "[escalation] cascade failed"),
+        );
+      });
     }
   }
 }
@@ -242,12 +308,13 @@ async function escalatePendingWithdrawals(): Promise<void> {
     .returning({ id: inrWithdrawalsTable.id, amountInr: inrWithdrawalsTable.amountInr });
 
   if (claimedStage2.length > 0) {
-    const adminTarget = await getAdminTarget();
     for (const w of claimedStage2) {
-      await placeEscalationCall(
-        { phone: adminTarget.phone, email: adminTarget.email, label: "admin" },
-        `Qorix Markets escalation. INR withdrawal number ${w.id} of ${w.amountInr} rupees was not actioned by any merchant within ${ADMIN_ESCALATION_MIN} minutes. Please intervene.`,
-      );
+      const msg = `Qorix Markets escalation. INR withdrawal number ${w.id} of ${w.amountInr} rupees was not actioned by any merchant within ${ADMIN_ESCALATION_MIN} minutes. Please intervene.`;
+      setImmediate(() => {
+        runAdminCascade(msg).catch((err) =>
+          logger.warn({ err: (err as Error).message, withdrawalId: w.id }, "[escalation] cascade failed"),
+        );
+      });
     }
   }
 }

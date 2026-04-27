@@ -37,6 +37,7 @@ import AdminPaymentMethodsPage from "@/pages/admin-payment-methods";
 import AdminSubscriptionsPage from "@/pages/admin-subscriptions";
 import AdminSubAdminsPage from "@/pages/admin-sub-admins";
 import AdminMerchantsPage from "@/pages/admin-merchants";
+import AdminEscalationContactsPage from "@/pages/admin-escalation-contacts";
 import MerchantLoginPage from "@/pages/merchant-login";
 import MerchantDashboardPage from "@/pages/merchant-dashboard";
 import MerchantPaymentMethodsPage from "@/pages/merchant-payment-methods";
@@ -192,6 +193,7 @@ function Router() {
       <Route path="/admin/subscriptions"><ProtectedRoute component={AdminSubscriptionsPage} adminOnly={true} /></Route>
       <Route path="/admin/sub-admins"><ProtectedRoute component={AdminSubAdminsPage} adminOnly={true} /></Route>
       <Route path="/admin/merchants"><ProtectedRoute component={AdminMerchantsPage} adminOnly={true} /></Route>
+      <Route path="/admin/escalation-contacts"><ProtectedRoute component={AdminEscalationContactsPage} adminOnly={true} /></Route>
       <Route path="/merchant/login" component={MerchantLoginPage} />
       <Route path="/merchant" component={MerchantDashboardPage} />
       <Route path="/merchant/methods" component={MerchantPaymentMethodsPage} />
