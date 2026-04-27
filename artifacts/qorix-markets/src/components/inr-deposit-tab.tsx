@@ -715,7 +715,7 @@ export function InrDepositTab() {
                 type="button"
                 onClick={() => submit.mutate()}
                 disabled={!utr.trim() || !proof || submit.isPending}
-                className="flex-[2] py-3 rounded-full bg-gradient-to-r from-amber-300 to-orange-400 text-gray-900 font-bold text-sm hover:from-amber-200 hover:to-orange-300 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                className="flex-[2] py-3 rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-bold text-sm hover:from-emerald-400 hover:to-teal-400 shadow-[0_0_24px_-6px_rgba(16,185,129,0.6)] disabled:opacity-40 disabled:cursor-not-allowed transition-all"
               >
                 {submit.isPending ? (
                   <span className="inline-flex items-center justify-center gap-2">
