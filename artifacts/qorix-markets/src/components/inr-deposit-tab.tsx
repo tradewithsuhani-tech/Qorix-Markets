@@ -866,62 +866,69 @@ export function InrDepositTab() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.18 }}
-            className="fixed inset-0 z-[200] bg-black/85 backdrop-blur-md flex flex-col items-center justify-center p-5"
+            className="fixed inset-0 z-[200] bg-black/90 backdrop-blur-md overflow-y-auto overscroll-contain"
             onClick={() => setQrModalOpen(false)}
+            style={{
+              paddingTop: "max(env(safe-area-inset-top), 0.5rem)",
+              paddingBottom: "max(env(safe-area-inset-bottom), 0.5rem)",
+            }}
           >
             <button
               type="button"
               onClick={() => setQrModalOpen(false)}
-              className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 text-white inline-flex items-center justify-center transition-colors"
+              className="fixed top-3 right-3 z-10 w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 backdrop-blur text-white inline-flex items-center justify-center transition-colors shadow-lg"
+              style={{ top: "max(env(safe-area-inset-top), 0.75rem)" }}
               aria-label="Close"
             >
               <X className="w-5 h-5" />
             </button>
 
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              transition={{ duration: 0.2 }}
-              className="w-full max-w-sm flex flex-col items-center gap-5"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="text-center">
-                <div className="text-[10px] uppercase tracking-[0.2em] text-emerald-300 font-semibold mb-1">
-                  Scan to Pay
-                </div>
-                <div className="text-base font-bold text-white">
-                  {selected.displayName || (selected.type === "upi" ? "UPI" : "Bank")}
-                </div>
-                {selected.type === "upi" && selected.upiId && (
-                  <div className="text-xs font-mono text-emerald-300 mt-1 break-all">
-                    {selected.upiId}
-                  </div>
-                )}
-              </div>
-
-              <div className="w-full rounded-2xl p-3 bg-gradient-to-br from-emerald-950/50 via-slate-900/70 to-slate-950/80 border border-emerald-500/25 shadow-[0_0_60px_-15px_rgba(16,185,129,0.4)] backdrop-blur-xl">
-                <img
-                  src={selected.qrImageBase64}
-                  alt="UPI QR code"
-                  className="w-full h-auto object-contain rounded-xl"
-                />
-              </div>
-
-              <a
-                href={selected.qrImageBase64}
-                download={`qorix-${selected.type === "upi" ? "upi" : "bank"}-qr.png`}
+            <div className="min-h-full flex items-start sm:items-center justify-center px-4 py-14">
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.97, opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                className="w-full max-w-sm flex flex-col items-center gap-4"
                 onClick={(e) => e.stopPropagation()}
-                className="w-full py-3 rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-bold text-sm hover:from-emerald-400 hover:to-teal-400 shadow-[0_0_24px_-6px_rgba(16,185,129,0.6)] transition-all inline-flex items-center justify-center gap-2"
               >
-                <Download className="w-4 h-4" />
-                Save QR to Phone
-              </a>
+                <div className="text-center">
+                  <div className="text-[10px] uppercase tracking-[0.2em] text-emerald-300 font-semibold mb-1">
+                    Scan to Pay
+                  </div>
+                  <div className="text-base font-bold text-white">
+                    {selected.displayName || (selected.type === "upi" ? "UPI" : "Bank")}
+                  </div>
+                  {selected.type === "upi" && selected.upiId && (
+                    <div className="text-xs font-mono text-emerald-300 mt-1 break-all">
+                      {selected.upiId}
+                    </div>
+                  )}
+                </div>
 
-              <p className="text-[11px] text-white/60 text-center px-4">
-                Open any UPI app → scan this QR → enter exact amount → pay.
-              </p>
-            </motion.div>
+                <div className="w-full rounded-2xl p-3 bg-gradient-to-br from-emerald-950/50 via-slate-900/70 to-slate-950/80 border border-emerald-500/25 shadow-[0_0_60px_-15px_rgba(16,185,129,0.4)] backdrop-blur-xl">
+                  <img
+                    src={selected.qrImageBase64}
+                    alt="UPI QR code"
+                    className="w-full max-h-[55vh] object-contain rounded-xl mx-auto"
+                  />
+                </div>
+
+                <a
+                  href={selected.qrImageBase64}
+                  download={`qorix-${selected.type === "upi" ? "upi" : "bank"}-qr.png`}
+                  onClick={(e) => e.stopPropagation()}
+                  className="w-full py-3 rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-bold text-sm hover:from-emerald-400 hover:to-teal-400 shadow-[0_0_24px_-6px_rgba(16,185,129,0.6)] transition-all inline-flex items-center justify-center gap-2"
+                >
+                  <Download className="w-4 h-4" />
+                  Save QR to Phone
+                </a>
+
+                <p className="text-[11px] text-white/60 text-center px-4">
+                  Open any UPI app → scan this QR → enter exact amount → pay.
+                </p>
+              </motion.div>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
