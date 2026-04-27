@@ -79,6 +79,22 @@ export default function WalletPage() {
     id: number; netAmount: number; fee: number; source: string; address: string; at: string;
   } | null>(null);
 
+  // Idempotency key for the in-flight withdrawal intent. Generated when the
+  // user starts a fresh withdraw flow, reused across double-taps and network
+  // retries of THIS attempt, regenerated on form reset (next intent). Pairs
+  // with the backend's partial unique index on transactions(user_id, type,
+  // idempotency_key) — server returns the same booked withdrawal on replay
+  // instead of debiting the balance twice.
+  const [withdrawIdemKey, setWithdrawIdemKey] = useState<string>(() =>
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `wd-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+  );
+  const newIdemKey = () =>
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `wd-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
   const sourceBalance = withdrawSource === "main" ? (wallet?.mainBalance || 0) : (wallet?.profitBalance || 0);
 
   // KYC status — used to gate the withdrawal button.
@@ -96,6 +112,8 @@ export default function WalletPage() {
   const resetWithdrawForm = () => {
     setWithdrawAmount(""); setWithdrawAddress(""); setWithdrawOtp("");
     setWithdrawStep("form"); setWithdrawReceipt(null);
+    // Fresh idempotency key for the next withdrawal intent.
+    setWithdrawIdemKey(newIdemKey());
   };
 
   const requestWithdrawalOtp = async () => {
@@ -123,13 +141,18 @@ export default function WalletPage() {
           otp: withdrawOtp,
           source: withdrawSource,
           usePoints: pointsToSpend,
+          idempotencyKey: withdrawIdemKey,
         }),
       });
-      const amt = Number(withdrawAmount);
+      // Prefer the server-canonical net amount over local form math — this
+      // matters on idempotent replay where the server returns the ORIGINAL
+      // booked withdrawal (which may differ from the current form state if
+      // the user changed inputs between attempts using the same key).
+      const serverNetAmount = typeof res.amount === "number" ? res.amount : Number(withdrawAmount) - feeAmount;
       const fee = feeAmount;
       setWithdrawReceipt({
         id: res.id,
-        netAmount: amt - fee,
+        netAmount: serverNetAmount,
         fee,
         source: withdrawSource,
         address: withdrawAddress,
@@ -459,7 +482,7 @@ export default function WalletPage() {
                     </div>
                     <div className="grid grid-cols-2 gap-2">
                       <button
-                        onClick={() => setWithdrawStep("form")}
+                        onClick={() => { setWithdrawStep("form"); setWithdrawIdemKey(newIdemKey()); }}
                         disabled={sendingOtp}
                         className="px-4 py-2.5 rounded-xl bg-white/5 border border-white/10 text-sm text-white hover:bg-white/10 transition-colors disabled:opacity-50"
                       >
@@ -519,7 +542,7 @@ export default function WalletPage() {
                         autoFocus
                       />
                       <button
-                        onClick={() => { setWithdrawStep("form"); setWithdrawOtp(""); }}
+                        onClick={() => { setWithdrawStep("form"); setWithdrawOtp(""); setWithdrawIdemKey(newIdemKey()); }}
                         className="px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-muted-foreground hover:bg-white/10 transition-colors"
                       >
                         <X style={{ width: 14, height: 14 }} />

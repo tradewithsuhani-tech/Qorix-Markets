@@ -171,6 +171,61 @@ router.post("/wallet/withdraw", async (req: AuthRequest, res) => {
 
   const { amount, walletAddress } = result.data;
 
+  // ── IDEMPOTENCY DEDUP (early exit) ──────────────────────────────────────
+  // Optional client-supplied key. Frontend generates a fresh UUID per submit
+  // attempt; double-taps and network retries reuse the same key. If we have
+  // already booked a withdrawal for this (user, key), return the same
+  // response shape WITHOUT debiting balance / firing emails / OTP again.
+  // The DB-level partial unique index on (user_id, type, idempotency_key)
+  // is the authoritative race guard — this pre-check just avoids touching
+  // OTP / wallet on a clear replay.
+  // Fail-closed validation: if the client supplied an idempotencyKey, it
+  // MUST be a non-empty string ≤80 chars. Silently ignoring a malformed
+  // value would drop dedup protection without the client ever knowing —
+  // making future double-submits land as real duplicate withdrawals.
+  const rawIdem = req.body?.idempotencyKey;
+  let idempotencyKey: string | null = null;
+  if (rawIdem !== undefined && rawIdem !== null) {
+    if (typeof rawIdem !== "string" || rawIdem.length === 0 || rawIdem.length > 80) {
+      res.status(400).json({
+        error: "invalid_idempotency_key",
+        message: "idempotencyKey must be a non-empty string up to 80 characters",
+      });
+      return;
+    }
+    idempotencyKey = rawIdem;
+  }
+  if (idempotencyKey) {
+    const replay = await db
+      .select()
+      .from(transactionsTable)
+      .where(
+        and(
+          eq(transactionsTable.userId, req.userId!),
+          eq(transactionsTable.type, "withdrawal"),
+          eq(transactionsTable.idempotencyKey, idempotencyKey),
+        ),
+      )
+      .limit(1);
+    if (replay[0]) {
+      const r = replay[0];
+      transactionLogger.info(
+        { event: "withdrawal_idempotent_replay", userId: req.userId!, transactionId: r.id, idempotencyKey },
+        "Withdrawal idempotent replay — returning existing transaction without re-debit",
+      );
+      res.json({
+        id: r.id,
+        userId: r.userId,
+        type: r.type,
+        amount: parseFloat(r.amount as string),
+        status: r.status,
+        description: r.description,
+        createdAt: r.createdAt.toISOString(),
+      });
+      return;
+    }
+  }
+
   // --- User status / KYC / cool-off checks ---
   const userRows = await db.select().from(usersTable).where(eq(usersTable.id, req.userId!)).limit(1);
   const user = userRows[0];
@@ -364,6 +419,7 @@ router.post("/wallet/withdraw", async (req: AuthRequest, res) => {
         status: "pending",
         description: `Withdrawal from ${source} to ${walletAddress}${feeAmount > 0 ? ` (fee: $${feeAmount.toFixed(2)})` : ""}`,
         walletAddress,
+        idempotencyKey,
       })
       .returning();
 
@@ -398,6 +454,48 @@ router.post("/wallet/withdraw", async (req: AuthRequest, res) => {
           `for your security. Deposits and trading continue as normal.`,
       });
       return;
+    }
+    // ── IDEMPOTENCY RACE GUARD ─────────────────────────────────────────────
+    // Two concurrent submits with the same idempotencyKey both passed the
+    // pre-check above; only one wins the partial unique index on
+    // (user_id, type, idempotency_key). Postgres surfaces this as 23505.
+    // The transaction rolled back (no double-debit) — re-fetch the winner
+    // and return its response shape so the client sees a single success.
+    const pgCode = err?.code ?? err?.cause?.code;
+    if (
+      idempotencyKey &&
+      (pgCode === "23505" ||
+        (typeof err?.message === "string" &&
+          err.message.includes("transactions_user_type_idem_uq")))
+    ) {
+      const winner = await db
+        .select()
+        .from(transactionsTable)
+        .where(
+          and(
+            eq(transactionsTable.userId, req.userId!),
+            eq(transactionsTable.type, "withdrawal"),
+            eq(transactionsTable.idempotencyKey, idempotencyKey),
+          ),
+        )
+        .limit(1);
+      if (winner[0]) {
+        const r = winner[0];
+        transactionLogger.info(
+          { event: "withdrawal_idempotent_race_resolved", userId: req.userId!, transactionId: r.id, idempotencyKey },
+          "Withdrawal idempotency race lost — returning winner's transaction without re-debit",
+        );
+        res.json({
+          id: r.id,
+          userId: r.userId,
+          type: r.type,
+          amount: parseFloat(r.amount as string),
+          status: r.status,
+          description: r.description,
+          createdAt: r.createdAt.toISOString(),
+        });
+        return;
+      }
     }
     throw err;
   }
