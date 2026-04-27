@@ -248,20 +248,70 @@ export function sendTxnEmailToUser(
   title: string,
   message: string,
 ): void {
-  setImmediate(async () => {
-    try {
-      const rows = await db
-        .select({ email: usersTable.email })
-        .from(usersTable)
-        .where(eq(usersTable.id, userId))
-        .limit(1);
-      const email = rows[0]?.email;
-      if (!email) return;
-      const html = buildBrandedEmailHtml(title, message);
-      await sendEmail(email, title, message, html);
-    } catch (err) {
-      logger.warn({ err: (err as Error).message, userId, title }, "[email-service] txn email failed");
-    }
+  setImmediate(() => {
+    // Wrap the async work so a transient DB blip (e.g. Neon pool reconnect)
+    // never crashes the process via an unhandled rejection. We retry once
+    // after a short backoff before giving up — this fixes the silent drop of
+    // deposit/withdrawal confirmation emails seen on Fly when the user's row
+    // lookup raced with a Neon idle reconnect.
+    void (async () => {
+      const lookupEmail = async (): Promise<string | null> => {
+        const rows = await db
+          .select({ email: usersTable.email })
+          .from(usersTable)
+          .where(eq(usersTable.id, userId))
+          .limit(1);
+        return rows[0]?.email ?? null;
+      };
+
+      let email: string | null = null;
+      let lastErr: unknown = null;
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          email = await lookupEmail();
+          lastErr = null;
+          break;
+        } catch (err) {
+          lastErr = err;
+          if (attempt === 1) {
+            // brief backoff for transient connection / pool issues
+            await new Promise((r) => setTimeout(r, 750));
+          }
+        }
+      }
+
+      if (lastErr) {
+        const e = lastErr as { message?: string; code?: string; cause?: { message?: string; code?: string } };
+        logger.warn(
+          {
+            userId,
+            title,
+            errMessage: e?.message,
+            errCode: e?.code,
+            causeMessage: e?.cause?.message,
+            causeCode: e?.cause?.code,
+          },
+          "[email-service] txn email user lookup failed after retry",
+        );
+        return;
+      }
+
+      if (!email) {
+        logger.info({ userId, title }, "[email-service] txn email skipped — user has no email");
+        return;
+      }
+
+      try {
+        const html = buildBrandedEmailHtml(title, message);
+        await sendEmail(email, title, message, html);
+      } catch (err) {
+        const e = err as { message?: string; code?: string };
+        logger.warn(
+          { userId, title, errMessage: e?.message, errCode: e?.code },
+          "[email-service] txn email send failed",
+        );
+      }
+    })();
   });
 }
 
