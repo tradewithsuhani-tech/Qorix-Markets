@@ -93,8 +93,8 @@ export function buildBrandedEmailHtml(title: string, message: string): string {
 
         <!-- LOGO BAR — premium 3D Q wordmark on dark gradient -->
         <tr>
-          <td align="center" class="qx-logo-pad" style="padding:36px 24px 8px;background:#0A0F1C;background-image:linear-gradient(135deg,#0A0F1C 0%,#111B36 40%,#1E1B4B 75%,#3B1763 100%);">
-            <img src="cid:${BRAND_LOGO_CID}" alt="Qorix Markets" width="240" height="162" style="display:block;width:240px;max-width:72%;height:auto;border:0;outline:none;text-decoration:none;margin:0 auto;" />
+          <td align="left" class="qx-logo-pad" style="padding:38px 24px 12px 32px;background:#0A0F1C;background-image:linear-gradient(135deg,#0A0F1C 0%,#111B36 40%,#1E1B4B 75%,#3B1763 100%);">
+            <img src="cid:${BRAND_LOGO_CID}" alt="Qorix Markets" width="300" height="203" style="display:block;width:300px;max-width:86%;height:auto;border:0;outline:none;text-decoration:none;margin:0;" />
           </td>
         </tr>
 
