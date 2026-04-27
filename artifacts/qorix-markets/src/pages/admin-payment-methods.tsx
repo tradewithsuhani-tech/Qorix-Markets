@@ -64,6 +64,26 @@ interface AdminInrDeposit {
   createdAt: string;
 }
 
+interface AdminInrWithdrawal {
+  id: number;
+  userId: number;
+  amountInr: number;
+  amountUsdt: number;
+  rateUsed: number;
+  payoutMethod: "upi" | "bank";
+  upiId: string | null;
+  accountHolder: string | null;
+  accountNumber: string | null;
+  ifsc: string | null;
+  bankName: string | null;
+  status: "pending" | "approved" | "rejected";
+  adminNote: string | null;
+  payoutReference: string | null;
+  reviewedBy: number | null;
+  reviewedAt: string | null;
+  createdAt: string;
+}
+
 const emptyForm: Partial<PaymentMethod> = {
   type: "bank",
   displayName: "",
@@ -361,6 +381,40 @@ export default function AdminPaymentMethodsPage() {
     onError: (e: any) => toast({ title: "Reject failed", description: e?.message, variant: "destructive" }),
   });
 
+  // ── INR WITHDRAWALS ───────────────────────────────────────────────────────
+  const { data: wdrResp } = useQuery<{ withdrawals: AdminInrWithdrawal[] }>({
+    queryKey: ["admin-inr-withdrawals", "pending"],
+    queryFn: () => authFetch(getApiUrl("/admin/inr-withdrawals?status=pending")),
+    refetchInterval: 15000,
+  });
+  const withdrawals = wdrResp?.withdrawals ?? [];
+
+  const approveWdr = useMutation({
+    mutationFn: ({ id, payoutReference, note }: { id: number; payoutReference: string; note?: string }) =>
+      authFetch(getApiUrl(`/admin/inr-withdrawals/${id}/approve`), {
+        method: "POST",
+        body: JSON.stringify({ payoutReference, adminNote: note }),
+      }),
+    onSuccess: () => {
+      toast({ title: "Withdrawal marked paid", description: "User notified" });
+      qc.invalidateQueries({ queryKey: ["admin-inr-withdrawals", "pending"] });
+    },
+    onError: (e: any) => toast({ title: "Approve failed", description: e?.message, variant: "destructive" }),
+  });
+
+  const rejectWdr = useMutation({
+    mutationFn: ({ id, note }: { id: number; note: string }) =>
+      authFetch(getApiUrl(`/admin/inr-withdrawals/${id}/reject`), {
+        method: "POST",
+        body: JSON.stringify({ adminNote: note }),
+      }),
+    onSuccess: () => {
+      toast({ title: "Withdrawal rejected", description: "Funds refunded to user's main balance" });
+      qc.invalidateQueries({ queryKey: ["admin-inr-withdrawals", "pending"] });
+    },
+    onError: (e: any) => toast({ title: "Reject failed", description: e?.message, variant: "destructive" }),
+  });
+
   return (
     <Layout>
       <motion.div
@@ -440,6 +494,33 @@ export default function AdminPaymentMethodsPage() {
                   onReject={(note) => reject.mutate({ id: d.id, note })}
                   busy={approve.isPending || reject.isPending}
                   onPreview={setPreviewProof}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Pending INR withdrawals */}
+        <div className="glass-card rounded-2xl overflow-hidden">
+          <div className="px-5 pt-4 pb-3 border-b border-white/8 flex items-center justify-between">
+            <div>
+              <div className="text-sm font-semibold text-white">Pending INR withdrawals</div>
+              <div className="text-[11px] text-muted-foreground mt-0.5">
+                {withdrawals.length} awaiting payout · funds already held from user balances
+              </div>
+            </div>
+          </div>
+          {withdrawals.length === 0 ? (
+            <div className="px-5 py-10 text-center text-xs text-muted-foreground">No pending withdrawals</div>
+          ) : (
+            <div className="divide-y divide-white/5">
+              {withdrawals.map((w) => (
+                <PendingWithdrawalRow
+                  key={w.id}
+                  w={w}
+                  onApprove={(payoutReference, note) => approveWdr.mutate({ id: w.id, payoutReference, note })}
+                  onReject={(note) => rejectWdr.mutate({ id: w.id, note })}
+                  busy={approveWdr.isPending || rejectWdr.isPending}
                 />
               ))}
             </div>
@@ -659,6 +740,112 @@ function PendingDepositRow({
               className="px-3 py-1.5 text-xs rounded-md bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border border-emerald-500/25 inline-flex items-center gap-1.5"
             >
               <CheckCircle className="w-3.5 h-3.5" /> Approve & Credit
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PendingWithdrawalRow({
+  w,
+  onApprove,
+  onReject,
+  busy,
+}: {
+  w: AdminInrWithdrawal;
+  onApprove: (payoutReference: string, note?: string) => void;
+  onReject: (note: string) => void;
+  busy: boolean;
+}) {
+  const [note, setNote] = useState("");
+  const [payoutRef, setPayoutRef] = useState("");
+  const [showActions, setShowActions] = useState(false);
+
+  return (
+    <div className="px-5 py-4">
+      <div className="flex items-start gap-3">
+        <div className={cn(
+          "w-12 h-12 rounded-lg flex items-center justify-center shrink-0",
+          w.payoutMethod === "bank" ? "bg-blue-500/15 text-blue-400" : "bg-violet-500/15 text-violet-400"
+        )}>
+          {w.payoutMethod === "bank" ? <Banknote className="w-5 h-5" /> : <Smartphone className="w-5 h-5" />}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-semibold text-white">
+            ₹{Number(w.amountInr).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            <span className="text-[11px] text-muted-foreground font-normal ml-2">
+              held ${Number(w.amountUsdt).toFixed(2)} USDT @ ₹{w.rateUsed}
+            </span>
+          </div>
+          <div className="text-[11px] text-muted-foreground mt-0.5 truncate">
+            user#{w.userId} ·{" "}
+            {w.payoutMethod === "upi" ? (
+              <>UPI <span className="font-mono text-white">{w.upiId}</span></>
+            ) : (
+              <>
+                {w.bankName ?? "Bank"} · {w.accountHolder} · A/c{" "}
+                <span className="font-mono text-white">{w.accountNumber}</span> ·{" "}
+                IFSC <span className="font-mono text-white">{w.ifsc}</span>
+              </>
+            )}
+          </div>
+          <div className="text-[10px] text-muted-foreground mt-0.5">
+            {new Date(w.createdAt).toLocaleString()}
+          </div>
+        </div>
+        <button
+          onClick={() => setShowActions(!showActions)}
+          className="px-3 py-1.5 text-xs rounded-md bg-white/5 hover:bg-white/10 text-white"
+        >
+          Pay out
+        </button>
+      </div>
+      {showActions && (
+        <div className="mt-3 space-y-2 pt-3 border-t border-white/5">
+          <div className="grid grid-cols-2 gap-2">
+            <input
+              type="text"
+              placeholder="Bank/UPI reference (UTR or txn id)"
+              value={payoutRef}
+              onChange={(e) => setPayoutRef(e.target.value)}
+              className="field-input text-xs"
+            />
+            <input
+              type="text"
+              placeholder="Admin note (optional / required for reject)"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              className="field-input text-xs"
+            />
+          </div>
+          <div className="flex items-center gap-2 justify-end">
+            <button
+              onClick={() => {
+                if (!note.trim()) {
+                  alert("Please enter a reason for rejecting (will be shown to user).");
+                  return;
+                }
+                onReject(note.trim());
+              }}
+              disabled={busy}
+              className="px-3 py-1.5 text-xs rounded-md bg-red-500/15 hover:bg-red-500/25 text-red-400 border border-red-500/25 inline-flex items-center gap-1.5"
+            >
+              <XCircle className="w-3.5 h-3.5" /> Reject & Refund
+            </button>
+            <button
+              onClick={() => {
+                if (!payoutRef.trim()) {
+                  alert("Please enter the bank/UPI reference for this payout.");
+                  return;
+                }
+                onApprove(payoutRef.trim(), note.trim() || undefined);
+              }}
+              disabled={busy}
+              className="px-3 py-1.5 text-xs rounded-md bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border border-emerald-500/25 inline-flex items-center gap-1.5"
+            >
+              <CheckCircle className="w-3.5 h-3.5" /> Mark Paid
             </button>
           </div>
         </div>
