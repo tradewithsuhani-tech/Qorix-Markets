@@ -253,6 +253,7 @@ Defense-in-depth, three layers:
 
 **1. Application-layer guards (fast path)**
 - KYC required for withdrawals + KYC/deposit-gated tasks (`task-service.ts`)
+- One-phone-one-account: voice-OTP `/send` pre-checks + `/verify` race-rechecks; partial unique index `users_phone_verified_uidx` on `(phone_number) WHERE phone_verified_at IS NOT NULL` is the DB fence (commit 5201ab7)
 - 24h new-account withdrawal cool-off (`wallet.ts`)
 - Daily referral cap: 10 sponsored signups per user per calendar day (`auth.ts /register`) — silently drops sponsor link past limit
 - Weekly referral points cap (1000 pts/week) (`task-service.ts awardPoints`)
