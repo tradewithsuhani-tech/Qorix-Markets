@@ -69,6 +69,49 @@ export function InrWithdrawTab({ kycApproved, onKycRequired }: { kycApproved: bo
   const [bankName, setBankName] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
+  // IFSC auto-verification (Razorpay free IFSC API)
+  const [ifscStatus, setIfscStatus] = useState<"idle" | "loading" | "verified" | "error">("idle");
+  const [ifscBranchInfo, setIfscBranchInfo] = useState<string>("");
+
+  useEffect(() => {
+    const code = ifsc.trim().toUpperCase();
+    if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(code)) {
+      setIfscStatus("idle");
+      setIfscBranchInfo("");
+      return;
+    }
+    setIfscStatus("loading");
+    const ctrl = new AbortController();
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`https://ifsc.razorpay.com/${code}`, { signal: ctrl.signal });
+        if (!res.ok) {
+          setIfscStatus("error");
+          setIfscBranchInfo("IFSC code not found in Razorpay registry");
+          return;
+        }
+        const data = await res.json();
+        const bank = String(data?.BANK ?? "").trim();
+        const branch = String(data?.BRANCH ?? "").trim();
+        const city = String(data?.CITY ?? data?.DISTRICT ?? "").trim();
+        const state = String(data?.STATE ?? "").trim();
+        if (bank) {
+          setBankName(bank);
+          setIfscBranchInfo([branch, city, state].filter(Boolean).join(", "));
+          setIfscStatus("verified");
+        } else {
+          setIfscStatus("error");
+          setIfscBranchInfo("Could not read bank info");
+        }
+      } catch (err: any) {
+        if (err?.name === "AbortError") return;
+        setIfscStatus("error");
+        setIfscBranchInfo("Could not verify IFSC (network error)");
+      }
+    }, 400);
+    return () => { clearTimeout(timer); ctrl.abort(); };
+  }, [ifsc]);
+
   const refresh = async () => {
     try {
       const [lim, hist] = await Promise.all([
@@ -276,27 +319,66 @@ export function InrWithdrawTab({ kycApproved, onKycRequired }: { kycApproved: bo
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs text-muted-foreground font-medium mb-1.5 block">IFSC Code</label>
+              <label className="text-xs text-muted-foreground font-medium mb-1.5 block flex items-center gap-1.5">
+                IFSC Code
+                {ifscStatus === "loading" && (
+                  <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />
+                )}
+                {ifscStatus === "verified" && (
+                  <span className="inline-flex items-center gap-0.5 text-emerald-400">
+                    <CheckCircle2 className="w-3 h-3" />
+                    <span className="text-[10px] font-semibold">Verified</span>
+                  </span>
+                )}
+                {ifscStatus === "error" && (
+                  <span className="inline-flex items-center gap-0.5 text-red-400">
+                    <AlertCircle className="w-3 h-3" />
+                    <span className="text-[10px] font-semibold">Invalid</span>
+                  </span>
+                )}
+              </label>
               <input
                 type="text"
                 value={ifsc}
                 onChange={(e) => setIfsc(e.target.value.toUpperCase())}
-                className="field-input font-mono uppercase"
+                className={`field-input font-mono uppercase ${
+                  ifscStatus === "verified" ? "border-emerald-500/50" :
+                  ifscStatus === "error" ? "border-red-500/50" : ""
+                }`}
                 placeholder="HDFC0001234"
                 maxLength={11}
               />
             </div>
             <div>
-              <label className="text-xs text-muted-foreground font-medium mb-1.5 block">Bank Name (opt.)</label>
+              <label className="text-xs text-muted-foreground font-medium mb-1.5 block">
+                Bank Name {ifscStatus === "verified" && <span className="text-[10px] text-emerald-400">(auto-filled)</span>}
+              </label>
               <input
                 type="text"
                 value={bankName}
                 onChange={(e) => setBankName(e.target.value)}
-                className="field-input"
+                className={`field-input ${ifscStatus === "verified" ? "bg-emerald-500/5 border-emerald-500/30" : ""}`}
                 placeholder="HDFC Bank"
+                readOnly={ifscStatus === "verified"}
               />
             </div>
           </div>
+          {ifscBranchInfo && (
+            <div className={`text-[11px] px-3 py-2 rounded-lg flex items-start gap-2 ${
+              ifscStatus === "verified"
+                ? "bg-emerald-500/8 border border-emerald-500/20 text-emerald-300"
+                : "bg-red-500/8 border border-red-500/20 text-red-300"
+            }`}>
+              {ifscStatus === "verified" ? (
+                <CheckCircle2 className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+              ) : (
+                <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+              )}
+              <span className="leading-snug">
+                {ifscStatus === "verified" ? <><span className="font-semibold">Branch:</span> {ifscBranchInfo}</> : ifscBranchInfo}
+              </span>
+            </div>
+          )}
         </div>
       )}
 
