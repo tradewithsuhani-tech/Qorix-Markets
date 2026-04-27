@@ -16,6 +16,7 @@ import { loginEventsTable, blockchainDepositsTable, serviceSubscriptionsTable } 
 import { eq, ne, sum, count, and, or, desc, sql, inArray, isNotNull } from "drizzle-orm";
 import { createNotification } from "../lib/notifications";
 import { authMiddleware, adminMiddleware, getParam, getQueryInt, getQueryString, type AuthRequest } from "../middlewares/auth";
+import { auditAdminRequest, requireAdminPermission } from "../middlewares/admin-rbac";
 import { notifyMaintenanceInvalidation, getMaintenanceState } from "../middlewares/maintenance";
 import { SetDailyProfitBody } from "@workspace/api-zod";
 import { transferProfitToMain } from "../lib/profit-service";
@@ -43,6 +44,8 @@ import { notSmokeTestUser, notSmokeTestUserRef, shouldIncludeSmokeTest } from ".
 const router = Router();
 router.use("/admin", authMiddleware);
 router.use("/admin", adminMiddleware);
+router.use("/admin", requireAdminPermission);
+router.use("/admin", auditAdminRequest);
 
 export async function getSlotData() {
   const slotRows = await db

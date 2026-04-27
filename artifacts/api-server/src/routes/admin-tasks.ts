@@ -2,12 +2,15 @@ import { Router } from "express";
 import { db, tasksTable, taskProofsTable, userTaskCompletionsTable, usersTable, pointsTransactionsTable } from "@workspace/db";
 import { eq, and, desc, count, sql } from "drizzle-orm";
 import { authMiddleware, adminMiddleware, getParam, getQueryString, type AuthRequest } from "../middlewares/auth";
+import { auditAdminRequest, requireAdminPermission } from "../middlewares/admin-rbac";
 import { awardPoints } from "../lib/task-service";
 import { createNotification } from "../lib/notifications";
 
 const router = Router();
 router.use("/admin", authMiddleware);
 router.use("/admin", adminMiddleware);
+router.use("/admin", requireAdminPermission);
+router.use("/admin", auditAdminRequest);
 
 // ---------------------------------------------------------------------------
 // GET /admin/task-proofs — list all pending proofs

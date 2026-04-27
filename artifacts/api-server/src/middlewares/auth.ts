@@ -1,7 +1,7 @@
 import type { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
-import { db, systemSettingsTable, usersTable } from "@workspace/db";
+import { db, systemSettingsTable, usersTable, adminPermissionsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { getMaintenanceState } from "./maintenance";
 
@@ -54,6 +54,12 @@ const JWT_SECRET = SESSION_SECRET_ENV || "qorix-markets-secret";
 export interface AuthRequest extends Request {
   userId?: number;
   isAdmin?: boolean;
+  /** "super" for super admins, "sub" for sub-admins. Populated by adminMiddleware. */
+  adminRole?: "super" | "sub" | null;
+  /** List of module slugs this sub-admin is allowed to access. Empty for super (super has access to all). */
+  adminPermissions?: string[];
+  /** Email of the authenticated admin (denormalised into audit log). */
+  adminEmail?: string | null;
 }
 
 export async function authMiddleware(req: AuthRequest, res: Response, next: NextFunction) {
@@ -138,6 +144,30 @@ export async function adminMiddleware(req: AuthRequest, res: Response, next: Nex
   if (!req.isAdmin) {
     res.status(403).json({ error: "Admin access required" });
     return;
+  }
+  // Hydrate adminRole + adminPermissions for downstream RBAC + audit-log
+  // middleware. Cheap (single user row by PK is already cached in pg buffer
+  // pool from authMiddleware), and we additionally fetch the permissions
+  // row only for sub-admins.
+  if (req.userId) {
+    const adminRow = await db
+      .select({ email: usersTable.email, adminRole: usersTable.adminRole })
+      .from(usersTable)
+      .where(eq(usersTable.id, req.userId))
+      .limit(1);
+    const role = adminRow[0]?.adminRole;
+    req.adminEmail = adminRow[0]?.email ?? null;
+    req.adminRole = role === "super" ? "super" : "sub";
+    if (req.adminRole === "sub") {
+      const permRow = await db
+        .select({ modules: adminPermissionsTable.modules })
+        .from(adminPermissionsTable)
+        .where(eq(adminPermissionsTable.adminId, req.userId))
+        .limit(1);
+      req.adminPermissions = permRow[0]?.modules ?? [];
+    } else {
+      req.adminPermissions = [];
+    }
   }
   const whitelistRows = await db
     .select({ value: systemSettingsTable.value })
