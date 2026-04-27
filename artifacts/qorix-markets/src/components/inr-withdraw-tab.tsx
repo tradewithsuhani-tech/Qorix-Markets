@@ -350,8 +350,9 @@ export function InrWithdrawTab({ kycApproved, onKycRequired }: { kycApproved: bo
               />
             </div>
             <div>
-              <label className="text-xs text-muted-foreground font-medium mb-1.5 block">
-                Bank Name {ifscStatus === "verified" && <span className="text-[10px] text-emerald-400">(auto-filled)</span>}
+              <label className="text-xs text-muted-foreground font-medium mb-1.5 block flex items-center gap-1.5">
+                Bank Name
+                {ifscStatus === "verified" && <CheckCircle2 className="w-3 h-3 text-emerald-400" />}
               </label>
               <input
                 type="text"
