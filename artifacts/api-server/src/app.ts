@@ -81,10 +81,29 @@ app.use("/api", maintenanceMiddleware, router);
 // middleware. `_next` is unused but the signature is required.
 app.use(
   (err: unknown, req: Request, res: Response, _next: NextFunction) => {
-    const e = err instanceof Error ? err : new Error(String(err));
+    // Walk the .cause chain so wrapper errors (e.g. Drizzle's
+    // "Failed query: ..." which puts the underlying postgres error in
+    // err.cause) actually reveal the root reason in fly logs.
+    const chain: Array<{ type: string; message: string; stack?: string; code?: string; detail?: string }> = [];
+    let cur: unknown = err;
+    let depth = 0;
+    while (cur && depth < 5) {
+      const c = cur instanceof Error ? cur : new Error(String(cur));
+      const anyC = c as Error & { code?: unknown; detail?: unknown; cause?: unknown };
+      chain.push({
+        type: c.constructor.name,
+        message: c.message,
+        stack: c.stack,
+        code: typeof anyC.code === "string" || typeof anyC.code === "number" ? String(anyC.code) : undefined,
+        detail: typeof anyC.detail === "string" ? anyC.detail : undefined,
+      });
+      cur = anyC.cause;
+      depth++;
+    }
     logger.error(
       {
-        err: { type: e.constructor.name, message: e.message, stack: e.stack },
+        err: chain[0],
+        causeChain: chain.slice(1),
         route: `${req.method} ${req.path}`,
       },
       "unhandled route error",
