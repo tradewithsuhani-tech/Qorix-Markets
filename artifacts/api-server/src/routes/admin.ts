@@ -839,7 +839,7 @@ const buildBroadcastHtml = buildBrandedEmailHtml;
 // same brand wrapper as /admin/broadcast.
 // ---------------------------------------------------------------------------
 router.post("/admin/users/:id/send-email", async (req: AuthRequest, res) => {
-  const userId = parseInt(req.params.id, 10);
+  const userId = parseInt(getParam(req, "id"));
   if (!Number.isFinite(userId)) {
     res.status(400).json({ error: "Invalid user id" });
     return;
