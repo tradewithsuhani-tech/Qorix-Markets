@@ -653,7 +653,11 @@ export default function WalletPage() {
         <motion.div variants={item}>
           <div className="flex items-start gap-3 px-4 py-3 rounded-xl bg-blue-500/8 border border-blue-500/15 text-xs text-muted-foreground">
             <AlertCircle style={{ width: 14, height: 14 }} className="text-blue-400 shrink-0 mt-0.5" />
-            <span>Withdrawals are reviewed within 24 hours. Ensure your wallet address is correct — funds sent to wrong addresses cannot be recovered.</span>
+            {withdrawTab === "inr" ? (
+              <span>INR withdrawals are processed within 24 hours after admin review. Double-check your UPI ID or bank account number &amp; IFSC — funds sent to wrong accounts cannot be recovered. Make sure the account holder name matches your KYC.</span>
+            ) : (
+              <span>Withdrawals are reviewed within 24 hours. Ensure your wallet address is correct — funds sent to wrong addresses cannot be recovered.</span>
+            )}
           </div>
         </motion.div>
 
