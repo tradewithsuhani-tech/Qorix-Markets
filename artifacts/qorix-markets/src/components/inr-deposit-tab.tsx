@@ -322,7 +322,7 @@ export function InrDepositTab() {
                 >
                   <MethodIcon type={m.type} />
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm font-bold text-white truncate">{m.displayName}</div>
+                    <div className="text-sm font-bold text-white truncate">{m.type === "upi" ? "UPI" : "Bank"}</div>
                     <div className="text-[11px] text-muted-foreground mt-0.5 flex items-center gap-2">
                       <span className="text-emerald-400 font-semibold">No Fees</span>
                       <span className="text-white/20">|</span>
@@ -397,7 +397,7 @@ export function InrDepositTab() {
                 <div className="text-xs text-muted-foreground">Pay With</div>
                 <div className="flex items-center gap-2">
                   <MethodIcon type={selected.type} size="sm" />
-                  <span className="text-sm font-bold text-white">{selected.displayName}</span>
+                  <span className="text-sm font-bold text-white">{selected.type === "upi" ? "UPI" : "Bank"}</span>
                 </div>
               </div>
               {selected.type === "bank" && selected.accountNumber && (
