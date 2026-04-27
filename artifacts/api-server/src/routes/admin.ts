@@ -13,7 +13,8 @@ import {
   signalTradesTable,
 } from "@workspace/db";
 import { loginEventsTable, blockchainDepositsTable, serviceSubscriptionsTable } from "@workspace/db/schema";
-import { eq, sum, count, and, or, desc, sql, inArray } from "drizzle-orm";
+import { eq, ne, sum, count, and, or, desc, sql, inArray, isNotNull } from "drizzle-orm";
+import { createNotification } from "../lib/notifications";
 import { authMiddleware, adminMiddleware, getParam, getQueryInt, getQueryString, type AuthRequest } from "../middlewares/auth";
 import { notifyMaintenanceInvalidation, getMaintenanceState } from "../middlewares/maintenance";
 import { SetDailyProfitBody } from "@workspace/api-zod";
@@ -302,6 +303,159 @@ router.post("/admin/users/:id/action", async (req: AuthRequest, res) => {
     isDisabled: updated.isDisabled,
     isFrozen: updated.isFrozen,
     forceLogoutAfter: updated.forceLogoutAfter?.toISOString() ?? null,
+  });
+});
+
+// Admin-side direct edit of a user's identity fields (full name, email,
+// phone). Bypasses the user-facing OTP flow because admin is the trusted
+// reviewer (e.g. KYC correction, support escalation, lost-phone recovery).
+//
+// Safety rails:
+//   - Email + phone are checked against the SAME uniqueness constraints as
+//     normal user flows (email column is unique; phone uses the partial
+//     unique index that fires only when phone_verified_at IS NOT NULL).
+//   - When admin sets a new phone we mark it admin-verified immediately
+//     (phoneVerifiedAt = now). When admin clears the phone we also clear
+//     phoneVerifiedAt so the partial index frees the old number for reuse.
+//   - The user gets a notification recording exactly which fields changed
+//     so a malicious / mistaken admin edit is at least visible to them.
+//   - Every change is written to the transaction logger with admin id +
+//     before/after for audit trail.
+router.patch("/admin/users/:id/profile", async (req: AuthRequest, res) => {
+  const id = parseInt(getParam(req, "id"));
+  if (!Number.isFinite(id) || id <= 0) {
+    res.status(400).json({ error: "invalid_user_id" });
+    return;
+  }
+  const body = (req.body ?? {}) as { fullName?: string; email?: string; phoneNumber?: string | null };
+
+  const [existing] = await db.select().from(usersTable).where(eq(usersTable.id, id)).limit(1);
+  if (!existing) { res.status(404).json({ error: "user_not_found" }); return; }
+
+  const updates: Partial<typeof usersTable.$inferInsert> = {};
+  const changes: Record<string, { from: any; to: any }> = {};
+
+  // Full name: trim, length cap. Anything else passes through.
+  if (typeof body.fullName === "string") {
+    const trimmed = body.fullName.trim();
+    if (trimmed.length < 1 || trimmed.length > 255) {
+      res.status(400).json({ error: "invalid_full_name", message: "Full name must be 1-255 characters" });
+      return;
+    }
+    if (trimmed !== existing.fullName) {
+      updates.fullName = trimmed;
+      changes.fullName = { from: existing.fullName, to: trimmed };
+    }
+  }
+
+  // Email: lowercase, simple format check, uniqueness check.
+  if (typeof body.email === "string") {
+    const normalized = body.email.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized) || normalized.length > 255) {
+      res.status(400).json({ error: "invalid_email", message: "Enter a valid email address" });
+      return;
+    }
+    if (normalized !== existing.email) {
+      const dupes = await db
+        .select({ id: usersTable.id })
+        .from(usersTable)
+        .where(and(eq(usersTable.email, normalized), ne(usersTable.id, id)))
+        .limit(1);
+      if (dupes.length > 0) {
+        res.status(409).json({ error: "email_in_use", message: "Another account already uses that email" });
+        return;
+      }
+      updates.email = normalized;
+      changes.email = { from: existing.email, to: normalized };
+    }
+  }
+
+  // Phone: accept null/empty to clear, or a 10-digit Indian mobile to set.
+  // When set, mark admin-verified so the user can immediately receive
+  // OTP-gated actions tied to the new number. When cleared, also clear
+  // phoneVerifiedAt so the partial unique index releases the old number
+  // for reuse on another account.
+  if ("phoneNumber" in body) {
+    const raw = body.phoneNumber;
+    if (raw === null || raw === undefined || String(raw).trim() === "") {
+      if (existing.phoneNumber !== null) {
+        updates.phoneNumber = null;
+        updates.phoneVerifiedAt = null;
+        changes.phoneNumber = { from: existing.phoneNumber, to: null };
+      }
+    } else {
+      const digits = String(raw).replace(/\D/g, "");
+      let normalized: string | null = null;
+      if (digits.length === 10 && /^[6-9]/.test(digits)) normalized = digits;
+      else if (digits.length === 12 && digits.startsWith("91") && /^[6-9]/.test(digits.slice(2))) normalized = digits.slice(2);
+      else if (digits.length === 11 && digits.startsWith("0") && /^[6-9]/.test(digits.slice(1))) normalized = digits.slice(1);
+      if (!normalized) {
+        res.status(400).json({ error: "invalid_phone", message: "Enter a valid 10-digit Indian mobile number" });
+        return;
+      }
+      if (normalized !== existing.phoneNumber) {
+        const conflicts = await db
+          .select({ id: usersTable.id })
+          .from(usersTable)
+          .where(and(
+            eq(usersTable.phoneNumber, normalized),
+            isNotNull(usersTable.phoneVerifiedAt),
+            ne(usersTable.id, id),
+          ))
+          .limit(1);
+        if (conflicts.length > 0) {
+          res.status(409).json({ error: "phone_in_use", message: "Another account already verified that phone number" });
+          return;
+        }
+        updates.phoneNumber = normalized;
+        updates.phoneVerifiedAt = new Date(); // admin vouches → immediately verified
+        changes.phoneNumber = { from: existing.phoneNumber, to: normalized };
+      }
+    }
+  }
+
+  if (Object.keys(updates).length === 0) {
+    res.json({ id: existing.id, fullName: existing.fullName, email: existing.email, phoneNumber: existing.phoneNumber, changed: false });
+    return;
+  }
+
+  let updated;
+  try {
+    [updated] = await db.update(usersTable).set(updates).where(eq(usersTable.id, id)).returning();
+  } catch (err: any) {
+    const msg = String(err?.message || "");
+    if (/unique|duplicate/i.test(msg)) {
+      res.status(409).json({ error: "constraint_violation", message: "Email or phone is already in use." });
+      return;
+    }
+    transactionLogger.error({ event: "admin_user_profile_edit_failed", adminId: req.userId, userId: id, err: msg }, "Admin user profile edit failed");
+    res.status(500).json({ error: "update_failed" });
+    return;
+  }
+
+  // Notify the user about each changed field so a sneaky admin edit can't
+  // happen in total silence. Single notification with a summary.
+  const changedKeys = Object.keys(changes);
+  if (changedKeys.length > 0) {
+    const summary = changedKeys.map((k) => {
+      if (k === "phoneNumber") {
+        const to = changes[k].to ? `******${String(changes[k].to).slice(-4)}` : "(removed)";
+        return `phone → ${to}`;
+      }
+      return `${k} updated`;
+    }).join(", ");
+    await createNotification(id, "system", "Profile updated by admin", `Account changes by support: ${summary}.`);
+  }
+
+  transactionLogger.info({ event: "admin_user_profile_edit", adminId: req.userId, userId: id, changes }, "Admin user profile edit");
+  res.json({
+    id: updated!.id,
+    fullName: updated!.fullName,
+    email: updated!.email,
+    phoneNumber: updated!.phoneNumber,
+    phoneVerifiedAt: updated!.phoneVerifiedAt?.toISOString() ?? null,
+    changed: true,
+    changedFields: changedKeys,
   });
 });
 
@@ -1937,7 +2091,7 @@ function advanceDueDate(current: string | null, cycle: string): string | null {
   return result.toISOString().slice(0, 10);
 }
 
-router.get("/subscriptions", authMiddleware, adminMiddleware, async (_req: AuthRequest, res) => {
+router.get("/admin/subscriptions", authMiddleware, adminMiddleware, async (_req: AuthRequest, res) => {
   // Sort by next_due_date ASC NULLS LAST so overdue + upcoming appear at
   // the top, then by manual sortOrder, then by name. NULL due dates (e.g.
   // one-time paid items) sink to the bottom.
@@ -1952,7 +2106,7 @@ router.get("/subscriptions", authMiddleware, adminMiddleware, async (_req: AuthR
   res.json({ subscriptions: rows });
 });
 
-router.post("/subscriptions", authMiddleware, adminMiddleware, async (req: AuthRequest, res) => {
+router.post("/admin/subscriptions", authMiddleware, adminMiddleware, async (req: AuthRequest, res) => {
   const b = req.body ?? {};
   const name = String(b.name ?? "").trim();
   const provider = String(b.provider ?? "other").trim();
@@ -1978,7 +2132,7 @@ router.post("/subscriptions", authMiddleware, adminMiddleware, async (req: AuthR
   res.json({ subscription: row });
 });
 
-router.patch("/subscriptions/:id", authMiddleware, adminMiddleware, async (req: AuthRequest, res) => {
+router.patch("/admin/subscriptions/:id", authMiddleware, adminMiddleware, async (req: AuthRequest, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id) || id <= 0) {
     res.status(400).json({ error: "bad_id" });
@@ -2007,7 +2161,7 @@ router.patch("/subscriptions/:id", authMiddleware, adminMiddleware, async (req: 
   res.json({ subscription: row });
 });
 
-router.delete("/subscriptions/:id", authMiddleware, adminMiddleware, async (req: AuthRequest, res) => {
+router.delete("/admin/subscriptions/:id", authMiddleware, adminMiddleware, async (req: AuthRequest, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id) || id <= 0) {
     res.status(400).json({ error: "bad_id" });
@@ -2017,7 +2171,7 @@ router.delete("/subscriptions/:id", authMiddleware, adminMiddleware, async (req:
   res.json({ ok: true });
 });
 
-router.post("/subscriptions/:id/mark-paid", authMiddleware, adminMiddleware, async (req: AuthRequest, res) => {
+router.post("/admin/subscriptions/:id/mark-paid", authMiddleware, adminMiddleware, async (req: AuthRequest, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id) || id <= 0) {
     res.status(400).json({ error: "bad_id" });
