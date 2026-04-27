@@ -134,8 +134,8 @@ function renderOtpHtml(opts: {
     <td align="center">
       <table width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#0F172A;border-radius:18px;overflow:hidden;border:1px solid #1F2937;">
         <tr>
-          <td align="left" style="padding:40px 20px 32px 32px;background:linear-gradient(135deg,#05070D 0%,#0A0F1C 50%,#111B36 100%);">
-            <img src="cid:${BRAND_LOGO_CID}" alt="Qorix Markets" width="320" height="217" style="display:block;width:320px;max-width:88%;height:auto;border:0;outline:none;text-decoration:none;margin:0;" />
+          <td align="left" style="padding:20px 20px 14px 28px;background:linear-gradient(135deg,#05070D 0%,#0A0F1C 50%,#111B36 100%);">
+            <img src="cid:${BRAND_LOGO_CID}" alt="Qorix Markets" width="280" height="190" style="display:block;width:280px;max-width:80%;height:auto;border:0;outline:none;text-decoration:none;margin:0;" />
           </td>
         </tr>
         <tr>

@@ -93,8 +93,8 @@ export function buildBrandedEmailHtml(title: string, message: string): string {
 
         <!-- LOGO BAR — premium 3D Q wordmark on dark gradient -->
         <tr>
-          <td align="left" class="qx-logo-pad" style="padding:38px 24px 12px 32px;background:#0A0F1C;background-image:linear-gradient(135deg,#0A0F1C 0%,#111B36 40%,#1E1B4B 75%,#3B1763 100%);">
-            <img src="cid:${BRAND_LOGO_CID}" alt="Qorix Markets" width="300" height="203" style="display:block;width:300px;max-width:86%;height:auto;border:0;outline:none;text-decoration:none;margin:0;" />
+          <td align="left" class="qx-logo-pad" style="padding:18px 24px 0 28px;background:#0A0F1C;background-image:linear-gradient(135deg,#0A0F1C 0%,#111B36 40%,#1E1B4B 75%,#3B1763 100%);">
+            <img src="cid:${BRAND_LOGO_CID}" alt="Qorix Markets" width="280" height="190" style="display:block;width:280px;max-width:80%;height:auto;border:0;outline:none;text-decoration:none;margin:0;" />
           </td>
         </tr>
 
@@ -103,7 +103,7 @@ export function buildBrandedEmailHtml(title: string, message: string): string {
           <td style="padding:0;background:#0A0F1C;background-image:linear-gradient(135deg,#0A0F1C 0%,#111B36 40%,#1E1B4B 75%,#3B1763 100%);">
             <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
               <tr>
-                <td align="center" class="qx-hero-pad" style="padding:8px 32px 36px;">
+                <td align="center" class="qx-hero-pad" style="padding:0 32px 30px;">
                   <div class="qx-badge" style="display:inline-block;padding:7px 16px;border-radius:999px;background:rgba(34,211,238,0.12);border:1px solid rgba(34,211,238,0.35);font-size:11px;letter-spacing:2px;color:#67E8F9;font-weight:700;text-transform:uppercase;margin-bottom:24px;">
                     ⚡ AI-Powered Trading System
                   </div>
