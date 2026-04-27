@@ -137,15 +137,49 @@ router.post("/phone-otp/verify", authMiddleware, async (req: AuthRequest, res) =
     return;
   }
 
-  // Verify with 2Factor.in
-  try {
-    const url = `https://2factor.in/API/V1/${encodeURIComponent(TWO_FACTOR_KEY)}/SMS/VERIFY/${encodeURIComponent(user.phoneOtpSessionId)}/${encodeURIComponent(cleanOtp)}`;
+  // Verify with 2Factor.in.
+  // 2Factor exposes /SMS/VERIFY/{sessionId}/{otp} as the unified session-based
+  // verifier (works for both SMS and Voice channels). Some accounts/plans
+  // require the channel-specific path /VOICE/VERIFY/{sessionId}/{otp}, so we
+  // try the unified endpoint first and fall back to VOICE on a non-Success
+  // response — and log the full response from each attempt so we can see the
+  // real reason ("OTP Expired", "Invalid Session Id", "OTP Mismatch", etc.).
+  type TwoFactorResp = { Status?: string; Details?: string };
+  const tryVerify = async (path: "SMS" | "VOICE"): Promise<{ ok: boolean; status: number; data: TwoFactorResp }> => {
+    const url = `https://2factor.in/API/V1/${encodeURIComponent(TWO_FACTOR_KEY)}/${path}/VERIFY/${encodeURIComponent(user.phoneOtpSessionId!)}/${encodeURIComponent(cleanOtp)}`;
     const r = await fetch(url);
-    const data: any = await r.json().catch(() => ({}));
-    if (!r.ok || data?.Status !== "Success") {
-      res.status(400).json({ error: "otp_mismatch", message: data?.Details === "OTP Expired" ? "OTP expired" : "Wrong OTP, try again" });
-      return;
+    let data: TwoFactorResp = {};
+    try { data = (await r.json()) as TwoFactorResp; } catch { /* non-JSON body */ }
+    return { ok: r.ok && data?.Status === "Success", status: r.status, data };
+  };
+
+  try {
+    const primary = await tryVerify("SMS");
+    let final = primary;
+    if (!primary.ok) {
+      // Fallback to VOICE channel verifier
+      const fallback = await tryVerify("VOICE");
+      if (fallback.ok) {
+        console.log("[phone-otp] verify ok via VOICE fallback", { userId: req.userId, sessionId: user.phoneOtpSessionId });
+        final = fallback;
+      } else {
+        console.warn("[phone-otp] verify failed", {
+          userId: req.userId,
+          sessionId: user.phoneOtpSessionId,
+          otpLen: cleanOtp.length,
+          primary: { status: primary.status, Status: primary.data?.Status, Details: primary.data?.Details },
+          fallback: { status: fallback.status, Status: fallback.data?.Status, Details: fallback.data?.Details },
+        });
+        const details = primary.data?.Details || fallback.data?.Details || "";
+        const isExpired = /expir/i.test(details);
+        res.status(400).json({
+          error: "otp_mismatch",
+          message: isExpired ? "OTP expired. Request a new voice call." : "Wrong OTP. Listen to the call again and re-enter.",
+        });
+        return;
+      }
     }
+    console.log("[phone-otp] verify success", { userId: req.userId, status: final.data?.Status });
   } catch (err: any) {
     console.error("[phone-otp] verify network error", err?.message);
     res.status(502).json({ error: "otp_network_error", message: "Network error verifying OTP" });
