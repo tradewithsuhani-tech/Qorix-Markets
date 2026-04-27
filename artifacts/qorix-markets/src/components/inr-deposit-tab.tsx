@@ -468,7 +468,7 @@ export function InrDepositTab() {
             className="space-y-4 -mx-1"
           >
             {/* Gradient header */}
-            <div className="relative rounded-2xl overflow-hidden bg-gradient-to-br from-orange-400 via-pink-500 to-purple-600 px-5 pt-5 pb-6 text-white">
+            <div className="relative rounded-2xl overflow-hidden bg-gradient-to-br from-slate-900 via-emerald-950/70 to-slate-900 border border-emerald-500/20 px-5 pt-5 pb-6 text-white shadow-[0_0_40px_-12px_rgba(16,185,129,0.25)]">
               <button
                 onClick={() => setStep("amount")}
                 className="absolute top-3 left-3 inline-flex items-center gap-1 text-[11px] text-white/80 hover:text-white"
