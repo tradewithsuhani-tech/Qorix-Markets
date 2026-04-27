@@ -538,14 +538,16 @@ export default function KycPage() {
                                 </span>
                               )}
                             </label>
-                            <div className="flex gap-2">
+                            <div className="flex flex-col sm:flex-row gap-2">
+                              {/* Row 1 (mobile): country + input together. On desktop, all three are inline. */}
+                              <div className="flex gap-2 min-w-0">
                               {/* Country dial-code picker */}
                               <Popover open={countryOpen && !phoneVerified} onOpenChange={setCountryOpen}>
                                 <PopoverTrigger asChild>
                                   <button
                                     type="button"
                                     disabled={phoneVerified}
-                                    className={`flex items-center gap-1.5 px-2.5 py-2.5 rounded-xl bg-white/[0.03] border text-sm focus:outline-none focus:border-blue-500/40 disabled:opacity-70 transition-all ${
+                                    className={`shrink-0 flex items-center gap-1.5 px-3 py-3 sm:py-2.5 rounded-xl bg-white/[0.03] border text-sm focus:outline-none focus:border-blue-500/40 disabled:opacity-70 transition-all ${
                                       phoneVerified ? "border-emerald-500/40 bg-emerald-500/5" : "border-white/10 hover:bg-white/[0.05]"
                                     }`}
                                   >
@@ -598,23 +600,24 @@ export default function KycPage() {
                               <input
                                 value={phone}
                                 onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, selectedCountry.digits))}
-                                placeholder={`${selectedCountry.digits}-digit mobile`}
+                                placeholder="Mobile number"
                                 inputMode="numeric"
                                 maxLength={selectedCountry.digits}
                                 disabled={phoneVerified}
-                                className={`flex-1 min-w-0 px-3 py-2.5 rounded-xl bg-white/[0.03] border text-sm focus:outline-none focus:border-blue-500/40 disabled:opacity-70 ${
+                                className={`flex-1 min-w-0 px-3 py-3 sm:py-2.5 rounded-xl bg-white/[0.03] border text-base sm:text-sm focus:outline-none focus:border-blue-500/40 disabled:opacity-70 ${
                                   phoneVerified ? "border-emerald-500/40 bg-emerald-500/5" : "border-white/10"
                                 }`}
                               />
+                              </div>
                               {!phoneVerified && (
                                 <button
                                   type="button"
                                   disabled={!indianPhoneOk || sendOtp.isPending || cooldownSecLeft > 0}
                                   onClick={() => sendOtp.mutate()}
-                                  className="px-3 py-2.5 rounded-xl bg-blue-500/15 border border-blue-500/30 text-blue-300 text-xs font-semibold disabled:opacity-40 hover:bg-blue-500/25 transition-all whitespace-nowrap"
+                                  className="w-full sm:w-auto px-4 py-3 sm:py-2.5 rounded-xl bg-blue-500/15 border border-blue-500/30 text-blue-300 text-sm sm:text-xs font-semibold disabled:opacity-40 hover:bg-blue-500/25 transition-all whitespace-nowrap"
                                 >
                                   {sendOtp.isPending ? "Calling…" :
-                                   cooldownSecLeft > 0 ? `Resend ${cooldownSecLeft}s` :
+                                   cooldownSecLeft > 0 ? `Resend in ${cooldownSecLeft}s` :
                                    otpExpiresAt ? "Resend Call" : "Send Voice OTP"}
                                 </button>
                               )}
