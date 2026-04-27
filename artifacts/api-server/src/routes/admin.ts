@@ -12,7 +12,7 @@ import {
   notificationsTable,
   signalTradesTable,
 } from "@workspace/db";
-import { loginEventsTable, blockchainDepositsTable } from "@workspace/db/schema";
+import { loginEventsTable, blockchainDepositsTable, serviceSubscriptionsTable } from "@workspace/db/schema";
 import { eq, sum, count, and, or, desc, sql, inArray } from "drizzle-orm";
 import { authMiddleware, adminMiddleware, getParam, getQueryInt, getQueryString, type AuthRequest } from "../middlewares/auth";
 import { notifyMaintenanceInvalidation, getMaintenanceState } from "../middlewares/maintenance";
@@ -1904,6 +1904,133 @@ router.post("/admin/signal-trades/reanchor", async (req: AuthRequest, res) => {
     errorLogger.error({ err, adminId: req.userId }, "Admin re-anchor failed");
     res.status(500).json({ error: err?.message ?? "reanchor failed", summary });
   }
+});
+
+// ─── Service Subscriptions (operational bill tracker) ───────────────────────
+// Admin-only bookkeeping for what we pay for hosting/DB/domain/etc., when
+// the next bill is due, and how much. Surfaces upcoming + overdue
+// payments to /admin/subscriptions before they cause an outage.
+
+function advanceDueDate(current: string | null, cycle: string): string | null {
+  // Roll the next-due date forward by one billing cycle from `current`
+  // (or today if current is null/past). Returns ISO YYYY-MM-DD or null
+  // for one-time subscriptions.
+  if (cycle === "one-time") return null;
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+  let base = current ? new Date(current + "T00:00:00Z") : today;
+  if (base < today) base = today;
+  if (cycle === "yearly") {
+    base.setUTCFullYear(base.getUTCFullYear() + 1);
+  } else {
+    base.setUTCMonth(base.getUTCMonth() + 1);
+  }
+  return base.toISOString().slice(0, 10);
+}
+
+router.get("/subscriptions", authMiddleware, adminMiddleware, async (_req: AuthRequest, res) => {
+  // Sort by next_due_date ASC NULLS LAST so overdue + upcoming appear at
+  // the top, then by manual sortOrder, then by name. NULL due dates (e.g.
+  // one-time paid items) sink to the bottom.
+  const rows = await db
+    .select()
+    .from(serviceSubscriptionsTable)
+    .orderBy(
+      sql`${serviceSubscriptionsTable.nextDueDate} ASC NULLS LAST`,
+      serviceSubscriptionsTable.sortOrder,
+      serviceSubscriptionsTable.name,
+    );
+  res.json({ subscriptions: rows });
+});
+
+router.post("/subscriptions", authMiddleware, adminMiddleware, async (req: AuthRequest, res) => {
+  const b = req.body ?? {};
+  const name = String(b.name ?? "").trim();
+  const provider = String(b.provider ?? "other").trim();
+  if (!name) {
+    res.status(400).json({ error: "name_required" });
+    return;
+  }
+  const cycle = ["monthly", "yearly", "one-time"].includes(b.billingCycle) ? b.billingCycle : "monthly";
+  const [row] = await db
+    .insert(serviceSubscriptionsTable)
+    .values({
+      name,
+      provider,
+      amountUsd: String(b.amountUsd ?? "0"),
+      billingCycle: cycle,
+      nextDueDate: b.nextDueDate || null,
+      lastPaidDate: b.lastPaidDate || null,
+      notes: b.notes ?? null,
+      isActive: b.isActive !== false,
+      sortOrder: Number.isFinite(Number(b.sortOrder)) ? Number(b.sortOrder) : 0,
+    })
+    .returning();
+  res.json({ subscription: row });
+});
+
+router.patch("/subscriptions/:id", authMiddleware, adminMiddleware, async (req: AuthRequest, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) {
+    res.status(400).json({ error: "bad_id" });
+    return;
+  }
+  const b = req.body ?? {};
+  const patch: any = { updatedAt: new Date() };
+  if (typeof b.name === "string") patch.name = b.name.trim();
+  if (typeof b.provider === "string") patch.provider = b.provider.trim();
+  if (b.amountUsd !== undefined) patch.amountUsd = String(b.amountUsd);
+  if (b.billingCycle && ["monthly", "yearly", "one-time"].includes(b.billingCycle)) patch.billingCycle = b.billingCycle;
+  if ("nextDueDate" in b) patch.nextDueDate = b.nextDueDate || null;
+  if ("lastPaidDate" in b) patch.lastPaidDate = b.lastPaidDate || null;
+  if ("notes" in b) patch.notes = b.notes ?? null;
+  if (typeof b.isActive === "boolean") patch.isActive = b.isActive;
+  if (Number.isFinite(Number(b.sortOrder))) patch.sortOrder = Number(b.sortOrder);
+  const [row] = await db
+    .update(serviceSubscriptionsTable)
+    .set(patch)
+    .where(eq(serviceSubscriptionsTable.id, id))
+    .returning();
+  if (!row) {
+    res.status(404).json({ error: "not_found" });
+    return;
+  }
+  res.json({ subscription: row });
+});
+
+router.delete("/subscriptions/:id", authMiddleware, adminMiddleware, async (req: AuthRequest, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) {
+    res.status(400).json({ error: "bad_id" });
+    return;
+  }
+  await db.delete(serviceSubscriptionsTable).where(eq(serviceSubscriptionsTable.id, id));
+  res.json({ ok: true });
+});
+
+router.post("/subscriptions/:id/mark-paid", authMiddleware, adminMiddleware, async (req: AuthRequest, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) {
+    res.status(400).json({ error: "bad_id" });
+    return;
+  }
+  const [existing] = await db
+    .select()
+    .from(serviceSubscriptionsTable)
+    .where(eq(serviceSubscriptionsTable.id, id))
+    .limit(1);
+  if (!existing) {
+    res.status(404).json({ error: "not_found" });
+    return;
+  }
+  const today = new Date().toISOString().slice(0, 10);
+  const newNext = advanceDueDate(existing.nextDueDate, existing.billingCycle);
+  const [row] = await db
+    .update(serviceSubscriptionsTable)
+    .set({ lastPaidDate: today, nextDueDate: newNext, updatedAt: new Date() })
+    .where(eq(serviceSubscriptionsTable.id, id))
+    .returning();
+  res.json({ subscription: row });
 });
 
 export default router;

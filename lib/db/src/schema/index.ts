@@ -25,3 +25,4 @@ export * from "./scheduled-promos";
 export * from "./payment-methods";
 export * from "./inr-deposits";
 export * from "./inr-withdrawals";
+export * from "./service-subscriptions";
