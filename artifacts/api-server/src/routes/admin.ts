@@ -838,6 +838,18 @@ const buildBroadcastHtml = buildBrandedEmailHtml;
 // payload is the final { subject, message } that gets rendered through the
 // same brand wrapper as /admin/broadcast.
 // ---------------------------------------------------------------------------
+const ALLOWED_DIRECT_EMAIL_TEMPLATE_IDS = new Set([
+  "announcement",
+  "promotion",
+  "alert",
+  "info",
+  "maintenance",
+  "trade_alert",
+  "next_trade",
+]);
+const DIRECT_EMAIL_SUBJECT_MAX = 200;
+const DIRECT_EMAIL_MESSAGE_MAX = 10_000;
+
 router.post("/admin/users/:id/send-email", async (req: AuthRequest, res) => {
   const userId = parseInt(getParam(req, "id"));
   if (!Number.isFinite(userId)) {
@@ -853,6 +865,30 @@ router.post("/admin/users/:id/send-email", async (req: AuthRequest, res) => {
 
   if (!subject || !subject.trim() || !message || !message.trim()) {
     res.status(400).json({ error: "Subject and message are required" });
+    return;
+  }
+  if (subject.length > DIRECT_EMAIL_SUBJECT_MAX) {
+    res.status(400).json({ error: `Subject must be ${DIRECT_EMAIL_SUBJECT_MAX} characters or fewer` });
+    return;
+  }
+  if (message.length > DIRECT_EMAIL_MESSAGE_MAX) {
+    res.status(400).json({ error: `Message must be ${DIRECT_EMAIL_MESSAGE_MAX} characters or fewer` });
+    return;
+  }
+  if (templateId != null && templateId !== "" && !ALLOWED_DIRECT_EMAIL_TEMPLATE_IDS.has(templateId)) {
+    res.status(400).json({ error: "Unknown templateId" });
+    return;
+  }
+
+  // Refuse early if SMTP isn't configured — sendEmail() silently no-ops in
+  // that case and would otherwise return a misleading "success" + write a
+  // false audit entry.
+  if (!process.env.SES_FROM_EMAIL || !process.env.SMTP_PASS) {
+    errorLogger.error(
+      { adminId: req.userId, targetUserId: userId },
+      "Admin direct email — SMTP not configured (SES_FROM_EMAIL / SMTP_PASS missing)",
+    );
+    res.status(503).json({ error: "Email service is not configured on this server" });
     return;
   }
 
@@ -883,9 +919,8 @@ router.post("/admin/users/:id/send-email", async (req: AuthRequest, res) => {
       { err, to: user.email, targetUserId: userId, adminId: req.userId },
       "Admin direct email — send failed",
     );
-    res
-      .status(502)
-      .json({ error: "Email send failed", detail: err?.message ?? String(err) });
+    // Don't leak provider error details to the client — keep them in logs.
+    res.status(502).json({ error: "Email send failed" });
     return;
   }
 
