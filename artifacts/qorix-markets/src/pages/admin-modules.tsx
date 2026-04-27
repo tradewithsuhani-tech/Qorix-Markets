@@ -40,6 +40,8 @@ import {
   Trash2,
   Power,
   PartyPopper,
+  Pencil,
+  Loader2,
 } from "lucide-react";
 import { HIDDEN_FEATURES } from "@/lib/hidden-features";
 import { AddressDisplay } from "@/components/address-display";
@@ -298,11 +300,99 @@ function ManualCreditModal({ onClose, onDone }: { onClose: () => void; onDone: (
   );
 }
 
+function EditProfileModal({ user, onClose, onDone }: { user: any; onClose: () => void; onDone: () => void }) {
+  const { toast } = useToast();
+  const [fullName, setFullName] = useState<string>(user.fullName ?? "");
+  const [email, setEmail] = useState<string>(user.email ?? "");
+  const [phoneNumber, setPhoneNumber] = useState<string>(user.phoneNumber ?? "");
+  const [saving, setSaving] = useState(false);
+
+  async function submit() {
+    setSaving(true);
+    try {
+      const body: Record<string, any> = {};
+      if (fullName.trim() !== (user.fullName ?? "")) body.fullName = fullName.trim();
+      if (email.trim().toLowerCase() !== (user.email ?? "").toLowerCase()) body.email = email.trim().toLowerCase();
+      const cleanPhone = phoneNumber.replace(/\D/g, "");
+      const currentPhone = user.phoneNumber ?? "";
+      if (cleanPhone !== currentPhone) body.phoneNumber = cleanPhone === "" ? null : cleanPhone;
+
+      if (Object.keys(body).length === 0) {
+        toast({ title: "Nothing to save", description: "No fields changed." });
+        setSaving(false);
+        return;
+      }
+
+      const result = await adminFetch(`/admin/users/${user.id}/profile`, {
+        method: "PATCH",
+        body: JSON.stringify(body),
+      });
+      toast({ title: "Profile updated", description: `Changed: ${(result.changedFields ?? []).join(", ") || "—"}` });
+      onDone();
+      onClose();
+    } catch (e: any) {
+      let msg = e?.message ?? "Update failed";
+      try { const parsed = JSON.parse(msg); if (parsed?.message) msg = parsed.message; } catch { /* not json */ }
+      toast({ title: "Failed", description: msg, variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center p-3" onClick={onClose}>
+      <motion.div
+        initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }}
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-md glass-card rounded-2xl p-5 space-y-4"
+      >
+        <div className="flex items-start justify-between">
+          <div>
+            <h3 className="font-semibold text-base flex items-center gap-2"><Pencil className="w-4 h-4 text-blue-400" /> Edit Profile</h3>
+            <p className="text-xs text-muted-foreground mt-1">User #{user.id} — bypasses OTP. Phone change marks the new number admin-verified.</p>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/10 text-muted-foreground"><X className="w-4 h-4" /></button>
+        </div>
+
+        <div className="space-y-3">
+          <label className="block">
+            <span className="text-xs text-muted-foreground">Full Name</span>
+            <input value={fullName} onChange={(e) => setFullName(e.target.value)} className="mt-1 w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-sm focus:ring-1 focus:ring-blue-500/50" />
+          </label>
+          <label className="block">
+            <span className="text-xs text-muted-foreground">Email</span>
+            <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" className="mt-1 w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-sm font-mono focus:ring-1 focus:ring-blue-500/50" />
+          </label>
+          <label className="block">
+            <span className="text-xs text-muted-foreground">Phone Number (10 digits, blank = remove)</span>
+            <input
+              value={phoneNumber}
+              onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, "").slice(0, 10))}
+              inputMode="numeric"
+              placeholder="9XXXXXXXXX"
+              className="mt-1 w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-sm font-mono tracking-wider focus:ring-1 focus:ring-blue-500/50"
+            />
+          </label>
+        </div>
+
+        <div className="flex gap-3">
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-muted-foreground hover:text-white text-sm transition-all">Cancel</button>
+          <button onClick={submit} disabled={saving} className="flex-1 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-sm font-medium transition-all flex items-center justify-center gap-2">
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Pencil className="w-4 h-4" />}
+            Save changes
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
 export function AdminUsersPage() {
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [adjustUser, setAdjustUser] = useState<any | null>(null);
+  const [editUser, setEditUser] = useState<any | null>(null);
   const [showSmokeTest, setShowSmokeTest] = useState(false);
   const { toast } = useToast();
 
@@ -336,6 +426,9 @@ export function AdminUsersPage() {
       <AnimatePresence>
         {adjustUser && (
           <BalanceAdjustModal user={adjustUser} onClose={() => setAdjustUser(null)} onDone={load} />
+        )}
+        {editUser && (
+          <EditProfileModal user={editUser} onClose={() => setEditUser(null)} onDone={load} />
         )}
       </AnimatePresence>
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
@@ -404,6 +497,7 @@ export function AdminUsersPage() {
                         <button onClick={() => action(u.id, u.isDisabled ? "enable" : "disable")} className="px-2 py-1 rounded-lg bg-red-500/10 text-red-400 text-xs hover:bg-red-500/20 transition-colors">{u.isDisabled ? "Enable" : "Disable"}</button>
                         <button onClick={() => action(u.id, "force_logout")} className="px-2 py-1 rounded-lg bg-blue-500/10 text-blue-400 text-xs hover:bg-blue-500/20 transition-colors">Force logout</button>
                         <button onClick={() => setAdjustUser(u)} className="px-2 py-1 rounded-lg bg-emerald-500/10 text-emerald-400 text-xs hover:bg-emerald-500/20 transition-colors flex items-center gap-1"><Wallet className="w-3 h-3" /> Balance</button>
+                        <button onClick={() => setEditUser(u)} className="px-2 py-1 rounded-lg bg-blue-500/10 text-blue-400 text-xs hover:bg-blue-500/20 transition-colors flex items-center gap-1"><Pencil className="w-3 h-3" /> Edit Profile</button>
                       </div>
                     </td>
                   </tr>

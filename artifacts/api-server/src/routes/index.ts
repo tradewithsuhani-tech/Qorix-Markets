@@ -33,6 +33,7 @@ import twoFactorRouter from "./two-factor";
 import inrDepositsRouter from "./inr-deposits";
 import inrWithdrawalsRouter from "./inr-withdrawals";
 import phoneVerifyRouter from "./phone-verify";
+import phoneChangeRouter from "./phone-change";
 
 const router: IRouter = Router();
 
@@ -71,5 +72,6 @@ router.use(twoFactorRouter);
 router.use(inrDepositsRouter);
 router.use(inrWithdrawalsRouter);
 router.use(phoneVerifyRouter);
+router.use(phoneChangeRouter);
 
 export default router;

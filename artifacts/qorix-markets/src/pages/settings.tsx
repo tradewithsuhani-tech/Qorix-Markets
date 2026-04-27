@@ -14,6 +14,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { TelegramAlertsCard } from "@/components/telegram-alerts-card";
 import { TwoFactorCard } from "@/components/two-factor-card";
+import { PhoneChangeCard } from "@/components/phone-change-card";
 
 interface SecurityStatus {
   passwordChangedAt: string | null;
@@ -226,6 +227,11 @@ export default function SettingsPage() {
               />
             </div>
           </div>
+        </motion.div>
+
+        {/* Phone Number (change wizard) */}
+        <motion.div variants={item}>
+          <PhoneChangeCard />
         </motion.div>
 
         {/* Security */}
