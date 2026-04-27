@@ -3,6 +3,7 @@ import { db, usersTable } from "@workspace/db";
 import { and, eq, sql } from "drizzle-orm";
 import { authMiddleware, getQueryString, type AuthRequest } from "../middlewares/auth";
 import { createNotification } from "../lib/notifications";
+import { sendTxnEmailToUser } from "../lib/email-service";
 import { notSmokeTestUser, shouldIncludeSmokeTest } from "../lib/smoke-test-account";
 
 const router = Router();
@@ -80,6 +81,7 @@ router.post("/kyc/personal", authMiddleware, async (req: AuthRequest, res) => {
     .select({
       phoneNumber: usersTable.phoneNumber,
       phoneVerifiedAt: usersTable.phoneVerifiedAt,
+      kycPersonalStatus: usersTable.kycPersonalStatus,
     })
     .from(usersTable)
     .where(eq(usersTable.id, req.userId!))
@@ -91,6 +93,12 @@ router.post("/kyc/personal", authMiddleware, async (req: AuthRequest, res) => {
     });
     return;
   }
+  // Idempotency guard: if Lv.1 already approved, no-op without re-firing
+  // notifications/emails. Prevents spam from rapid re-submissions.
+  if (user.kycPersonalStatus === "approved") {
+    res.json({ success: true, status: "approved", noop: true });
+    return;
+  }
   await db
     .update(usersTable)
     .set({
@@ -100,6 +108,11 @@ router.post("/kyc/personal", authMiddleware, async (req: AuthRequest, res) => {
     })
     .where(eq(usersTable.id, req.userId!));
   await createNotification(req.userId!, "system", "Personal details verified", "Lv.1 verification complete.");
+  sendTxnEmailToUser(
+    req.userId!,
+    "Personal details verified — Qorix Markets",
+    "Your personal details (Lv.1) have been verified successfully. You can now proceed to identity verification (Lv.2).",
+  );
   res.json({ success: true, status: "approved" });
 });
 
@@ -150,6 +163,11 @@ router.post("/kyc/submit", authMiddleware, async (req: AuthRequest, res) => {
     })
     .where(eq(usersTable.id, req.userId!));
   await createNotification(req.userId!, "system", "Identity submitted", "Your ID is under review. We'll notify you within 24 hours.");
+  sendTxnEmailToUser(
+    req.userId!,
+    "Identity verification submitted — Qorix Markets",
+    "We've received your identity document (Lv.2). Our team will review it within 24 hours and notify you once a decision is made. No further action is needed from your side right now.",
+  );
   res.json({ success: true, status: "pending" });
 });
 
@@ -196,6 +214,11 @@ router.post("/kyc/address", authMiddleware, async (req: AuthRequest, res) => {
     })
     .where(eq(usersTable.id, req.userId!));
   await createNotification(req.userId!, "system", "Address submitted", "Your address proof is under review.");
+  sendTxnEmailToUser(
+    req.userId!,
+    "Address verification submitted — Qorix Markets",
+    "We've received your address proof (Lv.3). Our team will review it within 24 hours and notify you once a decision is made.",
+  );
   res.json({ success: true, status: "pending" });
 });
 
@@ -287,6 +310,10 @@ router.post("/admin/kyc/review", authMiddleware, async (req: AuthRequest, res) =
   if (action !== "approve" && action !== "reject") { res.status(400).json({ error: "invalid_action" }); return; }
   if (kind !== "identity" && kind !== "address") { res.status(400).json({ error: "invalid_kind" }); return; }
   if (reason != null && (typeof reason !== "string" || reason.length > 500)) { res.status(400).json({ error: "invalid_reason" }); return; }
+  // Normalize: empty / whitespace-only reason → fallback. Without this an
+  // admin who submits "" (which passes validation above) would send a
+  // rejection email with a blank reason field.
+  const cleanReason = (typeof reason === "string" ? reason.trim() : "") || "Document not acceptable";
   const isAddress = kind === "address";
 
   const target = (
@@ -308,24 +335,36 @@ router.post("/admin/kyc/review", authMiddleware, async (req: AuthRequest, res) =
     ? {
         kycAddressStatus: newStatus,
         kycAddressReviewedAt: new Date(),
-        kycAddressRejectionReason: action === "reject" ? (reason ?? "Document not acceptable") : null,
+        kycAddressRejectionReason: action === "reject" ? cleanReason : null,
       }
     : {
         kycStatus: newStatus,
         kycReviewedAt: new Date(),
-        kycRejectionReason: action === "reject" ? (reason ?? "Document not acceptable") : null,
+        kycRejectionReason: action === "reject" ? cleanReason : null,
       };
   await db.update(usersTable).set(set).where(eq(usersTable.id, userId));
-  await createNotification(
-    userId,
-    "system",
+  const notifTitle =
     action === "approve"
       ? (isAddress ? "Address verified" : "KYC approved")
-      : (isAddress ? "Address rejected" : "KYC rejected"),
+      : (isAddress ? "Address rejected" : "KYC rejected");
+  const notifBody =
     action === "approve"
       ? (isAddress ? "Lv.3 verification complete." : "Identity verified — withdrawals enabled.")
-      : `${isAddress ? "Address" : "KYC"} rejected. ${reason ?? "Please re-submit."}`,
-  );
+      : `${isAddress ? "Address" : "KYC"} rejected. ${cleanReason}`;
+  await createNotification(userId, "system", notifTitle, notifBody);
+  const emailSubject =
+    action === "approve"
+      ? (isAddress ? "Address verified — Qorix Markets" : "Identity verified — Qorix Markets")
+      : (isAddress ? "Address verification rejected — Qorix Markets" : "Identity verification rejected — Qorix Markets");
+  const emailBody =
+    action === "approve"
+      ? (isAddress
+          ? "Great news! Your address proof (Lv.3) has been verified. Your account is now fully verified."
+          : "Great news! Your identity (Lv.2) has been verified. Withdrawals are now enabled on your account. You can proceed to Lv.3 (address) verification if not already done.")
+      : (isAddress
+          ? `Your address verification was rejected.\n\nReason: ${cleanReason}\n\nPlease re-submit a clearer copy of an accepted address proof from your dashboard.`
+          : `Your identity verification was rejected.\n\nReason: ${cleanReason}\n\nPlease re-submit a clearer copy of an accepted ID document from your dashboard.`);
+  sendTxnEmailToUser(userId, emailSubject, emailBody);
   res.json({ success: true, status: newStatus });
 });
 
