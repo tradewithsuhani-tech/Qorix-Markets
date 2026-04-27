@@ -42,7 +42,10 @@ async function fetchTRC20Transfers(address: string): Promise<TRC20Transfer[]> {
   return json.data ?? [];
 }
 
-async function creditUserDeposit(
+// Exported so the admin "claim unmatched deposit" endpoint can reuse the exact
+// same atomic credit + ledger + promo-bonus pipeline as the live watcher,
+// guaranteeing one source of truth for crediting.
+export async function creditUserDeposit(
   userId: number,
   amount: number,
   txHash: string,
@@ -72,14 +75,43 @@ async function creditUserDeposit(
     return;
   }
 
-  const newMain = parseFloat(wallet.mainBalance as string) + amount;
-
   await db.transaction(async (tx) => {
+    // ── IDEMPOTENCY GUARD ────────────────────────────────────────────────
+    // Atomically claim the deposit row by flipping `credited` from false to
+    // true UP-FRONT, gated on the current state. If another caller (the
+    // watcher's own retry path, an admin claim, or a polling re-entry) has
+    // already credited this row, the UPDATE returns zero rows and we abort
+    // BEFORE touching wallet/transactions/ledger — preventing duplicate
+    // credits, duplicate transaction rows, and ledger imbalance.
+    const claimed = await tx
+      .update(blockchainDepositsTable)
+      .set({ status: "confirmed", credited: true, creditedAt: new Date() })
+      .where(
+        and(
+          eq(blockchainDepositsTable.id, depositId),
+          eq(blockchainDepositsTable.credited, false),
+        ),
+      )
+      .returning({ id: blockchainDepositsTable.id });
+    if (claimed.length === 0) {
+      logger.warn(
+        { depositId, userId, txHash },
+        "creditUserDeposit: row already credited or missing — skipping (idempotent no-op)",
+      );
+      return;
+    }
+
     await ensureUserAccounts(userId, tx);
 
+    // Atomic SQL increment — concurrency-safe (matches the pattern used in
+    // wallet.ts) and avoids the read-modify-write lost-update bug that
+    // existed when newMain was computed outside the transaction.
     await tx
       .update(walletsTable)
-      .set({ mainBalance: newMain.toString(), updatedAt: new Date() })
+      .set({
+        mainBalance: sql`${walletsTable.mainBalance} + ${amount.toString()}`,
+        updatedAt: new Date(),
+      })
       .where(eq(walletsTable.userId, userId));
 
     const [txn] = await tx
@@ -112,11 +144,6 @@ async function creditUserDeposit(
       txn!.id,
       tx,
     );
-
-    await tx
-      .update(blockchainDepositsTable)
-      .set({ status: "confirmed", credited: true, creditedAt: new Date() })
-      .where(eq(blockchainDepositsTable.id, depositId));
 
     // --- 5% promo-code bonus (one-per-user, credited on first qualifying deposit) ---
     const promoRows = await tx
