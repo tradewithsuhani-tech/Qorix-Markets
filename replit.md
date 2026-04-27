@@ -178,6 +178,31 @@ All routes prefixed with `/api`:
 - Admin-only login: `/admin-login`
 - Admin portal: `/admin`, `/admin/users`, `/admin/deposits`, `/admin/withdrawals`, `/admin/trading`, `/admin/wallet`, `/admin/analytics`, `/admin/system`, `/admin/logs`, `/admin/intelligence`, `/admin/fraud`, `/admin/chats`
 
+## INR Withdrawal System (cap-based fraud prevention)
+
+Schema: `lib/db/src/schema/inr-withdrawals.ts` — `inr_withdrawals` table on Fly Singapore Neon (id, userId, amountInr, amountUsdt, rateUsed, payoutMethod[upi|bank], upiId, accountHolder/Number/ifsc/bankName, status[pending|approved|rejected], adminNote, payoutReference, reviewedBy, reviewedAt).
+
+Cap helper: `artifacts/api-server/src/lib/withdrawal-caps.ts` (accepts optional tx executor) computes:
+- `inrChannelOwed` = sum(approved INR deposits) — money user put in via INR
+- `usdtChannelOwed` = sum(credited USDT/TRC20 deposits) — money user put in via USDT
+- `inrChannelMax` = how much user can still withdraw via INR (deposits via INR + profit headroom − pending/approved INR withdrawals)
+- `usdtChannelMax` = same for USDT side
+
+Rule: deposits via channel X must be withdrawn back via channel X up to deposited amount; profit (excess over total deposits) is free to either channel. Race-safe via cap re-check inside the DB transaction (both `routes/inr-withdrawals.ts` POST and `routes/wallet.ts` USDT withdraw). KYC-approved users only.
+
+Routes (`artifacts/api-server/src/routes/inr-withdrawals.ts`):
+- `GET /api/withdrawal-limits` — current caps + INR rate (auth)
+- `GET /api/inr-withdrawals/mine` — user history (auth)
+- `POST /api/inr-withdrawals` — create withdrawal request, atomic guarded debit + cap re-check (auth)
+- `GET /api/admin/inr-withdrawals?status=pending` — admin list
+- `POST /api/admin/inr-withdrawals/:id/approve` — mark paid with `payoutReference` (admin)
+- `POST /api/admin/inr-withdrawals/:id/reject` — refunds main balance (admin)
+
+Frontend:
+- `artifacts/qorix-markets/src/components/inr-withdraw-tab.tsx` — INR withdraw UI with payout method (UPI/bank) + cap display
+- `artifacts/qorix-markets/src/pages/wallet.tsx` — Withdraw card has tab switcher: USDT (TRC20) | INR (UPI/Bank)
+- `artifacts/qorix-markets/src/pages/admin-payment-methods.tsx` — "Pending INR withdrawals" section with Approve (with payout ref input) / Reject & Refund actions
+
 ## Cron Jobs (node-cron)
 
 Defined in `artifacts/api-server/src/lib/cron.ts`, initialized on server start:
