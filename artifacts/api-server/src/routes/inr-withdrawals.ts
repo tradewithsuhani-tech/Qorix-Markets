@@ -14,6 +14,7 @@ import { transactionLogger, errorLogger } from "../lib/logger";
 import { sendTxnEmailToUser } from "../lib/email-service";
 import { isSmokeTestUser } from "../lib/smoke-test-account";
 import { getWithdrawalCaps } from "../lib/withdrawal-caps";
+import { notifyAllActiveMerchantsOfNewWithdrawal } from "../lib/escalation-cron";
 
 const router = Router();
 
@@ -236,6 +237,9 @@ router.post("/inr-withdrawals", authMiddleware, async (req: AuthRequest, res) =>
     "INR withdrawal submitted",
     `Your INR withdrawal of ₹${amountInr.toFixed(2)} (≈$${amountUsdt.toFixed(2)} USDT) is awaiting admin payout.`,
   );
+  // Notify every active merchant — first to claim it from the panel becomes
+  // the owner. The 10/15-min cron escalates further if no one acts.
+  void notifyAllActiveMerchantsOfNewWithdrawal(created!.id);
   transactionLogger.info(
     { event: "inr_withdrawal_requested", id: created!.id, userId: req.userId, amountInr, amountUsdt },
     "INR withdrawal requested",

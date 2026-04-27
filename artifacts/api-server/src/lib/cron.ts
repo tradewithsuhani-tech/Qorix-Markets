@@ -6,6 +6,7 @@ import { logger, profitLogger, errorLogger } from "./logger";
 import { getLastDailyProfitPercent, sweepSignalProfitsToProfitWallet } from "./profit-service";
 import { emitProfitDistribution } from "./event-bus";
 import { tickAutoSignalEngine, closeMaturedAutoTrades, rehydrateAutoEngineState } from "./auto-signal-engine";
+import { runEscalationTick } from "./escalation-cron";
 
 const AUTO_ENGINE_ENABLED = (process.env.AUTO_SIGNAL_ENGINE_ENABLED ?? "1") !== "0";
 
@@ -110,8 +111,20 @@ export async function initCronJobs(): Promise<void> {
     logger.info("Cron: auto-signal-engine DISABLED via AUTO_SIGNAL_ENGINE_ENABLED=0");
   }
 
+  // Every minute: walk pending INR deposits/withdrawals and fire escalation
+  // calls (merchant at 10min, admin at 15min). Idempotent — uses
+  // escalatedToMerchantAt/escalatedToAdminAt timestamps to skip already-fired
+  // steps so we don't spam recipients on every tick.
+  cron.schedule("* * * * *", async () => {
+    try {
+      await runEscalationTick();
+    } catch (err) {
+      errorLogger.error({ err }, "Cron: INR escalation tick failed");
+    }
+  });
+
   logger.info(
-    "Cron: jobs registered — daily profit (00:00), monthly trading→profit sweep (25th 00:00), hourly promo expiry",
+    "Cron: jobs registered — daily profit (00:00), monthly trading→profit sweep (25th 00:00), hourly promo expiry, INR escalation (every 1min)",
   );
   // Touch sql import so it isn't dropped by tooling — kept for future hourly maintenance jobs.
   void sql;

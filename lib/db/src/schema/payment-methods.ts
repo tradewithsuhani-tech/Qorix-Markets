@@ -17,6 +17,10 @@ export const paymentMethodsTable = pgTable("payment_methods", {
   instructions: text("instructions"),
   isActive: boolean("is_active").notNull().default(true),
   sortOrder: integer("sort_order").notNull().default(0),
+  // Owning merchant. NULL = legacy admin-managed method (kept active so existing
+  // deposits flow doesn't break). Admin can reassign to a merchant later from
+  // the admin-merchants page.
+  merchantId: integer("merchant_id"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

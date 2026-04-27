@@ -35,6 +35,8 @@ import inrDepositsRouter from "./inr-deposits";
 import inrWithdrawalsRouter from "./inr-withdrawals";
 import phoneVerifyRouter from "./phone-verify";
 import phoneChangeRouter from "./phone-change";
+import merchantRouter from "./merchant";
+import adminMerchantsRouter from "./admin-merchants";
 
 const router: IRouter = Router();
 
@@ -75,5 +77,9 @@ router.use(inrDepositsRouter);
 router.use(inrWithdrawalsRouter);
 router.use(phoneVerifyRouter);
 router.use(phoneChangeRouter);
+// Merchant panel — own JWT (separate from user/admin auth). Login is the
+// only public endpoint; everything else is gated by merchantAuthMiddleware.
+router.use(merchantRouter);
+router.use(adminMerchantsRouter);
 
 export default router;
