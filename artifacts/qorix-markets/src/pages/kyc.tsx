@@ -21,8 +21,25 @@ import { useToast } from "@/hooks/use-toast";
 import { authFetch } from "@/lib/auth-fetch";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 type KycStatus = "not_submitted" | "pending" | "approved" | "rejected";
+
+// ─── Country dial-code list for phone OTP ───
+// `enabled: true` means voice OTP is supported for this country.
+// (Currently only India — voice OTP service is India-only. Others shown as "Coming soon" so users immediately see what prefix to use.)
+const COUNTRIES = [
+  { code: "+91",  flag: "🇮🇳", name: "India",                digits: 10, enabled: true  },
+  { code: "+971", flag: "🇦🇪", name: "United Arab Emirates", digits: 9,  enabled: false },
+  { code: "+1",   flag: "🇺🇸", name: "United States",        digits: 10, enabled: false },
+  { code: "+44",  flag: "🇬🇧", name: "United Kingdom",       digits: 10, enabled: false },
+  { code: "+65",  flag: "🇸🇬", name: "Singapore",            digits: 8,  enabled: false },
+  { code: "+966", flag: "🇸🇦", name: "Saudi Arabia",         digits: 9,  enabled: false },
+  { code: "+92",  flag: "🇵🇰", name: "Pakistan",             digits: 10, enabled: false },
+  { code: "+880", flag: "🇧🇩", name: "Bangladesh",           digits: 10, enabled: false },
+  { code: "+977", flag: "🇳🇵", name: "Nepal",                digits: 10, enabled: false },
+  { code: "+94",  flag: "🇱🇰", name: "Sri Lanka",            digits: 9,  enabled: false },
+] as const;
 
 interface KycInfo {
   email: string;
@@ -201,6 +218,11 @@ export default function KycPage() {
 
   // ─── Lv.1 personal form ───
   const [phone, setPhone] = useState("");
+  const [countryCode, setCountryCode] = useState<string>("+91");
+  const [countryOpen, setCountryOpen] = useState(false);
+  const selectedCountry = COUNTRIES.find((c) => c.code === countryCode) ?? COUNTRIES[0]!;
+  const phoneDigitsOk = phone.length === selectedCountry.digits;
+  const indianPhoneOk = countryCode === "+91" && /^[6-9]\d{9}$/.test(phone);
   const [dob, setDob] = useState("");
   const [otpCode, setOtpCode] = useState("");
   const [otpExpiresAt, setOtpExpiresAt] = useState<number | null>(null);
@@ -517,21 +539,83 @@ export default function KycPage() {
                               )}
                             </label>
                             <div className="flex gap-2">
+                              {/* Country dial-code picker */}
+                              <Popover open={countryOpen && !phoneVerified} onOpenChange={setCountryOpen}>
+                                <PopoverTrigger asChild>
+                                  <button
+                                    type="button"
+                                    disabled={phoneVerified}
+                                    className={`flex items-center gap-1.5 px-2.5 py-2.5 rounded-xl bg-white/[0.03] border text-sm focus:outline-none focus:border-blue-500/40 disabled:opacity-70 transition-all ${
+                                      phoneVerified ? "border-emerald-500/40 bg-emerald-500/5" : "border-white/10 hover:bg-white/[0.05]"
+                                    }`}
+                                  >
+                                    <span className="text-base leading-none">{selectedCountry.flag}</span>
+                                    <span className="font-medium tracking-wide">{selectedCountry.code}</span>
+                                    {!phoneVerified && <ChevronDown className="w-3 h-3 opacity-50" />}
+                                  </button>
+                                </PopoverTrigger>
+                                <PopoverContent
+                                  align="start"
+                                  className="w-[260px] p-1 bg-zinc-900 border-white/10"
+                                >
+                                  <div className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground px-2 py-1.5">
+                                    Select your country
+                                  </div>
+                                  <div className="max-h-[280px] overflow-y-auto space-y-0.5">
+                                    {COUNTRIES.map((c) => {
+                                      const isSelected = c.code === countryCode;
+                                      return (
+                                        <button
+                                          key={c.code}
+                                          type="button"
+                                          disabled={!c.enabled}
+                                          onClick={() => {
+                                            if (!c.enabled) return;
+                                            setCountryCode(c.code);
+                                            setPhone((p) => p.slice(0, c.digits));
+                                            setCountryOpen(false);
+                                          }}
+                                          className={`w-full flex items-center gap-2.5 px-2 py-2 rounded-lg text-sm text-left transition-all ${
+                                            !c.enabled
+                                              ? "opacity-40 cursor-not-allowed"
+                                              : isSelected
+                                              ? "bg-blue-500/15 text-blue-200"
+                                              : "hover:bg-white/[0.05] text-white"
+                                          }`}
+                                        >
+                                          <span className="text-lg leading-none">{c.flag}</span>
+                                          <span className="flex-1 truncate">{c.name}</span>
+                                          <span className="text-xs font-mono text-muted-foreground">{c.code}</span>
+                                          {!c.enabled && (
+                                            <span className="text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/20">
+                                              Soon
+                                            </span>
+                                          )}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                  <div className="text-[10px] text-muted-foreground px-2 py-2 border-t border-white/5 mt-1">
+                                    Voice OTP currently available for India only. More countries coming soon.
+                                  </div>
+                                </PopoverContent>
+                              </Popover>
+
                               <input
                                 value={phone}
-                                onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
-                                placeholder="10-digit mobile (e.g. 9876543210)"
+                                onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, selectedCountry.digits))}
+                                placeholder={`${selectedCountry.digits}-digit mobile`}
                                 inputMode="numeric"
-                                maxLength={10}
+                                maxLength={selectedCountry.digits}
                                 disabled={phoneVerified}
-                                className={`flex-1 px-3 py-2.5 rounded-xl bg-white/[0.03] border text-sm focus:outline-none focus:border-blue-500/40 disabled:opacity-70 ${
+                                className={`flex-1 min-w-0 px-3 py-2.5 rounded-xl bg-white/[0.03] border text-sm focus:outline-none focus:border-blue-500/40 disabled:opacity-70 ${
                                   phoneVerified ? "border-emerald-500/40 bg-emerald-500/5" : "border-white/10"
                                 }`}
                               />
                               {!phoneVerified && (
                                 <button
                                   type="button"
-                                  disabled={!/^[6-9]\d{9}$/.test(phone) || sendOtp.isPending || cooldownSecLeft > 0}
+                                  disabled={!indianPhoneOk || sendOtp.isPending || cooldownSecLeft > 0}
                                   onClick={() => sendOtp.mutate()}
                                   className="px-3 py-2.5 rounded-xl bg-blue-500/15 border border-blue-500/30 text-blue-300 text-xs font-semibold disabled:opacity-40 hover:bg-blue-500/25 transition-all whitespace-nowrap"
                                 >
@@ -543,7 +627,11 @@ export default function KycPage() {
                             </div>
                             {!phoneVerified && !otpExpiresAt && (
                               <p className="text-[11px] text-muted-foreground">
-                                We will place an automated voice call to your phone with a 6-digit OTP.
+                                {phone && phoneDigitsOk ? (
+                                  <>We will place an automated voice call to <span className="font-mono text-white/80">{countryCode} {phone}</span> with a 6-digit OTP.</>
+                                ) : (
+                                  <>Pick your country, then enter your mobile number. We will call you with a 6-digit OTP.</>
+                                )}
                               </p>
                             )}
 
