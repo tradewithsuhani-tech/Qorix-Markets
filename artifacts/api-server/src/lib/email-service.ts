@@ -10,7 +10,7 @@ import nodemailer, { type Transporter } from "nodemailer";
 // 403/SPA-fallback). The PNG is base64-bundled into the build by esbuild
 // (see build.mjs `loader: { ".png": "base64" }`) so there's no runtime
 // disk read.
-import logoBase64 from "../assets/qorix-email-logo.png";
+import logoBase64 from "../assets/qorix-email-logo.base64";
 const LOGO_BUFFER = Buffer.from(logoBase64, "base64");
 
 // ---------------------------------------------------------------------------
