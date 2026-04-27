@@ -62,11 +62,7 @@ router.get("/kyc/status", authMiddleware, async (req: AuthRequest, res) => {
 
 // ─── Lv.1 — PERSONAL DETAILS (auto-approve on submit) ────────
 router.post("/kyc/personal", authMiddleware, async (req: AuthRequest, res) => {
-  const { phoneNumber, dateOfBirth } = req.body ?? {};
-  if (typeof phoneNumber !== "string" || phoneNumber.trim().length < 6 || phoneNumber.length > 32) {
-    res.status(400).json({ error: "invalid_phone" });
-    return;
-  }
+  const { dateOfBirth } = req.body ?? {};
   if (typeof dateOfBirth !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(dateOfBirth)) {
     res.status(400).json({ error: "invalid_dob", message: "Use YYYY-MM-DD" });
     return;
@@ -79,10 +75,25 @@ router.post("/kyc/personal", authMiddleware, async (req: AuthRequest, res) => {
     res.status(400).json({ error: "invalid_age", message: "You must be 18 or older" });
     return;
   }
+  // Phone must already be verified via voice OTP (POST /api/phone-otp/verify)
+  const [user] = await db
+    .select({
+      phoneNumber: usersTable.phoneNumber,
+      phoneVerifiedAt: usersTable.phoneVerifiedAt,
+    })
+    .from(usersTable)
+    .where(eq(usersTable.id, req.userId!))
+    .limit(1);
+  if (!user?.phoneVerifiedAt || !user?.phoneNumber) {
+    res.status(400).json({
+      error: "phone_not_verified",
+      message: "Verify your mobile number via voice OTP first.",
+    });
+    return;
+  }
   await db
     .update(usersTable)
     .set({
-      phoneNumber: phoneNumber.trim(),
       dateOfBirth,
       kycPersonalStatus: "approved",
       kycPersonalSubmittedAt: new Date(),
