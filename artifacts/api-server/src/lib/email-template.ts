@@ -11,6 +11,12 @@ export function escapeHtml(s: string): string {
 // trust badges, stat grid, feature pills, premium CTA, footer.
 // Email-client safe: table-based layout, inline CSS, web-safe fonts,
 // mobile-responsive via @media query.
+//
+// Premium 3D Q wordmark — transparent PNG, served from the public folder
+// of the qorix-markets web app. Override via EMAIL_LOGO_URL env if needed.
+const LOGO_URL =
+  process.env.EMAIL_LOGO_URL || "https://qorixmarkets.com/qorix-email-logo.png";
+
 export function buildBrandedEmailHtml(title: string, message: string): string {
   const safeTitle = escapeHtml(title);
   const year = new Date().getFullYear();
@@ -84,12 +90,19 @@ export function buildBrandedEmailHtml(title: string, message: string): string {
       <!-- MAIN CARD -->
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="qx-card" style="max-width:600px;background:#0A0F1C;border:1px solid rgba(99,102,241,0.18);border-radius:24px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,0.6);">
 
+        <!-- LOGO BAR — premium 3D Q wordmark on dark gradient -->
+        <tr>
+          <td align="center" class="qx-logo-pad" style="padding:36px 24px 8px;background:#0A0F1C;background-image:linear-gradient(135deg,#0A0F1C 0%,#111B36 40%,#1E1B4B 75%,#3B1763 100%);">
+            <img src="${LOGO_URL}" alt="Qorix Markets" width="240" height="162" style="display:block;width:240px;max-width:72%;height:auto;border:0;outline:none;text-decoration:none;margin:0 auto;" />
+          </td>
+        </tr>
+
         <!-- HERO -->
         <tr>
           <td style="padding:0;background:#0A0F1C;background-image:linear-gradient(135deg,#0A0F1C 0%,#111B36 40%,#1E1B4B 75%,#3B1763 100%);">
             <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
               <tr>
-                <td align="center" class="qx-hero-pad" style="padding:48px 32px 36px;">
+                <td align="center" class="qx-hero-pad" style="padding:8px 32px 36px;">
                   <div class="qx-badge" style="display:inline-block;padding:7px 16px;border-radius:999px;background:rgba(34,211,238,0.12);border:1px solid rgba(34,211,238,0.35);font-size:11px;letter-spacing:2px;color:#67E8F9;font-weight:700;text-transform:uppercase;margin-bottom:24px;">
                     ⚡ AI-Powered Trading System
                   </div>

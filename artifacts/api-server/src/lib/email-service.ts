@@ -5,8 +5,9 @@ import { buildBrandedEmailHtml } from "./email-template";
 import crypto from "crypto";
 import nodemailer, { type Transporter } from "nodemailer";
 // Hosted brand logo URL — no inline attachment so emails appear "clean"
-// in Gmail (no "One attachment" badge).
-const LOGO_URL = process.env.EMAIL_LOGO_URL || "https://qorixmarkets.com/qorix-logo.png";
+// in Gmail (no "One attachment" badge). Premium 3D Q wordmark, transparent
+// PNG, optimized for dark email backgrounds.
+const LOGO_URL = process.env.EMAIL_LOGO_URL || "https://qorixmarkets.com/qorix-email-logo.png";
 
 // ---------------------------------------------------------------------------
 // SMTP transport (Google Workspace) — lazy-initialized
@@ -112,8 +113,8 @@ function renderOtpHtml(opts: {
     <td align="center">
       <table width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#0F172A;border-radius:18px;overflow:hidden;border:1px solid #1F2937;">
         <tr>
-          <td align="center" style="padding:34px 20px 28px 20px;background:linear-gradient(135deg,#0B0F1A,#1E293B);">
-            <img src="${LOGO_URL}" alt="Qorix Markets" width="220" style="display:block;width:220px;max-width:80%;height:auto;border:0;outline:none;text-decoration:none;margin:0 auto;" />
+          <td align="center" style="padding:40px 20px 32px 20px;background:linear-gradient(135deg,#05070D 0%,#0A0F1C 50%,#111B36 100%);">
+            <img src="${LOGO_URL}" alt="Qorix Markets" width="260" height="176" style="display:block;width:260px;max-width:78%;height:auto;border:0;outline:none;text-decoration:none;margin:0 auto;" />
           </td>
         </tr>
         <tr>
