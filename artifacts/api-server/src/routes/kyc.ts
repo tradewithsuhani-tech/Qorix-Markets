@@ -81,6 +81,7 @@ router.post("/kyc/personal", authMiddleware, async (req: AuthRequest, res) => {
     .select({
       phoneNumber: usersTable.phoneNumber,
       phoneVerifiedAt: usersTable.phoneVerifiedAt,
+      kycPersonalStatus: usersTable.kycPersonalStatus,
     })
     .from(usersTable)
     .where(eq(usersTable.id, req.userId!))
@@ -90,6 +91,12 @@ router.post("/kyc/personal", authMiddleware, async (req: AuthRequest, res) => {
       error: "phone_not_verified",
       message: "Verify your mobile number via voice OTP first.",
     });
+    return;
+  }
+  // Idempotency guard: if Lv.1 already approved, no-op without re-firing
+  // notifications/emails. Prevents spam from rapid re-submissions.
+  if (user.kycPersonalStatus === "approved") {
+    res.json({ success: true, status: "approved", noop: true });
     return;
   }
   await db
@@ -303,6 +310,10 @@ router.post("/admin/kyc/review", authMiddleware, async (req: AuthRequest, res) =
   if (action !== "approve" && action !== "reject") { res.status(400).json({ error: "invalid_action" }); return; }
   if (kind !== "identity" && kind !== "address") { res.status(400).json({ error: "invalid_kind" }); return; }
   if (reason != null && (typeof reason !== "string" || reason.length > 500)) { res.status(400).json({ error: "invalid_reason" }); return; }
+  // Normalize: empty / whitespace-only reason → fallback. Without this an
+  // admin who submits "" (which passes validation above) would send a
+  // rejection email with a blank reason field.
+  const cleanReason = (typeof reason === "string" ? reason.trim() : "") || "Document not acceptable";
   const isAddress = kind === "address";
 
   const target = (
@@ -324,12 +335,12 @@ router.post("/admin/kyc/review", authMiddleware, async (req: AuthRequest, res) =
     ? {
         kycAddressStatus: newStatus,
         kycAddressReviewedAt: new Date(),
-        kycAddressRejectionReason: action === "reject" ? (reason ?? "Document not acceptable") : null,
+        kycAddressRejectionReason: action === "reject" ? cleanReason : null,
       }
     : {
         kycStatus: newStatus,
         kycReviewedAt: new Date(),
-        kycRejectionReason: action === "reject" ? (reason ?? "Document not acceptable") : null,
+        kycRejectionReason: action === "reject" ? cleanReason : null,
       };
   await db.update(usersTable).set(set).where(eq(usersTable.id, userId));
   const notifTitle =
@@ -339,7 +350,7 @@ router.post("/admin/kyc/review", authMiddleware, async (req: AuthRequest, res) =
   const notifBody =
     action === "approve"
       ? (isAddress ? "Lv.3 verification complete." : "Identity verified — withdrawals enabled.")
-      : `${isAddress ? "Address" : "KYC"} rejected. ${reason ?? "Please re-submit."}`;
+      : `${isAddress ? "Address" : "KYC"} rejected. ${cleanReason}`;
   await createNotification(userId, "system", notifTitle, notifBody);
   const emailSubject =
     action === "approve"
@@ -351,8 +362,8 @@ router.post("/admin/kyc/review", authMiddleware, async (req: AuthRequest, res) =
           ? "Great news! Your address proof (Lv.3) has been verified. Your account is now fully verified."
           : "Great news! Your identity (Lv.2) has been verified. Withdrawals are now enabled on your account. You can proceed to Lv.3 (address) verification if not already done.")
       : (isAddress
-          ? `Your address verification was rejected.\n\nReason: ${reason ?? "Document not acceptable"}\n\nPlease re-submit a clearer copy of an accepted address proof from your dashboard.`
-          : `Your identity verification was rejected.\n\nReason: ${reason ?? "Document not acceptable"}\n\nPlease re-submit a clearer copy of an accepted ID document from your dashboard.`);
+          ? `Your address verification was rejected.\n\nReason: ${cleanReason}\n\nPlease re-submit a clearer copy of an accepted address proof from your dashboard.`
+          : `Your identity verification was rejected.\n\nReason: ${cleanReason}\n\nPlease re-submit a clearer copy of an accepted ID document from your dashboard.`);
   sendTxnEmailToUser(userId, emailSubject, emailBody);
   res.json({ success: true, status: newStatus });
 });
