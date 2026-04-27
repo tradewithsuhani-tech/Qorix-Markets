@@ -19,6 +19,7 @@ import { notifyMaintenanceInvalidation, getMaintenanceState } from "../middlewar
 import { SetDailyProfitBody } from "@workspace/api-zod";
 import { transferProfitToMain } from "../lib/profit-service";
 import { sendUsdtFromTreasury, getTreasuryUsdtBalance } from "../lib/crypto-deposit/sweep";
+import { creditUserDeposit } from "../lib/tron-monitor";
 import { emitProfitDistribution } from "../lib/event-bus";
 import { transactionLogger, profitLogger, errorLogger } from "../lib/logger";
 import { sendEmail, sendTxnEmailToUser } from "../lib/email-service";
@@ -855,6 +856,135 @@ router.post("/admin/deposits/:id/reset-sweep", async (req: AuthRequest, res) => 
     .set({ swept: false, sweptAt: null, sweepTxHash: null })
     .where(eq(blockchainDepositsTable.id, id));
   res.json({ ok: true, message: "Sweep reset; will retry on next poll cycle (~15s)" });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Unmatched blockchain deposits: list + claim
+//
+// Background:
+//   `tron-monitor.pollPlatformAddress` records every inbound USDT transfer to
+//   the legacy PLATFORM_TRON_ADDRESS. If the sender address is not registered
+//   to any user (`users.tron_address` lookup misses), the row is inserted with
+//   `userId=0, status='unmatched', credited=false`. Without this UI the funds
+//   are effectively locked because the watcher will never auto-credit them.
+//
+// Workflow:
+//   1) Admin lists unmatched rows (GET /admin/blockchain-deposits/unmatched).
+//   2) Admin verifies (off-platform: support ticket, KYC docs, sender proof).
+//   3) Admin claims to a specific user (POST .../:id/claim {userId}). The
+//      route assigns userId atomically (status='unmatched' guard prevents
+//      double-claim) and reuses `creditUserDeposit` so the same atomic
+//      wallet+ledger+promo pipeline as the live watcher runs.
+// ─────────────────────────────────────────────────────────────────────────────
+
+router.get("/admin/blockchain-deposits/unmatched", async (_req: AuthRequest, res) => {
+  const rows = await db
+    .select({
+      id: blockchainDepositsTable.id,
+      txHash: blockchainDepositsTable.txHash,
+      fromAddress: blockchainDepositsTable.fromAddress,
+      toAddress: blockchainDepositsTable.toAddress,
+      amount: blockchainDepositsTable.amount,
+      status: blockchainDepositsTable.status,
+      blockTimestamp: blockchainDepositsTable.blockTimestamp,
+      createdAt: blockchainDepositsTable.createdAt,
+    })
+    .from(blockchainDepositsTable)
+    .where(
+      and(
+        eq(blockchainDepositsTable.status, "unmatched"),
+        eq(blockchainDepositsTable.credited, false),
+      ),
+    )
+    .orderBy(desc(blockchainDepositsTable.createdAt))
+    .limit(200);
+  res.json({ count: rows.length, deposits: rows });
+});
+
+router.post("/admin/blockchain-deposits/:id/claim", async (req: AuthRequest, res) => {
+  const id = parseInt(getParam(req, "id"));
+  const userId = parseInt(req.body?.userId, 10);
+  if (!id || !Number.isFinite(id)) {
+    res.status(400).json({ error: "Invalid deposit id" });
+    return;
+  }
+  if (!userId || !Number.isFinite(userId) || userId <= 0) {
+    res.status(400).json({ error: "Invalid userId — must be a positive integer" });
+    return;
+  }
+
+  // Verify target user exists before we touch the deposit row.
+  const targetUser = await db
+    .select({ id: usersTable.id, email: usersTable.email })
+    .from(usersTable)
+    .where(eq(usersTable.id, userId))
+    .limit(1);
+  if (targetUser.length === 0) {
+    res.status(404).json({ error: "Target user not found" });
+    return;
+  }
+
+  // Atomically assign userId ONLY if the row is still unmatched + uncredited.
+  // The status guard in the WHERE clause closes the race where two admins
+  // claim the same row simultaneously — only the first UPDATE returns a row.
+  const [claimed] = await db
+    .update(blockchainDepositsTable)
+    .set({ userId, status: "pending" })
+    .where(
+      and(
+        eq(blockchainDepositsTable.id, id),
+        eq(blockchainDepositsTable.status, "unmatched"),
+        eq(blockchainDepositsTable.credited, false),
+      ),
+    )
+    .returning();
+
+  if (!claimed) {
+    res.status(409).json({
+      error: "Deposit is not in 'unmatched' state (already claimed, credited, or does not exist)",
+    });
+    return;
+  }
+
+  // Reuse the watcher's credit pipeline so the wallet update, transactions
+  // row, double-entry journal, and promo bonus all happen atomically inside a
+  // single DB transaction. If this throws after the status flip, the row is
+  // safely left as `pending` (uncredited) for retry/manual review — it will
+  // NOT re-appear in the unmatched list, preventing double-claim attempts.
+  try {
+    const amount = parseFloat(claimed.amount as string);
+    await creditUserDeposit(userId, amount, claimed.txHash, claimed.id);
+  } catch (err: any) {
+    errorLogger.error(
+      { depositId: id, userId, err: err?.message },
+      "Admin claim: creditUserDeposit failed after status flip — row left as 'pending' for manual review",
+    );
+    res.status(500).json({
+      error: "Credit pipeline failed — deposit moved to 'pending'. Investigate logs and retry manually.",
+    });
+    return;
+  }
+
+  transactionLogger.info(
+    {
+      event: "blockchain_deposit_claimed",
+      depositId: id,
+      userId,
+      adminId: req.userId,
+      amount: claimed.amount,
+      txHash: claimed.txHash,
+    },
+    "Unmatched blockchain deposit claimed by admin and credited",
+  );
+
+  res.json({
+    ok: true,
+    depositId: id,
+    creditedToUserId: userId,
+    creditedToEmail: targetUser[0]!.email,
+    amount: claimed.amount,
+    txHash: claimed.txHash,
+  });
 });
 
 router.post("/maintenance/zero-balances", async (req: AuthRequest, res) => {
