@@ -7,16 +7,17 @@ export function escapeHtml(s: string): string {
     .replace(/'/g, "&#39;");
 }
 
+// Content-ID for the brand logo CID inline attachment. Email-service
+// attaches the PNG with this exact cid on every HTML send, so any
+// <img src="cid:${BRAND_LOGO_CID}"> in a template resolves without
+// needing an external URL. Keep this value stable — changing it would
+// break image rendering in already-queued emails.
+export const BRAND_LOGO_CID = "qorix-logo@brand";
+
 // High-end branded email — institutional dark theme, gradient hero,
 // trust badges, stat grid, feature pills, premium CTA, footer.
 // Email-client safe: table-based layout, inline CSS, web-safe fonts,
 // mobile-responsive via @media query.
-//
-// Premium 3D Q wordmark — transparent PNG, served from the public folder
-// of the qorix-markets web app. Override via EMAIL_LOGO_URL env if needed.
-const LOGO_URL =
-  process.env.EMAIL_LOGO_URL || "https://qorixmarkets.com/qorix-email-logo.png";
-
 export function buildBrandedEmailHtml(title: string, message: string): string {
   const safeTitle = escapeHtml(title);
   const year = new Date().getFullYear();
@@ -93,7 +94,7 @@ export function buildBrandedEmailHtml(title: string, message: string): string {
         <!-- LOGO BAR — premium 3D Q wordmark on dark gradient -->
         <tr>
           <td align="center" class="qx-logo-pad" style="padding:36px 24px 8px;background:#0A0F1C;background-image:linear-gradient(135deg,#0A0F1C 0%,#111B36 40%,#1E1B4B 75%,#3B1763 100%);">
-            <img src="${LOGO_URL}" alt="Qorix Markets" width="240" height="162" style="display:block;width:240px;max-width:72%;height:auto;border:0;outline:none;text-decoration:none;margin:0 auto;" />
+            <img src="cid:${BRAND_LOGO_CID}" alt="Qorix Markets" width="240" height="162" style="display:block;width:240px;max-width:72%;height:auto;border:0;outline:none;text-decoration:none;margin:0 auto;" />
           </td>
         </tr>
 

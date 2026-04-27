@@ -1,13 +1,17 @@
 import { db, emailOtpsTable, usersTable } from "@workspace/db";
 import { eq, and, gt } from "drizzle-orm";
 import { logger } from "./logger";
-import { buildBrandedEmailHtml } from "./email-template";
+import { buildBrandedEmailHtml, BRAND_LOGO_CID } from "./email-template";
 import crypto from "crypto";
 import nodemailer, { type Transporter } from "nodemailer";
-// Hosted brand logo URL — no inline attachment so emails appear "clean"
-// in Gmail (no "One attachment" badge). Premium 3D Q wordmark, transparent
-// PNG, optimized for dark email backgrounds.
-const LOGO_URL = process.env.EMAIL_LOGO_URL || "https://qorixmarkets.com/qorix-email-logo.png";
+// Premium 3D Q brand logo, embedded as a CID inline attachment so the
+// image renders in EVERY email client without depending on a public URL
+// (qorixmarkets.com/qorix-email-logo.png is not always served — historic
+// 403/SPA-fallback). The PNG is base64-bundled into the build by esbuild
+// (see build.mjs `loader: { ".png": "base64" }`) so there's no runtime
+// disk read.
+import logoBase64 from "../assets/qorix-email-logo.png";
+const LOGO_BUFFER = Buffer.from(logoBase64, "base64");
 
 // ---------------------------------------------------------------------------
 // SMTP transport (Google Workspace) — lazy-initialized
@@ -70,6 +74,22 @@ export async function sendEmail(
     return;
   }
 
+  // When an HTML body is supplied, ALWAYS attach the brand logo as a
+  // CID inline part so any <img src="cid:qorix-logo@brand"> in the
+  // template resolves. Content-Disposition: inline keeps Gmail's
+  // attachment chip from showing.
+  const attachments = html
+    ? [
+        {
+          filename: "qorix-logo.png",
+          content: LOGO_BUFFER,
+          cid: BRAND_LOGO_CID,
+          contentType: "image/png",
+          contentDisposition: "inline" as const,
+        },
+      ]
+    : undefined;
+
   try {
     const info = await transporter.sendMail({
       from: `"Qorix Markets" <${from}>`,
@@ -77,6 +97,7 @@ export async function sendEmail(
       subject,
       text,
       html,
+      attachments,
     });
     logger.info({ to, subject, messageId: info.messageId }, "[email-service] email sent via SMTP");
   } catch (err) {
@@ -114,7 +135,7 @@ function renderOtpHtml(opts: {
       <table width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#0F172A;border-radius:18px;overflow:hidden;border:1px solid #1F2937;">
         <tr>
           <td align="center" style="padding:40px 20px 32px 20px;background:linear-gradient(135deg,#05070D 0%,#0A0F1C 50%,#111B36 100%);">
-            <img src="${LOGO_URL}" alt="Qorix Markets" width="260" height="176" style="display:block;width:260px;max-width:78%;height:auto;border:0;outline:none;text-decoration:none;margin:0 auto;" />
+            <img src="cid:${BRAND_LOGO_CID}" alt="Qorix Markets" width="260" height="176" style="display:block;width:260px;max-width:78%;height:auto;border:0;outline:none;text-decoration:none;margin:0 auto;" />
           </td>
         </tr>
         <tr>
