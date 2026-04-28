@@ -47,6 +47,7 @@ const {
 } = await import("../../middlewares/maintenance");
 const { signToken } = await import("../../middlewares/auth");
 const { eq } = await import("drizzle-orm");
+const { teardownHttpServer, teardownRedis } = await import("./cleanup");
 
 let server: Server;
 let baseUrl = "";
@@ -139,7 +140,7 @@ before(async () => {
 
 after(async () => {
   try {
-    await new Promise<void>((resolve) => server.close(() => resolve()));
+    await teardownHttpServer(server);
   } finally {
     try {
       // Best-effort cleanup. Each delete is scoped to identifiers we created
@@ -150,6 +151,7 @@ after(async () => {
       await clearMaintenanceEndsAtRow();
       delete process.env["MAINTENANCE_ETA"];
     } finally {
+      await teardownRedis();
       await pool.end();
     }
   }

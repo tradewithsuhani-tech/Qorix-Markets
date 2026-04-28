@@ -19,6 +19,7 @@ const {
   shouldRunBackgroundJobs,
 } = await import("../../middlewares/maintenance");
 const { registerBackgroundJobs } = await import("../../lib/background-jobs");
+const { teardownHttpServer, teardownRedis } = await import("./cleanup");
 import type { BackgroundJobFactories } from "../background-jobs";
 
 let server: Server;
@@ -46,10 +47,11 @@ before(async () => {
 });
 
 after(async () => {
-  await new Promise<void>((resolve) => server.close(() => resolve()));
+  await teardownHttpServer(server);
   delete process.env["MAINTENANCE_MODE"];
   delete process.env["MAINTENANCE_ETA"];
   invalidateMaintenanceCache();
+  await teardownRedis();
   await pool.end();
 });
 
