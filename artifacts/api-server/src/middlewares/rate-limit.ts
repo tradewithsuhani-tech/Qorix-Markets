@@ -100,10 +100,27 @@ export function makeRedisLimiter(opts: MakeRedisLimiterOptions) {
 // Healthz is exempted explicitly — the Fly load balancer probes it every
 // 15s from a small set of internal IPs, and a 429 there would deregister
 // otherwise-healthy instances.
+//
+// LOADTEST_TOKEN bypass:
+//   When LOADTEST_TOKEN is set as a Fly secret AND the request carries a
+//   matching `x-loadtest-token` header, the GLOBAL limiter is skipped so a
+//   single-source-IP k6 run can drive 5 000 VUs without tripping the per-IP
+//   cap. Per-route limiters (login, 2fa, forgot, etc.) explicitly do NOT
+//   honor this — we want the load test to confirm those still fire under
+//   load. The token is unset immediately after the test window. See
+//   `tools/load-test/README.md` for the run procedure.
 export const globalApiLimiter = makeRedisLimiter({
   name: "global-ip",
   windowMs: 60_000,
   limit: 600,
   message: { error: "Too many requests, slow down.", code: "rate_limited" },
-  skip: (req) => req.path === "/healthz" || req.path === "/api/healthz",
+  skip: (req) => {
+    if (req.path === "/healthz" || req.path === "/api/healthz") return true;
+    const expected = process.env.LOADTEST_TOKEN;
+    if (expected && expected.length >= 16) {
+      const header = req.header("x-loadtest-token");
+      if (header && header === expected) return true;
+    }
+    return false;
+  },
 });
