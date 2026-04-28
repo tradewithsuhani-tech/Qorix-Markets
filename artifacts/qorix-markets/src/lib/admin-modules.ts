@@ -24,6 +24,7 @@ export const ADMIN_MODULES: readonly AdminModule[] = [
   { slug: "deposits",        label: "Deposits",          description: "Review crypto + INR deposits and on-chain detection." },
   { slug: "withdrawals",     label: "Withdrawals",       description: "Approve / reject crypto and INR withdrawal requests." },
   { slug: "payment-methods", label: "INR / Payments",    description: "Bank / UPI methods, INR→USDT rate, payment instructions." },
+  { slug: "merchants",       label: "Merchants",         description: "Merchant operators: create accounts, INR balance top-ups, payment-method assignment." },
   { slug: "kyc",             label: "KYC",               description: "Review and approve user identity verification documents." },
   { slug: "fraud",           label: "Fraud Monitor",     description: "Multi-account, device, and IP fraud signals + flag review." },
   { slug: "intelligence",    label: "Intelligence",      description: "Cross-user analytics, cohort views, behaviour insights." },
