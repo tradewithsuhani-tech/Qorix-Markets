@@ -1416,32 +1416,50 @@ jobs:
           // match BOTH the API_BASE host (prod build) and same-origin
           // (dev/preview fallback) so this works regardless of how
           // VITE_API_URL was baked in.
-          await ctx.route('**/api/auth/me', async () => {
-            // Intentionally do NOT fulfill — let the request hang in
-            // pending until browser.close() tears it down. This keeps
-            // useGetMe in isLoading=true, which is the ONLY state in
-            // which BOTH of these app behaviors stay quiet:
-            //   1. PublicOnlyRoute (App.tsx) redirects /login →
-            //      /dashboard the moment `!isLoading && token && user`
-            //      becomes true. A fulfilled 200 (even with a complete
-            //      synthetic User shape) would trip that redirect, the
-            //      LoginPage would unmount before its Email-Address
-            //      input ever rendered, and waitFor below would time
-            //      out — exactly the symptom we kept hitting.
-            //   2. The auth hook's `useEffect(() => { if (isError)
-            //      logout(); })` would fire on a 401, and logout()
-            //      synchronously calls
-            //      `localStorage.removeItem("qorix_token")`. That
-            //      removal has nothing to do with forceReload — it is
-            //      the normal auth pipeline reacting to an invalid
-            //      token — but it would falsely fail the
-            //      qorix_token-preservation assertion below by wiping
-            //      the seeded sentinel through an unrelated pathway.
-            // Hanging on /me sidesteps both: the SPA stays on /login
-            // with the Email-Address input visible (so the
-            // post-reload waitFor passes) and the seeded qorix_token
-            // is left untouched, which is exactly what this smoke
-            // step is supposed to assert about forceReload itself.
+          await ctx.route('**/api/auth/me', async (route) => {
+            // Resolve /me with HTTP 200 and a literal `null` JSON body.
+            // We need a very specific auth state on the reloaded SPA
+            // for this smoke step to be testable:
+            //
+            //   * isLoading must be FALSE — PublicOnlyRoute renders a
+            //     full-screen spinner whenever isLoading is true (see
+            //     App.tsx:113-119), which means the seeded sentinel
+            //     check below would time out on `Email Address`
+            //     because the LoginPage never gets to mount. So /me
+            //     MUST resolve, not hang.
+            //
+            //   * isError must be FALSE — the auth hook
+            //     (use-auth.tsx) has `useEffect(() => { if (isError)
+            //       logout(); })`, and logout() synchronously runs
+            //     `localStorage.removeItem("qorix_token")`. A 401
+            //     would trip that path and silently wipe the seeded
+            //     qorix_token through an auth-pipeline pathway that
+            //     has nothing to do with forceReload, falsely failing
+            //     the preservation assertion. So /me MUST be 2xx, not
+            //     4xx/5xx.
+            //
+            //   * user must be FALSY — PublicOnlyRoute checks
+            //     `if (token && user) return null` immediately after
+            //     the spinner branch, so any truthy user object would
+            //     blank out LoginPage AND fire the redirect-to-
+            //     /dashboard effect, again starving the
+            //     `Email Address` waitFor.
+            //
+            // A 200 with body `null` threads all three needles at
+            // once: useGetMe completes (isLoading=false), succeeds
+            // (isError=false), and stores `null` as `data`, which the
+            // AuthProvider then exposes as `user || null` === null.
+            // Result: PublicOnlyRoute renders the real LoginPage with
+            // the Email-Address input, and nothing in the auth flow
+            // touches localStorage["qorix_token"]. Anything still in
+            // localStorage at the assertion below was put there by
+            // forceReload's own behavior — which is exactly the
+            // contract this smoke step is pinned to verify.
+            await route.fulfill({
+              status: 200,
+              headers: { 'content-type': 'application/json' },
+              body: 'null',
+            });
           });
 
           const page = await ctx.newPage();
