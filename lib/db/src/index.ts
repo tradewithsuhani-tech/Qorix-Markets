@@ -58,9 +58,32 @@ if (allowInvalidCert) {
   );
 }
 
+// ─── Pool sizing & per-query timeouts ──────────────────────────────────────
+// Default `pg.Pool` `max` is 10. Under cron + Tron monitor + Telegram poller
+// + BullMQ workers all running on the same instance as web traffic, that
+// pool exhausted in seconds — new HTTP requests then queued behind
+// in-flight queries and produced 80–200s tail latencies (and starved the
+// Fly health check, triggering the "no healthy instances" cascade observed
+// on 2026-04-28). Bumping to 25 keeps us well under Neon's per-project
+// ~100-connection ceiling even with web + worker + ad-hoc migrations all
+// holding clients at the same time.
+//
+// `statement_timeout` (server-side) cancels any single SQL statement that
+// runs longer than 10s and releases the connection back to the pool, so
+// one runaway query can never permanently consume a slot. This is the
+// last-resort safety net under the per-route 30s timeout middleware in
+// app.ts — that middleware ends the HTTP response, this kills the actual
+// DB work behind it.
+//
+// `idle_in_transaction_session_timeout` reclaims connections that issued
+// `BEGIN` and then went idle (handler crashed/hung mid-transaction without
+// COMMIT/ROLLBACK), which would otherwise hold a slot indefinitely.
 export const pool = new Pool({
   connectionString: dbUrl,
   ssl: wantsSsl ? { rejectUnauthorized: !allowInvalidCert } : undefined,
+  max: 25,
+  statement_timeout: 10_000,
+  idle_in_transaction_session_timeout: 15_000,
 });
 export const db = drizzle(pool, { schema });
 
