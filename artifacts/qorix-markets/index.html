@@ -18,20 +18,20 @@
     <meta name="description" content="Professional automated USDT trading platform." />
     <link rel="manifest" href="/manifest.json" />
 
-    <!-- Favicon -->
+    <!-- Favicon: consolidated to 2 declarations (was 8). The previous setup
+         had 5 <link rel="icon"> + 3 <link rel="apple-touch-icon"> tags,
+         each pointing at the same image with a `?v=4` cache-buster, which
+         caused 15-20 redundant fetches per page-load on Chromium dev tools
+         (HMR re-emits + sized-variant matching re-fires the link list).
+         Modern browsers pick the best icon from `<link rel="icon">` and
+         iOS uses `<link rel="apple-touch-icon">` — that's all we need. -->
     <link rel="icon" type="image/png" href="/qorix-favicon.png?v=4" />
-    <link rel="icon" type="image/png" sizes="16x16" href="/qorix-favicon.png?v=4" />
-    <link rel="icon" type="image/png" sizes="32x32" href="/qorix-favicon.png?v=4" />
-    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png?v=4" />
-    <link rel="shortcut icon" href="/qorix-favicon.png?v=4" />
 
     <!-- iOS / Apple PWA -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Qorix" />
-    <link rel="apple-touch-icon" href="/icon-192.png" />
     <link rel="apple-touch-icon" sizes="192x192" href="/icon-192.png" />
-    <link rel="apple-touch-icon" sizes="512x512" href="/icon-512.png" />
 
     <!-- iOS splash screens (portrait) -->
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />

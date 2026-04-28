@@ -13,7 +13,7 @@ import {
   signalTradesTable,
 } from "@workspace/db";
 import { loginEventsTable, blockchainDepositsTable, serviceSubscriptionsTable } from "@workspace/db/schema";
-import { eq, ne, sum, count, and, or, desc, sql, inArray, isNotNull } from "drizzle-orm";
+import { eq, ne, sum, count, and, or, desc, sql, inArray, isNotNull, ilike } from "drizzle-orm";
 import { createNotification } from "../lib/notifications";
 import { authMiddleware, adminMiddleware, getParam, getQueryInt, getQueryString, invalidateAuthUserCache, type AuthRequest } from "../middlewares/auth";
 import { RedisCache } from "../lib/cache/redis-cache";
@@ -283,7 +283,30 @@ router.get("/admin/users", async (req, res) => {
   // Hide the deploy smoke-test account from the admin user list by default,
   // with an opt-in via `?includeSmokeTest=true` for support/debug.
   const includeSmoke = shouldIncludeSmokeTest(req.query["includeSmokeTest"]);
-  const usersFilter = includeSmoke ? undefined : notSmokeTestUser();
+  const smokeFilter = includeSmoke ? undefined : notSmokeTestUser();
+
+  // Phase 7.3: server-side search by email / fullName / referralCode.
+  // Without this, when the admin reduces `limit` to 20 the in-page filter
+  // can only see the loaded slice and would falsely report "user not
+  // found" for anyone outside the latest 20. ILIKE is case-insensitive
+  // and does an index scan if a trigram/expression index exists; without
+  // one it's a seq scan, but the users table is bounded (<10k rows in
+  // prod) so this is fine for an admin-only path.
+  const rawQ = getQueryString(req, "q", "").trim();
+  // Escape SQL LIKE wildcards (`%` and `_`) and the escape char (`\`)
+  // so a search for "50%" doesn't accidentally match every row.
+  const escapedQ = rawQ.replace(/[\\%_]/g, (c) => `\\${c}`);
+  const searchFilter = escapedQ
+    ? or(
+        ilike(usersTable.email, `%${escapedQ}%`),
+        ilike(usersTable.fullName, `%${escapedQ}%`),
+        ilike(usersTable.referralCode, `%${escapedQ}%`),
+      )
+    : undefined;
+
+  const usersFilter = smokeFilter && searchFilter
+    ? and(smokeFilter, searchFilter)
+    : (smokeFilter ?? searchFilter);
 
   const [totalResult] = await db
     .select({ count: count() })
@@ -1134,18 +1157,17 @@ router.get("/admin/logs", async (_req: AuthRequest, res) => {
   });
 });
 
-router.get("/admin/withdrawals", async (req, res) => {
-  // Hide the deploy smoke-test account from the pending-withdrawal queue by
-  // default; admins can opt in via `?includeSmokeTest=true` for support /
-  // debugging (mirrors the user list and KYC queue UX).
-  const includeSmoke = shouldIncludeSmokeTest(req.query["includeSmokeTest"]);
+// Extracted so /admin/dashboard can reuse the exact same shape without
+// firing an HTTP round-trip back through the router. `limit` lets the
+// dashboard cap to top-N (it shows a preview list, not the full queue).
+async function getPendingWithdrawalsData(opts: { includeSmoke: boolean; limit?: number }) {
   const filters = [
     eq(transactionsTable.type, "withdrawal"),
     eq(transactionsTable.status, "pending"),
-    includeSmoke ? undefined : notSmokeTestUser(),
+    opts.includeSmoke ? undefined : notSmokeTestUser(),
   ].filter(Boolean) as any[];
 
-  const pending = await db
+  const baseQuery = db
     .select({
       id: transactionsTable.id,
       userId: transactionsTable.userId,
@@ -1161,7 +1183,9 @@ router.get("/admin/withdrawals", async (req, res) => {
     .where(and(...filters))
     .orderBy(desc(transactionsTable.createdAt));
 
-  const result = pending.map((tx) => ({
+  const pending = opts.limit ? await baseQuery.limit(opts.limit) : await baseQuery;
+
+  return pending.map((tx) => ({
     id: tx.id,
     userId: tx.userId,
     userEmail: tx.userEmail ?? "",
@@ -1170,9 +1194,16 @@ router.get("/admin/withdrawals", async (req, res) => {
     walletAddress: tx.walletAddress ?? "",
     status: tx.status,
     requestedAt: tx.createdAt.toISOString(),
-    processedAt: null,
+    processedAt: null as string | null,
   }));
+}
 
+router.get("/admin/withdrawals", async (req, res) => {
+  // Hide the deploy smoke-test account from the pending-withdrawal queue by
+  // default; admins can opt in via `?includeSmokeTest=true` for support /
+  // debugging (mirrors the user list and KYC queue UX).
+  const includeSmoke = shouldIncludeSmokeTest(req.query["includeSmokeTest"]);
+  const result = await getPendingWithdrawalsData({ includeSmoke });
   res.json(result);
 });
 
@@ -1957,11 +1988,11 @@ router.post("/admin/transactions/manual-credit", async (req: AuthRequest, res) =
   res.json({ success: true, transactionId: tx?.id, userId: uid, amount: parsedAmount });
 });
 
-router.get("/admin/system-health", async (_req: AuthRequest, res) => {
-  // Phase 6: 15s shared cache + Promise.all the underlying probes. Polled
-  // every 30s by the admin dashboard, so 1-in-2 polls hits cache and the
-  // remaining 1-in-2 pays one round-trip instead of five.
-  const { value: payload, cached } = await adminSystemHealthCache.getOrCompute("v1", async () => {
+// Extracted from the route handler so /admin/dashboard (the aggregator) can
+// reuse the SAME compute path — both routes share `adminSystemHealthCache`,
+// so a /admin/dashboard cache miss won't redundantly recompute when
+// /admin/system-health was hit seconds earlier.
+async function getSystemHealthData(): Promise<AdminSystemHealthResponse> {
     const checks: Record<string, { status: "ok" | "error"; latencyMs?: number; detail?: string }> = {};
 
     // Capture the DB probe's actual latency (not the whole fan-out's). All
@@ -2032,9 +2063,71 @@ router.get("/admin/system-health", async (_req: AuthRequest, res) => {
         completedTransactions: Number(completedTx?.count ?? 0),
       },
     };
-  });
+}
+
+router.get("/admin/system-health", async (_req: AuthRequest, res) => {
+  // Phase 6: 15s shared cache + Promise.all the underlying probes. Polled
+  // every 60s by the admin dashboard, so 1-in-4 polls hits cache and the
+  // remaining 3-in-4 pay one round-trip instead of five. The same cache is
+  // shared with /admin/dashboard's aggregator path so back-to-back hits
+  // from either route reuse the warm entry.
+  const { value: payload, cached } = await adminSystemHealthCache.getOrCompute("v1", () => getSystemHealthData());
   res.setHeader("X-Cache", cached ? "HIT" : "MISS");
   res.json(payload);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Phase 7: /admin/dashboard aggregator
+//
+// The admin dashboard page used to hit /admin/stats + /admin/system-health +
+// /admin/withdrawals as three separate React Query hooks. Each one paid an
+// independent BOM→SIN round-trip + its own React Query lifecycle (mount,
+// refetch on focus pre-Phase1, polling). Combined with the rest of the page
+// (notifications, version, system/status, layout chrome) the dashboard fired
+// 50+ requests on a single page load.
+//
+// This aggregator returns all three payloads in ONE response. It internally
+// reuses each sub-route's cache (`adminStatsCache`, `adminSystemHealthCache`)
+// so /admin/dashboard cache misses never re-do work that another route just
+// did, and vice-versa. The dashboard itself is wrapped in a 5s top-level
+// cache so a burst of dashboard polls only pays one Upstash round-trip.
+// ─────────────────────────────────────────────────────────────────────────────
+
+type AdminDashboardResponse = {
+  stats: Awaited<ReturnType<typeof getAdminStatsData>>;
+  systemHealth: AdminSystemHealthResponse;
+  pendingWithdrawals: Awaited<ReturnType<typeof getPendingWithdrawalsData>>;
+};
+
+const adminDashboardCache = new RedisCache<AdminDashboardResponse>({
+  getRedis: getRedisConnection,
+  namespace: "admin-dashboard",
+  ttlMs: 5_000,
+  fallback: new TTLCache<AdminDashboardResponse>(5_000),
+});
+
+async function getAdminDashboardData(): Promise<AdminDashboardResponse> {
+  // All three sub-computes run in parallel. Each goes through its OWN cache
+  // so a warm sub-cache short-circuits to ~5ms while a cold one pays its
+  // full ~80ms. Worst case (all three cold): one round-trip total instead
+  // of three sequential round-trips from the old client-side fan-out.
+  const [statsRes, healthRes, pendingWithdrawals] = await Promise.all([
+    adminStatsCache.getOrCompute("v1", () => getAdminStatsData()),
+    adminSystemHealthCache.getOrCompute("v1", () => getSystemHealthData()),
+    // Dashboard preview only needs top 10 — full queue is on /admin/withdrawals.
+    getPendingWithdrawalsData({ includeSmoke: false, limit: 10 }),
+  ]);
+  return {
+    stats: statsRes.value,
+    systemHealth: healthRes.value,
+    pendingWithdrawals,
+  };
+}
+
+router.get("/admin/dashboard", async (_req: AuthRequest, res) => {
+  const { value, cached } = await adminDashboardCache.getOrCompute("v1", () => getAdminDashboardData());
+  res.setHeader("X-Cache", cached ? "HIT" : "MISS");
+  res.json(value);
 });
 
 router.get("/admin/activity-logs", async (req: AuthRequest, res) => {

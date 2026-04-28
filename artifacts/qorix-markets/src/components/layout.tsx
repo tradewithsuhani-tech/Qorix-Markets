@@ -156,9 +156,12 @@ function haptic(pattern: number | number[] = 10) {
 
 function NotificationPanel({ onClose, variant }: { onClose: () => void; variant: "mobile" | "desktop" }) {
   const qc = useQueryClient();
+  // Bumped 30s → 60s to halve notification poll traffic. Same query key as
+  // NotificationBell so React Query dedupes — only ONE network request per
+  // 60s regardless of how many notification UIs are mounted.
   const { data, isLoading } = useGetNotifications(
     { limit: 20 },
-    { query: { refetchInterval: 30000 } }
+    { query: { refetchInterval: 60_000 } }
   );
   const markRead = useMarkNotificationRead();
   const markAll = useMarkAllNotificationsRead();
@@ -367,9 +370,14 @@ function NotificationPanel({ onClose, variant }: { onClose: () => void; variant:
 
 function NotificationBell({ variant = "mobile" }: { variant?: "mobile" | "desktop" }) {
   const [open, setOpen] = useState(false);
+  // Match NotificationPanel's params (limit:20) so React Query treats this as
+  // the SAME query and dedupes — previously the bell + panel fired two
+  // separate polls every 30s with different params. Now: one shared query
+  // every 60s. The /notifications response always includes `unreadCount`
+  // regardless of params, so the bell badge still works.
   const { data } = useGetNotifications(
-    { limit: 1, unread: "true" },
-    { query: { refetchInterval: 30000 } }
+    { limit: 20 },
+    { query: { refetchInterval: 60_000 } }
   );
   const unread = data?.unreadCount ?? 0;
 
@@ -419,7 +427,12 @@ function NotificationBell({ variant = "mobile" }: { variant?: "mobile" | "deskto
 
 function ProtectionBanner() {
   const [dismissed, setDismissed] = useState(false);
-  const { data: investment } = useGetInvestment({ query: { refetchInterval: 10000 } });
+  // Bumped 10s → 60s. Protection trigger reflects drawdown thresholds that
+  // change on tick-level updates server-side, not user input — 10s polling
+  // was 6× more aggressive than necessary and was the noisiest steady-state
+  // poll on the user dashboard. (This component is already unmounted on
+  // /admin routes via the parent Layout's `!isAdminArea` gate.)
+  const { data: investment } = useGetInvestment({ query: { refetchInterval: 60_000 } });
 
   const isTriggered = investment?.isPaused && !investment?.isActive;
   if (!isTriggered || dismissed) return null;

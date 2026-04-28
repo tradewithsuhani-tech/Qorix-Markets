@@ -73,7 +73,29 @@ import PrivacyPage from "@/pages/legal/privacy";
 import RiskDisclosurePage from "@/pages/legal/risk-disclosure";
 import AmlKycPage from "@/pages/legal/aml-kyc";
 
-const queryClient = new QueryClient();
+// Perf overhaul: tighten query-client defaults so we stop firing 50+
+// requests on every render. Per-query polling (refetchInterval) still
+// overrides these defaults for live dashboards / notifications, and
+// mutation invalidations still force refetch regardless of staleTime.
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      // Cache reads for 30s before considering them stale. Eliminates the
+      // immediate refetch-on-mount thrash when navigating between pages.
+      staleTime: 30_000,
+      // Hold cached data for 5 min after the last subscriber unmounts so
+      // navigating back is instant.
+      gcTime: 5 * 60_000,
+      // Tab-focus refetch caused random duplicate calls every time the user
+      // alt-tabbed. Polling queries already keep their own cadence.
+      refetchOnWindowFocus: false,
+      // Skip refetch on remount if data is still fresh (within staleTime).
+      refetchOnMount: false,
+      // Faster failure for end users; one retry is enough for transient blips.
+      retry: 1,
+    },
+  },
+});
 
 const ProtectedRoute = ({ component: Component, adminOnly = false }: { component: any; adminOnly?: boolean }) => {
   const { user, token, isLoading } = useAuth();
@@ -242,7 +264,9 @@ function MaintenanceGate({ children }: { children: React.ReactNode }) {
       } catch { /* ignore */ }
     };
     fetchStatus();
-    const id = setInterval(fetchStatus, 60_000);
+    // Maintenance overlay flag flips rarely; 5-min cadence is plenty.
+    // Bumped from 60s to drop one of the steady-state per-page polls.
+    const id = setInterval(fetchStatus, 5 * 60_000);
     return () => { cancelled = true; clearInterval(id); };
   }, []);
 
