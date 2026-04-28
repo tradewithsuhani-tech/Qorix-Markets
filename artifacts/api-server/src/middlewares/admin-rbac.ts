@@ -158,6 +158,23 @@ export function auditAdminRequest(
   const targetId = (req.params?.id as string | undefined) ?? null;
 
   const flush = (statusCode: number) => {
+    // Pull any structured detail the route handler stashed on `res.locals`
+    // for the audit row. Routes that need richer audit (e.g. balance
+    // top-ups storing { delta, note, beforeBalance, afterBalance }) set
+    // these immediately before responding; everything else stays null and
+    // the audit row remains a plain method+path+status record.
+    const summaryRaw = (res.locals as Record<string, unknown>)["auditSummary"];
+    const metadataRaw = (res.locals as Record<string, unknown>)["auditMetadata"];
+    const targetTypeRaw = (res.locals as Record<string, unknown>)["auditTargetType"];
+    const summary = typeof summaryRaw === "string" ? summaryRaw.slice(0, 500) : null;
+    const metadata =
+      metadataRaw == null
+        ? null
+        : typeof metadataRaw === "string"
+          ? metadataRaw
+          : JSON.stringify(metadataRaw);
+    const targetType = typeof targetTypeRaw === "string" ? targetTypeRaw : null;
+
     // Fire-and-forget; never await in the hot path.
     db.insert(adminAuditLogTable)
       .values({
@@ -168,10 +185,10 @@ export function auditAdminRequest(
         action: actionFromMethod(method),
         method,
         path,
-        targetType: null,
+        targetType,
         targetId,
-        summary: null,
-        metadata: null,
+        summary,
+        metadata,
         ipAddress: ip,
         userAgent: ua,
         statusCode,
