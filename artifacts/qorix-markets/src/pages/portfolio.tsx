@@ -1,7 +1,7 @@
 import { Layout } from "@/components/layout";
 import { isFeatureHidden } from "@/lib/hidden-features";
 import { Link } from "wouter";
-import { DemoDashboardBody } from "@/pages/demo-dashboard";
+import { DemoDashboardBody } from "@/pages/dashboard";
 import {
   useGetInvestment,
   useGetDashboardSummary,
