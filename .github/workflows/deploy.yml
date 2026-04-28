@@ -382,11 +382,25 @@ jobs:
           # loudly in QA — without this build-arg, login captcha breaks.
           flyctl deploy \
             --remote-only \
+            --no-cache \
             --config artifacts/qorix-markets/fly.toml \
             --dockerfile artifacts/qorix-markets/Dockerfile \
             --build-arg VITE_API_URL="${API_BASE}" \
             --build-arg VITE_RECAPTCHA_SITE_KEY="${{ secrets.VITE_RECAPTCHA_SITE_KEY }}" \
             --wait-timeout 600
+          # NOTE: --no-cache is intentional. The vite plugin stamps a fresh
+          # BUILD_VERSION (Date.now()) at build time, baked into both
+          # /version.json and the JS bundle. The smoke step downstream then
+          # asserts that PREVIOUS_VERSION (the live /version.json before
+          # this deploy) differs from the new one. Depot's remote-builder
+          # cache has been observed to reuse the prior build's COPY layer
+          # AND the `pnpm run build` RUN layer even when artifacts/qorix-
+          # markets had genuinely changed source files, which causes the
+          # exact same dist/ to be re-shipped, the version stamp to match
+          # PREVIOUS, and the deploy to be auto-rolled back. --no-cache
+          # forces a fresh build of the SPA every time, which is the right
+          # tradeoff: the build is fast (~90s) and SPA correctness here is
+          # safety-critical (stale clients == broken update prompts).
       # Static / network-level smoke check. Confirms nginx is serving the
       # new build, the bundle has VITE_API_URL baked in, the SPA fallback
       # is healthy, and an authenticated API call from the web origin works
