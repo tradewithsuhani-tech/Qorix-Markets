@@ -1416,15 +1416,32 @@ jobs:
           // match BOTH the API_BASE host (prod build) and same-origin
           // (dev/preview fallback) so this works regardless of how
           // VITE_API_URL was baked in.
-          await ctx.route('**/api/auth/me', async (route) => {
-            await route.fulfill({
-              status: 200,
-              headers: { 'content-type': 'application/json' },
-              body: JSON.stringify({
-                id: 'smoke-test-synthetic-user',
-                email: 'smoke-test-synthetic@qorixmarkets.invalid',
-              }),
-            });
+          await ctx.route('**/api/auth/me', async () => {
+            // Intentionally do NOT fulfill — let the request hang in
+            // pending until browser.close() tears it down. This keeps
+            // useGetMe in isLoading=true, which is the ONLY state in
+            // which BOTH of these app behaviors stay quiet:
+            //   1. PublicOnlyRoute (App.tsx) redirects /login →
+            //      /dashboard the moment `!isLoading && token && user`
+            //      becomes true. A fulfilled 200 (even with a complete
+            //      synthetic User shape) would trip that redirect, the
+            //      LoginPage would unmount before its Email-Address
+            //      input ever rendered, and waitFor below would time
+            //      out — exactly the symptom we kept hitting.
+            //   2. The auth hook's `useEffect(() => { if (isError)
+            //      logout(); })` would fire on a 401, and logout()
+            //      synchronously calls
+            //      `localStorage.removeItem("qorix_token")`. That
+            //      removal has nothing to do with forceReload — it is
+            //      the normal auth pipeline reacting to an invalid
+            //      token — but it would falsely fail the
+            //      qorix_token-preservation assertion below by wiping
+            //      the seeded sentinel through an unrelated pathway.
+            // Hanging on /me sidesteps both: the SPA stays on /login
+            // with the Email-Address input visible (so the
+            // post-reload waitFor passes) and the seeded qorix_token
+            // is left untouched, which is exactly what this smoke
+            // step is supposed to assert about forceReload itself.
           });
 
           const page = await ctx.newPage();
