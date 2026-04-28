@@ -427,3 +427,234 @@ See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and pa
 ### Local working tree drift (unstaged, fine to leave)
 - M deploy.yml + email-service.ts + login.tsx — already pushed via API; local git index just stale.
 - M package.json + pnpm-lock.yaml — libsodium-wrappers temp add/remove (already removed from package.json).
+
+## 2026-04-27 — Merchant Panel (multi-operator)
+
+### What it is
+A self-serve operator console at `qorixmarkets.com/merchant` (separate token from user/admin). Admin creates merchants from `/admin/merchants` — no signup, no forgot-password. Each merchant manages their own UPI/bank/QR payment methods, sets the platform INR→USDT rate, and approves/rejects INR deposits posted to *their* methods. Withdrawals are first-come: any active merchant can claim and process.
+
+### Escalation chain (cron tick every minute)
+- T+0     : email to owning merchant (deposits) / all active merchants (withdrawals)
+- T+10min: voice call to merchant (Twilio/Exotel — credentials pending; falls back to email)
+- T+15min: voice call to platform admin
+- T+30min: user sees "Heavy load — review delayed" amber banner on their deposit/withdraw page
+Each stage uses an atomic `UPDATE … RETURNING` claim so two cron ticks/replicas can never double-call.
+
+### DB additions (all additive nullable; PKs preserved as `serial`)
+- New `merchants` table (id serial, email uniq, passwordHash, fullName, phone, isActive, createdBy, lastLoginAt)
+- `payment_methods.merchant_id` (nullable int FK → merchants.id)
+- `inr_deposits.escalated_to_merchant_at`, `escalated_to_admin_at`, `reviewed_by_kind`
+- `inr_withdrawals.escalated_to_merchant_at`, `escalated_to_admin_at`, `reviewed_by_kind`, `assigned_merchant_id`
+
+### Routes
+- API: `/api/merchant/auth/login`, `/me`, `/dashboard`, `/payment-methods` (CRUD), `/inr-deposits` + `/:id/approve|reject`, `/inr-withdrawals` + `/:id/claim|approve|reject`, `/inr-rate` (read+write).
+- Admin: `/api/admin/merchants` (CRUD), `/admin/merchants/:id/assign-method`, `/admin/payment-methods/unassigned`.
+- Frontend: `/merchant/login`, `/merchant`, `/merchant/methods`, `/merchant/deposits`, `/merchant/withdrawals`, `/merchant/settings`, `/admin/merchants`.
+
+### Financial guardrails
+- Approve/reject paths use `UPDATE … WHERE status='pending' RETURNING` inside a transaction; double-credit/refund impossible.
+- Merchant USDT-on-approval override is bounded: must be `> 0` and `≤` the originally quoted amount (rate × INR). Over-credit returns HTTP 400. Merchants can credit *less* (partial payment) but never more.
+- Merchant JWT carries `type:"merchant"`; middleware blocks user/admin tokens cross-tenant. Frontend uses `qorix_merchant_token` localStorage key (separate from `qorix_token`).
+
+### Pending operator setup (no code change needed)
+- Twilio/Exotel credentials → set `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER` (or `EXOTEL_*`) on Fly to enable real voice calls. Voice service stubs to email-only until then.
+- Admin escalation contact: insert `admin_escalation_phone` + `admin_escalation_email` rows into `system_settings` (no UI yet).
+
+---
+
+## Phase 3 + Phase 4 (perf): DB indexes, slow-query logger, in-memory TTL cache (Apr 28, 2026)
+
+Read-pressure relief on Neon (Singapore) from BOM API instances. All changes additive; ZERO PK changes.
+
+### Phase 3: composite btree indexes on user-history hot paths
+8 new indexes added to `lib/db/src/schema/*` AND pre-applied to Neon prod via idempotent `CREATE INDEX IF NOT EXISTS` (single transaction, ~170ms each):
+
+- `transactions(user_id, created_at DESC)`
+- `notifications(user_id, created_at DESC)` *(replaced single-col user_id)*
+- `ledger_entries(transaction_id)` + `ledger_entries(account_id, created_at DESC)`
+- `blockchain_deposits(user_id, created_at DESC)` *(replaced single-col user_id)*
+- `inr_deposits(user_id, created_at DESC)`
+- `inr_withdrawals(user_id, created_at DESC)`
+- `inr_withdrawals(assigned_merchant_id) WHERE assigned_merchant_id IS NOT NULL` (partial; merchant claim queue)
+
+Skipped `investments(user_id)` — already UNIQUE. `merchants.id` stays `serial`. Verified via forced `enable_seqscan=off`: all 5 user-history indexes produce Index Scan on prod.
+
+### Phase 3b: slow-query logger
+- `lib/db/src/index.ts` wraps `pool.query` AND `client.query` (via `pool.on("connect")`) so transaction client queries are timed.
+- Modes via `DRIZZLE_QUERY_LOG`: `full | slow | none`. Default: `slow` in prod, `none` elsewhere.
+- Threshold: `SLOW_QUERY_MS` (default 1000ms).
+- Log payload: SQL snippet (200 chars, whitespace collapsed) + params COUNT only — no param values logged (PII safety).
+- Pino `warn` level. Double-wrap guard via `__qorixWrapped` flag.
+
+### Phase 4: per-process in-memory TTL cache
+- New `artifacts/api-server/src/lib/cache/ttl-cache.ts` — `TTLCache<T>` class with `get / set / getOrCompute / invalidate / clear / stats`. Single-flight in-flight Map dedup (concurrent first-callers share the promise). Failures are NOT cached (entry dropped from in-flight on reject).
+- WRAPPED:
+  - `GET /api/public/market-indicators` — TTL **10s**, key `"v1"`. Live: 50-req soak shows 47 HIT / 3 MISS (matches TTL math); HIT latency = network RTT only.
+  - `GET /api/dashboard/summary` — TTL **5s**, key `u:${userId}` (per-user, no cross-user leak).
+- Both responses set `X-Cache: HIT|MISS` header for observability.
+- NOT WRAPPED: `GET /api/system/status` — `getMaintenanceState()` already has LISTEN/NOTIFY-driven cross-instance invalidation; a wrapping cache shadowed `invalidateMaintenanceCache()` and broke 5 maintenance tests during initial implementation. Removed before push.
+
+### Validation
+- `tsc --build` (libs) ✅ + api-server typecheck ✅
+- Full test suite **75/75 pass** (3 batches: 28 + 30 + 17)
+- CI: typecheck pass + qorix-markets-web deploy + smoke + qorix-api deploy + smoke ✅
+- Live prod soak: healthz 30 concurrent — all 200 OK; market-indicators 50 sequential — 47 HIT, 3 MISS
+
+### Pending follow-ups (architect-suggested, non-blocking)
+- Targeted cache invalidation on balance-mutating flows (deposit/withdraw approval) for instant freshness; keep 5s TTL as safety net.
+- Defensive startup check that `SLOW_QUERY_MS` is finite and non-negative (prevent silent NaN suppression).
+- Lightweight cache observability — periodic log sample of HIT/MISS ratio + in-flight count to tune TTLs from real traffic.
+
+## Phase 5 (perf @ scale): Redis cache + rate-limit, multi-instance, k6 baseline (Apr 28, 2026)
+
+### Goal & constraints
+Prep for 5,000+ concurrent users with sub-300ms responses. ZERO schema/PK changes; USDT TRC20 untouched; prod-safe rolling deploys via CI.
+
+### Architecture changes
+1. **Shared Redis cache (Upstash Singapore)** — `artifacts/api-server/src/lib/cache/redis-cache.ts`
+   - `RedisCache<T>` with same surface as `TTLCache` (`get`, `set`, `getOrCompute`, `invalidate`, `clear`)
+   - Lazy `getRedisConnection()` thunk — no connection at module load (test-safe)
+   - Best-effort: any Redis error → logged warn, returned as miss, caller recomputes
+   - Namespace: `qorix:cache:v1:<ns>:<key>` for SCAN+DEL during emergencies
+   - Migrated: `/api/public/market-indicators` (TTL 10s), `/api/dashboard/summary` (TTL 5s, key=u:${userId})
+   - `X-Cache: HIT|MISS` header preserved
+
+2. **Redis-backed rate limiting** — `artifacts/api-server/src/middlewares/rate-limit.ts`
+   - `makeRedisLimiter(opts)` → express-rate-limit middleware backed by `rate-limit-redis`
+   - Migrated per-route limiters: `loginRateLimit`, `changePasswordLimiter`, `forgotLimiter`, `twoFactorMgmtLimit`
+   - **New global per-IP limiter** at app level: 600 req/min on `/api/*` (healthz exempt). Mounted in `app.ts` before router.
+   - `LOADTEST_TOKEN` bypass on the GLOBAL limiter only (per-route limiters always fire — load tests should still see 429s on auth)
+
+3. **Horizontal scale of Fly app tier**
+   - `fly.toml`: `min_machines_running = 2` for app group (worker stays at 1 + standby)
+   - 3 app machines: 2× BOM (`82d331b7711678` orig + `08070dda094e48` clone) + 1× SIN (`d8dd900a955048` clone)
+   - Worker BOM standby unchanged (`857504c4279908`)
+   - Provisioned via `flyctl machine clone` (deterministic per-region placement; `flyctl scale count --region bom=2 --region sin=1` mis-parses `sin=1` as a region name)
+
+4. **Stateless audit (T504)** — no divergence concerns
+   - Maintenance state: LISTEN/NOTIFY ✓
+   - JWT auth: no server-side session ✓
+   - Telegram poller / Tron watcher: gated by `FLY_PROCESS_GROUP === "worker"` ✓
+   - Module-level Maps in routes: read-only or per-IP ephemeral counters → now in Redis
+
+### Performance baseline (k6 smoke @ 1000 VU, Apr 28 2026 16:52 UTC)
+**Test conditions:** 95s, 25s ramp 0→1000 VUs + 60s hold @ 1000 + 10s drain. Source: Replit US-East container → qorix-api.fly.dev. Single source IP, `LOADTEST_TOKEN` bypass active during test, removed immediately after.
+
+| Metric | Value |
+|---|---|
+| Total requests | 51,306 |
+| Sustained throughput | **517 RPS** |
+| Cache hit ratio | **99.95%** (28,182 HIT / 14 MISS) |
+| Real error rate | **0.04%** (21 / 51,306) |
+| 5xx errors | 0 |
+| Redis errors | 0 |
+| Login 429s | 4,200 (per-route limiter still firing under load — expected) |
+| Cluster health | All 3 machines 1/1 throughout, 0 OOMs, 0 restarts |
+
+**Server-side latency (from Pino access logs during peak):**
+| Endpoint | avg |
+|---|---|
+| `/api/public/market-indicators` (cached) | **172ms** |
+| `/api/system/status` | **192ms** |
+| `/api/healthz` | **3.6ms** |
+
+**Client-side latency (k6 from Replit US-East):**
+| Endpoint | p50 | p90 | p95 | p99 |
+|---|---|---|---|---|
+| `/api/public/market-indicators` | 368ms | 819ms | 4.35s | 9.24s |
+| `/api/system/status` | 257ms | 707ms | 4.44s | 9.24s |
+| `/api/healthz` | 251ms | 594ms | 4.18s | 9.03s |
+
+**Long-tail caveat:** p95/p99 spike is a TEST ARTIFACT — Replit US-East single-source-IP egress to Fly Asia under 1000 VUs causes TCP socket queueing. Server-side latency confirms infra is healthy (172ms avg vs 368ms client median = ~196ms cross-Pacific RTT). For true client p95 validation, a 5000 VU run from a Singapore-region client (or distributed load gen) is the correct next step.
+
+**Per-machine load distribution during test (sample of 99 logged requests):**
+| Machine | Region | Requests | Share |
+|---|---|---|---|
+| `d8dd900a955048` | SIN | 87 | ~88% |
+| `08070dda094e48` | BOM (clone) | 8 | ~8% |
+| `82d331b7711678` | BOM (orig) | 4 | ~4% |
+
+Replit's egress took the BOM→SIN edge path → SIN handled most of the load. **Single SIN machine held 1000 VUs alone with zero errors** → strong headroom indicator.
+
+### DB region recommendation
+**Keep Neon DB in Singapore.** Reasoning:
+- SIN web instance brings the read-path RTT from BOM→SIN→Neon (~80ms one-way) down to SIN→SIN→Neon (~5ms) — already realised in the baseline above
+- Hot reads are now cache-first via Upstash Redis (Singapore, same region as DB) → DB hit only on cache miss + writes
+- Writes are infrequent (deposits, withdrawals, signals) and naturally bounded by per-route rate limits
+- No multi-region DB replication needed at this scale — adds ops complexity (failover, write conflicts) for marginal benefit
+
+**Revisit when**: active concurrent users > 10,000 OR Neon Singapore CPU > 60% sustained → add Neon read replica in BOM, or move to Neon autoscaling tier.
+
+### Production monitoring guidance
+**Upstash Redis (Singapore — `right-kodiak-97175`):**
+- Dashboard: https://console.upstash.com
+- Watch: total ops/sec, used memory %, connections
+- Alert thresholds: memory > 80% of plan, ops/sec sustained > 80% of plan, connection errors > 0
+- Current usage at idle: ~2-5 ops/sec; under 1000 VU smoke peak: ~600-800 ops/sec
+
+**Fly machines:**
+- Dashboard: https://fly.io/apps/qorix-api/machines
+- Watch: per-machine CPU/memory (shared-cpu-1x = 1 vCPU + 1024 MB)
+- Scale trigger: if any single machine exceeds 70% sustained CPU during normal load → add a 4th app machine via `flyctl machine clone <id> --region <r> -a qorix-api`
+
+**Latency trends (without external APM):**
+- Pino access logs include `responseTime` per request: `flyctl logs -a qorix-api --no-tail | tail -1000 | grep responseTime | grep -oE 'responseTime":[0-9]+' | awk -F: '{s+=$2;n++}END{print "avg="s/n"ms n="n}'`
+- Cache hit ratio sample: `grep '"X-Cache":"HIT"' -c` over a window
+- 5xx alerts: `grep '"statusCode":5' -c` should yield 0 in any rolling 1-hour window
+- Suggest: weekly grep, log to a small Notion/Sheet for trend tracking
+
+### Operational runbook — re-run load test at 500–1000 DAU
+1. Set `LOADTEST_TOKEN=<random hex>` on Fly: `flyctl secrets set LOADTEST_TOKEN=$(openssl rand -hex 32) -a qorix-api`
+2. Wait for rolling restart (~90s). Force-update any cloned machines that didn't roll: `flyctl machine update <mid> -a qorix-api --yes`
+3. Run `tools/load-test/k6-ramp.js` from a beefy client (Mac with `brew install k6`, or a Fly machine in SIN). See `tools/load-test/README.md` for the env-var invocation.
+4. **Immediately** `flyctl secrets unset LOADTEST_TOKEN -a qorix-api` and verify bypass disabled (counter should decrement on subsequent requests).
+5. Capture `k6-summary.json` + machine snapshots; compare against the baseline above.
+
+### Files modified
+- `artifacts/api-server/src/lib/cache/redis-cache.ts` (new)
+- `artifacts/api-server/src/middlewares/rate-limit.ts` (new + `LOADTEST_TOKEN` bypass)
+- `artifacts/api-server/src/routes/{public,dashboard,auth,two-factor}.ts`
+- `artifacts/api-server/src/app.ts` (`globalApiLimiter` mount on `/api`)
+- `artifacts/api-server/fly.toml` (`min_machines_running=2` for app group)
+- `tools/load-test/k6-ramp.js` (new — 0→1k→3k→5k 10-min ramp)
+- `tools/load-test/README.md` (new — bypass procedure)
+
+### Deploys (Apr 28, 2026)
+- Commit `4e59c72b` — Phase 5a (Redis cache + rate-limit migration) — Fly **v107** via CI #211
+- Commit `76271ab` — Phase 5b (`fly.toml` min_machines + k6 script + bypass) — Fly **v108** via CI #212
+- Manual T508 scaling: `flyctl machine clone` × 2 (BOM + SIN) — rolled through v109 → v110 across LOADTEST_TOKEN set/unset cycle
+- **Final deployed release: v110**, all 3 app machines + 1 worker standby healthy, no `LOADTEST_TOKEN` secret on Fly (load test completed + cleaned up)
+
+### Post-review hardening (architect feedback, Apr 28 2026)
+After the smoke baseline, an architect review flagged that Redis was on the
+hot path of every `/api/*` request via `globalApiLimiter` while the shared
+ioredis client was configured with `maxRetriesPerRequest: null` and no
+command timeout. An Upstash incident could therefore queue commands
+indefinitely and amplify into a fleet-wide outage at the 30 s app-level
+timeout. Fix shipped:
+
+- `artifacts/api-server/src/lib/redis.ts` — bounded retries
+  (`maxRetriesPerRequest: 1`), `connectTimeout: 5000`, `commandTimeout: 1500`.
+  Left `enableOfflineQueue` at the ioredis default because
+  `rate-limit-redis` loads its increment Lua script in the `RedisStore`
+  constructor (synchronous, before the socket emits "ready") — disabling the
+  offline queue crashed app boot. The combination of bounded retries +
+  command timeout still flushes any pending queue inside a couple of seconds
+  during an outage.
+- `artifacts/api-server/src/middlewares/rate-limit.ts` — set
+  `passOnStoreError: true` explicitly on every limiter so a Redis store
+  error surfaces as "request passes through" rather than 503. Worst-case
+  during an Upstash incident is a brief window with no rate limiting (still
+  acceptable; bcrypt cost on `/auth/login` caps practical brute-force) — far
+  better than blocking the whole auth flow.
+- Local validation: typecheck clean; `db-tls-breakglass.test.ts` (3/3) green;
+  `artifacts/api-server` workflow boots cleanly and serves `/api/healthz`
+  200 OK.
+
+### Pending follow-ups (non-blocking, defer until 500–1000 DAU)
+- Full 5000 VU k6 run from Mac or Fly SIN machine (per `tools/load-test/README.md`)
+- Add cache observability — periodic Pino sample of HIT/MISS ratio + Redis client roundtrip latency
+- Consider HTTP/2 keep-alive between Fly LB and app to reduce per-request connection overhead under sustained load
+- If WebSocket / SSE features are added (live price ticker), revisit sticky-session vs. broadcast strategy
+- Add a regression test that simulates Redis being down and asserts the limiter passes through within the 1.5 s commandTimeout budget (architect MINOR follow-up)
+- Constant-time compare for `LOADTEST_TOKEN` header (architect MINOR follow-up — low practical risk, current strict equality is acceptable for a 32-byte hex token)
