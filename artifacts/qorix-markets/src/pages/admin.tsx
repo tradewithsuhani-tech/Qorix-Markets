@@ -15,6 +15,7 @@ import { useState, useEffect } from "react";
 import { format } from "date-fns";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
+import { authFetch } from "@/lib/auth-fetch";
 
 // Phase 7: Single aggregator hook. Replaces three independent React Query
 // subscriptions (useGetAdminStats + useGetPendingWithdrawals + useSystemHealth)
@@ -46,12 +47,7 @@ type AdminDashboardData = {
 function useAdminDashboard() {
   return useQuery({
     queryKey: ADMIN_DASHBOARD_QUERY_KEY,
-    queryFn: async (): Promise<AdminDashboardData> => {
-      const t = localStorage.getItem("qorix_token");
-      const res = await fetch("/api/admin/dashboard", { headers: t ? { Authorization: `Bearer ${t}` } : {} });
-      if (!res.ok) throw new Error("failed");
-      return res.json();
-    },
+    queryFn: () => authFetch<AdminDashboardData>("/api/admin/dashboard"),
     refetchInterval: 60_000,
   });
 }
