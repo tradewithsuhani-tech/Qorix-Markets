@@ -155,9 +155,41 @@ export function auditAdminRequest(
   const module = resolveAdminModule(req.path);
   const ip = clientIp(req);
   const ua = (req.headers["user-agent"] as string | undefined) ?? null;
-  const targetId = (req.params?.id as string | undefined) ?? null;
+  // Snapshot target id from req.params at request time as a fallback. NOTE:
+  // when this middleware is mounted at a router-level prefix (e.g.
+  // `router.use("/admin/merchants", auditAdminRequest)`), the mount point
+  // declares no `:id` param, so `req.params.id` is typically empty here.
+  // For richer correlation, the route handler should set
+  // `res.locals.auditTargetId = String(id)` immediately before responding;
+  // we read that override below in `flush()`.
+  const targetIdFromParams = (req.params?.id as string | undefined) ?? null;
 
   const flush = (statusCode: number) => {
+    // Pull any structured detail the route handler stashed on `res.locals`
+    // for the audit row. Routes that need richer audit (e.g. balance
+    // top-ups storing { delta, note, beforeBalance, afterBalance }) set
+    // these immediately before responding; everything else stays null and
+    // the audit row remains a plain method+path+status record.
+    const summaryRaw = (res.locals as Record<string, unknown>)["auditSummary"];
+    const metadataRaw = (res.locals as Record<string, unknown>)["auditMetadata"];
+    const targetTypeRaw = (res.locals as Record<string, unknown>)["auditTargetType"];
+    const targetIdOverrideRaw = (res.locals as Record<string, unknown>)["auditTargetId"];
+    const targetIdOverride =
+      typeof targetIdOverrideRaw === "string"
+        ? targetIdOverrideRaw
+        : typeof targetIdOverrideRaw === "number"
+          ? String(targetIdOverrideRaw)
+          : null;
+    const targetId = targetIdOverride ?? targetIdFromParams;
+    const summary = typeof summaryRaw === "string" ? summaryRaw.slice(0, 500) : null;
+    const metadata =
+      metadataRaw == null
+        ? null
+        : typeof metadataRaw === "string"
+          ? metadataRaw
+          : JSON.stringify(metadataRaw);
+    const targetType = typeof targetTypeRaw === "string" ? targetTypeRaw : null;
+
     // Fire-and-forget; never await in the hot path.
     db.insert(adminAuditLogTable)
       .values({
@@ -168,10 +200,10 @@ export function auditAdminRequest(
         action: actionFromMethod(method),
         method,
         path,
-        targetType: null,
+        targetType,
         targetId,
-        summary: null,
-        metadata: null,
+        summary,
+        metadata,
         ipAddress: ip,
         userAgent: ua,
         statusCode,

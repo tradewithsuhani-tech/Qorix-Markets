@@ -1,6 +1,14 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
-import { db, merchantsTable, paymentMethodsTable } from "@workspace/db";
+import {
+  db,
+  merchantsTable,
+  paymentMethodsTable,
+  inrDepositsTable,
+  inrWithdrawalsTable,
+  usersTable,
+  adminAuditLogTable,
+} from "@workspace/db";
 import { eq, sql, and } from "drizzle-orm";
 import { authMiddleware, adminMiddleware, type AuthRequest } from "../middlewares/auth";
 import { auditAdminRequest, requireAdminPermission } from "../middlewares/admin-rbac";
@@ -153,10 +161,329 @@ router.post("/admin/merchants/:id/topup", async (req: AuthRequest, res) => {
     res.status(404).json({ error: "Merchant not found" });
     return;
   }
+  // Persist the structured detail so the audit-log middleware can attach
+  // delta/note/before/after to the audit row. The activity feed below
+  // reads these back to render the topup history line items.
+  // CRITICAL: also set `auditTargetId` because this handler runs under
+  // a router-level `auditAdminRequest` mounted at `/admin/merchants`
+  // (no `:id` param at the mount point), so `req.params.id` is empty
+  // when the middleware first snapshots it. Without this override, the
+  // audit row's `target_id` stays null and the activity-feed branch
+  // that filters by `target_type='merchant_topup' AND target_id=:id`
+  // would never see top-up entries.
+  const afterBalance = parseFloat(updated[0].inrBalance as string);
+  const beforeBalance = afterBalance - delta;
+  res.locals["auditTargetType"] = "merchant_topup";
+  res.locals["auditTargetId"] = String(id);
+  res.locals["auditSummary"] =
+    `${delta >= 0 ? "Credited" : "Debited"} ₹${Math.abs(delta).toFixed(2)} ` +
+    `(merchant #${id}${note ? `, note: ${note}` : ""})`;
+  res.locals["auditMetadata"] = {
+    delta: deltaStr,
+    note,
+    beforeBalance: beforeBalance.toFixed(2),
+    afterBalance: afterBalance.toFixed(2),
+  };
   res.json({
     merchant: updated[0],
     delta: Number(deltaStr),
     note,
+  });
+});
+
+// Per-merchant audit / activity drawer. Returns:
+//   - identity: profile snapshot (name, email, phone, isActive, lastLogin,
+//     createdAt) plus the live wallet figures (balance, pendingHold, available)
+//   - methods: every payment method this merchant owns with full bank/UPI
+//     account details (admin-only — these are sensitive but the operator
+//     ultimately needs to see exactly what the merchant is collecting on)
+//   - activity: chronological credit/debit feed unioned across three sources
+//       1. inr_deposits APPROVED via this merchant's methods → debits balance
+//       2. inr_withdrawals APPROVED with assigned_merchant_id = this merchant
+//          → credits balance (merchant pays out, gets reimbursed)
+//       3. admin_audit_log entries for /admin/merchants/:id/topup → credit or
+//          debit depending on the recorded delta. We read delta/note/before/
+//          after directly from the audit metadata column so no separate
+//          ledger table is needed.
+//   Each row carries: at, kind, delta, amountInr, userName, userEmail,
+//   reference (UTR / payout ref / audit row id), methodName, actorEmail,
+//   actorKind, note. Frontend renders a colour-coded timeline.
+router.get("/admin/merchants/:id/activity", async (req, res) => {
+  const id = Number(req.params["id"]);
+  if (!Number.isFinite(id) || id <= 0) {
+    res.status(400).json({ error: "Invalid id" });
+    return;
+  }
+  const limit = Math.min(Math.max(Number(req.query["limit"]) || 100, 10), 500);
+
+  // Identity + live wallet snapshot. Mirrors the list endpoint so the
+  // drawer header doesn't drift from the card it was opened from.
+  const ident = await db
+    .select({
+      id: merchantsTable.id,
+      email: merchantsTable.email,
+      fullName: merchantsTable.fullName,
+      phone: merchantsTable.phone,
+      isActive: merchantsTable.isActive,
+      createdAt: merchantsTable.createdAt,
+      lastLoginAt: merchantsTable.lastLoginAt,
+      inrBalance: merchantsTable.inrBalance,
+      pendingHold: sql<string>`coalesce((
+        select sum(d.amount_inr)::text
+        from inr_deposits d
+        join payment_methods pm on pm.id = d.payment_method_id
+        where pm.merchant_id = merchants.id and d.status = 'pending'
+      ), '0')`,
+    })
+    .from(merchantsTable)
+    .where(eq(merchantsTable.id, id))
+    .limit(1);
+  if (!ident[0]) {
+    res.status(404).json({ error: "Merchant not found" });
+    return;
+  }
+  const merchant = {
+    ...ident[0],
+    available: (
+      parseFloat(ident[0].inrBalance as string) - parseFloat(ident[0].pendingHold)
+    ).toFixed(2),
+  };
+
+  // Owned payment methods, full sensitive detail.
+  const methods = await db
+    .select({
+      id: paymentMethodsTable.id,
+      type: paymentMethodsTable.type,
+      displayName: paymentMethodsTable.displayName,
+      accountHolder: paymentMethodsTable.accountHolder,
+      accountNumber: paymentMethodsTable.accountNumber,
+      ifsc: paymentMethodsTable.ifsc,
+      bankName: paymentMethodsTable.bankName,
+      upiId: paymentMethodsTable.upiId,
+      minAmount: paymentMethodsTable.minAmount,
+      maxAmount: paymentMethodsTable.maxAmount,
+      isActive: paymentMethodsTable.isActive,
+      createdAt: paymentMethodsTable.createdAt,
+    })
+    .from(paymentMethodsTable)
+    .where(eq(paymentMethodsTable.merchantId, id))
+    .orderBy(paymentMethodsTable.id);
+
+  // Lifetime totals (computed on the same data we're listing). Useful at
+  // a glance: "how much has this merchant settled in / paid out total".
+  const totalsRes = await db.execute<{
+    deposit_count: string;
+    deposit_total: string;
+    withdrawal_count: string;
+    withdrawal_total: string;
+  }>(sql`
+    select
+      coalesce((
+        select count(*)::text from inr_deposits d
+        join payment_methods pm on pm.id = d.payment_method_id
+        where pm.merchant_id = ${id} and d.status = 'approved'
+      ), '0') as deposit_count,
+      coalesce((
+        select sum(d.amount_inr)::text from inr_deposits d
+        join payment_methods pm on pm.id = d.payment_method_id
+        where pm.merchant_id = ${id} and d.status = 'approved'
+      ), '0') as deposit_total,
+      coalesce((
+        select count(*)::text from inr_withdrawals w
+        where w.assigned_merchant_id = ${id} and w.status = 'approved'
+      ), '0') as withdrawal_count,
+      coalesce((
+        select sum(w.amount_inr)::text from inr_withdrawals w
+        where w.assigned_merchant_id = ${id} and w.status = 'approved'
+      ), '0') as withdrawal_total
+  `);
+  const totals = totalsRes.rows[0];
+
+  // Activity union. Three branches each cap their own slice so a merchant
+  // with thousands of approved deposits doesn't starve the topup history
+  // out of the merged feed. Final ORDER + LIMIT picks the freshest rows
+  // across branches.
+  const activityRes = await db.execute<{
+    at: string;
+    kind: string;
+    delta: string;
+    amount_inr: string;
+    user_id: number | null;
+    user_name: string | null;
+    user_email: string | null;
+    reference: string | null;
+    method_name: string | null;
+    actor_kind: string | null;
+    actor_email: string | null;
+    note: string | null;
+    event_id: string;
+  }>(sql`
+    (
+      select
+        d.reviewed_at as at,
+        'deposit_approved'::text as kind,
+        ('-' || d.amount_inr::text)::numeric as delta,
+        d.amount_inr::text as amount_inr,
+        d.user_id,
+        u.full_name as user_name,
+        u.email as user_email,
+        d.utr as reference,
+        pm.display_name as method_name,
+        d.reviewed_by_kind as actor_kind,
+        case
+          when d.reviewed_by_kind = 'admin' then admin_u.email
+          when d.reviewed_by_kind = 'merchant' then merchant_r.email
+          else null
+        end as actor_email,
+        d.admin_note as note,
+        ('d:' || d.id::text) as event_id
+      from inr_deposits d
+      join payment_methods pm on pm.id = d.payment_method_id
+      left join users u on u.id = d.user_id
+      left join users admin_u
+        on admin_u.id = d.reviewed_by and d.reviewed_by_kind = 'admin'
+      left join merchants merchant_r
+        on merchant_r.id = d.reviewed_by and d.reviewed_by_kind = 'merchant'
+      where pm.merchant_id = ${id}
+        and d.status = 'approved'
+        and d.reviewed_at is not null
+      order by d.reviewed_at desc
+      limit ${limit}
+    )
+    union all
+    (
+      select
+        w.reviewed_at as at,
+        'withdrawal_approved'::text as kind,
+        w.amount_inr::numeric as delta,
+        w.amount_inr::text as amount_inr,
+        w.user_id,
+        u.full_name as user_name,
+        u.email as user_email,
+        coalesce(w.payout_reference, ('W' || w.id::text)) as reference,
+        null::varchar as method_name,
+        w.reviewed_by_kind as actor_kind,
+        case
+          when w.reviewed_by_kind = 'admin' then admin_u.email
+          when w.reviewed_by_kind = 'merchant' then merchant_r.email
+          else null
+        end as actor_email,
+        w.admin_note as note,
+        ('w:' || w.id::text) as event_id
+      from inr_withdrawals w
+      left join users u on u.id = w.user_id
+      left join users admin_u
+        on admin_u.id = w.reviewed_by and w.reviewed_by_kind = 'admin'
+      left join merchants merchant_r
+        on merchant_r.id = w.reviewed_by and w.reviewed_by_kind = 'merchant'
+      where w.assigned_merchant_id = ${id}
+        and w.status = 'approved'
+        and w.reviewed_at is not null
+      order by w.reviewed_at desc
+      limit ${limit}
+    )
+    union all
+    (
+      select
+        a.created_at as at,
+        case
+          when (coalesce(
+            substring(a.metadata from '[{,]\\s*"delta"\\s*:\\s*"(-?[0-9]{1,18}(?:\\.[0-9]{1,18})?)"\\s*[,}]'),
+            substring(a.metadata from '[{,]\\s*"delta"\\s*:\\s*(-?[0-9]{1,18}(?:\\.[0-9]{1,18})?)\\s*[,}]')
+          ))::numeric >= 0 then 'topup_credit'
+          else 'topup_debit'
+        end as kind,
+        (coalesce(
+          substring(a.metadata from '[{,]\\s*"delta"\\s*:\\s*"(-?[0-9]{1,18}(?:\\.[0-9]{1,18})?)"\\s*[,}]'),
+          substring(a.metadata from '[{,]\\s*"delta"\\s*:\\s*(-?[0-9]{1,18}(?:\\.[0-9]{1,18})?)\\s*[,}]')
+        ))::numeric as delta,
+        abs((coalesce(
+          substring(a.metadata from '[{,]\\s*"delta"\\s*:\\s*"(-?[0-9]{1,18}(?:\\.[0-9]{1,18})?)"\\s*[,}]'),
+          substring(a.metadata from '[{,]\\s*"delta"\\s*:\\s*(-?[0-9]{1,18}(?:\\.[0-9]{1,18})?)\\s*[,}]')
+        ))::numeric)::text as amount_inr,
+        null::int as user_id,
+        null::varchar as user_name,
+        null::varchar as user_email,
+        ('AUD-' || a.id::text) as reference,
+        null::varchar as method_name,
+        'admin'::varchar as actor_kind,
+        a.admin_email as actor_email,
+        coalesce(substring(a.metadata from '[{,]\\s*"note"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)"\\s*[,}]'), '')::varchar as note,
+        ('a:' || a.id::text) as event_id
+      from admin_audit_log a
+      where a.target_type = 'merchant_topup'
+        and a.target_id = ${String(id)}
+        and a.module = 'merchants'
+        and a.status_code between 200 and 299
+        and a.metadata is not null
+        -- Defensive: admin_audit_log.metadata is stored as text. The
+        -- topup handler above writes JSON like
+        --   {"delta":"123.45","note":"...","beforeBalance":"...","afterBalance":"..."}
+        -- where delta is a STRING (deltaStr from .toFixed(2)). The
+        -- previous version cast metadata to jsonb directly, which can
+        -- 500 on any malformed text whose brace-prefix passes the
+        -- pre-filter regex (PostgreSQL does not guarantee that a
+        -- WHERE-clause cast is short-circuited by an earlier predicate
+        -- in the same WHERE list). The new approach extracts delta +
+        -- note via substring() with a POSIX regex which returns NULL
+        -- on no-match and never throws.
+        --
+        -- The delta extractor uses TWO patterns coalesced together,
+        -- one for a quoted JSON string value ("123.45") and one for
+        -- an unquoted JSON number value (123.45), so the same query
+        -- works whether the writer emits a string (current handler)
+        -- or a number (any future handler). Keeping them as separate
+        -- patterns enforces paired quotes — a pathological row with a
+        -- mismatched quote like {"delta":"123,...} cannot accidentally
+        -- match one half of an "?...?" optional-quote regex.
+        --
+        -- Both patterns require a trailing JSON value boundary
+        -- (\\s*[,}]) immediately after the digits / closing quote so
+        -- non-canonical garbage like "123abc", 12345e6, or a 20-digit
+        -- overflow integer cannot prefix-match into a wrong delta
+        -- value — the regex backtracks to no match and the row is
+        -- dropped from the union. The leading [{,] anchors the key
+        -- to a JSON-object-key-context boundary so the substring
+        -- "delta": appearing inside a note string cannot satisfy the
+        -- WHERE filter or yield a wrong capture in the SELECT.
+        -- Digit count is bounded {1,18} on each side of the decimal
+        -- so the surviving ::numeric cast cannot overflow PostgreSQL's
+        -- numeric limits even on a pathological hand-edited row.
+        and (
+          a.metadata ~ '[{,]\\s*"delta"\\s*:\\s*"-?[0-9]{1,18}(?:\\.[0-9]{1,18})?"\\s*[,}]'
+          or a.metadata ~ '[{,]\\s*"delta"\\s*:\\s*-?[0-9]{1,18}(?:\\.[0-9]{1,18})?\\s*[,}]'
+        )
+      order by a.created_at desc
+      limit ${limit}
+    )
+    order by at desc
+    limit ${limit}
+  `);
+
+  res.json({
+    merchant,
+    methods,
+    totals: {
+      depositCount: Number(totals?.deposit_count ?? 0),
+      depositTotalInr: totals?.deposit_total ?? "0",
+      withdrawalCount: Number(totals?.withdrawal_count ?? 0),
+      withdrawalTotalInr: totals?.withdrawal_total ?? "0",
+    },
+    activity: activityRes.rows.map((r) => ({
+      at: r.at,
+      kind: r.kind,
+      delta: r.delta,
+      amountInr: r.amount_inr,
+      userId: r.user_id,
+      userName: r.user_name,
+      userEmail: r.user_email,
+      reference: r.reference,
+      methodName: r.method_name,
+      actorKind: r.actor_kind,
+      actorEmail: r.actor_email,
+      note: r.note,
+      eventId: r.event_id,
+    })),
   });
 });
 

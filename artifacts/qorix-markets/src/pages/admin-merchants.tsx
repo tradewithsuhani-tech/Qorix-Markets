@@ -12,6 +12,12 @@ import {
   X,
   Link2,
   Wallet,
+  ScrollText,
+  ArrowDownCircle,
+  ArrowUpCircle,
+  Banknote,
+  Receipt,
+  Clock,
 } from "lucide-react";
 
 const BASE_URL = import.meta.env.BASE_URL ?? "/";
@@ -60,6 +66,7 @@ export default function AdminMerchantsPage() {
   const [topupFor, setTopupFor] = useState<AdminMerchant | null>(null);
   const [topupDelta, setTopupDelta] = useState("");
   const [topupNote, setTopupNote] = useState("");
+  const [activityFor, setActivityFor] = useState<AdminMerchant | null>(null);
 
   const { data, isLoading, error, isError } = useQuery<{ merchants: AdminMerchant[] }>({
     queryKey: ["admin-merchants"],
@@ -218,7 +225,14 @@ export default function AdminMerchantsPage() {
                     )}
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap justify-end">
+                  <button
+                    onClick={() => setActivityFor(m)}
+                    className="rounded-lg border border-sky-500/40 px-3 py-1.5 text-xs text-sky-300 hover:bg-sky-500/10 flex items-center gap-1"
+                    title="View account details, methods and credit/debit history"
+                  >
+                    <ScrollText className="h-3.5 w-3.5" /> Activity
+                  </button>
                   <button
                     onClick={() => {
                       setTopupFor(m);
@@ -438,8 +452,361 @@ export default function AdminMerchantsPage() {
             </div>
           </Modal>
         )}
+
+        {/* Activity drawer — full audit view: identity, totals, methods,
+            credit/debit timeline. Built on the same Modal shell but uses
+            the wide variant so the activity table renders comfortably. */}
+        {activityFor && (
+          <ActivityModal merchant={activityFor} onClose={() => setActivityFor(null)} />
+        )}
       </div>
     </Layout>
+  );
+}
+
+interface ActivityResponse {
+  merchant: AdminMerchant & { createdAt: string; lastLoginAt: string | null };
+  methods: Array<{
+    id: number;
+    type: "bank" | "upi";
+    displayName: string;
+    accountHolder: string | null;
+    accountNumber: string | null;
+    ifsc: string | null;
+    bankName: string | null;
+    upiId: string | null;
+    minAmount: string;
+    maxAmount: string;
+    isActive: boolean;
+    createdAt: string;
+  }>;
+  totals: {
+    depositCount: number;
+    depositTotalInr: string;
+    withdrawalCount: number;
+    withdrawalTotalInr: string;
+  };
+  activity: Array<{
+    at: string;
+    kind: "deposit_approved" | "withdrawal_approved" | "topup_credit" | "topup_debit";
+    delta: string;
+    amountInr: string;
+    userId: number | null;
+    userName: string | null;
+    userEmail: string | null;
+    reference: string | null;
+    methodName: string | null;
+    actorKind: "admin" | "merchant" | null;
+    actorEmail: string | null;
+    note: string | null;
+    eventId: string;
+  }>;
+}
+
+function ActivityModal({
+  merchant,
+  onClose,
+}: {
+  merchant: AdminMerchant;
+  onClose: () => void;
+}) {
+  const { data, isLoading, isError, error } = useQuery<ActivityResponse>({
+    queryKey: ["admin-merchant-activity", merchant.id],
+    queryFn: () => authFetch(apiUrl(`/admin/merchants/${merchant.id}/activity?limit=200`)),
+  });
+
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-950/80 flex items-center justify-center px-2 sm:px-4">
+      <div className="w-full max-w-4xl bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-6 max-h-[92vh] overflow-y-auto">
+        <div className="flex items-start justify-between mb-4 gap-3">
+          <div>
+            <h3 className="text-lg font-semibold flex items-center gap-2">
+              <ScrollText className="h-5 w-5 text-sky-400" />
+              {merchant.fullName}
+              <span className="text-xs font-normal text-slate-400">— audit & activity</span>
+            </h3>
+            <div className="text-xs text-slate-400 mt-0.5">
+              {merchant.email}
+              {merchant.phone ? <> • {merchant.phone}</> : null}
+            </div>
+          </div>
+          <button onClick={onClose} className="text-slate-400 hover:text-white shrink-0">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        {isLoading ? (
+          <div className="flex items-center justify-center py-12 text-slate-400">
+            <Loader2 className="h-5 w-5 animate-spin mr-2" /> Loading audit…
+          </div>
+        ) : isError ? (
+          <div className="rounded-xl border border-rose-500/40 bg-rose-500/5 p-4 text-sm">
+            <div className="text-rose-300 font-medium">Couldn't load activity</div>
+            <div className="text-xs text-slate-400 mt-1">
+              {error instanceof Error ? error.message : String(error ?? "Unknown error")}
+            </div>
+          </div>
+        ) : !data ? null : (
+          <div className="space-y-5">
+            {/* Wallet snapshot */}
+            <section>
+              <SectionHeader icon={<Wallet className="h-4 w-4" />} label="Wallet snapshot" />
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <Stat label="Balance" value={inr(data.merchant.inrBalance)} />
+                <Stat label="Pending hold" value={inr(data.merchant.pendingHold)} amber />
+                <Stat label="Available" value={inr(data.merchant.available)} emerald />
+                <Stat
+                  label="Last login"
+                  value={
+                    data.merchant.lastLoginAt
+                      ? new Date(data.merchant.lastLoginAt).toLocaleString()
+                      : "never"
+                  }
+                  small
+                />
+              </div>
+            </section>
+
+            {/* Lifetime totals */}
+            <section>
+              <SectionHeader icon={<Receipt className="h-4 w-4" />} label="Lifetime totals" />
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <Stat
+                  label="Deposits approved"
+                  value={`${data.totals.depositCount}`}
+                  sub={inr(data.totals.depositTotalInr)}
+                  rose
+                />
+                <Stat
+                  label="Withdrawals paid"
+                  value={`${data.totals.withdrawalCount}`}
+                  sub={inr(data.totals.withdrawalTotalInr)}
+                  emerald
+                />
+                <Stat
+                  label="Net (paid − received)"
+                  value={inr(
+                    parseFloat(data.totals.withdrawalTotalInr) -
+                      parseFloat(data.totals.depositTotalInr),
+                  )}
+                />
+                <Stat
+                  label="Owned methods"
+                  value={`${data.methods.length}`}
+                />
+              </div>
+            </section>
+
+            {/* Account / payment methods */}
+            <section>
+              <SectionHeader
+                icon={<Banknote className="h-4 w-4" />}
+                label={`Account methods (${data.methods.length})`}
+              />
+              {!data.methods.length ? (
+                <div className="text-xs text-slate-500 py-3">
+                  No payment methods owned by this merchant yet.
+                </div>
+              ) : (
+                <div className="grid sm:grid-cols-2 gap-2">
+                  {data.methods.map((m) => (
+                    <div
+                      key={m.id}
+                      className={`rounded-xl border p-3 ${
+                        m.isActive
+                          ? "border-slate-700 bg-slate-800/40"
+                          : "border-slate-800 bg-slate-900/40 opacity-70"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <div className="font-medium text-sm">{m.displayName}</div>
+                        <span
+                          className={`text-[10px] px-1.5 py-0.5 rounded uppercase ${
+                            m.type === "upi"
+                              ? "bg-violet-500/20 text-violet-300"
+                              : "bg-sky-500/20 text-sky-300"
+                          }`}
+                        >
+                          {m.type}
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-slate-300 space-y-0.5 font-mono">
+                        {m.type === "upi" ? (
+                          <Row k="UPI" v={m.upiId ?? "—"} />
+                        ) : (
+                          <>
+                            <Row k="Holder" v={m.accountHolder ?? "—"} />
+                            <Row k="A/C" v={m.accountNumber ?? "—"} />
+                            <Row k="IFSC" v={m.ifsc ?? "—"} />
+                            <Row k="Bank" v={m.bankName ?? "—"} />
+                          </>
+                        )}
+                        <Row
+                          k="Range"
+                          v={`${inr(m.minAmount)} – ${inr(m.maxAmount)}`}
+                        />
+                      </div>
+                      {!m.isActive && (
+                        <div className="mt-1.5 text-[10px] text-slate-400">DISABLED</div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            {/* Activity timeline */}
+            <section>
+              <SectionHeader
+                icon={<Clock className="h-4 w-4" />}
+                label={`Credit / debit activity (${data.activity.length})`}
+              />
+              {!data.activity.length ? (
+                <div className="text-xs text-slate-500 py-3">
+                  No activity yet. Approved deposits, paid withdrawals and admin
+                  top-ups will appear here in chronological order.
+                </div>
+              ) : (
+                <div className="rounded-xl border border-slate-800 overflow-hidden">
+                  <div className="grid grid-cols-[120px_1fr_120px] sm:grid-cols-[170px_1fr_140px] text-[10px] uppercase tracking-wide text-slate-500 bg-slate-800/40 px-3 py-2">
+                    <div>When</div>
+                    <div>What</div>
+                    <div className="text-right">Δ Balance</div>
+                  </div>
+                  <div className="divide-y divide-slate-800">
+                    {data.activity.map((a) => (
+                      <ActivityRow key={a.eventId} a={a} />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </section>
+          </div>
+        )}
+
+        <div className="mt-5 flex justify-end">
+          <button
+            onClick={onClose}
+            className="rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-300 hover:bg-slate-800"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ActivityRow({ a }: { a: ActivityResponse["activity"][number] }) {
+  const delta = parseFloat(a.delta);
+  const isCredit = delta > 0;
+  const isTopup = a.kind === "topup_credit" || a.kind === "topup_debit";
+  const Icon = isCredit ? ArrowUpCircle : ArrowDownCircle;
+  const tone = isCredit ? "text-emerald-300" : "text-rose-300";
+  const labelMap: Record<string, string> = {
+    deposit_approved: "Deposit approved (user → merchant float)",
+    withdrawal_approved: "Withdrawal paid (merchant → user)",
+    topup_credit: "Admin top-up",
+    topup_debit: "Admin debit",
+  };
+  return (
+    <div className="grid grid-cols-[120px_1fr_120px] sm:grid-cols-[170px_1fr_140px] px-3 py-2.5 text-xs items-start">
+      <div className="text-slate-400 text-[11px] leading-tight">
+        {new Date(a.at).toLocaleString()}
+      </div>
+      <div className="min-w-0">
+        <div className={`flex items-center gap-1.5 font-medium ${tone}`}>
+          <Icon className="h-3.5 w-3.5 shrink-0" />
+          <span className="truncate">{labelMap[a.kind] ?? a.kind}</span>
+        </div>
+        <div className="text-[11px] text-slate-300 mt-0.5 space-y-0.5">
+          {!isTopup && a.userName && (
+            <div>
+              User:{" "}
+              <span className="text-white">{a.userName}</span>
+              {a.userEmail && (
+                <span className="text-slate-500"> ({a.userEmail})</span>
+              )}
+            </div>
+          )}
+          {a.methodName && (
+            <div>
+              Method: <span className="text-white">{a.methodName}</span>
+            </div>
+          )}
+          {a.reference && (
+            <div className="font-mono text-[10px] text-slate-400">
+              Ref: {a.reference}
+            </div>
+          )}
+          {a.actorEmail && (
+            <div className="text-slate-500 text-[10px]">
+              by {a.actorKind ?? "actor"}: {a.actorEmail}
+            </div>
+          )}
+          {a.note && (
+            <div className="text-slate-400 text-[10px] italic">"{a.note}"</div>
+          )}
+        </div>
+      </div>
+      <div className={`text-right font-mono ${tone}`}>
+        {isCredit ? "+" : ""}
+        {inr(delta)}
+      </div>
+    </div>
+  );
+}
+
+function SectionHeader({ icon, label }: { icon: React.ReactNode; label: string }) {
+  return (
+    <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-slate-400 mb-2">
+      {icon}
+      <span>{label}</span>
+    </div>
+  );
+}
+
+function Stat({
+  label,
+  value,
+  sub,
+  emerald,
+  amber,
+  rose,
+  small,
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+  emerald?: boolean;
+  amber?: boolean;
+  rose?: boolean;
+  small?: boolean;
+}) {
+  const tone = emerald
+    ? "text-emerald-300 border-emerald-500/30 bg-emerald-500/5"
+    : amber
+      ? "text-amber-300 border-amber-500/30 bg-amber-500/5"
+      : rose
+        ? "text-rose-300 border-rose-500/30 bg-rose-500/5"
+        : "text-slate-200 border-slate-700 bg-slate-800/40";
+  return (
+    <div className={`rounded-lg border p-2.5 ${tone}`}>
+      <div className="text-[10px] uppercase tracking-wide text-slate-400">{label}</div>
+      <div className={`mt-0.5 font-mono ${small ? "text-[11px]" : "text-sm"} truncate`}>
+        {value}
+      </div>
+      {sub && <div className="text-[10px] text-slate-400 mt-0.5">{sub}</div>}
+    </div>
+  );
+}
+
+function Row({ k, v }: { k: string; v: string }) {
+  return (
+    <div className="flex justify-between gap-2">
+      <span className="text-slate-500">{k}</span>
+      <span className="text-right truncate">{v}</span>
+    </div>
   );
 }
 
