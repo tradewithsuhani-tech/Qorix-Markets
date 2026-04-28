@@ -67,7 +67,7 @@ function PointsPill() {
       if (!res.ok) throw new Error("Failed to load points");
       return res.json();
     },
-    refetchInterval: 30_000,
+    refetchInterval: 300_000,
   });
   const balance = data?.balance ?? 0;
   return (
@@ -569,20 +569,20 @@ export function DemoDashboardBody({
   const { user } = useAuth();
 
   const { data: summary, isLoading: summaryLoading } = useGetDashboardSummary({
-    query: { refetchInterval: 5000 }
+    query: { refetchInterval: 30000 }
   });
   const { data: equity, isLoading: equityLoading, dataUpdatedAt: equityUpdatedAt } = useGetEquityChart(
     { days: chartDays },
-    { query: { refetchInterval: 15000 } }
+    { query: { refetchInterval: 60000 } }
   );
   const { data: returnsEquity, isLoading: returnsLoading } = useGetEquityChart(
     { days: returnsDays },
-    { query: { refetchInterval: 5000 } }
+    { query: { refetchInterval: 120000 } }
   );
   const { data: pnlHistory, isLoading: pnlHistoryLoading } = useQuery<Array<{ date: string; percent: number; amount: number }>>({
     queryKey: ["dashboard-pnl-history", pnlDays],
     queryFn: () => authFetch(`/api/dashboard/pnl-history?days=${pnlDays}`),
-    refetchInterval: 15000,
+    refetchInterval: 120000,
   });
   const { data: tradesData, isLoading: tradesLoading } = useQuery<{ trades: Array<{ id: number; pair: string; direction: string; createdAt: string }> }>({
     queryKey: ["signal-trades-running"],
@@ -591,7 +591,7 @@ export function DemoDashboardBody({
       if (!res.ok) throw new Error("Failed to fetch");
       return res.json();
     },
-    refetchInterval: 5000,
+    refetchInterval: 15000,
   });
   const { data: recentTradesData } = useQuery<{ trades: Array<{ id: number; pair: string; direction: string; entryPrice: string; realizedExitPrice: string | null; realizedProfitPercent: string; closeReason: string | null; closedAt: string }> }>({
     queryKey: ["signal-trades-recent"],
@@ -600,16 +600,16 @@ export function DemoDashboardBody({
       if (!res.ok) throw new Error("Failed to fetch");
       return res.json();
     },
-    refetchInterval: 10000,
+    refetchInterval: 60000,
   });
   const { data: perf, isLoading: perfLoading } = useGetDashboardPerformance({
-    query: { refetchInterval: 30000 }
+    query: { refetchInterval: 120000 }
   });
   const { data: fundStats, isLoading: fundLoading } = useGetDashboardFundStats({
-    query: { refetchInterval: 30000 }
+    query: { refetchInterval: 120000 }
   });
   const { data: investment, isLoading: investLoading } = useGetInvestment({
-    query: { refetchInterval: 10000 }
+    query: { refetchInterval: 60000 }
   });
   // Single source of truth for /public/market-indicators (includes both legacy
   // metrics and the new conversion-mode fields not yet in the openapi spec).
@@ -629,7 +629,7 @@ export function DemoDashboardBody({
       if (!res.ok) throw new Error("failed");
       return res.json();
     },
-    refetchInterval: 30000,
+    refetchInterval: 120000,
   });
   const conversion = marketIndicators;
   const protectionMutation = useUpdateProtection({
