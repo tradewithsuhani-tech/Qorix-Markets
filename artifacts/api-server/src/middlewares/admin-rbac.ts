@@ -155,7 +155,14 @@ export function auditAdminRequest(
   const module = resolveAdminModule(req.path);
   const ip = clientIp(req);
   const ua = (req.headers["user-agent"] as string | undefined) ?? null;
-  const targetId = (req.params?.id as string | undefined) ?? null;
+  // Snapshot target id from req.params at request time as a fallback. NOTE:
+  // when this middleware is mounted at a router-level prefix (e.g.
+  // `router.use("/admin/merchants", auditAdminRequest)`), the mount point
+  // declares no `:id` param, so `req.params.id` is typically empty here.
+  // For richer correlation, the route handler should set
+  // `res.locals.auditTargetId = String(id)` immediately before responding;
+  // we read that override below in `flush()`.
+  const targetIdFromParams = (req.params?.id as string | undefined) ?? null;
 
   const flush = (statusCode: number) => {
     // Pull any structured detail the route handler stashed on `res.locals`
@@ -166,6 +173,14 @@ export function auditAdminRequest(
     const summaryRaw = (res.locals as Record<string, unknown>)["auditSummary"];
     const metadataRaw = (res.locals as Record<string, unknown>)["auditMetadata"];
     const targetTypeRaw = (res.locals as Record<string, unknown>)["auditTargetType"];
+    const targetIdOverrideRaw = (res.locals as Record<string, unknown>)["auditTargetId"];
+    const targetIdOverride =
+      typeof targetIdOverrideRaw === "string"
+        ? targetIdOverrideRaw
+        : typeof targetIdOverrideRaw === "number"
+          ? String(targetIdOverrideRaw)
+          : null;
+    const targetId = targetIdOverride ?? targetIdFromParams;
     const summary = typeof summaryRaw === "string" ? summaryRaw.slice(0, 500) : null;
     const metadata =
       metadataRaw == null
