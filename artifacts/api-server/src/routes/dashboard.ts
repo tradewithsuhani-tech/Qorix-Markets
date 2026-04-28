@@ -5,6 +5,8 @@ import { getSlotData } from "./admin";
 import { authMiddleware, getQueryInt, getQueryString, type AuthRequest } from "../middlewares/auth";
 import { getVipInfo } from "../lib/vip";
 import { TTLCache } from "../lib/cache/ttl-cache";
+import { RedisCache } from "../lib/cache/redis-cache";
+import { getRedisConnection } from "../lib/redis";
 
 const router = Router();
 router.use(authMiddleware);
@@ -47,7 +49,16 @@ type DashboardSummaryResponse = {
     nextTier: unknown | null;
   };
 };
-const dashboardSummaryCache = new TTLCache<DashboardSummaryResponse>(5_000);
+// Redis-backed for cross-instance sharing (3 web machines = single warmup
+// cost), with per-instance TTLCache fallback so a Redis hiccup degrades to
+// per-machine caching instead of hammering Neon. Key includes userId so
+// users never see each other's data.
+const dashboardSummaryCache = new RedisCache<DashboardSummaryResponse>({
+  getRedis: getRedisConnection,
+  namespace: "dashboard-summary",
+  ttlMs: 5_000,
+  fallback: new TTLCache<DashboardSummaryResponse>(5_000),
+});
 
 // Per-user "Total Equity" display boost: random $100–$500 every 10 min,
 // persisted in wallets.demo_equity_boost. Display-only — never affects real

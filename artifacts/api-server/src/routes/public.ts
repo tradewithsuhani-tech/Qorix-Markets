@@ -4,13 +4,19 @@ import { eq, and, gte, avg, count, inArray, sql } from "drizzle-orm";
 import { listTrades } from "../lib/signal-trade-service";
 import { getMaintenanceState } from "../middlewares/maintenance";
 import { TTLCache } from "../lib/cache/ttl-cache";
+import { RedisCache } from "../lib/cache/redis-cache";
+import { getRedisConnection } from "../lib/redis";
 
 const router = Router();
 
-// ─── Hot-read TTL cache ─────────────────────────────────────────────────────
+// ─── Hot-read shared cache (Redis + in-process fallback) ────────────────────
 // /public/market-indicators is unauthenticated and non-personalized — every
 // caller gets the same response. The landing page polls it every few seconds
-// so caching it in memory removes the bulk of the read pressure on Neon.
+// so caching it removes the bulk of the read pressure on Neon.
+//
+// Redis-backed (shared across all Fly app instances) so 2× BOM + 1× SIN
+// machines all benefit from the first warmup. Per-instance TTLCache fallback
+// preserves serving capability if Upstash hiccups.
 //
 // 10s TTL — values are synthetic, monotonic counters that only change every
 // 10–30 minutes anyway. 10s of staleness invisible. advanceLiveCounters has
@@ -33,7 +39,12 @@ type MarketIndicatorsResponse = {
   demoProfitValue: number;
   fomoMessages: string[];
 };
-const marketIndicatorsCache = new TTLCache<MarketIndicatorsResponse>(10_000);
+const marketIndicatorsCache = new RedisCache<MarketIndicatorsResponse>({
+  getRedis: getRedisConnection,
+  namespace: "market-indicators",
+  ttlMs: 10_000,
+  fallback: new TTLCache<MarketIndicatorsResponse>(10_000),
+});
 
 // Public: system status (maintenance mode + dynamic dashboard return).
 //

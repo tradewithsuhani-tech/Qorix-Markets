@@ -39,7 +39,7 @@
 // ──────────────────────────────────────────────────────────────────────────
 
 import { Router } from "express";
-import rateLimit from "express-rate-limit";
+import { makeRedisLimiter } from "../middlewares/rate-limit";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import * as OTPAuth from "otpauth";
@@ -55,11 +55,10 @@ const router = Router();
 // session shouldn't be able to grind through the ~40-bit backup-code
 // space to silently disable 2FA. Login + login-verify already have
 // their own (separate) limiter inside auth.ts.
-const twoFactorMgmtLimit = rateLimit({
+const twoFactorMgmtLimit = makeRedisLimiter({
+  name: "two-factor-mgmt",
   windowMs: 15 * 60 * 1000,
   limit: 10,
-  standardHeaders: true,
-  legacyHeaders: false,
 });
 
 const ISSUER = "Qorix Markets";
