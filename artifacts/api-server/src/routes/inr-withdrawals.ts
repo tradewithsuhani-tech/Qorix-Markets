@@ -302,13 +302,20 @@ router.post("/admin/inr-withdrawals/:id/approve", async (req: AuthRequest, res) 
       const creditTo = claimed.assignedMerchantId ?? adminPickedMerchantId;
       if (creditTo != null) {
         const amountInrStr = parseFloat(claimed.amountInr as string).toFixed(2);
-        await tx
+        const credited = await tx
           .update(merchantsTable)
           .set({
             inrBalance: sql`${merchantsTable.inrBalance} + ${amountInrStr}::numeric`,
             updatedAt: new Date(),
           })
-          .where(eq(merchantsTable.id, creditTo));
+          .where(eq(merchantsTable.id, creditTo))
+          .returning({ id: merchantsTable.id });
+        // Guard against silent miss: if the supplied merchantId doesn't exist
+        // (no FK on assignedMerchantId), we must NOT finalize the withdrawal
+        // with no balance restored — roll the whole tx back instead.
+        if (credited.length === 0) {
+          throw new Error("INVALID_MERCHANT_ID");
+        }
       }
       return claimed;
     });
@@ -320,6 +327,10 @@ router.post("/admin/inr-withdrawals/:id/approve", async (req: AuthRequest, res) 
         return;
       }
       res.status(409).json({ error: `Withdrawal already ${existing.status}` });
+      return;
+    }
+    if (err?.message === "INVALID_MERCHANT_ID") {
+      res.status(400).json({ error: "Invalid merchantId — no such merchant" });
       return;
     }
     errorLogger.error({ err, id }, "[inr-withdrawal] approve failed");

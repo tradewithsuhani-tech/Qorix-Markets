@@ -273,6 +273,27 @@ export function InrDepositTab() {
     return () => window.clearTimeout(id);
   }, [step, secsLeft]);
 
+  // Stale-selection reconciliation: if the capacity query refetches and the
+  // user's selected merchant is no longer in the result (capacity dropped
+  // below their amount, merchant deactivated, etc.), bounce them back to
+  // the list step instead of leaving them stranded on a blank amount/transfer
+  // screen.
+  useEffect(() => {
+    if (step !== "amount" && step !== "transfer") return;
+    if (capacityLoading || capacityFetching) return;
+    if (selectedId == null) return;
+    const stillThere = methods.some((m) => m.id === selectedId);
+    if (!stillThere) {
+      setSelectedId(null);
+      setStep("list");
+      toast({
+        title: "Merchant no longer available",
+        description: "The selected merchant just ran out of capacity. Please pick another one.",
+        variant: "destructive",
+      });
+    }
+  }, [step, selectedId, methods, capacityLoading, capacityFetching, toast]);
+
   function resetFlow() {
     setStep("start");
     setSelectedId(null);
