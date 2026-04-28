@@ -7,8 +7,9 @@ import {
   paymentMethodsTable,
   inrDepositsTable,
   usersTable,
+  merchantsTable,
 } from "@workspace/db";
-import { eq, and, desc, sql } from "drizzle-orm";
+import { eq, and, desc, sql, gte } from "drizzle-orm";
 import { authMiddleware, adminMiddleware, type AuthRequest } from "../middlewares/auth";
 import { auditAdminRequest, requireAdminPermission } from "../middlewares/admin-rbac";
 import { createNotification } from "../lib/notifications";
@@ -77,14 +78,109 @@ function formatInrDeposit(d: typeof inrDepositsTable.$inferSelect) {
 // ---------------------------------------------------------------------------
 // PUBLIC (auth) endpoints — listed methods + user's INR deposits
 // ---------------------------------------------------------------------------
-router.get("/payment-methods", authMiddleware, async (_req: AuthRequest, res) => {
-  const rows = await db
+router.get("/payment-methods", authMiddleware, async (req: AuthRequest, res) => {
+  const rate = await getInrRate();
+  const amountParam = req.query["amount"];
+  const amount = amountParam != null ? Number(amountParam) : null;
+
+  // Legacy / no amount: keep old behavior (all active methods, no merchant filter).
+  if (amount == null || !Number.isFinite(amount) || amount <= 0) {
+    const rows = await db
+      .select()
+      .from(paymentMethodsTable)
+      .where(eq(paymentMethodsTable.isActive, true))
+      .orderBy(paymentMethodsTable.sortOrder, paymentMethodsTable.id);
+    res.json({ methods: rows.map(publicMethod), rate });
+    return;
+  }
+
+  // Capacity-aware: join active methods → active merchants, compute pending
+  // hold per merchant (sum of pending inr_deposits assigned via owned methods),
+  // available = inrBalance − pendingHold. Filter:
+  //   - method.isActive AND merchant.isActive
+  //   - method min/max bracket contains the requested amount
+  //   - available ≥ amount
+  // Cap to top 5 distinct merchants (largest available first), then return all
+  // qualifying methods of those merchants.
+  const amountStr = amount.toFixed(2);
+
+  const candidates = await db.execute<{
+    method_id: number;
+    merchant_id: number;
+    merchant_name: string;
+    available: string;
+  }>(sql`
+    select
+      pm.id as method_id,
+      m.id as merchant_id,
+      m.full_name as merchant_name,
+      (m.inr_balance - coalesce((
+        select sum(d.amount_inr)
+        from inr_deposits d
+        join payment_methods pm2 on pm2.id = d.payment_method_id
+        where pm2.merchant_id = m.id and d.status = 'pending'
+      ), 0))::text as available
+    from payment_methods pm
+    join merchants m on m.id = pm.merchant_id
+    where pm.is_active = true
+      and m.is_active = true
+      and pm.min_amount::numeric <= ${amountStr}::numeric
+      and pm.max_amount::numeric >= ${amountStr}::numeric
+      and (m.inr_balance - coalesce((
+        select sum(d.amount_inr)
+        from inr_deposits d
+        join payment_methods pm2 on pm2.id = d.payment_method_id
+        where pm2.merchant_id = m.id and d.status = 'pending'
+      ), 0)) >= ${amountStr}::numeric
+  `);
+
+  if (candidates.rows.length === 0) {
+    res.json({ methods: [], rate });
+    return;
+  }
+
+  // Pick top 5 merchants by available capacity DESC (more headroom first).
+  const byMerchant = new Map<number, { name: string; available: number }>();
+  for (const c of candidates.rows) {
+    const av = parseFloat(c.available);
+    if (!byMerchant.has(c.merchant_id)) {
+      byMerchant.set(c.merchant_id, { name: c.merchant_name, available: av });
+    }
+  }
+  const top5 = [...byMerchant.entries()]
+    .sort((a, b) => b[1].available - a[1].available)
+    .slice(0, 5)
+    .map(([id]) => id);
+
+  // Fetch full method rows for the chosen merchants in a single query.
+  const fullMethods = await db
     .select()
     .from(paymentMethodsTable)
-    .where(eq(paymentMethodsTable.isActive, true))
+    .where(
+      and(
+        eq(paymentMethodsTable.isActive, true),
+        sql`${paymentMethodsTable.merchantId} = ANY(${top5})`,
+      ),
+    )
     .orderBy(paymentMethodsTable.sortOrder, paymentMethodsTable.id);
-  const rate = await getInrRate();
-  res.json({ methods: rows.map(publicMethod), rate });
+
+  const candidateMethodIds = new Set(candidates.rows.map((c) => c.method_id));
+  const enriched = fullMethods
+    .filter((m) => candidateMethodIds.has(m.id))
+    .map((m) => {
+      const merchantInfo = byMerchant.get(m.merchantId!)!;
+      return {
+        ...publicMethod(m),
+        merchantId: m.merchantId,
+        merchantName: merchantInfo.name,
+        merchantAvailable: merchantInfo.available,
+      };
+    })
+    // Order by merchant available desc so the UI naturally shows best-capacity
+    // merchants first.
+    .sort((a, b) => (b.merchantAvailable ?? 0) - (a.merchantAvailable ?? 0));
+
+  res.json({ methods: enriched, rate });
 });
 
 router.get("/inr-deposits/mine", authMiddleware, async (req: AuthRequest, res) => {
@@ -139,6 +235,37 @@ router.post("/inr-deposits", authMiddleware, async (req: AuthRequest, res) => {
   if (amountInr < min || amountInr > max) {
     res.status(400).json({ error: `Amount must be between ₹${min} and ₹${max}` });
     return;
+  }
+
+  // Capacity check (best-effort, race-tolerant): if the chosen method is
+  // owned by a merchant, ensure their available capacity (inrBalance −
+  // pending sum) covers this deposit. Authoritative debit happens at
+  // approve time; this just blocks obviously over-capacity submissions.
+  if (method.merchantId != null) {
+    const [cap] = await db.execute<{ available: string }>(sql`
+      select (m.inr_balance - coalesce((
+        select sum(d.amount_inr)
+        from inr_deposits d
+        join payment_methods pm on pm.id = d.payment_method_id
+        where pm.merchant_id = m.id and d.status = 'pending'
+      ), 0))::text as available
+      from merchants m
+      where m.id = ${method.merchantId} and m.is_active = true
+      limit 1
+    `).then((r) => [r.rows[0]] as const);
+    if (!cap) {
+      res.status(409).json({ error: "Merchant is no longer accepting deposits" });
+      return;
+    }
+    const available = parseFloat(cap.available);
+    if (!(available >= amountInr)) {
+      res.status(409).json({
+        error: "merchant_capacity_exceeded",
+        message: `Selected merchant can accept at most ₹${available.toFixed(2)} right now. Try a smaller amount or pick a different merchant.`,
+        available,
+      });
+      return;
+    }
   }
 
   // Dedupe UTR — partial unique index would race; do an explicit check first
@@ -374,6 +501,30 @@ router.post("/admin/inr-deposits/:id/approve", async (req: AuthRequest, res) => 
           .where(eq(inrDepositsTable.id, id));
       }
 
+      // Debit the owning merchant's INR balance. Skipped for legacy methods
+      // with no merchantId so admin-managed channels keep working untouched.
+      const [mInfo] = await tx
+        .select({ merchantId: paymentMethodsTable.merchantId })
+        .from(paymentMethodsTable)
+        .where(eq(paymentMethodsTable.id, claimed.paymentMethodId))
+        .limit(1);
+      if (mInfo?.merchantId != null) {
+        const amountInrStr = parseFloat(claimed.amountInr as string).toFixed(2);
+        const debit = await tx
+          .update(merchantsTable)
+          .set({
+            inrBalance: sql`${merchantsTable.inrBalance} - ${amountInrStr}::numeric`,
+            updatedAt: new Date(),
+          })
+          .where(
+            sql`${merchantsTable.id} = ${mInfo.merchantId} and ${merchantsTable.inrBalance} >= ${amountInrStr}::numeric`,
+          )
+          .returning({ id: merchantsTable.id });
+        if (!debit[0]) {
+          throw new Error("INSUFFICIENT_MERCHANT_BALANCE");
+        }
+      }
+
       await ensureUserAccounts(claimed.userId, tx);
 
       // Atomic balance increment via raw SQL — no read-modify-write window,
@@ -412,6 +563,13 @@ router.post("/admin/inr-deposits/:id/approve", async (req: AuthRequest, res) => 
   } catch (err: any) {
     if (err?.message === "ALREADY_REVIEWED") {
       res.status(409).json({ error: "Deposit was already reviewed by another admin" });
+      return;
+    }
+    if (err?.message === "INSUFFICIENT_MERCHANT_BALANCE") {
+      res.status(409).json({
+        error: "insufficient_merchant_balance",
+        message: "Approve blocked: the merchant's INR balance is now lower than this deposit. Top them up or reject this deposit.",
+      });
       return;
     }
     errorLogger.error({ err, id }, "[inr-deposit] approve failed");

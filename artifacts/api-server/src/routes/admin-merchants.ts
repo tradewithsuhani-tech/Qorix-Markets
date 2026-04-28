@@ -9,7 +9,11 @@ const router = Router();
 
 router.use("/admin/merchants", authMiddleware, adminMiddleware, requireAdminPermission, auditAdminRequest);
 
-// List merchants with their owned-method count. Single SQL — no N+1.
+// List merchants with their owned-method count + INR wallet snapshot. Single
+// SQL — no N+1. `inrBalance` is the on-chain wallet figure, `pendingHold` is
+// the locked-in amount across pending user deposits assigned to this
+// merchant's methods, and `available` is the spendable headroom for new
+// deposits. Returned as strings (numeric) — frontend parses to number.
 router.get("/admin/merchants", async (_req, res) => {
   const rows = await db
     .select({
@@ -21,13 +25,26 @@ router.get("/admin/merchants", async (_req, res) => {
       createdBy: merchantsTable.createdBy,
       lastLoginAt: merchantsTable.lastLoginAt,
       createdAt: merchantsTable.createdAt,
+      inrBalance: merchantsTable.inrBalance,
       methodCount: sql<number>`(
         select count(*)::int from payment_methods pm where pm.merchant_id = ${merchantsTable.id}
       )`,
+      pendingHold: sql<string>`coalesce((
+        select sum(d.amount_inr)::text
+        from inr_deposits d
+        join payment_methods pm on pm.id = d.payment_method_id
+        where pm.merchant_id = ${merchantsTable.id} and d.status = 'pending'
+      ), '0')`,
     })
     .from(merchantsTable)
     .orderBy(merchantsTable.createdAt);
-  res.json({ merchants: rows });
+  // Compute available client-side from authoritative DB strings to avoid any
+  // numeric drift in the SQL expression.
+  const enriched = rows.map((r) => ({
+    ...r,
+    available: (parseFloat(r.inrBalance as string) - parseFloat(r.pendingHold)).toFixed(2),
+  }));
+  res.json({ merchants: enriched });
 });
 
 router.post("/admin/merchants", async (req: AuthRequest, res) => {
@@ -35,6 +52,17 @@ router.post("/admin/merchants", async (req: AuthRequest, res) => {
   const password = String(req.body?.password ?? "");
   const fullName = String(req.body?.fullName ?? "").trim();
   const phone = req.body?.phone ? String(req.body.phone).trim() : null;
+  // Optional initial INR security deposit / wallet balance.
+  const initialInrBalanceRaw = req.body?.inrBalance;
+  let inrBalance: string = "0";
+  if (initialInrBalanceRaw !== undefined && initialInrBalanceRaw !== null && initialInrBalanceRaw !== "") {
+    const n = Number(initialInrBalanceRaw);
+    if (!Number.isFinite(n) || n < 0) {
+      res.status(400).json({ error: "inrBalance must be a non-negative number" });
+      return;
+    }
+    inrBalance = n.toFixed(2);
+  }
   if (!email || !password || !fullName) {
     res.status(400).json({ error: "email, password and fullName are required" });
     return;
@@ -62,6 +90,7 @@ router.post("/admin/merchants", async (req: AuthRequest, res) => {
       phone,
       isActive: true,
       createdBy: req.userId ?? null,
+      inrBalance,
     })
     .returning({
       id: merchantsTable.id,
@@ -69,9 +98,60 @@ router.post("/admin/merchants", async (req: AuthRequest, res) => {
       fullName: merchantsTable.fullName,
       phone: merchantsTable.phone,
       isActive: merchantsTable.isActive,
+      inrBalance: merchantsTable.inrBalance,
       createdAt: merchantsTable.createdAt,
     });
   res.json({ merchant: created });
+});
+
+// Atomic top-up / debit of a merchant's INR balance. Positive `delta` credits,
+// negative debits. Rejected if it would push the balance below 0.
+router.post("/admin/merchants/:id/topup", async (req: AuthRequest, res) => {
+  const id = Number(req.params["id"]);
+  if (!Number.isFinite(id) || id <= 0) {
+    res.status(400).json({ error: "Invalid id" });
+    return;
+  }
+  const delta = Number(req.body?.delta);
+  if (!Number.isFinite(delta) || delta === 0) {
+    res.status(400).json({ error: "delta must be a non-zero number (+credit / -debit)" });
+    return;
+  }
+  const note = req.body?.note != null ? String(req.body.note).slice(0, 500) : null;
+  const deltaStr = delta.toFixed(2);
+
+  // Guard: if delta is negative, ensure resulting balance stays ≥ 0.
+  const updated = await db
+    .update(merchantsTable)
+    .set({
+      inrBalance: sql`${merchantsTable.inrBalance} + ${deltaStr}::numeric`,
+      updatedAt: new Date(),
+    })
+    .where(
+      delta < 0
+        ? sql`${merchantsTable.id} = ${id} and ${merchantsTable.inrBalance} + ${deltaStr}::numeric >= 0`
+        : eq(merchantsTable.id, id),
+    )
+    .returning({
+      id: merchantsTable.id,
+      inrBalance: merchantsTable.inrBalance,
+    });
+  if (!updated[0]) {
+    if (delta < 0) {
+      res.status(409).json({
+        error: "insufficient_balance",
+        message: "Debit blocked — would push merchant balance below 0.",
+      });
+      return;
+    }
+    res.status(404).json({ error: "Merchant not found" });
+    return;
+  }
+  res.json({
+    merchant: updated[0],
+    delta: Number(deltaStr),
+    note,
+  });
 });
 
 router.patch("/admin/merchants/:id", async (req, res) => {
