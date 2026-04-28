@@ -4,6 +4,7 @@ import pinoHttp from "pino-http";
 import router from "./routes";
 import { logger } from "./lib/logger";
 import { maintenanceMiddleware, peekMaintenanceState } from "./middlewares/maintenance";
+import { globalApiLimiter } from "./middlewares/rate-limit";
 
 const app: Express = express();
 
@@ -115,6 +116,15 @@ app.use((req, res, next) => {
   res.on("finish", () => clearTimeout(t));
   next();
 });
+
+// ─── Global per-IP rate limit (backstop) ──────────────────────────────────
+// Mounted BEFORE the maintenance gate so a runaway client can't burn DB
+// pool slots inside maintenanceMiddleware just to get rejected after the
+// fact. Healthz is exempted inside the limiter (skip predicate). Per-route
+// limiters in routes/auth.ts and routes/two-factor.ts run AFTER this one
+// and apply stricter caps to sensitive endpoints (login, password reset,
+// 2FA management).
+app.use("/api", globalApiLimiter);
 
 // Maintenance gate sits in front of every /api route. When MAINTENANCE_MODE=true
 // (set as a Fly secret during the cutover window) it lets reads through with a

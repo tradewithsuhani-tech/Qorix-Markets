@@ -16,15 +16,14 @@ import {
   consumeAuthCodeForUser,
 } from "./two-factor";
 import crypto from "crypto";
-import rateLimit from "express-rate-limit";
+import { makeRedisLimiter } from "../middlewares/rate-limit";
 
 const router = Router();
 
-const loginRateLimit = rateLimit({
+const loginRateLimit = makeRedisLimiter({
+  name: "login",
   windowMs: 15 * 60 * 1000,
   limit: 20,
-  standardHeaders: true,
-  legacyHeaders: false,
 });
 
 // Max 5 new accounts per IP per day
@@ -873,11 +872,10 @@ router.get("/auth/security-status", authMiddleware, async (req: AuthRequest, res
 // the next WITHDRAWAL_LOCK_HOURS_AFTER_PASSWORD_CHANGE hours — gives the
 // real owner a window to react if their account was just taken over.
 // ---------------------------------------------------------------------------
-const changePasswordLimiter = rateLimit({
+const changePasswordLimiter = makeRedisLimiter({
+  name: "change-password",
   windowMs: 15 * 60 * 1000,
   limit: 10,
-  standardHeaders: true,
-  legacyHeaders: false,
   message: { error: "Too many password change attempts. Try again later." },
 });
 
@@ -1057,11 +1055,10 @@ router.post("/auth/withdrawal-otp", authMiddleware, async (req: AuthRequest, res
 // enumeration. The OTP is delivered via the same SMTP pipeline as email
 // verification (lib/email-service).
 // ---------------------------------------------------------------------------
-const forgotLimiter = rateLimit({
+const forgotLimiter = makeRedisLimiter({
+  name: "forgot-password",
   windowMs: 15 * 60 * 1000,
   limit: 5,
-  standardHeaders: true,
-  legacyHeaders: false,
   message: { error: "Too many reset requests. Try again later." },
 });
 

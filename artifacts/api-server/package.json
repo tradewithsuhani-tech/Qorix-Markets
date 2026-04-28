@@ -33,6 +33,7 @@
     "pino": "^9",
     "pino-http": "^10",
     "qrcode": "^1.5.4",
+    "rate-limit-redis": "^4.3.1",
     "tronweb": "^6.2.2"
   },
   "devDependencies": {
