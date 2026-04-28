@@ -9,7 +9,7 @@ import {
   usersTable,
   merchantsTable,
 } from "@workspace/db";
-import { eq, and, desc, sql, gte } from "drizzle-orm";
+import { eq, and, desc, sql, gte, inArray } from "drizzle-orm";
 import { authMiddleware, adminMiddleware, type AuthRequest } from "../middlewares/auth";
 import { auditAdminRequest, requireAdminPermission } from "../middlewares/admin-rbac";
 import { createNotification } from "../lib/notifications";
@@ -153,13 +153,17 @@ router.get("/payment-methods", authMiddleware, async (req: AuthRequest, res) => 
     .map(([id]) => id);
 
   // Fetch full method rows for the chosen merchants in a single query.
+  // NOTE: Drizzle's sql template can't safely interpolate a JS number[] into a
+  // postgres `ANY()` array literal (pg-node serializes [1] as "1", not "{1}",
+  // which throws 22P02 "malformed array literal"). Use the typed `inArray`
+  // helper instead — it expands to `merchant_id in ($1, $2, ...)` correctly.
   const fullMethods = await db
     .select()
     .from(paymentMethodsTable)
     .where(
       and(
         eq(paymentMethodsTable.isActive, true),
-        sql`${paymentMethodsTable.merchantId} = ANY(${top5})`,
+        inArray(paymentMethodsTable.merchantId, top5),
       ),
     )
     .orderBy(paymentMethodsTable.sortOrder, paymentMethodsTable.id);
@@ -431,8 +435,12 @@ router.get("/admin/inr-deposits", async (req, res) => {
     : db.select().from(inrDepositsTable).orderBy(desc(inrDepositsTable.createdAt)).limit(200));
   // Pull user emails for the admin list (small N, single query)
   const ids = Array.from(new Set(rows.map((r) => r.userId)));
+  // Use inArray (not sql`= ANY(${ids})`) — see capacity-aware /payment-methods
+  // handler above for the same pg-node JS-array → postgres array literal trap
+  // (22P02 "malformed array literal") when interpolated through Drizzle's sql
+  // template.
   const users = ids.length
-    ? await db.select({ id: usersTable.id, email: usersTable.email, fullName: usersTable.fullName }).from(usersTable).where(sql`${usersTable.id} = ANY(${ids})`)
+    ? await db.select({ id: usersTable.id, email: usersTable.email, fullName: usersTable.fullName }).from(usersTable).where(inArray(usersTable.id, ids))
     : [];
   const byId = new Map(users.map((u) => [u.id, u]));
   res.json({
