@@ -466,12 +466,12 @@ function PerformanceBlock({
   todayPnl: number;
 }) {
   const { data: perf, isLoading: perfLoading } = useGetDashboardPerformance({
-    query: { refetchInterval: 30000 },
+    query: { refetchInterval: 120000 },
   });
   const { data: pnlHistory } = useQuery<Array<{ date: string; percent: number; amount: number }>>({
     queryKey: ["dashboard-pnl-history", 14],
     queryFn: () => authFetch(`/api/dashboard/pnl-history?days=14`),
-    refetchInterval: 30000,
+    refetchInterval: 120000,
   });
 
   const winRate = perf?.winRate ?? 0;
@@ -687,9 +687,9 @@ function fmtMoney(n: number) {
 function PortfolioInner() {
   const queryClient = useQueryClient();
   const { data: investment, isLoading: invLoading } = useGetInvestment({
-    query: { refetchInterval: 10000 },
+    query: { refetchInterval: 60000 },
   });
-  const { data: summary } = useGetDashboardSummary({ query: { refetchInterval: 5000 } });
+  const { data: summary } = useGetDashboardSummary({ query: { refetchInterval: 30000 } });
   const stopMutation = useStopInvestment({
     mutation: {
       onSuccess: () => {
@@ -712,11 +712,11 @@ function PortfolioInner() {
   };
   const { data: equity, dataUpdatedAt: equityUpdatedAt } = useGetEquityChart(
     { days: 30 },
-    { query: { refetchInterval: 15000 } },
+    { query: { refetchInterval: 60000 } },
   );
   const { data: tradesData } = useGetTrades(
     { limit: 5 },
-    { query: { refetchInterval: 15000 } },
+    { query: { refetchInterval: 60000 } },
   );
 
   const investedAmount = investment?.amount ?? 0;
@@ -1774,7 +1774,7 @@ function PortfolioInner() {
 function RecentTradeAttribution() {
   const { data: tradesData } = useGetTrades(
     { limit: 5 },
-    { query: { refetchInterval: 15000 } },
+    { query: { refetchInterval: 60000 } },
   );
   const trades = tradesData ?? [];
   return (
@@ -1881,7 +1881,7 @@ function RecentTradeAttribution() {
 export default function PortfolioPage() {
   const { data: summary } = useGetDashboardSummary({ query: { refetchInterval: 60000 } });
   const { data: investment, isLoading: invLoading } = useGetInvestment({
-    query: { refetchInterval: 10000 },
+    query: { refetchInterval: 60000 },
   });
   const investedAmount = investment?.amount ?? 0;
   const isActive = !!investment?.isActive;
