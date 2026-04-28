@@ -40,6 +40,7 @@ const MODULE_MAP: ReadonlyArray<ModuleEntry> = [
   ["/admin/inr-deposits", "deposits"],
   ["/admin/inr-rate", "payment-methods"],
   ["/admin/payment-methods", "payment-methods"],
+  ["/admin/merchants", "merchants"],
   ["/admin/deposits", "deposits"],
   ["/admin/intelligence", "intelligence"],
   ["/admin/ledger", "wallet"],

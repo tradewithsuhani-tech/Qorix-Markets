@@ -61,7 +61,7 @@ export default function AdminMerchantsPage() {
   const [topupDelta, setTopupDelta] = useState("");
   const [topupNote, setTopupNote] = useState("");
 
-  const { data, isLoading } = useQuery<{ merchants: AdminMerchant[] }>({
+  const { data, isLoading, error, isError } = useQuery<{ merchants: AdminMerchant[] }>({
     queryKey: ["admin-merchants"],
     queryFn: () => authFetch(apiUrl("/admin/merchants")),
   });
@@ -154,6 +154,21 @@ export default function AdminMerchantsPage() {
         {isLoading ? (
           <div className="flex items-center justify-center py-12 text-slate-400">
             <Loader2 className="h-5 w-5 animate-spin mr-2" /> Loading…
+          </div>
+        ) : isError ? (
+          // Surface the actual API error so a 500/403/etc. doesn't masquerade
+          // as the friendly "no merchants yet" empty state. We hit exactly
+          // this trap once already — a bare-identifier ambiguity inside a
+          // correlated subquery 500'd the endpoint and the page silently
+          // showed "No merchants yet" while QOREX TRADE / SURYA BHAI /
+          // BIMLESH FX were sitting in the DB the whole time.
+          <div className="rounded-2xl border border-rose-500/40 bg-rose-500/5 p-6 text-center">
+            <div className="text-rose-300 font-medium mb-1">
+              Couldn't load merchants
+            </div>
+            <div className="text-xs text-slate-400">
+              {(error as Error)?.message ?? "Unknown error"}
+            </div>
           </div>
         ) : !data?.merchants.length ? (
           <div className="rounded-2xl border border-dashed border-slate-800 p-10 text-center text-slate-400">

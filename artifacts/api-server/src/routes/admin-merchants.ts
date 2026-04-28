@@ -26,14 +26,20 @@ router.get("/admin/merchants", async (_req, res) => {
       lastLoginAt: merchantsTable.lastLoginAt,
       createdAt: merchantsTable.createdAt,
       inrBalance: merchantsTable.inrBalance,
+      // NOTE: We use the fully-qualified literal `merchants.id` here instead
+      // of `${merchantsTable.id}` because Drizzle interpolates a column
+      // reference as the bare identifier `"id"`. Inside these correlated
+      // subqueries, `payment_methods` also has its own `id` column, so the
+      // bare `"id"` is ambiguous and Postgres raises
+      // `column reference "id" is ambiguous`, 500ing the entire endpoint.
       methodCount: sql<number>`(
-        select count(*)::int from payment_methods pm where pm.merchant_id = ${merchantsTable.id}
+        select count(*)::int from payment_methods pm where pm.merchant_id = merchants.id
       )`,
       pendingHold: sql<string>`coalesce((
         select sum(d.amount_inr)::text
         from inr_deposits d
         join payment_methods pm on pm.id = d.payment_method_id
-        where pm.merchant_id = ${merchantsTable.id} and d.status = 'pending'
+        where pm.merchant_id = merchants.id and d.status = 'pending'
       ), '0')`,
     })
     .from(merchantsTable)
