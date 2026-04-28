@@ -30,6 +30,7 @@ const {
   shouldRunBackgroundJobs,
 } = await import("../../middlewares/maintenance");
 const { inArray } = await import("drizzle-orm");
+const { teardownHttpServer, teardownRedis } = await import("./cleanup");
 
 let server: Server;
 let baseUrl = "";
@@ -76,13 +77,14 @@ before(async () => {
 });
 
 after(async () => {
-  await new Promise<void>((resolve) => server.close(() => resolve()));
+  await teardownHttpServer(server);
   // Clean up the row we wrote so it doesn't leak into other tests in the
   // suite that depend on a clean baseline.
   await db
     .delete(systemSettingsTable)
     .where(inArray(systemSettingsTable.key, [...MAINTENANCE_KEYS]));
   invalidateMaintenanceCache();
+  await teardownRedis();
   await pool.end();
 });
 

@@ -48,6 +48,7 @@ const {
   getMaintenanceState,
 } = await import("../../middlewares/maintenance");
 const { eq, sql } = await import("drizzle-orm");
+const { teardownHttpServer, teardownRedis } = await import("./cleanup");
 
 let server: Server;
 let baseUrl = "";
@@ -97,12 +98,13 @@ before(async () => {
 
 after(async () => {
   try {
-    await new Promise<void>((resolve) => server.close(() => resolve()));
+    await teardownHttpServer(server);
   } finally {
     try {
       await clearMaintenanceMessageRow();
       delete process.env["MAINTENANCE_MESSAGE"];
     } finally {
+      await teardownRedis();
       await pool.end();
     }
   }

@@ -35,6 +35,7 @@ const { invalidateMaintenanceCache } = await import(
   "../../middlewares/maintenance"
 );
 const { signToken } = await import("../../middlewares/auth");
+const { teardownHttpServer, teardownRedis } = await import("./cleanup");
 const { eq, inArray, sql } = await import("drizzle-orm");
 
 let server: Server;
@@ -157,7 +158,9 @@ before(async () => {
 
 after(async () => {
   try {
-    await new Promise<void>((resolve) => server.close(() => resolve()));
+    // See ./cleanup.ts for why both server.close() AND closeAllConnections()
+    // are needed to release the event loop after fetch()-driven tests.
+    await teardownHttpServer(server);
   } finally {
     try {
       // Best-effort cleanup. Each delete is scoped to identifiers we
@@ -168,6 +171,12 @@ after(async () => {
       await clearMaintenanceRows();
       delete process.env["MAINTENANCE_MODE"];
     } finally {
+      // Phase 6 added a Redis-backed auth-user cache to authMiddleware AND
+      // a Redis-backed rate limiter to globalApiLimiter — both share the
+      // ioredis singleton from lib/redis.ts. Without explicit teardown the
+      // singleton's reconnect timer keeps node's event loop alive past the
+      // suite finishing. See ./cleanup.ts for the full reasoning.
+      await teardownRedis();
       await pool.end();
     }
   }
