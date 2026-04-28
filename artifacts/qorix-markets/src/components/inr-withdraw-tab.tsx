@@ -81,9 +81,25 @@ export function InrWithdrawTab({ kycApproved, onKycRequired }: { kycApproved: bo
 
   useEffect(() => {
     const code = ifsc.trim().toUpperCase();
-    if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(code)) {
+    // Empty → silent idle. User hasn't typed yet.
+    if (code.length === 0) {
       setIfscStatus("idle");
       setIfscBranchInfo("");
+      return;
+    }
+    // Typed something but doesn't match the strict 4-letter + 0 + 6-alphanumeric
+    // shape that all real Indian IFSCs follow. Surface an explicit error with
+    // an example, otherwise the user just sees a grey submit button with no
+    // reason (this is exactly the trap that hit a user who typed "PAYTM012345"
+    // instead of "PYTM0123456" — the brand name has 5 letters, the bank IFSC
+    // prefix has 4).
+    if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(code)) {
+      setIfscStatus("error");
+      setIfscBranchInfo(
+        code.length !== 11
+          ? `IFSC must be exactly 11 characters (you typed ${code.length}). Format: 4 letters + 0 + 6 alphanumeric, e.g. HDFC0001234.`
+          : "IFSC format wrong. Must be 4 letters + 0 + 6 alphanumeric. Example: HDFC0001234, ICIC0000123, PYTM0123456 (Paytm).",
+      );
       return;
     }
     setIfscStatus("loading");
@@ -152,6 +168,46 @@ export function InrWithdrawTab({ kycApproved, onKycRequired }: { kycApproved: bo
         /^\d{6,20}$/.test(accountNumber.trim()) &&
         /^[A-Z]{4}0[A-Z0-9]{6}$/.test(ifsc.trim().toUpperCase()));
 
+  /**
+   * Human-readable reason WHY the submit button is currently disabled,
+   * shown as a small helper line beneath the button. The button text
+   * itself can't change for every possible failure mode, and a silent
+   * grey button leaves users guessing — earlier a user reported "bank
+   * withdrawal not working" and assumed it was the USDT channel lock,
+   * when actually they had typed an 11-char IFSC with the wrong shape
+   * ("PAYTM012345" — 5 letters at start instead of 4) and there was
+   * no inline message telling them so. Returns null when the form is
+   * either submittable or in a state where the button text already
+   * communicates the issue (e.g. KYC).
+   */
+  const disabledReason: string | null = (() => {
+    if (!kycApproved) return null;          // button text already says "Complete KYC"
+    if (amount === 0) return "Enter the amount you want to withdraw.";
+    if (belowMin) return "Minimum withdrawal is ₹100.";
+    if (exceedsCap) {
+      return `Amount above your INR cap of ₹${limits!.inrChannelMaxInr.toLocaleString(undefined, { maximumFractionDigits: 2 })}.`;
+    }
+    if (exceedsMain) return "Amount exceeds your Main Balance.";
+    if (method === "upi") {
+      const v = upiId.trim();
+      if (!v) return "Enter your UPI ID.";
+      if (!/^[\w.\-]{2,}@[\w.\-]{2,}$/.test(v)) {
+        return "UPI ID format invalid. Example: yourname@okhdfcbank.";
+      }
+    } else {
+      if (accountHolder.trim().length < 2) return "Enter the account holder name.";
+      const acc = accountNumber.trim();
+      if (!acc) return "Enter the account number.";
+      if (!/^\d{6,20}$/.test(acc)) return "Account number must be 6 to 20 digits, no spaces.";
+      const code = ifsc.trim().toUpperCase();
+      if (!code) return "Enter the IFSC code.";
+      if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(code)) {
+        return "IFSC code format wrong. Must be 4 letters + 0 + 6 alphanumeric (e.g. HDFC0001234, PYTM0123456).";
+      }
+    }
+    return null;
+  })();
+
   const submit = async () => {
     if (!kycApproved) { onKycRequired(); return; }
     if (!canSubmit) return;
@@ -215,8 +271,13 @@ export function InrWithdrawTab({ kycApproved, onKycRequired }: { kycApproved: bo
             <div className="flex items-start gap-1.5 text-[11px] text-amber-300/90 mt-1">
               <AlertCircle style={{ width: 11, height: 11 }} className="mt-0.5 shrink-0" />
               <span>
-                ${limits.usdtChannelOwed.toFixed(2)} of your balance is reserved to be withdrawn back via USDT (TRC20)
-                because you deposited that amount via crypto.
+                <b>${limits.usdtChannelOwed.toFixed(2)} USDT</b> of your balance is reserved for crypto (TRC20)
+                withdrawal only — you deposited that via crypto, so it has to leave the same way.
+                {" "}
+                <span className="text-emerald-300/90">
+                  The remaining <b>₹{limits.inrChannelMaxInr.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</b>
+                  {" "}can be withdrawn freely via either UPI or Bank Transfer — your choice.
+                </span>
               </span>
             </div>
           )}
@@ -408,6 +469,15 @@ export function InrWithdrawTab({ kycApproved, onKycRequired }: { kycApproved: bo
           <>Request ₹{amount > 0 ? amount.toFixed(0) : ""} Withdrawal</>
         )}
       </button>
+
+      {/* Inline reason WHY the button is disabled — never leave the user
+          guessing in front of a grey button. */}
+      {disabledReason && !submitting && (
+        <div className="flex items-start gap-1.5 text-[11px] text-amber-300/90 -mt-2 px-1">
+          <AlertCircle className="w-3 h-3 mt-0.5 shrink-0" />
+          <span>{disabledReason}</span>
+        </div>
+      )}
 
       <div className="flex items-start gap-2 rounded-xl border border-amber-500/20 bg-amber-500/5 px-3 py-2.5 text-[11px] text-amber-300/90">
         <Clock className="w-3 h-3 mt-0.5 shrink-0" />
