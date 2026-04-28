@@ -432,10 +432,12 @@ export function InrWithdrawTab({ kycApproved, onKycRequired }: { kycApproved: bo
         </div>
       )}
 
-      {/* Celebratory success receipt modal — replaces the prior plain toast */}
+      {/* Celebratory success receipt modal — replaces the prior plain toast.
+          Reads the executed rate straight off the server response (`rateUsed`)
+          rather than current `limits.rate`, so the displayed receipt cannot
+          drift if the platform rate is changed between submit and render. */}
       <WithdrawalSuccessModal
         receipt={successReceipt}
-        rate={limits?.rate ?? 0}
         onClose={() => setSuccessReceipt(null)}
       />
 
@@ -508,11 +510,9 @@ function StatusPill({ status }: { status: "pending" | "approved" | "rejected" })
  */
 function WithdrawalSuccessModal({
   receipt,
-  rate,
   onClose,
 }: {
   receipt: Withdrawal | null;
-  rate: number;
   onClose: () => void;
 }) {
   const [copied, setCopied] = useState(false);
@@ -652,7 +652,9 @@ function WithdrawalSuccessModal({
               <div className="mt-1 text-[11px] text-emerald-300/90 inline-flex items-center gap-1">
                 <ArrowDownToLine className="w-3 h-3" />
                 ${usdtHeld.toFixed(2)} USDT held from Main Balance
-                {rate > 0 && <span className="text-white/40 ml-1">@ ₹{rate.toFixed(2)}</span>}
+                {receipt.rateUsed > 0 && (
+                  <span className="text-white/40 ml-1">@ ₹{receipt.rateUsed.toFixed(2)}</span>
+                )}
               </div>
             </motion.div>
           </div>
