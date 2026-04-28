@@ -7,6 +7,7 @@ import {
   boolean,
   text,
   timestamp,
+  index,
 } from "drizzle-orm/pg-core";
 
 export const glAccountsTable = pgTable("gl_accounts", {
@@ -20,15 +21,29 @@ export const glAccountsTable = pgTable("gl_accounts", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-export const ledgerEntriesTable = pgTable("ledger_entries", {
-  id: serial("id").primaryKey(),
-  journalId: varchar("journal_id", { length: 100 }).notNull(), // groups debit+credit pair(s) for one event
-  transactionId: integer("transaction_id"), // nullable — links to transactions table
-  accountId: integer("account_id").notNull(), // FK to gl_accounts.id (denorm kept simple)
-  accountCode: varchar("account_code", { length: 100 }).notNull(), // denormalized for readability
-  entryType: varchar("entry_type", { length: 10 }).notNull(), // debit | credit
-  amount: numeric("amount", { precision: 18, scale: 8 }).notNull(),
-  currency: varchar("currency", { length: 10 }).notNull().default("USDT"),
-  description: text("description"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+export const ledgerEntriesTable = pgTable(
+  "ledger_entries",
+  {
+    id: serial("id").primaryKey(),
+    journalId: varchar("journal_id", { length: 100 }).notNull(), // groups debit+credit pair(s) for one event
+    transactionId: integer("transaction_id"), // nullable — links to transactions table
+    accountId: integer("account_id").notNull(), // FK to gl_accounts.id (denorm kept simple)
+    accountCode: varchar("account_code", { length: 100 }).notNull(), // denormalized for readability
+    entryType: varchar("entry_type", { length: 10 }).notNull(), // debit | credit
+    amount: numeric("amount", { precision: 18, scale: 8 }).notNull(),
+    currency: varchar("currency", { length: 10 }).notNull().default("USDT"),
+    description: text("description"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => ({
+    // ledger-service joins `ledger_entries` to a transaction during deposit/withdrawal
+    // approval to render the entry pair. Previously no index → Seq Scan per join.
+    transactionIdx: index("ledger_entries_transaction_idx").on(t.transactionId),
+    // Account audit trail (admin views): all entries for an account, newest first.
+    // Composite (account_id, created_at DESC) collapses WHERE + ORDER BY into one scan.
+    accountCreatedIdx: index("ledger_entries_account_created_idx").on(
+      t.accountId,
+      t.createdAt.desc(),
+    ),
+  }),
+);

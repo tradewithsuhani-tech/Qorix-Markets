@@ -3,8 +3,37 @@ import { db, investmentsTable, transactionsTable, dailyProfitRunsTable, systemSe
 import { eq, and, gte, avg, count, inArray, sql } from "drizzle-orm";
 import { listTrades } from "../lib/signal-trade-service";
 import { getMaintenanceState } from "../middlewares/maintenance";
+import { TTLCache } from "../lib/cache/ttl-cache";
 
 const router = Router();
+
+// ─── Hot-read TTL cache ─────────────────────────────────────────────────────
+// /public/market-indicators is unauthenticated and non-personalized — every
+// caller gets the same response. The landing page polls it every few seconds
+// so caching it in memory removes the bulk of the read pressure on Neon.
+//
+// 10s TTL — values are synthetic, monotonic counters that only change every
+// 10–30 minutes anyway. 10s of staleness invisible. advanceLiveCounters has
+// DB writes (system_settings upserts) that we intentionally skip on cache
+// hit; it's catch-up-friendly so the next miss correctly advances all
+// elapsed windows in one shot.
+//
+// /system/status is intentionally NOT wrapped: getMaintenanceState() already
+// has LISTEN/NOTIFY-driven cross-instance cache invalidation, and a wrapping
+// TTL cache would shadow invalidateMaintenanceCache() — when admin toggles
+// maintenance in the UI, the banner would lag by up to TTL seconds on every
+// instance.
+type MarketIndicatorsResponse = {
+  activeInvestors: number;
+  usersEarningNow: number;
+  withdrawals24h: number;
+  avgMonthlyReturn: number;
+  demoModeEnabled: boolean;
+  demoProfitEnabled: boolean;
+  demoProfitValue: number;
+  fomoMessages: string[];
+};
+const marketIndicatorsCache = new TTLCache<MarketIndicatorsResponse>(10_000);
 
 // Public: system status (maintenance mode + dynamic dashboard return).
 //
@@ -277,92 +306,96 @@ async function advanceLiveCounters(currentBaseline: number, baselineAum: number 
 export { advanceLiveCounters };
 
 router.get("/public/market-indicators", async (_req, res) => {
-  // NOT EXISTS subquery (rather than a join + filter) so the query plan stays
-  // a simple count over the active-investments index. Excludes the deploy
-  // smoke-test account so a stray active investment on it never inflates the
-  // public "Active Investors" widget.
-  const activeInvRows = await db.execute(sql`
-    SELECT COUNT(*)::int AS count
-    FROM investments i
-    WHERE i.is_active = true
-      AND NOT EXISTS (
-        SELECT 1 FROM users u
-        WHERE u.id = i.user_id AND u.is_smoke_test = true
-      )
-  `);
-  const activeInvResult = activeInvRows.rows[0] as { count: number } | undefined;
+  const { value, cached } = await marketIndicatorsCache.getOrCompute("v1", async () => {
+    // NOT EXISTS subquery (rather than a join + filter) so the query plan stays
+    // a simple count over the active-investments index. Excludes the deploy
+    // smoke-test account so a stray active investment on it never inflates the
+    // public "Active Investors" widget.
+    const activeInvRows = await db.execute(sql`
+      SELECT COUNT(*)::int AS count
+      FROM investments i
+      WHERE i.is_active = true
+        AND NOT EXISTS (
+          SELECT 1 FROM users u
+          WHERE u.id = i.user_id AND u.is_smoke_test = true
+        )
+    `);
+    const activeInvResult = activeInvRows.rows[0] as { count: number } | undefined;
 
-  const realActiveInvestors = Number(activeInvResult?.count ?? 0);
+    const realActiveInvestors = Number(activeInvResult?.count ?? 0);
 
-  const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
-  const [withdrawals24hResult] = await db
-    .select({ count: count() })
-    .from(transactionsTable)
-    .where(
-      and(
-        eq(transactionsTable.type, "withdrawal"),
-        eq(transactionsTable.status, "completed"),
-        gte(transactionsTable.createdAt, since24h),
-      ),
-    );
+    const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const [withdrawals24hResult] = await db
+      .select({ count: count() })
+      .from(transactionsTable)
+      .where(
+        and(
+          eq(transactionsTable.type, "withdrawal"),
+          eq(transactionsTable.status, "completed"),
+          gte(transactionsTable.createdAt, since24h),
+        ),
+      );
 
-  const realWithdrawals24h = Number(withdrawals24hResult?.count ?? 0);
+    const realWithdrawals24h = Number(withdrawals24hResult?.count ?? 0);
 
-  const since30d = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-  const [avgResult] = await db
-    .select({ avg: avg(dailyProfitRunsTable.profitPercent) })
-    .from(dailyProfitRunsTable)
-    .where(gte(dailyProfitRunsTable.createdAt, since30d));
+    const since30d = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const [avgResult] = await db
+      .select({ avg: avg(dailyProfitRunsTable.profitPercent) })
+      .from(dailyProfitRunsTable)
+      .where(gte(dailyProfitRunsTable.createdAt, since30d));
 
-  const dailyAvg = parseFloat(String(avgResult?.avg ?? "0")) || 0;
-  const realAvgMonthlyReturn = parseFloat((dailyAvg * 30).toFixed(2));
+    const dailyAvg = parseFloat(String(avgResult?.avg ?? "0")) || 0;
+    const realAvgMonthlyReturn = parseFloat((dailyAvg * 30).toFixed(2));
 
-  // Layer admin-controlled baselines so brand-new platforms never show 0
-  const baselineRows = await db
-    .select()
-    .from(systemSettingsTable)
-    .where(inArray(systemSettingsTable.key, [
-      "baseline_active_investors",
-      "baseline_users_earning_now",
-      "baseline_withdrawals_24h",
-      "baseline_avg_monthly_return",
-      "demo_mode_enabled",
-      "demo_profit_value",
-      "demo_profit_enabled",
-      "fomo_messages",
-    ]));
-  const settings = Object.fromEntries(baselineRows.map((r) => [r.key, r.value]));
+    // Layer admin-controlled baselines so brand-new platforms never show 0
+    const baselineRows = await db
+      .select()
+      .from(systemSettingsTable)
+      .where(inArray(systemSettingsTable.key, [
+        "baseline_active_investors",
+        "baseline_users_earning_now",
+        "baseline_withdrawals_24h",
+        "baseline_avg_monthly_return",
+        "demo_mode_enabled",
+        "demo_profit_value",
+        "demo_profit_enabled",
+        "fomo_messages",
+      ]));
+    const settings = Object.fromEntries(baselineRows.map((r) => [r.key, r.value]));
 
-  const baseInvestors = Number(settings["baseline_active_investors"] ?? "0") || 0;
-  const baseEarning = Number(settings["baseline_users_earning_now"] ?? "0") || 0;
-  const baseWithdrawals = Number(settings["baseline_withdrawals_24h"] ?? "0") || 0;
-  const baseAvgReturn = Number(settings["baseline_avg_monthly_return"] ?? "0") || 0;
+    const baseInvestors = Number(settings["baseline_active_investors"] ?? "0") || 0;
+    const baseEarning = Number(settings["baseline_users_earning_now"] ?? "0") || 0;
+    const baseWithdrawals = Number(settings["baseline_withdrawals_24h"] ?? "0") || 0;
+    const baseAvgReturn = Number(settings["baseline_avg_monthly_return"] ?? "0") || 0;
 
-  let fomoMessages: string[] = [];
-  try {
-    const parsed = JSON.parse(settings["fomo_messages"] ?? "[]");
-    if (Array.isArray(parsed)) fomoMessages = parsed.filter((s) => typeof s === "string");
-  } catch {}
+    let fomoMessages: string[] = [];
+    try {
+      const parsed = JSON.parse(settings["fomo_messages"] ?? "[]");
+      if (Array.isArray(parsed)) fomoMessages = parsed.filter((s) => typeof s === "string");
+    } catch {}
 
-  // Monotonic, auto-incrementing live counters (persisted in DB).
-  // - activeInvestors: bumps 5–25 every 30 min, seeded from real + admin baseline
-  // - usersEarningNow: 80–95% of activeInvestors, monotonic
-  const live = await advanceLiveCounters(realActiveInvestors + baseInvestors);
+    // Monotonic, auto-incrementing live counters (persisted in DB).
+    // - activeInvestors: bumps 5–25 every 30 min, seeded from real + admin baseline
+    // - usersEarningNow: 80–95% of activeInvestors, monotonic
+    const live = await advanceLiveCounters(realActiveInvestors + baseInvestors);
 
-  res.json({
-    activeInvestors: live.activeInvestors,
-    usersEarningNow: Math.max(live.usersEarningNow, realActiveInvestors + baseEarning),
-    // Synthetic 24h withdrawal volume (USD), persisted in DB.
-    // Resets to a fresh $15K–$35K every 24h, bumps $100–$1000 every 30 min.
-    withdrawals24h: live.withdrawals24h,
-    // Daily-rotating monthly return % (7.12–10.00), persisted in DB.
-    // Real average is used as a floor only if it exceeds the synthetic value.
-    avgMonthlyReturn: Math.max(live.avgMonthlyReturn, realAvgMonthlyReturn),
-    demoModeEnabled: settings["demo_mode_enabled"] !== "false",
-    demoProfitEnabled: settings["demo_profit_enabled"] !== "false",
-    demoProfitValue: Number(settings["demo_profit_value"] ?? "0") || 0,
-    fomoMessages,
+    return {
+      activeInvestors: live.activeInvestors,
+      usersEarningNow: Math.max(live.usersEarningNow, realActiveInvestors + baseEarning),
+      // Synthetic 24h withdrawal volume (USD), persisted in DB.
+      // Resets to a fresh $15K–$35K every 24h, bumps $100–$1000 every 30 min.
+      withdrawals24h: live.withdrawals24h,
+      // Daily-rotating monthly return % (7.12–10.00), persisted in DB.
+      // Real average is used as a floor only if it exceeds the synthetic value.
+      avgMonthlyReturn: Math.max(live.avgMonthlyReturn, realAvgMonthlyReturn),
+      demoModeEnabled: settings["demo_mode_enabled"] !== "false",
+      demoProfitEnabled: settings["demo_profit_enabled"] !== "false",
+      demoProfitValue: Number(settings["demo_profit_value"] ?? "0") || 0,
+      fomoMessages,
+    };
   });
+  res.setHeader("X-Cache", cached ? "HIT" : "MISS");
+  res.json(value);
 });
 
 export default router;
