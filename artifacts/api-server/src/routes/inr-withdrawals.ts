@@ -5,6 +5,7 @@ import {
   usersTable,
   inrWithdrawalsTable,
   systemSettingsTable,
+  merchantsTable,
 } from "@workspace/db";
 import { eq, and, desc, sql, inArray, gte } from "drizzle-orm";
 import { authMiddleware, adminMiddleware, type AuthRequest } from "../middlewares/auth";
@@ -274,24 +275,59 @@ router.post("/admin/inr-withdrawals/:id/approve", async (req: AuthRequest, res) 
     res.status(400).json({ error: "Invalid id" });
     return;
   }
-  const [row] = await db
-    .update(inrWithdrawalsTable)
-    .set({
-      status: "approved",
-      reviewedBy: req.userId!,
-      reviewedAt: new Date(),
-      payoutReference,
-      adminNote,
-    })
-    .where(and(eq(inrWithdrawalsTable.id, id), eq(inrWithdrawalsTable.status, "pending")))
-    .returning();
-  if (!row) {
-    const [existing] = await db.select().from(inrWithdrawalsTable).where(eq(inrWithdrawalsTable.id, id)).limit(1);
-    if (!existing) {
-      res.status(404).json({ error: "Withdrawal not found" });
+  // Admin can also pass `merchantId` to credit a specific merchant (e.g. when
+  // approving without the withdrawal being claimed via the merchant flow).
+  // If the row already has assignedMerchantId, that wins.
+  const adminPickedMerchantId =
+    req.body?.merchantId != null && Number.isFinite(Number(req.body.merchantId))
+      ? Number(req.body.merchantId)
+      : null;
+
+  let row: typeof inrWithdrawalsTable.$inferSelect | undefined;
+  try {
+    row = await db.transaction(async (tx) => {
+      const [claimed] = await tx
+        .update(inrWithdrawalsTable)
+        .set({
+          status: "approved",
+          reviewedBy: req.userId!,
+          reviewedAt: new Date(),
+          payoutReference,
+          adminNote,
+          ...(adminPickedMerchantId != null ? { assignedMerchantId: adminPickedMerchantId } : {}),
+        })
+        .where(and(eq(inrWithdrawalsTable.id, id), eq(inrWithdrawalsTable.status, "pending")))
+        .returning();
+      if (!claimed) throw new Error("NOT_PENDING");
+      const creditTo = claimed.assignedMerchantId ?? adminPickedMerchantId;
+      if (creditTo != null) {
+        const amountInrStr = parseFloat(claimed.amountInr as string).toFixed(2);
+        await tx
+          .update(merchantsTable)
+          .set({
+            inrBalance: sql`${merchantsTable.inrBalance} + ${amountInrStr}::numeric`,
+            updatedAt: new Date(),
+          })
+          .where(eq(merchantsTable.id, creditTo));
+      }
+      return claimed;
+    });
+  } catch (err: any) {
+    if (err?.message === "NOT_PENDING") {
+      const [existing] = await db.select().from(inrWithdrawalsTable).where(eq(inrWithdrawalsTable.id, id)).limit(1);
+      if (!existing) {
+        res.status(404).json({ error: "Withdrawal not found" });
+        return;
+      }
+      res.status(409).json({ error: `Withdrawal already ${existing.status}` });
       return;
     }
-    res.status(409).json({ error: `Withdrawal already ${existing.status}` });
+    errorLogger.error({ err, id }, "[inr-withdrawal] approve failed");
+    res.status(500).json({ error: "Failed to approve withdrawal" });
+    return;
+  }
+  if (!row) {
+    res.status(500).json({ error: "Approve handler reached an inconsistent state" });
     return;
   }
   await createNotification(

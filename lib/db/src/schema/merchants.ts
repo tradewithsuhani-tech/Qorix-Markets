@@ -1,4 +1,4 @@
-import { pgTable, serial, integer, varchar, boolean, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, varchar, boolean, numeric, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -12,6 +12,12 @@ export const merchantsTable = pgTable(
     phone: varchar("phone", { length: 30 }),
     isActive: boolean("is_active").notNull().default(true),
     createdBy: integer("created_by"),
+    // INR wallet / security deposit. Available capacity for accepting new
+    // user INR deposits = inrBalance − sum(pending inr_deposits assigned to
+    // this merchant via owned payment_methods). Decremented atomically when
+    // a deposit is approved; incremented when a withdrawal this merchant
+    // paid out is approved.
+    inrBalance: numeric("inr_balance", { precision: 18, scale: 2 }).notNull().default("0"),
     lastLoginAt: timestamp("last_login_at"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
