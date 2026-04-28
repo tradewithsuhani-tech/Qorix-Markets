@@ -15,7 +15,10 @@ import {
 import { loginEventsTable, blockchainDepositsTable, serviceSubscriptionsTable } from "@workspace/db/schema";
 import { eq, ne, sum, count, and, or, desc, sql, inArray, isNotNull } from "drizzle-orm";
 import { createNotification } from "../lib/notifications";
-import { authMiddleware, adminMiddleware, getParam, getQueryInt, getQueryString, type AuthRequest } from "../middlewares/auth";
+import { authMiddleware, adminMiddleware, getParam, getQueryInt, getQueryString, invalidateAuthUserCache, type AuthRequest } from "../middlewares/auth";
+import { RedisCache } from "../lib/cache/redis-cache";
+import { TTLCache } from "../lib/cache/ttl-cache";
+import { getRedisConnection } from "../lib/redis";
 import { auditAdminRequest, requireAdminPermission } from "../middlewares/admin-rbac";
 import { notifyMaintenanceInvalidation, getMaintenanceState } from "../middlewares/maintenance";
 import { SetDailyProfitBody } from "@workspace/api-zod";
@@ -47,6 +50,51 @@ router.use("/admin", adminMiddleware);
 router.use("/admin", requireAdminPermission);
 router.use("/admin", auditAdminRequest);
 
+// ─── Admin caches (Phase 6) ────────────────────────────────────────────────
+// /admin/stats and /admin/system-health together fire 12 + 5 sequential DB
+// queries per call. From Fly BOM that's ~1s of pure round-trip. They're
+// single-tenant from the admin's perspective (every super admin sees the
+// same numbers), so we cache them in Upstash with short TTLs — fresh enough
+// that withdrawal-queue/health changes are visible within a few seconds,
+// long enough that a bursty admin click pattern (refresh, navigate away,
+// come back) hits cache instead of hammering Neon.
+//
+// TTL choices:
+//   - stats: 5s — admin actions (approve withdrawal, set profit %) explicitly
+//     `queryClient.invalidateQueries({ queryKey: getGetAdminStatsQueryKey() })`
+//     on the client, so cache lag never blocks an admin from seeing the
+//     consequence of their OWN action — only of cluster-wide background
+//     activity (e.g. a new pending withdrawal arriving in the last 5s).
+//   - system-health: 15s — the page polls this every 30s, so 1-in-2 polls
+//     hits cache. The check is a heartbeat, not a forensic tool.
+//
+// In-process TTLCache fallback so an Upstash blip degrades to per-instance
+// caching rather than no caching.
+const adminStatsCache = new RedisCache<Awaited<ReturnType<typeof getAdminStatsData>>>({
+  getRedis: getRedisConnection,
+  namespace: "admin-stats",
+  ttlMs: 5_000,
+  fallback: new TTLCache<Awaited<ReturnType<typeof getAdminStatsData>>>(5_000),
+});
+
+type AdminSystemHealthResponse = {
+  status: string;
+  timestamp: string;
+  checks: Record<string, { status: "ok" | "error"; latencyMs?: number; detail?: string }>;
+  stats: {
+    totalUsers: number;
+    activeInvestors: number;
+    pendingTransactions: number;
+    completedTransactions: number;
+  };
+};
+const adminSystemHealthCache = new RedisCache<AdminSystemHealthResponse>({
+  getRedis: getRedisConnection,
+  namespace: "admin-system-health",
+  ttlMs: 15_000,
+  fallback: new TTLCache<AdminSystemHealthResponse>(15_000),
+});
+
 export async function getSlotData() {
   const slotRows = await db
     .select()
@@ -66,79 +114,85 @@ export async function getSlotData() {
 }
 
 async function getAdminStatsData() {
-  // Exclude the deploy smoke-test account from the headline user count so the
-  // admin dashboard matches the filtered admin user list.
-  const [totalUsersResult] = await db
-    .select({ count: count() })
-    .from(usersTable)
-    .where(notSmokeTestUser());
-  const [activeInvResult] = await db
-    .select({ count: count() })
-    .from(investmentsTable)
-    .where(eq(investmentsTable.isActive, true));
-  const [aumResult] = await db
-    .select({ total: sum(investmentsTable.amount) })
-    .from(investmentsTable)
-    .where(eq(investmentsTable.isActive, true));
-  const [profitResult] = await db
-    .select({ total: sum(investmentsTable.totalProfit) })
-    .from(investmentsTable);
-  // Pending-withdrawal headline counts must match the filtered admin queue:
-  // exclude the deploy smoke-test account so the dashboard badge agrees with
-  // what an admin actually sees on /admin/withdrawals.
-  const [pendingResult] = await db
-    .select({ count: count() })
-    .from(transactionsTable)
-    .innerJoin(usersTable, eq(usersTable.id, transactionsTable.userId))
-    .where(and(
-      eq(transactionsTable.type, "withdrawal"),
-      eq(transactionsTable.status, "pending"),
-      notSmokeTestUser(),
-    ));
-  const [pendingAmountResult] = await db
-    .select({ total: sum(transactionsTable.amount) })
-    .from(transactionsTable)
-    .innerJoin(usersTable, eq(usersTable.id, transactionsTable.userId))
-    .where(and(
-      eq(transactionsTable.type, "withdrawal"),
-      eq(transactionsTable.status, "pending"),
-      notSmokeTestUser(),
-    ));
+  // Phase 6: all 12 of the queries below are independent reads — no shared
+  // state, no foreign-key chain — so we fan them out with Promise.all to
+  // pay one BOM→Singapore round-trip total instead of twelve sequential
+  // ones (~80ms each). On the Neon side they all complete in <1ms; the
+  // win is purely network. Result destructuring preserves the previous
+  // sequential order so reading the function bottom-up is unchanged.
+  //
+  // Exclude the deploy smoke-test account from the headline user count so
+  // the admin dashboard matches the filtered admin user list.
+  const [
+    [totalUsersResult],
+    [activeInvResult],
+    [aumResult],
+    [profitResult],
+    [pendingResult],
+    [pendingAmountResult],
+    [walletTotalsResult],
+    [depositsEverResult],
+    [withdrawalsEverResult],
+    settingRows,
+    slotData,
+  ] = await Promise.all([
+    db.select({ count: count() }).from(usersTable).where(notSmokeTestUser()),
+    db.select({ count: count() }).from(investmentsTable).where(eq(investmentsTable.isActive, true)),
+    db.select({ total: sum(investmentsTable.amount) }).from(investmentsTable).where(eq(investmentsTable.isActive, true)),
+    db.select({ total: sum(investmentsTable.totalProfit) }).from(investmentsTable),
+    // Pending-withdrawal headline counts must match the filtered admin queue:
+    // exclude the deploy smoke-test account so the dashboard badge agrees
+    // with what an admin actually sees on /admin/withdrawals.
+    db
+      .select({ count: count() })
+      .from(transactionsTable)
+      .innerJoin(usersTable, eq(usersTable.id, transactionsTable.userId))
+      .where(and(
+        eq(transactionsTable.type, "withdrawal"),
+        eq(transactionsTable.status, "pending"),
+        notSmokeTestUser(),
+      )),
+    db
+      .select({ total: sum(transactionsTable.amount) })
+      .from(transactionsTable)
+      .innerJoin(usersTable, eq(usersTable.id, transactionsTable.userId))
+      .where(and(
+        eq(transactionsTable.type, "withdrawal"),
+        eq(transactionsTable.status, "pending"),
+        notSmokeTestUser(),
+      )),
+    db
+      .select({
+        main: sum(walletsTable.mainBalance),
+        trading: sum(walletsTable.tradingBalance),
+        profit: sum(walletsTable.profitBalance),
+      })
+      .from(walletsTable),
+    db
+      .select({ total: sum(transactionsTable.amount) })
+      .from(transactionsTable)
+      .where(and(eq(transactionsTable.type, "deposit"), eq(transactionsTable.status, "completed"))),
+    db
+      .select({ total: sum(transactionsTable.amount) })
+      .from(transactionsTable)
+      .where(and(eq(transactionsTable.type, "withdrawal"), eq(transactionsTable.status, "completed"))),
+    db
+      .select()
+      .from(systemSettingsTable)
+      .where(eq(systemSettingsTable.key, "daily_profit_percent"))
+      .limit(1),
+    getSlotData(),
+  ]);
 
-  const [walletTotalsResult] = await db
-    .select({
-      main: sum(walletsTable.mainBalance),
-      trading: sum(walletsTable.tradingBalance),
-      profit: sum(walletsTable.profitBalance),
-    })
-    .from(walletsTable);
   const totalMainWallet = parseFloat(String(walletTotalsResult?.main ?? "0")) || 0;
   const totalTradingWallet = parseFloat(String(walletTotalsResult?.trading ?? "0")) || 0;
   const totalProfitWallet = parseFloat(String(walletTotalsResult?.profit ?? "0")) || 0;
   const totalUserFunds = totalMainWallet + totalTradingWallet + totalProfitWallet;
-
-  const [depositsEverResult] = await db
-    .select({ total: sum(transactionsTable.amount) })
-    .from(transactionsTable)
-    .where(and(eq(transactionsTable.type, "deposit"), eq(transactionsTable.status, "completed")));
   const totalDepositsEver = parseFloat(String(depositsEverResult?.total ?? "0")) || 0;
-
-  const [withdrawalsEverResult] = await db
-    .select({ total: sum(transactionsTable.amount) })
-    .from(transactionsTable)
-    .where(and(eq(transactionsTable.type, "withdrawal"), eq(transactionsTable.status, "completed")));
   const totalWithdrawalsEver = parseFloat(String(withdrawalsEverResult?.total ?? "0")) || 0;
-
-  const settingRows = await db
-    .select()
-    .from(systemSettingsTable)
-    .where(eq(systemSettingsTable.key, "daily_profit_percent"))
-    .limit(1);
   const dailyProfitSetting = settingRows.length > 0
     ? parseFloat(settingRows[0]!.value)
     : 0;
-
-  const slotData = await getSlotData();
 
   return {
     totalUsers: Number(totalUsersResult?.count ?? 0),
@@ -161,7 +215,11 @@ async function getAdminStatsData() {
 }
 
 router.get("/admin/stats", async (req, res) => {
-  const stats = await getAdminStatsData();
+  // Phase 6: 5s shared cache. The compute fan-out is already Promise.all'd
+  // inside getAdminStatsData (~80ms cold). On a hit we serve from Upstash
+  // in under 5ms.
+  const { value: stats, cached } = await adminStatsCache.getOrCompute("v1", () => getAdminStatsData());
+  res.setHeader("X-Cache", cached ? "HIT" : "MISS");
   res.json(stats);
 });
 
@@ -299,6 +357,10 @@ router.post("/admin/users/:id/action", async (req: AuthRequest, res) => {
     return;
   }
 
+  // Phase 6: invalidate the auth-user cache so isDisabled / isFrozen /
+  // forceLogoutAfter take effect on the user's NEXT request, not 30s later.
+  await invalidateAuthUserCache(id);
+
   transactionLogger.info({ event: "admin_user_action", adminId: req.userId, userId: id, action }, "Admin user action");
   res.json({
     id: updated.id,
@@ -435,6 +497,9 @@ router.patch("/admin/users/:id/profile", async (req: AuthRequest, res) => {
     res.status(500).json({ error: "update_failed" });
     return;
   }
+  // Phase 6: identity edits don't touch any auth-cache field today, but
+  // refresh proactively so future schema additions stay safe-by-default.
+  await invalidateAuthUserCache(id);
 
   // Notify the user about each changed field so a sneaky admin edit can't
   // happen in total silence. Single notification with a summary.
@@ -1893,45 +1958,66 @@ router.post("/admin/transactions/manual-credit", async (req: AuthRequest, res) =
 });
 
 router.get("/admin/system-health", async (_req: AuthRequest, res) => {
-  const checks: Record<string, { status: "ok" | "error"; latencyMs?: number; detail?: string }> = {};
+  // Phase 6: 15s shared cache + Promise.all the underlying probes. Polled
+  // every 30s by the admin dashboard, so 1-in-2 polls hits cache and the
+  // remaining 1-in-2 pays one round-trip instead of five.
+  const { value: payload, cached } = await adminSystemHealthCache.getOrCompute("v1", async () => {
+    const checks: Record<string, { status: "ok" | "error"; latencyMs?: number; detail?: string }> = {};
 
-  const dbStart = Date.now();
-  try {
-    await db.select({ count: count() }).from(usersTable);
-    checks["database"] = { status: "ok", latencyMs: Date.now() - dbStart };
-  } catch (err: any) {
-    checks["database"] = { status: "error", detail: err.message };
-  }
+    const dbStart = Date.now();
+    let dbProbeRows: { count: number }[] = [];
+    let dbProbeError: string | null = null;
+    const dbProbe = db
+      .select({ count: count() })
+      .from(usersTable)
+      .then((rows) => { dbProbeRows = rows as typeof dbProbeRows; })
+      .catch((err: any) => { dbProbeError = err?.message ?? String(err); });
 
-  const recentRuns = await db.select().from(dailyProfitRunsTable).orderBy(desc(dailyProfitRunsTable.createdAt)).limit(1);
-  checks["profit_worker"] = {
-    status: "ok",
-    detail: recentRuns.length ? `Last run: ${recentRuns[0]!.runDate}` : "No runs yet",
-  };
+    const [
+      _,
+      recentRuns,
+      [pendingTx],
+      [completedTx],
+      [totalUsers],
+      [activeInv],
+    ] = await Promise.all([
+      dbProbe,
+      db.select().from(dailyProfitRunsTable).orderBy(desc(dailyProfitRunsTable.createdAt)).limit(1),
+      db.select({ count: count() }).from(transactionsTable).where(eq(transactionsTable.status, "pending")),
+      db.select({ count: count() }).from(transactionsTable).where(eq(transactionsTable.status, "completed")),
+      // Match the headline dashboard count: exclude the deploy smoke-test account.
+      db.select({ count: count() }).from(usersTable).where(notSmokeTestUser()),
+      db.select({ count: count() }).from(investmentsTable).where(eq(investmentsTable.isActive, true)),
+    ]);
+    void _;
 
-  const [pendingTx] = await db.select({ count: count() }).from(transactionsTable).where(eq(transactionsTable.status, "pending"));
-  const [completedTx] = await db.select({ count: count() }).from(transactionsTable).where(eq(transactionsTable.status, "completed"));
-  // Match the headline dashboard count: exclude the deploy smoke-test account.
-  const [totalUsers] = await db
-    .select({ count: count() })
-    .from(usersTable)
-    .where(notSmokeTestUser());
-  const [activeInv] = await db.select({ count: count() }).from(investmentsTable).where(eq(investmentsTable.isActive, true));
+    if (dbProbeError) {
+      checks["database"] = { status: "error", detail: dbProbeError };
+    } else {
+      checks["database"] = { status: "ok", latencyMs: Date.now() - dbStart };
+      void dbProbeRows; // sanity: probe ran successfully
+    }
+    checks["profit_worker"] = {
+      status: "ok",
+      detail: recentRuns.length ? `Last run: ${recentRuns[0]!.runDate}` : "No runs yet",
+    };
+    checks["api"] = { status: "ok", detail: "Express server responding" };
+    checks["blockchain_listener"] = { status: "ok", detail: "TRON USDT monitor active" };
 
-  checks["api"] = { status: "ok", detail: "Express server responding" };
-  checks["blockchain_listener"] = { status: "ok", detail: "TRON USDT monitor active" };
-
-  res.json({
-    status: "healthy",
-    timestamp: new Date().toISOString(),
-    checks,
-    stats: {
-      totalUsers: Number(totalUsers?.count ?? 0),
-      activeInvestors: Number(activeInv?.count ?? 0),
-      pendingTransactions: Number(pendingTx?.count ?? 0),
-      completedTransactions: Number(completedTx?.count ?? 0),
-    },
+    return {
+      status: "healthy",
+      timestamp: new Date().toISOString(),
+      checks,
+      stats: {
+        totalUsers: Number(totalUsers?.count ?? 0),
+        activeInvestors: Number(activeInv?.count ?? 0),
+        pendingTransactions: Number(pendingTx?.count ?? 0),
+        completedTransactions: Number(completedTx?.count ?? 0),
+      },
+    };
   });
+  res.setHeader("X-Cache", cached ? "HIT" : "MISS");
+  res.json(payload);
 });
 
 router.get("/admin/activity-logs", async (req: AuthRequest, res) => {

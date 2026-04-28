@@ -2,7 +2,7 @@ import { Router } from "express";
 import bcrypt from "bcryptjs";
 import { db, usersTable, walletsTable, investmentsTable, systemSettingsTable, ipSignupsTable } from "@workspace/db";
 import { eq, and, gte, count, sql } from "drizzle-orm";
-import { authMiddleware, signToken, computeDeviceFingerprint, describeDevice, type AuthRequest } from "../middlewares/auth";
+import { authMiddleware, signToken, computeDeviceFingerprint, describeDevice, invalidateAuthUserCache, type AuthRequest } from "../middlewares/auth";
 import { loginAttemptsTable } from "@workspace/db";
 import { RegisterBody, LoginBody } from "@workspace/api-zod";
 import { trackLoginEvent, runFraudChecks } from "../lib/fraud-service";
@@ -310,6 +310,7 @@ router.post("/auth/verify-email-public", async (req, res) => {
     .update(usersTable)
     .set({ emailVerified: true })
     .where(eq(usersTable.id, user.id));
+  await invalidateAuthUserCache(user.id);
 
   // Award one-time points (fire-and-forget)
   setImmediate(async () => {
@@ -467,6 +468,7 @@ async function issueSessionAfterAuth(
       .update(usersTable)
       .set({ activeSessionFingerprint: fingerprint, activeSessionLastSeen: new Date() })
       .where(eq(usersTable.id, user.id));
+    await invalidateAuthUserCache(user.id);
   }
   const token = signToken(user.id, user.isAdmin);
   // Track this device + fire "new device detected" email if it's the first
@@ -625,6 +627,7 @@ router.post("/auth/login-attempts/:id/respond", authMiddleware, async (req: Auth
         forceLogoutAfter: new Date(),
       })
       .where(eq(usersTable.id, req.userId!));
+    await invalidateAuthUserCache(req.userId!);
     // Mint the JWT NOW (after forceLogoutAfter is set) so the iat is
     // strictly later than the kill-switch and the new device's token
     // stays valid.
@@ -803,6 +806,7 @@ router.post("/auth/login-attempts/:id/verify-otp", async (req, res) => {
       forceLogoutAfter: new Date(),
     })
     .where(eq(usersTable.id, row.userId));
+  await invalidateAuthUserCache(row.userId);
   const userRows = await db
     .select()
     .from(usersTable)
@@ -930,6 +934,7 @@ router.post(
       .update(usersTable)
       .set({ passwordHash: newHash, passwordChangedAt: now })
       .where(eq(usersTable.id, user.id));
+    await invalidateAuthUserCache(user.id);
 
     // Notify the user out-of-band that their password was just changed —
     // gives the real owner a chance to react if this was an attacker.
@@ -1013,6 +1018,7 @@ router.post("/auth/verify-email", authMiddleware, async (req: AuthRequest, res) 
     .update(usersTable)
     .set({ emailVerified: true })
     .where(eq(usersTable.id, req.userId!));
+  await invalidateAuthUserCache(req.userId!);
 
   // Award points for email verification (one-time task)
   setImmediate(async () => {
@@ -1140,6 +1146,7 @@ router.post("/auth/reset-password", forgotLimiter, async (req, res) => {
     .update(usersTable)
     .set({ passwordHash, passwordChangedAt: new Date() })
     .where(eq(usersTable.id, users[0]!.id));
+  await invalidateAuthUserCache(users[0]!.id);
   res.json({ success: true, message: "Password reset successfully" });
 });
 
