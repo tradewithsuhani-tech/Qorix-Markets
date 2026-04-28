@@ -46,7 +46,23 @@ export async function merchantAuthFetch<T = unknown>(url: string, init?: Request
         : undefined;
     notifyMaintenance(msg, headerEndsAt || bodyEndsAt);
   }
-  if (res.status === 401) {
+  // Special-case: backend signals "the admin disabled this merchant account
+  // mid-session" with HTTP 403 + { code: "ACCOUNT_DISABLED" }. We need to
+  // (a) clear the now-useless token, (b) bounce the user back to the login
+  // page, and (c) carry a flag in the URL so the login page shows a clear,
+  // actionable banner — instead of the user staring at a generic "Login
+  // failed" toast and assuming they typed the wrong password.
+  const isAccountDisabled =
+    res.status === 403 &&
+    data &&
+    typeof data === "object" &&
+    (data as { code?: string }).code === "ACCOUNT_DISABLED";
+  if (isAccountDisabled) {
+    clearMerchantToken();
+    if (typeof window !== "undefined" && !window.location.pathname.endsWith("/merchant/login")) {
+      window.location.href = `${import.meta.env.BASE_URL ?? "/"}merchant/login?disabled=1`;
+    }
+  } else if (res.status === 401) {
     // Stale token — clear and bounce back to login. Wouter handles the SPA
     // navigation; full reload would lose the toast.
     clearMerchantToken();

@@ -48,13 +48,32 @@ router.post("/merchant/auth/login", async (req, res) => {
     .where(eq(merchantsTable.email, email))
     .limit(1);
   const merchant = rows[0];
-  if (!merchant || !merchant.isActive) {
-    res.status(401).json({ error: "Invalid credentials" });
+  // Email not on file → generic invalid (we don't leak account existence).
+  if (!merchant) {
+    res.status(401).json({ error: "Invalid email or password" });
     return;
   }
+  // Verify password BEFORE the isActive gate, so a disabled merchant who
+  // typed the wrong password still sees "invalid password" (don't leak that
+  // a disabled-account exists to a stranger guessing emails) — but a disabled
+  // merchant who typed the RIGHT password gets a precise, actionable message
+  // ("Account is disabled, contact admin"). This was the entire user-reported
+  // bug: the previous code lumped "disabled" and "wrong password" together as
+  // "Invalid credentials", so merchants who got disabled assumed their
+  // password was wrong, panic-typed wrong passwords, and then couldn't log in
+  // even AFTER admin re-enabled them because they had lost track of which
+  // password actually worked.
   const valid = await bcrypt.compare(password, merchant.passwordHash);
   if (!valid) {
-    res.status(401).json({ error: "Invalid credentials" });
+    res.status(401).json({ error: "Invalid email or password" });
+    return;
+  }
+  if (!merchant.isActive) {
+    res.status(403).json({
+      error:
+        "Your merchant account is disabled. Please contact the platform admin to re-enable it.",
+      code: "ACCOUNT_DISABLED",
+    });
     return;
   }
   await db

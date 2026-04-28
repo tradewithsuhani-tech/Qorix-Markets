@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
-import { Store, Loader2 } from "lucide-react";
+import { Store, Loader2, AlertCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
   getMerchantToken,
@@ -20,6 +20,16 @@ export default function MerchantLoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  // `?disabled=1` is set by merchant-auth-fetch when the SPA gets booted off
+  // mid-session because the admin disabled this merchant. Sticky local state
+  // (not just a URL read) so it persists if the user navigates within the
+  // login screen, and `?disabledNow=1` is set on the *current* login attempt
+  // when the backend returns ACCOUNT_DISABLED — covers the case where the
+  // merchant was disabled BEFORE they even loaded the page.
+  const [showDisabledBanner, setShowDisabledBanner] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return new URLSearchParams(window.location.search).get("disabled") === "1";
+  });
 
   // If already logged in, jump straight to dashboard. Cheap UX win — avoids
   // a re-login prompt on accidental page refresh while a token is valid.
@@ -40,12 +50,25 @@ export default function MerchantLoginPage() {
         body: JSON.stringify({ email, password }),
       });
       setMerchantToken(res.token);
+      // Successful login wipes the stale "you were disabled" banner — the
+      // admin clearly re-enabled the account, so leaving it up would be
+      // confusing.
+      setShowDisabledBanner(false);
       toast({ title: `Welcome, ${res.merchant.fullName}` });
       navigate("/merchant");
     } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      // Backend returns the exact "Your merchant account is disabled…"
+      // message verbatim for ACCOUNT_DISABLED. Promote it from a quick toast
+      // to the persistent in-form banner so the merchant cannot miss it
+      // (and so they don't burn through the right password thinking it's
+      // wrong, the way the original bug report described).
+      if (/disabled/i.test(msg)) {
+        setShowDisabledBanner(true);
+      }
       toast({
         title: "Login failed",
-        description: err instanceof Error ? err.message : String(err),
+        description: msg,
         variant: "destructive",
       });
     } finally {
@@ -63,6 +86,22 @@ export default function MerchantLoginPage() {
             <div className="text-xs text-slate-400">Qorix Markets</div>
           </div>
         </div>
+        {showDisabledBanner && (
+          <div
+            className="mb-4 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2.5 text-xs text-red-200 flex items-start gap-2"
+            data-testid="merchant-disabled-banner"
+          >
+            <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-red-400" />
+            <div className="leading-snug">
+              <div className="font-semibold text-red-100">Account disabled by admin</div>
+              <div className="mt-0.5 text-red-200/90">
+                Your merchant account has been disabled by the platform admin and you have been signed out.
+                Sign-in will start working again as soon as the admin re-enables your account — please contact
+                them. Your password has not changed.
+              </div>
+            </div>
+          </div>
+        )}
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-xs uppercase tracking-wide text-slate-400 mb-1">Email</label>

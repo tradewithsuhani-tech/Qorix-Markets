@@ -42,8 +42,22 @@ export async function merchantAuthMiddleware(
       .where(eq(merchantsTable.id, decoded.merchantId))
       .limit(1);
     const merchant = rows[0];
-    if (!merchant || !merchant.isActive) {
-      res.status(401).json({ error: "Merchant account is not active" });
+    if (!merchant) {
+      // Token references a merchant row that no longer exists — generic 401.
+      res.status(401).json({ error: "Invalid token" });
+      return;
+    }
+    // Distinguish "you got disabled while logged in" from a generic stale-
+    // token 401 so the SPA can show the user a precise, actionable banner
+    // instead of silently bouncing them to login with no explanation. The
+    // explicit `code: "ACCOUNT_DISABLED"` is the contract the frontend keys
+    // off in merchant-auth-fetch.
+    if (!merchant.isActive) {
+      res.status(403).json({
+        error:
+          "Your merchant account has been disabled by the platform admin. Please contact admin to re-enable it.",
+        code: "ACCOUNT_DISABLED",
+      });
       return;
     }
     req.merchantId = merchant.id;
