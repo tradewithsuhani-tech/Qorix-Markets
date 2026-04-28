@@ -49,6 +49,10 @@ interface PaymentMethod {
   instructions: string | null;
   isActive: boolean;
   sortOrder: number;
+  // Capacity-aware extras (only present when fetched with ?amount=X)
+  merchantId?: number | null;
+  merchantName?: string | null;
+  merchantAvailable?: string | null;
 }
 
 interface InrDeposit {
@@ -181,31 +185,56 @@ function formatTime(s: number) {
   return `${m}:${sec}`;
 }
 
-type Step = "list" | "amount" | "transfer" | "success";
+type Step = "start" | "list" | "amount" | "transfer" | "success";
 
 export function InrDepositTab() {
   const { toast } = useToast();
   const qc = useQueryClient();
   const { user } = useAuth();
 
-  const { data: methodsResp, isLoading: methodsLoading } = useQuery<{ methods: PaymentMethod[]; rate: number }>({
-    queryKey: ["inr-payment-methods"],
+  const [step, setStep] = useState<Step>("start");
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [amount, setAmount] = useState("");
+  // The amount we actually committed to fetch merchants for. Locked once user
+  // clicks "Find merchants" so editing the input mid-flow doesn't desync.
+  const [committedAmount, setCommittedAmount] = useState<string>("");
+  const [agreed, setAgreed] = useState(false);
+
+  // Lightweight rate-only probe (no amount filter) — drives the rate banner on
+  // the start step. Backend returns the same `methods` array but we ignore it
+  // here since we'll re-fetch with capacity filter when the user commits.
+  const { data: rateResp, isLoading: rateLoading } = useQuery<{ methods: PaymentMethod[]; rate: number }>({
+    queryKey: ["inr-payment-methods", "rate-only"],
     queryFn: () => authFetch(getApiUrl("/payment-methods")),
   });
+  const rate = rateResp?.rate ?? 85;
+  // Use this only for the empty-state probe ("system has any active methods?").
+  const anyMethodsExist = (rateResp?.methods ?? []).length > 0;
 
+  // Capacity-aware fetch — only runs once the user has committed an amount.
+  // Returns at most 5 merchant cards ordered by available capacity desc.
+  const {
+    data: capacityResp,
+    isLoading: capacityLoading,
+    isFetching: capacityFetching,
+  } = useQuery<{ methods: PaymentMethod[]; rate: number }>({
+    queryKey: ["inr-payment-methods", "capacity", committedAmount],
+    queryFn: () =>
+      authFetch(
+        getApiUrl(`/payment-methods?amount=${encodeURIComponent(committedAmount)}`),
+      ),
+    enabled: !!committedAmount && Number(committedAmount) > 0,
+  });
+  const methods = capacityResp?.methods ?? [];
+
+  // History — independent of the deposit funnel. Polled so the user sees
+  // status flips after admin/merchant approval.
   const { data: historyResp } = useQuery<{ deposits: InrDeposit[] }>({
     queryKey: ["inr-deposits-mine"],
     queryFn: () => authFetch(getApiUrl("/inr-deposits/mine")),
     refetchInterval: 15000,
   });
 
-  const methods = methodsResp?.methods ?? [];
-  const rate = methodsResp?.rate ?? 85;
-
-  const [step, setStep] = useState<Step>("list");
-  const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [amount, setAmount] = useState("");
-  const [agreed, setAgreed] = useState(false);
   const [utr, setUtr] = useState("");
   const [payerName, setPayerName] = useState("");
   const [proof, setProof] = useState<string | null>(null);
@@ -218,7 +247,17 @@ export function InrDepositTab() {
   const selected = methods.find((m) => m.id === selectedId) ?? null;
   const amountNum = Number(amount);
   const min = selected ? Number(selected.minAmount) : 0;
-  const max = selected ? Number(selected.maxAmount) : 0;
+  // Cap by merchantAvailable when present so a user can't edit the amount
+  // higher than what the merchant can actually settle. Falls back to the
+  // method's own max when no merchant cap is provided (legacy admin methods).
+  const max = selected
+    ? Math.min(
+        Number(selected.maxAmount),
+        selected.merchantAvailable != null && selected.merchantAvailable !== ""
+          ? Number(selected.merchantAvailable)
+          : Number.POSITIVE_INFINITY,
+      )
+    : 0;
   const amountValid = !!selected && amountNum >= min && amountNum <= max;
   const usdtPreview = useMemo(() => (amountNum > 0 && rate > 0 ? (amountNum / rate).toFixed(2) : "0.00"), [amountNum, rate]);
 
@@ -235,9 +274,10 @@ export function InrDepositTab() {
   }, [step, secsLeft]);
 
   function resetFlow() {
-    setStep("list");
+    setStep("start");
     setSelectedId(null);
     setAmount("");
+    setCommittedAmount("");
     setAgreed(false);
     setUtr("");
     setPayerName("");
@@ -245,6 +285,20 @@ export function InrDepositTab() {
     setOrderNo("");
     setSecsLeft(COUNTDOWN_SECS);
     setSubmittedDepositId(null);
+  }
+
+  function commitAmount() {
+    const n = Number(amount);
+    if (!Number.isFinite(n) || n < 100) {
+      toast({
+        title: "Invalid amount",
+        description: "Enter at least ₹100.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setCommittedAmount(amount);
+    setStep("list");
   }
 
   function goToAmount(id: number) {
@@ -299,7 +353,7 @@ export function InrDepositTab() {
     reader.readAsDataURL(file);
   };
 
-  if (methodsLoading) {
+  if (rateLoading) {
     return (
       <div className="flex items-center justify-center py-16 text-muted-foreground">
         <Loader2 className="w-5 h-5 animate-spin" />
@@ -307,7 +361,7 @@ export function InrDepositTab() {
     );
   }
 
-  if (methods.length === 0) {
+  if (!anyMethodsExist) {
     return (
       <div className="glass-card rounded-2xl p-8 text-center">
         <Banknote className="w-10 h-10 mx-auto mb-3 text-muted-foreground" />
@@ -321,9 +375,9 @@ export function InrDepositTab() {
   return (
     <div className="space-y-5">
       <AnimatePresence mode="wait">
-        {step === "list" && (
+        {step === "start" && (
           <motion.div
-            key="list"
+            key="start"
             initial={{ opacity: 0, x: -12 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -12 }}
@@ -341,35 +395,145 @@ export function InrDepositTab() {
               </div>
             </div>
 
-            <div className="text-xs text-muted-foreground font-semibold uppercase tracking-wider px-1">
-              Local Bank Transfer
+            {/* Amount entry header */}
+            <div className="text-center py-2">
+              <div className="relative">
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  placeholder="0"
+                  min={100}
+                  className="w-full bg-transparent text-center text-4xl sm:text-5xl font-extrabold text-white outline-none placeholder:text-white/15"
+                />
+                <div className="text-xs text-muted-foreground mt-1 font-semibold">Enter INR Amount</div>
+              </div>
+              {Number(amount) > 0 && rate > 0 && (
+                <div className="mt-3 inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10">
+                  <span className="text-[11px] text-muted-foreground">≈</span>
+                  <span className="text-sm font-bold text-emerald-300">
+                    {(Number(amount) / rate).toFixed(2)} USDT
+                  </span>
+                </div>
+              )}
             </div>
 
-            <div className="space-y-2.5">
-              {methods.map((m, idx) => (
-                <motion.button
-                  key={m.id}
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: idx * 0.04 }}
-                  onClick={() => goToAmount(m.id)}
-                  className="w-full text-left p-4 rounded-2xl border border-white/8 bg-white/[0.02] hover:bg-white/[0.05] hover:border-white/15 transition-all flex items-center gap-3 group"
+            {/* Quick chips */}
+            <div className="grid grid-cols-4 gap-2">
+              {[1000, 5000, 25000, 50000].map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => setAmount(String(v))}
+                  className="py-2 rounded-xl border border-white/10 bg-white/[0.03] text-xs font-semibold text-white/80 hover:bg-white/[0.06] hover:text-white transition-colors"
                 >
-                  <MethodIcon type={m.type} />
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-bold text-white truncate">{m.type === "upi" ? "UPI" : "Bank"}</div>
-                    <div className="text-[11px] text-muted-foreground mt-0.5 flex items-center gap-2">
-                      <span className="text-emerald-400 font-semibold">No Fees</span>
-                      <span className="text-white/20">|</span>
-                      <span>1-3 Hours</span>
-                      <span className="text-white/20">|</span>
-                      <span>₹{Number(m.minAmount).toLocaleString("en-IN")} – ₹{Number(m.maxAmount).toLocaleString("en-IN")}</span>
-                    </div>
-                  </div>
-                  <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-white transition-colors" />
-                </motion.button>
+                  ₹{v.toLocaleString("en-IN")}
+                </button>
               ))}
             </div>
+
+            <div className="rounded-xl border border-white/8 bg-white/[0.02] p-3 text-[11px] text-muted-foreground leading-relaxed">
+              Enter how much INR you want to deposit. We'll show you the
+              merchants who can accept that amount right now (top 5 by
+              capacity). Minimum ₹100.
+            </div>
+
+            <button
+              type="button"
+              onClick={commitAmount}
+              disabled={!amount || Number(amount) < 100}
+              className="w-full py-3.5 rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-bold text-sm hover:from-emerald-400 hover:to-teal-400 shadow-[0_0_24px_-6px_rgba(16,185,129,0.6)] disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none transition-all"
+            >
+              Find merchants
+            </button>
+          </motion.div>
+        )}
+
+        {step === "list" && (
+          <motion.div
+            key="list"
+            initial={{ opacity: 0, x: -12 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -12 }}
+            transition={{ duration: 0.2 }}
+            className="space-y-4"
+          >
+            <button
+              onClick={() => setStep("start")}
+              className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-white transition-colors"
+            >
+              <ChevronLeft className="w-3.5 h-3.5" /> Back
+            </button>
+
+            {/* Header strip — shows committed amount */}
+            <div className="rounded-2xl px-4 py-3 bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-cyan-500/10 border border-emerald-500/20 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Banknote className="w-4 h-4 text-emerald-300" />
+                <span className="text-xs text-emerald-100/80">Depositing</span>
+              </div>
+              <div className="text-sm font-bold text-white">
+                ₹{Number(committedAmount).toLocaleString("en-IN")}
+                <span className="text-[10px] text-muted-foreground ml-2">@ ₹{rate}/USDT</span>
+              </div>
+            </div>
+
+            <div className="text-xs text-muted-foreground font-semibold uppercase tracking-wider px-1">
+              Available merchants ({methods.length})
+            </div>
+
+            {capacityLoading || capacityFetching ? (
+              <div className="flex items-center justify-center py-10 text-muted-foreground">
+                <Loader2 className="w-5 h-5 animate-spin" />
+              </div>
+            ) : methods.length === 0 ? (
+              <div className="glass-card rounded-2xl p-8 text-center">
+                <AlertTriangle className="w-10 h-10 mx-auto mb-3 text-amber-400" />
+                <div className="text-sm text-white font-semibold">
+                  No merchant available for ₹{Number(committedAmount).toLocaleString("en-IN")} right now
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Try a smaller amount, or use the USDT (TRC20) tab. If urgent, contact support.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setStep("start")}
+                  className="mt-4 inline-flex items-center justify-center px-4 py-2 rounded-full border border-white/15 text-xs text-white/80 hover:bg-white/5 hover:text-white"
+                >
+                  Try a different amount
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-2.5">
+                {methods.map((m, idx) => (
+                  <motion.button
+                    key={m.id}
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: idx * 0.04 }}
+                    onClick={() => goToAmount(m.id)}
+                    className="w-full text-left p-4 rounded-2xl border border-white/8 bg-white/[0.02] hover:bg-white/[0.05] hover:border-white/15 transition-all flex items-center gap-3 group"
+                  >
+                    <MethodIcon type={m.type} />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-bold text-white truncate">
+                        {m.merchantName ?? (m.type === "upi" ? "UPI" : "Bank")}
+                      </div>
+                      <div className="text-[11px] text-muted-foreground mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                        <span className="uppercase tracking-wider text-[10px] font-semibold text-white/60">
+                          {m.type === "upi" ? "UPI" : "Bank"}
+                        </span>
+                        <span className="text-white/20">|</span>
+                        <span className="text-emerald-400 font-semibold">No Fees</span>
+                        <span className="text-white/20">|</span>
+                        <span>1-3 Hours</span>
+                      </div>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-white transition-colors" />
+                  </motion.button>
+                ))}
+              </div>
+            )}
           </motion.div>
         )}
 

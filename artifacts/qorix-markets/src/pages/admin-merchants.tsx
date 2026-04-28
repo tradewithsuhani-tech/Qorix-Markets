@@ -11,6 +11,7 @@ import {
   Store,
   X,
   Link2,
+  Wallet,
 } from "lucide-react";
 
 const BASE_URL = import.meta.env.BASE_URL ?? "/";
@@ -28,6 +29,15 @@ interface AdminMerchant {
   lastLoginAt: string | null;
   createdAt: string;
   methodCount: number;
+  inrBalance: string;
+  pendingHold: string;
+  available: string;
+}
+
+function inr(s: string | number) {
+  const n = typeof s === "number" ? s : parseFloat(s);
+  if (!Number.isFinite(n)) return "₹0";
+  return `₹${n.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 }
 
 interface UnassignedMethod {
@@ -47,6 +57,9 @@ export default function AdminMerchantsPage() {
   const [resetFor, setResetFor] = useState<AdminMerchant | null>(null);
   const [newPassword, setNewPassword] = useState("");
   const [assignFor, setAssignFor] = useState<AdminMerchant | null>(null);
+  const [topupFor, setTopupFor] = useState<AdminMerchant | null>(null);
+  const [topupDelta, setTopupDelta] = useState("");
+  const [topupNote, setTopupNote] = useState("");
 
   const { data, isLoading } = useQuery<{ merchants: AdminMerchant[] }>({
     queryKey: ["admin-merchants"],
@@ -80,6 +93,28 @@ export default function AdminMerchantsPage() {
       toast({ title: "Merchant updated" });
     },
     onError: (e) => toast({ title: "Update failed", description: String(e), variant: "destructive" }),
+  });
+
+  const topup = useMutation({
+    mutationFn: async ({ id, delta, note }: { id: number; delta: number; note: string }) =>
+      authFetch(apiUrl(`/admin/merchants/${id}/topup`), {
+        method: "POST",
+        body: JSON.stringify({ delta, note: note || null }),
+      }),
+    onSuccess: (_resp, vars) => {
+      qc.invalidateQueries({ queryKey: ["admin-merchants"] });
+      setTopupFor(null);
+      setTopupDelta("");
+      setTopupNote("");
+      toast({
+        title: vars.delta >= 0 ? "Balance credited" : "Balance debited",
+        description: `${vars.delta >= 0 ? "+" : ""}${inr(vars.delta)}`,
+      });
+    },
+    onError: (e: any) => {
+      const msg = e?.message ?? String(e);
+      toast({ title: "Top-up failed", description: msg, variant: "destructive" });
+    },
   });
 
   const assign = useMutation({
@@ -149,8 +184,35 @@ export default function AdminMerchantsPage() {
                     {m.methodCount} method{m.methodCount === 1 ? "" : "s"} •
                     {" "}Last login: {m.lastLoginAt ? new Date(m.lastLoginAt).toLocaleString() : "never"}
                   </div>
+                  <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                    <span
+                      className="text-[10px] px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-300 border border-emerald-500/30"
+                      title="Available capacity = balance − pending holds"
+                    >
+                      Available {inr(m.available)}
+                    </span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-md bg-slate-800/80 text-slate-300 border border-slate-700">
+                      Balance {inr(m.inrBalance)}
+                    </span>
+                    {parseFloat(m.pendingHold) > 0 && (
+                      <span className="text-[10px] px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-300 border border-amber-500/30">
+                        Hold {inr(m.pendingHold)}
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      setTopupFor(m);
+                      setTopupDelta("");
+                      setTopupNote("");
+                    }}
+                    className="rounded-lg border border-emerald-500/40 px-3 py-1.5 text-xs text-emerald-300 hover:bg-emerald-500/10 flex items-center gap-1"
+                    title="Top up or debit INR balance"
+                  >
+                    <Wallet className="h-3.5 w-3.5" /> Top up
+                  </button>
                   <button
                     onClick={() => setAssignFor(m)}
                     className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800 flex items-center gap-1"
@@ -230,6 +292,86 @@ export default function AdminMerchantsPage() {
               >
                 {patch.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
                 Save new password
+              </button>
+            </div>
+          </Modal>
+        )}
+
+        {/* Top-up dialog */}
+        {topupFor && (
+          <Modal title={`Top up — ${topupFor.fullName}`} onClose={() => setTopupFor(null)}>
+            <div className="space-y-3">
+              <div className="rounded-lg border border-slate-700 bg-slate-800/40 p-3 text-xs text-slate-300 space-y-1">
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Current balance</span>
+                  <span className="font-mono">{inr(topupFor.inrBalance)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Pending hold</span>
+                  <span className="font-mono">{inr(topupFor.pendingHold)}</span>
+                </div>
+                <div className="flex justify-between border-t border-slate-700 pt-1 mt-1">
+                  <span className="text-emerald-300">Available</span>
+                  <span className="font-mono text-emerald-300">{inr(topupFor.available)}</span>
+                </div>
+              </div>
+              <Field
+                label="Delta (₹) — positive credits, negative debits"
+                value={topupDelta}
+                onChange={setTopupDelta}
+                type="number"
+              />
+              <div className="flex flex-wrap gap-1.5">
+                {[10000, 25000, 50000, 100000].map((v) => (
+                  <button
+                    key={v}
+                    type="button"
+                    onClick={() => setTopupDelta(String(v))}
+                    className="text-[11px] px-2 py-1 rounded-md bg-slate-800 border border-slate-700 text-slate-300 hover:bg-slate-700"
+                  >
+                    +{inr(v)}
+                  </button>
+                ))}
+              </div>
+              <Field
+                label="Note (optional, for audit)"
+                value={topupNote}
+                onChange={setTopupNote}
+              />
+              {topupDelta && Number(topupDelta) !== 0 && (
+                <div className="text-[11px] text-slate-400">
+                  New balance after this top-up:{" "}
+                  <span className="font-mono text-white">
+                    {inr(parseFloat(topupFor.inrBalance) + Number(topupDelta))}
+                  </span>
+                </div>
+              )}
+            </div>
+            <div className="mt-5 flex justify-end gap-3">
+              <button
+                onClick={() => setTopupFor(null)}
+                className="rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-300 hover:bg-slate-800"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() =>
+                  topup.mutate({
+                    id: topupFor.id,
+                    delta: Number(topupDelta),
+                    note: topupNote,
+                  })
+                }
+                disabled={
+                  topup.isPending ||
+                  !topupDelta ||
+                  !Number.isFinite(Number(topupDelta)) ||
+                  Number(topupDelta) === 0
+                }
+                className="rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-medium px-4 py-2 text-sm flex items-center gap-2 disabled:opacity-50"
+              >
+                {topup.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+                {Number(topupDelta) < 0 ? "Debit" : "Top up"}
               </button>
             </div>
           </Modal>

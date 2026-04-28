@@ -339,6 +339,24 @@ router.post("/merchant/inr-deposits/:id/approve", async (req: MerchantAuthReques
         .returning();
       if (!claimed) throw new Error("ALREADY_REVIEWED");
       approvedDep = claimed;
+
+      // Debit this merchant's INR balance for the original amount the user
+      // committed. Authoritative — guarded so we never go negative.
+      const amountInrStr = parseFloat(claimed.amountInr as string).toFixed(2);
+      const debit = await tx
+        .update(merchantsTable)
+        .set({
+          inrBalance: sql`${merchantsTable.inrBalance} - ${amountInrStr}::numeric`,
+          updatedAt: new Date(),
+        })
+        .where(
+          sql`${merchantsTable.id} = ${req.merchantId!} and ${merchantsTable.inrBalance} >= ${amountInrStr}::numeric`,
+        )
+        .returning({ id: merchantsTable.id });
+      if (!debit[0]) {
+        throw new Error("INSUFFICIENT_MERCHANT_BALANCE");
+      }
+
       // Bound the merchant override: they can credit *less* than the
       // originally computed USDT amount (e.g. partial INR landed) but never
       // more — that would let a rogue/compromised merchant over-credit a
@@ -406,6 +424,13 @@ router.post("/merchant/inr-deposits/:id/approve", async (req: MerchantAuthReques
     const msg = (err as Error).message;
     if (msg === "ALREADY_REVIEWED") {
       res.status(409).json({ error: "Deposit was already reviewed" });
+      return;
+    }
+    if (msg === "INSUFFICIENT_MERCHANT_BALANCE") {
+      res.status(409).json({
+        error: "insufficient_merchant_balance",
+        message: "Your INR balance is lower than this deposit. Top up via admin or reject this deposit.",
+      });
       return;
     }
     if (msg === "BAD_OVERRIDE") {
@@ -566,30 +591,57 @@ router.post("/merchant/inr-withdrawals/:id/approve", async (req: MerchantAuthReq
     return;
   }
   // Ownership: must either be already assigned to me, or I'm claiming it now.
-  const [row] = await db
-    .update(inrWithdrawalsTable)
-    .set({
-      status: "approved",
-      reviewedBy: req.merchantId!,
-      reviewedByKind: "merchant",
-      reviewedAt: new Date(),
-      payoutReference,
-      adminNote,
-      assignedMerchantId: req.merchantId!,
-    })
-    .where(
-      and(
-        eq(inrWithdrawalsTable.id, id),
-        eq(inrWithdrawalsTable.status, "pending"),
-        or(
-          eq(inrWithdrawalsTable.assignedMerchantId, req.merchantId!),
-          isNull(inrWithdrawalsTable.assignedMerchantId),
-        )!,
-      ),
-    )
-    .returning();
+  // Wrapped in a tx so the merchant credit lands atomically with the claim.
+  let row: typeof inrWithdrawalsTable.$inferSelect | undefined;
+  try {
+    row = await db.transaction(async (tx) => {
+      const [claimed] = await tx
+        .update(inrWithdrawalsTable)
+        .set({
+          status: "approved",
+          reviewedBy: req.merchantId!,
+          reviewedByKind: "merchant",
+          reviewedAt: new Date(),
+          payoutReference,
+          adminNote,
+          assignedMerchantId: req.merchantId!,
+        })
+        .where(
+          and(
+            eq(inrWithdrawalsTable.id, id),
+            eq(inrWithdrawalsTable.status, "pending"),
+            or(
+              eq(inrWithdrawalsTable.assignedMerchantId, req.merchantId!),
+              isNull(inrWithdrawalsTable.assignedMerchantId),
+            )!,
+          ),
+        )
+        .returning();
+      if (!claimed) throw new Error("ALREADY_REVIEWED");
+
+      // Credit merchant's INR balance — they paid the user offline so their
+      // capacity grows back by the same amount.
+      const amountInrStr = parseFloat(claimed.amountInr as string).toFixed(2);
+      await tx
+        .update(merchantsTable)
+        .set({
+          inrBalance: sql`${merchantsTable.inrBalance} + ${amountInrStr}::numeric`,
+          updatedAt: new Date(),
+        })
+        .where(eq(merchantsTable.id, req.merchantId!));
+      return claimed;
+    });
+  } catch (err: unknown) {
+    if ((err as Error).message === "ALREADY_REVIEWED") {
+      res.status(409).json({ error: "Withdrawal already actioned or assigned to another merchant" });
+      return;
+    }
+    errorLogger.error({ err, id }, "[merchant] approve withdrawal failed");
+    res.status(500).json({ error: "Failed to approve withdrawal" });
+    return;
+  }
   if (!row) {
-    res.status(409).json({ error: "Withdrawal already actioned or assigned to another merchant" });
+    res.status(500).json({ error: "Approve handler reached an inconsistent state" });
     return;
   }
   await createNotification(
