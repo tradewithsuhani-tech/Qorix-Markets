@@ -10,7 +10,10 @@ declare const __APP_VERSION__: string;
 export const APP_VERSION: string =
   typeof __APP_VERSION__ === "string" ? __APP_VERSION__ : "dev";
 
-const POLL_INTERVAL_MS = 60_000;
+// Bumped 60s → 5min. The version banner only flips after a fresh deploy;
+// 60s polling burned a request every minute on every open tab for content
+// that changes a few times a day at most.
+const POLL_INTERVAL_MS = 5 * 60_000;
 
 interface ServerVersion {
   version?: string;

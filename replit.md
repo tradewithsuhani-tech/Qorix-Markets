@@ -735,3 +735,106 @@ Zero error/warn lines after deploy. Local typecheck clean both workspaces.
   (`admin-stats`, `admin-system-health`, `auth-user`) so we can SLO it.
 - Wire similar caches to other expensive admin endpoints if audit reveals
   more sequential-await patterns (`/admin/withdrawals`, `/admin/users` list).
+
+## Phase 7 (perf): admin dashboard <10 requests / <1s (Apr 28, 2026)
+
+Goal: Cut admin dashboard request count from 50+ per page-load to <10 and
+total interactive time to <1s. Phase 6 already cut per-endpoint latency;
+this phase cuts the request *count* via React Query defaults, polling
+backoff, and a server-side aggregator. ZERO schema changes, ZERO PK
+touches — pure app-layer.
+
+### Phase 7.1: frontend-only (React Query + polling backoff)
+
+- `artifacts/qorix-markets/src/App.tsx` — added QueryClient defaults:
+  `staleTime: 30s`, `gcTime: 5min`, `refetchOnWindowFocus: false`,
+  `refetchOnMount: false`, `retry: 1`. Eliminates cold-cache thrash on
+  every component mount and every tab focus.
+- `artifacts/qorix-markets/src/App.tsx` — MaintenanceGate `/system/status`
+  poll 60s → 5min. Ran on every page in-tree; only flips on a real
+  maintenance toggle.
+- `artifacts/qorix-markets/src/components/layout.tsx`:
+  - NotificationPanel poll 30s → 60s.
+  - NotificationBell poll 30s → 60s **and** changed query param
+    `limit: 10 → 20` so it shares the React Query cache key with
+    NotificationPanel (Bell + Panel now dedup to a single subscription).
+  - ProtectionBanner poll 10s → 60s (already `!isAdminArea` gated, so
+    admin pages were never paying this; this fixes the user-side dashboard).
+- `artifacts/qorix-markets/src/pages/admin.tsx` — useSystemHealth 30s → 60s
+  (backend caches at 15s, so 30s was hitting the cache twice/min for nothing).
+- `artifacts/qorix-markets/src/lib/version-check.ts` — POLL_INTERVAL_MS
+  60s → 5min. Version banner only flips after a fresh deploy; daily-ish
+  changes don't justify per-minute polling on every tab.
+
+### Phase 7.2: `/admin/dashboard` aggregator endpoint
+
+Three independent React Query subscriptions (`useGetAdminStats` +
+`useGetPendingWithdrawals` + `useSystemHealth`) collapsed into a single
+backend call.
+
+`artifacts/api-server/src/routes/admin.ts`:
+- Extracted `getSystemHealthData()` from inside the `/admin/system-health`
+  route handler so the aggregator can reuse the SAME compute path through
+  the same `adminSystemHealthCache`.
+- Extracted `getPendingWithdrawalsData({ includeSmoke, limit? })` from
+  inside the `/admin/withdrawals` route handler. Added optional `limit`
+  for the dashboard preview (top 10) — the full queue stays on
+  `/admin/withdrawals`.
+- Added `adminDashboardCache` (`namespace: "admin-dashboard"`, 5s Upstash
+  TTL with TTLCache fallback). **Critical**: includes `getRedis:
+  getRedisConnection` (omitting it caused TS2345 + per-instance memory-only
+  cache — caught by code review pre-push, fixed before deploy).
+- `getAdminDashboardData()` runs all three sub-computes in parallel via
+  Promise.all, each through its own cache. Cold worst case: one BOM→SIN
+  RTT total instead of three sequential. Warm: ~5ms Upstash HIT.
+- New route `GET /admin/dashboard` returns
+  `{ stats, systemHealth, pendingWithdrawals }`. Same `/admin` auth gate.
+
+`artifacts/qorix-markets/src/pages/admin.tsx`:
+- Replaced the 3 hooks with `useAdminDashboard()` — single call, 60s
+  polling. Destructured into `stats`/`withdrawals`/`health` so all
+  downstream JSX is byte-identical.
+- All 4 mutation onSuccess handlers (approve/reject/profit/slots) now also
+  invalidate `ADMIN_DASHBOARD_QUERY_KEY` (in addition to the existing
+  per-endpoint keys, so other admin sub-pages still refresh).
+
+### Verification (local dev, pre-push)
+
+- `pnpm --filter @workspace/api-server run typecheck` — clean.
+- Both refactored routes (`/admin/system-health`, `/admin/withdrawals`)
+  return 401 (auth gate) — proves refactor compiled and externally visible
+  behavior preserved.
+- New `/admin/dashboard` returns 401 — proves route mounted under same
+  admin auth middleware.
+- Code review (architect) — initially flagged HIGH: missing `getRedis` on
+  `adminDashboardCache`. Fixed in same session, re-verified typecheck
+  clean, route still mounts.
+
+### Predicted production impact (admin dashboard)
+
+| Metric | Before | After Phase 7 |
+| --- | --- | --- |
+| On-mount API calls | 7+ (stats + withdrawals + system-health + 2× notifications + system/status + version) | 4 (admin/dashboard + 1× notifications + system/status + version) |
+| Steady-state calls/min | ~9-10 (30s polling on 5 endpoints) | ~3.4 (60s on the unified endpoint, 5min on system/status + version) |
+| Cold load TTFB | 3 sequential RTTs (stats + health + withdrawals) | 1 RTT (parallel fan-out on server) |
+| Warm load TTFB | 3 RTTs | 1 RTT, ~5ms (Upstash HIT) |
+
+### Files touched
+
+- `artifacts/qorix-markets/src/App.tsx`
+- `artifacts/qorix-markets/src/components/layout.tsx`
+- `artifacts/qorix-markets/src/pages/admin.tsx`
+- `artifacts/qorix-markets/src/lib/version-check.ts`
+- `artifacts/api-server/src/routes/admin.ts`
+
+### Pending follow-ups (non-blocking)
+
+- Push to origin/main → trigger Fly deploy → measure actual request count
+  on the live admin dashboard with DevTools → compare against predicted.
+- Landing-page duplicate-call investigation (out of scope for admin perf):
+  `/api/system/status` and `/api/public/market-indicators` fire in pairs
+  every 60s on the public landing page. Likely a sibling-component
+  duplicate render or StrictMode double-mount in dev — needs verification
+  in prod.
+- If we add more admin sub-pages with similar fan-outs (`/admin/users`,
+  `/admin/intelligence`), apply the same aggregator pattern.
