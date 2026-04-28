@@ -387,11 +387,20 @@ router.get("/admin/merchants/:id/activity", async (req, res) => {
       select
         a.created_at as at,
         case
-          when (substring(a.metadata from '[{,]\\s*"delta"\\s*:\\s*"?(-?[0-9]{1,18}(?:\\.[0-9]{1,18})?)"?'))::numeric >= 0 then 'topup_credit'
+          when (coalesce(
+            substring(a.metadata from '[{,]\\s*"delta"\\s*:\\s*"(-?[0-9]{1,18}(?:\\.[0-9]{1,18})?)"\\s*[,}]'),
+            substring(a.metadata from '[{,]\\s*"delta"\\s*:\\s*(-?[0-9]{1,18}(?:\\.[0-9]{1,18})?)\\s*[,}]')
+          ))::numeric >= 0 then 'topup_credit'
           else 'topup_debit'
         end as kind,
-        (substring(a.metadata from '[{,]\\s*"delta"\\s*:\\s*"?(-?[0-9]{1,18}(?:\\.[0-9]{1,18})?)"?'))::numeric as delta,
-        abs((substring(a.metadata from '[{,]\\s*"delta"\\s*:\\s*"?(-?[0-9]{1,18}(?:\\.[0-9]{1,18})?)"?'))::numeric)::text as amount_inr,
+        (coalesce(
+          substring(a.metadata from '[{,]\\s*"delta"\\s*:\\s*"(-?[0-9]{1,18}(?:\\.[0-9]{1,18})?)"\\s*[,}]'),
+          substring(a.metadata from '[{,]\\s*"delta"\\s*:\\s*(-?[0-9]{1,18}(?:\\.[0-9]{1,18})?)\\s*[,}]')
+        ))::numeric as delta,
+        abs((coalesce(
+          substring(a.metadata from '[{,]\\s*"delta"\\s*:\\s*"(-?[0-9]{1,18}(?:\\.[0-9]{1,18})?)"\\s*[,}]'),
+          substring(a.metadata from '[{,]\\s*"delta"\\s*:\\s*(-?[0-9]{1,18}(?:\\.[0-9]{1,18})?)\\s*[,}]')
+        ))::numeric)::text as amount_inr,
         null::int as user_id,
         null::varchar as user_name,
         null::varchar as user_email,
@@ -399,7 +408,7 @@ router.get("/admin/merchants/:id/activity", async (req, res) => {
         null::varchar as method_name,
         'admin'::varchar as actor_kind,
         a.admin_email as actor_email,
-        coalesce(substring(a.metadata from '[{,]\\s*"note"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)"'), '')::varchar as note,
+        coalesce(substring(a.metadata from '[{,]\\s*"note"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)"\\s*[,}]'), '')::varchar as note,
         ('a:' || a.id::text) as event_id
       from admin_audit_log a
       where a.target_type = 'merchant_topup'
@@ -417,18 +426,33 @@ router.get("/admin/merchants/:id/activity", async (req, res) => {
         -- WHERE-clause cast is short-circuited by an earlier predicate
         -- in the same WHERE list). The new approach extracts delta +
         -- note via substring() with a POSIX regex which returns NULL
-        -- on no-match and never throws. The regex is anchored to a
-        -- JSON-key-context boundary [{,] so we cannot pick up the
-        -- substring "delta": occurring inside note text, and the
-        -- digit count is bounded {1,18} on each side of the decimal
+        -- on no-match and never throws.
+        --
+        -- The delta extractor uses TWO patterns coalesced together,
+        -- one for a quoted JSON string value ("123.45") and one for
+        -- an unquoted JSON number value (123.45), so the same query
+        -- works whether the writer emits a string (current handler)
+        -- or a number (any future handler). Keeping them as separate
+        -- patterns enforces paired quotes — a pathological row with a
+        -- mismatched quote like {"delta":"123,...} cannot accidentally
+        -- match one half of an "?...?" optional-quote regex.
+        --
+        -- Both patterns require a trailing JSON value boundary
+        -- (\\s*[,}]) immediately after the digits / closing quote so
+        -- non-canonical garbage like "123abc", 12345e6, or a 20-digit
+        -- overflow integer cannot prefix-match into a wrong delta
+        -- value — the regex backtracks to no match and the row is
+        -- dropped from the union. The leading [{,] anchors the key
+        -- to a JSON-object-key-context boundary so the substring
+        -- "delta": appearing inside a note string cannot satisfy the
+        -- WHERE filter or yield a wrong capture in the SELECT.
+        -- Digit count is bounded {1,18} on each side of the decimal
         -- so the surviving ::numeric cast cannot overflow PostgreSQL's
-        -- numeric limits even on a pathological hand-edited row. The
-        -- value is matched with optional surrounding quotes ("?...?")
-        -- so it works whether delta is stored as a JSON number or a
-        -- JSON string (current handler stores a string). Any row that
-        -- does not present a properly-formatted delta-number pair is
-        -- dropped from the union instead of crashing the endpoint.
-        and a.metadata ~ '[{,]\\s*"delta"\\s*:\\s*"?-?[0-9]{1,18}(?:\\.[0-9]{1,18})?"?'
+        -- numeric limits even on a pathological hand-edited row.
+        and (
+          a.metadata ~ '[{,]\\s*"delta"\\s*:\\s*"-?[0-9]{1,18}(?:\\.[0-9]{1,18})?"\\s*[,}]'
+          or a.metadata ~ '[{,]\\s*"delta"\\s*:\\s*-?[0-9]{1,18}(?:\\.[0-9]{1,18})?\\s*[,}]'
+        )
       order by a.created_at desc
       limit ${limit}
     )
