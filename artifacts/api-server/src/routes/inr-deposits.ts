@@ -435,8 +435,12 @@ router.get("/admin/inr-deposits", async (req, res) => {
     : db.select().from(inrDepositsTable).orderBy(desc(inrDepositsTable.createdAt)).limit(200));
   // Pull user emails for the admin list (small N, single query)
   const ids = Array.from(new Set(rows.map((r) => r.userId)));
+  // Use inArray (not sql`= ANY(${ids})`) — see capacity-aware /payment-methods
+  // handler above for the same pg-node JS-array → postgres array literal trap
+  // (22P02 "malformed array literal") when interpolated through Drizzle's sql
+  // template.
   const users = ids.length
-    ? await db.select({ id: usersTable.id, email: usersTable.email, fullName: usersTable.fullName }).from(usersTable).where(sql`${usersTable.id} = ANY(${ids})`)
+    ? await db.select({ id: usersTable.id, email: usersTable.email, fullName: usersTable.fullName }).from(usersTable).where(inArray(usersTable.id, ids))
     : [];
   const byId = new Map(users.map((u) => [u.id, u]));
   res.json({
