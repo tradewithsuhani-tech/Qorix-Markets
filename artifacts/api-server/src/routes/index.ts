@@ -53,6 +53,15 @@ router.use(publicRouter);
 router.use(authRouter);
 router.use(googleOauthRouter); // public OAuth — must be before auth-gated routers
 router.use(kycRouter); // per-route authMiddleware — must be before router-level auth gates
+// Merchant panel — own JWT (separate from user/admin auth). The login route
+// (POST /merchant/auth/login) is the ONLY public merchant endpoint; every
+// other route inside merchantRouter is gated by a path-prefixed
+// `router.use("/merchant", merchantAuthMiddleware)`. Mounting this BEFORE
+// any router-level naked `router.use(authMiddleware)` is REQUIRED so
+// /merchant/auth/login can fall through to its own handler instead of being
+// 401'd by an upstream user/admin authMiddleware that doesn't recognise
+// merchant tokens. Same reason kycRouter is hoisted above.
+router.use(merchantRouter);
 router.use(reportsRouter);
 router.use(walletRouter);
 router.use(transactionsRouter);
