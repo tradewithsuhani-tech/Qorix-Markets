@@ -29,7 +29,7 @@ import type { Server } from "node:http";
 import { getRedisConnection } from "../redis";
 
 /**
- * Stop the HTTP server cleanly: refuse new connections, then hard-shut any
+ * Stop the HTTP server cleanly: refuse new connections AND hard-shut any
  * keep-alive sockets that were left open by `fetch()` calls in the tests.
  *
  * Why both calls are needed:
@@ -39,10 +39,21 @@ import { getRedisConnection } from "../redis";
  *   Node), which is enough to keep the event loop alive past the suite's
  *   completion. `server.closeAllConnections()` (Node 18.2+) destroys those
  *   parked sockets immediately so the process can exit promptly.
+ *
+ * Why the ordering matters:
+ *   `closeAllConnections()` MUST be called immediately after `close()` is
+ *   initiated (i.e. on the same tick, before awaiting close's callback).
+ *   If you await close() to completion first, you've already paid the idle
+ *   timeout penalty waiting for those keep-alive sockets to drain — the
+ *   subsequent closeAllConnections() then has nothing to do. By dispatching
+ *   close() and immediately calling closeAllConnections(), the parked
+ *   sockets are torn down first, which lets close's callback fire promptly.
  */
 export async function teardownHttpServer(server: Server): Promise<void> {
-  await new Promise<void>((resolve) => server.close(() => resolve()));
-  server.closeAllConnections();
+  await new Promise<void>((resolve) => {
+    server.close(() => resolve());
+    server.closeAllConnections();
+  });
 }
 
 /**
