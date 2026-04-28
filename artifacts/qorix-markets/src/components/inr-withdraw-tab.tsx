@@ -183,6 +183,7 @@ export function InrWithdrawTab({ kycApproved, onKycRequired }: { kycApproved: bo
   const disabledReason: string | null = (() => {
     if (!kycApproved) return null;          // button text already says "Complete KYC"
     if (amount === 0) return "Enter the amount you want to withdraw.";
+    if (amount < 0) return "Amount must be greater than zero.";
     if (belowMin) return "Minimum withdrawal is ₹100.";
     if (exceedsCap) {
       return `Amount above your INR cap of ₹${limits!.inrChannelMaxInr.toLocaleString(undefined, { maximumFractionDigits: 2 })}.`;
