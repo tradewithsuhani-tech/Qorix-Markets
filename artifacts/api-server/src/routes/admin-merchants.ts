@@ -387,11 +387,11 @@ router.get("/admin/merchants/:id/activity", async (req, res) => {
       select
         a.created_at as at,
         case
-          when (a.metadata::jsonb->>'delta')::numeric >= 0 then 'topup_credit'
+          when (substring(a.metadata from '"delta"\\s*:\\s*(-?[0-9]+(?:\\.[0-9]+)?)'))::numeric >= 0 then 'topup_credit'
           else 'topup_debit'
         end as kind,
-        (a.metadata::jsonb->>'delta')::numeric as delta,
-        abs((a.metadata::jsonb->>'delta')::numeric)::text as amount_inr,
+        (substring(a.metadata from '"delta"\\s*:\\s*(-?[0-9]+(?:\\.[0-9]+)?)'))::numeric as delta,
+        abs((substring(a.metadata from '"delta"\\s*:\\s*(-?[0-9]+(?:\\.[0-9]+)?)'))::numeric)::text as amount_inr,
         null::int as user_id,
         null::varchar as user_name,
         null::varchar as user_email,
@@ -399,7 +399,7 @@ router.get("/admin/merchants/:id/activity", async (req, res) => {
         null::varchar as method_name,
         'admin'::varchar as actor_kind,
         a.admin_email as actor_email,
-        a.metadata::jsonb->>'note' as note,
+        coalesce(substring(a.metadata from '"note"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)"'), '')::varchar as note,
         ('a:' || a.id::text) as event_id
       from admin_audit_log a
       where a.target_type = 'merchant_topup'
@@ -407,14 +407,20 @@ router.get("/admin/merchants/:id/activity", async (req, res) => {
         and a.module = 'merchants'
         and a.status_code between 200 and 299
         and a.metadata is not null
-        -- Defensive: metadata is stored as text, not jsonb. Guard the
-        -- cast against malformed values from any future route that
-        -- accidentally writes non-JSON or non-numeric delta so the
-        -- whole endpoint does not 500. We require the text to start
-        -- with a JSON object brace and the extracted delta to be a
-        -- plain numeric literal; the topup handler satisfies both.
-        and a.metadata ~ '^\\s*\\{'
-        and (a.metadata::jsonb->>'delta') ~ '^-?[0-9]+(\\.[0-9]+)?$'
+        -- Defensive: metadata is stored as text, not jsonb. The previous
+        -- guard relied on a brace-prefix regex + casting to jsonb, but
+        -- ANY row with a leading brace that was not valid JSON would
+        -- still 500 the endpoint because PostgreSQL does not guarantee
+        -- that a WHERE-clause cast is short-circuited by the preceding
+        -- regex predicate. So we now extract delta + note via the
+        -- substring() POSIX regex form which returns NULL on no-match
+        -- and never throws; the only numeric cast left in the SELECT
+        -- is fed by a regex-validated numeric literal and is safe.
+        -- The WHERE filter likewise requires the metadata text to
+        -- contain a properly-formatted delta-number pair before the
+        -- row is included, so any garbage row is dropped instead of
+        -- crashing the union.
+        and a.metadata ~ '"delta"\\s*:\\s*-?[0-9]+(?:\\.[0-9]+)?'
       order by a.created_at desc
       limit ${limit}
     )
