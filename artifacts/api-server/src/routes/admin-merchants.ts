@@ -164,9 +164,17 @@ router.post("/admin/merchants/:id/topup", async (req: AuthRequest, res) => {
   // Persist the structured detail so the audit-log middleware can attach
   // delta/note/before/after to the audit row. The activity feed below
   // reads these back to render the topup history line items.
+  // CRITICAL: also set `auditTargetId` because this handler runs under
+  // a router-level `auditAdminRequest` mounted at `/admin/merchants`
+  // (no `:id` param at the mount point), so `req.params.id` is empty
+  // when the middleware first snapshots it. Without this override, the
+  // audit row's `target_id` stays null and the activity-feed branch
+  // that filters by `target_type='merchant_topup' AND target_id=:id`
+  // would never see top-up entries.
   const afterBalance = parseFloat(updated[0].inrBalance as string);
   const beforeBalance = afterBalance - delta;
   res.locals["auditTargetType"] = "merchant_topup";
+  res.locals["auditTargetId"] = String(id);
   res.locals["auditSummary"] =
     `${delta >= 0 ? "Credited" : "Debited"} ₹${Math.abs(delta).toFixed(2)} ` +
     `(merchant #${id}${note ? `, note: ${note}` : ""})`;
@@ -394,11 +402,19 @@ router.get("/admin/merchants/:id/activity", async (req, res) => {
         a.metadata::jsonb->>'note' as note,
         ('a:' || a.id::text) as event_id
       from admin_audit_log a
-      where a.target_id = ${String(id)}
+      where a.target_type = 'merchant_topup'
+        and a.target_id = ${String(id)}
         and a.module = 'merchants'
-        and a.path like '%/topup'
         and a.status_code between 200 and 299
         and a.metadata is not null
+        -- Defensive: metadata is stored as text, not jsonb. Guard the
+        -- cast against malformed values from any future route that
+        -- accidentally writes non-JSON or non-numeric delta so the
+        -- whole endpoint does not 500. We require the text to start
+        -- with a JSON object brace and the extracted delta to be a
+        -- plain numeric literal; the topup handler satisfies both.
+        and a.metadata ~ '^\\s*\\{'
+        and (a.metadata::jsonb->>'delta') ~ '^-?[0-9]+(\\.[0-9]+)?$'
       order by a.created_at desc
       limit ${limit}
     )
