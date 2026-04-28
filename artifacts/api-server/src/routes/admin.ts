@@ -1964,14 +1964,25 @@ router.get("/admin/system-health", async (_req: AuthRequest, res) => {
   const { value: payload, cached } = await adminSystemHealthCache.getOrCompute("v1", async () => {
     const checks: Record<string, { status: "ok" | "error"; latencyMs?: number; detail?: string }> = {};
 
+    // Capture the DB probe's actual latency (not the whole fan-out's). All
+    // promises start in parallel at ~dbStart, but the DB probe finishes when
+    // its own .then() fires — so we record `dbProbeLatencyMs` inside the
+    // callback rather than computing it after Promise.all resolves.
     const dbStart = Date.now();
     let dbProbeRows: { count: number }[] = [];
     let dbProbeError: string | null = null;
+    let dbProbeLatencyMs = 0;
     const dbProbe = db
       .select({ count: count() })
       .from(usersTable)
-      .then((rows) => { dbProbeRows = rows as typeof dbProbeRows; })
-      .catch((err: any) => { dbProbeError = err?.message ?? String(err); });
+      .then((rows) => {
+        dbProbeLatencyMs = Date.now() - dbStart;
+        dbProbeRows = rows as typeof dbProbeRows;
+      })
+      .catch((err: any) => {
+        dbProbeLatencyMs = Date.now() - dbStart;
+        dbProbeError = err?.message ?? String(err);
+      });
 
     const [
       _,
@@ -1992,9 +2003,9 @@ router.get("/admin/system-health", async (_req: AuthRequest, res) => {
     void _;
 
     if (dbProbeError) {
-      checks["database"] = { status: "error", detail: dbProbeError };
+      checks["database"] = { status: "error", latencyMs: dbProbeLatencyMs, detail: dbProbeError };
     } else {
-      checks["database"] = { status: "ok", latencyMs: Date.now() - dbStart };
+      checks["database"] = { status: "ok", latencyMs: dbProbeLatencyMs };
       void dbProbeRows; // sanity: probe ran successfully
     }
     checks["profit_worker"] = {
@@ -2004,8 +2015,14 @@ router.get("/admin/system-health", async (_req: AuthRequest, res) => {
     checks["api"] = { status: "ok", detail: "Express server responding" };
     checks["blockchain_listener"] = { status: "ok", detail: "TRON USDT monitor active" };
 
+    // Top-level status reflects the worst probe — degraded if ANY check
+    // returned error. Without this, the dashboard would render "healthy"
+    // even when the DB probe failed.
+    const anyError = Object.values(checks).some((c) => c.status === "error");
+    const overallStatus = anyError ? "degraded" : "healthy";
+
     return {
-      status: "healthy",
+      status: overallStatus,
       timestamp: new Date().toISOString(),
       checks,
       stats: {
