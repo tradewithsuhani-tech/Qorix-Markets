@@ -186,9 +186,28 @@ router.post("/inr-withdrawals", authMiddleware, async (req: AuthRequest, res) =>
         throw new Error("INSUFFICIENT_BALANCE");
       }
 
-      // Authoritative cap re-check (after debit, before insert) — defeats concurrent-request race
+      // Authoritative cap re-check (after debit, before insert) — defeats concurrent-request race.
+      //
+      // BUGFIX (2026-04-28): the previous form `amountUsdt > txCaps.inrChannelMax`
+      // was incorrect because the wallet debit above has *already* subtracted
+      // `amountUsdt` from main_balance, so the snapshot read by getWithdrawalCaps
+      // inside this tx returns a totalBalance that is post-debit. That makes
+      // `inrChannelMax = post_total - usdtChannelOwed`, and the comparison
+      // `amountUsdt > post_total - usdtChannelOwed` rejects practically every
+      // INR withdrawal that was at or near the cap (it falsely rejected the user
+      // who deposited ₹9,000 via INR + $5 via USDT and tried to withdraw
+      // ₹9,000 INR — the pre-flight passed, the debit succeeded, and then this
+      // re-check fired with `91.84 > 0`, triggering rollback and the misleading
+      // "max ₹9000.00 right now" error).
+      //
+      // The correct post-debit guard is the same shape used in wallet.ts for
+      // the USDT path: after the debit, the remaining wallet must still cover
+      // whatever is owed to the *other* channel — here, the USDT/TRC20
+      // reservation (`usdtChannelOwed`). Race semantics are preserved: if a
+      // concurrent USDT deposit landed between pre-flight and this snapshot,
+      // usdtChannelOwed grows and we still reject correctly.
       const txCaps = await getWithdrawalCaps(req.userId!, tx);
-      if (amountUsdt > txCaps.inrChannelMax) {
+      if (txCaps.totalBalance < txCaps.usdtChannelOwed) {
         throw new Error("INR_CHANNEL_CAP_EXCEEDED");
       }
 
