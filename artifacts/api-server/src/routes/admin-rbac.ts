@@ -12,6 +12,7 @@ import {
   getParam,
   getQueryInt,
   getQueryString,
+  invalidateAuthUserCache,
   type AuthRequest,
 } from "../middlewares/auth";
 import {
@@ -99,6 +100,10 @@ router.post("/admin/sub-admins", async (req: AuthRequest, res) => {
     .update(usersTable)
     .set({ isAdmin: true, adminRole: "sub" })
     .where(eq(usersTable.id, user.id));
+
+  // Phase 6: invalidate auth-user cache so the promotion takes effect on the
+  // promoted user's next request without waiting for the 30s TTL.
+  await invalidateAuthUserCache(user.id);
 
   await db
     .insert(adminPermissionsTable)
@@ -215,6 +220,12 @@ router.delete("/admin/sub-admins/:id", async (req: AuthRequest, res) => {
       .delete(adminPermissionsTable)
       .where(eq(adminPermissionsTable.adminId, id));
   });
+
+  // Phase 6: invalidate AFTER the transaction commits so a concurrent reader
+  // can't repopulate the cache from the pre-commit (still-admin) row state.
+  // Critical: without this the demoted user retains admin access for up to
+  // the 30s authMiddleware cache TTL.
+  await invalidateAuthUserCache(id);
 
   res.json({ success: true });
 });

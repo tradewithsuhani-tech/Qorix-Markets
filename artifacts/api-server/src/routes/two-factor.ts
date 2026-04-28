@@ -47,7 +47,7 @@ import QRCode from "qrcode";
 import jwt from "jsonwebtoken";
 import { db, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
-import { authMiddleware, type AuthRequest } from "../middlewares/auth";
+import { authMiddleware, invalidateAuthUserCache, type AuthRequest } from "../middlewares/auth";
 
 const router = Router();
 
@@ -215,6 +215,7 @@ router.post("/security/2fa/setup", async (req: AuthRequest, res) => {
     .update(usersTable)
     .set({ twoFactorSecret: secretBase32 })
     .where(eq(usersTable.id, userId));
+  await invalidateAuthUserCache(userId);
 
   res.json({
     qrDataUrl,
@@ -272,6 +273,7 @@ router.post("/security/2fa/verify-setup", async (req: AuthRequest, res) => {
       twoFactorBackupCodes: hashed,
     })
     .where(eq(usersTable.id, userId));
+  await invalidateAuthUserCache(userId);
 
   res.json({
     enabled: true,
@@ -331,6 +333,7 @@ router.post("/security/2fa/disable", twoFactorMgmtLimit, async (req: AuthRequest
       twoFactorBackupCodes: [],
     })
     .where(eq(usersTable.id, userId));
+  await invalidateAuthUserCache(userId);
 
   res.json({ enabled: false });
 });
@@ -359,6 +362,7 @@ router.post("/security/2fa/regenerate-backup-codes", twoFactorMgmtLimit, async (
     .update(usersTable)
     .set({ twoFactorBackupCodes: hashed })
     .where(eq(usersTable.id, userId));
+  await invalidateAuthUserCache(userId);
   res.json({ backupCodes: plain });
 });
 
@@ -406,7 +410,10 @@ export async function consumeAuthCodeForUser(
   userId: number,
   code: string,
 ): Promise<{ ok: boolean; reason?: "not-enabled" | "invalid-code" | "not-found" }> {
-  return await db.transaction(async (tx) => {
+  // Track whether the tx actually wrote (backup-code burn) vs just verified
+  // a TOTP, so we only pay the Redis round-trip when something changed.
+  let didWrite = false;
+  const outcome = await db.transaction(async (tx) => {
     const rows = await tx
       .select({
         email: usersTable.email,
@@ -428,9 +435,16 @@ export async function consumeAuthCodeForUser(
         .update(usersTable)
         .set({ twoFactorBackupCodes: result.updatedBackupCodes })
         .where(eq(usersTable.id, userId));
+      didWrite = true;
     }
     return { ok: true };
   });
+  // Invalidate AFTER the tx commits so a concurrent read can't repopulate
+  // the cache with the pre-commit row state. Backup codes aren't part of
+  // CachedAuthUser today, but keeping the invalidation here is cheap and
+  // future-proofs the cache against any field that joins the projection.
+  if (didWrite) await invalidateAuthUserCache(userId);
+  return outcome;
 }
 
 export default router;
