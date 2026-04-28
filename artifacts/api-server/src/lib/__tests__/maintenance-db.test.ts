@@ -58,6 +58,15 @@ before(async () => {
   // boot-time getMaintenanceState() call — would mask the new value for up
   // to CACHE_TTL_MS).
   invalidateMaintenanceCache();
+  // Warm the cache with a single fresh read so the very first /api/healthz
+  // probe below sees the seeded DB row. /api/healthz is mounted BEFORE
+  // maintenanceMiddleware (zero-DB probe to keep Fly LB happy under pool
+  // pressure) and reads the X-Maintenance-Mode header from a synchronous
+  // cache peek — no DB round-trip on the probe path. In production the
+  // cache warms naturally on the first real /api request through
+  // maintenanceMiddleware or via a LISTEN/NOTIFY broadcast from another
+  // instance; the test mirrors that warming explicitly.
+  await getMaintenanceState();
 
   await new Promise<void>((resolve, reject) => {
     server = app.listen(0, (err?: Error) => (err ? reject(err) : resolve()));

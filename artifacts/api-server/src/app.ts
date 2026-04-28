@@ -3,7 +3,7 @@ import cors from "cors";
 import pinoHttp from "pino-http";
 import router from "./routes";
 import { logger } from "./lib/logger";
-import { maintenanceMiddleware } from "./middlewares/maintenance";
+import { maintenanceMiddleware, peekMaintenanceState } from "./middlewares/maintenance";
 
 const app: Express = express();
 
@@ -72,6 +72,18 @@ app.use(express.urlencoded({ extended: true }));
 // very top guarantees the probe ALWAYS returns immediately, regardless of
 // DB / cache / cron state on this instance.
 app.get("/api/healthz", (_req, res) => {
+  // Best-effort: if the merged maintenance state is already in the in-memory
+  // TTL cache, surface the X-Maintenance-Mode header so any client that
+  // happened to poll healthz still sees the same banner-trigger marker that
+  // every other /api response carries. We do NOT trigger a DB read here —
+  // that's exactly what made healthz time out during the pool-exhaustion
+  // incident. On cache miss we just return 200 ok; the next real /api
+  // request will warm the cache via maintenanceMiddleware.
+  const state = peekMaintenanceState();
+  if (state?.active) {
+    res.setHeader("X-Maintenance-Mode", "true");
+    if (state.endsAt) res.setHeader("X-Maintenance-Ends-At", state.endsAt);
+  }
   res.json({ status: "ok" });
 });
 
