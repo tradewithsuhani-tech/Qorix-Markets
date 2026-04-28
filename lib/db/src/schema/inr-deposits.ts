@@ -28,8 +28,15 @@ export const inrDepositsTable = pgTable(
   },
   (t) => ({
     utrUq: uniqueIndex("inr_deposits_utr_uq").on(t.utr),
+    // Existing single-column index kept for backward compat / planner choice on
+    // tiny result sets; the composite below supersedes it for the common
+    // user-history query pattern.
     userIdx: index("inr_deposits_user_idx").on(t.userId),
     statusIdx: index("inr_deposits_status_idx").on(t.status),
+    // GET /api/inr-deposits/mine: WHERE user_id = $1 ORDER BY created_at DESC LIMIT 50.
+    // The composite serves WHERE + ORDER BY in one index scan, eliminating the
+    // in-memory sort that the (user_id) single-column index forced.
+    userCreatedIdx: index("inr_deposits_user_created_idx").on(t.userId, t.createdAt.desc()),
   }),
 );
 

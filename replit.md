@@ -459,3 +459,48 @@ Each stage uses an atomic `UPDATE … RETURNING` claim so two cron ticks/replica
 ### Pending operator setup (no code change needed)
 - Twilio/Exotel credentials → set `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER` (or `EXOTEL_*`) on Fly to enable real voice calls. Voice service stubs to email-only until then.
 - Admin escalation contact: insert `admin_escalation_phone` + `admin_escalation_email` rows into `system_settings` (no UI yet).
+
+---
+
+## Phase 3 + Phase 4 (perf): DB indexes, slow-query logger, in-memory TTL cache (Apr 28, 2026)
+
+Read-pressure relief on Neon (Singapore) from BOM API instances. All changes additive; ZERO PK changes.
+
+### Phase 3: composite btree indexes on user-history hot paths
+8 new indexes added to `lib/db/src/schema/*` AND pre-applied to Neon prod via idempotent `CREATE INDEX IF NOT EXISTS` (single transaction, ~170ms each):
+
+- `transactions(user_id, created_at DESC)`
+- `notifications(user_id, created_at DESC)` *(replaced single-col user_id)*
+- `ledger_entries(transaction_id)` + `ledger_entries(account_id, created_at DESC)`
+- `blockchain_deposits(user_id, created_at DESC)` *(replaced single-col user_id)*
+- `inr_deposits(user_id, created_at DESC)`
+- `inr_withdrawals(user_id, created_at DESC)`
+- `inr_withdrawals(assigned_merchant_id) WHERE assigned_merchant_id IS NOT NULL` (partial; merchant claim queue)
+
+Skipped `investments(user_id)` — already UNIQUE. `merchants.id` stays `serial`. Verified via forced `enable_seqscan=off`: all 5 user-history indexes produce Index Scan on prod.
+
+### Phase 3b: slow-query logger
+- `lib/db/src/index.ts` wraps `pool.query` AND `client.query` (via `pool.on("connect")`) so transaction client queries are timed.
+- Modes via `DRIZZLE_QUERY_LOG`: `full | slow | none`. Default: `slow` in prod, `none` elsewhere.
+- Threshold: `SLOW_QUERY_MS` (default 1000ms).
+- Log payload: SQL snippet (200 chars, whitespace collapsed) + params COUNT only — no param values logged (PII safety).
+- Pino `warn` level. Double-wrap guard via `__qorixWrapped` flag.
+
+### Phase 4: per-process in-memory TTL cache
+- New `artifacts/api-server/src/lib/cache/ttl-cache.ts` — `TTLCache<T>` class with `get / set / getOrCompute / invalidate / clear / stats`. Single-flight in-flight Map dedup (concurrent first-callers share the promise). Failures are NOT cached (entry dropped from in-flight on reject).
+- WRAPPED:
+  - `GET /api/public/market-indicators` — TTL **10s**, key `"v1"`. Live: 50-req soak shows 47 HIT / 3 MISS (matches TTL math); HIT latency = network RTT only.
+  - `GET /api/dashboard/summary` — TTL **5s**, key `u:${userId}` (per-user, no cross-user leak).
+- Both responses set `X-Cache: HIT|MISS` header for observability.
+- NOT WRAPPED: `GET /api/system/status` — `getMaintenanceState()` already has LISTEN/NOTIFY-driven cross-instance invalidation; a wrapping cache shadowed `invalidateMaintenanceCache()` and broke 5 maintenance tests during initial implementation. Removed before push.
+
+### Validation
+- `tsc --build` (libs) ✅ + api-server typecheck ✅
+- Full test suite **75/75 pass** (3 batches: 28 + 30 + 17)
+- CI: typecheck pass + qorix-markets-web deploy + smoke + qorix-api deploy + smoke ✅
+- Live prod soak: healthz 30 concurrent — all 200 OK; market-indicators 50 sequential — 47 HIT, 3 MISS
+
+### Pending follow-ups (architect-suggested, non-blocking)
+- Targeted cache invalidation on balance-mutating flows (deposit/withdraw approval) for instant freshness; keep 5s TTL as safety net.
+- Defensive startup check that `SLOW_QUERY_MS` is finite and non-negative (prevent silent NaN suppression).
+- Lightweight cache observability — periodic log sample of HIT/MISS ratio + in-flight count to tune TTLs from real traffic.

@@ -4,9 +4,50 @@ import { eq, and, gte, desc, sum, count, sql } from "drizzle-orm";
 import { getSlotData } from "./admin";
 import { authMiddleware, getQueryInt, getQueryString, type AuthRequest } from "../middlewares/auth";
 import { getVipInfo } from "../lib/vip";
+import { TTLCache } from "../lib/cache/ttl-cache";
 
 const router = Router();
 router.use(authMiddleware);
+
+// 5s per-user cache for /dashboard/summary. The handler is the most-polled
+// authenticated endpoint (the dashboard refreshes it every few seconds),
+// and its writes are all idempotent catch-up math (`Math.floor((now-lastAt)
+// / WINDOW_MS)` over windows of 10min / 30min / 4hr). Skipping a write for
+// up to 5s is invisible because the next miss correctly catches up all
+// elapsed windows in one go. Key by userId so users never see each other's
+// data.
+type DashboardSummaryResponse = {
+  totalBalance: number;
+  dailyProfitLoss: number;
+  dailyProfitPercent: number;
+  dailyPnl: {
+    amount: number;
+    percent: number;
+    targetPercent: number;
+    incrementsDone: number;
+    incrementsTotal: number;
+    nextChunkAt: number | null;
+    marketClosed: boolean;
+    marketOpensAt: number | null;
+  };
+  activeInvestment: number;
+  totalProfit: number;
+  profitBalance: number;
+  tradingBalance: number;
+  nextPayoutDate: string;
+  daysUntilPayout: number;
+  riskLevel: string | null;
+  isTrading: boolean;
+  vip: {
+    tier: string;
+    label: string;
+    profitBonus: number;
+    withdrawalFee: number;
+    minAmount: number;
+    nextTier: unknown | null;
+  };
+};
+const dashboardSummaryCache = new TTLCache<DashboardSummaryResponse>(5_000);
 
 // Per-user "Total Equity" display boost: random $100–$500 every 10 min,
 // persisted in wallets.demo_equity_boost. Display-only — never affects real
@@ -52,8 +93,10 @@ function generateDailyChunks(targetPct: number): number[] {
 }
 
 router.get("/dashboard/summary", async (req: AuthRequest, res) => {
-  const wallets = await db.select().from(walletsTable).where(eq(walletsTable.userId, req.userId!)).limit(1);
-  const invs = await db.select().from(investmentsTable).where(eq(investmentsTable.userId, req.userId!)).limit(1);
+  const userId = req.userId!;
+  const { value, cached } = await dashboardSummaryCache.getOrCompute(`u:${userId}`, async () => {
+  const wallets = await db.select().from(walletsTable).where(eq(walletsTable.userId, userId)).limit(1);
+  const invs = await db.select().from(investmentsTable).where(eq(investmentsTable.userId, userId)).limit(1);
 
   const wallet = wallets[0];
   const inv = invs[0];
@@ -244,37 +287,40 @@ router.get("/dashboard/summary", async (req: AuthRequest, res) => {
   const vipInvestmentAmount = inv?.isActive ? realInvestment : 0;
   const vipInfo = getVipInfo(vipInvestmentAmount);
 
-  res.json({
-    totalBalance,
-    dailyProfitLoss: dailyProfit,
-    dailyProfitPercent: dailyPnlPct,
-    dailyPnl: {
-      amount: dailyPnlAmount,
-      percent: dailyPnlPct,
-      targetPercent: dailyPnlTargetPct,
-      incrementsDone: dailyPnlIncrementsDone,
-      incrementsTotal: DAILY_PNL_INCREMENTS,
-      nextChunkAt,
-      marketClosed: weekend,
-      marketOpensAt,
-    },
-    activeInvestment: investmentAmount,
-    totalProfit,
-    profitBalance,
-    tradingBalance,
-    nextPayoutDate: nextPayout.toISOString().split("T")[0],
-    daysUntilPayout,
-    riskLevel: inv?.riskLevel ?? null,
-    isTrading: inv?.isActive ?? false,
-    vip: {
-      tier: vipInfo.tier,
-      label: vipInfo.label,
-      profitBonus: vipInfo.profitBonus,
-      withdrawalFee: vipInfo.withdrawalFee,
-      minAmount: vipInfo.minAmount,
-      nextTier: vipInfo.nextTier ?? null,
-    },
+    return {
+      totalBalance,
+      dailyProfitLoss: dailyProfit,
+      dailyProfitPercent: dailyPnlPct,
+      dailyPnl: {
+        amount: dailyPnlAmount,
+        percent: dailyPnlPct,
+        targetPercent: dailyPnlTargetPct,
+        incrementsDone: dailyPnlIncrementsDone,
+        incrementsTotal: DAILY_PNL_INCREMENTS,
+        nextChunkAt,
+        marketClosed: weekend,
+        marketOpensAt,
+      },
+      activeInvestment: investmentAmount,
+      totalProfit,
+      profitBalance,
+      tradingBalance,
+      nextPayoutDate: nextPayout.toISOString().split("T")[0],
+      daysUntilPayout,
+      riskLevel: inv?.riskLevel ?? null,
+      isTrading: inv?.isActive ?? false,
+      vip: {
+        tier: vipInfo.tier,
+        label: vipInfo.label,
+        profitBonus: vipInfo.profitBonus,
+        withdrawalFee: vipInfo.withdrawalFee,
+        minAmount: vipInfo.minAmount,
+        nextTier: vipInfo.nextTier ?? null,
+      },
+    };
   });
+  res.setHeader("X-Cache", cached ? "HIT" : "MISS");
+  res.json(value);
 });
 
 router.get("/dashboard/equity-chart", async (req: AuthRequest, res) => {

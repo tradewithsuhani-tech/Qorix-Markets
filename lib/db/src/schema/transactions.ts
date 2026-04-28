@@ -1,4 +1,4 @@
-import { pgTable, serial, integer, numeric, varchar, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, numeric, varchar, text, timestamp, uniqueIndex, index } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
@@ -25,6 +25,11 @@ export const transactionsTable = pgTable(
     idempotencyUq: uniqueIndex("transactions_user_type_idem_uq")
       .on(t.userId, t.type, t.idempotencyKey)
       .where(sql`${t.idempotencyKey} IS NOT NULL`),
+    // Hot read path: GET /api/transactions filtered by user_id ORDER BY created_at DESC LIMIT 20.
+    // Without this composite, the planner did a Seq Scan + in-memory sort on every page load.
+    // The existing partial-unique index above only covers rows WHERE idempotency_key IS NOT NULL
+    // (a small subset), so it cannot serve the general user-history query.
+    userCreatedIdx: index("transactions_user_created_idx").on(t.userId, t.createdAt.desc()),
   }),
 );
 
