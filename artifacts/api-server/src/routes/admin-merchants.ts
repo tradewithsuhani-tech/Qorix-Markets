@@ -387,11 +387,11 @@ router.get("/admin/merchants/:id/activity", async (req, res) => {
       select
         a.created_at as at,
         case
-          when (substring(a.metadata from '"delta"\\s*:\\s*(-?[0-9]+(?:\\.[0-9]+)?)'))::numeric >= 0 then 'topup_credit'
+          when (substring(a.metadata from '[{,]\\s*"delta"\\s*:\\s*"?(-?[0-9]{1,18}(?:\\.[0-9]{1,18})?)"?'))::numeric >= 0 then 'topup_credit'
           else 'topup_debit'
         end as kind,
-        (substring(a.metadata from '"delta"\\s*:\\s*(-?[0-9]+(?:\\.[0-9]+)?)'))::numeric as delta,
-        abs((substring(a.metadata from '"delta"\\s*:\\s*(-?[0-9]+(?:\\.[0-9]+)?)'))::numeric)::text as amount_inr,
+        (substring(a.metadata from '[{,]\\s*"delta"\\s*:\\s*"?(-?[0-9]{1,18}(?:\\.[0-9]{1,18})?)"?'))::numeric as delta,
+        abs((substring(a.metadata from '[{,]\\s*"delta"\\s*:\\s*"?(-?[0-9]{1,18}(?:\\.[0-9]{1,18})?)"?'))::numeric)::text as amount_inr,
         null::int as user_id,
         null::varchar as user_name,
         null::varchar as user_email,
@@ -399,7 +399,7 @@ router.get("/admin/merchants/:id/activity", async (req, res) => {
         null::varchar as method_name,
         'admin'::varchar as actor_kind,
         a.admin_email as actor_email,
-        coalesce(substring(a.metadata from '"note"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)"'), '')::varchar as note,
+        coalesce(substring(a.metadata from '[{,]\\s*"note"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)"'), '')::varchar as note,
         ('a:' || a.id::text) as event_id
       from admin_audit_log a
       where a.target_type = 'merchant_topup'
@@ -407,20 +407,28 @@ router.get("/admin/merchants/:id/activity", async (req, res) => {
         and a.module = 'merchants'
         and a.status_code between 200 and 299
         and a.metadata is not null
-        -- Defensive: metadata is stored as text, not jsonb. The previous
-        -- guard relied on a brace-prefix regex + casting to jsonb, but
-        -- ANY row with a leading brace that was not valid JSON would
-        -- still 500 the endpoint because PostgreSQL does not guarantee
-        -- that a WHERE-clause cast is short-circuited by the preceding
-        -- regex predicate. So we now extract delta + note via the
-        -- substring() POSIX regex form which returns NULL on no-match
-        -- and never throws; the only numeric cast left in the SELECT
-        -- is fed by a regex-validated numeric literal and is safe.
-        -- The WHERE filter likewise requires the metadata text to
-        -- contain a properly-formatted delta-number pair before the
-        -- row is included, so any garbage row is dropped instead of
-        -- crashing the union.
-        and a.metadata ~ '"delta"\\s*:\\s*-?[0-9]+(?:\\.[0-9]+)?'
+        -- Defensive: admin_audit_log.metadata is stored as text. The
+        -- topup handler above writes JSON like
+        --   {"delta":"123.45","note":"...","beforeBalance":"...","afterBalance":"..."}
+        -- where delta is a STRING (deltaStr from .toFixed(2)). The
+        -- previous version cast metadata to jsonb directly, which can
+        -- 500 on any malformed text whose brace-prefix passes the
+        -- pre-filter regex (PostgreSQL does not guarantee that a
+        -- WHERE-clause cast is short-circuited by an earlier predicate
+        -- in the same WHERE list). The new approach extracts delta +
+        -- note via substring() with a POSIX regex which returns NULL
+        -- on no-match and never throws. The regex is anchored to a
+        -- JSON-key-context boundary [{,] so we cannot pick up the
+        -- substring "delta": occurring inside note text, and the
+        -- digit count is bounded {1,18} on each side of the decimal
+        -- so the surviving ::numeric cast cannot overflow PostgreSQL's
+        -- numeric limits even on a pathological hand-edited row. The
+        -- value is matched with optional surrounding quotes ("?...?")
+        -- so it works whether delta is stored as a JSON number or a
+        -- JSON string (current handler stores a string). Any row that
+        -- does not present a properly-formatted delta-number pair is
+        -- dropped from the union instead of crashing the endpoint.
+        and a.metadata ~ '[{,]\\s*"delta"\\s*:\\s*"?-?[0-9]{1,18}(?:\\.[0-9]{1,18})?"?'
       order by a.created_at desc
       limit ${limit}
     )
