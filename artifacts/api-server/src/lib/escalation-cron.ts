@@ -75,7 +75,7 @@ async function getAdminContacts(): Promise<AdminContactTarget[]> {
 // "answered", so the loop will email every contact in turn — that matches
 // the user expectation of "make sure SOMEONE gets it".
 async function runAdminCascade(
-  buildMessage: (contactName: string) => string,
+  buildMessage: (contactName: string) => { ssmlBody: string; plainText: string },
 ): Promise<void> {
   const contacts = await getAdminContacts();
   if (contacts.length === 0) {
@@ -84,10 +84,10 @@ async function runAdminCascade(
   }
   for (const c of contacts) {
     try {
-      const outcome = await placeEscalationCallAndAwaitOutcome(
-        c,
-        buildMessage(c.friendlyName),
-      );
+      const m = buildMessage(c.friendlyName);
+      const outcome = await placeEscalationCallAndAwaitOutcome(c, m.plainText, {
+        ssmlBody: m.ssmlBody,
+      });
       if (outcome.answered) {
         logger.info(
           { label: c.label, finalStatus: outcome.finalStatus },
@@ -229,22 +229,24 @@ async function escalatePendingDeposits(): Promise<void> {
       .where(inArray(inrDepositsTable.id, ids));
     for (const row of rows) {
       if (!row.merchant || !row.merchant.isActive) continue;
-      const merchantName = firstName(row.merchant.fullName) || "merchant";
-      const userName = firstName(row.user?.fullName) || "ek user";
+      const merchantName = firstName(row.merchant.fullName) || "Merchant";
+      const userName = firstName(row.user?.fullName) || "a user";
       const amount = fmtAmount(row.deposit.amountInr);
-      const utrSpoken = spellOut(row.deposit.utr);
-      const message =
-        `Hello dear ${merchantName}. Qorix Markets se message hai. ` +
-        `Aapko user ${userName} se ${amount} rupee ka deposit request aaya hai. ` +
-        `UTR number ${utrSpoken} hai. ` +
-        `Kripya payment check karne ke baad approve kare. Dhanyawaad.`;
+      const msg = buildVoiceMessage({
+        recipientName: merchantName,
+        alertKind: "payment",
+        bodySentence: `A user named ${userName} has submitted a deposit request of ${amount} rupees.`,
+        utr: row.deposit.utr,
+        actionSentence: "Please verify the payment and approve it from your dashboard.",
+      });
       await placeEscalationCall(
         {
           phone: row.merchant.phone,
           email: row.merchant.email,
           label: `merchant#${row.merchant.id}`,
         },
-        message,
+        msg.plainText,
+        { ssmlBody: msg.ssmlBody },
       );
     }
   }
@@ -285,19 +287,21 @@ async function escalatePendingDeposits(): Promise<void> {
     // Fire-and-forget the cascade per claimed row so the cron tick stays
     // fast (each cascade can take up to ~270s for 3 contacts × 90s wait).
     for (const row of rows) {
-      const userName = firstName(row.user?.fullName) || "ek user";
+      const userName = firstName(row.user?.fullName) || "a user";
       const merchantName = firstName(row.merchant?.fullName) || null;
       const amount = fmtAmount(row.deposit.amountInr);
-      const utrSpoken = spellOut(row.deposit.utr);
-      const merchantPart = merchantName
-        ? ` Merchant ${merchantName} ne 15 minute me approve nahi kiya.`
-        : ` 15 minute me kisi merchant ne approve nahi kiya.`;
+      const ctx = merchantName
+        ? `Merchant ${merchantName} has not approved it in fifteen minutes.`
+        : `No merchant has approved it in fifteen minutes.`;
       const buildMsg = (adminName: string) =>
-        `Hello dear ${adminName}. Qorix Markets escalation alert. ` +
-        `User ${userName} ne ${amount} rupee ka deposit kiya hai. ` +
-        `UTR number ${utrSpoken} hai.` +
-        merchantPart +
-        ` Kripya jaldi intervene kare. Dhanyawaad.`;
+        buildVoiceMessage({
+          recipientName: adminName,
+          alertKind: "escalation",
+          bodySentence: `A user named ${userName} has submitted a deposit request of ${amount} rupees.`,
+          utr: row.deposit.utr,
+          contextSentence: ctx,
+          actionSentence: "Please intervene as soon as possible.",
+        });
       setImmediate(() => {
         runAdminCascade(buildMsg).catch((err) =>
           logger.warn(
@@ -348,20 +352,23 @@ async function escalatePendingWithdrawals(): Promise<void> {
         ? merchants.filter((m) => m.id === w.assignedMerchantId)
         : merchants;
       const ctx = byId.get(w.id);
-      const userName = firstName(ctx?.user?.fullName) || "ek user";
+      const userName = firstName(ctx?.user?.fullName) || "a user";
       const amount = fmtAmount(w.amountInr);
       const acctHolder = ctx?.w.accountHolder?.trim();
-      const acctPart = acctHolder ? ` Account holder ka naam ${acctHolder} hai.` : "";
+      const acctCtx = acctHolder ? `Account holder name is ${acctHolder}.` : undefined;
       for (const m of targets) {
-        const merchantName = firstName(m.fullName) || "merchant";
-        const message =
-          `Hello dear ${merchantName}. Qorix Markets se message hai. ` +
-          `User ${userName} ne ${amount} rupee ka withdrawal request kiya hai.` +
-          acctPart +
-          ` Kripya jaldi action lekar process kare. Dhanyawaad.`;
+        const merchantName = firstName(m.fullName) || "Merchant";
+        const msg = buildVoiceMessage({
+          recipientName: merchantName,
+          alertKind: "payment",
+          bodySentence: `A user named ${userName} has requested a withdrawal of ${amount} rupees.`,
+          contextSentence: acctCtx,
+          actionSentence: "Please process this from your dashboard as soon as possible.",
+        });
         await placeEscalationCall(
           { phone: m.phone, email: m.email, label: `merchant#${m.id}` },
-          message,
+          msg.plainText,
+          { ssmlBody: msg.ssmlBody },
         );
       }
     }
@@ -390,16 +397,20 @@ async function escalatePendingWithdrawals(): Promise<void> {
       .leftJoin(usersTable, eq(usersTable.id, inrWithdrawalsTable.userId))
       .where(inArray(inrWithdrawalsTable.id, ids));
     for (const row of rows) {
-      const userName = firstName(row.user?.fullName) || "ek user";
+      const userName = firstName(row.user?.fullName) || "a user";
       const amount = fmtAmount(row.w.amountInr);
       const acctHolder = row.w.accountHolder?.trim();
-      const acctPart = acctHolder ? ` Account holder ka naam ${acctHolder} hai.` : "";
+      const ctx = acctHolder
+        ? `Account holder name is ${acctHolder}. No merchant has acted on it in fifteen minutes.`
+        : `No merchant has acted on it in fifteen minutes.`;
       const buildMsg = (adminName: string) =>
-        `Hello dear ${adminName}. Qorix Markets escalation alert. ` +
-        `User ${userName} ne ${amount} rupee ka withdrawal request kiya hai.` +
-        acctPart +
-        ` 15 minute me kisi merchant ne action nahi liya. ` +
-        `Kripya jaldi intervene kare. Dhanyawaad.`;
+        buildVoiceMessage({
+          recipientName: adminName,
+          alertKind: "escalation",
+          bodySentence: `A user named ${userName} has requested a withdrawal of ${amount} rupees.`,
+          contextSentence: ctx,
+          actionSentence: "Please intervene as soon as possible.",
+        });
       setImmediate(() => {
         runAdminCascade(buildMsg).catch((err) =>
           logger.warn(
@@ -441,14 +452,118 @@ function fmtAmount(s: string | number | null | undefined): string {
   return Number.isInteger(n) ? String(n) : n.toFixed(2);
 }
 
-// "ABC1234567" → "A B C 1 2 3 4 5 6 7". Forces the TTS engine to read each
-// character individually instead of treating long digit runs as a single
-// number ("twelve million three hundred forty…"). Spaces are pronounced as
-// brief pauses by both the alice and Polly voices.
-function spellOut(s: string | null | undefined): string {
+// "ABC1234567" → "A B C 1 2 3 4 5 6 7". Used inside the email/Exotel
+// fallback path where TwiML SSML is not available — we just space-separate
+// each character so a human reading the message text still sees the
+// reference number cleanly.
+function spellOutPlain(s: string | null | undefined): string {
   if (!s) return "";
   return String(s)
     .split("")
     .filter((c) => c.trim() !== "")
     .join(" ");
+}
+
+// Same job as spellOutPlain but emits SSML <say-as> tags so Polly reads
+// each character distinctly. We split on letter↔digit boundaries so digit
+// runs are spoken with `digits` interpret-as (which preserves single-digit
+// pronunciation reliably across voices) and letter runs use `characters`
+// (spell-out). A short break between the two groups stops the runs from
+// blurring together. Anything non-alphanumeric is dropped to keep the
+// utterance clean.
+function spellOutSsml(s: string | null | undefined): string {
+  if (!s) return "";
+  const parts = String(s).match(/[A-Za-z]+|\d+/g);
+  if (!parts || parts.length === 0) return "";
+  return parts
+    .map((p) =>
+      /^\d+$/.test(p)
+        ? `<say-as interpret-as="digits">${p}</say-as>`
+        : `<say-as interpret-as="characters">${escapeXmlForSsml(p)}</say-as>`,
+    )
+    .join(' <break time="200ms"/> ');
+}
+
+// XML-escape user-controlled values that go INSIDE an SSML body. The
+// surrounding <Say><prosody> wrapper is added by voice-call-service, but
+// the body we hand it must already be safe to inject as raw XML.
+function escapeXmlForSsml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+// Builds the dual-form (SSML + plain text) message used for every
+// escalation call. The shape is fixed and intentional:
+//
+//   "Hello {name}."                                   (greeting once)
+//   "This is a payment|escalation alert from Qorix Markets."   (intro once)
+//   {body sentence}
+//   "UTR number is {spelled}."                        (only if utr provided)
+//   {context sentence}                                (optional, e.g.
+//                                                      "Account holder name
+//                                                      is X. No merchant has
+//                                                      acted in 15 minutes.")
+//   {action sentence} "Thank you."
+//   "Please listen carefully. Repeating the details once again."
+//   …entire details block repeated…                   (so the recipient
+//                                                      gets two chances to
+//                                                      catch the amount /
+//                                                      UTR / account holder)
+//
+// The voice (`Polly.Aditi`) and pace (`90%`) live in voice-call-service —
+// callers just produce the body and it gets wrapped consistently.
+function buildVoiceMessage(opts: {
+  recipientName: string;
+  alertKind: "payment" | "escalation";
+  bodySentence: string;
+  utr?: string | null;
+  contextSentence?: string;
+  actionSentence: string;
+}): { ssmlBody: string; plainText: string } {
+  const intro =
+    opts.alertKind === "payment"
+      ? "This is a payment alert from Qorix Markets."
+      : "This is an escalation alert from Qorix Markets.";
+
+  const utrSsml = opts.utr ? `UTR number is ${spellOutSsml(opts.utr)}.` : "";
+  const utrText = opts.utr ? `UTR number is ${spellOutPlain(opts.utr)}.` : "";
+
+  const ctxSsml = opts.contextSentence ? escapeXmlForSsml(opts.contextSentence) : "";
+  const ctxText = opts.contextSentence ?? "";
+
+  const detailsSsml = [
+    escapeXmlForSsml(opts.bodySentence),
+    utrSsml ? `<break time="700ms"/>${utrSsml}` : "",
+    ctxSsml ? `<break time="700ms"/>${ctxSsml}` : "",
+    `<break time="700ms"/>${escapeXmlForSsml(opts.actionSentence)}`,
+    `<break time="500ms"/>Thank you.`,
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  const detailsText = [opts.bodySentence, utrText, ctxText, opts.actionSentence, "Thank you."]
+    .filter(Boolean)
+    .join(" ");
+
+  const ssmlBody = [
+    `Hello ${escapeXmlForSsml(opts.recipientName)}.`,
+    `<break time="400ms"/>`,
+    escapeXmlForSsml(intro),
+    `<break time="700ms"/>`,
+    detailsSsml,
+    `<break time="1500ms"/>`,
+    `Please listen carefully.`,
+    `<break time="500ms"/>`,
+    `Repeating the details once again.`,
+    `<break time="800ms"/>`,
+    detailsSsml,
+  ].join(" ");
+
+  const plainText = `Hello ${opts.recipientName}. ${intro} ${detailsText}`;
+
+  return { ssmlBody, plainText };
 }

@@ -28,6 +28,21 @@ interface CallTarget {
   label: string;
 }
 
+// Voice + pace are user-tuned defaults (Polly Aditi at 90% rate sounds
+// clear, professional and Indian-context familiar). Centralised here so
+// every escalation call ships with the same brand voice.
+const TWILIO_VOICE = "Polly.Aditi";
+const TWILIO_PROSODY_RATE = "90%";
+
+// Optional caller-supplied SSML body for the Twilio <Say> branch. When
+// provided it is injected verbatim inside <prosody> — the caller is
+// responsible for XML-escaping any user-controlled values it embeds.
+// `plainText` is always required and is what the email/Exotel fallbacks
+// (which do not support TwiML SSML the same way) actually deliver.
+export interface CallMessageOpts {
+  ssmlBody?: string;
+}
+
 export interface CallResult {
   ok: boolean;
   provider: "twilio" | "exotel" | "email-fallback" | "skipped";
@@ -45,10 +60,11 @@ export interface CallOutcome extends CallResult {
 
 export async function placeEscalationCall(
   target: CallTarget,
-  message: string,
+  plainText: string,
+  opts: CallMessageOpts = {},
 ): Promise<CallResult> {
   if (!target.phone) {
-    return await fallbackToEmail(target, message, "no_phone_on_file");
+    return await fallbackToEmail(target, plainText, "no_phone_on_file");
   }
   const exotelSid = process.env["EXOTEL_SID"];
   const exotelKey = process.env["EXOTEL_API_KEY"];
@@ -61,7 +77,7 @@ export async function placeEscalationCall(
       token: exotelToken,
       from: exotelFrom,
       to: target.phone,
-      message,
+      message: plainText,
     });
   }
   const twilioSid = process.env["TWILIO_ACCOUNT_SID"];
@@ -73,10 +89,11 @@ export async function placeEscalationCall(
       token: twilioToken,
       from: twilioFrom,
       to: target.phone,
-      message,
+      plainText,
+      ssmlBody: opts.ssmlBody,
     });
   }
-  return await fallbackToEmail(target, message, "no_provider_configured");
+  return await fallbackToEmail(target, plainText, "no_provider_configured");
 }
 
 // Place a call AND wait for the outcome. Used by the admin cascade so we
@@ -87,10 +104,10 @@ export async function placeEscalationCall(
 // state (or the wait window expires).
 export async function placeEscalationCallAndAwaitOutcome(
   target: CallTarget,
-  message: string,
-  opts: { maxWaitMs?: number; pollIntervalMs?: number } = {},
+  plainText: string,
+  opts: CallMessageOpts & { maxWaitMs?: number; pollIntervalMs?: number } = {},
 ): Promise<CallOutcome> {
-  const placed = await placeEscalationCall(target, message);
+  const placed = await placeEscalationCall(target, plainText, { ssmlBody: opts.ssmlBody });
   if (!placed.ok || placed.provider !== "twilio" || !placed.callSid) {
     return { ...placed, answered: false };
   }
@@ -184,11 +201,19 @@ async function callViaTwilio(opts: {
   token: string;
   from: string;
   to: string;
-  message: string;
+  plainText: string;
+  ssmlBody?: string;
 }): Promise<CallResult> {
   const url = `https://api.twilio.com/2010-04-01/Accounts/${opts.sid}/Calls.json`;
   const auth = Buffer.from(`${opts.sid}:${opts.token}`).toString("base64");
-  const twiml = `<Response><Say voice="alice">${escapeXml(opts.message)}</Say></Response>`;
+  // Prefer the caller-supplied SSML (rich pacing, spell-out, repeat block,
+  // pre-escaped). Fall back to escaping plain text so legacy / minimal
+  // callers still work.
+  const inner = opts.ssmlBody ?? escapeXml(opts.plainText);
+  const twiml =
+    `<Response><Say voice="${TWILIO_VOICE}">` +
+    `<prosody rate="${TWILIO_PROSODY_RATE}">${inner}</prosody>` +
+    `</Say></Response>`;
   const body = new URLSearchParams({
     From: opts.from,
     To: opts.to,
