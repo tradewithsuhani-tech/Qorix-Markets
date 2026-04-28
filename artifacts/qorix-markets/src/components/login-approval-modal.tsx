@@ -33,7 +33,15 @@ async function authFetch(path: string, init: RequestInit = {}) {
 
 // Poll cadence — 5s is responsive enough for the new device's countdown
 // (60s before OTP fallback) without spamming the API.
-const POLL_INTERVAL_MS = 5_000;
+// Bumped 5s → 15s in Phase 6: at 25 logged-in non-admin users this dropped
+// device-poll volume from ~5 req/s to ~1.7 req/s, freeing the shared DB
+// connection pool for actual page loads. The user-perceived latency for
+// approve/deny is still well under one poll cycle in practice (the new
+// device shows a spinner while waiting on /auth/login-attempts/:id/status,
+// which is unaffected). If a security review later wants tighter detection,
+// switch this whole modal to SSE on /auth/login-attempts/stream rather than
+// shrinking the poll back down.
+const POLL_INTERVAL_MS = 15_000;
 
 export function LoginApprovalGate() {
   const { token, user, logout } = useAuth();

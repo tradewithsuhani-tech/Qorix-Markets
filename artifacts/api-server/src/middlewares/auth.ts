@@ -4,6 +4,9 @@ import crypto from "crypto";
 import { db, systemSettingsTable, usersTable, adminPermissionsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { getMaintenanceState } from "./maintenance";
+import { RedisCache } from "../lib/cache/redis-cache";
+import { TTLCache } from "../lib/cache/ttl-cache";
+import { getRedisConnection } from "../lib/redis";
 
 // ─── Device fingerprint ────────────────────────────────────────────────────
 // SHA-256 of the raw User-Agent header (first 32 hex chars) — stable across
@@ -62,6 +65,54 @@ export interface AuthRequest extends Request {
   adminEmail?: string | null;
 }
 
+// ─── Auth-user cache (Phase 6) ─────────────────────────────────────────────
+// Every authenticated request used to issue `SELECT * FROM users WHERE id=?`,
+// which on Fly BOM → Neon Singapore is ~80ms of pure round-trip per request.
+// Multiplied across the 5+ requests an admin page fires that's ~400ms of
+// auth overhead alone. We cache the auth-relevant subset of the user row in
+// Upstash for 30s, keyed by userId, and the writes that change any cached
+// field call `invalidateAuthUserCache(userId)` so disable/freeze/force-logout
+// take effect immediately instead of waiting for the TTL.
+//
+// Date columns are stored as unix-ms numbers because RedisCache uses JSON
+// serialisation — Date instances would round-trip as ISO strings and silently
+// break `.getTime()` consumers. Numbers are explicit and impossible to
+// misuse.
+//
+// `null` is cacheable: a missing user row (deleted between JWT issue and the
+// next request) is itself a definitive answer, no point re-querying every
+// time. The TTL is short enough that re-creation within 30s is fine.
+type CachedAuthUser = {
+  id: number;
+  isDisabled: boolean;
+  isFrozen: boolean;
+  isAdmin: boolean;
+  isSmokeTest: boolean;
+  /** unix ms; null if no force-logout cutoff is set */
+  forceLogoutAfter: number | null;
+  activeSessionFingerprint: string | null;
+  /** unix ms; null if the user has never claimed a fingerprint */
+  activeSessionLastSeen: number | null;
+};
+
+const authUserCache = new RedisCache<CachedAuthUser | null>({
+  getRedis: getRedisConnection,
+  namespace: "auth-user",
+  ttlMs: 30_000,
+  fallback: new TTLCache<CachedAuthUser | null>(30_000),
+});
+
+/**
+ * Drop the cached auth user for `userId`. MUST be called after any write
+ * that changes one of the fields cached above (isDisabled, isFrozen,
+ * isAdmin, forceLogoutAfter, activeSessionFingerprint, activeSessionLastSeen).
+ * Cheap (single Redis DEL); failures are logged inside RedisCache and do
+ * not throw.
+ */
+export async function invalidateAuthUserCache(userId: number): Promise<void> {
+  await authUserCache.invalidate(`u:${userId}`);
+}
+
 export async function authMiddleware(req: AuthRequest, res: Response, next: NextFunction) {
   const authHeader = req.headers["authorization"];
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -72,8 +123,21 @@ export async function authMiddleware(req: AuthRequest, res: Response, next: Next
   const token = authHeader.substring(7);
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as { userId: number; isAdmin: boolean; iat?: number };
-    const users = await db.select().from(usersTable).where(eq(usersTable.id, decoded.userId)).limit(1);
-    const user = users[0];
+    const { value: user } = await authUserCache.getOrCompute(`u:${decoded.userId}`, async () => {
+      const users = await db.select().from(usersTable).where(eq(usersTable.id, decoded.userId)).limit(1);
+      const u = users[0];
+      if (!u) return null;
+      return {
+        id: u.id,
+        isDisabled: u.isDisabled,
+        isFrozen: u.isFrozen,
+        isAdmin: u.isAdmin,
+        isSmokeTest: u.isSmokeTest,
+        forceLogoutAfter: u.forceLogoutAfter?.getTime() ?? null,
+        activeSessionFingerprint: u.activeSessionFingerprint,
+        activeSessionLastSeen: u.activeSessionLastSeen?.getTime() ?? null,
+      };
+    });
     if (!user || user.isDisabled || (user.isFrozen && !user.isAdmin)) {
       res.status(401).json({ error: "Account access is restricted" });
       return;
@@ -101,7 +165,7 @@ export async function authMiddleware(req: AuthRequest, res: Response, next: Next
       });
       return;
     }
-    if (user.forceLogoutAfter && decoded.iat && decoded.iat * 1000 < user.forceLogoutAfter.getTime()) {
+    if (user.forceLogoutAfter && decoded.iat && decoded.iat * 1000 < user.forceLogoutAfter) {
       res.status(401).json({ error: "Session expired" });
       return;
     }
@@ -120,13 +184,19 @@ export async function authMiddleware(req: AuthRequest, res: Response, next: Next
     ) {
       const fp = computeDeviceFingerprint(req);
       if (fp === user.activeSessionFingerprint) {
-        const lastSeenMs = user.activeSessionLastSeen?.getTime() ?? 0;
+        const lastSeenMs = user.activeSessionLastSeen ?? 0;
         if (Date.now() - lastSeenMs > 30_000) {
           // Fire-and-forget: never block the request on this update.
+          // Also invalidate the auth-user cache so the next request picks
+          // up the fresh activeSessionLastSeen rather than the 30s-stale
+          // cached one. Without this the heartbeat would write but never
+          // be visible to the device-fingerprint check until the cache
+          // entry expired.
           void db
             .update(usersTable)
             .set({ activeSessionLastSeen: new Date() })
             .where(eq(usersTable.id, decoded.userId))
+            .then(() => invalidateAuthUserCache(decoded.userId))
             .catch(() => { /* heartbeat is best-effort */ });
         }
       }
