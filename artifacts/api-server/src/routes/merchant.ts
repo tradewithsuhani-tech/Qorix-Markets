@@ -93,7 +93,14 @@ router.get("/merchant/me", async (req: MerchantAuthRequest, res) => {
   res.json({ merchant: rows[0] ?? null });
 });
 
-// ─── Dashboard KPI counts ──────────────────────────────────────────────────
+// ─── Dashboard KPI counts + INR wallet snapshot ────────────────────────────
+// Returns the live action-queue counts AND the merchant's wallet balance so
+// the merchant panel can show how much INR they have parked with the
+// platform (admin top-ups land here) and how much is currently locked up
+// against pending user deposits ("pendingHold"). `available` is the
+// spendable headroom — what new user deposits can still be matched against
+// this merchant before they have to top up again. Mirrors the shape that
+// /admin/merchants returns per merchant so both panels stay in sync.
 router.get("/merchant/dashboard", async (req: MerchantAuthRequest, res) => {
   const merchantId = req.merchantId!;
   // Pending deposits scoped to my methods
@@ -124,7 +131,36 @@ router.get("/merchant/dashboard", async (req: MerchantAuthRequest, res) => {
     .select({ totalMethods: sql<number>`count(*)::int` })
     .from(paymentMethodsTable)
     .where(eq(paymentMethodsTable.merchantId, merchantId));
-  res.json({ pendingDeposits, pendingWithdrawals, totalMethods });
+  // Wallet snapshot — same correlated-subquery pattern as
+  // routes/admin-merchants.ts so the two surfaces never disagree. We use
+  // the literal `merchants.id` inside the subquery (not a Drizzle column
+  // ref) because a column ref renders as the bare identifier "id" which
+  // would be ambiguous against payment_methods.id and 500 the endpoint —
+  // exact same trap admin-merchants.ts comments call out.
+  const [walletRow] = await db
+    .select({
+      inrBalance: merchantsTable.inrBalance,
+      pendingHold: sql<string>`coalesce((
+        select sum(d.amount_inr)::text
+        from inr_deposits d
+        join payment_methods pm on pm.id = d.payment_method_id
+        where pm.merchant_id = merchants.id and d.status = 'pending'
+      ), '0')`,
+    })
+    .from(merchantsTable)
+    .where(eq(merchantsTable.id, merchantId))
+    .limit(1);
+  const inrBalance = (walletRow?.inrBalance as string | null) ?? "0";
+  const pendingHold = walletRow?.pendingHold ?? "0";
+  const available = (parseFloat(inrBalance) - parseFloat(pendingHold)).toFixed(2);
+  res.json({
+    pendingDeposits,
+    pendingWithdrawals,
+    totalMethods,
+    inrBalance,
+    pendingHold,
+    available,
+  });
 });
 
 // ─── Payment methods (own only) ────────────────────────────────────────────
