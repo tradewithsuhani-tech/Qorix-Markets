@@ -167,7 +167,9 @@ export default function AdminMerchantsPage() {
               Couldn't load merchants
             </div>
             <div className="text-xs text-slate-400">
-              {(error as Error)?.message ?? "Unknown error"}
+              {error instanceof Error
+                ? error.message
+                : String(error ?? "Unknown error")}
             </div>
           </div>
         ) : !data?.merchants.length ? (
