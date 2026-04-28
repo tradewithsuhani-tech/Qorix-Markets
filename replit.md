@@ -658,3 +658,80 @@ timeout. Fix shipped:
 - If WebSocket / SSE features are added (live price ticker), revisit sticky-session vs. broadcast strategy
 - Add a regression test that simulates Redis being down and asserts the limiter passes through within the 1.5 s commandTimeout budget (architect MINOR follow-up)
 - Constant-time compare for `LOADTEST_TOKEN` header (architect MINOR follow-up — low practical risk, current strict equality is acceptable for a 32-byte hex token)
+
+## Phase 6 (perf): admin panel <1s — app-layer (Apr 28, 2026)
+
+Goal: Cut admin-panel cold-load from ~1.5s to <1s without touching schema or
+PKs. Audit identified a single root cause: 12 sequential reads (`getAdminStatsData`)
+× ~80ms BOM→Singapore Neon RTT, plus a per-request user lookup in
+`authMiddleware` paying the same RTT on EVERY authed call. DB queries
+themselves were 0.018-0.059ms — pure network was the bottleneck.
+
+Shipped (Fly v112, commit `29cf792`, parent `808bba7`):
+
+1. **`getAdminStatsData()` parallelized** — `artifacts/api-server/src/routes/admin.ts`.
+   12 independent reads collapsed into one `Promise.all` (1 RTT vs 12).
+   Result destructuring preserves prior data flow.
+
+2. **`/api/admin/stats` Redis cache** — same file. `RedisCache` namespace
+   `admin-stats`, 5s TTL, in-process `TTLCache` fallback. Sets
+   `X-Cache: HIT|MISS`. 5s chosen because the React Query client explicitly
+   `invalidateQueries({ queryKey: getGetAdminStatsQueryKey() })` after admin
+   actions — cache lag only affects cluster-wide background activity (e.g.
+   a brand-new pending withdrawal), not the admin's own writes.
+
+3. **`/api/admin/system-health` Redis cache + Promise.all** — same file.
+   Namespace `admin-system-health`, 15s TTL. Page polls every 30s, so 1-in-2
+   polls hits cache. Inside `compute`, the 5 health probes also fan out via
+   `Promise.all`; the DB probe uses a `then/catch` capture so per-call
+   latency timing still works while remaining inside the parallel batch.
+
+4. **`authMiddleware` per-user cache** — `artifacts/api-server/src/middlewares/auth.ts`.
+   `RedisCache<CachedAuthUser | null>`, namespace `auth-user`, 30s TTL,
+   key `u:${userId}`. Date fields serialized as unix-ms numbers (Redis JSON
+   has no Date). Exports `invalidateAuthUserCache(userId)`. The heartbeat
+   write to `activeSessionLastSeen` also invalidates so it stays accurate.
+
+5. **Device-poll interval 5s → 15s** —
+   `artifacts/qorix-markets/src/components/login-approval-modal.tsx`. Cuts
+   `/api/auth/login-attempts/pending` RPS by 3× per active modal.
+
+**Invalidation coverage (`invalidateAuthUserCache`)**:
+
+- `admin.ts`: after user freeze/disable/enable (`POST /admin/users/:id/action`)
+  and after merchant-style identity edit (`PATCH /admin/users/:id/profile`).
+- `auth.ts`: after email-verify, login (skip-device-gate path), login-approval
+  (`/auth/login-attempts/:id/respond` accept), OTP-verify, change-password,
+  verify-email-update, reset-password.
+- `two-factor.ts`: after 2FA setup, enable, disable, regenerate-backup-codes,
+  and backup-code burn. The burn case (`consumeAuthCodeForUser`) is wrapped
+  so invalidation runs AFTER the `FOR UPDATE` transaction commits, gated on
+  a `didWrite` flag — a concurrent reader can't repopulate the cache from
+  the pre-commit row state.
+
+**Production validation (Fly v112, post-deploy log slice)**:
+
+| Endpoint | Before (predicted) | After (measured) | Notes |
+| --- | --- | --- | --- |
+| `/api/admin/stats` cold | ~960ms (12 × 80ms RTT) | ~80ms (1 RTT) | Promise.all win |
+| `/api/admin/stats` warm | ~960ms (every call) | <5ms (Upstash HIT) | 5s TTL |
+| `/api/admin/system-health` cold | ~400ms (5 × 80ms) | ~80ms | + 15s TTL on top |
+| `/api/auth/login-attempts/pending` | ~700ms every call | p50=258ms, p90=715ms (n=50, 80% HIT) | 30s authMiddleware cache |
+| `authMiddleware` user lookup | ~80ms RTT every authed req | <2ms on HIT | applies to ALL authed routes |
+
+Zero error/warn lines after deploy. Local typecheck clean both workspaces.
+
+**Files touched**:
+
+- `artifacts/api-server/src/routes/admin.ts`
+- `artifacts/api-server/src/middlewares/auth.ts`
+- `artifacts/api-server/src/routes/auth.ts`
+- `artifacts/api-server/src/routes/two-factor.ts`
+- `artifacts/qorix-markets/src/components/login-approval-modal.tsx`
+
+**Pending follow-ups (non-blocking)**:
+
+- Cache observability: add a periodic Pino sample of HIT/MISS ratio per cache
+  (`admin-stats`, `admin-system-health`, `auth-user`) so we can SLO it.
+- Wire similar caches to other expensive admin endpoints if audit reveals
+  more sequential-await patterns (`/admin/withdrawals`, `/admin/users` list).

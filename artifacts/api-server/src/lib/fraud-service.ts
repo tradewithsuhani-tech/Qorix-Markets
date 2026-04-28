@@ -2,6 +2,7 @@ import { db, usersTable, loginEventsTable, fraudFlagsTable, transactionsTable, i
 import { eq, and, ne, inArray, gte, count, sql, desc, notExists } from "drizzle-orm";
 import { logger } from "./logger";
 import { isSmokeTestUser } from "./smoke-test-account";
+import { invalidateAuthUserCache } from "../middlewares/auth";
 import crypto from "crypto";
 
 // Subquery that excludes the deploy smoke-test account from any login_events
@@ -126,6 +127,10 @@ async function raiseFraudFlag(
           .update(usersTable)
           .set({ isFrozen: true })
           .where(eq(usersTable.id, userId));
+        // Phase 6: invalidate auth-user cache so the auto-freeze takes effect
+        // on the user's NEXT request — without this they keep operating for
+        // up to 30s (authMiddleware cache TTL) after being flagged.
+        await invalidateAuthUserCache(userId);
         logger.error({ userId, highFlagCount: highCount?.cnt }, "fraud-service: AUTO-FROZEN account due to repeated high-severity flags");
       }
     }
