@@ -127,6 +127,31 @@ export function invalidateMaintenanceCache(): void {
   cached = null;
 }
 
+// Synchronous, cache-only read of the merged maintenance state. Returns the
+// in-memory cached value if it's still within CACHE_TTL_MS, otherwise null.
+//
+// This exists for ONE caller: the early /api/healthz handler in app.ts,
+// which is mounted before maintenanceMiddleware so a saturated pg pool can
+// never hang the Fly load-balancer probe. The async getMaintenanceState()
+// can wait indefinitely on a free connection when the pool is exhausted
+// (statement_timeout only starts ticking AFTER the query begins executing),
+// which is exactly what produced the "no known healthy instances" cascade
+// during the 2026-04-28 incident.
+//
+// On cache miss we return null and the caller is expected to skip the
+// maintenance-related side-effect (e.g. simply omit the X-Maintenance-Mode
+// header on this one probe). The cache is warmed by:
+//   - the very next /api request that flows through maintenanceMiddleware
+//     (typically within a single request RTT), or
+//   - a NOTIFY broadcast from another instance via the LISTEN fan-out
+//     (typically tens of milliseconds after an admin toggle).
+// Either way the warm-up window is well under the 5s LB probe interval, so
+// in steady state every probe will carry the header.
+export function peekMaintenanceState(): MaintenanceState | null {
+  if (cached && Date.now() - cached.at < CACHE_TTL_MS) return cached.state;
+  return null;
+}
+
 // Test-only: returns the backend PID of the live LISTEN connection (or null
 // if the listener isn't currently connected). Used by the reconnect
 // regression test to forcibly terminate the LISTEN backend via

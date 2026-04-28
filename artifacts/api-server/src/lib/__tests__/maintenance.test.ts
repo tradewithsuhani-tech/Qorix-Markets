@@ -28,6 +28,16 @@ before(async () => {
   // Cache invalidate so the env var we just set is picked up by the very
   // first request (rather than only after the 5s TTL).
   invalidateMaintenanceCache();
+  // Warm the in-memory maintenance cache before the first probe. The
+  // /api/healthz handler is now mounted BEFORE maintenanceMiddleware (so a
+  // saturated pg pool can never hang the Fly LB probe) and reads the
+  // X-Maintenance-Mode header from a synchronous cache peek — no DB
+  // round-trip on the probe path. In production the cache warms naturally
+  // on the first real /api request that flows through the middleware (or
+  // via a LISTEN/NOTIFY broadcast); the test mirrors that warming
+  // explicitly so the very first /api/healthz request below sees the
+  // seeded MAINTENANCE_MODE state instead of a cold cache.
+  await getMaintenanceState();
   await new Promise<void>((resolve, reject) => {
     server = app.listen(0, (err?: Error) => (err ? reject(err) : resolve()));
   });
