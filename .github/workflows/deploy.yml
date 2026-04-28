@@ -172,6 +172,25 @@ jobs:
             --config artifacts/api-server/fly.toml \
             --dockerfile artifacts/api-server/Dockerfile \
             --wait-timeout 600
+      # ─── Worker process scale guarantee ──────────────────────────────────
+      # Phase 2 of the 2026-04-28 perf fix split api-server into two process
+      # groups:
+      #   app    → public HTTP only       (machine count managed by
+      #                                    [http_service.min_machines_running])
+      #   worker → cron + Tron monitor + Telegram poller + BullMQ workers
+      # `flyctl deploy` creates the worker machine on the first deploy after
+      # [processes] is added to fly.toml, but it does NOT recreate it on
+      # subsequent deploys if the machine was ever destroyed or scaled to 0.
+      # This step is the idempotent safety net — it pins worker count to 1
+      # in the primary region (bom) on every deploy. Bump the value here
+      # when we want HA on the worker (the cron handlers and the Tron
+      # monitor are designed to be single-writer, so multi-worker needs
+      # additional locking before increasing the count).
+      - name: Ensure worker process is scaled to 1 in BOM
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          flyctl scale count worker=1 -a qorix-api --region bom --yes
       # Post-deploy smoke check. `flyctl deploy` only proves the container
       # started — these curls prove the API is actually reachable, that the
       # Neon connection works, AND that the auth pipeline (login + JWT verify
