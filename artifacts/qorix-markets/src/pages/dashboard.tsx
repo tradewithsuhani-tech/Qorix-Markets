@@ -58,15 +58,7 @@ function PointsPill() {
   const [, navigate] = useLocation();
   const { data } = useQuery<{ balance: number }>({
     queryKey: ["/api/points"],
-    queryFn: async () => {
-      let token: string | null = null;
-      try { token = localStorage.getItem("qorix_token"); } catch {}
-      const res = await fetch("/api/points", {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      if (!res.ok) throw new Error("Failed to load points");
-      return res.json();
-    },
+    queryFn: () => authFetch("/api/points"),
     refetchInterval: 300_000,
   });
   const balance = data?.balance ?? 0;
