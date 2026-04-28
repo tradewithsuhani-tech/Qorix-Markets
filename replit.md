@@ -838,3 +838,78 @@ backend call.
   in prod.
 - If we add more admin sub-pages with similar fan-outs (`/admin/users`,
   `/admin/intelligence`), apply the same aggregator pattern.
+
+### Phase 7.3 (Apr 28, 2026): admin sub-page over-fetch + favicon spam
+
+User reported 100+ requests on `/admin/users` (sub-page, not main `/admin`).
+DevTools showed 17+ duplicate `qorix-favicon.png?v=4` fetches per page-load
+and `users?limit=100` + `transactions?limit=120` over-fetches.
+
+**Root causes**:
+
+1. **`index.html` had 8 favicon-related `<link>` tags** (3 sized PNGs + 1
+   icon-192 + 1 shortcut + 3 apple-touch-icon variants). Each `?v=4`
+   cache-buster meant browser couldn't dedupe via 304s. With dev tools
+   "Disable cache" + Vite HMR re-emitting `<head>` on each tab nav, the
+   browser fired 15-20 redundant fetches per page-load.
+2. **`admin-modules.tsx` is hand-rolled `adminFetch()`** (NOT React Query),
+   so Phase 7.1's QueryClient defaults don't apply to its sub-pages. It
+   was also pulling 100 users + 120 transactions per page-load when only
+   ~20 fit on screen (in-page search filters client-side).
+3. **`/api/admin/dashboard` aggregator is on `/admin` main page only** —
+   sub-pages (`/admin/users`, `/admin/transactions`, …) load disjoint
+   datasets and can't share a single aggregator. Each sub-page needed its
+   own surgical fix.
+
+**Shipped (commit pending push to origin/main)**:
+
+- `artifacts/qorix-markets/index.html` — 8 favicon link tags → 2 (one
+  `<link rel="icon">` + one `<link rel="apple-touch-icon">`). Modern
+  browsers pick the best icon from the `rel="icon"` list and iOS uses
+  `apple-touch-icon`; sized variants are not needed for a single PNG
+  source. Dropped `/icon-192.png?v=4` from the favicon list (still in
+  manifest.json as the PWA install icon, where it belongs).
+- `artifacts/qorix-markets/src/pages/admin-modules.tsx` — `AdminUsersPage`
+  limit `100 → 20` + **server-side debounced search** (300ms, query
+  forwarded as `?q=`). `AdminTransactionsPage` limit `120 → 20` (already
+  filtered server-side by `type` + `status`).
+- `artifacts/api-server/src/routes/admin.ts` — added optional `?q=` param
+  on `/admin/users` (case-insensitive ILIKE on `email`, `fullName`,
+  `referralCode`, combined with the existing smoke-test filter via
+  `and()`). LIKE wildcards (`%`, `_`, `\`) in user input are escaped to
+  prevent search-term injection / accidental wildcard matching. Without
+  this, the limit cut would have caused false-negative searches (admin
+  searches for a user not in the latest 20 → "no users found", but the
+  user actually exists). Caught by the architect code review pre-push.
+
+**Code review (architect, evaluate_task)**: initially flagged the naked
+limit cut as a HIGH correctness risk for admin user search. Resolved by
+adding `?q=` server-side support before committing the limit reduction.
+Re-verified: both workspaces typecheck clean; `/admin/users?q=test` and
+`/admin/users` both return 401 (auth gate intact, route mounted).
+
+**Not changed (intentional)**:
+
+- `artifacts/qorix-markets/src/pages/transactions.tsx:72` (user's own
+  trade history page) still uses `useGetTransactions({ limit: 100 })` —
+  user explicitly mentioned the **admin** users limit, not their own
+  transactions page; touching it would silently truncate their visible
+  history.
+- `sw.js` is dead-code (no `register()` call anywhere; `main.tsx`
+  unregisters any pre-existing SW on every load) but left in /public to
+  match the manifest reference and avoid breaking PWA install paths.
+
+**Predicted impact (admin sub-pages, e.g. `/admin/users`)**:
+
+| Metric | Before Phase 7.3 | After Phase 7.3 |
+| --- | --- | --- |
+| Total requests on cold load | 100+ (mostly favicon spam) | <20 |
+| Favicon fetches per load | 15-20 | 1-2 |
+| Users payload | 100 rows (~50KB) | 20 rows (~10KB) |
+| Transactions payload | 120 rows (~75KB) | 20 rows (~12KB) |
+
+**Verification (local)**: `pnpm typecheck` clean both workspaces. Web
+workflow restarted; admin sub-page renders.
+
+**Ready to push**: commit + Fly deploy via `tools/push-commit.sh` (GitHub
+API → CI → Fly v113+).

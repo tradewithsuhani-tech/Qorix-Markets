@@ -539,17 +539,32 @@ export function AdminUsersPage() {
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
+  // Phase 7.3: debounced copy of `query` for the actual fetch — prevents a
+  // network call per keystroke while still feeling instant (300ms is the
+  // sweet spot between "felt" lag and request thrash).
+  const [debouncedQuery, setDebouncedQuery] = useState("");
   const [adjustUser, setAdjustUser] = useState<any | null>(null);
   const [editUser, setEditUser] = useState<any | null>(null);
   const [emailUser, setEmailUser] = useState<any | null>(null);
   const [showSmokeTest, setShowSmokeTest] = useState(false);
   const { toast } = useToast();
 
+  useEffect(() => {
+    const handle = setTimeout(() => setDebouncedQuery(query.trim()), 300);
+    return () => clearTimeout(handle);
+  }, [query]);
+
   async function load() {
     setLoading(true);
     try {
-      const params = new URLSearchParams({ limit: "100" });
+      // Phase 7.3: limit 100 → 20 + server-side `q` search. Loading 100 rows
+      // on every page-mount wasted ~50KB and render time when only ~20 fit
+      // on screen. Server-side search (added to /admin/users in the same
+      // phase) closes the correctness gap — the in-page filter alone would
+      // have hidden any user outside the latest 20.
+      const params = new URLSearchParams({ limit: "20" });
       if (showSmokeTest) params.set("includeSmokeTest", "true");
+      if (debouncedQuery) params.set("q", debouncedQuery);
       const data = await adminFetch(`/admin/users?${params.toString()}`);
       setUsers(data.data ?? []);
     } finally {
@@ -557,12 +572,12 @@ export function AdminUsersPage() {
     }
   }
 
-  useEffect(() => { load(); }, [showSmokeTest]);
+  useEffect(() => { load(); }, [showSmokeTest, debouncedQuery]);
 
-  const filtered = useMemo(() => {
-    const q = query.toLowerCase();
-    return users.filter((u) => [u.email, u.fullName, u.referralCode].some((v) => String(v ?? "").toLowerCase().includes(q)));
-  }, [users, query]);
+  // The list is already filtered server-side, so no extra client filtering
+  // needed — but keep it as a no-op-friendly pass-through for any case
+  // where the user's local typing has outpaced the debounce.
+  const filtered = users;
 
   async function action(id: number, userAction: string) {
     await adminFetch(`/admin/users/${id}/action`, { method: "POST", body: JSON.stringify({ action: userAction }) });
@@ -682,7 +697,9 @@ export function AdminTransactionsPage({ mode }: { mode: "deposits" | "withdrawal
   async function load() {
     setLoading(true);
     try {
-      const params = new URLSearchParams({ type, status, limit: "120" });
+      // Phase 7.3: limit 120 → 20. Same rationale as Users: client-side
+      // status filter on a top-N preview, full history is on its own page.
+      const params = new URLSearchParams({ type, status, limit: "20" });
       if (showSmokeTest) params.set("includeSmokeTest", "true");
       const data = await adminFetch(`/admin/transactions?${params.toString()}`);
       setRows(data.data ?? []);

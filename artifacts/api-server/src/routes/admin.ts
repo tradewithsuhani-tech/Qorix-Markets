@@ -13,7 +13,7 @@ import {
   signalTradesTable,
 } from "@workspace/db";
 import { loginEventsTable, blockchainDepositsTable, serviceSubscriptionsTable } from "@workspace/db/schema";
-import { eq, ne, sum, count, and, or, desc, sql, inArray, isNotNull } from "drizzle-orm";
+import { eq, ne, sum, count, and, or, desc, sql, inArray, isNotNull, ilike } from "drizzle-orm";
 import { createNotification } from "../lib/notifications";
 import { authMiddleware, adminMiddleware, getParam, getQueryInt, getQueryString, invalidateAuthUserCache, type AuthRequest } from "../middlewares/auth";
 import { RedisCache } from "../lib/cache/redis-cache";
@@ -283,7 +283,30 @@ router.get("/admin/users", async (req, res) => {
   // Hide the deploy smoke-test account from the admin user list by default,
   // with an opt-in via `?includeSmokeTest=true` for support/debug.
   const includeSmoke = shouldIncludeSmokeTest(req.query["includeSmokeTest"]);
-  const usersFilter = includeSmoke ? undefined : notSmokeTestUser();
+  const smokeFilter = includeSmoke ? undefined : notSmokeTestUser();
+
+  // Phase 7.3: server-side search by email / fullName / referralCode.
+  // Without this, when the admin reduces `limit` to 20 the in-page filter
+  // can only see the loaded slice and would falsely report "user not
+  // found" for anyone outside the latest 20. ILIKE is case-insensitive
+  // and does an index scan if a trigram/expression index exists; without
+  // one it's a seq scan, but the users table is bounded (<10k rows in
+  // prod) so this is fine for an admin-only path.
+  const rawQ = getQueryString(req, "q", "").trim();
+  // Escape SQL LIKE wildcards (`%` and `_`) and the escape char (`\`)
+  // so a search for "50%" doesn't accidentally match every row.
+  const escapedQ = rawQ.replace(/[\\%_]/g, (c) => `\\${c}`);
+  const searchFilter = escapedQ
+    ? or(
+        ilike(usersTable.email, `%${escapedQ}%`),
+        ilike(usersTable.fullName, `%${escapedQ}%`),
+        ilike(usersTable.referralCode, `%${escapedQ}%`),
+      )
+    : undefined;
+
+  const usersFilter = smokeFilter && searchFilter
+    ? and(smokeFilter, searchFilter)
+    : (smokeFilter ?? searchFilter);
 
   const [totalResult] = await db
     .select({ count: count() })
