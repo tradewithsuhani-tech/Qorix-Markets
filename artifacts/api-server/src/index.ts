@@ -27,6 +27,27 @@ import {
 // soft user-write freeze, not a process-level kill switch. Operators who
 // need to stop workers mid-flight should restart the API.
 
+// ─── Per-process role on Fly (web vs worker split) ─────────────────────────
+// Fly auto-sets `FLY_PROCESS_GROUP` from fly.toml's [processes] block. We
+// run the same image as two process groups so cron / Tron monitor /
+// Telegram poller / BullMQ workers never compete with web requests for the
+// same DB pool slots:
+//
+//   app    → web HTTP only         → RUN_BACKGROUND_JOBS=false
+//   worker → background jobs only  → RUN_BACKGROUND_JOBS=true
+//
+// The override is performed here (top-level, before main() runs) so that
+// `shouldRunBackgroundJobs()` reads the correct value in registerBackgroundJobs.
+// Outside Fly (Replit dev, local), FLY_PROCESS_GROUP is unset and we fall
+// back to the env var (defaults to "true" so single-process devs keep
+// running cron locally).
+const flyProcessGroup = process.env["FLY_PROCESS_GROUP"];
+if (flyProcessGroup === "worker") {
+  process.env["RUN_BACKGROUND_JOBS"] = "true";
+} else if (flyProcessGroup === "app") {
+  process.env["RUN_BACKGROUND_JOBS"] = "false";
+}
+
 async function main() {
   await ensureRedisRunning();
   await initSystemAccounts();

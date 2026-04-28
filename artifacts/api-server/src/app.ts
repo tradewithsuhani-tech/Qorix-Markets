@@ -61,6 +61,49 @@ if (corsOriginEnv) {
 app.use(express.json({ limit: "12mb" }));
 app.use(express.urlencoded({ extended: true }));
 
+// ─── Health probe — mounted BEFORE every other middleware ──────────────────
+// Fly's load balancer pulls an instance out of rotation if /api/healthz
+// doesn't return 200 within `[[http_service.checks]].timeout` (5s in
+// fly.toml). The maintenance middleware below is *almost* free (in-memory
+// TTL cache) but on a cold cache it issues a DB SELECT, and during the
+// 2026-04-28 incident that single query queued behind an exhausted pool
+// for 80+ seconds — which is what produced the "no known healthy
+// instances" cascade. A zero-dependency healthz handler mounted at the
+// very top guarantees the probe ALWAYS returns immediately, regardless of
+// DB / cache / cron state on this instance.
+app.get("/api/healthz", (_req, res) => {
+  res.json({ status: "ok" });
+});
+
+// ─── Request-level safety-net timeout ──────────────────────────────────────
+// Server-side cap so a single stuck handler (DB pool starvation, runaway
+// upstream HTTP call, etc.) cannot tie up a Node socket forever. We send
+// a structured 503 to the client at 30s; the underlying DB query, if any,
+// is killed sooner by `statement_timeout=10s` on the pg pool (lib/db).
+// The handler may still finish in the background — `res.headersSent`
+// guards against double-send — but the client gets a fast, predictable
+// failure instead of a 200s wait.
+//
+// /healthz is exempted: a timed-out probe would trigger the very
+// "no healthy instance" cascade this whole file is designed to prevent.
+const REQUEST_TIMEOUT_MS = 30_000;
+app.use((req, res, next) => {
+  if (req.path === "/api/healthz" || req.path === "/healthz") return next();
+  const t = setTimeout(() => {
+    if (res.headersSent) return;
+    logger.warn(
+      { method: req.method, url: req.url, timeoutMs: REQUEST_TIMEOUT_MS },
+      "Request exceeded server-side timeout — returning 503",
+    );
+    res
+      .status(503)
+      .json({ error: "Request timed out", code: "request_timeout" });
+  }, REQUEST_TIMEOUT_MS);
+  res.on("close", () => clearTimeout(t));
+  res.on("finish", () => clearTimeout(t));
+  next();
+});
+
 // Maintenance gate sits in front of every /api route. When MAINTENANCE_MODE=true
 // (set as a Fly secret during the cutover window) it lets reads through with a
 // header marker and rejects writes with a structured 503 — replacing the blunt

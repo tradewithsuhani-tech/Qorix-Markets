@@ -13,7 +13,25 @@ primary_region = 'bom'
   CORS_ORIGIN = 'https://qorixmarkets.com,https://www.qorixmarkets.com,https://qorix-markets-web.fly.dev'
   NODE_ENV = 'production'
   PORT = '8080'
-  RUN_BACKGROUND_JOBS = 'true'
+  # RUN_BACKGROUND_JOBS is intentionally NOT set here. src/index.ts derives
+  # it from FLY_PROCESS_GROUP (auto-set by Fly per process group below):
+  #   app    → false  (web HTTP traffic only)
+  #   worker → true   (cron + Tron monitor + Telegram poller + BullMQ workers)
+  # Setting it here would override the per-process logic and re-create the
+  # 2026-04-28 pool-exhaustion incident.
+
+# ─── Process groups: web vs worker split ───────────────────────────────────
+# Splits the running container into two roles backed by the same image:
+#   app    → fronted by [http_service] below, serves /api/* HTTP requests.
+#   worker → no public traffic; runs cron, on-chain watchers, Telegram poller,
+#            BullMQ workers (gated by RUN_BACKGROUND_JOBS, set per-process in
+#            src/index.ts via FLY_PROCESS_GROUP).
+# Each process group gets its own Fly machines and its own pg.Pool — so a
+# slow cron tick can no longer queue requests behind it, and a burst of
+# web traffic can no longer delay a cron tick.
+[processes]
+  app = 'node --enable-source-maps dist/index.mjs'
+  worker = 'node --enable-source-maps dist/index.mjs'
 
 [http_service]
   internal_port = 8080
@@ -35,3 +53,12 @@ primary_region = 'bom'
   size = 'shared-cpu-1x'
   memory = '1gb'
   processes = ['app']
+
+# Worker VM — same shape as the web VM. Sized identically because cron /
+# tron-monitor / Telegram poller workloads are I/O-bound (DB + RPC) and
+# fit comfortably in 1 GB. Bump to shared-cpu-2x / 2 GB only if we observe
+# CPU saturation or OOM after the split.
+[[vm]]
+  size = 'shared-cpu-1x'
+  memory = '1gb'
+  processes = ['worker']
