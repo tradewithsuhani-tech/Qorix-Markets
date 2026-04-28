@@ -14,6 +14,7 @@ const {
   loginEventsTable,
 } = await import("@workspace/db");
 const { eq } = await import("drizzle-orm");
+const { teardownHttpServer, teardownRedis } = await import("./cleanup");
 
 // Mirror admin-smoke-test-filter.test.ts: forge a JWT against the same secret
 // authMiddleware uses, dropping back to the dev default if SESSION_SECRET is
@@ -206,7 +207,7 @@ before(async () => {
 
 after(async () => {
   try {
-    await new Promise<void>((resolve) => server.close(() => resolve()));
+    await teardownHttpServer(server);
   } finally {
     try {
       // Best-effort cleanup of every row we inserted. Each delete is scoped
@@ -233,6 +234,7 @@ after(async () => {
           .where(eq(systemSettingsTable.key, "admin_ip_whitelist"));
       }
     } finally {
+      await teardownRedis();
       await pool.end();
     }
   }

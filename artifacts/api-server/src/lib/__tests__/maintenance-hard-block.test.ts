@@ -41,6 +41,7 @@ const {
 } = await import("../../middlewares/maintenance");
 const { signToken } = await import("../../middlewares/auth");
 const { eq, inArray, sql } = await import("drizzle-orm");
+const { teardownHttpServer, teardownRedis } = await import("./cleanup");
 
 // Re-seed the maintenance rows + drop the in-memory cache. node:test runs
 // each *.test.ts file in its own worker process IN PARALLEL by default, and
@@ -153,7 +154,7 @@ before(async () => {
 });
 
 after(async () => {
-  await new Promise<void>((resolve) => server.close(() => resolve()));
+  await teardownHttpServer(server);
   // Clean up the rows we wrote so other suites get a clean baseline.
   await db
     .delete(systemSettingsTable)
@@ -162,6 +163,7 @@ after(async () => {
     .delete(usersTable)
     .where(inArray(usersTable.email, [NON_ADMIN_EMAIL, ADMIN_EMAIL]));
   invalidateMaintenanceCache();
+  await teardownRedis();
   await pool.end();
 });
 
