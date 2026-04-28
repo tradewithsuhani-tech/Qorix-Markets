@@ -1,4 +1,4 @@
-import { useGetAdminStats, useGetPendingWithdrawals, useApproveWithdrawal, useRejectWithdrawal, useSetDailyProfit, useSetInvestorSlots } from "@workspace/api-client-react";
+import { useApproveWithdrawal, useRejectWithdrawal, useSetDailyProfit, useSetInvestorSlots } from "@workspace/api-client-react";
 import { Layout } from "@/components/layout";
 import { AnimatedCounter } from "@/components/animated-counter";
 import { motion } from "framer-motion";
@@ -16,16 +16,43 @@ import { format } from "date-fns";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 
-function useSystemHealth() {
+// Phase 7: Single aggregator hook. Replaces three independent React Query
+// subscriptions (useGetAdminStats + useGetPendingWithdrawals + useSystemHealth)
+// with ONE backend call to /admin/dashboard. The server fans out to its
+// existing per-route caches in parallel, so a warm dashboard returns in ~5ms
+// and a cold one pays one round-trip total instead of three sequential ones.
+//
+// 60s polling matches the slowest of the three previous hooks; the backend
+// caches the aggregate at 5s so a 60s client poll always pays a real compute
+// at most once per cycle.
+const ADMIN_DASHBOARD_QUERY_KEY = ["admin-dashboard"] as const;
+
+type AdminDashboardData = {
+  stats: any;
+  systemHealth: { status: string; checks: Record<string, { status: "ok" | "error"; latencyMs?: number; detail?: string }>; stats: any; timestamp: string };
+  pendingWithdrawals: Array<{
+    id: number;
+    userId: number;
+    userEmail: string;
+    userFullName: string;
+    amount: number;
+    walletAddress: string;
+    status: string;
+    requestedAt: string;
+    processedAt: string | null;
+  }>;
+};
+
+function useAdminDashboard() {
   return useQuery({
-    queryKey: ["admin-system-health"],
-    queryFn: async () => {
+    queryKey: ADMIN_DASHBOARD_QUERY_KEY,
+    queryFn: async (): Promise<AdminDashboardData> => {
       const t = localStorage.getItem("qorix_token");
-      const res = await fetch("/api/admin/system-health", { headers: t ? { Authorization: `Bearer ${t}` } : {} });
+      const res = await fetch("/api/admin/dashboard", { headers: t ? { Authorization: `Bearer ${t}` } : {} });
       if (!res.ok) throw new Error("failed");
       return res.json();
     },
-    refetchInterval: 30000,
+    refetchInterval: 60_000,
   });
 }
 
@@ -45,19 +72,37 @@ const QUICK_LINKS = [
 ];
 
 export default function AdminPage() {
-  const { data: stats, isLoading: statsLoading } = useGetAdminStats();
-  const { data: withdrawals, isLoading: wLoading } = useGetPendingWithdrawals();
-  const { data: health } = useSystemHealth();
+  // Phase 7: ONE call replaces three (stats + system-health + withdrawals).
+  // Destructured here so the rest of the JSX is unchanged — `stats`,
+  // `withdrawals`, and `health` keep the exact same shape the old hooks
+  // returned. `wLoading` reuses the aggregator's loading state since the
+  // withdrawals list and the rest of the dashboard now load together.
+  const { data: dashboard, isLoading: dashboardLoading } = useAdminDashboard();
+  const stats = dashboard?.stats;
+  const withdrawals = dashboard?.pendingWithdrawals;
+  const health = dashboard?.systemHealth;
+  const statsLoading = dashboardLoading;
+  const wLoading = dashboardLoading;
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [profitInput, setProfitInput] = useState("");
   const [slotsInput, setSlotsInput] = useState("");
+
+  // Phase 7: All mutation invalidations now ALSO invalidate the new
+  // dashboard aggregator key so this page refreshes immediately after a
+  // mutation. The old per-endpoint keys are kept because other admin
+  // sub-pages (/admin/withdrawals, /admin/users) still subscribe to them
+  // — invalidating both is harmless if a key has no subscribers.
+  const invalidateDashboard = () => {
+    queryClient.invalidateQueries({ queryKey: ADMIN_DASHBOARD_QUERY_KEY });
+  };
 
   const slotsMutation = useSetInvestorSlots({
     mutation: {
       onSuccess: () => {
         toast({ title: "Investor slots updated" });
         queryClient.invalidateQueries({ queryKey: getGetAdminStatsQueryKey() });
+        invalidateDashboard();
         setSlotsInput("");
       },
       onError: (err: any) => {
@@ -71,6 +116,7 @@ export default function AdminPage() {
       onSuccess: () => {
         toast({ title: "Withdrawal approved" });
         queryClient.invalidateQueries({ queryKey: getGetPendingWithdrawalsQueryKey() });
+        invalidateDashboard();
       }
     }
   });
@@ -80,6 +126,7 @@ export default function AdminPage() {
       onSuccess: () => {
         toast({ title: "Withdrawal rejected" });
         queryClient.invalidateQueries({ queryKey: getGetPendingWithdrawalsQueryKey() });
+        invalidateDashboard();
       }
     }
   });
@@ -89,6 +136,7 @@ export default function AdminPage() {
       onSuccess: () => {
         toast({ title: "Daily profit distributed", description: "All active users have been credited." });
         queryClient.invalidateQueries({ queryKey: getGetAdminStatsQueryKey() });
+        invalidateDashboard();
         setProfitInput("");
       },
       onError: (err: any) => {

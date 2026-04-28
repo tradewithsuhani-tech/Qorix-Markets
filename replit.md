@@ -735,3 +735,181 @@ Zero error/warn lines after deploy. Local typecheck clean both workspaces.
   (`admin-stats`, `admin-system-health`, `auth-user`) so we can SLO it.
 - Wire similar caches to other expensive admin endpoints if audit reveals
   more sequential-await patterns (`/admin/withdrawals`, `/admin/users` list).
+
+## Phase 7 (perf): admin dashboard <10 requests / <1s (Apr 28, 2026)
+
+Goal: Cut admin dashboard request count from 50+ per page-load to <10 and
+total interactive time to <1s. Phase 6 already cut per-endpoint latency;
+this phase cuts the request *count* via React Query defaults, polling
+backoff, and a server-side aggregator. ZERO schema changes, ZERO PK
+touches — pure app-layer.
+
+### Phase 7.1: frontend-only (React Query + polling backoff)
+
+- `artifacts/qorix-markets/src/App.tsx` — added QueryClient defaults:
+  `staleTime: 30s`, `gcTime: 5min`, `refetchOnWindowFocus: false`,
+  `refetchOnMount: false`, `retry: 1`. Eliminates cold-cache thrash on
+  every component mount and every tab focus.
+- `artifacts/qorix-markets/src/App.tsx` — MaintenanceGate `/system/status`
+  poll 60s → 5min. Ran on every page in-tree; only flips on a real
+  maintenance toggle.
+- `artifacts/qorix-markets/src/components/layout.tsx`:
+  - NotificationPanel poll 30s → 60s.
+  - NotificationBell poll 30s → 60s **and** changed query param
+    `limit: 10 → 20` so it shares the React Query cache key with
+    NotificationPanel (Bell + Panel now dedup to a single subscription).
+  - ProtectionBanner poll 10s → 60s (already `!isAdminArea` gated, so
+    admin pages were never paying this; this fixes the user-side dashboard).
+- `artifacts/qorix-markets/src/pages/admin.tsx` — useSystemHealth 30s → 60s
+  (backend caches at 15s, so 30s was hitting the cache twice/min for nothing).
+- `artifacts/qorix-markets/src/lib/version-check.ts` — POLL_INTERVAL_MS
+  60s → 5min. Version banner only flips after a fresh deploy; daily-ish
+  changes don't justify per-minute polling on every tab.
+
+### Phase 7.2: `/admin/dashboard` aggregator endpoint
+
+Three independent React Query subscriptions (`useGetAdminStats` +
+`useGetPendingWithdrawals` + `useSystemHealth`) collapsed into a single
+backend call.
+
+`artifacts/api-server/src/routes/admin.ts`:
+- Extracted `getSystemHealthData()` from inside the `/admin/system-health`
+  route handler so the aggregator can reuse the SAME compute path through
+  the same `adminSystemHealthCache`.
+- Extracted `getPendingWithdrawalsData({ includeSmoke, limit? })` from
+  inside the `/admin/withdrawals` route handler. Added optional `limit`
+  for the dashboard preview (top 10) — the full queue stays on
+  `/admin/withdrawals`.
+- Added `adminDashboardCache` (`namespace: "admin-dashboard"`, 5s Upstash
+  TTL with TTLCache fallback). **Critical**: includes `getRedis:
+  getRedisConnection` (omitting it caused TS2345 + per-instance memory-only
+  cache — caught by code review pre-push, fixed before deploy).
+- `getAdminDashboardData()` runs all three sub-computes in parallel via
+  Promise.all, each through its own cache. Cold worst case: one BOM→SIN
+  RTT total instead of three sequential. Warm: ~5ms Upstash HIT.
+- New route `GET /admin/dashboard` returns
+  `{ stats, systemHealth, pendingWithdrawals }`. Same `/admin` auth gate.
+
+`artifacts/qorix-markets/src/pages/admin.tsx`:
+- Replaced the 3 hooks with `useAdminDashboard()` — single call, 60s
+  polling. Destructured into `stats`/`withdrawals`/`health` so all
+  downstream JSX is byte-identical.
+- All 4 mutation onSuccess handlers (approve/reject/profit/slots) now also
+  invalidate `ADMIN_DASHBOARD_QUERY_KEY` (in addition to the existing
+  per-endpoint keys, so other admin sub-pages still refresh).
+
+### Verification (local dev, pre-push)
+
+- `pnpm --filter @workspace/api-server run typecheck` — clean.
+- Both refactored routes (`/admin/system-health`, `/admin/withdrawals`)
+  return 401 (auth gate) — proves refactor compiled and externally visible
+  behavior preserved.
+- New `/admin/dashboard` returns 401 — proves route mounted under same
+  admin auth middleware.
+- Code review (architect) — initially flagged HIGH: missing `getRedis` on
+  `adminDashboardCache`. Fixed in same session, re-verified typecheck
+  clean, route still mounts.
+
+### Predicted production impact (admin dashboard)
+
+| Metric | Before | After Phase 7 |
+| --- | --- | --- |
+| On-mount API calls | 7+ (stats + withdrawals + system-health + 2× notifications + system/status + version) | 4 (admin/dashboard + 1× notifications + system/status + version) |
+| Steady-state calls/min | ~9-10 (30s polling on 5 endpoints) | ~3.4 (60s on the unified endpoint, 5min on system/status + version) |
+| Cold load TTFB | 3 sequential RTTs (stats + health + withdrawals) | 1 RTT (parallel fan-out on server) |
+| Warm load TTFB | 3 RTTs | 1 RTT, ~5ms (Upstash HIT) |
+
+### Files touched
+
+- `artifacts/qorix-markets/src/App.tsx`
+- `artifacts/qorix-markets/src/components/layout.tsx`
+- `artifacts/qorix-markets/src/pages/admin.tsx`
+- `artifacts/qorix-markets/src/lib/version-check.ts`
+- `artifacts/api-server/src/routes/admin.ts`
+
+### Pending follow-ups (non-blocking)
+
+- Push to origin/main → trigger Fly deploy → measure actual request count
+  on the live admin dashboard with DevTools → compare against predicted.
+- Landing-page duplicate-call investigation (out of scope for admin perf):
+  `/api/system/status` and `/api/public/market-indicators` fire in pairs
+  every 60s on the public landing page. Likely a sibling-component
+  duplicate render or StrictMode double-mount in dev — needs verification
+  in prod.
+- If we add more admin sub-pages with similar fan-outs (`/admin/users`,
+  `/admin/intelligence`), apply the same aggregator pattern.
+
+### Phase 7.3 (Apr 28, 2026): admin sub-page over-fetch + favicon spam
+
+User reported 100+ requests on `/admin/users` (sub-page, not main `/admin`).
+DevTools showed 17+ duplicate `qorix-favicon.png?v=4` fetches per page-load
+and `users?limit=100` + `transactions?limit=120` over-fetches.
+
+**Root causes**:
+
+1. **`index.html` had 8 favicon-related `<link>` tags** (3 sized PNGs + 1
+   icon-192 + 1 shortcut + 3 apple-touch-icon variants). Each `?v=4`
+   cache-buster meant browser couldn't dedupe via 304s. With dev tools
+   "Disable cache" + Vite HMR re-emitting `<head>` on each tab nav, the
+   browser fired 15-20 redundant fetches per page-load.
+2. **`admin-modules.tsx` is hand-rolled `adminFetch()`** (NOT React Query),
+   so Phase 7.1's QueryClient defaults don't apply to its sub-pages. It
+   was also pulling 100 users + 120 transactions per page-load when only
+   ~20 fit on screen (in-page search filters client-side).
+3. **`/api/admin/dashboard` aggregator is on `/admin` main page only** —
+   sub-pages (`/admin/users`, `/admin/transactions`, …) load disjoint
+   datasets and can't share a single aggregator. Each sub-page needed its
+   own surgical fix.
+
+**Shipped (commit pending push to origin/main)**:
+
+- `artifacts/qorix-markets/index.html` — 8 favicon link tags → 2 (one
+  `<link rel="icon">` + one `<link rel="apple-touch-icon">`). Modern
+  browsers pick the best icon from the `rel="icon"` list and iOS uses
+  `apple-touch-icon`; sized variants are not needed for a single PNG
+  source. Dropped `/icon-192.png?v=4` from the favicon list (still in
+  manifest.json as the PWA install icon, where it belongs).
+- `artifacts/qorix-markets/src/pages/admin-modules.tsx` — `AdminUsersPage`
+  limit `100 → 20` + **server-side debounced search** (300ms, query
+  forwarded as `?q=`). `AdminTransactionsPage` limit `120 → 20` (already
+  filtered server-side by `type` + `status`).
+- `artifacts/api-server/src/routes/admin.ts` — added optional `?q=` param
+  on `/admin/users` (case-insensitive ILIKE on `email`, `fullName`,
+  `referralCode`, combined with the existing smoke-test filter via
+  `and()`). LIKE wildcards (`%`, `_`, `\`) in user input are escaped to
+  prevent search-term injection / accidental wildcard matching. Without
+  this, the limit cut would have caused false-negative searches (admin
+  searches for a user not in the latest 20 → "no users found", but the
+  user actually exists). Caught by the architect code review pre-push.
+
+**Code review (architect, evaluate_task)**: initially flagged the naked
+limit cut as a HIGH correctness risk for admin user search. Resolved by
+adding `?q=` server-side support before committing the limit reduction.
+Re-verified: both workspaces typecheck clean; `/admin/users?q=test` and
+`/admin/users` both return 401 (auth gate intact, route mounted).
+
+**Not changed (intentional)**:
+
+- `artifacts/qorix-markets/src/pages/transactions.tsx:72` (user's own
+  trade history page) still uses `useGetTransactions({ limit: 100 })` —
+  user explicitly mentioned the **admin** users limit, not their own
+  transactions page; touching it would silently truncate their visible
+  history.
+- `sw.js` is dead-code (no `register()` call anywhere; `main.tsx`
+  unregisters any pre-existing SW on every load) but left in /public to
+  match the manifest reference and avoid breaking PWA install paths.
+
+**Predicted impact (admin sub-pages, e.g. `/admin/users`)**:
+
+| Metric | Before Phase 7.3 | After Phase 7.3 |
+| --- | --- | --- |
+| Total requests on cold load | 100+ (mostly favicon spam) | <20 |
+| Favicon fetches per load | 15-20 | 1-2 |
+| Users payload | 100 rows (~50KB) | 20 rows (~10KB) |
+| Transactions payload | 120 rows (~75KB) | 20 rows (~12KB) |
+
+**Verification (local)**: `pnpm typecheck` clean both workspaces. Web
+workflow restarted; admin sub-page renders.
+
+**Ready to push**: commit + Fly deploy via `tools/push-commit.sh` (GitHub
+API → CI → Fly v113+).
