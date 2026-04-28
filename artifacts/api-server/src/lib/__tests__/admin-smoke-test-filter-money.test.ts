@@ -349,6 +349,22 @@ test("/admin/stats pendingWithdrawal aggregates exclude the smoke-test account",
   // /admin/stats started counting the smoke pending withdrawal, the delta
   // would be off by the SMOKE_PENDING_AMOUNT. Working in deltas keeps this
   // safe even when other suites have seeded unrelated pending withdrawals.
+  //
+  // Phase 6 wraps /admin/stats in a 5s Redis cache backed by an in-process
+  // TTLCache fallback at the same TTL. To make the delta meaningful both
+  // snapshots must be a real recompute:
+  //   1. Drop any sibling-populated Redis entry so `before` is fresh.
+  //   2. After deleting the row, wait past the 5s TTL so both layers expire
+  //      and `afterDelete` recomputes against the post-delete DB state.
+  // We can't reach adminStatsCache.clear() from here without exporting it
+  // (a production-code change), so we wait it out.
+  const ADMIN_STATS_REDIS_KEY = "qorix:cache:v1:admin-stats:v1";
+  const ADMIN_STATS_TTL_MS = 5_000;
+  const { getRedisConnection } = await import("../redis");
+  await getRedisConnection()
+    .del(ADMIN_STATS_REDIS_KEY)
+    .catch(() => undefined);
+
   const before = await getStats();
 
   await db
@@ -357,6 +373,11 @@ test("/admin/stats pendingWithdrawal aggregates exclude the smoke-test account",
   // Make sure cleanup in `after` doesn't try to delete it again.
   const removedNormalWithdrawalId = normalWithdrawalId;
   normalWithdrawalId = 0;
+
+  // Wait for both Redis (5s) and the in-process TTLCache fallback (5s) to
+  // expire. Without this the next /admin/stats call returns the cached
+  // `before` value and the delta is 0.
+  await new Promise((resolve) => setTimeout(resolve, ADMIN_STATS_TTL_MS + 500));
 
   const afterDelete = await getStats();
 
