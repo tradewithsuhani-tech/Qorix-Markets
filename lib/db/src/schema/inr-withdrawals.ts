@@ -1,4 +1,5 @@
 import { pgTable, serial, integer, varchar, text, numeric, timestamp, index } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -31,8 +32,17 @@ export const inrWithdrawalsTable = pgTable(
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },
   (t) => ({
+    // Existing single-column index kept; composite below covers user-history sort path.
     userIdx: index("inr_withdrawals_user_idx").on(t.userId),
     statusIdx: index("inr_withdrawals_status_idx").on(t.status),
+    // GET /api/inr-withdrawals/mine: WHERE user_id = $1 ORDER BY created_at DESC LIMIT 50.
+    userCreatedIdx: index("inr_withdrawals_user_created_idx").on(t.userId, t.createdAt.desc()),
+    // Merchant claim queue: WHERE assigned_merchant_id = $1.
+    // Partial index — only ~claimed rows actually hit the index, keeping it small
+    // (most withdrawals are NULL for assigned_merchant_id since admin can approve directly).
+    assignedMerchantIdx: index("inr_withdrawals_assigned_merchant_idx")
+      .on(t.assignedMerchantId)
+      .where(sql`${t.assignedMerchantId} IS NOT NULL`),
   }),
 );
 
