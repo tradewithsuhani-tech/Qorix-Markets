@@ -3,7 +3,7 @@ import { useLogin, useRegister } from "@workspace/api-client-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useLocation, Link } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
-import { TrendingUp, Lock, Mail, User as UserIcon, ArrowLeft, Eye, EyeOff, ShieldCheck, CheckCircle2, Loader2 } from "lucide-react";
+import { TrendingUp, Lock, Mail, User as UserIcon, ArrowLeft, Eye, EyeOff, ShieldCheck, CheckCircle2, Loader2, KeyRound } from "lucide-react";
 import { QorixLogo } from "@/components/qorix-logo";
 import { useToast } from "@/hooks/use-toast";
 import { Recaptcha, CAPTCHA_ENABLED } from "@/components/recaptcha";
@@ -369,13 +369,43 @@ function TwoFactorPromptStep({
 }) {
   const [code, setCode] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  // Verification method picker. Defaults to "totp" (the common case — user
+  // still has their authenticator app). Users who lost their phone tap
+  // "Switch to Another Verification Method" to flip to "backup" mode, which
+  // shows a text input formatted for one-time backup codes (XXXX-XXXX).
+  // Backend (`/auth/2fa/login-verify`) accepts BOTH formats on the same
+  // endpoint, so no API change is needed — this is a UI affordance only.
+  const [verifyMode, setVerifyMode] = useState<"totp" | "backup">("totp");
   const { toast } = useToast();
+
+  // Per-mode input handler. TOTP strips non-digits and caps at 6; backup
+  // uppercases, strips non-alphanumerics, auto-inserts the dash after 4
+  // chars, and caps at 9 (XXXX-XXXX).
+  const handleCodeChange = (raw: string) => {
+    if (verifyMode === "totp") {
+      setCode(raw.replace(/\D/g, "").slice(0, 6));
+    } else {
+      const cleaned = raw.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8);
+      const formatted = cleaned.length > 4
+        ? `${cleaned.slice(0, 4)}-${cleaned.slice(4)}`
+        : cleaned;
+      setCode(formatted);
+    }
+  };
+
+  const switchMode = () => {
+    setVerifyMode((m) => (m === "totp" ? "backup" : "totp"));
+    setCode("");
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const trimmed = code.trim();
     if (!trimmed) {
-      toast({ title: "Enter your 2FA code", variant: "destructive" });
+      toast({
+        title: verifyMode === "totp" ? "Enter your 6-digit code" : "Enter your backup code",
+        variant: "destructive",
+      });
       return;
     }
     setSubmitting(true);
@@ -396,6 +426,8 @@ function TwoFactorPromptStep({
     }
   };
 
+  const isBackup = verifyMode === "backup";
+
   return (
     <div className="min-h-screen w-full bg-background flex items-center justify-center px-4 relative overflow-hidden">
       <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[700px] h-[500px] bg-primary/8 rounded-full blur-[120px] pointer-events-none" />
@@ -406,30 +438,41 @@ function TwoFactorPromptStep({
       >
         <div className="glass-card rounded-2xl p-7">
           <div className="flex flex-col items-center text-center mb-5">
-            <div className="p-3 rounded-2xl bg-blue-500/15 text-blue-400 mb-3">
-              <ShieldCheck style={{ width: 28, height: 28 }} />
+            <div className={`p-3 rounded-2xl mb-3 ${isBackup ? "bg-amber-500/15 text-amber-400" : "bg-blue-500/15 text-blue-400"}`}>
+              {isBackup ? (
+                <KeyRound style={{ width: 28, height: 28 }} />
+              ) : (
+                <ShieldCheck style={{ width: 28, height: 28 }} />
+              )}
             </div>
-            <h2 className="text-xl font-semibold">Two-Factor Authentication</h2>
+            <h2 className="text-xl font-semibold">
+              {isBackup ? "Use a Backup Code" : "Two-Factor Authentication"}
+            </h2>
             <p className="text-sm text-muted-foreground mt-1">
-              Enter the 6-digit code from your authenticator app, or one of your backup codes.
+              {isBackup
+                ? "Lost your phone? Enter one of the 8-character backup codes you saved when enabling 2FA."
+                : "Enter the 6-digit code from your authenticator app."}
             </p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <input
+              key={verifyMode}
               type="text"
-              inputMode="text"
+              inputMode={isBackup ? "text" : "numeric"}
               autoComplete="one-time-code"
               value={code}
-              onChange={(e) => setCode(e.target.value)}
-              placeholder="123456"
-              className="w-full px-4 py-3 rounded-xl bg-white/[0.04] border border-white/10 text-center text-lg font-mono tracking-[0.3em] focus:outline-none focus:border-blue-500/50"
+              onChange={(e) => handleCodeChange(e.target.value)}
+              placeholder={isBackup ? "XXXX-XXXX" : "123456"}
+              className={`w-full px-4 py-3 rounded-xl bg-white/[0.04] border border-white/10 text-center text-lg font-mono focus:outline-none ${
+                isBackup ? "tracking-[0.25em] uppercase focus:border-amber-500/50" : "tracking-[0.3em] focus:border-blue-500/50"
+              }`}
               autoFocus
-              maxLength={16}
+              maxLength={isBackup ? 9 : 6}
             />
             <Button
               type="submit"
-              disabled={submitting || !code.trim()}
+              disabled={submitting || !code.trim() || (isBackup ? code.replace(/-/g, "").length < 8 : code.length < 6)}
               className="w-full h-11"
             >
               {submitting ? (
@@ -438,17 +481,38 @@ function TwoFactorPromptStep({
                 "Verify & Sign in"
               )}
             </Button>
+
+            {/* Switch verification method — primary affordance for users who
+                lost their phone. Styled as a prominent link (amber when on
+                TOTP step → directs to backup; muted when on backup step →
+                back to authenticator). */}
+            <button
+              type="button"
+              onClick={switchMode}
+              className={`w-full text-sm font-semibold py-2 transition-colors ${
+                isBackup
+                  ? "text-blue-400 hover:text-blue-300"
+                  : "text-amber-400 hover:text-amber-300"
+              }`}
+            >
+              {isBackup
+                ? "Use authenticator app instead"
+                : "Switch to Another Verification Method"}
+            </button>
+
             <button
               type="button"
               onClick={onCancel}
-              className="w-full text-xs text-muted-foreground hover:text-white transition-colors py-2"
+              className="w-full text-xs text-muted-foreground hover:text-white transition-colors py-1"
             >
               Cancel and start over
             </button>
           </form>
 
           <p className="text-[11px] text-center text-muted-foreground/70 mt-4">
-            Lost access? Each backup code (XXXX-XXXX) works once.
+            {isBackup
+              ? "Each backup code works only once and is then permanently used."
+              : "Lost access to your authenticator? Use a backup code instead."}
           </p>
         </div>
       </motion.div>
