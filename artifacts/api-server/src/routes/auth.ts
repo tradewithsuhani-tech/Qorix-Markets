@@ -104,12 +104,18 @@ router.post("/auth/register", async (req, res) => {
   const rawIp = getClientIp(req);
   const ip = normalizeIp(rawIp);
 
-  // --- Captcha check (skipped if TURNSTILE_SECRET_KEY not configured) ---
-  const captchaResult = await verifyCaptcha(req.body.captchaToken, ip);
-  if (!captchaResult.ok) {
-    res.status(400).json({ error: captchaResult.error ?? "Captcha required" });
-    return;
-  }
+  // --- Captcha check ---
+  // INTENTIONALLY SKIPPED on /auth/signup until Batch 6.1 ships the
+  // reCAPTCHA widget on the signup page. The /auth/login route DOES
+  // call verifyCaptcha (re-enabled in Batch 6 — see below). Enabling
+  // the check here without the matching client widget would 400 every
+  // signup with "Captcha required". Re-enable in B6.1 alongside the
+  // signup.tsx widget render.
+  //   const captchaResult = await verifyCaptcha(req.body.captchaToken, ip);
+  //   if (!captchaResult.ok) {
+  //     res.status(400).json({ error: captchaResult.error ?? "Captcha required" });
+  //     return;
+  //   }
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
   const [ipCount] = await db
