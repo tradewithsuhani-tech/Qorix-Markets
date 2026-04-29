@@ -14,6 +14,7 @@ import {
   signTwoFactorChallenge,
   verifyTwoFactorChallenge,
   consumeAuthCodeForUser,
+  TWO_FA_CHALLENGE_TTL_SECONDS,
 } from "./two-factor";
 import crypto from "crypto";
 import { makeRedisLimiter } from "../middlewares/rate-limit";
@@ -408,7 +409,7 @@ router.post("/auth/login", loginRateLimit, async (req, res) => {
     res.json({
       requires2FA: true,
       twoFactorToken,
-      ttlSeconds: 5 * 60,
+      ttlSeconds: TWO_FA_CHALLENGE_TTL_SECONDS,
     });
     return;
   }
@@ -480,16 +481,25 @@ async function issueSessionAfterAuth(
 
 // ---------------------------------------------------------------------------
 // POST /auth/2fa/login-verify
-// Second leg of the 2FA-gated login. Body: { twoFactorToken, code } where
-// `code` is a 6-digit TOTP code OR an 8-char backup code. On success we
-// hand the user off to issueSessionAfterAuth() — same single-device + JWT
-// path the password-only login uses.
+// Second leg of the 2FA-gated login. Body: { twoFactorToken, code, mode? }.
+//   • mode === "email_otp" → `code` is the 6-digit one-time code we mailed
+//     to the user via /auth/2fa/email-fallback/request (single-use, 10-min
+//     TTL, stored in email_otps with purpose="two_factor_login").
+//   • otherwise            → `code` is a 6-digit TOTP code OR an 8-char
+//     backup code (existing path).
+// On success we hand the user off to issueSessionAfterAuth() — same
+// single-device + JWT path the password-only login uses.
 // ---------------------------------------------------------------------------
 router.post("/auth/2fa/login-verify", loginRateLimit, async (req, res) => {
   const token: unknown = req.body?.twoFactorToken;
   const code: unknown = req.body?.code;
+  const mode: unknown = req.body?.mode;
   if (typeof token !== "string" || typeof code !== "string") {
     res.status(400).json({ error: "Validation failed" });
+    return;
+  }
+  if (mode !== undefined && mode !== "email_otp" && mode !== "totp_or_backup") {
+    res.status(400).json({ error: "Invalid verification mode" });
     return;
   }
   const decoded = verifyTwoFactorChallenge(token);
@@ -514,6 +524,26 @@ router.post("/auth/2fa/login-verify", loginRateLimit, async (req, res) => {
     return;
   }
 
+  // ── Branch 1: email-OTP fallback ───────────────────────────────────────
+  // Used when the user lost access to their authenticator AND backup codes,
+  // and chose "Email me a verification code" in the UI. Code was sent via
+  // /auth/2fa/email-fallback/request → verifyOtp atomically marks it used.
+  if (mode === "email_otp") {
+    const cleaned = code.trim().replace(/\s+/g, "");
+    if (!/^\d{6}$/.test(cleaned)) {
+      res.status(400).json({ error: "Email codes are 6 digits." });
+      return;
+    }
+    const result = await verifyOtp(user.id, cleaned, "two_factor_login");
+    if (!result.valid) {
+      res.status(400).json({ error: result.error || "Invalid or expired code. Please try again." });
+      return;
+    }
+    await issueSessionAfterAuth(user, req, res);
+    return;
+  }
+
+  // ── Branch 2: TOTP or backup code (existing path) ──────────────────────
   // Atomic verify+consume: row lock + verify against fresh state +
   // persist consumed backup-code state, all inside one transaction.
   // Prevents two concurrent login-verify requests from both burning
@@ -529,6 +559,79 @@ router.post("/auth/2fa/login-verify", loginRateLimit, async (req, res) => {
     return;
   }
   await issueSessionAfterAuth(user, req, res);
+});
+
+// ---------------------------------------------------------------------------
+// POST /auth/2fa/email-fallback/request
+// Triggered when a 2FA-enabled user clicks "Email me a verification code"
+// on the login screen because they've lost access to their authenticator
+// app AND their backup codes. We email a 6-digit OTP to their registered
+// address (single-use, 10-min TTL) and they then submit it via
+// /auth/2fa/login-verify with mode="email_otp".
+//
+// Security:
+//   • Requires a valid 2FA challenge token (proves password was just
+//     verified) — random people can't trigger emails to arbitrary users.
+//   • Rate-limited via loginRateLimit (20/15min per IP).
+//   • sendOtp invalidates any prior pending OTP for the same purpose, so
+//     spamming "resend" only ever leaves the latest code valid.
+//   • Email is masked in the response (a***@d***.com) so we never leak
+//     the full address back to the network.
+// ---------------------------------------------------------------------------
+function maskEmailForResponse(email: string): string {
+  const [local, domain] = email.split("@");
+  if (!local || !domain) return "your registered email";
+  const maskedLocal =
+    local.length <= 2
+      ? local[0] + "*"
+      : local[0] + "*".repeat(Math.max(1, local.length - 2)) + local[local.length - 1];
+  const dotIdx = domain.indexOf(".");
+  const domainHead = dotIdx === -1 ? domain : domain.slice(0, dotIdx);
+  const domainTail = dotIdx === -1 ? "" : domain.slice(dotIdx);
+  const maskedDomain =
+    domainHead.length <= 1
+      ? domainHead + "*" + domainTail
+      : domainHead[0] + "*".repeat(Math.max(1, domainHead.length - 1)) + domainTail;
+  return `${maskedLocal}@${maskedDomain}`;
+}
+
+router.post("/auth/2fa/email-fallback/request", loginRateLimit, async (req, res) => {
+  const token: unknown = req.body?.twoFactorToken;
+  if (typeof token !== "string") {
+    res.status(400).json({ error: "Validation failed" });
+    return;
+  }
+  const decoded = verifyTwoFactorChallenge(token);
+  if (!decoded) {
+    res.status(401).json({ error: "Two-factor session expired. Please log in again." });
+    return;
+  }
+  const users = await db.select().from(usersTable).where(eq(usersTable.id, decoded.userId)).limit(1);
+  const user = users[0];
+  if (!user) {
+    res.status(401).json({ error: "Invalid session" });
+    return;
+  }
+  if (user.isDisabled || (user.isFrozen && !user.isAdmin)) {
+    res.status(403).json({ error: "Account access is restricted" });
+    return;
+  }
+  if (!user.twoFactorEnabled) {
+    res.status(400).json({ error: "Two-factor authentication is not enabled on this account." });
+    return;
+  }
+  try {
+    await sendOtp(user.id, user.email, "two_factor_login");
+  } catch (err) {
+    // sendEmail logs the underlying SES/SMTP failure — surface a generic
+    // message so the user knows to try again or fall back to backup codes.
+    res.status(500).json({
+      error:
+        "We couldn't send your verification email right now. Please try again, or use a backup code instead.",
+    });
+    return;
+  }
+  res.json({ ok: true, email: maskEmailForResponse(user.email) });
 });
 
 // ─── Single-active-device login: tunables ────────────────────────────────
