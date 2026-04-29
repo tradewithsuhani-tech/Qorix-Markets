@@ -206,6 +206,33 @@ Frontend:
 - `artifacts/qorix-markets/src/pages/wallet.tsx` — Withdraw card has tab switcher: USDT (TRC20) | INR (UPI/Bank)
 - `artifacts/qorix-markets/src/pages/admin-payment-methods.tsx` — "Pending INR withdrawals" section with Approve (with payout ref input) / Reject & Refund actions
 
+## Quiz Giveaway System
+
+KYC users join scheduled quizzes, answer 5 timed MCQs, see a live SSE-driven leaderboard, top 3 win prizes (manually marked paid by admins — no auto wallet credit).
+
+Schema (`lib/db/src/schema/quizzes.ts`): `quizzes`, `quiz_questions` (max 5), `quiz_participants` (KYC gate), `quiz_answers` (unique on (participantId, questionId) — anti-cheat), `quiz_winners` (unpaid|paid).
+
+Backend (`artifacts/api-server/src/lib/`):
+- `quiz-event-bus.ts` — per-instance EventEmitter + Redis pub/sub bridge so SSE fans out across multiple Fly machines.
+- `quiz-runner.ts` — drives a quiz through 5 rounds with server-authoritative timing (BASE=500, TIME_BONUS_MAX=500, ANSWER_GRACE_MS=250).
+- `quiz-scheduler.ts` — interval worker (in `background-jobs.ts`) that flips `scheduled→live` and starts runners.
+- `quiz-scoring.ts` — Redis ZSET leaderboard helpers.
+- `quiz-ai.ts` — gpt-5-mini drafts via `openai-client`.
+
+Routes (`artifacts/api-server/src/routes/quiz.ts`, all paths absolute):
+- User: `GET /api/quiz`, `GET /api/quiz/mine/past`, `GET /api/quiz/:id`, `POST /api/quiz/:id/join`, `POST /api/quiz/:id/answer`, `GET /api/quiz/:id/standing`, `GET /api/quiz/:id/stream` (SSE).
+- Admin: `GET/POST /api/admin/quizzes`, `PATCH /api/admin/quizzes/:id`, `POST /api/admin/quizzes/:id/cancel`, `POST /api/admin/quizzes/:id/force-start`, full questions CRUD + reorder + AI generate, `GET /api/admin/quizzes/:id/monitor`, `GET /api/admin/quizzes/:id/results`, `POST /api/admin/quizzes/:id/winners/:wid/mark-paid`.
+
+SSE endpoint accepts JWT via `Authorization: Bearer …` OR `?token=…` (browser EventSource has no headers). Headers: `text/event-stream`, `no-cache,no-transform`, `X-Accel-Buffering: no`. Heartbeat every 20s. Each event has a numeric `id:` so EventSource auto-resumes via `Last-Event-ID`.
+
+Frontend:
+- `artifacts/qorix-markets/src/hooks/use-quiz-stream.ts` — EventSource hook with reconnect/backoff, per-event-id dedup, server-clock offset for honest countdowns.
+- `artifacts/qorix-markets/src/pages/quizzes.tsx` — lobby + countdown + live play + final winners.
+- `artifacts/qorix-markets/src/pages/admin-quizzes.tsx` — list, schedule/edit, manual + AI question editor, live monitor, results & mark-paid.
+- Nav links added in `layout.tsx` (user "Quizzes" + admin "Quizzes").
+
+Load smoke: `node artifacts/api-server/scripts/quiz-load-test.mjs` — simulates N KYC users (token list file) joining + answering. Reports SSE connect p50/p95, answer-latency, accept/reject counts, final winners.
+
 ## Cron Jobs (node-cron)
 
 Defined in `artifacts/api-server/src/lib/cron.ts`, initialized on server start:
@@ -1468,3 +1495,125 @@ on the same component.
 - **B9.4**: behavior-signal hardening — trajectory linearity,
   acceleration profile, keystroke jitter; tighter replay bound for
   slider tokens.
+
+### Batch 9.4 (Apr 29, 2026)
+
+**Title:** Hybrid captcha — Part 2 of 4 (per agreed sequence): slider
+trajectory hardening + per-IP rate limit
+
+**Why:** B9.1 shipped the slider primitive with a "good enough" floor
+(±5 px, ≥ 5 samples, 200–15 000 ms duration, y-variance, monotonic
+timestamps). The B9.1 architect review explicitly named "behavior
+signal hardening" + "endpoint rate limit on /captcha/slider/verify"
+as the B9.4 candidates, and we agreed B9.4 runs BEFORE B9.3 wires
+the slider into auth. So B9.4 raises the bot-cost floor on the
+already-live verify endpoint without changing its public contract.
+
+**B9.4 — 2 source changes, ZERO schema, ZERO DB writes:**
+
+1. `artifacts/api-server/src/lib/slider-captcha-service.ts`
+   (~ 90 new lines inside `verifySliderSolution`, plus thresholds
+   and an updated header comment)
+   - **First-sample bounds** — the first trajectory sample's `x` must
+     be ≤ 30 px (the piece is visually drawn at the left edge). A bot
+     that just submits `[{x:targetX,y:0,t:0}, ...]` is now rejected
+     with `Trajectory does not start at handle` instead of silently
+     passing the existing checks.
+   - **Track bounds** — every sample's `x` must be in
+     `[-10, SLIDER_WIDTH - PIECE_WIDTH + 10]` (small slop for
+     overshoot frames). Out-of-range samples → `Trajectory out of
+     bounds`.
+   - **Linearity (R²)** — compute the linear regression of `x` vs
+     `t` in the same O(n) pass that already collects y-variance, and
+     reject if R² > 0.998. Empirically a cubic-ease human trajectory
+     has R² ≈ 0.92–0.97; a constant-velocity bot has R² = 1.0. The
+     0.998 threshold leaves comfortable headroom for any natural
+     drag while catching the synthetic-line case.
+     (Defended degenerate inputs: zero `t` variance OR zero `x`
+     variance both short-circuit to `Trajectory degenerate` rather
+     than dividing by zero.)
+   - **Velocity uniformity (CoV)** — compute Δx/Δt between
+     consecutive samples (skipping `Δt == 0` events from coalesced
+     pointermoves), and require the coefficient of variation of
+     those velocities to exceed 0.10. A constant-velocity bot has
+     CoV ≈ 0; a real human accelerating + decelerating produces CoV
+     well above the threshold. Belt-and-braces against gaming this
+     check by sending a near-zero-mean trajectory: when |mean| is
+     ~0 the test falls back to an absolute-stddev floor.
+
+2. `artifacts/api-server/src/routes/captcha.ts`
+   (1 new import + 1 new limiter + 2 middleware insertions)
+   - Added a Redis-backed `makeRedisLimiter` instance
+     `sliderCaptchaLimiter` — 60 requests / minute / IP, single
+     bucket shared between `/captcha/slider/challenge` and
+     `/captcha/slider/verify`. Mounted as middleware on both routes.
+   - Generous enough that a real user retrying the puzzle several
+     times (or refreshing a signup form) will never see a 429,
+     while bounding brute-force trajectory mining at 1 attempt /
+     sec / IP. One shared bucket because the issue→verify pair is
+     always called together by the React component — splitting them
+     would let an attacker double their effective verify budget by
+     burning the challenge bucket separately.
+   - Same Redis-backed store used by `/auth/login` etc., so the cap
+     survives across all Fly instances (BOM 2x + SIN 1x). On Redis
+     outage the default `passOnStoreError: true` lets requests
+     through (acceptable: captcha verify is cheap and downstream
+     auth still rate-limits).
+
+**Net behavior:**
+
+- The new bot signals fire entirely INSIDE `verifySliderSolution()`,
+  so the public contract of `/captcha/slider/{challenge,verify}` is
+  unchanged: same request shape, same response shape, same HTTP
+  status codes; only the catalogue of `error` strings is extended
+  with `Trajectory does not start at handle`,
+  `Trajectory out of bounds`, `Trajectory degenerate`,
+  `Trajectory too linear`, `Trajectory too uniform`.
+- The React component (`<SliderPuzzleCaptcha>`) is unchanged — it
+  already collects everything the new checks consume, and it
+  already surfaces the server-supplied `error` string verbatim.
+- 60/min/IP limit is well above any real-user retry pattern, so
+  legitimate flows are not affected.
+- All other flows (deposit, withdraw, 2FA, KYC, transfer, trading,
+  merchant, admin, etc.) → completely unchanged.
+- B9.1's slider tokens still issue and consume identically; B9.3
+  will still wire `consumeSliderToken()` into `verifyCaptcha()`.
+
+**Validation:**
+
+- `pnpm --filter @workspace/api-server typecheck` → clean (after
+  rebuilding stale `lib/db` dist; `quizzesTable` etc. came in via
+  a parallel-agent merge — not introduced by B9.4).
+- `pnpm --filter @workspace/qorix-markets typecheck` → clean.
+- API server restarted, no startup errors, captcha routes still
+  mounted, Redis connected.
+- Local end-to-end smoke (script `/tmp/slider_smoke_b9_4.mjs`,
+  hitting `localhost:8080`) — 8 / 8 meaningful cases:
+  - Valid ease-in-out solve → `slider.v1.*` token ✅
+  - Valid ease-out solve (B9.1's own profile) → token ✅
+    (confirms B9.4 does not reject any trajectory shape that B9.1
+    accepted; no false-positive regression on real users)
+  - Off-target by 20 px → `Off target` ✅
+  - Flat-y bot → `Trajectory too rigid` ✅ (B9.1 floor still wins
+    the race vs the new B9.4 checks for this signature)
+  - Too-fast (50 ms) → `Non-monotonic timestamps` ✅
+  - Linear bot (R² = 1) → `Trajectory too linear` ✅ (B9.4 NEW)
+  - Teleport bot (starts at target) →
+    `Trajectory does not start at handle` ✅ (B9.4 NEW)
+  - OOB bot (x = 9999) → `Trajectory out of bounds` ✅ (B9.4 NEW)
+- Production validation pending CI deploy.
+
+### Roadmap (Phase A continued, B9 series — updated)
+
+- ~~**B9.1**: hybrid captcha — slider puzzle component + verify
+  endpoint~~ ✅ LIVE.
+- ~~**B9.4**: behavior-signal hardening on slider trajectory + per-IP
+  rate limit~~ ✅ LIVE.
+- **B9.2**: risk score engine — SELECT-only signals (failed-attempts
+  in last 1 h, IP repetition, device freshness) → `low|medium|high`.
+- **B9.3**: risk-based escalation glue — `verifyCaptcha()` extended
+  to accept `slider.v1.*` tokens; signup/login form picks slider vs.
+  reCAPTCHA based on risk tier. Prereqs (from B9.1 architect notes,
+  saved at `/tmp/b9_3_prereqs_from_architect.md`): single-use
+  challenge IDs (Redis SETNX) and centralised consumed-token replay
+  defense across instances.
