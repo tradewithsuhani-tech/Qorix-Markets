@@ -1172,6 +1172,14 @@ const withdrawalOtpLimiter = makeRedisLimiter({
     }
     return `u:${userId}`;
   },
+  // Fail-CLOSED on Redis errors. The default for our limiter factory is
+  // fail-OPEN (better availability for cheap auth surfaces like /auth/login
+  // where bcrypt cost already caps brute-force throughput). For this
+  // endpoint the side-effect is an OUTBOUND OTP EMAIL — leaving it ungated
+  // during a Redis incident effectively re-opens the inbox-bomb vector this
+  // limiter exists to close. Prefer transient 5xx during an Upstash outage
+  // over silently letting a stolen session spam the user's mailbox.
+  passOnStoreError: false,
 });
 
 router.post(

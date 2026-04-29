@@ -20,17 +20,24 @@
 //   `getRedisConnection()` thunk was designed for.
 //
 // Failure mode (explicit, not library-default):
-//   We set `passOnStoreError: true` on every limiter so a Redis outage
-//   degrades to "no rate limiting for this request" rather than "503 the
-//   whole sign-in flow". For login this is the right tradeoff: we'd rather
-//   take a transient brute-force window than block the whole auth flow
-//   during an Upstash incident. The bcrypt cost on /auth/login (10 rounds,
-//   ~70ms) caps the practical brute-force throughput anyway.
+//   By DEFAULT we set `passOnStoreError: true` on every limiter so a Redis
+//   outage degrades to "no rate limiting for this request" rather than
+//   "503 the whole sign-in flow". For login this is the right tradeoff:
+//   we'd rather take a transient brute-force window than block the whole
+//   auth flow during an Upstash incident. The bcrypt cost on /auth/login
+//   (10 rounds, ~70ms) caps the practical brute-force throughput anyway.
+//
+//   Endpoints that send EXPENSIVE side-effects (OTP emails / SMS) where
+//   "no rate limit" effectively means "free inbox-bomb" can opt OUT of the
+//   default by passing `passOnStoreError: false`. In that mode a Redis
+//   outage causes the request to fail (Express error middleware → 5xx)
+//   rather than silently ungating the side-effect. Currently used by the
+//   withdrawal-OTP limiter (see auth.ts).
 //
 //   Combined with the bounded `commandTimeout` on the shared ioredis client
 //   (see lib/redis.ts), a Redis hang surfaces as a fast store error within
-//   ~1.5s and the request is served — instead of parking on Redis until the
-//   30s app-level timeout fires.
+//   ~1.5s and the request is served (or, in fail-closed mode, errored)
+//   — instead of parking on Redis until the 30s app-level timeout fires.
 
 import rateLimit, { type Options as RateLimitOptions } from "express-rate-limit";
 import { RedisStore } from "rate-limit-redis";
@@ -58,6 +65,14 @@ export type MakeRedisLimiterOptions = {
   keyGenerator?: RateLimitOptions["keyGenerator"];
   /** Optional skip predicate (e.g. always allow /healthz probes). */
   skip?: RateLimitOptions["skip"];
+  /**
+   * Override the default `passOnStoreError: true`. Set to `false` to make
+   * this limiter fail-CLOSED on Redis errors (request errors out instead
+   * of being silently allowed through). Use only for endpoints whose
+   * side-effect is too expensive to leave ungated during a Redis incident
+   * — currently the withdrawal-OTP send. See file header for rationale.
+   */
+  passOnStoreError?: boolean;
 };
 
 export function makeRedisLimiter(opts: MakeRedisLimiterOptions) {
@@ -88,7 +103,10 @@ export function makeRedisLimiter(opts: MakeRedisLimiterOptions) {
     // we let the request through instead of returning 503. This is the
     // intentional tradeoff: a Redis outage briefly disables rate limiting
     // for affected windows rather than taking down auth/API endpoints.
-    passOnStoreError: true,
+    //
+    // Endpoints that send expensive side-effects (e.g. OTP emails) override
+    // this to `false` to fail-CLOSED instead — see file header.
+    passOnStoreError: opts.passOnStoreError ?? true,
     ...(opts.message !== undefined ? { message: opts.message } : {}),
     ...(opts.skipFailedRequests !== undefined
       ? { skipFailedRequests: opts.skipFailedRequests }
