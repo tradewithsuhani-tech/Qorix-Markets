@@ -1087,15 +1087,88 @@ End-to-end B6 state on prod:
 - Prod smoke (live): `POST /api/auth/login` → 400 Captcha required ✅,
   `POST /api/auth/register` → 400 Captcha required ✅.
 
+### Batch 7 (Apr 29, 2026)
+
+**Title:** 24h new-device withdrawal cooldown (INR + USDT)
+
+**Problem solved:**
+A session-hijacker / new-machine-takeover attacker who has just got
+into a session can drain the wallet INSTANTLY — even with KYC, 2FA
+session issuance, withdrawal-OTP, the new-account 24h lock and the
+post-password-change 24h lock all already in place — provided the
+real owner created the account >24h ago, never changed their password
+recently, and the attacker can intercept the email OTP. The "Login
+from a new device detected" email IS sent (via `trackLoginDevice`),
+but it's *just an email* — by the time the real owner reads it the
+funds have already moved.
+
+B7 closes that window by refusing withdrawals from a device until
+that (user, device-fingerprint) pair has been recorded in
+`user_devices` for >= 24h. The clock starts at first successful
+LOGIN from the device (not at the withdraw click), so the alert
+email and the cooldown share the same start time.
+
+**B7 — 4 files, ZERO schema changes:**
+
+1. `artifacts/api-server/src/lib/withdraw-device-cooldown.ts` (NEW)
+   • Exports `NEW_DEVICE_WITHDRAWAL_COOLDOWN_HOURS = 24`,
+     `formatIstTimestamp(d)`, and async
+     `checkWithdrawDeviceCooldown(req, userId)`.
+   • Read-only against `user_devices` — write side is owned
+     EXCLUSIVELY by `lib/device-tracking.ts` → `trackLoginDevice`,
+     which has been writing `first_seen_at` for months.
+   • `formatIstTimestamp` is hand-rolled (UTC + 5:30 fixed offset,
+     no DST) so it doesn't depend on icu/Intl data being present in
+     the prod container — historical pain point on slim base images.
+   • Fail-closed: if `computeDeviceFingerprint` returns empty/unknown,
+     OR if no `user_devices` row exists for (user, fingerprint), we
+     BLOCK with a "log out and back in" message (the no-row case
+     covers legacy sessions issued before device-tracking shipped or
+     any hypothetical 2FA-only path that bypassed `trackLoginDevice`).
+   • `Math.max(1, Math.ceil(...))` so we never display "0h remaining"
+     while still actually blocking.
+
+2. `artifacts/api-server/src/routes/wallet.ts` (POST /wallet/withdraw)
+   • Added `import { checkWithdrawDeviceCooldown } from "../lib/withdraw-device-cooldown"`.
+   • Inserted the cooldown check AFTER the password-change lock and
+     BEFORE OTP verification — so a blocked user never burns a
+     single-use email OTP.
+
+3. `artifacts/api-server/src/routes/inr-withdrawals.ts` (POST /inr-withdrawals)
+   • Same import + same insertion point (after password-change lock,
+     before body parsing / OTP). The INR endpoint MUST mirror the
+     USDT endpoint or the lock becomes a paper tiger — every other
+     freshness lock in this codebase has the same parity for the
+     same reason (see the comment block on lines 109-113 of the
+     pre-B7 inr-withdrawals.ts about channel-bypass).
+
+4. `replit.md` (this file)
+
+**Net behavior post-B7:**
+- `POST /api/wallet/withdraw`   from a device first-seen <24h ago →
+  `403 {"error":"withdrawal_locked_new_device","message":"Withdrawals
+  are locked from new devices for 24h. Please try again at
+  29 Apr 2026, 20:43 IST (Xh remaining).","hoursLeft":X,"unlockAt":"…"}`
+- `POST /api/inr-withdrawals`   from a device first-seen <24h ago →
+  same shape.
+- Both endpoints from a device first-seen >=24h ago → unchanged
+  (continues to OTP / cap / debit pipeline).
+- All other endpoints (deposit, transfer, login, etc.) → completely
+  unchanged.
+
+**Validation:**
+- `pnpm --filter @workspace/api-server typecheck` → clean (exit 0).
+- API server restarted, no startup errors, all existing endpoints
+  still serving 200/304.
+- Local no-auth smoke: `POST /api/wallet/withdraw` → 401, `POST
+  /api/inr-withdrawals` → 401 (auth middleware reached normally —
+  imports load, no crash).
+- Production validation pending CI deploy.
+
 ### Roadmap (Phase A continued)
 
 - ~~**B6.1**: signup captcha + failed-submit widget reset~~ ✅ LIVE (`d5e1c63`).
-- **B7**: 24h new-device withdraw cooldown. **Schema survey complete
-  (Apr 29):** all required columns ALREADY EXIST — `user_devices`
-  table has `(user_id, device_fingerprint)` with `first_seen_at` /
-  `last_seen_at`. **No schema change needed.** Implementation = add
-  a runtime check in the withdraw handler comparing
-  `now - user_devices.first_seen_at` against 24h.
+- ~~**B7**: 24h new-device withdraw cooldown.~~ ✅ LIVE (`920cef6`).
 - **B8**: My Devices page (depends on B7 trust-device infra; likely
   also no schema change since user_devices already has all fields).
 - **/auth/forgot-password CAPTCHA enforcement** (architect note 6 from

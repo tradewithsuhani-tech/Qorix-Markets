@@ -18,6 +18,7 @@ import { getWithdrawalCaps } from "../lib/withdrawal-caps";
 import { notifyAllActiveMerchantsOfNewWithdrawal } from "../lib/escalation-cron";
 import { WITHDRAWAL_LOCK_HOURS_AFTER_PASSWORD_CHANGE } from "./auth";
 import { NEW_ACCOUNT_WITHDRAWAL_LOCK_HOURS } from "./wallet";
+import { checkWithdrawDeviceCooldown } from "../lib/withdraw-device-cooldown";
 
 const router = Router();
 
@@ -144,6 +145,28 @@ router.post("/inr-withdrawals", authMiddleware, async (req: AuthRequest, res) =>
         hoursLeft,
         lockedUntil: new Date(new Date(user.passwordChangedAt).getTime() + lockMs).toISOString(),
       });
+      return;
+    }
+  }
+
+  // --- 24h NEW-DEVICE withdrawal cooldown (B7, parity with USDT path) ---
+  // Mirrors `routes/wallet.ts` (USDT/TRC20 path) — see the comment block
+  // there for the full rationale. Short version: the write side is owned
+  // by `lib/device-tracking.ts` → `trackLoginDevice`, which stamps
+  // `user_devices.first_seen_at` on first successful login from a
+  // (user, device-fingerprint) pair. Until 24h has elapsed we refuse
+  // withdrawals from that device, even with a valid session and OTP.
+  // Without this on INR the USDT lock would be a paper tiger — the same
+  // channel-bypass argument that put the new-account 24h lock and the
+  // post-password-change 24h lock on this endpoint.
+  //
+  // Placement: BEFORE body parsing / OTP verification so a blocked user
+  // never burns a single-use email OTP. AFTER user/kyc/account-age/
+  // password-change so the user sees the most informative early reject.
+  {
+    const cooldown = await checkWithdrawDeviceCooldown(req, req.userId!);
+    if (!cooldown.ok) {
+      res.status(cooldown.status).json(cooldown.body);
       return;
     }
   }
