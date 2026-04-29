@@ -1027,15 +1027,80 @@ End-to-end B6 state on prod:
 - Local/dev (no `VITE_RECAPTCHA_SITE_KEY`) → widget hidden + client
   gate skipped — unchanged dev DX.
 
+### Batch 6.1 (Apr 29, 2026 — commit `d5e1c63`)
+
+**Title:** signup-side captcha enforcement + failed-submit widget reset
+
+**Problem:**
+1. `/auth/register` (the actual API route — `/signup` is the frontend
+   URL only) was deferred from B6 because the signup screen had no
+   widget. But `login.tsx` is the SHARED form for `/login`, `/register`,
+   and `/signup` (App.tsx routing) so it ALREADY rendered the widget
+   for every mode — server enforcement could safely ship for the
+   signup endpoint too.
+2. reCAPTCHA v2 ("I'm not a robot") tokens are SINGLE-USE. After a
+   failed login/signup the consumed token left the user blocked for
+   ~2 minutes (natural expiry) before they could re-submit.
+
+**B6.1** (`d5e1c63`) — 3 files, ZERO schema:
+
+1. `artifacts/api-server/src/routes/auth.ts` (POST /auth/register)
+   • Un-commented the `verifyCaptcha` call + 400 response that B6
+     intentionally left as a TODO. Now mirrors POST /auth/login.
+   • Local/dev builds with no `RECAPTCHA_SECRET_KEY` auto-skip via
+     `captcha-service.ts` (unchanged).
+
+2. `artifacts/qorix-markets/src/components/recaptcha.tsx`
+   • Converted `function Recaptcha` → `forwardRef<RecaptchaHandle,
+     RecaptchaProps>` so parents can hold a ref.
+   • Exposes new exported interface `RecaptchaHandle { reset(): void }`
+     via `useImperativeHandle`. The reset method calls
+     `window.grecaptcha.reset(widgetIdRef.current)` (try/catch around
+     the grecaptcha call so a destroyed widget can't throw) and
+     invokes `onExpire?.()` so the parent's local copy of the consumed
+     token is cleared in the same tick.
+
+3. `artifacts/qorix-markets/src/pages/login.tsx`
+   • Added `recaptchaRef = useRef<RecaptchaHandle | null>(null)` and
+     passed `ref={recaptchaRef}` to `<Recaptcha/>`.
+   • `submitLogin()` finally block: added
+     `setCaptchaToken(""); recaptchaRef.current?.reset();`. Runs on
+     success-redirect paths too (harmless no-op).
+   • `registerMutation` onError: added the same reset+clear pair.
+   • REMOVED the synchronous `setCaptchaToken("")` at the bottom of
+     `handleSubmit` — that line was a latent bug (ran BEFORE the async
+     submit completed). Lifecycle now owned cleanly by submitLogin
+     (finally) + registerMutation (onError).
+
+**Net behavior post-B6.1:**
+- `POST /api/auth/login`    w/o captchaToken → `400 Captcha required` ✅
+- `POST /api/auth/register` w/o captchaToken → `400 Captcha required` ✅ NEW
+- Failed /login form submit  → widget resets, user can re-submit instantly ✅ NEW
+- Failed /signup form submit → widget resets, user can re-submit instantly ✅ NEW
+
+**Validation:**
+- Both packages typecheck clean.
+- Local /login renders correctly (forwardRef syntax accepted; widget
+  shows expected "Localhost not in supported domains" message because
+  the reCAPTCHA site key is allowlisted only for qorixmarkets.com).
+- CI deploy: `d5e1c63` → SUCCESS in 5m39s.
+- Prod smoke (live): `POST /api/auth/login` → 400 Captcha required ✅,
+  `POST /api/auth/register` → 400 Captcha required ✅.
+
 ### Roadmap (Phase A continued)
 
-- **B6.1**: render Recaptcha widget on signup tab + un-comment the
-  `/auth/signup` `verifyCaptcha` call. Also fix the v2-checkbox
-  token-reset-on-failed-login UX (call `grecaptcha.reset(widgetId)`
-  in `login.tsx` after a failed submit instead of just clearing
-  local state).
-- **B7**: 24h new-device withdraw cooldown.
-- **B8**: My Devices page.
+- ~~**B6.1**: signup captcha + failed-submit widget reset~~ ✅ LIVE (`d5e1c63`).
+- **B7**: 24h new-device withdraw cooldown. **Schema survey complete
+  (Apr 29):** all required columns ALREADY EXIST — `user_devices`
+  table has `(user_id, device_fingerprint)` with `first_seen_at` /
+  `last_seen_at`. **No schema change needed.** Implementation = add
+  a runtime check in the withdraw handler comparing
+  `now - user_devices.first_seen_at` against 24h.
+- **B8**: My Devices page (depends on B7 trust-device infra; likely
+  also no schema change since user_devices already has all fields).
+- **/auth/forgot-password CAPTCHA enforcement** (architect note 6 from
+  B6 review) — deferred; that endpoint is rate-limited today; will
+  revisit after B7/B8 land.
 
 ### Hard rules across all of Phase A
 

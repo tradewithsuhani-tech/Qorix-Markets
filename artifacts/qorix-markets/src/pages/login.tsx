@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { TrendingUp, Lock, Mail, User as UserIcon, ArrowLeft, Eye, EyeOff, ShieldCheck, CheckCircle2, Loader2, KeyRound } from "lucide-react";
 import { QorixLogo } from "@/components/qorix-logo";
 import { useToast } from "@/hooks/use-toast";
-import { Recaptcha, CAPTCHA_ENABLED } from "@/components/recaptcha";
+import { Recaptcha, CAPTCHA_ENABLED, type RecaptchaHandle } from "@/components/recaptcha";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -713,6 +713,10 @@ export default function LoginPage() {
   const [showOtpStep, setShowOtpStep] = useState(false);
   const [pendingVerifyEmail, setPendingVerifyEmail] = useState("");
   const [captchaToken, setCaptchaToken] = useState("");
+  // B6.1: imperative ref so failed login/signup can reset the v2 widget
+  // (single-use tokens — without reset the user has to wait ~2min before
+  // re-submitting). See recaptcha.tsx:RecaptchaHandle.
+  const recaptchaRef = useRef<RecaptchaHandle | null>(null);
   const autoHideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pageLoadTime = useRef<number>(Date.now());
 
@@ -858,6 +862,12 @@ export default function LoginPage() {
       });
     } finally {
       setLoginInFlight(false);
+      // B6.1: reCAPTCHA v2 tokens are single-use. Clear local copy and
+      // reset the widget so the user can re-submit immediately after a
+      // failed attempt (or after a successful 2FA-required path that
+      // keeps them on this page). Idempotent on success-redirect paths.
+      setCaptchaToken("");
+      recaptchaRef.current?.reset();
     }
   };
 
@@ -881,6 +891,11 @@ export default function LoginPage() {
       onError: (err: any) => {
         const msg = err.message || "Something went wrong";
         toast({ title: "Registration failed", description: msg, variant: "destructive" });
+        // B6.1: same single-use-token reset as submitLogin's finally.
+        // Failed signup leaves user on the form, so the widget must be
+        // reset before they can re-submit.
+        setCaptchaToken("");
+        recaptchaRef.current?.reset();
       }
     }
   });
@@ -908,8 +923,11 @@ export default function LoginPage() {
         } as any,
       });
     }
-    // Turnstile tokens are single-use; widget will auto-refresh via callback
-    setCaptchaToken("");
+    // B6.1: do NOT clear captchaToken synchronously here. Both
+    // submitLogin (finally) and registerMutation (onError) own the
+    // reset+clear lifecycle now — this used to fire before the async
+    // submit completed, leaving a stale-but-cleared token state for
+    // any error toast retry path.
   };
 
   const isPending = loginMutation.isPending || registerMutation.isPending;
@@ -1165,6 +1183,7 @@ export default function LoginPage() {
             {CAPTCHA_ENABLED && (
               <div className="pt-1">
                 <Recaptcha
+                  ref={recaptchaRef}
                   onVerify={(t) => setCaptchaToken(t)}
                   onExpire={() => setCaptchaToken("")}
                 />
