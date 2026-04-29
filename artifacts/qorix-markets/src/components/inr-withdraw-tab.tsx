@@ -5,7 +5,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { getGetWalletQueryKey } from "@workspace/api-client-react";
 import {
   IndianRupee, Building2, Smartphone, AlertCircle, CheckCircle2, Clock, Loader2, ShieldCheck,
-  X, Sparkles, Hash, ArrowDownToLine, Copy, Check,
+  X, Sparkles, Hash, ArrowDownToLine, Copy, Check, Mail,
 } from "lucide-react";
 
 import { authFetch } from "@/lib/auth-fetch";
@@ -59,6 +59,17 @@ export function InrWithdrawTab({ kycApproved, onKycRequired }: { kycApproved: bo
   const [ifsc, setIfsc] = useState("");
   const [bankName, setBankName] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  // --- OTP step-up state (parity with the USDT path in wallet.tsx) ---
+  // Two-step flow: "form" → user fills inputs and clicks Request → server
+  // sends 6-digit code to email → "otp" → user enters code and clicks
+  // Confirm → actual `POST /inr-withdrawals` with the code in the body.
+  // Form fields go read-only while we're in the "otp" step so the user
+  // can't change the amount mid-flight (the OTP they just received was
+  // bound to the values they confirmed, mentally — keep that contract).
+  const [step, setStep] = useState<"form" | "otp">("form");
+  const [withdrawOtp, setWithdrawOtp] = useState("");
+  const [sendingOtp, setSendingOtp] = useState(false);
 
   // Success modal state — replaces the prior plain toast with a richer
   // celebratory receipt modal so the user gets a clear, confidence-building
@@ -199,12 +210,46 @@ export function InrWithdrawTab({ kycApproved, onKycRequired }: { kycApproved: bo
     return null;
   })();
 
+  // Step 1: validate client-side, then ask the server to send the email OTP.
+  // The server uses the shared `withdrawal_confirm` purpose so a single
+  // outstanding OTP can be redeemed against either the INR or USDT path
+  // (whichever the user submits first; the OTP is consumed on success).
+  const requestOtp = async () => {
+    if (!kycApproved) { onKycRequired(); return; }
+    if (!canSubmit) return;
+    setSendingOtp(true);
+    try {
+      await apiFetch("/auth/withdrawal-otp", { method: "POST" });
+      setWithdrawOtp("");
+      setStep("otp");
+      toast({
+        title: "OTP sent",
+        description: "Enter the 6-digit code from your email to confirm the withdrawal.",
+      });
+    } catch (err: any) {
+      toast({
+        title: "Failed to send OTP",
+        description: err?.data?.message ?? err?.message ?? "Could not send the verification code. Try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setSendingOtp(false);
+    }
+  };
+
+  // Step 2: submit the actual withdrawal with the OTP. If the OTP is wrong
+  // we land back on the OTP step (server returns `invalid_otp`) so the
+  // user can retry without re-entering the form. If the OTP is valid, the
+  // server consumes it and books the withdrawal — the user must request a
+  // fresh OTP for any subsequent attempt (matches USDT-path behavior).
   const submit = async () => {
     if (!kycApproved) { onKycRequired(); return; }
     if (!canSubmit) return;
+    if (step !== "otp") return;
+    if (withdrawOtp.trim().length < 6) return;
     setSubmitting(true);
     try {
-      const body: any = { amountInr: amount, payoutMethod: method };
+      const body: any = { amountInr: amount, payoutMethod: method, otp: withdrawOtp.trim() };
       if (method === "upi") body.upiId = upiId.trim();
       else {
         body.accountHolder = accountHolder.trim();
@@ -219,17 +264,27 @@ export function InrWithdrawTab({ kycApproved, onKycRequired }: { kycApproved: bo
       if (resp?.withdrawal) setSuccessReceipt(resp.withdrawal as Withdrawal);
       setAmountInr("");
       setUpiId(""); setAccountHolder(""); setAccountNumber(""); setIfsc(""); setBankName("");
+      setWithdrawOtp(""); setStep("form");
       queryClient.invalidateQueries({ queryKey: getGetWalletQueryKey() });
       refresh();
     } catch (err: any) {
+      // On `invalid_otp` we keep the user on the OTP step so they can retry
+      // without losing their form values. On any other error we still keep
+      // the form values but surface the server message.
+      const errCode = err?.data?.error;
       toast({
-        title: "Withdrawal failed",
+        title: errCode === "invalid_otp" ? "Invalid code" : "Withdrawal failed",
         description: err?.data?.message ?? err?.message ?? "Could not submit withdrawal",
         variant: "destructive",
       });
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const cancelOtp = () => {
+    setStep("form");
+    setWithdrawOtp("");
   };
 
   if (loading) {
@@ -441,34 +496,124 @@ export function InrWithdrawTab({ kycApproved, onKycRequired }: { kycApproved: bo
         </div>
       )}
 
-      {/* Submit */}
-      <button
-        onClick={submit}
-        disabled={!canSubmit || submitting}
-        className="btn w-full flex items-center justify-center gap-2"
-        style={{
-          background: canSubmit && !submitting ? "linear-gradient(135deg,#10b981,#059669)" : "rgba(255,255,255,0.05)",
-          color: canSubmit && !submitting ? "#fff" : "rgba(255,255,255,0.4)",
-          boxShadow: canSubmit && !submitting ? "0 4px 18px rgba(16,185,129,0.3)" : "none",
-        }}
-      >
-        {submitting ? (
-          <><Loader2 className="w-4 h-4 animate-spin" /> Submitting…</>
-        ) : !kycApproved ? (
-          <><ShieldCheck style={{ width: 14, height: 14 }} /> Complete KYC for Withdrawal</>
-        ) : (
-          <>Request ₹{amount > 0 ? amount.toFixed(0) : ""} Withdrawal</>
-        )}
-      </button>
+      {/* Submit / OTP — two-step flow gated on email verification.
+          step === "form": user clicks "Confirm & Send Code" → requestOtp.
+          step === "otp":  6-digit input + Back/Confirm buttons → submit. */}
+      <AnimatePresence mode="wait" initial={false}>
+        {step === "form" ? (
+          <motion.div
+            key="form-submit"
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            className="space-y-2"
+          >
+            <button
+              onClick={requestOtp}
+              disabled={!canSubmit || sendingOtp}
+              className="btn w-full flex items-center justify-center gap-2"
+              style={{
+                background: canSubmit && !sendingOtp ? "linear-gradient(135deg,#10b981,#059669)" : "rgba(255,255,255,0.05)",
+                color: canSubmit && !sendingOtp ? "#fff" : "rgba(255,255,255,0.4)",
+                boxShadow: canSubmit && !sendingOtp ? "0 4px 18px rgba(16,185,129,0.3)" : "none",
+              }}
+            >
+              {sendingOtp ? (
+                <><Loader2 className="w-4 h-4 animate-spin" /> Sending code…</>
+              ) : !kycApproved ? (
+                <><ShieldCheck style={{ width: 14, height: 14 }} /> Complete KYC for Withdrawal</>
+              ) : (
+                <><Mail style={{ width: 14, height: 14 }} /> Confirm & Send Code{amount > 0 ? ` (₹${amount.toFixed(0)})` : ""}</>
+              )}
+            </button>
 
-      {/* Inline reason WHY the button is disabled — never leave the user
-          guessing in front of a grey button. */}
-      {disabledReason && !submitting && (
-        <div className="flex items-start gap-1.5 text-[11px] text-amber-300/90 -mt-2 px-1">
-          <AlertCircle className="w-3 h-3 mt-0.5 shrink-0" />
-          <span>{disabledReason}</span>
-        </div>
-      )}
+            {/* Inline reason WHY the button is disabled — never leave the user
+                guessing in front of a grey button. */}
+            {disabledReason && !sendingOtp && (
+              <div className="flex items-start gap-1.5 text-[11px] text-amber-300/90 px-1">
+                <AlertCircle className="w-3 h-3 mt-0.5 shrink-0" />
+                <span>{disabledReason}</span>
+              </div>
+            )}
+          </motion.div>
+        ) : (
+          <motion.div
+            key="otp-step"
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            className="space-y-2"
+          >
+            {/* Confirmation summary — shows the exact request the OTP authorizes.
+                If the user edits the form after requesting the OTP, the server
+                still validates whatever values they finally POST; this summary
+                surfaces what they typed at request time as a sanity anchor. */}
+            <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/8 px-3 py-2 text-[11px] space-y-0.5">
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Withdrawing</span>
+                <span className="text-emerald-300 font-bold">
+                  ₹{amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-muted-foreground shrink-0">To</span>
+                <span className="font-mono text-white truncate">
+                  {method === "upi"
+                    ? upiId.trim()
+                    : `${(bankName.trim() || "Bank")} · ${accountNumber.trim()} · ${ifsc.trim().toUpperCase()}`}
+                </span>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 text-xs text-blue-400 bg-blue-500/10 border border-blue-500/20 rounded-xl px-3 py-2">
+              <ShieldCheck style={{ width: 13, height: 13 }} />
+              Enter the 6-digit code sent to your email
+            </div>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                inputMode="numeric"
+                maxLength={6}
+                value={withdrawOtp}
+                onChange={(e) => setWithdrawOtp(e.target.value.replace(/\D/g, ""))}
+                placeholder="000000"
+                className="flex-1 field-input text-center font-mono tracking-widest text-lg"
+                autoFocus
+              />
+              <button
+                onClick={cancelOtp}
+                disabled={submitting}
+                className="px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-muted-foreground hover:bg-white/10 transition-colors disabled:opacity-50"
+                title="Cancel and go back"
+              >
+                <X style={{ width: 14, height: 14 }} />
+              </button>
+            </div>
+            <button
+              onClick={submit}
+              disabled={submitting || withdrawOtp.length < 6 || !canSubmit}
+              className="btn w-full flex items-center justify-center gap-2"
+              style={{
+                background: !submitting && withdrawOtp.length >= 6 && canSubmit ? "linear-gradient(135deg,#10b981,#059669)" : "rgba(255,255,255,0.05)",
+                color: !submitting && withdrawOtp.length >= 6 && canSubmit ? "#fff" : "rgba(255,255,255,0.4)",
+                boxShadow: !submitting && withdrawOtp.length >= 6 && canSubmit ? "0 4px 18px rgba(16,185,129,0.3)" : "none",
+              }}
+            >
+              {submitting ? (
+                <><Loader2 className="w-4 h-4 animate-spin" /> Confirming…</>
+              ) : (
+                <>Confirm Withdrawal</>
+              )}
+            </button>
+            <button
+              onClick={requestOtp}
+              disabled={sendingOtp || submitting}
+              className="text-[11px] text-blue-400 hover:text-blue-300 underline-offset-2 hover:underline disabled:opacity-50 disabled:no-underline"
+            >
+              {sendingOtp ? "Sending…" : "Didn't receive it? Send a new code"}
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <div className="flex items-start gap-2 rounded-xl border border-amber-500/20 bg-amber-500/5 px-3 py-2.5 text-[11px] text-amber-300/90">
         <Clock className="w-3 h-3 mt-0.5 shrink-0" />
