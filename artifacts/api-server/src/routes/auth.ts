@@ -1118,22 +1118,141 @@ router.post("/auth/verify-email", authMiddleware, async (req: AuthRequest, res) 
 
 // ---------------------------------------------------------------------------
 // POST /auth/withdrawal-otp — send OTP before a withdrawal
+//
+// Hardened in Batch 5.6 (2026-04-29) after the parallel security audit:
+//
+// 1) Per-user rate limit (Redis-backed, like /auth/forgot-password). Without
+//    it a stolen-session attacker could flood the legit owner's inbox by
+//    looping POSTs to this endpoint — the global 600/min/IP cap is an order
+//    of magnitude too coarse to stop an inbox bomb. 3 sends per 10 minutes
+//    per userId is enough headroom for "I clicked resend twice and didn't
+//    see the email" while bounding abuse to one email burst per window.
+//    keyGenerator runs AFTER authMiddleware (mount order below), so
+//    req.userId is populated; falls back to ip for the unreachable case
+//    where auth somehow let an unauthed request through.
+//
+// 2) Precondition gate: the withdraw routes themselves reject
+//    KYC-pending / disabled / frozen / new-account / post-password-change
+//    accounts (see routes/inr-withdrawals.ts and routes/wallet.ts). If any
+//    of those will reject, sending an OTP first is pure waste — and worse,
+//    leaks lock state to an attacker (e.g. "OTP sent" vs "withdrawal
+//    locked" tells them when the lock will expire). This handler now
+//    short-circuits with the same error codes the withdraw routes use, so
+//    the client sees a single consistent error model regardless of which
+//    layer rejected. Admins/test-mode are deliberately not exempted: this
+//    is a money-out path.
 // ---------------------------------------------------------------------------
-router.post("/auth/withdrawal-otp", authMiddleware, async (req: AuthRequest, res) => {
-  const users = await db
-    .select({ id: usersTable.id, email: usersTable.email })
-    .from(usersTable)
-    .where(eq(usersTable.id, req.userId!))
-    .limit(1);
-
-  if (users.length === 0) {
-    res.status(404).json({ error: "User not found" });
-    return;
-  }
-
-  await sendOtp(users[0]!.id, users[0]!.email, "withdrawal_confirm");
-  res.json({ success: true, message: "Withdrawal confirmation OTP sent to your email" });
+const withdrawalOtpLimiter = makeRedisLimiter({
+  name: "withdrawal-otp",
+  windowMs: 10 * 60 * 1000,
+  limit: 3,
+  message: {
+    error: "Too many OTP requests. Please wait 10 minutes before requesting another withdrawal code.",
+    code: "rate_limited",
+  },
+  // Per-userId, not per-IP, because the threat is "spam the OWNER'S inbox"
+  // not "spam from one IP". Two honest users sharing a household NAT must
+  // not interfere with each other's withdraw retries.
+  //
+  // Note on the unauth fallback: this limiter is mounted AFTER authMiddleware
+  // (see router.post call below), so reaching this point without a userId is
+  // a contract violation — we throw so misconfiguration surfaces loudly at
+  // boot/test time instead of silently degrading to a global single-key
+  // bucket that would let an attacker share-bypass other users' limits.
+  // We deliberately do NOT fall back to req.ip because (a) auth has already
+  // guaranteed userId by mount order, and (b) the v8 express-rate-limit
+  // ERR_ERL_KEY_GEN_IPV6 validator (correctly) refuses ad-hoc req.ip use
+  // without the ipKeyGenerator helper.
+  keyGenerator: (req) => {
+    const userId = (req as AuthRequest).userId;
+    if (!userId) {
+      throw new Error(
+        "withdrawalOtpLimiter reached without authMiddleware setting req.userId — check route mount order",
+      );
+    }
+    return `u:${userId}`;
+  },
 });
+
+router.post(
+  "/auth/withdrawal-otp",
+  authMiddleware,
+  withdrawalOtpLimiter,
+  async (req: AuthRequest, res) => {
+    // Pull every column the precondition checks need in a single round-trip.
+    const users = await db
+      .select({
+        id: usersTable.id,
+        email: usersTable.email,
+        kycStatus: usersTable.kycStatus,
+        isDisabled: usersTable.isDisabled,
+        isFrozen: usersTable.isFrozen,
+        createdAt: usersTable.createdAt,
+        passwordChangedAt: usersTable.passwordChangedAt,
+      })
+      .from(usersTable)
+      .where(eq(usersTable.id, req.userId!))
+      .limit(1);
+
+    if (users.length === 0) {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
+    const user = users[0]!;
+
+    // Mirror the withdraw routes' guards verbatim — same error codes so the
+    // client's existing toast handlers work without modification.
+    if (user.isDisabled || user.isFrozen) {
+      res.status(403).json({
+        error: "account_restricted",
+        message: "Withdrawals are blocked for restricted accounts",
+      });
+      return;
+    }
+    if (user.kycStatus !== "approved") {
+      res.status(403).json({
+        error: "kyc_required",
+        message: "Complete KYC verification before withdrawing",
+      });
+      return;
+    }
+
+    // Lazy import to avoid the auth.ts ↔ wallet.ts cycle (wallet.ts already
+    // does the symmetric `await import("./auth")` for the password-change
+    // constant — see routes/wallet.ts:260). Keeps the constants single-
+    // source-of-truth instead of redefining "24" here.
+    const { NEW_ACCOUNT_WITHDRAWAL_LOCK_HOURS } = await import("./wallet");
+
+    const accountAgeMs = Date.now() - new Date(user.createdAt).getTime();
+    if (accountAgeMs < NEW_ACCOUNT_WITHDRAWAL_LOCK_HOURS * 60 * 60 * 1000) {
+      const hoursLeft = Math.ceil(NEW_ACCOUNT_WITHDRAWAL_LOCK_HOURS - accountAgeMs / 3_600_000);
+      res.status(403).json({
+        error: "withdrawal_locked_new_account",
+        message: `New accounts must wait ${NEW_ACCOUNT_WITHDRAWAL_LOCK_HOURS}h before first withdrawal (${hoursLeft}h remaining)`,
+      });
+      return;
+    }
+
+    if (user.passwordChangedAt) {
+      const lockMs = WITHDRAWAL_LOCK_HOURS_AFTER_PASSWORD_CHANGE * 60 * 60 * 1000;
+      const sinceChangeMs = Date.now() - new Date(user.passwordChangedAt).getTime();
+      if (sinceChangeMs < lockMs) {
+        const hoursLeft = Math.ceil((lockMs - sinceChangeMs) / 3_600_000);
+        res.status(403).json({
+          error: "withdrawal_locked_password_change",
+          message:
+            `Withdrawals are paused for ${WITHDRAWAL_LOCK_HOURS_AFTER_PASSWORD_CHANGE}h after a password change ` +
+            `for your security (${hoursLeft}h remaining). Deposits and trading continue as normal.`,
+          hoursLeft,
+        });
+        return;
+      }
+    }
+
+    await sendOtp(user.id, user.email, "withdrawal_confirm");
+    res.json({ success: true, message: "Withdrawal confirmation OTP sent to your email" });
+  },
+);
 
 // ---------------------------------------------------------------------------
 // PUBLIC password-reset flow
