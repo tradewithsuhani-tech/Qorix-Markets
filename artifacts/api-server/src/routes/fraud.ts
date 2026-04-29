@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db, usersTable, fraudFlagsTable, loginEventsTable, userDevicesTable } from "@workspace/db";
 import { eq, and, desc, count, ne, gte, inArray } from "drizzle-orm";
-import { authMiddleware, adminMiddleware, getParam, getQueryInt, getQueryString, describeDeviceFromUserAgent, type AuthRequest } from "../middlewares/auth";
+import { authMiddleware, adminMiddleware, getParam, getQueryInt, getQueryString, describeDeviceFromUserAgent, pickRicherLabel, type AuthRequest } from "../middlewares/auth";
 import { getFraudStats } from "../lib/fraud-service";
 import { lookupGeoFull, type GeoFullResult } from "../lib/geo-ip";
 import { errorLogger } from "../lib/logger";
@@ -185,8 +185,11 @@ router.get("/admin/fraud/users/:userId/events", async (req, res) => {
         // Lazy refresh: re-parse the event's stored UA at response time using
         // the latest ua-parser-js. Stored labels from `user_devices` may be
         // stale (older parser version); re-parsing gives every historical row
-        // the richest current labels with zero DB writes. Falls back to the
-        // joined device's stored labels only when the event has no UA captured.
+        // the richest current labels with zero DB writes. We `pickRicherLabel`
+        // between stored and re-parsed because Batch-2 hint-enabled writes can
+        // store more precise versions ("Android 14.4.1") than the UA re-parse
+        // ("Android 10") would yield from the frozen UA-Reduction string —
+        // always preferring `fresh` would silently downgrade those values.
         const fresh = e.userAgent ? describeDeviceFromUserAgent(e.userAgent) : null;
         return {
           id: e.id,
@@ -195,8 +198,8 @@ router.get("/admin/fraud/users/:userId/events", async (req, res) => {
           deviceFingerprint: e.deviceFingerprint,
           eventType: e.eventType,
           userAgent: e.userAgent,
-          browserLabel: fresh?.browser ?? dev?.browserLabel ?? null,
-          osLabel: fresh?.os ?? dev?.osLabel ?? null,
+          browserLabel: pickRicherLabel(dev?.browserLabel, fresh?.browser),
+          osLabel: pickRicherLabel(dev?.osLabel, fresh?.os),
           deviceType: fresh?.deviceType ?? null,
           deviceModel: fresh?.deviceModel ?? null,
           deviceVendor: fresh?.deviceVendor ?? null,
@@ -269,15 +272,18 @@ router.get("/admin/fraud/users/:userId/devices", async (req, res) => {
         // latest ua-parser-js. Older rows were inserted with the regex parser
         // (only "Chrome" / "Android"); re-parsing now produces "Chrome 121"
         // / "Android 14" plus model/vendor/version — all retroactively, with
-        // zero DB writes and no backfill migration needed. Stored labels are
-        // kept as fallback for rows where the UA column was never captured.
+        // zero DB writes and no backfill migration needed. We `pickRicherLabel`
+        // between stored and re-parsed because Batch-2 hint-enabled writes can
+        // store more precise versions ("Android 14.4.1") than the UA re-parse
+        // ("Android 10") would yield from the frozen UA-Reduction string —
+        // always preferring `fresh` would silently downgrade those values.
         const fresh = d.userAgent ? describeDeviceFromUserAgent(d.userAgent) : null;
         return {
           id: String(d.id),
           deviceFingerprint: d.deviceFingerprint,
           userAgent: d.userAgent,
-          browserLabel: fresh?.browser ?? d.browserLabel,
-          osLabel: fresh?.os ?? d.osLabel,
+          browserLabel: pickRicherLabel(d.browserLabel, fresh?.browser),
+          osLabel: pickRicherLabel(d.osLabel, fresh?.os),
           deviceType: fresh?.deviceType ?? null,
           deviceModel: fresh?.deviceModel ?? null,
           deviceVendor: fresh?.deviceVendor ?? null,
