@@ -202,48 +202,73 @@ export function renderVerifyEmailOtpHtml(opts: {
           </td>
         </tr>
 
-        <!-- SEGMENTED OTP — six independently-bordered glowing cells -->
+        <!-- SEGMENTED OTP — six independently-bordered glowing cells (visual brand) -->
         <tr>
-          <td align="center" style="padding:22px 12px 6px;">
+          <td align="center" style="padding:22px 12px 0;">
             <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto;">
               <tr>
 ${otpCellsHtml}
               </tr>
             </table>
-            <div style="margin-top:14px;font-size:10.5px;color:#64748B;letter-spacing:1.8px;text-transform:uppercase;font-weight:600;">
-              Expires in 10 minutes · Single use
+          </td>
+        </tr>
+
+        <!-- COPYABLE PLAIN OTP — selectable text for easy long-press copy on mobile -->
+        <tr>
+          <td align="center" style="padding:14px 12px 4px;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto;">
+              <tr>
+                <td align="center" style="padding:9px 22px;background:rgba(34,211,238,0.06);border:1px dashed rgba(34,211,238,0.34);border-radius:10px;">
+                  <span style="font-family:'SF Mono','Menlo','Consolas','Courier New',monospace;font-size:17px;letter-spacing:6px;color:#67E8F9;font-weight:700;-webkit-user-select:all;-moz-user-select:all;user-select:all;line-height:1.2;">${escapeHtml(otp)}</span>
+                </td>
+              </tr>
+            </table>
+            <div style="margin-top:10px;font-size:10px;color:#64748B;letter-spacing:1.5px;text-transform:uppercase;font-weight:600;">
+              Tap &amp; hold to copy &nbsp;·&nbsp; Expires in 10 min &nbsp;·&nbsp; Single use
             </div>
           </td>
         </tr>
 
-        <!-- WHAT'S NEXT — onboarding mini-strip (Verify / Fund / Trade) -->
+        <!-- YOUR JOURNEY — premium numbered stepper with gradient connector lines -->
         <tr>
-          <td class="qx-step-pad" style="padding:32px 28px 8px;">
-            <div style="text-align:center;font-size:11px;letter-spacing:2.2px;color:#5EEAD4;text-transform:uppercase;font-weight:700;margin-bottom:14px;">
-              What's next
+          <td class="qx-step-pad" style="padding:36px 28px 8px;">
+            <div style="text-align:center;font-size:11px;letter-spacing:2.4px;color:#5EEAD4;text-transform:uppercase;font-weight:700;margin-bottom:20px;">
+              Your journey
             </div>
-            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:440px;margin:0 auto;">
+              <!-- Row 1: numbered circles + gradient connector lines -->
               <tr>
-                <td width="33%" valign="top" class="qx-step-cell" style="padding:0 6px;">
-                  <div style="background:rgba(34,211,238,0.04);border:1px solid rgba(34,211,238,0.14);border-radius:12px;padding:14px 12px;text-align:center;">
-                    <div style="font-size:18px;line-height:1;margin-bottom:6px;">📧</div>
-                    <div style="font-size:12px;font-weight:700;color:#FFFFFF;margin-bottom:3px;">1. Verify</div>
-                    <div style="font-size:10.5px;color:#64748B;line-height:1.5;">Confirm your email</div>
-                  </div>
+                <td width="46" align="center" valign="middle">
+                  <div class="qx-step-num qx-step-active" style="width:42px;height:42px;line-height:38px;border-radius:999px;background-image:linear-gradient(135deg,#22D3EE 0%,#14B8A6 100%);background-color:#22D3EE;color:#04080F;font-size:15px;font-weight:800;text-align:center;border:2px solid rgba(103,232,249,0.45);box-shadow:0 0 22px rgba(34,211,238,0.55),inset 0 1px 0 rgba(255,255,255,0.35);">1</div>
                 </td>
-                <td width="34%" valign="top" class="qx-step-cell" style="padding:0 6px;">
-                  <div style="background:rgba(34,211,238,0.04);border:1px solid rgba(34,211,238,0.14);border-radius:12px;padding:14px 12px;text-align:center;">
-                    <div style="font-size:18px;line-height:1;margin-bottom:6px;">💸</div>
-                    <div style="font-size:12px;font-weight:700;color:#FFFFFF;margin-bottom:3px;">2. Fund</div>
-                    <div style="font-size:10.5px;color:#64748B;line-height:1.5;">Deposit from $10</div>
-                  </div>
+                <td valign="middle" style="height:42px;padding:0 6px;">
+                  <div style="height:2px;background-image:linear-gradient(90deg,rgba(34,211,238,0.55) 0%,rgba(34,211,238,0.20) 100%);background-color:rgba(34,211,238,0.32);border-radius:2px;line-height:2px;font-size:0;">&nbsp;</div>
                 </td>
-                <td width="33%" valign="top" class="qx-step-cell" style="padding:0 6px;">
-                  <div style="background:rgba(34,211,238,0.04);border:1px solid rgba(34,211,238,0.14);border-radius:12px;padding:14px 12px;text-align:center;">
-                    <div style="font-size:18px;line-height:1;margin-bottom:6px;">🚀</div>
-                    <div style="font-size:12px;font-weight:700;color:#FFFFFF;margin-bottom:3px;">3. Trade</div>
-                    <div style="font-size:10.5px;color:#64748B;line-height:1.5;">AI runs 24/7</div>
-                  </div>
+                <td width="46" align="center" valign="middle">
+                  <div class="qx-step-num" style="width:42px;height:42px;line-height:38px;border-radius:999px;background:#0A1726;color:#67E8F9;font-size:15px;font-weight:800;text-align:center;border:2px solid rgba(34,211,238,0.42);box-shadow:0 0 12px rgba(34,211,238,0.18);">2</div>
+                </td>
+                <td valign="middle" style="height:42px;padding:0 6px;">
+                  <div style="height:2px;background-image:linear-gradient(90deg,rgba(34,211,238,0.20) 0%,rgba(34,211,238,0.12) 100%);background-color:rgba(34,211,238,0.16);border-radius:2px;line-height:2px;font-size:0;">&nbsp;</div>
+                </td>
+                <td width="46" align="center" valign="middle">
+                  <div class="qx-step-num" style="width:42px;height:42px;line-height:38px;border-radius:999px;background:#0A1726;color:#67E8F9;font-size:15px;font-weight:800;text-align:center;border:2px solid rgba(34,211,238,0.42);box-shadow:0 0 12px rgba(34,211,238,0.18);">3</div>
+                </td>
+              </tr>
+              <!-- Row 2: title + sub under each circle -->
+              <tr>
+                <td align="center" style="padding-top:12px;">
+                  <div style="font-size:12.5px;font-weight:700;color:#FFFFFF;letter-spacing:0.2px;">Verify</div>
+                  <div style="font-size:10.5px;color:#64748B;line-height:1.5;margin-top:2px;">your email</div>
+                </td>
+                <td>&nbsp;</td>
+                <td align="center" style="padding-top:12px;">
+                  <div style="font-size:12.5px;font-weight:700;color:#FFFFFF;letter-spacing:0.2px;">Fund</div>
+                  <div style="font-size:10.5px;color:#64748B;line-height:1.5;margin-top:2px;">from $10</div>
+                </td>
+                <td>&nbsp;</td>
+                <td align="center" style="padding-top:12px;">
+                  <div style="font-size:12.5px;font-weight:700;color:#FFFFFF;letter-spacing:0.2px;">Trade</div>
+                  <div style="font-size:10.5px;color:#64748B;line-height:1.5;margin-top:2px;">AI runs 24/7</div>
                 </td>
               </tr>
             </table>
