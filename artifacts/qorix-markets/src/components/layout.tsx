@@ -574,7 +574,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   useNotificationSoundOnNew();
 
   const userLinks = [
-    { href: "/demo-dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { href: "/wallet", label: "Wallet", icon: Wallet },
     { href: "/invest", label: "Trade", icon: TrendingUp, featured: true },
     { href: "/portfolio", label: "Portfolio", icon: PieChart },

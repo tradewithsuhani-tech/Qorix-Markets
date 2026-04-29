@@ -191,12 +191,8 @@ export default function DepositPage() {
 
   const fetchAddress = useCallback(async () => {
     setAddressLoading(true);
-    const token = localStorage.getItem("qorix_token");
     try {
-      const res = await fetch(getApiUrl("/deposit/address"), {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      const d = await res.json();
+      const d = await authFetch<{ platformAddress?: string }>(getApiUrl("/deposit/address"));
       setPlatformAddress(d.platformAddress ?? "");
     } catch {
     } finally {
@@ -205,13 +201,9 @@ export default function DepositPage() {
   }, []);
 
   const fetchConfirmedCount = useCallback(async (): Promise<number> => {
-    const token = localStorage.getItem("qorix_token");
     try {
-      const res = await fetch(getApiUrl("/deposit/history?limit=50"), {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      const d = await res.json();
-      return (d.deposits ?? []).filter((dep: any) => dep.status === "confirmed").length;
+      const d = await authFetch<{ deposits?: Array<{ status: string }> }>(getApiUrl("/deposit/history?limit=50"));
+      return (d.deposits ?? []).filter((dep) => dep.status === "confirmed").length;
     } catch {
       return 0;
     }

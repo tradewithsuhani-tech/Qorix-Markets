@@ -14,12 +14,14 @@ import { AdminPopup } from "@/components/admin-popup";
 import { PeriodFilter, DAYS_PERIOD_OPTIONS } from "@/components/period-filter";
 import { GrowthPanel } from "@/components/growth-panel";
 import { IdleBalanceBanner } from "@/components/idle-balance-banner";
+import { MissedTradeBanner } from "@/components/missed-trade-banner";
+import { PromoBonusBanner } from "@/components/promo-bonus-banner";
 import { UpdatedAgo } from "@/components/updated-ago";
 import { VipBadge, VipCard } from "@/components/vip-badge";
-import { MarketsStatusPill, InsightRotatorPill } from "@/components/header-status-pills";
 import { AnimatedCounter, BigBalanceCounter } from "@/components/animated-counter";
 import { useAuth } from "@/hooks/use-auth";
 import { generateMonthlyReport } from "@/lib/report-generator";
+import { authFetch } from "@/lib/auth-fetch";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { format } from "date-fns";
@@ -27,11 +29,12 @@ import {
   ArrowUpRight, ArrowDownRight, Wallet, Activity, Clock, TrendingUp,
   TrendingDown, Zap, Target, ShieldCheck, BarChart2, Layers,
   RefreshCw, Globe, PieChart, Award, Shield, AlertTriangle, CheckCircle, FileDown,
-  Users, UserCheck, Banknote, X, Sparkles, CircleDot, Trophy, Flame, Gauge
+  Users, UserCheck, Banknote, X, Sparkles, Trophy, Flame, Gauge, Lock
 } from "lucide-react";
+import { MarketsStatusPill, InsightRotatorPill } from "@/components/header-status-pills";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useState, useEffect, useRef } from "react";
-import { useLocation } from "wouter";
+import { useLocation, Link } from "wouter";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -40,6 +43,7 @@ import {
 } from "recharts";
 
 import { BannerCarousel } from "@/components/banner-carousel";
+import { DrawdownChartCard } from "@/components/drawdown-chart-card";
 
 const DASHBOARD_BANNERS = [
   { src: `${import.meta.env.BASE_URL}promo/banner-1-manual-trading.png`, alt: "Manual Trading Is Breaking You — Trade Smart with Qorix" },
@@ -54,16 +58,8 @@ function PointsPill() {
   const [, navigate] = useLocation();
   const { data } = useQuery<{ balance: number }>({
     queryKey: ["/api/points"],
-    queryFn: async () => {
-      let token: string | null = null;
-      try { token = localStorage.getItem("qorix_token"); } catch {}
-      const res = await fetch("/api/points", {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      if (!res.ok) throw new Error("Failed to load points");
-      return res.json();
-    },
-    refetchInterval: 30_000,
+    queryFn: () => authFetch("/api/points"),
+    refetchInterval: 300_000,
   });
   const balance = data?.balance ?? 0;
   return (
@@ -71,10 +67,10 @@ function PointsPill() {
       type="button"
       onClick={() => navigate("/tasks")}
       title="Earn more points by completing tasks"
-      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border bg-amber-500/10 border-amber-500/25 text-amber-300 hover:bg-amber-500/20 hover:border-amber-500/40 transition-all whitespace-nowrap shrink-0 leading-none"
+      className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border bg-amber-500/10 border-amber-500/25 text-amber-300 hover:bg-amber-500/20 hover:border-amber-500/40 transition-all"
     >
-      <Award style={{ width: 13, height: 13 }} className="text-amber-400 shrink-0" />
-      <span className="whitespace-nowrap tabular-nums">{balance.toLocaleString()}&nbsp;pts</span>
+      <Award style={{ width: 13, height: 13 }} className="text-amber-400" />
+      <span>{balance.toLocaleString()} pts</span>
     </button>
   );
 }
@@ -178,9 +174,12 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 const DrawdownTooltip = ({ active, payload, label }: any) => {
   if (!active || !payload?.length) return null;
   return (
-    <div className="glass-card rounded-xl px-3 py-2.5 text-xs border border-white/10 shadow-xl">
-      <p className="text-muted-foreground mb-1">{label}</p>
-      <p className="font-semibold text-red-400">
+    <div
+      className="rounded-xl px-3.5 py-2.5 text-xs border border-white/10 shadow-2xl"
+      style={{ background: "rgba(15, 23, 42, 0.96)" }}
+    >
+      <p className="text-slate-300 mb-1">{label}</p>
+      <p className="font-semibold text-emerald-400">
         P&L: {Number(payload[0]?.value) >= 0 ? "+" : ""}${Number(payload[0]?.value).toFixed(2)}
       </p>
     </div>
@@ -527,10 +526,33 @@ function CapitalProtectionWidget({
   );
 }
 
-export default function Dashboard() {
+export interface DemoDashboardBodyProps {
+  hideHeader?: boolean;
+  hideFomoTicker?: boolean;
+  hideMarketIndicators?: boolean;
+  hideGrowthPanel?: boolean;
+  hideFundTransparency?: boolean;
+  hideLiveTrades?: boolean;
+  hidePrimaryStatCards?: boolean;
+  swapEquityWithRolling?: boolean;
+  hideEquityCurve?: boolean;
+}
+
+export function DemoDashboardBody({
+  hideHeader = false,
+  hideFomoTicker = false,
+  hideMarketIndicators = false,
+  hideGrowthPanel = false,
+  hideFundTransparency = false,
+  hideLiveTrades = false,
+  hidePrimaryStatCards = false,
+  swapEquityWithRolling = false,
+  hideEquityCurve = false,
+}: DemoDashboardBodyProps = {}) {
   const [, navigate] = useLocation();
   const [chartDays, setChartDays] = useState(30);
   const [returnsDays, setReturnsDays] = useState(30);
+  const [pnlDays, setPnlDays] = useState(30);
   const [pendingLimit, setPendingLimit] = useState<number | null>(null);
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
   const prevProfitRef = useRef(0);
@@ -539,16 +561,21 @@ export default function Dashboard() {
   const { user } = useAuth();
 
   const { data: summary, isLoading: summaryLoading } = useGetDashboardSummary({
-    query: { refetchInterval: 5000 }
+    query: { refetchInterval: 30000 }
   });
   const { data: equity, isLoading: equityLoading, dataUpdatedAt: equityUpdatedAt } = useGetEquityChart(
     { days: chartDays },
-    { query: { refetchInterval: 15000 } }
+    { query: { refetchInterval: 60000 } }
   );
   const { data: returnsEquity, isLoading: returnsLoading } = useGetEquityChart(
     { days: returnsDays },
-    { query: { refetchInterval: 30000 } }
+    { query: { refetchInterval: 120000 } }
   );
+  const { data: pnlHistory, isLoading: pnlHistoryLoading } = useQuery<Array<{ date: string; percent: number; amount: number }>>({
+    queryKey: ["dashboard-pnl-history", pnlDays],
+    queryFn: () => authFetch(`/api/dashboard/pnl-history?days=${pnlDays}`),
+    refetchInterval: 120000,
+  });
   const { data: tradesData, isLoading: tradesLoading } = useQuery<{ trades: Array<{ id: number; pair: string; direction: string; createdAt: string }> }>({
     queryKey: ["signal-trades-running"],
     queryFn: async () => {
@@ -556,7 +583,7 @@ export default function Dashboard() {
       if (!res.ok) throw new Error("Failed to fetch");
       return res.json();
     },
-    refetchInterval: 5000,
+    refetchInterval: 15000,
   });
   const { data: recentTradesData } = useQuery<{ trades: Array<{ id: number; pair: string; direction: string; entryPrice: string; realizedExitPrice: string | null; realizedProfitPercent: string; closeReason: string | null; closedAt: string }> }>({
     queryKey: ["signal-trades-recent"],
@@ -565,16 +592,16 @@ export default function Dashboard() {
       if (!res.ok) throw new Error("Failed to fetch");
       return res.json();
     },
-    refetchInterval: 10000,
+    refetchInterval: 60000,
   });
   const { data: perf, isLoading: perfLoading } = useGetDashboardPerformance({
-    query: { refetchInterval: 30000 }
+    query: { refetchInterval: 120000 }
   });
   const { data: fundStats, isLoading: fundLoading } = useGetDashboardFundStats({
-    query: { refetchInterval: 30000 }
+    query: { refetchInterval: 120000 }
   });
   const { data: investment, isLoading: investLoading } = useGetInvestment({
-    query: { refetchInterval: 10000 }
+    query: { refetchInterval: 60000 }
   });
   // Single source of truth for /public/market-indicators (includes both legacy
   // metrics and the new conversion-mode fields not yet in the openapi spec).
@@ -594,7 +621,7 @@ export default function Dashboard() {
       if (!res.ok) throw new Error("failed");
       return res.json();
     },
-    refetchInterval: 30000,
+    refetchInterval: 120000,
   });
   const conversion = marketIndicators;
   const protectionMutation = useUpdateProtection({
@@ -628,6 +655,35 @@ export default function Dashboard() {
   // Total Profit starts here, then accumulates upward as equity grows.
   const totalProfitBaseline = Number((fundStats as any)?.totalProfitBaseline ?? 0) || 0;
   const totalProfitDisplay = +(totalProfitBaseline + (summary?.totalProfit ?? 0) * equityScale).toFixed(2);
+  const dailyPnlMeta = (summary as any)?.dailyPnl as
+    | { marketClosed?: boolean; marketOpensAt?: number | null; nextChunkAt?: number | null }
+    | undefined;
+  const marketClosed = !!dailyPnlMeta?.marketClosed;
+  const marketOpensAt = dailyPnlMeta?.marketOpensAt ?? null;
+  const nextChunkAt = dailyPnlMeta?.nextChunkAt ?? null;
+
+  const [pnlNowTick, setPnlNowTick] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setPnlNowTick(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  const formatCountdown = (ms: number) => {
+    if (ms <= 0) return "0s";
+    const s = Math.floor(ms / 1000);
+    const d = Math.floor(s / 86400);
+    const h = Math.floor((s % 86400) / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const sec = s % 60;
+    if (d > 0) return `${d}d ${h}h ${m}m`;
+    if (h > 0) return `${h}h ${m}m ${sec}s`;
+    if (m > 0) return `${m}m ${sec}s`;
+    return `${sec}s`;
+  };
+  const pnlSubLabel = marketClosed && marketOpensAt
+    ? `Market closed · Opens in ${formatCountdown(marketOpensAt - pnlNowTick)}`
+    : nextChunkAt
+      ? `Next update in ${formatCountdown(nextChunkAt - pnlNowTick)}`
+      : "All updates done for today";
 
   const prevProfit = prevProfitRef.current;
   useEffect(() => {
@@ -640,10 +696,19 @@ export default function Dashboard() {
     profit: e.profit,
   }));
 
-  const drawdownData = equityArr.map((e) => ({
-    date: format(new Date(e.date), "MMM dd"),
-    value: e.profit,
-  }));
+  // Daily P&L bar chart: each bar = that day's P&L $ amount; color is up
+  // (green) if today's percent > previous day's percent, otherwise down (red).
+  // Sourced from /dashboard/pnl-history so it always matches the Daily P&L card.
+  const pnlArr = Array.isArray(pnlHistory) ? pnlHistory : [];
+  const drawdownData = pnlArr.map((p, i) => {
+    const prevPct = i > 0 ? pnlArr[i - 1]!.percent : p.percent;
+    return {
+      date: format(new Date(p.date + "T00:00:00Z"), pnlDays <= 1 ? "HH:mm" : "MMM dd"),
+      value: p.amount,
+      percent: p.percent,
+      up: p.percent >= prevPct,
+    };
+  });
 
   const handleDownloadReport = async () => {
     if (!user || !summary || !perf) {
@@ -697,6 +762,7 @@ export default function Dashboard() {
   const statCards = [
     {
       label: "Total Equity",
+      // synced with Total AUM (Fund Transparency) — same value across both cards
       icon: <Wallet style={{ width: 16, height: 16 }} className="text-blue-400" />,
       value: <BigBalanceCounter value={fundStats?.totalAUM ?? summary?.totalBalance ?? 0} className="text-lg sm:text-2xl md:text-3xl" />,
       sub: (
@@ -719,13 +785,20 @@ export default function Dashboard() {
         </span>
       ),
       sub: (
-        <span className={`text-xs font-medium flex items-center gap-1 ${isPositive ? "profit-text" : "loss-text"}`}>
-          {isPositive ? <ArrowUpRight style={{ width: 12, height: 12 }} /> : <ArrowDownRight style={{ width: 12, height: 12 }} />}
-          {isPositive ? "+" : ""}{dailyPct.toFixed(2)}% today
-        </span>
+        <div className="flex flex-col gap-0.5">
+          <span className={`text-xs font-medium flex items-center gap-1 ${marketClosed ? "text-muted-foreground" : isPositive ? "profit-text" : "loss-text"}`}>
+            {marketClosed ? null : isPositive ? <ArrowUpRight style={{ width: 12, height: 12 }} /> : <ArrowDownRight style={{ width: 12, height: 12 }} />}
+            {marketClosed ? "0.00% today" : `${isPositive ? "+" : ""}${dailyPct.toFixed(2)}% today`}
+          </span>
+          {marketClosed && marketOpensAt ? (
+            <span className="text-[10px] text-amber-400">
+              Market closed · Opens in {formatCountdown(marketOpensAt - pnlNowTick)}
+            </span>
+          ) : null}
+        </div>
       ),
-      accent: isPositive ? "green" : "red",
-      glow: isPositive ? "rgba(34,197,94,0.1)" : "rgba(239,68,68,0.1)",
+      accent: marketClosed ? "amber" : isPositive ? "green" : "red",
+      glow: marketClosed ? "rgba(245,158,11,0.1)" : isPositive ? "rgba(34,197,94,0.1)" : "rgba(239,68,68,0.1)",
     },
     {
       label: "Active Trading Fund",
@@ -833,8 +906,248 @@ export default function Dashboard() {
     },
   ];
 
+  const equityCurveBody = (
+    <>
+      <div className="flex flex-col gap-3 mb-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <h3 className="font-semibold whitespace-nowrap flex items-center gap-2">
+            Equity Curve
+            <span className="text-[9px] px-1.5 py-0.5 rounded font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-400/30 uppercase tracking-wider inline-flex items-center gap-1">
+              <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              Live
+            </span>
+          </h3>
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="text-xs text-muted-foreground whitespace-nowrap">
+              Live Performance
+            </p>
+            <span className="text-muted-foreground/40">·</span>
+            <UpdatedAgo timestamp={equityUpdatedAt} />
+          </div>
+        </div>
+        <div className="-mx-1 overflow-x-auto scrollbar-hide sm:mx-0 sm:overflow-visible">
+          <PeriodFilter
+            options={DAYS_PERIOD_OPTIONS}
+            selected={chartDays}
+            onChange={(v) => setChartDays(Number(v))}
+            ariaLabel="Equity curve period"
+          />
+        </div>
+      </div>
+      <div className="w-full" style={{ height: 260 }}>
+        {equityLoading ? (
+          <div className="w-full h-full flex items-end gap-1 pb-2">
+            {Array.from({ length: 20 }).map((_, i) => (
+              <div key={i} className="flex-1 bg-white/5 rounded-t animate-pulse" style={{ height: `${30 + (i * 3) % 60}%` }} />
+            ))}
+          </div>
+        ) : chartData.length < 2 ? (
+          <div className="w-full h-full flex items-center justify-center text-xs text-muted-foreground">
+            Building your equity curve…
+          </div>
+        ) : (
+          <ResponsiveContainer width="100%" height={260}>
+            <AreaChart data={chartData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+              <defs>
+                <linearGradient id="equityGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="rgba(96,165,250,0.35)" />
+                  <stop offset="100%" stopColor="rgba(96,165,250,0.00)" />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
+              <XAxis
+                dataKey="date"
+                tick={{ fill: "#64748b", fontSize: 11 }}
+                axisLine={false}
+                tickLine={false}
+                interval="preserveStartEnd"
+              />
+              <YAxis
+                tick={{ fill: "#64748b", fontSize: 11 }}
+                axisLine={false}
+                tickLine={false}
+                tickFormatter={v => `$${Number(v).toLocaleString()}`}
+                width={70}
+                domain={[
+                  (dataMin: number) => {
+                    // Pad below min by ~10% of the data range so curve sits
+                    // off the floor and any growth is clearly visible.
+                    const dataMax = Math.max(...chartData.map(d => Number(d.equity) || 0));
+                    const range = dataMax - dataMin;
+                    const pad = Math.max(range * 0.25, dataMax * 0.02);
+                    return Math.max(0, Math.floor((dataMin - pad) / 100) * 100);
+                  },
+                  (dataMax: number) => {
+                    const dataMin = Math.min(...chartData.map(d => Number(d.equity) || 0));
+                    const range = dataMax - dataMin;
+                    const pad = Math.max(range * 0.15, dataMax * 0.02);
+                    return Math.ceil((dataMax + pad) / 100) * 100;
+                  },
+                ]}
+              />
+              <Tooltip
+                content={<CustomTooltip />}
+                cursor={{ stroke: "rgba(148,163,184,0.25)", strokeWidth: 1 }}
+                wrapperStyle={{ outline: "none" }}
+              />
+              <Area
+                type="monotone"
+                dataKey="equity"
+                name="Equity"
+                stroke="rgba(96,165,250,1)"
+                strokeWidth={2}
+                fill="url(#equityGrad)"
+                dot={false}
+                activeDot={{ r: 5, fill: "rgba(96,165,250,1)", strokeWidth: 0 }}
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        )}
+      </div>
+    </>
+  );
+
+  const rollingReturnsBody = (
+    <>
+      <div className="flex items-start justify-between mb-3 gap-3 flex-wrap">
+        <div>
+          <h3 className="font-semibold">Rolling Returns</h3>
+          <p className="text-xs text-muted-foreground">Cumulative return over selected period</p>
+        </div>
+        <PeriodFilter
+          options={DAYS_PERIOD_OPTIONS}
+          selected={returnsDays}
+          onChange={(v) => setReturnsDays(Number(v))}
+          ariaLabel="Rolling returns period"
+        />
+      </div>
+
+      {(() => {
+        const rawArr = Array.isArray(returnsEquity) ? (returnsEquity as Array<{ date: string; equity: number }>) : [];
+        const arr = [...rawArr].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+        const base = arr.length > 0 ? Number(arr[0].equity) || 0 : 0;
+        const series = arr.map(p => ({
+          date: format(new Date(p.date), "MMM dd"),
+          ret: base > 0 ? ((Number(p.equity) - base) / base) * 100 : 0,
+        }));
+        const last = series.length > 0 ? series[series.length - 1].ret : 0;
+        const isPos = last >= 0;
+        const stroke = isPos ? "rgba(34,197,94,1)" : "rgba(239,68,68,1)";
+        const gradTop = isPos ? "rgba(34,197,94,0.32)" : "rgba(239,68,68,0.32)";
+
+        return (
+          <>
+            <div className="flex items-baseline gap-2 mb-2">
+              <span className={`text-2xl font-bold tabular-nums ${isPos ? "profit-text" : "loss-text"}`}>
+                {isPos ? "+" : ""}{last.toFixed(2)}%
+              </span>
+              <span className="text-xs text-muted-foreground">
+                over {periodLabel(returnsDays)}
+              </span>
+            </div>
+            <div className="flex-1" style={{ minHeight: 160 }}>
+              {returnsLoading ? (
+                <div className="w-full h-full flex items-end gap-1 pb-2">
+                  {Array.from({ length: 20 }).map((_, i) => (
+                    <div key={i} className="flex-1 bg-white/5 rounded-t animate-pulse" style={{ height: `${30 + (i * 3) % 60}%` }} />
+                  ))}
+                </div>
+              ) : series.length < 2 ? (
+                <div className="w-full h-full flex items-center justify-center text-xs text-muted-foreground">
+                  Not enough data for this period yet
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={series} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="returnsGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor={gradTop} />
+                        <stop offset="100%" stopColor="rgba(0,0,0,0)" />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
+                    <XAxis
+                      dataKey="date"
+                      tick={{ fill: "#64748b", fontSize: 10 }}
+                      axisLine={false}
+                      tickLine={false}
+                      interval="preserveStartEnd"
+                    />
+                    <YAxis
+                      tick={{ fill: "#64748b", fontSize: 10 }}
+                      axisLine={false}
+                      tickLine={false}
+                      tickFormatter={v => `${Number(v).toFixed(1)}%`}
+                      width={48}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        background: "rgba(15,23,42,0.95)",
+                        border: "1px solid rgba(255,255,255,0.1)",
+                        borderRadius: 8,
+                        fontSize: 12,
+                      }}
+                      formatter={(v: any) => [`${Number(v).toFixed(2)}%`, "Return"]}
+                    />
+                    <ReferenceLine y={0} stroke="rgba(255,255,255,0.15)" strokeDasharray="4 2" />
+                    <Area
+                      type="monotone"
+                      dataKey="ret"
+                      name="Return"
+                      stroke={stroke}
+                      strokeWidth={2}
+                      fill="url(#returnsGrad)"
+                      dot={false}
+                      activeDot={{ r: 4, fill: stroke, strokeWidth: 0 }}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+          </>
+        );
+      })()}
+    </>
+  );
+
+  // Lock overlay reused on personal portfolio sections (Equity Curve,
+  // Drawdown/Daily P&L + Rolling Returns grid, Performance Metrics) when
+  // the user does not have an active trading fund. The underlying section
+  // still renders (so layout/data stays intact) but is blurred behind a
+  // teaser CTA inviting the user to activate trading.
+  const lockOverlay = (
+    <div className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none px-4">
+      <div className="pointer-events-auto max-w-sm w-full text-center rounded-2xl border border-amber-400/30 bg-gradient-to-br from-[#1a1408]/95 via-[#0d1320]/95 to-[#070b14]/95 shadow-[0_20px_60px_-10px_rgba(245,158,11,0.35)] p-5 backdrop-blur-sm">
+        <div className="mx-auto w-12 h-12 rounded-2xl bg-amber-500/15 border border-amber-400/40 flex items-center justify-center mb-2.5">
+          <Lock className="w-5 h-5 text-amber-300" />
+        </div>
+        <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-300 mb-1">
+          Locked
+        </div>
+        <h3 className="text-sm md:text-base font-bold text-white mb-1.5">
+          Activate Trading to Unlock
+        </h3>
+        <p className="text-[11px] md:text-xs text-muted-foreground leading-relaxed mb-3">
+          This personal analytics view goes live the moment your Trading Fund activates.
+        </p>
+        <Link
+          href="/invest"
+          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-green-500 hover:from-emerald-400 hover:to-green-400 text-black font-semibold text-xs transition-all shadow-lg shadow-emerald-500/30"
+        >
+          <Sparkles className="w-3 h-3" />
+          Start Trading
+          <ArrowUpRight className="w-3 h-3" />
+        </Link>
+      </div>
+    </div>
+  );
+  const lockBlurClass = !investment?.isActive
+    ? "pointer-events-none select-none blur-[3px] opacity-70"
+    : "";
+  const isPortfolioLocked = !investment?.isActive;
+
   return (
-    <Layout>
+    <>
       <AdminPopup />
       <motion.div
         initial={{ opacity: 0, y: 12 }}
@@ -843,36 +1156,15 @@ export default function Dashboard() {
         className="space-y-5 md:space-y-6"
       >
         {/* Header */}
+        {!hideHeader && (
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <h1 className="text-2xl md:text-3xl font-bold tracking-tight gradient-text">Overview</h1>
             <p className="text-muted-foreground text-sm mt-0.5">Portfolio performance dashboard</p>
           </div>
-          {/* Pill row — horizontally scrollable on mobile (iOS-style chip row)
-              so rotating-content pills like InsightRotatorPill never clip at
-              the viewport edge. Inline + no-scroll on tablet and up. */}
-          <div className="flex items-center gap-2 sm:gap-2.5 overflow-x-auto sm:overflow-visible flex-nowrap sm:flex-nowrap [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden -mx-4 px-4 sm:mx-0 sm:px-0 pb-1 sm:pb-0">
+          <div className="flex items-center gap-2 sm:gap-2.5 overflow-x-auto sm:overflow-visible flex-nowrap [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden -mx-4 px-4 sm:mx-0 sm:px-0 pb-1 sm:pb-0">
             {summary?.riskLevel && <RiskBadge score={perf?.riskScore ?? "Low"} />}
-            {summary?.vip && (summary.vip.tier as string) !== "none" && (
-              <VipBadge tier={summary.vip.tier as "silver" | "gold" | "platinum"} size="sm" />
-            )}
-            <PointsPill />
-
-            <button
-              onClick={handleDownloadReport}
-              disabled={isGeneratingReport || summaryLoading || perfLoading}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all duration-150 bg-blue-500/10 border-blue-500/25 text-blue-400 hover:bg-blue-500/20 hover:border-blue-500/40 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
-            >
-              <FileDown style={{ width: 12, height: 12 }} />
-              {isGeneratingReport
-                ? "Generating…"
-                : (
-                  <>
-                    <span className="sm:hidden">Report</span>
-                    <span className="hidden sm:inline">Download Report</span>
-                  </>
-                )}
-            </button>
+            {/* VIP, Points pill, and Download Report removed from demo dashboard — not relevant in demo. */}
             <MarketsStatusPill />
             <InsightRotatorPill
               insights={[
@@ -884,6 +1176,7 @@ export default function Dashboard() {
             />
           </div>
         </div>
+        )}
 
         {/* Promo Banners — hidden per request */}
         {false && (
@@ -1034,9 +1327,15 @@ export default function Dashboard() {
         )}
 
         {/* Live Activity FOMO Ticker */}
-        {conversion?.fomoMessages && conversion.fomoMessages.length > 0 && (
+        {!hideFomoTicker && conversion?.fomoMessages && conversion.fomoMessages.length > 0 && (
           <FomoTicker messages={conversion.fomoMessages} />
         )}
+
+        {/* 5% deposit-bonus promo banner — reappears every 30 minutes */}
+        <PromoBonusBanner />
+
+        {/* Missed-trade FOMO banner (main screen alert, not a popup) */}
+        <MissedTradeBanner />
 
         {/* Investment CTA + Trust block — only for users who haven't activated trading */}
         {conversion?.demoModeEnabled !== false && !investment?.isActive && (
@@ -1046,60 +1345,142 @@ export default function Dashboard() {
             transition={{ duration: 0.4, delay: 0.1 }}
             className="grid grid-cols-1 lg:grid-cols-5 gap-4"
           >
-            {/* Activate Trading CTA */}
-            <div className="lg:col-span-3 rounded-2xl border border-blue-500/25 bg-gradient-to-br from-[#0d1117] via-[#0d1117] to-blue-950/30 p-5 md:p-6 space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-[11px] font-semibold uppercase tracking-wider text-blue-300 mb-1">Start Trading</div>
-                  <h3 className="text-xl md:text-2xl font-bold leading-tight">Start from <span className="gradient-text">$10</span></h3>
-                </div>
-                <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold border bg-emerald-500/10 border-emerald-500/25 text-emerald-300">
-                  <CheckCircle style={{ width: 11, height: 11 }} /> No lock-in
-                </div>
-              </div>
+            {/* Activate Trading CTA — premium */}
+            <div className="lg:col-span-3 relative overflow-hidden rounded-2xl border border-blue-500/25 bg-gradient-to-br from-[#0d1117] via-[#0a0f1a] to-blue-950/40 p-4 sm:p-5 md:p-6 space-y-4 shadow-[0_0_40px_-12px_rgba(59,130,246,0.35)]">
+              {/* Top hairline + ambient glow */}
+              <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-blue-400/60 to-transparent" />
+              <div
+                className="pointer-events-none absolute -top-24 -right-20 w-72 h-72 rounded-full opacity-40"
+                style={{ background: "radial-gradient(circle, rgba(59,130,246,0.25) 0%, transparent 70%)" }}
+              />
+              <div
+                className="pointer-events-none absolute -bottom-24 -left-20 w-72 h-72 rounded-full opacity-30"
+                style={{ background: "radial-gradient(circle, rgba(168,85,247,0.20) 0%, transparent 70%)" }}
+              />
 
-              <div className="grid grid-cols-3 gap-2">
-                {[
-                  { name: "Low", returns: "2–5%/mo", bg: "bg-emerald-500/5 border-emerald-500/20", text: "text-emerald-300" },
-                  { name: "Balanced", returns: "4–6%/mo", bg: "bg-blue-500/5 border-blue-500/20", text: "text-blue-300" },
-                  { name: "Growth", returns: "5–8%/mo", bg: "bg-violet-500/5 border-violet-500/20", text: "text-violet-300" },
-                ].map((mode) => (
-                  <div
-                    key={mode.name}
-                    className={`rounded-xl border p-2.5 sm:p-3 text-center ${mode.bg} min-w-0`}
-                  >
-                    <div className={`text-xs font-semibold ${mode.text} mb-1 truncate`}>{mode.name}</div>
-                    <div className="text-[11px] text-muted-foreground tabular-nums whitespace-nowrap">{mode.returns}</div>
+              {/* Header */}
+              <div className="relative flex items-start justify-between gap-2">
+                <div className="flex items-start gap-3 min-w-0">
+                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500/25 to-purple-500/15 border border-blue-400/40 flex items-center justify-center shrink-0 shadow-[0_0_18px_-4px_rgba(59,130,246,0.6)]">
+                    <Zap style={{ width: 18, height: 18 }} className="text-blue-300" />
                   </div>
-                ))}
+                  <div className="min-w-0">
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-blue-300/90 mb-0.5">
+                      Start Trading
+                    </div>
+                    <h3 className="text-xl sm:text-2xl md:text-3xl font-extrabold leading-tight whitespace-nowrap">
+                      Start from <span className="bg-gradient-to-r from-blue-300 via-violet-300 to-purple-400 bg-clip-text text-transparent">$10</span>
+                    </h3>
+                  </div>
+                </div>
+                <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border bg-emerald-500/10 border-emerald-500/30 text-emerald-300 shrink-0 whitespace-nowrap">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  No lock-in
+                </span>
               </div>
 
+              {/* Strategy tier picker */}
+              <div className="relative">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70 mb-2">
+                  Choose your strategy
+                </div>
+                <div className="grid grid-cols-3 gap-2 sm:gap-2.5">
+                  {[
+                    { name: "Low", returns: "2–5%", icon: ShieldCheck, accent: "emerald", bg: "from-emerald-500/[0.10] to-emerald-500/[0.02]", border: "border-emerald-500/25 hover:border-emerald-400/50", text: "text-emerald-300", iconBg: "bg-emerald-500/20 border-emerald-400/30" },
+                    { name: "Balanced", returns: "4–6%", icon: BarChart2, accent: "blue", bg: "from-blue-500/[0.10] to-blue-500/[0.02]", border: "border-blue-500/30 hover:border-blue-400/50", text: "text-blue-300", iconBg: "bg-blue-500/20 border-blue-400/30" },
+                    { name: "Growth", returns: "5–8%", icon: TrendingUp, accent: "violet", bg: "from-violet-500/[0.10] to-violet-500/[0.02]", border: "border-violet-500/25 hover:border-violet-400/50", text: "text-violet-300", iconBg: "bg-violet-500/20 border-violet-400/30" },
+                  ].map((mode) => (
+                    <div
+                      key={mode.name}
+                      className={`group relative overflow-hidden rounded-xl border bg-gradient-to-br p-2.5 sm:p-3 text-center transition-all duration-200 hover:-translate-y-0.5 ${mode.bg} ${mode.border}`}
+                    >
+                      <div className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-gradient-to-br from-white/[0.05] to-transparent" />
+                      <div className={`relative w-7 h-7 mx-auto rounded-lg border flex items-center justify-center mb-1.5 ${mode.iconBg}`}>
+                        <mode.icon style={{ width: 14, height: 14 }} className={mode.text} />
+                      </div>
+                      <div className={`relative text-xs sm:text-sm font-bold ${mode.text} mb-0.5 truncate`}>{mode.name}</div>
+                      <div className="relative text-[10px] sm:text-[11px] text-muted-foreground tabular-nums whitespace-nowrap font-medium">{mode.returns}/mo</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* CTA button — premium with shimmer */}
               <button
                 onClick={() => navigate("/deposit")}
-                className="w-full px-5 py-3 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 shadow-lg shadow-blue-600/30 transition-all"
+                className="group relative w-full overflow-hidden px-5 py-3.5 rounded-xl text-sm sm:text-base font-bold text-white bg-gradient-to-r from-blue-600 via-violet-600 to-purple-600 hover:from-blue-500 hover:via-violet-500 hover:to-purple-500 shadow-[0_8px_24px_-6px_rgba(99,102,241,0.55)] hover:shadow-[0_12px_32px_-6px_rgba(99,102,241,0.75)] transition-all duration-300 border border-white/15"
               >
-                Activate Trading →
+                {/* Shimmer sweep */}
+                <span className="pointer-events-none absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out" />
+                <span className="relative inline-flex items-center justify-center gap-2">
+                  <Zap style={{ width: 16, height: 16 }} />
+                  Activate Trading
+                  <span className="transition-transform group-hover:translate-x-1">→</span>
+                </span>
               </button>
-              <div className="text-[11px] text-muted-foreground text-center">Start small. Scale anytime. Withdraw with one click.</div>
+
+              {/* Trust pills below button */}
+              <div className="relative flex items-center justify-center gap-1.5 sm:gap-3 flex-wrap text-[10px] sm:text-[11px] text-muted-foreground">
+                <span className="inline-flex items-center gap-1">
+                  <CheckCircle style={{ width: 11, height: 11 }} className="text-emerald-400" />
+                  Start small
+                </span>
+                <span className="text-muted-foreground/40">·</span>
+                <span className="inline-flex items-center gap-1">
+                  <CheckCircle style={{ width: 11, height: 11 }} className="text-emerald-400" />
+                  Scale anytime
+                </span>
+                <span className="text-muted-foreground/40">·</span>
+                <span className="inline-flex items-center gap-1">
+                  <CheckCircle style={{ width: 11, height: 11 }} className="text-emerald-400" />
+                  1-click withdraw
+                </span>
+              </div>
             </div>
 
-            {/* Trust Block */}
-            <div className="lg:col-span-2 rounded-2xl border border-white/10 bg-white/[0.02] p-5 space-y-3">
-              <div className="flex items-center gap-2">
-                <ShieldCheck style={{ width: 16, height: 16 }} className="text-emerald-400" />
-                <h3 className="font-semibold">Why Qorix</h3>
+            {/* Why Qorix — premium trust block */}
+            <div className="lg:col-span-2 relative overflow-hidden rounded-2xl border border-emerald-500/15 bg-gradient-to-br from-[#0e1828] via-[#0a1322] to-[#070b14] p-4 sm:p-5">
+              <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-emerald-400/40 to-transparent" />
+              <div
+                className="pointer-events-none absolute -top-20 -right-20 w-60 h-60 rounded-full opacity-25"
+                style={{ background: "radial-gradient(circle, rgba(16,185,129,0.20) 0%, transparent 70%)" }}
+              />
+
+              <div className="relative flex items-center gap-2.5 mb-4">
+                <div className="w-9 h-9 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center shrink-0 shadow-[0_0_16px_-4px_rgba(16,185,129,0.5)]">
+                  <ShieldCheck style={{ width: 16, height: 16 }} className="text-emerald-400" />
+                </div>
+                <div>
+                  <h3 className="text-sm sm:text-base font-bold text-white leading-tight">Why Qorix</h3>
+                  <div className="text-[10px] uppercase tracking-wider text-emerald-300/80 font-semibold">
+                    Built for trust
+                  </div>
+                </div>
               </div>
-              <ul className="space-y-2.5">
+
+              <ul className="relative space-y-2">
                 {[
-                  "Fully automated execution",
-                  "No manual trading required",
-                  "Risk-managed strategies",
-                  "Transparent dashboard",
-                  "Withdraw anytime",
+                  { icon: Zap, label: "Fully automated execution", desc: "AI-driven 24/7" },
+                  { icon: ShieldCheck, label: "No manual trading", desc: "Set & forget" },
+                  { icon: Gauge, label: "Risk-managed strategies", desc: "Protected by limits" },
+                  { icon: BarChart2, label: "Transparent dashboard", desc: "Real-time P&L" },
+                  { icon: Banknote, label: "Withdraw anytime", desc: "1-click cash-out" },
                 ].map((item) => (
-                  <li key={item} className="flex items-start gap-2.5 text-sm">
-                    <CheckCircle style={{ width: 14, height: 14 }} className="text-emerald-400 shrink-0 mt-0.5" />
-                    <span className="text-muted-foreground">{item}</span>
+                  <li
+                    key={item.label}
+                    className="group flex items-center gap-2.5 p-2 rounded-lg border border-transparent hover:border-emerald-500/15 hover:bg-emerald-500/[0.04] transition-all duration-200"
+                  >
+                    <div className="w-7 h-7 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center shrink-0 group-hover:bg-emerald-500/20 group-hover:border-emerald-400/40 transition-colors">
+                      <item.icon style={{ width: 13, height: 13 }} className="text-emerald-400" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs sm:text-sm font-semibold text-white truncate">
+                        {item.label}
+                      </div>
+                      <div className="text-[10px] text-muted-foreground/80 truncate">
+                        {item.desc}
+                      </div>
+                    </div>
                   </li>
                 ))}
               </ul>
@@ -1108,6 +1489,7 @@ export default function Dashboard() {
         )}
 
         {/* Investor Psychology Indicators */}
+        {!hideMarketIndicators && (
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -1161,12 +1543,11 @@ export default function Dashboard() {
               key={label}
               className={`glass-card rounded-xl border ${bg} px-3 py-2.5 sm:px-4 sm:py-3 flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-3 min-w-0`}
             >
-              {/* Icon: sits on top-left on mobile (small), inline on desktop */}
+              {/* Icon row: icon + label on mobile (saves vertical space) */}
               <div className="flex items-center gap-2 sm:gap-0">
                 <div className="shrink-0 w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-white/5 border border-white/8 flex items-center justify-center">
                   <Icon style={{ width: 13, height: 13 }} className={color} />
                 </div>
-                {/* Label inline with icon on mobile (saves vertical space) */}
                 <div className="sm:hidden text-[9px] uppercase tracking-normal text-muted-foreground whitespace-nowrap truncate flex-1 min-w-0">
                   {label}
                 </div>
@@ -1187,7 +1568,7 @@ export default function Dashboard() {
                     </span>
                   ) : null}
                 </div>
-                {/* Label below value on desktop only — on mobile it's already in the icon row */}
+                {/* Label below value on desktop only */}
                 <div className="hidden sm:block text-[11px] text-muted-foreground truncate mt-0.5">
                   {label}
                 </div>
@@ -1195,6 +1576,7 @@ export default function Dashboard() {
             </div>
           ))}
         </motion.div>
+        )}
 
         {/* Limited Slots Banner */}
         {fundStats && fundStats.maxSlots > 0 && (
@@ -1243,6 +1625,7 @@ export default function Dashboard() {
         )}
 
         {/* Primary Stat Cards */}
+        {!hidePrimaryStatCards && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
           {statCards.map((card, i) => (
             <motion.div
@@ -1264,122 +1647,37 @@ export default function Dashboard() {
               {summaryLoading ? (
                 <Skeleton className="h-8 w-28" />
               ) : (
-                <div className="font-bold leading-tight min-w-0 max-w-full overflow-hidden">{card.value}</div>
+                <div className="font-bold leading-tight min-w-0 overflow-hidden">{card.value}</div>
               )}
-              {card.sub && !summaryLoading && <div className="min-w-0 max-w-full overflow-hidden">{card.sub}</div>}
+              {card.sub && !summaryLoading && <div className="min-w-0 overflow-hidden">{card.sub}</div>}
             </motion.div>
           ))}
         </div>
+        )}
 
-        {/* Equity Chart + Trades */}
+        {/* Equity Chart + Trades — Equity Curve is a personal/portfolio chart,
+            so hide it for users without an active trading fund. Live Trades
+            stays visible (company-wide signal stream). */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-5">
-          {/* Equity Curve */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.22, duration: 0.4 }}
-            className="glass-card p-5 rounded-2xl col-span-1 lg:col-span-2 flex flex-col"
-            style={{ minHeight: 340 }}
-          >
-            <div className="flex flex-col gap-3 mb-4 sm:flex-row sm:items-center sm:justify-between">
-              <div className="min-w-0">
-                <h3 className="font-semibold whitespace-nowrap flex items-center gap-2">
-                  Equity Curve
-                  <span className="text-[9px] px-1.5 py-0.5 rounded font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-400/30 uppercase tracking-wider inline-flex items-center gap-1">
-                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                    Live
-                  </span>
-                </h3>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <p className="text-xs text-muted-foreground whitespace-nowrap">
-                    Live Performance
-                  </p>
-                  <span className="text-muted-foreground/40">·</span>
-                  <UpdatedAgo timestamp={equityUpdatedAt} />
-                </div>
-              </div>
-              <div className="-mx-1 overflow-x-auto scrollbar-hide sm:mx-0 sm:overflow-visible">
-                <PeriodFilter
-                  options={DAYS_PERIOD_OPTIONS}
-                  selected={chartDays}
-                  onChange={(v) => setChartDays(Number(v))}
-                  ariaLabel="Equity curve period"
-                />
-              </div>
-            </div>
-            <div className="flex-1" style={{ minHeight: 260 }}>
-              {equityLoading ? (
-                <div className="w-full h-full flex items-end gap-1 pb-2">
-                  {Array.from({ length: 20 }).map((_, i) => (
-                    <div key={i} className="flex-1 bg-white/5 rounded-t animate-pulse" style={{ height: `${30 + (i * 3) % 60}%` }} />
-                  ))}
-                </div>
-              ) : (
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={chartData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id="equityGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="rgba(96,165,250,0.35)" />
-                        <stop offset="100%" stopColor="rgba(96,165,250,0.00)" />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
-                    <XAxis
-                      dataKey="date"
-                      tick={{ fill: "#64748b", fontSize: 11 }}
-                      axisLine={false}
-                      tickLine={false}
-                      interval="preserveStartEnd"
-                    />
-                    <YAxis
-                      tick={{ fill: "#64748b", fontSize: 11 }}
-                      axisLine={false}
-                      tickLine={false}
-                      tickFormatter={v => `$${Number(v).toLocaleString()}`}
-                      width={70}
-                      domain={[
-                        (dataMin: number) => {
-                          const dataMax = Math.max(...chartData.map(d => Number(d.equity) || 0));
-                          const range = dataMax - dataMin;
-                          const pad = Math.max(range * 0.25, dataMax * 0.02);
-                          return Math.max(0, Math.floor((dataMin - pad) / 100) * 100);
-                        },
-                        (dataMax: number) => {
-                          const dataMin = Math.min(...chartData.map(d => Number(d.equity) || 0));
-                          const range = dataMax - dataMin;
-                          const pad = Math.max(range * 0.15, dataMax * 0.02);
-                          return Math.ceil((dataMax + pad) / 100) * 100;
-                        },
-                      ]}
-                    />
-                    <Tooltip
-                      content={<CustomTooltip />}
-                      cursor={{ stroke: "rgba(148,163,184,0.25)", strokeWidth: 1 }}
-                      wrapperStyle={{ outline: "none" }}
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="equity"
-                      name="Equity"
-                      stroke="rgba(96,165,250,1)"
-                      strokeWidth={2}
-                      fill="url(#equityGrad)"
-                      dot={false}
-                      activeDot={{ r: 5, fill: "rgba(96,165,250,1)", strokeWidth: 0 }}
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-              )}
-            </div>
-          </motion.div>
+          {/* Equity Curve (or Rolling Returns when swapped) */}
+          <div className={`col-span-1 ${swapEquityWithRolling && hideLiveTrades ? "lg:col-span-3" : "lg:col-span-2"}`}>
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.22, duration: 0.4 }}
+              className="glass-card p-5 rounded-2xl flex flex-col w-full h-[460px]"
+            >
+              {swapEquityWithRolling ? rollingReturnsBody : equityCurveBody}
+            </motion.div>
+          </div>
 
-          {/* Recent Trades Feed */}
+          {/* Recent Trades Feed — company-wide, always visible */}
+          {!hideLiveTrades && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.3, duration: 0.4 }}
-            className="glass-card p-5 rounded-2xl flex flex-col"
-            style={{ minHeight: 340 }}
+            className="glass-card p-5 rounded-2xl flex flex-col h-[460px] overflow-hidden"
           >
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-semibold">Live Trades</h3>
@@ -1392,25 +1690,20 @@ export default function Dashboard() {
               {tradesLoading ? (
                 Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-14 w-full rounded-xl" />)
               ) : trades.length === 0 ? (
-                <div className="flex flex-col h-full">
+                <div className="flex flex-col h-full gap-3">
                   {/* Waiting for setup — animated with gradient highlight */}
-                  <div className="flex-1 flex flex-col items-center justify-center py-6 relative overflow-hidden rounded-xl">
+                  <div className="flex-1 flex flex-col items-center justify-center py-4 relative overflow-hidden rounded-xl">
                     {/* Ambient gradient backdrop */}
                     <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-blue-500/10 via-indigo-500/5 to-purple-500/10" />
                     <div className="pointer-events-none absolute -top-16 -left-16 w-48 h-48 rounded-full bg-blue-500/20 blur-3xl animate-pulse" />
                     <div className="pointer-events-none absolute -bottom-16 -right-16 w-48 h-48 rounded-full bg-purple-500/20 blur-3xl animate-pulse" style={{ animationDelay: "1s" }} />
 
-                    {/* Shimmer sweep */}
-                    <div className="pointer-events-none absolute inset-0 overflow-hidden">
-                      <div className="absolute -inset-x-10 top-1/2 h-px bg-gradient-to-r from-transparent via-blue-400/40 to-transparent animate-pulse" />
-                    </div>
-
                     {/* Icon with gradient ring */}
-                    <div className="relative w-20 h-20 mb-4">
+                    <div className="relative w-14 h-14 mb-3">
                       <span className="absolute inset-0 rounded-full bg-gradient-to-br from-blue-500/40 to-purple-500/30 blur-md animate-ping" />
-                      <span className="absolute inset-2 rounded-full bg-gradient-to-br from-blue-400/30 to-cyan-400/20 animate-ping" style={{ animationDelay: "0.4s" }} />
-                      <div className="absolute inset-3 rounded-full bg-gradient-to-br from-slate-900 to-slate-950 border border-blue-400/30 flex items-center justify-center shadow-[0_0_24px_-4px_rgba(59,130,246,0.6)]">
-                        <Activity className="w-7 h-7 text-blue-300 animate-pulse" strokeWidth={2.25} />
+                      <span className="absolute inset-1.5 rounded-full bg-gradient-to-br from-blue-400/30 to-cyan-400/20 animate-ping" style={{ animationDelay: "0.4s" }} />
+                      <div className="absolute inset-2 rounded-full bg-gradient-to-br from-slate-900 to-slate-950 border border-blue-400/30 flex items-center justify-center shadow-[0_0_24px_-4px_rgba(59,130,246,0.6)]">
+                        <Activity className="w-5 h-5 text-blue-300 animate-pulse" strokeWidth={2.25} />
                       </div>
                     </div>
 
@@ -1420,7 +1713,7 @@ export default function Dashboard() {
                     <p className="text-[11px] text-white/50 mt-1">Scanning markets for next signal</p>
 
                     {/* Animated progress dots */}
-                    <div className="flex items-center gap-1.5 mt-3">
+                    <div className="flex items-center gap-1.5 mt-2.5">
                       <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
                       <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" style={{ animationDelay: "0.2s" }} />
                       <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse" style={{ animationDelay: "0.4s" }} />
@@ -1429,8 +1722,8 @@ export default function Dashboard() {
 
                   {/* Recent closed strip */}
                   {recentTradesData?.trades && recentTradesData.trades.length > 0 && (
-                    <div className="border-t border-white/5 pt-2.5 mt-2">
-                      <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1.5 px-1">Recent</div>
+                    <div className="border-t border-white/10 pt-3">
+                      <div className="text-[10px] uppercase tracking-wider text-muted-foreground/80 font-semibold mb-2 px-0.5">Recent</div>
                       <div className="space-y-1.5">
                         {recentTradesData.trades.slice(0, 3).map((t: any) => {
                           const pct = parseFloat(t.realizedProfitPercent || "0");
@@ -1516,10 +1809,12 @@ export default function Dashboard() {
               )}
             </div>
           </motion.div>
+          )}
         </div>
 
         {/* Drawdown Chart + Rolling Returns */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-5">
+        <div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-5">
           {/* Daily P&L / Drawdown Chart */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -1528,28 +1823,32 @@ export default function Dashboard() {
             className="glass-card p-5 rounded-2xl flex flex-col"
             style={{ minHeight: 240 }}
           >
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 gap-2">
               <div>
                 <h3 className="font-semibold">Daily P&L</h3>
-                <p className="text-xs text-muted-foreground">Drawdown analysis</p>
+                <p className="text-xs text-muted-foreground">Per-day P&L history</p>
               </div>
-              <div className="text-xs text-muted-foreground bg-white/5 border border-white/5 px-2.5 py-1 rounded-full">
-                {periodLabel(chartDays)}
+              <div className="overflow-x-auto scrollbar-hide -mx-1 px-1 sm:mx-0 sm:px-0 sm:overflow-visible">
+                <PeriodFilter
+                  options={DAYS_PERIOD_OPTIONS}
+                  selected={pnlDays}
+                  onChange={(v) => setPnlDays(Number(v))}
+                  ariaLabel="Daily P&L period"
+                />
               </div>
             </div>
             <div className="flex-1" style={{ minHeight: 180 }}>
-              {equityLoading ? (
-                <div className="w-full h-full flex items-end gap-1 pb-2">
-                  {Array.from({ length: 15 }).map((_, i) => (
-                    <div key={i} className="flex-1 animate-pulse rounded" style={{
-                      height: `${30 + (i * 5) % 50}%`,
-                      background: i % 3 === 0 ? 'rgba(239,68,68,0.2)' : 'rgba(34,197,94,0.2)'
-                    }} />
-                  ))}
-                </div>
+              {pnlHistoryLoading ? (
+                <div className="w-full h-full animate-pulse rounded-xl bg-emerald-500/5" />
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={drawdownData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+                  <AreaChart data={drawdownData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="pnlGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="rgba(34,197,94,0.55)" />
+                        <stop offset="100%" stopColor="rgba(34,197,94,0.02)" />
+                      </linearGradient>
+                    </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
                     <XAxis
                       dataKey="date"
@@ -1567,130 +1866,34 @@ export default function Dashboard() {
                     />
                     <Tooltip
                       content={<DrawdownTooltip />}
-                      cursor={{ fill: "rgba(148,163,184,0.08)" }}
+                      cursor={{ stroke: "rgba(148,163,184,0.25)", strokeDasharray: "3 3" }}
                       wrapperStyle={{ outline: "none" }}
                     />
-                    <ReferenceLine y={0} stroke="rgba(255,255,255,0.1)" strokeDasharray="4 2" />
-                    <Bar dataKey="value" radius={[3, 3, 0, 0]}>
-                      {drawdownData.map((entry, index) => (
-                        <Cell
-                          key={index}
-                          fill={entry.value >= 0 ? "rgba(34,197,94,0.7)" : "rgba(239,68,68,0.7)"}
-                        />
-                      ))}
-                    </Bar>
-                  </BarChart>
+                    <Area
+                      type="monotone"
+                      dataKey="value"
+                      stroke="rgba(34,197,94,0.95)"
+                      strokeWidth={2}
+                      fill="url(#pnlGradient)"
+                      dot={{ r: 2.5, fill: "rgba(34,197,94,1)", stroke: "rgba(15,23,42,0.9)", strokeWidth: 1 }}
+                      activeDot={{ r: 4, fill: "rgba(34,197,94,1)", stroke: "rgba(15,23,42,0.9)", strokeWidth: 2 }}
+                    />
+                  </AreaChart>
                 </ResponsiveContainer>
               )}
             </div>
           </motion.div>
 
-          {/* Rolling Returns — line chart */}
+          {/* Rolling Returns (or Equity Curve when swapped) */}
+          {!(swapEquityWithRolling && hideEquityCurve) && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.4, duration: 0.4 }}
             className="glass-card p-5 rounded-2xl flex flex-col"
-            style={{ minHeight: 240 }}
+            style={{ minHeight: swapEquityWithRolling ? 460 : 240 }}
           >
-            <div className="flex items-start justify-between mb-3 gap-3 flex-wrap">
-              <div>
-                <h3 className="font-semibold">Rolling Returns</h3>
-                <p className="text-xs text-muted-foreground">Cumulative return over selected period</p>
-              </div>
-              <PeriodFilter
-                options={DAYS_PERIOD_OPTIONS}
-                selected={returnsDays}
-                onChange={(v) => setReturnsDays(Number(v))}
-                ariaLabel="Rolling returns period"
-              />
-            </div>
-
-            {(() => {
-              const rawArr = Array.isArray(returnsEquity) ? (returnsEquity as Array<{ date: string; equity: number }>) : [];
-              const arr = [...rawArr].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-              const base = arr.length > 0 ? Number(arr[0].equity) || 0 : 0;
-              const series = arr.map(p => ({
-                date: format(new Date(p.date), "MMM dd"),
-                ret: base > 0 ? ((Number(p.equity) - base) / base) * 100 : 0,
-              }));
-              const last = series.length > 0 ? series[series.length - 1].ret : 0;
-              const isPos = last >= 0;
-              const stroke = isPos ? "rgba(34,197,94,1)" : "rgba(239,68,68,1)";
-              const gradTop = isPos ? "rgba(34,197,94,0.32)" : "rgba(239,68,68,0.32)";
-
-              return (
-                <>
-                  <div className="flex items-baseline gap-2 mb-2">
-                    <span className={`text-2xl font-bold tabular-nums ${isPos ? "profit-text" : "loss-text"}`}>
-                      {isPos ? "+" : ""}{last.toFixed(2)}%
-                    </span>
-                    <span className="text-xs text-muted-foreground">
-                      over {periodLabel(returnsDays)}
-                    </span>
-                  </div>
-                  <div className="flex-1" style={{ minHeight: 160 }}>
-                    {returnsLoading ? (
-                      <div className="w-full h-full flex items-end gap-1 pb-2">
-                        {Array.from({ length: 20 }).map((_, i) => (
-                          <div key={i} className="flex-1 bg-white/5 rounded-t animate-pulse" style={{ height: `${30 + (i * 3) % 60}%` }} />
-                        ))}
-                      </div>
-                    ) : series.length < 2 ? (
-                      <div className="w-full h-full flex items-center justify-center text-xs text-muted-foreground">
-                        Not enough data for this period yet
-                      </div>
-                    ) : (
-                      <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart data={series} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
-                          <defs>
-                            <linearGradient id="returnsGrad" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="0%" stopColor={gradTop} />
-                              <stop offset="100%" stopColor="rgba(0,0,0,0)" />
-                            </linearGradient>
-                          </defs>
-                          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
-                          <XAxis
-                            dataKey="date"
-                            tick={{ fill: "#64748b", fontSize: 10 }}
-                            axisLine={false}
-                            tickLine={false}
-                            interval="preserveStartEnd"
-                          />
-                          <YAxis
-                            tick={{ fill: "#64748b", fontSize: 10 }}
-                            axisLine={false}
-                            tickLine={false}
-                            tickFormatter={v => `${Number(v).toFixed(1)}%`}
-                            width={48}
-                          />
-                          <Tooltip
-                            contentStyle={{
-                              background: "rgba(15,23,42,0.95)",
-                              border: "1px solid rgba(255,255,255,0.1)",
-                              borderRadius: 8,
-                              fontSize: 12,
-                            }}
-                            formatter={(v: any) => [`${Number(v).toFixed(2)}%`, "Return"]}
-                          />
-                          <ReferenceLine y={0} stroke="rgba(255,255,255,0.15)" strokeDasharray="4 2" />
-                          <Area
-                            type="monotone"
-                            dataKey="ret"
-                            name="Return"
-                            stroke={stroke}
-                            strokeWidth={2}
-                            fill="url(#returnsGrad)"
-                            dot={false}
-                            activeDot={{ r: 4, fill: stroke, strokeWidth: 0 }}
-                          />
-                        </AreaChart>
-                      </ResponsiveContainer>
-                    )}
-                  </div>
-                </>
-              );
-            })()}
+            {swapEquityWithRolling ? equityCurveBody : rollingReturnsBody}
 
             {/* Live Profit Ticker */}
             <div className="mt-5 pt-4 border-t border-white/5">
@@ -1709,9 +1912,26 @@ export default function Dashboard() {
               </div>
             </div>
           </motion.div>
+          )}
+          </div>
+        </div>
+
+        {/* Drawdown Chart — same component as the Analytics page so the
+            visual + numbers stay in sync. Full-width row of its own so
+            both lines (Cumulative Return % and Drawdown from Peak %)
+            have room to breathe on mobile. */}
+        <div>
+          <DrawdownChartCard
+            equity={equity as Array<{ date: string; equity: number }> | undefined}
+            investment={investment as any}
+            days={chartDays}
+            loading={equityLoading || investLoading}
+            delay={0.42}
+          />
         </div>
 
         {/* Performance Metrics */}
+        <div>
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -1755,43 +1975,10 @@ export default function Dashboard() {
             ))}
           </div>
         </motion.div>
-
-        {/* Capital Protection Status */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.5, duration: 0.4 }}
-        >
-          <div className="flex items-center gap-2 mb-3">
-            <h2 className="text-base font-semibold">Capital Protection</h2>
-            <div className="h-px flex-1 bg-gradient-to-r from-white/10 to-transparent" />
-          </div>
-          <CapitalProtectionWidget
-            investment={investment ?? null}
-            isLoading={investLoading}
-            pendingLimit={pendingLimit}
-            setPendingLimit={setPendingLimit}
-            onSave={(limit) => protectionMutation.mutate({ data: { drawdownLimit: limit } })}
-            isSaving={protectionMutation.isPending}
-          />
-        </motion.div>
-
-        {/* VIP Membership */}
-        {summary?.vip && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.52, duration: 0.4 }}
-          >
-            <div className="flex items-center gap-2 mb-3">
-              <h2 className="text-base font-semibold">VIP Membership</h2>
-              <div className="h-px flex-1 bg-gradient-to-r from-white/10 to-transparent" />
-            </div>
-            <VipCard vip={summary.vip as VipInfo} investmentAmount={summary.activeInvestment ?? 0} />
-          </motion.div>
-        )}
+        </div>
 
         {/* Growth & Leaderboard Panel */}
+        {!hideGrowthPanel && (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -1803,6 +1990,7 @@ export default function Dashboard() {
           </div>
           <GrowthPanel />
         </motion.div>
+        )}
 
         <IdleBalanceBanner
           balance={summary?.totalBalance ?? 0}
@@ -1810,6 +1998,7 @@ export default function Dashboard() {
         />
 
         {/* Fund Transparency */}
+        {!hideFundTransparency && (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -1856,8 +2045,17 @@ export default function Dashboard() {
             ))}
           </div>
         </motion.div>
+        )}
 
       </motion.div>
+    </>
+  );
+}
+
+export default function Dashboard() {
+  return (
+    <Layout>
+      <DemoDashboardBody />
     </Layout>
   );
 }

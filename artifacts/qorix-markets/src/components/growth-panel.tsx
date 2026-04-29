@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { motion, AnimatePresence, animate, useMotionValue, useTransform } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
 import {
   Trophy, Star, Users, TrendingUp, Crown, Flame,
@@ -7,6 +7,8 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
+import { AnimatedCounter } from "@/components/animated-counter";
+import { authFetch } from "@/lib/auth-fetch";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -48,19 +50,6 @@ type Rewards = {
   };
   nextMilestone: Badge | null;
 };
-
-// ---------------------------------------------------------------------------
-// API
-// ---------------------------------------------------------------------------
-function authFetch<T>(url: string): Promise<T> {
-  const token = localStorage.getItem("qorix_token");
-  return fetch(url, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-  }).then((r) => {
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    return r.json();
-  });
-}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -332,35 +321,6 @@ function UpdatedAgo() {
   );
 }
 
-function CountUp({
-  value,
-  prefix = "",
-  duration = 1.4,
-  className,
-}: {
-  value: number;
-  prefix?: string;
-  duration?: number;
-  className?: string;
-}) {
-  const mv = useMotionValue(0);
-  const rounded = useTransform(mv, (v) =>
-    `${prefix}${v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-  );
-  const prev = useRef(0);
-  useEffect(() => {
-    const controls = animate(mv, value, {
-      duration,
-      ease: "easeOut",
-      from: prev.current,
-    });
-    prev.current = value;
-    return () => controls.stop();
-  }, [value, duration, mv]);
-  return <motion.span className={className}>{rounded}</motion.span>;
-}
-
-
 // ---------------------------------------------------------------------------
 // Weekly investors tab
 // ---------------------------------------------------------------------------
@@ -414,7 +374,7 @@ function WeeklyLeaderboard({ userId }: { userId: number }) {
               </div>
               <div className="mt-0.5 flex items-baseline gap-2 leading-tight">
                 <span className="text-[22px] sm:text-[24px] font-extrabold whitespace-nowrap bg-gradient-to-r from-emerald-300 to-green-400 bg-clip-text text-transparent tabular-nums">
-                  <CountUp value={topPool} prefix="$" />
+                  <AnimatedCounter value={topPool} prefix="$" />
                   <span>+</span>
                 </span>
                 <span className="hidden sm:inline text-xs text-white/60 font-semibold whitespace-nowrap">join them today</span>
@@ -467,7 +427,7 @@ function WeeklyLeaderboard({ userId }: { userId: number }) {
           <div className="flex items-baseline justify-between gap-2 sm:block min-w-0">
             <div className="text-[9px] sm:text-[10px] uppercase tracking-wider text-white/45 whitespace-nowrap">You</div>
             {myProfit > 0 ? (
-              <CountUp
+              <AnimatedCounter
                 value={myProfit}
                 prefix="+$"
                 className="text-[15px] sm:text-[19px] font-black tabular-nums leading-none sm:mt-0.5 text-emerald-400 inline-block whitespace-nowrap"
@@ -482,7 +442,7 @@ function WeeklyLeaderboard({ userId }: { userId: number }) {
           <div className="flex items-baseline justify-between gap-2 sm:block min-w-0">
             <div className="text-[9px] sm:text-[10px] uppercase tracking-wider text-yellow-300/80 whitespace-nowrap">Top #1</div>
             {top1Profit > 0 ? (
-              <CountUp
+              <AnimatedCounter
                 value={top1Profit}
                 prefix="$"
                 className="text-[15px] sm:text-[19px] font-black tabular-nums leading-none sm:mt-0.5 bg-gradient-to-r from-yellow-300 to-amber-400 bg-clip-text text-transparent inline-block whitespace-nowrap"

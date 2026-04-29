@@ -32,6 +32,7 @@ import {
 import { useState } from "react";
 import { format, parseISO, formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
+import { authFetch } from "@/lib/auth-fetch";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -114,29 +115,8 @@ type UserDevice = {
 // ---------------------------------------------------------------------------
 // API helpers
 // ---------------------------------------------------------------------------
-function authFetch<T>(url: string): Promise<T> {
-  const token = localStorage.getItem("qorix_token");
-  return fetch(url, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-  }).then((r) => {
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    return r.json();
-  });
-}
-
 function authPost<T>(url: string, body?: unknown): Promise<T> {
-  const token = localStorage.getItem("qorix_token");
-  return fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  }).then((r) => {
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    return r.json();
-  });
+  return authFetch<T>(url, { method: "POST", body: body ? JSON.stringify(body) : undefined });
 }
 
 // ---------------------------------------------------------------------------

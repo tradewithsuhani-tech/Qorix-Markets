@@ -3,17 +3,10 @@ import { Layout } from "@/components/layout";
 import { PageContainer } from "@/components/page-container";
 import { motion } from "framer-motion";
 import { TrendingUp, TrendingDown, Activity } from "lucide-react";
-
-function authHeaders() {
-  const t = localStorage.getItem("qorix_token");
-  return { "Content-Type": "application/json", ...(t ? { Authorization: `Bearer ${t}` } : {}) };
-}
+import { authFetch } from "@/lib/auth-fetch";
 
 async function apiFetch(path: string) {
-  const res = await fetch(path, { headers: authHeaders() });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || "Request failed");
-  return data;
+  return authFetch(path);
 }
 
 type HistoryItem = {

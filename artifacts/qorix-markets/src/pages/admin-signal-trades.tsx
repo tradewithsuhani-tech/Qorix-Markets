@@ -7,16 +7,10 @@ import {
   Target, ShieldAlert, X, Clock, RefreshCw, FileText, ChevronDown, ChevronUp,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { authFetch } from "@/lib/auth-fetch";
 
-function authHeaders() {
-  const t = localStorage.getItem("qorix_token");
-  return { "Content-Type": "application/json", ...(t ? { Authorization: `Bearer ${t}` } : {}) };
-}
 async function apiFetch(path: string, method = "GET", body?: unknown) {
-  const res = await fetch(path, { method, headers: authHeaders(), body: body ? JSON.stringify(body) : undefined });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || "Request failed");
-  return data;
+  return authFetch(path, { method, body: body ? JSON.stringify(body) : undefined });
 }
 
 type Trade = {
