@@ -2552,3 +2552,286 @@ export async function sendWithdrawalRejected(args: {
 
   await sendEmail(to, subject, text, html);
 }
+
+// ---------------------------------------------------------------------------
+// Identity Verified (Lv.2) — UNIQUE bronze/copper "Verified Member" design.
+// Fires when an admin approves Lv.2 identity verification — this is THE
+// unlock moment: withdrawals are now enabled (see routes/kyc.ts admin
+// review handler at /admin/kyc/review).
+//
+// Visual differentiators (vs all other emails):
+//   • bronze/copper palette — passport-stamp, member-card aesthetic
+//     (distinct from amber-gold OTP, orange dispatch, emerald deposit)
+//   • "✅ IDENTITY VERIFIED" hero pill + "You're In" headline
+//   • PREMIUM "Member Card" tile — Amex-Platinum vibe with user's name
+//     in elegant centerpiece + "VERIFIED" corner badge + tier line
+//   • Stacked rows: 🛡️ level · 🪪 document · 🔓 now unlocked · 🕐 verified at
+//   • DUAL CTA: "Make a Withdrawal" primary bronze + "Complete Lv.3 Address" link
+//   • "Trade smart 📈" footer
+// ---------------------------------------------------------------------------
+function prettifyDocumentType(raw: string): string {
+  const m = raw.toLowerCase().trim();
+  if (m === "passport") return "Passport";
+  if (m === "national_id" || m === "national-id" || m === "nationalid") return "National ID";
+  if (m === "drivers_license" || m === "drivers-license" || m === "driverslicense" || m === "driver_license")
+    return "Driver's License";
+  if (m === "aadhaar" || m === "aadhar") return "Aadhaar Card";
+  if (m === "pan" || m === "pan_card") return "PAN Card";
+  // Fallback: title-case the raw string (handles unknown types gracefully).
+  return raw
+    .replace(/[_-]+/g, " ")
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(" ");
+}
+
+export function renderIdentityVerifiedHtml(opts: {
+  preheader: string;
+  name: string;
+  documentType: string;
+  verifiedAt: Date;
+}): string {
+  const { preheader, name, documentType, verifiedAt } = opts;
+  const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const whenStr =
+    `${verifiedAt.getUTCDate()} ${MONTHS_SHORT[verifiedAt.getUTCMonth()]} ${verifiedAt.getUTCFullYear()} · ` +
+    `${String(verifiedAt.getUTCHours()).padStart(2, "0")}:${String(verifiedAt.getUTCMinutes()).padStart(2, "0")} UTC`;
+  const cardMonthYear = `${MONTHS_SHORT[verifiedAt.getUTCMonth()]} ${verifiedAt.getUTCFullYear()}`;
+  const fullName = (name || "Member").trim() || "Member";
+  const safeFirstName = escapeHtml(fullName.split(/\s+/)[0] || "there");
+  const safeFullName = escapeHtml(fullName);
+  const safeDocType = escapeHtml(prettifyDocumentType(documentType));
+  const safeWhen = escapeHtml(whenStr);
+  const safeCardWhen = escapeHtml(cardMonthYear);
+  const year = new Date().getFullYear();
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="x-apple-disable-message-reformatting" />
+<meta name="color-scheme" content="dark light" />
+<meta name="supported-color-schemes" content="dark light" />
+<title>Identity verified — Qorix Markets</title>
+<style type="text/css">
+  @media only screen and (max-width:480px) {
+    .qx-outer { padding:20px 10px !important; }
+    .qx-card { border-radius:18px !important; }
+    .qx-hero-pad { padding:6px 18px 22px !important; }
+    .qx-hero-h { font-size:24px !important; line-height:1.22 !important; }
+    .qx-mc-name { font-size:22px !important; letter-spacing:1px !important; }
+    .qx-mc-cell { padding:18px 18px !important; }
+    .qx-snap-pad { padding:24px 22px 4px !important; }
+    .qx-snap-label { font-size:10.5px !important; }
+    .qx-snap-value { font-size:14px !important; }
+    .qx-cta-pad { padding:24px 18px 6px !important; }
+    .qx-cta { padding:13px 24px !important; font-size:13.5px !important; letter-spacing:0.2px !important; }
+    .qx-foot-pad { padding:24px 18px 22px !important; }
+  }
+</style>
+</head>
+<body style="margin:0;padding:0;background:#1A0F08;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;">
+<div style="display:none;max-height:0;overflow:hidden;font-size:1px;line-height:1px;color:#1A0F08;opacity:0;">${escapeHtml(preheader)}</div>
+<div style="display:none;max-height:0;overflow:hidden;">&#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847;</div>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="qx-outer" style="background:#1A0F08;padding:32px 16px;">
+  <tr>
+    <td align="center">
+
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="qx-card" style="max-width:560px;background:#221610;border:1px solid rgba(184,115,51,0.35);border-radius:22px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,0.55);">
+
+        <!-- LOGO BAR — bronze/copper passport gradient -->
+        <tr>
+          <td align="left" style="padding:20px 24px 0 28px;background:#1A0F08;background-image:linear-gradient(135deg,#1A0F08 0%,#2D1A0E 45%,#4A2C16 80%,#8B5A2B 100%);">
+            <img src="cid:${BRAND_LOGO_CID}" alt="Qorix Markets" width="320" height="217" style="display:block;width:320px;max-width:90%;height:auto;border:0;outline:none;text-decoration:none;margin:0;" />
+          </td>
+        </tr>
+
+        <!-- HERO — verified pill + headline + bronze divider -->
+        <tr>
+          <td class="qx-hero-pad" align="center" style="padding:8px 32px 28px;background:#1A0F08;background-image:linear-gradient(135deg,#1A0F08 0%,#2D1A0E 45%,#4A2C16 80%,#8B5A2B 100%);">
+            <div style="display:inline-block;padding:6px 14px;border-radius:999px;background:rgba(224,176,132,0.20);border:1px solid rgba(224,176,132,0.55);font-size:10.5px;letter-spacing:2.4px;color:#F4D9B5;font-weight:700;text-transform:uppercase;margin-bottom:18px;">
+              ✅ Identity Verified
+            </div>
+            <div class="qx-hero-h" style="font-size:30px;line-height:1.18;font-weight:800;color:#FFFFFF;letter-spacing:-0.5px;max-width:440px;margin:0 auto;">
+              You're In
+            </div>
+            <div style="font-size:13.5px;color:#F4D9B5;margin-top:10px;font-weight:500;max-width:420px;margin-left:auto;margin-right:auto;line-height:1.5;">
+              ${safeFirstName}, your ID is verified — withdrawals are now enabled.
+            </div>
+            <div style="width:48px;height:3px;background:linear-gradient(90deg,#E0B084 0%,#8B5A2B 100%);margin:18px auto 0;border-radius:999px;"></div>
+          </td>
+        </tr>
+
+        <!-- PREMIUM MEMBER CARD — Amex-Platinum vibe, name centerpiece -->
+        <tr>
+          <td align="center" style="padding:32px 24px 4px;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:440px;margin:0 auto;">
+              <tr>
+                <td class="qx-mc-cell" style="padding:22px 26px;background:#2D1A0E;background-image:linear-gradient(135deg,#3A2110 0%,#2D1A0E 50%,#4A2C16 100%);border:1.5px solid rgba(224,176,132,0.55);border-radius:14px;box-shadow:0 0 32px rgba(184,115,51,0.30),inset 0 1px 0 rgba(255,255,255,0.06);">
+                  <!-- Top row: brand label + verified badge -->
+                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                    <tr>
+                      <td align="left" style="font-size:9.5px;letter-spacing:2.4px;color:#E0B084;font-weight:700;text-transform:uppercase;">
+                        Qorix Markets
+                      </td>
+                      <td align="right" style="font-size:9.5px;letter-spacing:1.8px;color:#F4D9B5;font-weight:700;text-transform:uppercase;">
+                        ✦ Verified
+                      </td>
+                    </tr>
+                  </table>
+                  <!-- Center: name -->
+                  <div class="qx-mc-name" style="font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:26px;letter-spacing:1.5px;color:#FFFFFF;font-weight:700;line-height:1.1;text-align:left;padding:24px 0 6px;text-shadow:0 0 18px rgba(224,176,132,0.35);text-transform:uppercase;">
+                    ${safeFullName}
+                  </div>
+                  <div style="height:1px;background:linear-gradient(90deg,rgba(224,176,132,0.6) 0%,rgba(224,176,132,0) 100%);margin:14px 0;"></div>
+                  <!-- Bottom row: tier + verified date -->
+                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                    <tr>
+                      <td align="left" style="font-size:9.5px;letter-spacing:1.8px;color:#E0B084;font-weight:600;text-transform:uppercase;">
+                        Member · Lv.2 Identity
+                      </td>
+                      <td align="right" style="font-size:9.5px;letter-spacing:1.8px;color:#F4D9B5;font-weight:600;text-transform:uppercase;">
+                        ✓ ${safeCardWhen}
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- VERIFICATION DETAILS — stacked rows -->
+        <tr>
+          <td class="qx-snap-pad" style="padding:34px 32px 4px;">
+            <div style="font-size:10.5px;letter-spacing:2.4px;color:#E0B084;text-transform:uppercase;font-weight:700;text-align:left;padding:0 0 14px 0;">
+              Verification Details
+            </div>
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td style="padding:14px 0;border-bottom:1px solid rgba(184,115,51,0.18);">
+                  <div class="qx-snap-label" style="font-size:11px;letter-spacing:1.6px;color:#A78866;text-transform:uppercase;font-weight:600;line-height:1;margin-bottom:6px;"><span style="margin-right:6px;">🛡️</span>Verification Level</div>
+                  <div class="qx-snap-value" style="font-size:15px;color:#FFFFFF;font-weight:600;line-height:1.4;">Lv.2 — Identity</div>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:14px 0;border-bottom:1px solid rgba(184,115,51,0.18);">
+                  <div class="qx-snap-label" style="font-size:11px;letter-spacing:1.6px;color:#A78866;text-transform:uppercase;font-weight:600;line-height:1;margin-bottom:6px;"><span style="margin-right:6px;">🪪</span>Document Type</div>
+                  <div class="qx-snap-value" style="font-size:15px;color:#FFFFFF;font-weight:600;line-height:1.4;">${safeDocType}</div>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:14px 0;border-bottom:1px solid rgba(184,115,51,0.18);">
+                  <div class="qx-snap-label" style="font-size:11px;letter-spacing:1.6px;color:#A78866;text-transform:uppercase;font-weight:600;line-height:1;margin-bottom:6px;"><span style="margin-right:6px;">🔓</span>Now Unlocked</div>
+                  <div class="qx-snap-value" style="font-size:15px;color:#FFFFFF;font-weight:600;line-height:1.4;">USDT &amp; INR Withdrawals</div>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:14px 0 4px;">
+                  <div class="qx-snap-label" style="font-size:11px;letter-spacing:1.6px;color:#A78866;text-transform:uppercase;font-weight:600;line-height:1;margin-bottom:6px;"><span style="margin-right:6px;">🕐</span>Verified At</div>
+                  <div class="qx-snap-value" style="font-size:15px;color:#FFFFFF;font-weight:600;line-height:1.4;">${safeWhen}</div>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- DUAL CTA — primary "Make a Withdrawal" + secondary "Complete Lv.3 Address" -->
+        <tr>
+          <td class="qx-cta-pad" align="center" style="padding:30px 32px 6px;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td align="center" style="border-radius:12px;background-image:linear-gradient(135deg,#B87333 0%,#8B5A2B 100%);background-color:#8B5A2B;box-shadow:0 8px 28px rgba(139,90,43,0.55);">
+                  <a href="https://qorixmarkets.com/wallet" target="_blank" class="qx-cta" style="display:inline-block;padding:16px 42px;font-size:15px;font-weight:700;color:#FFFFFF;text-decoration:none;letter-spacing:0.4px;border-radius:12px;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+                    Make a Withdrawal
+                  </a>
+                </td>
+              </tr>
+            </table>
+            <div style="margin-top:14px;font-size:12.5px;color:#A78866;line-height:1.6;">
+              Or complete <a href="https://qorixmarkets.com/profile" target="_blank" style="color:#F4D9B5;text-decoration:none;font-weight:600;border-bottom:1px dashed rgba(244,217,181,0.4);">Lv.3 Address Verification →</a>
+            </div>
+          </td>
+        </tr>
+
+        <!-- Reassurance card -->
+        <tr>
+          <td style="padding:22px 32px 8px;">
+            <div style="background:rgba(184,115,51,0.06);border-left:2px solid rgba(224,176,132,0.5);border-radius:6px;padding:12px 16px;font-size:12.5px;line-height:1.6;color:#A78866;">
+              <strong style="color:#F4D9B5;">Verification is permanent.</strong>
+              No further action needed unless your ID expires or our compliance team requests an update. Your verified status applies across all Qorix Markets services.
+            </div>
+          </td>
+        </tr>
+
+        <!-- FOOTER -->
+        <tr>
+          <td class="qx-foot-pad" align="center" style="padding:30px 32px 28px;border-top:1px solid rgba(255,255,255,0.05);background:#140A05;">
+            <div style="font-size:13px;color:#F4D9B5;margin-bottom:6px;font-weight:600;">
+              Trade smart 📈
+            </div>
+            <div style="font-size:11.5px;color:#7A6047;line-height:1.7;">
+              © ${year} Qorix Markets · AI-Powered Trading<br/>
+              Need help? <a href="mailto:support@qorixmarkets.com" style="color:#F4D9B5;text-decoration:none;">support@qorixmarkets.com</a>
+            </div>
+          </td>
+        </tr>
+
+      </table>
+
+      <div style="height:24px;line-height:24px;font-size:1px;">&nbsp;</div>
+    </td>
+  </tr>
+</table>
+</body>
+</html>`;
+}
+
+// ---------------------------------------------------------------------------
+// Send the Identity Verified (Lv.2 KYC approved) email. Caller looks up
+// email + name + document type, and passes them in. Replaces the previous
+// generic sendTxnEmailToUser path inside the admin KYC review handler
+// (see routes/kyc.ts /admin/kyc/review).
+// ---------------------------------------------------------------------------
+export async function sendIdentityVerified(args: {
+  to: string;
+  name: string;
+  documentType: string;
+  verifiedAt: Date;
+}): Promise<void> {
+  const { to, name, documentType, verifiedAt } = args;
+  const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const whenStr =
+    `${verifiedAt.getUTCDate()} ${MONTHS_SHORT[verifiedAt.getUTCMonth()]} ${verifiedAt.getUTCFullYear()} · ` +
+    `${String(verifiedAt.getUTCHours()).padStart(2, "0")}:${String(verifiedAt.getUTCMinutes()).padStart(2, "0")} UTC`;
+
+  const subject = `Qorix Markets — Identity verified, withdrawals unlocked ✅`;
+  const preheader = `Your Lv.2 identity (${prettifyDocumentType(documentType)}) is verified — USDT & INR withdrawals now enabled`;
+
+  const html = renderIdentityVerifiedHtml({
+    preheader,
+    name,
+    documentType,
+    verifiedAt,
+  });
+
+  const text =
+    `Identity verified — you're in\n\n` +
+    `Hi ${name},\n\n` +
+    `Great news — your Lv.2 identity verification has been approved.\n` +
+    `USDT & INR withdrawals are now enabled on your account.\n\n` +
+    `Verification level:  Lv.2 — Identity\n` +
+    `Document type:       ${prettifyDocumentType(documentType)}\n` +
+    `Now unlocked:        USDT & INR Withdrawals\n` +
+    `Verified at:         ${whenStr}\n\n` +
+    `Make a withdrawal:        https://qorixmarkets.com/wallet\n` +
+    `Complete Lv.3 (Address):  https://qorixmarkets.com/profile\n\n` +
+    `Verification is permanent. No further action is needed unless your ID\n` +
+    `expires or our compliance team requests an update.\n\n` +
+    `— Qorix Markets`;
+
+  await sendEmail(to, subject, text, html);
+}

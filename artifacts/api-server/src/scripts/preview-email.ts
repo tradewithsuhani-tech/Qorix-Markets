@@ -21,6 +21,7 @@ import {
   renderInrDepositApprovedHtml,
   renderWithdrawalSentHtml,
   renderWithdrawalRejectedHtml,
+  renderIdentityVerifiedHtml,
 } from "../lib/email-service";
 
 const DEFAULT_TO = "safepayu@gmail.com";
@@ -232,6 +233,28 @@ const TEMPLATES: Record<string, () => Preview> = {
         refundedTo,
         requestId,
         whenUtc,
+      }),
+    };
+  },
+
+  "identity-verified": () => {
+    const name = "Prem Kumar";
+    const documentType = "passport";
+    const verifiedAt = new Date();
+    return {
+      subject: "[PREVIEW] Qorix Markets — Identity Verified ✅ (new design)",
+      text:
+        `[DESIGN PREVIEW]\n\n` +
+        `Lv.2 Identity verified for ${name} (${documentType}).\n` +
+        `USDT & INR withdrawals unlocked.\n\n` +
+        `Test render of the new bronze/copper "Verified Member" template.\n` +
+        `Reply with feedback.\n\n` +
+        `— Qorix Markets`,
+      html: renderIdentityVerifiedHtml({
+        preheader: `[PREVIEW] Lv.2 identity (Passport) verified — USDT & INR withdrawals now enabled`,
+        name,
+        documentType,
+        verifiedAt,
       }),
     };
   },
