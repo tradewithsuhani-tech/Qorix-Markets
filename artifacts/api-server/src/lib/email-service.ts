@@ -107,7 +107,185 @@ export async function sendEmail(
 }
 
 // ---------------------------------------------------------------------------
-// Premium branded HTML email template — dark theme matching the Qorix UI.
+// Email-Verification OTP — UNIQUE cyan/teal "welcome aboard" design.
+// Used only for purpose === "verify_email". Different vibe from the
+// security-focused OTP template below (renderOtpHtml) so signup feels
+// inviting, not transactional.
+//
+// Visual differentiators vs renderOtpHtml:
+//   • cyan/teal palette (not blue/purple)
+//   • "Welcome aboard" hero pill with sparkle
+//   • SEGMENTED OTP boxes (6 individually-bordered glowing cells)
+//   • "What's next" 3-step onboarding strip (Verify → Fund → Trade)
+//   • friendly "Glad to have you, trader" footer sign-off
+//
+// Email-client safe: table layout, inline CSS, web-safe fonts, mobile @media.
+// ---------------------------------------------------------------------------
+function renderVerifyEmailOtpHtml(opts: {
+  preheader: string;
+  intro: string;
+  otp: string;
+}): string {
+  const { preheader, intro, otp } = opts;
+  const year = new Date().getFullYear();
+
+  // Pad to 6 cells defensively in case OTP length varies one day.
+  const digits = otp.split("");
+  while (digits.length < 6) digits.push("");
+  const otpCellsHtml = digits
+    .map(
+      (d) => `              <td align="center" valign="middle" style="padding:0 3px;">
+                <div class="qx-cell" style="width:44px;height:56px;line-height:56px;background:#0A1726;border:1.5px solid rgba(34,211,238,0.42);border-radius:10px;font-family:'SF Mono','Menlo','Consolas',monospace;font-size:24px;font-weight:800;color:#67E8F9;box-shadow:0 0 18px rgba(34,211,238,0.22),inset 0 1px 0 rgba(255,255,255,0.06);">${escapeHtml(d || "·")}</div>
+              </td>`,
+    )
+    .join("\n");
+
+  const safeIntro = escapeHtml(intro);
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="x-apple-disable-message-reformatting" />
+<meta name="color-scheme" content="dark light" />
+<meta name="supported-color-schemes" content="dark light" />
+<title>Welcome — Verify your Qorix Markets email</title>
+<style type="text/css">
+  @media only screen and (max-width:480px) {
+    .qx-outer { padding:20px 10px !important; }
+    .qx-card { border-radius:18px !important; }
+    .qx-hero-pad { padding:6px 18px 22px !important; }
+    .qx-hero-h { font-size:23px !important; line-height:1.25 !important; }
+    .qx-cell { width:38px !important; height:48px !important; line-height:48px !important; font-size:20px !important; }
+    .qx-intro { padding:24px 22px 4px !important; font-size:14px !important; }
+    .qx-step-pad { padding:24px 14px 4px !important; }
+    .qx-step-cell { padding:0 4px !important; }
+    .qx-foot-pad { padding:24px 18px 22px !important; }
+  }
+</style>
+</head>
+<body style="margin:0;padding:0;background:#04080F;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;">
+<div style="display:none;max-height:0;overflow:hidden;font-size:1px;line-height:1px;color:#04080F;opacity:0;">${escapeHtml(preheader)}</div>
+<div style="display:none;max-height:0;overflow:hidden;">&#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847;</div>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="qx-outer" style="background:#04080F;padding:32px 16px;">
+  <tr>
+    <td align="center">
+
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="qx-card" style="max-width:560px;background:#06111E;border:1px solid rgba(34,211,238,0.22);border-radius:22px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,0.55);">
+
+        <!-- LOGO BAR — cyan/teal gradient (unique to verify-email) -->
+        <tr>
+          <td align="left" style="padding:20px 24px 0 28px;background:#04080F;background-image:linear-gradient(135deg,#04080F 0%,#0A1F2E 45%,#0E3343 80%,#134E4A 100%);">
+            <img src="cid:${BRAND_LOGO_CID}" alt="Qorix Markets" width="260" height="176" style="display:block;width:260px;max-width:78%;height:auto;border:0;outline:none;text-decoration:none;margin:0;" />
+          </td>
+        </tr>
+
+        <!-- HERO — welcome pill + headline + thin gradient divider -->
+        <tr>
+          <td class="qx-hero-pad" align="center" style="padding:8px 32px 28px;background:#04080F;background-image:linear-gradient(135deg,#04080F 0%,#0A1F2E 45%,#0E3343 80%,#134E4A 100%);">
+            <div style="display:inline-block;padding:6px 14px;border-radius:999px;background:rgba(20,184,166,0.14);border:1px solid rgba(20,184,166,0.42);font-size:10.5px;letter-spacing:2.4px;color:#5EEAD4;font-weight:700;text-transform:uppercase;margin-bottom:18px;">
+              ✨ Welcome aboard
+            </div>
+            <div class="qx-hero-h" style="font-size:28px;line-height:1.22;font-weight:800;color:#FFFFFF;letter-spacing:-0.4px;max-width:420px;margin:0 auto;">
+              Verify your email to begin
+            </div>
+            <div style="width:48px;height:3px;background:linear-gradient(90deg,#22D3EE 0%,#14B8A6 100%);margin:18px auto 0;border-radius:999px;"></div>
+          </td>
+        </tr>
+
+        <!-- INTRO COPY -->
+        <tr>
+          <td class="qx-intro" align="center" style="padding:30px 36px 8px;color:#94A3B8;font-size:14.5px;line-height:1.7;">
+            ${safeIntro}
+          </td>
+        </tr>
+
+        <!-- SEGMENTED OTP — six independently-bordered glowing cells -->
+        <tr>
+          <td align="center" style="padding:22px 12px 6px;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto;">
+              <tr>
+${otpCellsHtml}
+              </tr>
+            </table>
+            <div style="margin-top:14px;font-size:10.5px;color:#64748B;letter-spacing:1.8px;text-transform:uppercase;font-weight:600;">
+              Expires in 10 minutes · Single use
+            </div>
+          </td>
+        </tr>
+
+        <!-- WHAT'S NEXT — onboarding mini-strip (Verify / Fund / Trade) -->
+        <tr>
+          <td class="qx-step-pad" style="padding:32px 28px 8px;">
+            <div style="text-align:center;font-size:11px;letter-spacing:2.2px;color:#5EEAD4;text-transform:uppercase;font-weight:700;margin-bottom:14px;">
+              What's next
+            </div>
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td width="33%" valign="top" class="qx-step-cell" style="padding:0 6px;">
+                  <div style="background:rgba(34,211,238,0.04);border:1px solid rgba(34,211,238,0.14);border-radius:12px;padding:14px 12px;text-align:center;">
+                    <div style="font-size:18px;line-height:1;margin-bottom:6px;">📧</div>
+                    <div style="font-size:12px;font-weight:700;color:#FFFFFF;margin-bottom:3px;">1. Verify</div>
+                    <div style="font-size:10.5px;color:#64748B;line-height:1.5;">Confirm your email</div>
+                  </div>
+                </td>
+                <td width="34%" valign="top" class="qx-step-cell" style="padding:0 6px;">
+                  <div style="background:rgba(34,211,238,0.04);border:1px solid rgba(34,211,238,0.14);border-radius:12px;padding:14px 12px;text-align:center;">
+                    <div style="font-size:18px;line-height:1;margin-bottom:6px;">💸</div>
+                    <div style="font-size:12px;font-weight:700;color:#FFFFFF;margin-bottom:3px;">2. Fund</div>
+                    <div style="font-size:10.5px;color:#64748B;line-height:1.5;">Deposit from $10</div>
+                  </div>
+                </td>
+                <td width="33%" valign="top" class="qx-step-cell" style="padding:0 6px;">
+                  <div style="background:rgba(34,211,238,0.04);border:1px solid rgba(34,211,238,0.14);border-radius:12px;padding:14px 12px;text-align:center;">
+                    <div style="font-size:18px;line-height:1;margin-bottom:6px;">🚀</div>
+                    <div style="font-size:12px;font-weight:700;color:#FFFFFF;margin-bottom:3px;">3. Trade</div>
+                    <div style="font-size:10.5px;color:#64748B;line-height:1.5;">AI runs 24/7</div>
+                  </div>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- SECURITY NOTE — soft teal accent (not alarming) -->
+        <tr>
+          <td style="padding:24px 32px 8px;">
+            <div style="background:rgba(94,234,212,0.04);border-left:2px solid rgba(94,234,212,0.5);border-radius:6px;padding:12px 16px;font-size:12.5px;line-height:1.6;color:#94A3B8;">
+              <strong style="color:#5EEAD4;">Heads up — </strong>
+              Qorix staff will <strong style="color:#FFFFFF;">never</strong> ask for this code. If you didn't sign up, you can safely ignore this email.
+            </div>
+          </td>
+        </tr>
+
+        <!-- FOOTER — friendly sign-off -->
+        <tr>
+          <td class="qx-foot-pad" align="center" style="padding:30px 32px 28px;border-top:1px solid rgba(255,255,255,0.05);background:#040810;">
+            <div style="font-size:13px;color:#CBD5E1;margin-bottom:6px;font-weight:600;">
+              Glad to have you, trader 🤝
+            </div>
+            <div style="font-size:11.5px;color:#475569;line-height:1.7;">
+              © ${year} Qorix Markets · AI-Powered Trading<br/>
+              Need help? <a href="mailto:support@qorixmarkets.com" style="color:#67E8F9;text-decoration:none;">support@qorixmarkets.com</a>
+            </div>
+          </td>
+        </tr>
+      </table>
+
+      <div style="height:24px;line-height:24px;font-size:1px;">&nbsp;</div>
+    </td>
+  </tr>
+</table>
+</body>
+</html>`;
+}
+
+// ---------------------------------------------------------------------------
+// Generic OTP template — currently still used for withdrawal_confirm and
+// device_login_approval. Each will get its own unique design as the redesign
+// rolls out (see roadmap in email-service.ts dispatcher in sendOtp).
 // Uses table-based layout for maximum email-client compatibility.
 // ---------------------------------------------------------------------------
 function renderOtpHtml(opts: {
@@ -221,13 +399,16 @@ export async function sendOtp(
     `If you did not request this, you can safely ignore this email.\n\n` +
     `— Qorix Markets\nhttps://qorixmarkets.com`;
 
-  const html = renderOtpHtml({
-    purposeLabel,
-    preheader: `Your Qorix Markets ${purposeLabel.toLowerCase()} code: ${otp} (expires in 10 minutes)`,
-    intro,
-    otp,
-    noteLines,
-  });
+  // Per-purpose template dispatch — each OTP type gets its own visual
+  // identity over time. Currently:
+  //   • verify_email          → renderVerifyEmailOtpHtml (cyan/teal welcome)
+  //   • withdrawal_confirm    → renderOtpHtml (generic — pending redesign)
+  //   • device_login_approval → renderOtpHtml (generic — pending redesign)
+  const preheader = `Your Qorix Markets ${purposeLabel.toLowerCase()} code: ${otp} (expires in 10 minutes)`;
+  const html =
+    purpose === "verify_email"
+      ? renderVerifyEmailOtpHtml({ preheader, intro, otp })
+      : renderOtpHtml({ purposeLabel, preheader, intro, otp, noteLines });
 
   await sendEmail(email, `Qorix Markets — ${purposeLabel} Code`, text, html);
 
