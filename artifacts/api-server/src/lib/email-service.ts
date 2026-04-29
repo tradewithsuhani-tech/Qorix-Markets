@@ -7319,13 +7319,16 @@ export function renderKycVerifiedHtml(opts: {
               <tr>
                 <td align="center" style="padding:30px 18px;background:#180A1A;background-image:linear-gradient(180deg,#251327 0%,#180A1A 100%);border:1.5px solid rgba(255,233,167,0.45);border-radius:14px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.04),0 0 28px rgba(212,160,56,0.25);">
 
-                  <!-- Iconic verified tick — Twitter/Meta-style blue badge on
-                       white ring, instantly recognised as "verified identity".
-                       Sized 108px so it dominates the centerpiece. Cold blue
-                       on warm plum-gold = high-contrast "sapphire on gold". -->
+                  <!-- Iconic verified tick — Qorix brand badge: deep royal
+                       purple gradient (#A855F7 → #6D28D9) matches the logo's
+                       purple-cyan brand identity and ties into the hero's
+                       plum-violet gradient. White ring + purple glow keeps
+                       the universally-recognised "verified identity" cue
+                       while feeling premium and on-brand (not a generic
+                       Twitter copy). Sized 108px to dominate the centerpiece. -->
                   <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center">
                     <tr>
-                      <td align="center" valign="middle" style="width:108px;height:108px;background:#1D9BF0;background-image:linear-gradient(135deg,#0EA5E9 0%,#1D4ED8 100%);border:4px solid #FFFFFF;border-radius:999px;text-align:center;vertical-align:middle;box-shadow:0 10px 28px rgba(29,155,240,0.55),0 0 36px rgba(96,165,250,0.40),inset 0 2px 6px rgba(255,255,255,0.30);">
+                      <td align="center" valign="middle" style="width:108px;height:108px;background:#7C3AED;background-image:linear-gradient(135deg,#A855F7 0%,#6D28D9 100%);border:4px solid #FFFFFF;border-radius:999px;text-align:center;vertical-align:middle;box-shadow:0 10px 28px rgba(124,58,237,0.55),0 0 36px rgba(168,85,247,0.40),inset 0 2px 6px rgba(255,255,255,0.30);">
                         <div style="font-size:62px;color:#FFFFFF;font-weight:900;line-height:1;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Roboto,Helvetica,Arial,sans-serif;text-shadow:0 1px 3px rgba(0,0,0,0.25);">&#10003;</div>
                       </td>
                     </tr>
