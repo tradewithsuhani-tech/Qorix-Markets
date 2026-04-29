@@ -105,17 +105,16 @@ router.post("/auth/register", async (req, res) => {
   const ip = normalizeIp(rawIp);
 
   // --- Captcha check ---
-  // INTENTIONALLY SKIPPED on /auth/signup until Batch 6.1 ships the
-  // reCAPTCHA widget on the signup page. The /auth/login route DOES
-  // call verifyCaptcha (re-enabled in Batch 6 — see below). Enabling
-  // the check here without the matching client widget would 400 every
-  // signup with "Captcha required". Re-enable in B6.1 alongside the
-  // signup.tsx widget render.
-  //   const captchaResult = await verifyCaptcha(req.body.captchaToken, ip);
-  //   if (!captchaResult.ok) {
-  //     res.status(400).json({ error: captchaResult.error ?? "Captcha required" });
-  //     return;
-  //   }
+  // Re-enabled in Batch 6.1 (2026-04-30) now that login.tsx (which is
+  // the shared form for /login, /register, /signup) renders the widget
+  // for every mode and resets it on failed submit. Server enforcement
+  // here matches /auth/login. Local/dev builds with no
+  // RECAPTCHA_SECRET_KEY auto-skip via captcha-service.ts.
+  const captchaResult = await verifyCaptcha(req.body.captchaToken, ip);
+  if (!captchaResult.ok) {
+    res.status(400).json({ error: captchaResult.error ?? "Captcha required" });
+    return;
+  }
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
   const [ipCount] = await db
