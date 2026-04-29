@@ -1136,7 +1136,14 @@ export default function InvestPage() {
                   {[
                     { label: "Capital", value: numAmount > 0 ? `$${numAmount.toFixed(2)} USD` : "—" },
                     { label: "Strategy", value: selectedProfile.label },
-                    { label: "Daily Rate", value: `${selectedProfile.minDailyPct}–${selectedProfile.maxDailyPct}%`, highlight: true },
+                    {
+                      // User receives payouts monthly, not daily — so we show
+                      // the monthly target range (daily % × 30) instead of the
+                      // raw daily rate to avoid confusion.
+                      label: "Monthly Target",
+                      value: `${(selectedProfile.minDailyPct * 30).toFixed(1).replace(/\.0$/, "")}–${(selectedProfile.maxDailyPct * 30).toFixed(1).replace(/\.0$/, "")}%`,
+                      highlight: true,
+                    },
                     { label: "Risk Level", value: selectedProfile.volatility },
                     { label: "Drawdown Limit", value: `${pendingLimit ?? (RISK_DEFAULT_DRAWDOWN[riskLevel.toLowerCase()] ?? selectedProfile.drawdownLimit)}%` },
                     { label: "Compounding", value: "Configurable post-start" },
