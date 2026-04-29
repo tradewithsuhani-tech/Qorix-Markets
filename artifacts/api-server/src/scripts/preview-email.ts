@@ -31,6 +31,7 @@ import {
   renderPasswordChangedHtml,
   renderTwoFactorEnabledHtml,
   renderTwoFactorDisabledHtml,
+  renderContactChangedAlertHtml,
 } from "../lib/email-service";
 
 const DEFAULT_TO = "safepayu@gmail.com";
@@ -467,6 +468,58 @@ const TEMPLATES: Record<string, () => Preview> = {
         preheader: `[PREVIEW] Two-factor authentication was just removed from your account. If this wasn't you, reset your password immediately.`,
         name,
         disabledAt,
+        ip: "203.0.113.42",
+        browser: "Chrome",
+        os: "macOS",
+      }),
+    };
+  },
+
+  "email-changed-alert": () => {
+    const name = "Prem Kumar";
+    const changedAt = new Date();
+    return {
+      subject: "[PREVIEW] Qorix Markets — Email Changed ⚠️ (twilight-chrome alert)",
+      text:
+        `[DESIGN PREVIEW]\n\n` +
+        `Email changed alert for ${name}.\n\n` +
+        `Test render of the new twilight-navy + chrome-yellow "Your Email Just Moved" template.\n` +
+        `Reroute diagram shows previous → new email (masked).\n` +
+        `Reply with feedback.\n\n` +
+        `— Qorix Markets`,
+      html: renderContactChangedAlertHtml({
+        preheader: `[PREVIEW] Your account email was just changed. This address is no longer linked. If this wasn't you, contact support immediately.`,
+        name,
+        attribute: "email",
+        oldDisplay: "p••••••@gmail.com",
+        newDisplay: "n••••••@yahoo.com",
+        changedAt,
+        ip: "203.0.113.42",
+        browser: "Chrome",
+        os: "macOS",
+      }),
+    };
+  },
+
+  "phone-changed-alert": () => {
+    const name = "Prem Kumar";
+    const changedAt = new Date();
+    return {
+      subject: "[PREVIEW] Qorix Markets — Phone Number Changed ⚠️ (twilight-chrome alert)",
+      text:
+        `[DESIGN PREVIEW]\n\n` +
+        `Phone changed alert for ${name}.\n\n` +
+        `Test render of the new twilight-navy + chrome-yellow "Your Number Just Moved" template.\n` +
+        `Reroute diagram shows previous → new phone (masked).\n` +
+        `Reply with feedback.\n\n` +
+        `— Qorix Markets`,
+      html: renderContactChangedAlertHtml({
+        preheader: `[PREVIEW] Your account phone number was just changed. The previous number can no longer receive your account messages.`,
+        name,
+        attribute: "phone",
+        oldDisplay: "+91 •••• ••3210",
+        newDisplay: "+91 •••• ••5678",
+        changedAt,
         ip: "203.0.113.42",
         browser: "Chrome",
         os: "macOS",

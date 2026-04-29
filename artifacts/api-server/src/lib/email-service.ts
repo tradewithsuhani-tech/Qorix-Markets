@@ -5400,3 +5400,420 @@ export async function sendTwoFactorDisabled(args: {
 
   await sendEmail(to, subject, text, html);
 }
+
+// ---------------------------------------------------------------------------
+// Mask helpers for displaying contact info in change-alert emails.
+// ---------------------------------------------------------------------------
+function maskEmailAddress(email: string): string {
+  const at = email.indexOf("@");
+  if (at < 1) return email;
+  const local = email.slice(0, at);
+  const domain = email.slice(at);
+  if (local.length <= 2) return `${local[0]}•${domain}`;
+  return `${local[0]}${"•".repeat(Math.min(6, local.length - 1))}${domain}`;
+}
+
+function maskPhoneNumber(phone: string): string {
+  const cleaned = phone.replace(/\s+/g, "");
+  if (cleaned.length <= 6) return phone;
+  const m = cleaned.match(/^(\+?\d{1,3})(.+)(\d{4})$/);
+  if (m) {
+    const cc = m[1];
+    const last4 = m[3];
+    return `${cc} •••• ••${last4}`;
+  }
+  return `${cleaned.slice(0, 2)}${"•".repeat(Math.max(4, cleaned.length - 6))}${cleaned.slice(-4)}`;
+}
+
+// ---------------------------------------------------------------------------
+// CONTACT INFO CHANGED — security alert email (sent to the OLD address)
+// ---------------------------------------------------------------------------
+// TWILIGHT-CHROME theme: deep twilight navy + chrome yellow. Distinct from
+// sapphire (more saturated) and carbon+lime (warm cool-black + green-yellow).
+// Layout flow:
+//   • Logo bar (twilight → storm-grey → chrome-yellow gradient)
+//   • Hero: ⚠️ {EMAIL|PHONE} CHANGED pill · "Your {Email|Number} Just Moved"
+//     headline · alert sub with "this address no longer linked"
+//   • LOST-ACCESS banner (yellow alert: "this {address|number} can't be used
+//     to sign in or recover the account anymore")
+//   • REROUTE diagram centerpiece: OLD value (✗ removed, dim) → arrow →
+//     NEW value (✓ active, glow). Both values are MASKED for security.
+//   • Event Details: changed at · source (IP + browser, optional)
+//   • Primary CTA "Wasn't you? Contact Support" (red gradient — urgent)
+//   • Secondary "Was you? You can ignore this message."
+//   • Reassurance card: "Recovering a hijacked account" + anti-phishing
+//   • "Trade smart 📈" footer
+// ---------------------------------------------------------------------------
+export function renderContactChangedAlertHtml(opts: {
+  preheader: string;
+  name: string;
+  attribute: "email" | "phone";
+  oldDisplay: string; // already masked (or full if caller wants)
+  newDisplay: string; // already masked (or full if caller wants)
+  changedAt: Date;
+  ip?: string | null;
+  browser?: string | null;
+  os?: string | null;
+}): string {
+  const { preheader, name, attribute, oldDisplay, newDisplay, changedAt, ip, browser, os } = opts;
+  const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const whenStr =
+    `${changedAt.getUTCDate()} ${MONTHS_SHORT[changedAt.getUTCMonth()]} ${changedAt.getUTCFullYear()} · ` +
+    `${String(changedAt.getUTCHours()).padStart(2, "0")}:${String(changedAt.getUTCMinutes()).padStart(2, "0")} UTC`;
+  const safeFirstName = escapeHtml((name || "there").trim().split(/\s+/)[0] || "there");
+  const safeWhen = escapeHtml(whenStr);
+  const safeOld = escapeHtml(oldDisplay);
+  const safeNew = escapeHtml(newDisplay);
+  const isEmail = attribute === "email";
+  const attrLabel = isEmail ? "Email" : "Phone";
+  const attrLower = isEmail ? "email address" : "phone number";
+  const attrIcon = isEmail ? "✉" : "📱";
+  const pillEmoji = "⚠️";
+  const headline = isEmail ? "Your Email Just Moved" : "Your Number Just Moved";
+  const lostAccessLine = isEmail
+    ? `This email address (the one you're reading right now) is <strong style="color:#FFFFFF;">no longer linked</strong> to your account. You won't receive future logins, OTPs, or recovery messages here.`
+    : `This phone number (the one being notified) is <strong style="color:#FFFFFF;">no longer linked</strong> to your account. You won't receive future SMS OTPs or recovery codes here.`;
+  const sourceParts: string[] = [];
+  if (ip && ip.trim()) sourceParts.push(ip.trim());
+  const deviceParts: string[] = [];
+  if (browser && browser.trim()) deviceParts.push(browser.trim());
+  if (os && os.trim()) deviceParts.push(os.trim());
+  if (deviceParts.length > 0) sourceParts.push(deviceParts.join(" on "));
+  const safeSource = sourceParts.length > 0 ? escapeHtml(sourceParts.join(" · ")) : null;
+  const year = new Date().getFullYear();
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="x-apple-disable-message-reformatting" />
+<meta name="color-scheme" content="dark light" />
+<meta name="supported-color-schemes" content="dark light" />
+<title>${attrLabel} changed — Qorix Markets</title>
+<style type="text/css">
+  @media only screen and (max-width:480px) {
+    .qx-outer { padding:20px 10px !important; }
+    .qx-card { border-radius:18px !important; }
+    .qx-hero-pad { padding:6px 18px 22px !important; }
+    .qx-hero-h { font-size:24px !important; line-height:1.22 !important; }
+    .qx-reroute-pad { padding:24px 18px 4px !important; }
+    .qx-reroute-cell { padding:18px 12px !important; }
+    .qx-reroute-arrow { padding:14px 0 !important; }
+    .qx-reroute-arrow-text { display:block !important; transform:rotate(90deg) !important; font-size:18px !important; }
+    .qx-reroute-stack { display:block !important; width:100% !important; }
+    .qx-reroute-value { font-size:13px !important; }
+    .qx-detail-pad { padding:24px 22px 4px !important; }
+    .qx-detail-label { font-size:10.5px !important; }
+    .qx-detail-value { font-size:14px !important; }
+    .qx-cta-pad { padding:24px 18px 6px !important; }
+    .qx-cta { padding:13px 24px !important; font-size:13.5px !important; letter-spacing:0.2px !important; }
+    .qx-foot-pad { padding:24px 18px 22px !important; }
+  }
+</style>
+</head>
+<body style="margin:0;padding:0;background:#0A1424;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;">
+<div style="display:none;max-height:0;overflow:hidden;font-size:1px;line-height:1px;color:#0A1424;opacity:0;">${escapeHtml(preheader)}</div>
+<div style="display:none;max-height:0;overflow:hidden;">&#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847;</div>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="qx-outer" style="background:#0A1424;padding:32px 16px;">
+  <tr>
+    <td align="center">
+
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="qx-card" style="max-width:560px;background:#14203A;border:1px solid rgba(253,224,71,0.30);border-radius:22px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,0.70);">
+
+        <!-- LOGO BAR — twilight → storm → chrome-yellow gradient -->
+        <tr>
+          <td align="left" style="padding:20px 24px 0 28px;background:#0A1424;background-image:linear-gradient(135deg,#0A1424 0%,#1E3A5F 45%,#475569 75%,#FACC15 100%);">
+            <img src="cid:${BRAND_LOGO_CID}" alt="Qorix Markets" width="320" height="217" style="display:block;width:320px;max-width:90%;height:auto;border:0;outline:none;text-decoration:none;margin:0;" />
+          </td>
+        </tr>
+
+        <!-- HERO — alert pill + headline + chrome divider -->
+        <tr>
+          <td class="qx-hero-pad" align="center" style="padding:8px 32px 28px;background:#0A1424;background-image:linear-gradient(135deg,#0A1424 0%,#1E3A5F 45%,#475569 75%,#FACC15 100%);">
+            <div style="display:inline-block;padding:6px 14px;border-radius:999px;background:rgba(253,224,71,0.20);border:1px solid rgba(253,224,71,0.55);font-size:10.5px;letter-spacing:2.4px;color:#FDE68A;font-weight:700;text-transform:uppercase;margin-bottom:18px;">
+              ${pillEmoji} ${attrLabel} Changed
+            </div>
+            <div class="qx-hero-h" style="font-size:30px;line-height:1.18;font-weight:800;color:#FFFFFF;letter-spacing:-0.5px;max-width:440px;margin:0 auto;">
+              ${headline}
+            </div>
+            <div style="font-size:13.5px;color:#FDE68A;margin-top:10px;font-weight:500;max-width:460px;margin-left:auto;margin-right:auto;line-height:1.5;">
+              ${safeFirstName}, your account ${attrLower} has been changed. If this <strong style="color:#FFFFFF;">wasn't you</strong>, contact support immediately to recover your account.
+            </div>
+            <div style="width:48px;height:3px;background:linear-gradient(90deg,#FDE68A 0%,#EAB308 100%);margin:18px auto 0;border-radius:999px;"></div>
+          </td>
+        </tr>
+
+        <!-- LOST-ACCESS banner — this contact no longer linked -->
+        <tr>
+          <td align="center" style="padding:24px 24px 0;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td style="padding:16px 18px;background:#1A1308;background-image:linear-gradient(180deg,#241B0E 0%,#1A1308 100%);border:1.5px solid rgba(253,224,71,0.50);border-radius:12px;box-shadow:0 0 24px rgba(250,204,21,0.22);">
+                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                    <tr>
+                      <td width="32" valign="top" style="width:32px;padding:2px 12px 0 0;">
+                        <div style="width:28px;height:28px;line-height:28px;text-align:center;border-radius:999px;background:rgba(253,224,71,0.22);border:1px solid rgba(253,224,71,0.65);font-size:14px;color:#FDE68A;font-weight:700;">⚠</div>
+                      </td>
+                      <td valign="top">
+                        <div style="font-size:11.5px;letter-spacing:1.6px;color:#FDE68A;text-transform:uppercase;font-weight:700;line-height:1;margin-bottom:6px;">${isEmail ? "This Address No Longer Linked" : "This Number No Longer Linked"}</div>
+                        <div style="font-size:13px;color:#FEF3C7;font-weight:500;line-height:1.55;">${lostAccessLine}</div>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- REROUTE DIAGRAM — old → arrow → new (masked for security) -->
+        <tr>
+          <td class="qx-reroute-pad" align="center" style="padding:32px 24px 4px;">
+            <div style="font-size:10.5px;letter-spacing:2.4px;color:#FDE68A;font-weight:700;text-transform:uppercase;text-align:left;padding:0 0 12px 0;">
+              Account ${attrLabel} Rerouted
+            </div>
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <!-- OLD (this address — ✗ removed, dim) -->
+                <td class="qx-reroute-cell qx-reroute-stack" width="44%" valign="top" style="width:44%;padding:18px 14px;background:#0E1828;background-image:linear-gradient(180deg,#11192C 0%,#0B1322 100%);border:1.5px dashed rgba(253,224,71,0.30);border-radius:14px;text-align:center;">
+                  <div style="font-size:10.5px;letter-spacing:1.8px;color:#7C8AA0;text-transform:uppercase;font-weight:700;line-height:1;margin-bottom:8px;">Previous ${attrLabel}</div>
+                  <div class="qx-reroute-value" style="font-size:14px;color:#9EAEC7;font-weight:600;line-height:1.4;font-family:'SF Mono',Menlo,Consolas,monospace;letter-spacing:-0.2px;word-break:break-all;margin-bottom:10px;">${attrIcon} ${safeOld}</div>
+                  <div style="font-size:11.5px;color:#FCA5A5;font-weight:600;line-height:1.4;">
+                    <span style="display:inline-block;width:14px;height:14px;line-height:14px;text-align:center;border-radius:999px;background:rgba(220,38,38,0.20);border:1px solid rgba(252,165,165,0.45);font-size:9px;color:#FECACA;font-weight:800;vertical-align:middle;margin-right:5px;">✗</span>
+                    <span style="vertical-align:middle;">Removed</span>
+                  </div>
+                </td>
+                <!-- ARROW -->
+                <td class="qx-reroute-arrow qx-reroute-stack" width="12%" valign="middle" style="width:12%;text-align:center;">
+                  <div class="qx-reroute-arrow-text" style="font-size:24px;color:#FDE68A;line-height:1;font-weight:700;">→</div>
+                </td>
+                <!-- NEW (now active) -->
+                <td class="qx-reroute-cell qx-reroute-stack" width="44%" valign="top" style="width:44%;padding:18px 14px;background:#1A1A1F;background-image:linear-gradient(180deg,#1F1F0C 0%,#15150A 100%);border:1.5px solid rgba(253,224,71,0.55);border-radius:14px;text-align:center;box-shadow:0 0 22px rgba(250,204,21,0.30);">
+                  <div style="font-size:10.5px;letter-spacing:1.8px;color:#FDE68A;text-transform:uppercase;font-weight:700;line-height:1;margin-bottom:8px;">New ${attrLabel}</div>
+                  <div class="qx-reroute-value" style="font-size:14px;color:#FFFFFF;font-weight:700;line-height:1.4;font-family:'SF Mono',Menlo,Consolas,monospace;letter-spacing:-0.2px;word-break:break-all;margin-bottom:10px;">${attrIcon} ${safeNew}</div>
+                  <div style="font-size:11.5px;color:#FACC15;font-weight:700;line-height:1.4;">
+                    <span style="display:inline-block;width:14px;height:14px;line-height:14px;text-align:center;border-radius:999px;background:rgba(250,204,21,0.22);border:1px solid rgba(253,224,71,0.65);font-size:9px;color:#FDE68A;font-weight:800;vertical-align:middle;margin-right:5px;">✓</span>
+                    <span style="vertical-align:middle;">Active</span>
+                  </div>
+                </td>
+              </tr>
+            </table>
+            <div style="margin-top:14px;font-size:11.5px;color:#7C8AA0;line-height:1.5;text-align:center;">
+              Values shown are masked for your security.
+            </div>
+          </td>
+        </tr>
+
+        <!-- DETAILS — stacked rows -->
+        <tr>
+          <td class="qx-detail-pad" style="padding:34px 32px 4px;">
+            <div style="font-size:10.5px;letter-spacing:2.4px;color:#FDE68A;text-transform:uppercase;font-weight:700;text-align:left;padding:0 0 14px 0;">
+              Event Details
+            </div>
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td style="padding:14px 0;border-bottom:1px solid rgba(253,224,71,0.18);">
+                  <div class="qx-detail-label" style="font-size:11px;letter-spacing:1.6px;color:#7C8AA0;text-transform:uppercase;font-weight:600;line-height:1;margin-bottom:6px;"><span style="margin-right:6px;">🕐</span>Changed At</div>
+                  <div class="qx-detail-value" style="font-size:15px;color:#FFFFFF;font-weight:600;line-height:1.4;">${safeWhen}</div>
+                </td>
+              </tr>
+              ${safeSource ? `
+              <tr>
+                <td style="padding:14px 0 4px;">
+                  <div class="qx-detail-label" style="font-size:11px;letter-spacing:1.6px;color:#7C8AA0;text-transform:uppercase;font-weight:600;line-height:1;margin-bottom:6px;"><span style="margin-right:6px;">📍</span>Source</div>
+                  <div class="qx-detail-value" style="font-size:15px;color:#FFFFFF;font-weight:600;line-height:1.4;font-family:'SF Mono',Menlo,Consolas,monospace;letter-spacing:-0.2px;">${safeSource}</div>
+                </td>
+              </tr>` : `
+              <tr>
+                <td style="padding:14px 0 4px;">
+                  <div class="qx-detail-label" style="font-size:11px;letter-spacing:1.6px;color:#7C8AA0;text-transform:uppercase;font-weight:600;line-height:1;margin-bottom:6px;"><span style="margin-right:6px;">⚠</span>Status</div>
+                  <div class="qx-detail-value" style="font-size:15px;color:#FFFFFF;font-weight:600;line-height:1.4;">${attrLabel} change applied</div>
+                </td>
+              </tr>`}
+            </table>
+          </td>
+        </tr>
+
+        <!-- DUAL CTA — primary "Wasn't you?" RED + secondary text -->
+        <tr>
+          <td class="qx-cta-pad" align="center" style="padding:30px 32px 6px;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td align="center" style="border-radius:12px;background-image:linear-gradient(135deg,#F87171 0%,#B91C1C 100%);background-color:#B91C1C;box-shadow:0 8px 28px rgba(185,28,28,0.55);">
+                  <a href="mailto:support@qorixmarkets.com?subject=Account%20${attrLabel}%20Changed%20Without%20My%20Consent" target="_blank" class="qx-cta" style="display:inline-block;padding:16px 36px;font-size:14.5px;font-weight:700;color:#FFFFFF;text-decoration:none;letter-spacing:0.4px;border-radius:12px;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+                    Wasn't you? Contact Support
+                  </a>
+                </td>
+              </tr>
+            </table>
+            <div style="margin-top:14px;font-size:12.5px;color:#7C8AA0;line-height:1.6;">
+              Was you? You can safely <span style="color:#FDE68A;font-weight:600;">ignore this message</span> — no further action needed.
+            </div>
+          </td>
+        </tr>
+
+        <!-- Reassurance card -->
+        <tr>
+          <td style="padding:22px 32px 8px;">
+            <div style="background:rgba(253,224,71,0.07);border-left:2px solid rgba(253,224,71,0.55);border-radius:6px;padding:14px 16px;font-size:12.5px;line-height:1.65;color:#A6B3C9;">
+              <div style="color:#FDE68A;font-weight:600;margin-bottom:6px;">Recovering a hijacked account</div>
+              Forward this email to <a href="mailto:support@qorixmarkets.com" style="color:#FDE68A;text-decoration:none;font-weight:600;">support@qorixmarkets.com</a> with subject <em>"Account ${attrLabel} Changed Without My Consent"</em>. Our team will verify your identity and restore access. We <strong style="color:#FDE68A;">never</strong> change your ${attrLower} without an OTP confirmation, and we never ask for your password over email, social media, or phone.
+            </div>
+          </td>
+        </tr>
+
+        <!-- FOOTER -->
+        <tr>
+          <td class="qx-foot-pad" align="center" style="padding:30px 32px 28px;border-top:1px solid rgba(255,255,255,0.05);background:#08111E;">
+            <div style="font-size:13px;color:#FDE68A;margin-bottom:6px;font-weight:600;">
+              Trade smart 📈
+            </div>
+            <div style="font-size:11.5px;color:#4A586E;line-height:1.7;">
+              © ${year} Qorix Markets · AI-Powered Trading<br/>
+              Need help? <a href="mailto:support@qorixmarkets.com" style="color:#FDE68A;text-decoration:none;">support@qorixmarkets.com</a>
+            </div>
+          </td>
+        </tr>
+
+      </table>
+
+      <div style="height:24px;line-height:24px;font-size:1px;">&nbsp;</div>
+    </td>
+  </tr>
+</table>
+</body>
+</html>`;
+}
+
+// ---------------------------------------------------------------------------
+// Send the Contact Changed alert to the OLD email address. The NEW address
+// gets its own welcome/confirm email (separate template, future).
+// ---------------------------------------------------------------------------
+export async function sendEmailChangedAlert(args: {
+  to: string;          // OLD email (the address being notified — losing access)
+  name: string;
+  oldEmail: string;    // raw — masked internally for display
+  newEmail: string;    // raw — masked internally for display
+  changedAt: Date;
+  ip?: string | null;
+  browser?: string | null;
+  os?: string | null;
+}): Promise<void> {
+  const { to, name, oldEmail, newEmail, changedAt, ip, browser, os } = args;
+  const oldDisplay = maskEmailAddress(oldEmail);
+  const newDisplay = maskEmailAddress(newEmail);
+  const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const whenStr =
+    `${changedAt.getUTCDate()} ${MONTHS_SHORT[changedAt.getUTCMonth()]} ${changedAt.getUTCFullYear()} · ` +
+    `${String(changedAt.getUTCHours()).padStart(2, "0")}:${String(changedAt.getUTCMinutes()).padStart(2, "0")} UTC`;
+  const sourceParts: string[] = [];
+  if (ip && ip.trim()) sourceParts.push(ip.trim());
+  const deviceParts: string[] = [];
+  if (browser && browser.trim()) deviceParts.push(browser.trim());
+  if (os && os.trim()) deviceParts.push(os.trim());
+  if (deviceParts.length > 0) sourceParts.push(deviceParts.join(" on "));
+  const sourceLine = sourceParts.length > 0 ? sourceParts.join(" · ") : null;
+
+  const subject = `Qorix Markets — Email changed ⚠️ — verify it was you`;
+  const preheader = `Your account email was just changed. This address is no longer linked. If this wasn't you, contact support immediately.`;
+
+  const html = renderContactChangedAlertHtml({
+    preheader,
+    name,
+    attribute: "email",
+    oldDisplay,
+    newDisplay,
+    changedAt,
+    ip: ip ?? null,
+    browser: browser ?? null,
+    os: os ?? null,
+  });
+
+  const text =
+    `Your Email Just Moved\n\n` +
+    `Hi ${name},\n\n` +
+    `Your Qorix Markets account email has been changed. If this WASN'T\n` +
+    `you, contact support immediately to recover your account.\n\n` +
+    `⚠ This address (the one you're reading right now) is no longer linked\n` +
+    `to your account. You won't receive future logins, OTPs, or recovery\n` +
+    `messages here.\n\n` +
+    `Account email rerouted (values masked for security):\n` +
+    `  Previous: ${oldDisplay}   ✗ Removed\n` +
+    `  New:      ${newDisplay}   ✓ Active\n\n` +
+    `Changed at:  ${whenStr}\n` +
+    (sourceLine ? `Source:      ${sourceLine}\n\n` : `Status:      Email change applied\n\n`) +
+    `Wasn't you? Email support@qorixmarkets.com with subject "Account\n` +
+    `Email Changed Without My Consent". Our team will verify your identity\n` +
+    `and restore access.\n\n` +
+    `Was you? You can ignore this message — no further action needed.\n\n` +
+    `We never change your email without an OTP confirmation, and we never\n` +
+    `ask for your password over email, social media, or phone.\n\n` +
+    `— Qorix Markets`;
+
+  await sendEmail(to, subject, text, html);
+}
+
+export async function sendPhoneChangedAlert(args: {
+  to: string;          // OLD email on file (since we still have email; phone change still alerts via email)
+  name: string;
+  oldPhone: string;    // raw — masked internally
+  newPhone: string;    // raw — masked internally
+  changedAt: Date;
+  ip?: string | null;
+  browser?: string | null;
+  os?: string | null;
+}): Promise<void> {
+  const { to, name, oldPhone, newPhone, changedAt, ip, browser, os } = args;
+  const oldDisplay = maskPhoneNumber(oldPhone);
+  const newDisplay = maskPhoneNumber(newPhone);
+  const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const whenStr =
+    `${changedAt.getUTCDate()} ${MONTHS_SHORT[changedAt.getUTCMonth()]} ${changedAt.getUTCFullYear()} · ` +
+    `${String(changedAt.getUTCHours()).padStart(2, "0")}:${String(changedAt.getUTCMinutes()).padStart(2, "0")} UTC`;
+  const sourceParts: string[] = [];
+  if (ip && ip.trim()) sourceParts.push(ip.trim());
+  const deviceParts: string[] = [];
+  if (browser && browser.trim()) deviceParts.push(browser.trim());
+  if (os && os.trim()) deviceParts.push(os.trim());
+  if (deviceParts.length > 0) sourceParts.push(deviceParts.join(" on "));
+  const sourceLine = sourceParts.length > 0 ? sourceParts.join(" · ") : null;
+
+  const subject = `Qorix Markets — Phone number changed ⚠️ — verify it was you`;
+  const preheader = `Your account phone number was just changed. The previous number can no longer receive your account messages.`;
+
+  const html = renderContactChangedAlertHtml({
+    preheader,
+    name,
+    attribute: "phone",
+    oldDisplay,
+    newDisplay,
+    changedAt,
+    ip: ip ?? null,
+    browser: browser ?? null,
+    os: os ?? null,
+  });
+
+  const text =
+    `Your Number Just Moved\n\n` +
+    `Hi ${name},\n\n` +
+    `Your Qorix Markets account phone number has been changed. If this\n` +
+    `WASN'T you, contact support immediately to recover your account.\n\n` +
+    `⚠ The previous number is no longer linked to your account. It won't\n` +
+    `receive future SMS OTPs or recovery codes.\n\n` +
+    `Account phone rerouted (values masked for security):\n` +
+    `  Previous: ${oldDisplay}   ✗ Removed\n` +
+    `  New:      ${newDisplay}   ✓ Active\n\n` +
+    `Changed at:  ${whenStr}\n` +
+    (sourceLine ? `Source:      ${sourceLine}\n\n` : `Status:      Phone change applied\n\n`) +
+    `Wasn't you? Email support@qorixmarkets.com with subject "Account\n` +
+    `Phone Changed Without My Consent". Our team will verify your identity\n` +
+    `and restore access.\n\n` +
+    `Was you? You can ignore this message — no further action needed.\n\n` +
+    `We never change your phone without an OTP confirmation, and we never\n` +
+    `ask for your password over email, social media, or phone.\n\n` +
+    `— Qorix Markets`;
+
+  await sendEmail(to, subject, text, html);
+}
