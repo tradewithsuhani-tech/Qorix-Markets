@@ -68,9 +68,16 @@ export interface DeviceDescription {
  * - Windows 11 still reports as "Windows NT 10.0" — distinguishing 10 vs
  *   11 also needs `Sec-CH-UA-Platform-Version`.
  */
-export function describeDeviceFull(req: Request): DeviceDescription {
-  const ua = (req.headers["user-agent"] ?? "") as string;
-  const result = new UAParser(ua).getResult();
+/**
+ * Pure UA-string parser. Used both by request-shaped callers
+ * (`describeDeviceFull(req)`) and by the lazy-refresh paths in admin
+ * routes that re-parse stored `user_agent` columns from the DB so
+ * historical rows show the latest, richest labels without any DB writes.
+ */
+export function describeDeviceFromUserAgent(
+  ua: string | null | undefined,
+): DeviceDescription {
+  const result = new UAParser(ua ?? "").getResult();
 
   const browserName = result.browser.name ?? null;
   const browserVersion = result.browser.version ?? null;
@@ -129,6 +136,11 @@ export function describeDeviceFull(req: Request): DeviceDescription {
     osVersion,
     cpuArchitecture: result.cpu.architecture ?? null,
   };
+}
+
+export function describeDeviceFull(req: Request): DeviceDescription {
+  const ua = (req.headers["user-agent"] ?? "") as string;
+  return describeDeviceFromUserAgent(ua);
 }
 
 /**

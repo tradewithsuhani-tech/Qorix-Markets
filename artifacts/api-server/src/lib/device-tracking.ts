@@ -93,7 +93,12 @@ async function trackLoginDeviceImpl(
   // Geo lookup is best-effort and slow — only do it on insert/update paths
   // that actually need it.
   if (existing.length > 0) {
-    // Known device — bump last-seen and refresh geo.
+    // Known device — bump last-seen, refresh geo, AND refresh the parsed
+    // browser/os labels. The labels are derived from the User-Agent each
+    // login, so this keeps them current as ua-parser-js gets upgraded
+    // (a Chrome 120 row inserted last week becomes "Chrome 121" the moment
+    // the user logs in again from the upgraded browser). Also self-heals
+    // older rows that were inserted with the legacy regex parser.
     const geo = await lookupGeo(ip);
     await db
       .update(userDevicesTable)
@@ -102,6 +107,12 @@ async function trackLoginDeviceImpl(
         lastSeenIp: ip || null,
         lastCity: geo.city,
         lastCountry: geo.country,
+        browserLabel: browser.slice(0, 80),
+        osLabel: os.slice(0, 80),
+        // Keep the stored UA in sync too — useful for the lazy re-parse path
+        // in routes/fraud.ts (re-parsing yields fresh device model / version
+        // even on rows from before this code shipped).
+        userAgent: ua,
       })
       .where(eq(userDevicesTable.id, existing[0]!.id));
     return;

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import type { Request } from "express";
 
 // Bare-import — describeDevice is a pure UA parser, no DB / app boot needed.
-const { describeDevice, describeDeviceFull } = await import(
+const { describeDevice, describeDeviceFull, describeDeviceFromUserAgent } = await import(
   "../../middlewares/auth"
 );
 
@@ -109,4 +109,49 @@ test("describeDeviceFull() never throws on garbage UA", () => {
   for (const ua of ["", "x", "🎉", "Mozilla/5.0", "abc; def; ghi"]) {
     assert.doesNotThrow(() => describeDeviceFull(reqWith(ua)));
   }
+});
+
+// ─── Lazy refresh path ─────────────────────────────────────────────────────
+// `describeDeviceFromUserAgent(uaString)` is the entry point used by the
+// admin /devices and /events handlers in routes/fraud.ts to re-parse
+// user_devices.user_agent / login_events.user_agent rows on read. It must
+// (a) accept a raw UA string (no Request shape), (b) be null-safe so
+// "no UA captured" rows don't crash the response, and (c) return labels
+// identical to the request-shaped helper for the same UA.
+
+test("describeDeviceFromUserAgent() accepts a raw UA string (no Request shape)", () => {
+  const ua = "Mozilla/5.0 (Linux; Android 14; SM-S918B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Mobile Safari/537.36";
+  const out = describeDeviceFromUserAgent(ua);
+  assert.equal(out.deviceVendor, "Samsung");
+  assert.equal(out.deviceModel, "SM-S918B");
+  assert.ok(out.os.startsWith("Android"));
+  assert.ok(out.browser.startsWith("Chrome"));
+});
+
+test("describeDeviceFromUserAgent() null/undefined → 'Unknown' fallbacks (does not throw)", () => {
+  // Stored user_agent column is nullable — older login_events rows have null.
+  // The lazy-refresh path passes the column straight through, so the helper
+  // must accept null without crashing the API response.
+  for (const ua of [null, undefined, ""]) {
+    const out = describeDeviceFromUserAgent(ua);
+    assert.equal(out.browser, "Unknown browser");
+    assert.equal(out.os, "Unknown OS");
+    assert.equal(out.deviceModel, null);
+    assert.equal(out.deviceVendor, null);
+  }
+});
+
+test("describeDeviceFromUserAgent() yields the same labels as describeDeviceFull(req) for identical UA", () => {
+  // Locks in: re-parsing a stored UA on read produces exactly what the
+  // initial parse on insert produced — no drift between the two paths.
+  const ua = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2.1 Safari/605.1.15";
+  const fromUa = describeDeviceFromUserAgent(ua);
+  const fromReq = describeDeviceFull(reqWith(ua));
+  assert.equal(fromUa.browser, fromReq.browser);
+  assert.equal(fromUa.os, fromReq.os);
+  assert.equal(fromUa.deviceType, fromReq.deviceType);
+  assert.equal(fromUa.deviceModel, fromReq.deviceModel);
+  assert.equal(fromUa.deviceVendor, fromReq.deviceVendor);
+  assert.equal(fromUa.osVersion, fromReq.osVersion);
+  assert.equal(fromUa.browserVersion, fromReq.browserVersion);
 });
