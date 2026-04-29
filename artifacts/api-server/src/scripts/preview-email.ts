@@ -32,6 +32,7 @@ import {
   renderTwoFactorEnabledHtml,
   renderTwoFactorDisabledHtml,
   renderContactChangedAlertHtml,
+  renderAccountLockedHtml,
 } from "../lib/email-service";
 
 const DEFAULT_TO = "safepayu@gmail.com";
@@ -523,6 +524,59 @@ const TEMPLATES: Record<string, () => Preview> = {
         ip: "203.0.113.42",
         browser: "Chrome",
         os: "macOS",
+      }),
+    };
+  },
+
+  "account-locked": () => {
+    const name = "Prem Kumar";
+    const lockedAt = new Date();
+    const autoUnlockAt = new Date(lockedAt.getTime() + 30 * 60 * 1000);
+    return {
+      subject: "[PREVIEW] Qorix Markets — Account Locked 🔐 (steel-vault, password-reset)",
+      text:
+        `[DESIGN PREVIEW]\n\n` +
+        `Account locked alert for ${name}.\n\n` +
+        `Test render of the new steel-vault + pale-silver "Vault Sealed" template.\n` +
+        `Lock seal centerpiece + dynamic unlock-method messaging.\n` +
+        `Reply with feedback.\n\n` +
+        `— Qorix Markets`,
+      html: renderAccountLockedHtml({
+        preheader: `[PREVIEW] We paused sign-ins after detecting unusual activity. Your account is protected — nothing was moved or changed.`,
+        name,
+        lockedAt,
+        reason: "Multiple failed sign-in attempts",
+        trigger: "5 failed password attempts in the last 10 minutes",
+        unlockMethod: "password-reset",
+        autoUnlockAt,
+        ip: "198.51.100.7",
+        browser: "Unknown browser",
+        os: "Unknown device",
+      }),
+    };
+  },
+
+  "account-locked-auto": () => {
+    const name = "Prem Kumar";
+    const lockedAt = new Date();
+    const autoUnlockAt = new Date(lockedAt.getTime() + 30 * 60 * 1000);
+    return {
+      subject: "[PREVIEW] Qorix Markets — Account Locked 🔐 (steel-vault, auto-unlock)",
+      text:
+        `[DESIGN PREVIEW]\n\n` +
+        `Account locked alert for ${name} — auto-unlock variant.\n\n` +
+        `— Qorix Markets`,
+      html: renderAccountLockedHtml({
+        preheader: `[PREVIEW] Account paused for 30 minutes after multiple failed sign-in attempts.`,
+        name,
+        lockedAt,
+        reason: "Multiple failed sign-in attempts",
+        trigger: "5 failed password attempts in the last 10 minutes",
+        unlockMethod: "auto",
+        autoUnlockAt,
+        ip: "198.51.100.7",
+        browser: "Chrome",
+        os: "Windows",
       }),
     };
   },

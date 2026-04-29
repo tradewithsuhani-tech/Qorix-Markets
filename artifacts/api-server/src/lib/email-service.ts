@@ -5817,3 +5817,382 @@ export async function sendPhoneChangedAlert(args: {
 
   await sendEmail(to, subject, text, html);
 }
+
+// ---------------------------------------------------------------------------
+// ACCOUNT LOCKED — security protection email
+// ---------------------------------------------------------------------------
+// STEEL-VAULT theme: obsidian + graphite + steel + pale silver. Cold,
+// protective, distinct from warm alert palettes (#17 carbon+lime, #18 violet,
+// #19 oxblood-ember, #20 twilight-chrome). Conceptually: "your account is in
+// cold storage / ice-locked vault" — positive protection, not alarming.
+// Layout flow:
+//   • Logo bar (obsidian → graphite → steel → silver gradient)
+//   • Hero: 🔐 ACCOUNT LOCKED pill · "Vault Sealed" · reassuring sub
+//   • PROTECTION-IN-PLACE banner (steel: "your funds and data are safe")
+//   • LOCK SEAL centerpiece — large 🔐 in framed vault, status pill,
+//     reason · trigger · unlock-method stacked details
+//   • Event Details: locked at · auto-unlock at (if auto) · source
+//   • Primary CTA — varies by unlockMethod:
+//       "auto"          → "Wait for Auto-Unlock" (silver, info)
+//       "password-reset"→ "Reset Password to Unlock" (silver, primary)
+//       "support"       → "Contact Support to Unlock" (silver, primary)
+//   • Secondary "Wasn't you trying to sign in? Reset your password."
+//   • Reassurance card: anti-phishing + "what triggered this"
+//   • "Trade smart 📈" footer
+// ---------------------------------------------------------------------------
+export function renderAccountLockedHtml(opts: {
+  preheader: string;
+  name: string;
+  lockedAt: Date;
+  reason: string;
+  trigger?: string | null;
+  unlockMethod: "auto" | "password-reset" | "support";
+  autoUnlockAt?: Date | null;
+  ip?: string | null;
+  browser?: string | null;
+  os?: string | null;
+}): string {
+  const { preheader, name, lockedAt, reason, trigger, unlockMethod, autoUnlockAt, ip, browser, os } = opts;
+  const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const fmtUtc = (d: Date) =>
+    `${d.getUTCDate()} ${MONTHS_SHORT[d.getUTCMonth()]} ${d.getUTCFullYear()} · ` +
+    `${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")} UTC`;
+  const safeFirstName = escapeHtml((name || "there").trim().split(/\s+/)[0] || "there");
+  const safeLockedAt = escapeHtml(fmtUtc(lockedAt));
+  const safeReason = escapeHtml(reason);
+  const safeTrigger = trigger && trigger.trim() ? escapeHtml(trigger.trim()) : null;
+  const safeAutoUnlockAt = autoUnlockAt ? escapeHtml(fmtUtc(autoUnlockAt)) : null;
+  const sourceParts: string[] = [];
+  if (ip && ip.trim()) sourceParts.push(ip.trim());
+  const deviceParts: string[] = [];
+  if (browser && browser.trim()) deviceParts.push(browser.trim());
+  if (os && os.trim()) deviceParts.push(os.trim());
+  if (deviceParts.length > 0) sourceParts.push(deviceParts.join(" on "));
+  const safeSource = sourceParts.length > 0 ? escapeHtml(sourceParts.join(" · ")) : null;
+
+  let unlockLabel: string;
+  let unlockHref: string;
+  let unlockHint: string;
+  if (unlockMethod === "auto") {
+    unlockLabel = "Wait for Auto-Unlock";
+    unlockHref = "https://qorixmarkets.com/login";
+    unlockHint = safeAutoUnlockAt
+      ? `Your account will automatically reopen at <strong style="color:#FFFFFF;">${safeAutoUnlockAt}</strong>. No action needed unless you want to sign in sooner.`
+      : `Your account will automatically reopen shortly. No action needed unless you want to sign in sooner.`;
+  } else if (unlockMethod === "support") {
+    unlockLabel = "Contact Support to Unlock";
+    unlockHref = "mailto:support@qorixmarkets.com?subject=Account%20Unlock%20Request";
+    unlockHint = `Reply to this email or write to <a href="mailto:support@qorixmarkets.com" style="color:#CBD5E1;text-decoration:none;font-weight:600;">support@qorixmarkets.com</a>. Our team will verify your identity and reopen your account.`;
+  } else {
+    unlockLabel = "Reset Password to Unlock";
+    unlockHref = "https://qorixmarkets.com/forgot-password";
+    unlockHint = `Resetting your password proves your identity and immediately reopens your account. Takes under 60 seconds.`;
+  }
+
+  const year = new Date().getFullYear();
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="x-apple-disable-message-reformatting" />
+<meta name="color-scheme" content="dark light" />
+<meta name="supported-color-schemes" content="dark light" />
+<title>Account locked — Qorix Markets</title>
+<style type="text/css">
+  @media only screen and (max-width:480px) {
+    .qx-outer { padding:20px 10px !important; }
+    .qx-card { border-radius:18px !important; }
+    .qx-hero-pad { padding:6px 18px 22px !important; }
+    .qx-hero-h { font-size:24px !important; line-height:1.22 !important; }
+    .qx-seal-pad { padding:24px 18px 4px !important; }
+    .qx-seal-frame { padding:24px 18px !important; }
+    .qx-seal-icon { width:64px !important; height:64px !important; line-height:64px !important; font-size:30px !important; }
+    .qx-seal-row { padding:10px 0 !important; }
+    .qx-seal-label { font-size:10.5px !important; }
+    .qx-seal-value { font-size:13px !important; }
+    .qx-detail-pad { padding:24px 22px 4px !important; }
+    .qx-detail-label { font-size:10.5px !important; }
+    .qx-detail-value { font-size:14px !important; }
+    .qx-cta-pad { padding:24px 18px 6px !important; }
+    .qx-cta { padding:13px 24px !important; font-size:13.5px !important; letter-spacing:0.2px !important; }
+    .qx-foot-pad { padding:24px 18px 22px !important; }
+  }
+</style>
+</head>
+<body style="margin:0;padding:0;background:#06080C;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;">
+<div style="display:none;max-height:0;overflow:hidden;font-size:1px;line-height:1px;color:#06080C;opacity:0;">${escapeHtml(preheader)}</div>
+<div style="display:none;max-height:0;overflow:hidden;">&#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847;</div>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="qx-outer" style="background:#06080C;padding:32px 16px;">
+  <tr>
+    <td align="center">
+
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="qx-card" style="max-width:560px;background:#11141A;border:1px solid rgba(203,213,225,0.22);border-radius:22px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,0.75);">
+
+        <!-- LOGO BAR — obsidian → graphite → steel → silver gradient -->
+        <tr>
+          <td align="left" style="padding:20px 24px 0 28px;background:#06080C;background-image:linear-gradient(135deg,#06080C 0%,#1A1F28 45%,#334155 75%,#CBD5E1 100%);">
+            <img src="cid:${BRAND_LOGO_CID}" alt="Qorix Markets" width="320" height="217" style="display:block;width:320px;max-width:90%;height:auto;border:0;outline:none;text-decoration:none;margin:0;" />
+          </td>
+        </tr>
+
+        <!-- HERO — locked pill + headline + silver divider -->
+        <tr>
+          <td class="qx-hero-pad" align="center" style="padding:8px 32px 28px;background:#06080C;background-image:linear-gradient(135deg,#06080C 0%,#1A1F28 45%,#334155 75%,#CBD5E1 100%);">
+            <div style="display:inline-block;padding:6px 14px;border-radius:999px;background:rgba(203,213,225,0.18);border:1px solid rgba(203,213,225,0.55);font-size:10.5px;letter-spacing:2.4px;color:#E2E8F0;font-weight:700;text-transform:uppercase;margin-bottom:18px;">
+              🔐 Account Locked
+            </div>
+            <div class="qx-hero-h" style="font-size:30px;line-height:1.18;font-weight:800;color:#FFFFFF;letter-spacing:-0.5px;max-width:440px;margin:0 auto;">
+              Vault Sealed
+            </div>
+            <div style="font-size:13.5px;color:#E2E8F0;margin-top:10px;font-weight:500;max-width:460px;margin-left:auto;margin-right:auto;line-height:1.5;">
+              ${safeFirstName}, we paused sign-ins to your account after detecting unusual activity. Your <strong style="color:#FFFFFF;">funds and data are safe</strong>.
+            </div>
+            <div style="width:48px;height:3px;background:linear-gradient(90deg,#E2E8F0 0%,#94A3B8 100%);margin:18px auto 0;border-radius:999px;"></div>
+          </td>
+        </tr>
+
+        <!-- PROTECTION-IN-PLACE banner -->
+        <tr>
+          <td align="center" style="padding:24px 24px 0;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td style="padding:16px 18px;background:#0E141C;background-image:linear-gradient(180deg,#131B26 0%,#0B1118 100%);border:1.5px solid rgba(203,213,225,0.40);border-radius:12px;box-shadow:0 0 24px rgba(148,163,184,0.20);">
+                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                    <tr>
+                      <td width="32" valign="top" style="width:32px;padding:2px 12px 0 0;">
+                        <div style="width:28px;height:28px;line-height:28px;text-align:center;border-radius:999px;background:rgba(203,213,225,0.18);border:1px solid rgba(203,213,225,0.65);font-size:14px;color:#E2E8F0;font-weight:700;">🛡</div>
+                      </td>
+                      <td valign="top">
+                        <div style="font-size:11.5px;letter-spacing:1.6px;color:#E2E8F0;text-transform:uppercase;font-weight:700;line-height:1;margin-bottom:6px;">Your Account Is Protected</div>
+                        <div style="font-size:13px;color:#CBD5E1;font-weight:500;line-height:1.55;">Nothing has been moved, withdrawn, or changed. The lock simply blocks new sign-ins until we confirm it's really you.</div>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- LOCK SEAL centerpiece -->
+        <tr>
+          <td class="qx-seal-pad" align="center" style="padding:32px 24px 4px;">
+            <div style="font-size:10.5px;letter-spacing:2.4px;color:#E2E8F0;font-weight:700;text-transform:uppercase;text-align:left;padding:0 0 12px 0;">
+              Lock Status
+            </div>
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td class="qx-seal-frame" align="center" style="padding:30px 24px;background:#0B0F16;background-image:linear-gradient(180deg,#0F1421 0%,#080B12 100%);border:1.5px solid rgba(203,213,225,0.45);border-radius:14px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.04),0 0 32px rgba(148,163,184,0.18);">
+                  <!-- Lock icon framed -->
+                  <div class="qx-seal-icon" style="width:76px;height:76px;line-height:76px;border-radius:18px;background:rgba(203,213,225,0.10);border:1.5px solid rgba(203,213,225,0.55);font-size:36px;color:#E2E8F0;margin:0 auto 14px;text-align:center;box-shadow:0 0 24px rgba(203,213,225,0.30);">🔐</div>
+                  <!-- Locked status pill -->
+                  <div style="display:inline-block;padding:5px 12px;border-radius:999px;background:rgba(203,213,225,0.18);border:1px solid rgba(203,213,225,0.55);font-size:10.5px;letter-spacing:2.0px;color:#E2E8F0;font-weight:700;text-transform:uppercase;margin-bottom:18px;">
+                    <span style="display:inline-block;width:6px;height:6px;border-radius:999px;background:#E2E8F0;box-shadow:0 0 8px rgba(226,232,240,0.85);vertical-align:middle;margin-right:6px;"></span>
+                    <span style="vertical-align:middle;">Locked</span>
+                  </div>
+                  <!-- Detail rows: reason · trigger · unlock -->
+                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="text-align:left;">
+                    <tr>
+                      <td class="qx-seal-row" style="padding:12px 0;border-top:1px solid rgba(203,213,225,0.15);">
+                        <div class="qx-seal-label" style="font-size:11px;letter-spacing:1.6px;color:#94A3B8;text-transform:uppercase;font-weight:600;line-height:1;margin-bottom:5px;">Reason</div>
+                        <div class="qx-seal-value" style="font-size:14px;color:#FFFFFF;font-weight:600;line-height:1.45;">${safeReason}</div>
+                      </td>
+                    </tr>
+                    ${safeTrigger ? `
+                    <tr>
+                      <td class="qx-seal-row" style="padding:12px 0;border-top:1px solid rgba(203,213,225,0.15);">
+                        <div class="qx-seal-label" style="font-size:11px;letter-spacing:1.6px;color:#94A3B8;text-transform:uppercase;font-weight:600;line-height:1;margin-bottom:5px;">Trigger</div>
+                        <div class="qx-seal-value" style="font-size:14px;color:#FFFFFF;font-weight:600;line-height:1.45;">${safeTrigger}</div>
+                      </td>
+                    </tr>` : ``}
+                    <tr>
+                      <td class="qx-seal-row" style="padding:12px 0 0;border-top:1px solid rgba(203,213,225,0.15);">
+                        <div class="qx-seal-label" style="font-size:11px;letter-spacing:1.6px;color:#94A3B8;text-transform:uppercase;font-weight:600;line-height:1;margin-bottom:5px;">How To Unlock</div>
+                        <div class="qx-seal-value" style="font-size:14px;color:#FFFFFF;font-weight:600;line-height:1.5;">${unlockHint}</div>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- DETAILS — locked at · auto-unlock · source -->
+        <tr>
+          <td class="qx-detail-pad" style="padding:34px 32px 4px;">
+            <div style="font-size:10.5px;letter-spacing:2.4px;color:#E2E8F0;text-transform:uppercase;font-weight:700;text-align:left;padding:0 0 14px 0;">
+              Event Details
+            </div>
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td style="padding:14px 0;border-bottom:1px solid rgba(203,213,225,0.15);">
+                  <div class="qx-detail-label" style="font-size:11px;letter-spacing:1.6px;color:#94A3B8;text-transform:uppercase;font-weight:600;line-height:1;margin-bottom:6px;"><span style="margin-right:6px;">🕐</span>Locked At</div>
+                  <div class="qx-detail-value" style="font-size:15px;color:#FFFFFF;font-weight:600;line-height:1.4;">${safeLockedAt}</div>
+                </td>
+              </tr>
+              ${unlockMethod === "auto" && safeAutoUnlockAt ? `
+              <tr>
+                <td style="padding:14px 0;border-bottom:1px solid rgba(203,213,225,0.15);">
+                  <div class="qx-detail-label" style="font-size:11px;letter-spacing:1.6px;color:#94A3B8;text-transform:uppercase;font-weight:600;line-height:1;margin-bottom:6px;"><span style="margin-right:6px;">⏱</span>Auto-Unlock At</div>
+                  <div class="qx-detail-value" style="font-size:15px;color:#FFFFFF;font-weight:600;line-height:1.4;">${safeAutoUnlockAt}</div>
+                </td>
+              </tr>` : ``}
+              ${safeSource ? `
+              <tr>
+                <td style="padding:14px 0 4px;">
+                  <div class="qx-detail-label" style="font-size:11px;letter-spacing:1.6px;color:#94A3B8;text-transform:uppercase;font-weight:600;line-height:1;margin-bottom:6px;"><span style="margin-right:6px;">📍</span>Last Sign-In Attempt</div>
+                  <div class="qx-detail-value" style="font-size:15px;color:#FFFFFF;font-weight:600;line-height:1.4;font-family:'SF Mono',Menlo,Consolas,monospace;letter-spacing:-0.2px;">${safeSource}</div>
+                </td>
+              </tr>` : `
+              <tr>
+                <td style="padding:14px 0 4px;">
+                  <div class="qx-detail-label" style="font-size:11px;letter-spacing:1.6px;color:#94A3B8;text-transform:uppercase;font-weight:600;line-height:1;margin-bottom:6px;"><span style="margin-right:6px;">🛡</span>Status</div>
+                  <div class="qx-detail-value" style="font-size:15px;color:#FFFFFF;font-weight:600;line-height:1.4;">Account locked for safety</div>
+                </td>
+              </tr>`}
+            </table>
+          </td>
+        </tr>
+
+        <!-- DUAL CTA — primary unlock action + secondary "wasn't you" -->
+        <tr>
+          <td class="qx-cta-pad" align="center" style="padding:30px 32px 6px;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td align="center" style="border-radius:12px;background-image:linear-gradient(135deg,#E2E8F0 0%,#94A3B8 100%);background-color:#94A3B8;box-shadow:0 8px 28px rgba(148,163,184,0.40);">
+                  <a href="${unlockHref}" target="_blank" class="qx-cta" style="display:inline-block;padding:16px 36px;font-size:14.5px;font-weight:700;color:#0F172A;text-decoration:none;letter-spacing:0.4px;border-radius:12px;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+                    ${unlockLabel} →
+                  </a>
+                </td>
+              </tr>
+            </table>
+            <div style="margin-top:14px;font-size:12.5px;color:#94A3B8;line-height:1.6;">
+              Wasn't you trying to sign in? <a href="https://qorixmarkets.com/forgot-password" target="_blank" style="color:#E2E8F0;text-decoration:none;font-weight:600;border-bottom:1px dashed rgba(226,232,240,0.4);">Reset your password →</a>
+            </div>
+          </td>
+        </tr>
+
+        <!-- Reassurance card -->
+        <tr>
+          <td style="padding:22px 32px 8px;">
+            <div style="background:rgba(203,213,225,0.06);border-left:2px solid rgba(203,213,225,0.55);border-radius:6px;padding:14px 16px;font-size:12.5px;line-height:1.65;color:#94A3B8;">
+              <div style="color:#E2E8F0;font-weight:600;margin-bottom:6px;">Why we lock accounts</div>
+              We pause sign-ins automatically when something looks off — too many wrong passwords, sign-in attempts from unknown locations, or other suspicious patterns. It's a circuit breaker, not a punishment. We <strong style="color:#E2E8F0;">never</strong> ask for your password over email, social media, or phone.
+            </div>
+          </td>
+        </tr>
+
+        <!-- FOOTER -->
+        <tr>
+          <td class="qx-foot-pad" align="center" style="padding:30px 32px 28px;border-top:1px solid rgba(255,255,255,0.05);background:#04060A;">
+            <div style="font-size:13px;color:#E2E8F0;margin-bottom:6px;font-weight:600;">
+              Trade smart 📈
+            </div>
+            <div style="font-size:11.5px;color:#475569;line-height:1.7;">
+              © ${year} Qorix Markets · AI-Powered Trading<br/>
+              Need help? <a href="mailto:support@qorixmarkets.com" style="color:#E2E8F0;text-decoration:none;">support@qorixmarkets.com</a>
+            </div>
+          </td>
+        </tr>
+
+      </table>
+
+      <div style="height:24px;line-height:24px;font-size:1px;">&nbsp;</div>
+    </td>
+  </tr>
+</table>
+</body>
+</html>`;
+}
+
+// ---------------------------------------------------------------------------
+// Send the Account Locked email — fires when failed-login lockout, suspicious
+// activity detection, or admin lock kicks in.
+// ---------------------------------------------------------------------------
+export async function sendAccountLocked(args: {
+  to: string;
+  name: string;
+  lockedAt: Date;
+  reason: string;
+  trigger?: string | null;
+  unlockMethod: "auto" | "password-reset" | "support";
+  autoUnlockAt?: Date | null;
+  ip?: string | null;
+  browser?: string | null;
+  os?: string | null;
+}): Promise<void> {
+  const { to, name, lockedAt, reason, trigger, unlockMethod, autoUnlockAt, ip, browser, os } = args;
+  const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const fmtUtc = (d: Date) =>
+    `${d.getUTCDate()} ${MONTHS_SHORT[d.getUTCMonth()]} ${d.getUTCFullYear()} · ` +
+    `${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")} UTC`;
+  const lockedAtStr = fmtUtc(lockedAt);
+  const autoUnlockAtStr = autoUnlockAt ? fmtUtc(autoUnlockAt) : null;
+  const sourceParts: string[] = [];
+  if (ip && ip.trim()) sourceParts.push(ip.trim());
+  const deviceParts: string[] = [];
+  if (browser && browser.trim()) deviceParts.push(browser.trim());
+  if (os && os.trim()) deviceParts.push(os.trim());
+  if (deviceParts.length > 0) sourceParts.push(deviceParts.join(" on "));
+  const sourceLine = sourceParts.length > 0 ? sourceParts.join(" · ") : null;
+
+  let unlockTextHint: string;
+  let unlockTextLink: string;
+  if (unlockMethod === "auto") {
+    unlockTextHint = autoUnlockAtStr
+      ? `Your account will automatically reopen at ${autoUnlockAtStr}. No action needed unless you want to sign in sooner.`
+      : `Your account will automatically reopen shortly. No action needed unless you want to sign in sooner.`;
+    unlockTextLink = `https://qorixmarkets.com/login`;
+  } else if (unlockMethod === "support") {
+    unlockTextHint = `Reply to this email or write to support@qorixmarkets.com. Our team will verify your identity and reopen your account.`;
+    unlockTextLink = `mailto:support@qorixmarkets.com?subject=Account%20Unlock%20Request`;
+  } else {
+    unlockTextHint = `Resetting your password proves your identity and immediately reopens your account. Takes under 60 seconds.`;
+    unlockTextLink = `https://qorixmarkets.com/forgot-password`;
+  }
+
+  const subject = `Qorix Markets — Account locked 🔐 — your funds are safe`;
+  const preheader = `We paused sign-ins after detecting unusual activity. Your account is protected — nothing was moved or changed.`;
+
+  const html = renderAccountLockedHtml({
+    preheader,
+    name,
+    lockedAt,
+    reason,
+    trigger: trigger ?? null,
+    unlockMethod,
+    autoUnlockAt: autoUnlockAt ?? null,
+    ip: ip ?? null,
+    browser: browser ?? null,
+    os: os ?? null,
+  });
+
+  const text =
+    `Vault Sealed — Account Locked\n\n` +
+    `Hi ${name},\n\n` +
+    `We paused sign-ins to your Qorix Markets account after detecting\n` +
+    `unusual activity. Your funds and data are safe — nothing has been\n` +
+    `moved, withdrawn, or changed.\n\n` +
+    `🔐 Lock Status: LOCKED\n` +
+    `  Reason:  ${reason}\n` +
+    (trigger ? `  Trigger: ${trigger}\n` : ``) +
+    `  Unlock:  ${unlockTextHint}\n\n` +
+    `Locked at: ${lockedAtStr}\n` +
+    (autoUnlockAtStr && unlockMethod === "auto" ? `Auto-unlock at: ${autoUnlockAtStr}\n` : ``) +
+    (sourceLine ? `Last sign-in attempt: ${sourceLine}\n\n` : `Status: Account locked for safety\n\n`) +
+    `Unlock: ${unlockTextLink}\n` +
+    `Wasn't you trying to sign in? Reset your password:\n` +
+    `https://qorixmarkets.com/forgot-password\n\n` +
+    `Why we lock accounts: We pause sign-ins automatically when something\n` +
+    `looks off — too many wrong passwords, sign-in attempts from unknown\n` +
+    `locations, or other suspicious patterns. It's a circuit breaker, not\n` +
+    `a punishment. We never ask for your password over email, social\n` +
+    `media, or phone.\n\n` +
+    `— Qorix Markets`;
+
+  await sendEmail(to, subject, text, html);
+}
