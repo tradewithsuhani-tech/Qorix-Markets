@@ -33,10 +33,21 @@ interface DeviceRow {
   withdrawalUnlockIst: string | null;
 }
 
+type CurrentSession =
+  | { withdrawalAllowed: true }
+  | {
+      withdrawalAllowed: false;
+      message: string;
+      hoursLeft: number;
+      unlockAt: string;
+      unlockIst: string;
+    };
+
 interface DevicesResponse {
   devices: DeviceRow[];
   cooldownHours: number;
   currentDeviceTracked: boolean;
+  currentSession: CurrentSession;
 }
 
 const container: Variants = {
@@ -198,13 +209,7 @@ function DeviceCard({ d }: { d: DeviceRow }) {
 export default function DevicesPage() {
   const { data, isLoading, error } = useQuery<DevicesResponse>({
     queryKey: ["/api/devices"],
-    queryFn: async () => {
-      const res = await authFetch("/api/devices");
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`);
-      }
-      return res.json();
-    },
+    queryFn: () => authFetch<DevicesResponse>("/api/devices"),
     refetchOnWindowFocus: false,
   });
 
@@ -272,8 +277,11 @@ export default function DevicesPage() {
 
         {data && data.devices.length > 0 && (
           <>
-            {/* "Ghost session" warning — caller's session has no row */}
-            {!data.currentDeviceTracked && (
+            {/* Authoritative "this session is blocked from withdrawals"
+                banner — driven by the same helper that gates the actual
+                withdrawal endpoints, so the message here can never
+                disagree with what /wallet/withdraw will tell you. */}
+            {!data.currentSession.withdrawalAllowed && (
               <motion.div
                 variants={item}
                 initial="hidden"
@@ -281,15 +289,14 @@ export default function DevicesPage() {
                 className="glass-card rounded-2xl p-4 border-amber-500/30 bg-amber-500/[0.05]"
               >
                 <div className="flex items-start gap-2.5 text-amber-200">
-                  <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <Lock className="w-4 h-4 shrink-0 mt-0.5" />
                   <div className="text-xs leading-relaxed">
                     <div className="font-semibold">
-                      This device isn't on your trusted list
+                      Withdrawals paused on this session
                     </div>
                     <div className="text-amber-200/80 mt-0.5">
-                      For your security, please sign out and sign in again.
-                      Withdrawals from this session are paused until the device
-                      is recognised.
+                      {data.currentSession.message}
+                      {" "}Deposits and trading continue as normal.
                     </div>
                   </div>
                 </div>
