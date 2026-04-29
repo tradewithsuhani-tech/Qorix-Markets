@@ -17,6 +17,7 @@ import {
   merchantAuthFetch,
 } from "@/lib/merchant-auth-fetch";
 import { useQuery } from "@tanstack/react-query";
+import { MerchantDepositNotifier } from "./merchant-deposit-notifier";
 
 interface MeResponse {
   merchant: {
@@ -155,6 +156,7 @@ export function MerchantLayout({ children }: { children: ReactNode }) {
           <div className="max-w-6xl mx-auto px-4 md:px-8 py-6">{children}</div>
         </main>
       </div>
+      <MerchantDepositNotifier />
     </div>
   );
 }
