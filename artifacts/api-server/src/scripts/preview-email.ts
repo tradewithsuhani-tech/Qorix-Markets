@@ -28,6 +28,7 @@ import {
   renderIdentitySubmittedHtml,
   renderAddressSubmittedHtml,
   renderPersonalVerifiedHtml,
+  renderPasswordChangedHtml,
 } from "../lib/email-service";
 
 const DEFAULT_TO = "safepayu@gmail.com";
@@ -400,6 +401,28 @@ const TEMPLATES: Record<string, () => Preview> = {
         preheader: `[PREVIEW] Your basic profile is verified — continue to Lv.2 to unlock USDT & INR withdrawals`,
         name,
         verifiedAt,
+      }),
+    };
+  },
+
+  "password-changed": () => {
+    const name = "Prem Kumar";
+    const changedAt = new Date();
+    return {
+      subject: "[PREVIEW] Qorix Markets — Password Updated 🔒 (new design)",
+      text:
+        `[DESIGN PREVIEW]\n\n` +
+        `Password change confirmation for ${name}.\n\n` +
+        `Test render of the new carbon-lime "Locked Down" template.\n` +
+        `Reply with feedback.\n\n` +
+        `— Qorix Markets`,
+      html: renderPasswordChangedHtml({
+        preheader: `[PREVIEW] Your password was just changed — only your password, nothing else. If this wasn't you, secure your account now.`,
+        name,
+        changedAt,
+        ip: "203.0.113.42",
+        browser: "Chrome",
+        os: "macOS",
       }),
     };
   },

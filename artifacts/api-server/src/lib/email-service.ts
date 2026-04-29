@@ -4432,3 +4432,299 @@ export async function sendPersonalVerified(args: {
 
   await sendEmail(to, subject, text, html);
 }
+
+// ---------------------------------------------------------------------------
+// Password Changed confirmation — UNIQUE carbon-black + electric lime
+// "Locked Down" design. Fires after a successful password reset / change
+// (forgot-password flow + in-app password change).
+//
+// Visual differentiators (vs all other emails):
+//   • carbon-black + electric LIME palette — yellow-green tech-vault
+//     log aesthetic. Lime is distinct from emerald (USDT deposit
+//     celebration), teal-mint (Lv.3 verified celebration), and sage
+//     (identity-submitted patience) — sharper, more neon, more
+//     "security indicator" than "celebration"
+//   • "🔒 PASSWORD UPDATED" hero pill + "Locked Down" headline
+//   • ACCOUNT CHANGES SNAPSHOT (centerpiece, UNIQUE) — vertical tile
+//     with 2 sections:
+//       a) ✓ CHANGED · password (just now)
+//       b) ⚪ UNCHANGED · email · phone · 2FA · devices
+//     Helps users catch attacker tampering — "did anything else change?"
+//     This is conceptually different from the Lv.1 split-tile (which
+//     was about future feature unlocks)
+//   • Stacked rows: 🕐 changed at · 📍 source (IP + browser, optional)
+//   • Primary CTA — RED-tinted "Wasn't you? Secure Account" (security
+//     red, not the friendly lime) so the recovery action stands out
+//   • Secondary "All good — view security settings →"
+//   • Reassurance card with 2FA-enable nudge + anti-phishing reminder
+//   • "Trade smart 📈" footer
+// ---------------------------------------------------------------------------
+export function renderPasswordChangedHtml(opts: {
+  preheader: string;
+  name: string;
+  changedAt: Date;
+  ip?: string | null;
+  browser?: string | null;
+  os?: string | null;
+}): string {
+  const { preheader, name, changedAt, ip, browser, os } = opts;
+  const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const whenStr =
+    `${changedAt.getUTCDate()} ${MONTHS_SHORT[changedAt.getUTCMonth()]} ${changedAt.getUTCFullYear()} · ` +
+    `${String(changedAt.getUTCHours()).padStart(2, "0")}:${String(changedAt.getUTCMinutes()).padStart(2, "0")} UTC`;
+  const safeFirstName = escapeHtml((name || "there").trim().split(/\s+/)[0] || "there");
+  const safeWhen = escapeHtml(whenStr);
+  const sourceParts: string[] = [];
+  if (ip && ip.trim()) sourceParts.push(ip.trim());
+  const deviceParts: string[] = [];
+  if (browser && browser.trim()) deviceParts.push(browser.trim());
+  if (os && os.trim()) deviceParts.push(os.trim());
+  if (deviceParts.length > 0) sourceParts.push(deviceParts.join(" on "));
+  const safeSource = sourceParts.length > 0 ? escapeHtml(sourceParts.join(" · ")) : null;
+  const year = new Date().getFullYear();
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="x-apple-disable-message-reformatting" />
+<meta name="color-scheme" content="dark light" />
+<meta name="supported-color-schemes" content="dark light" />
+<title>Password updated — Qorix Markets</title>
+<style type="text/css">
+  @media only screen and (max-width:480px) {
+    .qx-outer { padding:20px 10px !important; }
+    .qx-card { border-radius:18px !important; }
+    .qx-hero-pad { padding:6px 18px 22px !important; }
+    .qx-hero-h { font-size:24px !important; line-height:1.22 !important; }
+    .qx-snap-pad { padding:24px 22px 4px !important; }
+    .qx-snap-cell { padding:20px 20px !important; }
+    .qx-snap-row-label { font-size:10.5px !important; }
+    .qx-snap-row-value { font-size:13.5px !important; }
+    .qx-detail-pad { padding:24px 22px 4px !important; }
+    .qx-detail-label { font-size:10.5px !important; }
+    .qx-detail-value { font-size:14px !important; }
+    .qx-cta-pad { padding:24px 18px 6px !important; }
+    .qx-cta { padding:13px 24px !important; font-size:13.5px !important; letter-spacing:0.2px !important; }
+    .qx-foot-pad { padding:24px 18px 22px !important; }
+  }
+</style>
+</head>
+<body style="margin:0;padding:0;background:#08090B;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;">
+<div style="display:none;max-height:0;overflow:hidden;font-size:1px;line-height:1px;color:#08090B;opacity:0;">${escapeHtml(preheader)}</div>
+<div style="display:none;max-height:0;overflow:hidden;">&#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847;</div>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="qx-outer" style="background:#08090B;padding:32px 16px;">
+  <tr>
+    <td align="center">
+
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="qx-card" style="max-width:560px;background:#13151A;border:1px solid rgba(217,249,157,0.30);border-radius:22px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,0.65);">
+
+        <!-- LOGO BAR — carbon → lime gradient -->
+        <tr>
+          <td align="left" style="padding:20px 24px 0 28px;background:#08090B;background-image:linear-gradient(135deg,#08090B 0%,#13151A 45%,#1B3017 78%,#A3E635 100%);">
+            <img src="cid:${BRAND_LOGO_CID}" alt="Qorix Markets" width="320" height="217" style="display:block;width:320px;max-width:90%;height:auto;border:0;outline:none;text-decoration:none;margin:0;" />
+          </td>
+        </tr>
+
+        <!-- HERO — locked-down pill + headline + lime divider -->
+        <tr>
+          <td class="qx-hero-pad" align="center" style="padding:8px 32px 28px;background:#08090B;background-image:linear-gradient(135deg,#08090B 0%,#13151A 45%,#1B3017 78%,#A3E635 100%);">
+            <div style="display:inline-block;padding:6px 14px;border-radius:999px;background:rgba(217,249,157,0.18);border:1px solid rgba(217,249,157,0.55);font-size:10.5px;letter-spacing:2.4px;color:#D9F99D;font-weight:700;text-transform:uppercase;margin-bottom:18px;">
+              🔒 Password Updated
+            </div>
+            <div class="qx-hero-h" style="font-size:30px;line-height:1.18;font-weight:800;color:#FFFFFF;letter-spacing:-0.5px;max-width:440px;margin:0 auto;">
+              Locked Down
+            </div>
+            <div style="font-size:13.5px;color:#D9F99D;margin-top:10px;font-weight:500;max-width:420px;margin-left:auto;margin-right:auto;line-height:1.5;">
+              ${safeFirstName}, your password was just changed. If this was you, you're all set.
+            </div>
+            <div style="width:48px;height:3px;background:linear-gradient(90deg,#D9F99D 0%,#84CC16 100%);margin:18px auto 0;border-radius:999px;"></div>
+          </td>
+        </tr>
+
+        <!-- ACCOUNT CHANGES SNAPSHOT — vertical 2-section tile -->
+        <tr>
+          <td class="qx-snap-pad" align="center" style="padding:32px 24px 4px;">
+            <div style="font-size:10.5px;letter-spacing:2.4px;color:#D9F99D;font-weight:700;text-transform:uppercase;text-align:left;padding:0 0 12px 0;">
+              Account Changes Snapshot
+            </div>
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td class="qx-snap-cell" style="padding:22px 24px;background:#13151A;background-image:linear-gradient(180deg,#1A1F18 0%,#13151A 100%);border:1.5px solid rgba(217,249,157,0.35);border-radius:14px;box-shadow:0 0 28px rgba(163,230,53,0.18),inset 0 1px 0 rgba(255,255,255,0.03);">
+                  <!-- CHANGED row -->
+                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                    <tr>
+                      <td width="32" valign="top" style="width:32px;padding:2px 14px 0 0;">
+                        <div style="width:28px;height:28px;line-height:28px;text-align:center;border-radius:999px;background:#A3E635;background-image:linear-gradient(135deg,#D9F99D 0%,#65A30D 100%);border:1px solid rgba(217,249,157,0.85);font-size:13px;color:#1A2008;font-weight:800;box-shadow:0 0 14px rgba(163,230,53,0.55);">✓</div>
+                      </td>
+                      <td valign="top">
+                        <div class="qx-snap-row-label" style="font-size:11px;letter-spacing:1.8px;color:#A3E635;text-transform:uppercase;font-weight:700;line-height:1;margin-bottom:6px;">Changed</div>
+                        <div class="qx-snap-row-value" style="font-size:14px;color:#FFFFFF;font-weight:600;line-height:1.4;">Password <span style="color:#A3E635;font-weight:500;">· just now</span></div>
+                      </td>
+                    </tr>
+                  </table>
+                  <!-- Lime divider -->
+                  <div style="height:1px;background:linear-gradient(90deg,rgba(217,249,157,0.4) 0%,rgba(217,249,157,0) 100%);margin:18px 0;"></div>
+                  <!-- UNCHANGED row -->
+                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                    <tr>
+                      <td width="32" valign="top" style="width:32px;padding:2px 14px 0 0;">
+                        <div style="width:28px;height:28px;line-height:28px;text-align:center;border-radius:999px;background:rgba(217,249,157,0.06);border:1px dashed rgba(217,249,157,0.30);font-size:11px;color:#7A8B6A;font-weight:700;">·</div>
+                      </td>
+                      <td valign="top">
+                        <div class="qx-snap-row-label" style="font-size:11px;letter-spacing:1.8px;color:#7A8B6A;text-transform:uppercase;font-weight:700;line-height:1;margin-bottom:6px;">Unchanged</div>
+                        <div class="qx-snap-row-value" style="font-size:14px;color:#B5C49A;font-weight:500;line-height:1.5;">Email · Phone · 2FA · Trusted devices</div>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+            </table>
+            <!-- "Spot something off?" thin strip -->
+            <div style="margin-top:14px;font-size:11.5px;color:#6B7C5A;line-height:1.5;text-align:center;">
+              <span style="display:inline-block;width:7px;height:7px;border-radius:999px;background:#A3E635;box-shadow:0 0 10px rgba(163,230,53,0.7);vertical-align:middle;margin-right:6px;"></span>
+              <span style="vertical-align:middle;">Only your password was touched — nothing else.</span>
+            </div>
+          </td>
+        </tr>
+
+        <!-- DETAILS — stacked rows -->
+        <tr>
+          <td class="qx-detail-pad" style="padding:34px 32px 4px;">
+            <div style="font-size:10.5px;letter-spacing:2.4px;color:#D9F99D;text-transform:uppercase;font-weight:700;text-align:left;padding:0 0 14px 0;">
+              Event Details
+            </div>
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td style="padding:14px 0;border-bottom:1px solid rgba(217,249,157,0.16);">
+                  <div class="qx-detail-label" style="font-size:11px;letter-spacing:1.6px;color:#7A8B6A;text-transform:uppercase;font-weight:600;line-height:1;margin-bottom:6px;"><span style="margin-right:6px;">🕐</span>Changed At</div>
+                  <div class="qx-detail-value" style="font-size:15px;color:#FFFFFF;font-weight:600;line-height:1.4;">${safeWhen}</div>
+                </td>
+              </tr>
+              ${safeSource ? `
+              <tr>
+                <td style="padding:14px 0 4px;">
+                  <div class="qx-detail-label" style="font-size:11px;letter-spacing:1.6px;color:#7A8B6A;text-transform:uppercase;font-weight:600;line-height:1;margin-bottom:6px;"><span style="margin-right:6px;">📍</span>Source</div>
+                  <div class="qx-detail-value" style="font-size:15px;color:#FFFFFF;font-weight:600;line-height:1.4;font-family:'SF Mono',Menlo,Consolas,monospace;letter-spacing:-0.2px;">${safeSource}</div>
+                </td>
+              </tr>` : `
+              <tr>
+                <td style="padding:14px 0 4px;">
+                  <div class="qx-detail-label" style="font-size:11px;letter-spacing:1.6px;color:#7A8B6A;text-transform:uppercase;font-weight:600;line-height:1;margin-bottom:6px;"><span style="margin-right:6px;">🛡</span>Status</div>
+                  <div class="qx-detail-value" style="font-size:15px;color:#FFFFFF;font-weight:600;line-height:1.4;">Password change applied successfully</div>
+                </td>
+              </tr>`}
+            </table>
+          </td>
+        </tr>
+
+        <!-- DUAL CTA — primary "Wasn't you?" RED + secondary "All good" -->
+        <tr>
+          <td class="qx-cta-pad" align="center" style="padding:30px 32px 6px;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td align="center" style="border-radius:12px;background-image:linear-gradient(135deg,#F87171 0%,#DC2626 100%);background-color:#DC2626;box-shadow:0 8px 28px rgba(220,38,38,0.45);">
+                  <a href="https://qorixmarkets.com/forgot-password" target="_blank" class="qx-cta" style="display:inline-block;padding:16px 36px;font-size:14.5px;font-weight:700;color:#FFFFFF;text-decoration:none;letter-spacing:0.4px;border-radius:12px;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+                    Wasn't you? Secure Account
+                  </a>
+                </td>
+              </tr>
+            </table>
+            <div style="margin-top:14px;font-size:12.5px;color:#7A8B6A;line-height:1.6;">
+              All good? <a href="https://qorixmarkets.com/profile" target="_blank" style="color:#D9F99D;text-decoration:none;font-weight:600;border-bottom:1px dashed rgba(217,249,157,0.4);">View security settings →</a>
+            </div>
+          </td>
+        </tr>
+
+        <!-- Reassurance card -->
+        <tr>
+          <td style="padding:22px 32px 8px;">
+            <div style="background:rgba(217,249,157,0.06);border-left:2px solid rgba(217,249,157,0.5);border-radius:6px;padding:14px 16px;font-size:12.5px;line-height:1.65;color:#7A8B6A;">
+              <div style="color:#D9F99D;font-weight:600;margin-bottom:6px;">Want to lock things down further?</div>
+              Enable <strong style="color:#D9F99D;">2-Factor Authentication</strong> in your security settings — even if someone gets your password, they still can't get in. We never ask for your password over email, social media, or phone.
+            </div>
+          </td>
+        </tr>
+
+        <!-- FOOTER -->
+        <tr>
+          <td class="qx-foot-pad" align="center" style="padding:30px 32px 28px;border-top:1px solid rgba(255,255,255,0.05);background:#06070A;">
+            <div style="font-size:13px;color:#D9F99D;margin-bottom:6px;font-weight:600;">
+              Trade smart 📈
+            </div>
+            <div style="font-size:11.5px;color:#4C5847;line-height:1.7;">
+              © ${year} Qorix Markets · AI-Powered Trading<br/>
+              Need help? <a href="mailto:support@qorixmarkets.com" style="color:#D9F99D;text-decoration:none;">support@qorixmarkets.com</a>
+            </div>
+          </td>
+        </tr>
+
+      </table>
+
+      <div style="height:24px;line-height:24px;font-size:1px;">&nbsp;</div>
+    </td>
+  </tr>
+</table>
+</body>
+</html>`;
+}
+
+// ---------------------------------------------------------------------------
+// Send the Password Changed confirmation email — fires after a successful
+// password change (forgot-password flow + in-app password change).
+// ---------------------------------------------------------------------------
+export async function sendPasswordChanged(args: {
+  to: string;
+  name: string;
+  changedAt: Date;
+  ip?: string | null;
+  browser?: string | null;
+  os?: string | null;
+}): Promise<void> {
+  const { to, name, changedAt, ip, browser, os } = args;
+  const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const whenStr =
+    `${changedAt.getUTCDate()} ${MONTHS_SHORT[changedAt.getUTCMonth()]} ${changedAt.getUTCFullYear()} · ` +
+    `${String(changedAt.getUTCHours()).padStart(2, "0")}:${String(changedAt.getUTCMinutes()).padStart(2, "0")} UTC`;
+  const sourceParts: string[] = [];
+  if (ip && ip.trim()) sourceParts.push(ip.trim());
+  const deviceParts: string[] = [];
+  if (browser && browser.trim()) deviceParts.push(browser.trim());
+  if (os && os.trim()) deviceParts.push(os.trim());
+  if (deviceParts.length > 0) sourceParts.push(deviceParts.join(" on "));
+  const sourceLine = sourceParts.length > 0 ? sourceParts.join(" · ") : null;
+
+  const subject = `Qorix Markets — Password updated 🔒`;
+  const preheader = `Your password was just changed — only your password, nothing else. If this wasn't you, secure your account now.`;
+
+  const html = renderPasswordChangedHtml({
+    preheader,
+    name,
+    changedAt,
+    ip: ip ?? null,
+    browser: browser ?? null,
+    os: os ?? null,
+  });
+
+  const text =
+    `Password updated\n\n` +
+    `Hi ${name},\n\n` +
+    `Your Qorix Markets password was just changed. If this was you, no\n` +
+    `action needed.\n\n` +
+    `Account changes snapshot:\n` +
+    `  ✓ Changed:    Password (just now)\n` +
+    `  · Unchanged:  Email · Phone · 2FA · Trusted devices\n\n` +
+    `Only your password was touched — nothing else.\n\n` +
+    `Changed at:   ${whenStr}\n` +
+    (sourceLine ? `Source:       ${sourceLine}\n\n` : `Status:       Password change applied successfully\n\n`) +
+    `Wasn't you? Secure account: https://qorixmarkets.com/forgot-password\n` +
+    `All good? View security settings: https://qorixmarkets.com/profile\n\n` +
+    `Want to lock things down further? Enable 2-Factor Authentication in\n` +
+    `your security settings. We never ask for your password over email,\n` +
+    `social media, or phone.\n\n` +
+    `— Qorix Markets`;
+
+  await sendEmail(to, subject, text, html);
+}
