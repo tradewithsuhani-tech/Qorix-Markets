@@ -9,6 +9,7 @@ import {
   Inbox,
   ArrowDownCircle,
   X,
+  Eye,
 } from "lucide-react";
 import { MerchantLayout } from "@/components/merchant-layout";
 import { merchantApiUrl, merchantAuthFetch } from "@/lib/merchant-auth-fetch";
@@ -329,39 +330,107 @@ function DepositDetailModal({
   approving: boolean;
   rejecting: boolean;
 }) {
+  const [zoomed, setZoomed] = useState(false);
+  const busy = approving || rejecting;
+  const isPending = d.status === "pending";
+
+  // Status-driven accent: amber for pending, emerald for approved, rose for rejected
+  const accent = isPending
+    ? {
+        border: "border-amber-500/40",
+        glow: "bg-amber-500/15",
+        iconBorder: "border-amber-500/40",
+        iconBg: "bg-amber-500/10",
+        iconText: "text-amber-300",
+        shadow:
+          "shadow-[0_30px_80px_-20px_rgba(252,213,53,0.25),0_0_0_1px_rgba(252,213,53,0.08)]",
+      }
+    : d.status === "approved"
+      ? {
+          border: "border-emerald-500/30",
+          glow: "bg-emerald-500/10",
+          iconBorder: "border-emerald-500/30",
+          iconBg: "bg-emerald-500/10",
+          iconText: "text-emerald-300",
+          shadow:
+            "shadow-[0_30px_80px_-20px_rgba(16,185,129,0.2),0_0_0_1px_rgba(16,185,129,0.06)]",
+        }
+      : {
+          border: "border-rose-500/30",
+          glow: "bg-rose-500/10",
+          iconBorder: "border-rose-500/30",
+          iconBg: "bg-rose-500/10",
+          iconText: "text-rose-300",
+          shadow:
+            "shadow-[0_30px_80px_-20px_rgba(244,63,94,0.2),0_0_0_1px_rgba(244,63,94,0.06)]",
+        };
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 px-4 backdrop-blur-md">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/85 backdrop-blur-md px-4 py-6"
+      onClick={() => !busy && onClose()}
+    >
       <div
-        className="relative w-full max-w-lg overflow-hidden rounded-2xl border border-white/[0.08] bg-gradient-to-br from-slate-900 to-slate-950 shadow-[0_30px_80px_-20px_rgba(0,0,0,0.8)]"
+        onClick={(e) => e.stopPropagation()}
+        className={cn(
+          "relative w-full max-w-xl overflow-hidden rounded-2xl border bg-gradient-to-br from-slate-900 to-slate-950",
+          accent.border,
+          accent.shadow,
+        )}
       >
+        {/* Ambient glow */}
+        <div
+          aria-hidden
+          className={cn(
+            "pointer-events-none absolute -top-24 -right-24 h-64 w-64 rounded-full blur-3xl",
+            accent.glow,
+          )}
+        />
+
         {/* Header */}
-        <div className="flex items-start justify-between border-b border-white/[0.06] px-6 py-5">
+        <div className="relative flex items-start justify-between border-b border-white/[0.06] px-6 py-5">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-emerald-500/30 bg-emerald-500/10 text-emerald-300">
+            <div
+              className={cn(
+                "relative flex h-10 w-10 items-center justify-center rounded-xl border",
+                accent.iconBorder,
+                accent.iconBg,
+                accent.iconText,
+              )}
+            >
               <ArrowDownCircle className="h-5 w-5" />
+              {isPending && (
+                <span className="absolute -top-0.5 -right-0.5 flex h-2.5 w-2.5">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-75" />
+                  <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-amber-500" />
+                </span>
+              )}
             </div>
             <div>
-              <h3 className="text-base font-bold text-white">
+              <h3 className="text-base font-bold text-white leading-tight">
                 Deposit #{d.id}
               </h3>
-              <div className="text-[11px] text-slate-500">
+              <div className="text-[11px] text-slate-500 mt-0.5">
                 Submitted {new Date(d.createdAt).toLocaleString()}
               </div>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="rounded-lg p-1.5 text-slate-500 hover:bg-white/[0.05] hover:text-white"
+            disabled={busy}
+            className="rounded-lg p-1.5 text-slate-500 hover:bg-white/[0.05] hover:text-white disabled:opacity-50"
+            aria-label="Close"
           >
             <X className="h-4 w-4" />
           </button>
         </div>
 
-        <div className="max-h-[70vh] overflow-y-auto px-6 py-5">
-          {/* Hero amounts */}
+        {/* Body */}
+        <div className="max-h-[68vh] overflow-y-auto px-6 py-5 space-y-4">
+          {/* Hero amount */}
           <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
             <SectionLabel>Amount</SectionLabel>
-            <div className="mt-1.5 flex items-baseline gap-2">
+            <div className="mt-1.5 flex items-baseline gap-2 flex-wrap">
               <span className="text-3xl font-bold tabular-nums text-white">
                 {formatINR(d.amountInr)}
               </span>
@@ -374,41 +443,61 @@ function DepositDetailModal({
             </div>
           </div>
 
-          {/* Details grid */}
-          <dl className="mt-4 grid grid-cols-2 gap-3">
-            <DetailItem label="User" value={`#${d.userId}`} mono />
-            <DetailItem
-              label="Method"
-              value={`${d.methodDisplayName} · ${d.methodType.toUpperCase()}`}
-            />
-            <DetailItem
-              label="UTR / Reference"
-              value={d.utr}
-              mono
-              fullWidth
-              accent
-            />
-          </dl>
+          {/* User + Method grid */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3">
+              <SectionLabel>User</SectionLabel>
+              <div className="mt-1 text-sm font-mono text-slate-200">
+                #{d.userId}
+              </div>
+            </div>
+            <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3">
+              <SectionLabel>Method</SectionLabel>
+              <div className="mt-1 text-sm text-slate-200 truncate">
+                {d.methodDisplayName}
+              </div>
+              <div className="text-[10px] text-slate-500 mt-0.5">
+                {d.methodType?.toUpperCase()}
+              </div>
+            </div>
+          </div>
+
+          {/* UTR */}
+          <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3">
+            <SectionLabel>UTR / Reference</SectionLabel>
+            <div className="mt-1 break-all font-mono text-sm text-amber-300">
+              {d.utr}
+            </div>
+          </div>
 
           {/* Proof */}
-          <div className="mt-4">
+          <div>
             <SectionLabel>Proof of Payment</SectionLabel>
             {d.proofImageBase64 ? (
-              <img
-                src={d.proofImageBase64}
-                alt="proof"
-                className="mt-2 max-h-72 rounded-xl border border-white/[0.06] object-contain"
-              />
+              <button
+                type="button"
+                onClick={() => setZoomed(true)}
+                className="group mt-1.5 block w-full rounded-xl border border-white/[0.06] overflow-hidden bg-black/40 hover:border-amber-500/40 transition-colors"
+              >
+                <img
+                  src={d.proofImageBase64}
+                  alt="Payment proof"
+                  className="max-h-72 w-full object-contain"
+                />
+                <div className="px-3 py-1.5 bg-black/40 text-[10px] text-slate-400 font-semibold uppercase tracking-wider flex items-center justify-center gap-1.5 group-hover:text-amber-300 transition-colors">
+                  <Eye className="h-3 w-3" /> Tap to zoom
+                </div>
+              </button>
             ) : (
-              <div className="mt-2 flex items-center gap-2 rounded-xl border border-dashed border-white/[0.08] bg-white/[0.01] px-4 py-6 text-xs text-slate-500">
+              <div className="mt-1.5 flex items-center gap-2 rounded-xl border border-dashed border-white/[0.08] bg-white/[0.01] px-4 py-6 text-xs text-slate-500">
                 <ImageIcon className="h-4 w-4" /> No proof image attached
               </div>
             )}
           </div>
 
-          {/* Action form */}
-          {d.status === "pending" && (
-            <div className="mt-5 space-y-3 rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
+          {/* Action form (pending only) */}
+          {isPending && (
+            <div className="space-y-3 rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
               <SectionLabel>Action</SectionLabel>
               <div>
                 <label className="mb-1 block text-[11px] text-slate-400">
@@ -424,7 +513,10 @@ function DepositDetailModal({
               </div>
               <div>
                 <label className="mb-1 block text-[11px] text-slate-400">
-                  Note <span className="text-slate-600">(optional)</span>
+                  Note{" "}
+                  <span className="text-slate-600">
+                    (optional for approve, required for reject)
+                  </span>
                 </label>
                 <input
                   value={note}
@@ -436,78 +528,97 @@ function DepositDetailModal({
             </div>
           )}
 
-          {d.status !== "pending" && (
-            <div className="mt-5 rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 text-xs text-slate-400">
+          {/* Reviewed info (non-pending) */}
+          {!isPending && (
+            <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 text-xs text-slate-400">
               Reviewed{" "}
               {d.reviewedAt
                 ? new Date(d.reviewedAt).toLocaleString()
                 : "—"}{" "}
-              by <span className="text-slate-200">{d.reviewedByKind ?? "admin"}</span>.
+              by{" "}
+              <span className="text-slate-200">
+                {d.reviewedByKind ?? "admin"}
+              </span>
+              .
               {d.adminNote && (
-                <div className="mt-1.5 text-slate-300">Note: {d.adminNote}</div>
+                <div className="mt-1.5 text-slate-300">
+                  Note: {d.adminNote}
+                </div>
               )}
             </div>
           )}
         </div>
 
-        {/* Footer actions */}
-        {d.status === "pending" && (
-          <div className="flex items-center justify-end gap-2 border-t border-white/[0.06] bg-slate-950/50 px-6 py-4">
-            <DangerButton
+        {/* Footer */}
+        {isPending ? (
+          <div className="flex items-center gap-2 border-t border-white/[0.06] bg-slate-950/50 px-6 py-4">
+            <button
+              onClick={onClose}
+              disabled={busy}
+              className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2.5 text-xs font-semibold text-slate-300 hover:border-white/20 hover:bg-white/[0.05] disabled:opacity-50 transition-colors"
+            >
+              Cancel
+            </button>
+            <div className="flex-1" />
+            <button
               onClick={onReject}
-              disabled={approving || rejecting}
+              disabled={busy}
+              className="inline-flex items-center justify-center gap-2 rounded-lg border border-rose-500/40 bg-rose-500/10 px-4 py-2.5 text-sm font-medium text-rose-300 hover:border-rose-500/60 hover:bg-rose-500/20 disabled:opacity-50 transition-colors"
             >
-              <XCircle className="h-4 w-4" /> Reject
-            </DangerButton>
-            <SuccessButton
+              {rejecting ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <XCircle className="h-4 w-4" />
+              )}
+              Reject
+            </button>
+            <button
               onClick={onApprove}
-              disabled={approving || rejecting}
+              disabled={busy}
+              className="inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white bg-gradient-to-b from-emerald-400 to-emerald-600 shadow-[0_4px_14px_-2px_rgba(16,185,129,0.4)] hover:from-emerald-300 hover:to-emerald-500 disabled:opacity-50 transition-all"
             >
-              {approving && <Loader2 className="h-4 w-4 animate-spin" />}
-              <CheckCircle2 className="h-4 w-4" /> Approve & Credit
-            </SuccessButton>
+              {approving ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <CheckCircle2 className="h-4 w-4" />
+              )}
+              Approve & Credit
+            </button>
           </div>
-        )}
-        {d.status !== "pending" && (
+        ) : (
           <div className="flex items-center justify-end gap-2 border-t border-white/[0.06] bg-slate-950/50 px-6 py-4">
             <GhostButton onClick={onClose}>Close</GhostButton>
           </div>
         )}
       </div>
-    </div>
-  );
-}
 
-function DetailItem({
-  label,
-  value,
-  mono,
-  accent,
-  fullWidth,
-}: {
-  label: string;
-  value: React.ReactNode;
-  mono?: boolean;
-  accent?: boolean;
-  fullWidth?: boolean;
-}) {
-  return (
-    <div
-      className={cn(
-        "rounded-xl border border-white/[0.06] bg-white/[0.02] p-3",
-        fullWidth && "col-span-2",
+      {/* Zoomed proof image overlay */}
+      {zoomed && d.proofImageBase64 && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/92 px-4 py-6"
+          onClick={(e) => {
+            e.stopPropagation();
+            setZoomed(false);
+          }}
+        >
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setZoomed(false);
+            }}
+            className="fixed top-4 right-4 rounded-full bg-white/10 hover:bg-white/20 backdrop-blur p-2 text-white transition-colors"
+            aria-label="Close zoom"
+          >
+            <X className="h-5 w-5" />
+          </button>
+          <img
+            src={d.proofImageBase64}
+            alt="Payment proof zoomed"
+            className="max-h-[90vh] max-w-full rounded-xl object-contain shadow-[0_30px_80px_-10px_rgba(0,0,0,0.8)]"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
       )}
-    >
-      <SectionLabel>{label}</SectionLabel>
-      <div
-        className={cn(
-          "mt-1 break-all text-sm text-slate-200",
-          mono && "font-mono",
-          accent && "text-amber-300",
-        )}
-      >
-        {value}
-      </div>
     </div>
   );
 }
