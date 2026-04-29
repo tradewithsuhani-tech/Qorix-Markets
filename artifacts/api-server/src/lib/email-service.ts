@@ -5093,3 +5093,310 @@ export async function sendTwoFactorEnabled(args: {
 
   await sendEmail(to, subject, text, html);
 }
+
+// ---------------------------------------------------------------------------
+// TWO-FACTOR AUTHENTICATION DISABLED — security alert email
+// ---------------------------------------------------------------------------
+// OXBLOOD-EMBER theme: deep burgundy + ember-red. Mirror of "Vault Armed":
+// where #18 lit up the second lock, this email shows it removed/dim.
+// Layout flow:
+//   • Logo bar (oxblood → ember gradient)
+//   • Hero: ⚠️ 2FA DISABLED pill · "A Lock Just Came Off" · alert sub
+//   • PROTECTION REDUCED banner (deep burgundy, ⚠ shield icon)
+//   • PROTECTION LAYERS dual-lock centerpiece — Password ACTIVE, 2FA REMOVED
+//     (dim, ✗ icon, dashed border) + "ONLY 1 LAYER LEFT" warning strip
+//   • Event Details: disabled at · source (IP + browser, optional)
+//   • Primary CTA "Wasn't you? Reset Password" (red gradient)
+//   • Secondary "All good? Re-enable 2FA →"
+//   • Reassurance card: "Anyone you don't recognize?" + anti-phishing
+//   • "Trade smart 📈" footer
+// ---------------------------------------------------------------------------
+export function renderTwoFactorDisabledHtml(opts: {
+  preheader: string;
+  name: string;
+  disabledAt: Date;
+  ip?: string | null;
+  browser?: string | null;
+  os?: string | null;
+}): string {
+  const { preheader, name, disabledAt, ip, browser, os } = opts;
+  const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const whenStr =
+    `${disabledAt.getUTCDate()} ${MONTHS_SHORT[disabledAt.getUTCMonth()]} ${disabledAt.getUTCFullYear()} · ` +
+    `${String(disabledAt.getUTCHours()).padStart(2, "0")}:${String(disabledAt.getUTCMinutes()).padStart(2, "0")} UTC`;
+  const safeFirstName = escapeHtml((name || "there").trim().split(/\s+/)[0] || "there");
+  const safeWhen = escapeHtml(whenStr);
+  const sourceParts: string[] = [];
+  if (ip && ip.trim()) sourceParts.push(ip.trim());
+  const deviceParts: string[] = [];
+  if (browser && browser.trim()) deviceParts.push(browser.trim());
+  if (os && os.trim()) deviceParts.push(os.trim());
+  if (deviceParts.length > 0) sourceParts.push(deviceParts.join(" on "));
+  const safeSource = sourceParts.length > 0 ? escapeHtml(sourceParts.join(" · ")) : null;
+  const year = new Date().getFullYear();
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="x-apple-disable-message-reformatting" />
+<meta name="color-scheme" content="dark light" />
+<meta name="supported-color-schemes" content="dark light" />
+<title>2FA disabled — Qorix Markets</title>
+<style type="text/css">
+  @media only screen and (max-width:480px) {
+    .qx-outer { padding:20px 10px !important; }
+    .qx-card { border-radius:18px !important; }
+    .qx-hero-pad { padding:6px 18px 22px !important; }
+    .qx-hero-h { font-size:24px !important; line-height:1.22 !important; }
+    .qx-locks-pad { padding:24px 20px 4px !important; }
+    .qx-lock-cell { padding:18px 10px !important; }
+    .qx-lock-title { font-size:11px !important; }
+    .qx-lock-status { font-size:12px !important; }
+    .qx-detail-pad { padding:24px 22px 4px !important; }
+    .qx-detail-label { font-size:10.5px !important; }
+    .qx-detail-value { font-size:14px !important; }
+    .qx-cta-pad { padding:24px 18px 6px !important; }
+    .qx-cta { padding:13px 24px !important; font-size:13.5px !important; letter-spacing:0.2px !important; }
+    .qx-foot-pad { padding:24px 18px 22px !important; }
+  }
+</style>
+</head>
+<body style="margin:0;padding:0;background:#14060A;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;">
+<div style="display:none;max-height:0;overflow:hidden;font-size:1px;line-height:1px;color:#14060A;opacity:0;">${escapeHtml(preheader)}</div>
+<div style="display:none;max-height:0;overflow:hidden;">&#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847;</div>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="qx-outer" style="background:#14060A;padding:32px 16px;">
+  <tr>
+    <td align="center">
+
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="qx-card" style="max-width:560px;background:#1F0A12;border:1px solid rgba(252,165,165,0.30);border-radius:22px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,0.75);">
+
+        <!-- LOGO BAR — oxblood → ember gradient -->
+        <tr>
+          <td align="left" style="padding:20px 24px 0 28px;background:#14060A;background-image:linear-gradient(135deg,#14060A 0%,#3F0A14 45%,#7F1D1D 78%,#DC2626 100%);">
+            <img src="cid:${BRAND_LOGO_CID}" alt="Qorix Markets" width="320" height="217" style="display:block;width:320px;max-width:90%;height:auto;border:0;outline:none;text-decoration:none;margin:0;" />
+          </td>
+        </tr>
+
+        <!-- HERO — alert pill + headline + ember divider -->
+        <tr>
+          <td class="qx-hero-pad" align="center" style="padding:8px 32px 28px;background:#14060A;background-image:linear-gradient(135deg,#14060A 0%,#3F0A14 45%,#7F1D1D 78%,#DC2626 100%);">
+            <div style="display:inline-block;padding:6px 14px;border-radius:999px;background:rgba(252,165,165,0.22);border:1px solid rgba(252,165,165,0.60);font-size:10.5px;letter-spacing:2.4px;color:#FECACA;font-weight:700;text-transform:uppercase;margin-bottom:18px;">
+              ⚠️ 2FA Disabled
+            </div>
+            <div class="qx-hero-h" style="font-size:30px;line-height:1.18;font-weight:800;color:#FFFFFF;letter-spacing:-0.5px;max-width:440px;margin:0 auto;">
+              A Lock Just Came Off
+            </div>
+            <div style="font-size:13.5px;color:#FECACA;margin-top:10px;font-weight:500;max-width:440px;margin-left:auto;margin-right:auto;line-height:1.5;">
+              ${safeFirstName}, two-factor authentication has been removed from your account. If this <strong style="color:#FFFFFF;">wasn't you</strong>, reset your password immediately.
+            </div>
+            <div style="width:48px;height:3px;background:linear-gradient(90deg,#FCA5A5 0%,#DC2626 100%);margin:18px auto 0;border-radius:999px;"></div>
+          </td>
+        </tr>
+
+        <!-- PROTECTION REDUCED banner — security weakened alert -->
+        <tr>
+          <td align="center" style="padding:24px 24px 0;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td style="padding:16px 18px;background:#2A0810;background-image:linear-gradient(180deg,#3A0C16 0%,#2A0810 100%);border:1.5px solid rgba(252,165,165,0.50);border-radius:12px;box-shadow:0 0 28px rgba(220,38,38,0.30);">
+                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                    <tr>
+                      <td width="32" valign="top" style="width:32px;padding:2px 12px 0 0;">
+                        <div style="width:28px;height:28px;line-height:28px;text-align:center;border-radius:999px;background:rgba(252,165,165,0.22);border:1px solid rgba(252,165,165,0.65);font-size:14px;color:#FECACA;font-weight:700;">⚠</div>
+                      </td>
+                      <td valign="top">
+                        <div style="font-size:11.5px;letter-spacing:1.6px;color:#FECACA;text-transform:uppercase;font-weight:700;line-height:1;margin-bottom:6px;">Account Protection Reduced</div>
+                        <div style="font-size:13px;color:#FCA5A5;font-weight:500;line-height:1.55;">Your account is now protected by your <strong style="color:#FFFFFF;">password alone</strong>. Anyone with your password can sign in. We strongly recommend re-enabling 2FA.</div>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- PROTECTION LAYERS — dual-lock: Password ACTIVE, 2FA REMOVED -->
+        <tr>
+          <td class="qx-locks-pad" align="center" style="padding:32px 24px 4px;">
+            <div style="font-size:10.5px;letter-spacing:2.4px;color:#FECACA;font-weight:700;text-transform:uppercase;text-align:left;padding:0 0 12px 0;">
+              Protection Layers
+            </div>
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <!-- Lock 1: Password (still active — sole layer) -->
+                <td class="qx-lock-cell" width="50%" valign="top" style="width:50%;padding:22px 14px;background:#1F0A12;background-image:linear-gradient(180deg,#2A0E18 0%,#1F0A12 100%);border:1.5px solid rgba(252,165,165,0.35);border-radius:14px;text-align:center;box-shadow:inset 0 1px 0 rgba(255,255,255,0.03);">
+                  <div style="width:48px;height:48px;line-height:48px;border-radius:14px;background:rgba(252,165,165,0.14);border:1px solid rgba(252,165,165,0.40);font-size:22px;color:#FCA5A5;margin:0 auto 12px;text-align:center;">🔒</div>
+                  <div class="qx-lock-title" style="font-size:11.5px;letter-spacing:1.8px;color:#FCA5A5;text-transform:uppercase;font-weight:700;line-height:1;margin-bottom:8px;">Password</div>
+                  <div class="qx-lock-status" style="font-size:13px;color:#FFFFFF;font-weight:600;line-height:1.4;">
+                    <span style="display:inline-block;width:6px;height:6px;border-radius:999px;background:#FCA5A5;vertical-align:middle;margin-right:5px;"></span>
+                    <span style="vertical-align:middle;">Active</span>
+                  </div>
+                </td>
+                <td width="14" style="width:14px;font-size:0;line-height:0;">&nbsp;</td>
+                <!-- Lock 2: 2FA — REMOVED (dim, dashed border, ✗ overlay) -->
+                <td class="qx-lock-cell" width="50%" valign="top" style="width:50%;padding:22px 14px;background:#160508;background-image:linear-gradient(180deg,#1A0508 0%,#120406 100%);border:1.5px dashed rgba(252,165,165,0.30);border-radius:14px;text-align:center;">
+                  <div style="width:48px;height:48px;line-height:48px;border-radius:14px;background:rgba(252,165,165,0.05);border:1px dashed rgba(252,165,165,0.30);font-size:22px;color:#6B3540;margin:0 auto 12px;text-align:center;position:relative;">
+                    <span style="opacity:0.35;">🛡</span>
+                  </div>
+                  <div class="qx-lock-title" style="font-size:11.5px;letter-spacing:1.8px;color:#6B3540;text-transform:uppercase;font-weight:700;line-height:1;margin-bottom:8px;">2-Factor</div>
+                  <div class="qx-lock-status" style="font-size:13px;color:#9F6B75;font-weight:600;line-height:1.4;">
+                    <span style="display:inline-block;width:14px;height:14px;line-height:14px;text-align:center;border-radius:999px;background:rgba(220,38,38,0.20);border:1px solid rgba(252,165,165,0.45);font-size:9px;color:#FECACA;font-weight:800;vertical-align:middle;margin-right:5px;">✗</span>
+                    <span style="vertical-align:middle;">Removed</span>
+                  </div>
+                </td>
+              </tr>
+            </table>
+            <!-- "only 1 layer left" warning strip -->
+            <div style="margin-top:14px;font-size:11.5px;color:#9F6B75;line-height:1.5;text-align:center;">
+              <span style="display:inline-block;width:7px;height:7px;border-radius:999px;background:#DC2626;box-shadow:0 0 10px rgba(220,38,38,0.85);vertical-align:middle;margin-right:6px;"></span>
+              <span style="vertical-align:middle;color:#FECACA;font-weight:600;">Only 1 layer left</span><span style="vertical-align:middle;"> — your password is the last line of defense.</span>
+            </div>
+          </td>
+        </tr>
+
+        <!-- DETAILS — stacked rows -->
+        <tr>
+          <td class="qx-detail-pad" style="padding:34px 32px 4px;">
+            <div style="font-size:10.5px;letter-spacing:2.4px;color:#FECACA;text-transform:uppercase;font-weight:700;text-align:left;padding:0 0 14px 0;">
+              Event Details
+            </div>
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td style="padding:14px 0;border-bottom:1px solid rgba(252,165,165,0.18);">
+                  <div class="qx-detail-label" style="font-size:11px;letter-spacing:1.6px;color:#9F6B75;text-transform:uppercase;font-weight:600;line-height:1;margin-bottom:6px;"><span style="margin-right:6px;">🕐</span>Disabled At</div>
+                  <div class="qx-detail-value" style="font-size:15px;color:#FFFFFF;font-weight:600;line-height:1.4;">${safeWhen}</div>
+                </td>
+              </tr>
+              ${safeSource ? `
+              <tr>
+                <td style="padding:14px 0 4px;">
+                  <div class="qx-detail-label" style="font-size:11px;letter-spacing:1.6px;color:#9F6B75;text-transform:uppercase;font-weight:600;line-height:1;margin-bottom:6px;"><span style="margin-right:6px;">📍</span>Source</div>
+                  <div class="qx-detail-value" style="font-size:15px;color:#FFFFFF;font-weight:600;line-height:1.4;font-family:'SF Mono',Menlo,Consolas,monospace;letter-spacing:-0.2px;">${safeSource}</div>
+                </td>
+              </tr>` : `
+              <tr>
+                <td style="padding:14px 0 4px;">
+                  <div class="qx-detail-label" style="font-size:11px;letter-spacing:1.6px;color:#9F6B75;text-transform:uppercase;font-weight:600;line-height:1;margin-bottom:6px;"><span style="margin-right:6px;">⚠</span>Status</div>
+                  <div class="qx-detail-value" style="font-size:15px;color:#FFFFFF;font-weight:600;line-height:1.4;">Two-factor authentication removed</div>
+                </td>
+              </tr>`}
+            </table>
+          </td>
+        </tr>
+
+        <!-- DUAL CTA — primary "Wasn't you?" RED + secondary "Re-enable 2FA" -->
+        <tr>
+          <td class="qx-cta-pad" align="center" style="padding:30px 32px 6px;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td align="center" style="border-radius:12px;background-image:linear-gradient(135deg,#F87171 0%,#B91C1C 100%);background-color:#B91C1C;box-shadow:0 8px 28px rgba(185,28,28,0.55);">
+                  <a href="https://qorixmarkets.com/forgot-password" target="_blank" class="qx-cta" style="display:inline-block;padding:16px 36px;font-size:14.5px;font-weight:700;color:#FFFFFF;text-decoration:none;letter-spacing:0.4px;border-radius:12px;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+                    Wasn't you? Reset Password
+                  </a>
+                </td>
+              </tr>
+            </table>
+            <div style="margin-top:14px;font-size:12.5px;color:#9F6B75;line-height:1.6;">
+              All good? <a href="https://qorixmarkets.com/profile" target="_blank" style="color:#FECACA;text-decoration:none;font-weight:600;border-bottom:1px dashed rgba(254,202,202,0.4);">Re-enable 2FA →</a>
+            </div>
+          </td>
+        </tr>
+
+        <!-- Reassurance card -->
+        <tr>
+          <td style="padding:22px 32px 8px;">
+            <div style="background:rgba(252,165,165,0.07);border-left:2px solid rgba(252,165,165,0.55);border-radius:6px;padding:14px 16px;font-size:12.5px;line-height:1.65;color:#B59197;">
+              <div style="color:#FECACA;font-weight:600;margin-bottom:6px;">Anyone you don't recognize?</div>
+              Reset your password right now and re-enable 2FA. We <strong style="color:#FECACA;">never</strong> disable 2FA without an explicit request from your authenticated session, and we never ask for your password over email, social media, or phone.
+            </div>
+          </td>
+        </tr>
+
+        <!-- FOOTER -->
+        <tr>
+          <td class="qx-foot-pad" align="center" style="padding:30px 32px 28px;border-top:1px solid rgba(255,255,255,0.05);background:#0E0408;">
+            <div style="font-size:13px;color:#FECACA;margin-bottom:6px;font-weight:600;">
+              Trade smart 📈
+            </div>
+            <div style="font-size:11.5px;color:#6B3540;line-height:1.7;">
+              © ${year} Qorix Markets · AI-Powered Trading<br/>
+              Need help? <a href="mailto:support@qorixmarkets.com" style="color:#FECACA;text-decoration:none;">support@qorixmarkets.com</a>
+            </div>
+          </td>
+        </tr>
+
+      </table>
+
+      <div style="height:24px;line-height:24px;font-size:1px;">&nbsp;</div>
+    </td>
+  </tr>
+</table>
+</body>
+</html>`;
+}
+
+// ---------------------------------------------------------------------------
+// Send the 2FA Disabled security alert email — fires after the user (or an
+// attacker) successfully removes two-factor authentication from the account.
+// ---------------------------------------------------------------------------
+export async function sendTwoFactorDisabled(args: {
+  to: string;
+  name: string;
+  disabledAt: Date;
+  ip?: string | null;
+  browser?: string | null;
+  os?: string | null;
+}): Promise<void> {
+  const { to, name, disabledAt, ip, browser, os } = args;
+  const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const whenStr =
+    `${disabledAt.getUTCDate()} ${MONTHS_SHORT[disabledAt.getUTCMonth()]} ${disabledAt.getUTCFullYear()} · ` +
+    `${String(disabledAt.getUTCHours()).padStart(2, "0")}:${String(disabledAt.getUTCMinutes()).padStart(2, "0")} UTC`;
+  const sourceParts: string[] = [];
+  if (ip && ip.trim()) sourceParts.push(ip.trim());
+  const deviceParts: string[] = [];
+  if (browser && browser.trim()) deviceParts.push(browser.trim());
+  if (os && os.trim()) deviceParts.push(os.trim());
+  if (deviceParts.length > 0) sourceParts.push(deviceParts.join(" on "));
+  const sourceLine = sourceParts.length > 0 ? sourceParts.join(" · ") : null;
+
+  const subject = `Qorix Markets — 2FA disabled ⚠️ — verify it was you`;
+  const preheader = `Two-factor authentication was just removed from your account. If this wasn't you, reset your password immediately.`;
+
+  const html = renderTwoFactorDisabledHtml({
+    preheader,
+    name,
+    disabledAt,
+    ip: ip ?? null,
+    browser: browser ?? null,
+    os: os ?? null,
+  });
+
+  const text =
+    `A Lock Just Came Off — 2FA Disabled\n\n` +
+    `Hi ${name},\n\n` +
+    `Two-factor authentication has been REMOVED from your Qorix Markets\n` +
+    `account. If this WASN'T you, reset your password immediately.\n\n` +
+    `⚠ Account Protection Reduced\n` +
+    `Your account is now protected by your password alone. Anyone with\n` +
+    `your password can sign in. We strongly recommend re-enabling 2FA.\n\n` +
+    `Protection layers:\n` +
+    `  🔒 Password   · Active\n` +
+    `  ✗ 2-Factor   · Removed\n` +
+    `Only 1 layer left — your password is the last line of defense.\n\n` +
+    `Disabled at: ${whenStr}\n` +
+    (sourceLine ? `Source:      ${sourceLine}\n\n` : `Status:      Two-factor authentication removed\n\n`) +
+    `Wasn't you? Reset password: https://qorixmarkets.com/forgot-password\n` +
+    `All good? Re-enable 2FA: https://qorixmarkets.com/profile\n\n` +
+    `Anyone you don't recognize? Reset your password right now and\n` +
+    `re-enable 2FA. We never disable 2FA without an explicit request from\n` +
+    `your authenticated session, and we never ask for your password over\n` +
+    `email, social media, or phone.\n\n` +
+    `— Qorix Markets`;
+
+  await sendEmail(to, subject, text, html);
+}

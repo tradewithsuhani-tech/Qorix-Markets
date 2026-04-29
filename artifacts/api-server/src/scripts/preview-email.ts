@@ -30,6 +30,7 @@ import {
   renderPersonalVerifiedHtml,
   renderPasswordChangedHtml,
   renderTwoFactorEnabledHtml,
+  renderTwoFactorDisabledHtml,
 } from "../lib/email-service";
 
 const DEFAULT_TO = "safepayu@gmail.com";
@@ -444,6 +445,28 @@ const TEMPLATES: Record<string, () => Preview> = {
         name,
         enabledAt,
         method: "TOTP",
+        ip: "203.0.113.42",
+        browser: "Chrome",
+        os: "macOS",
+      }),
+    };
+  },
+
+  "two-factor-disabled": () => {
+    const name = "Prem Kumar";
+    const disabledAt = new Date();
+    return {
+      subject: "[PREVIEW] Qorix Markets — 2FA Disabled ⚠️ (oxblood-ember alert)",
+      text:
+        `[DESIGN PREVIEW]\n\n` +
+        `2FA disabled security alert for ${name}.\n\n` +
+        `Test render of the new oxblood-burgundy + ember-red "A Lock Just Came Off" template.\n` +
+        `Reply with feedback.\n\n` +
+        `— Qorix Markets`,
+      html: renderTwoFactorDisabledHtml({
+        preheader: `[PREVIEW] Two-factor authentication was just removed from your account. If this wasn't you, reset your password immediately.`,
+        name,
+        disabledAt,
         ip: "203.0.113.42",
         browser: "Chrome",
         os: "macOS",
