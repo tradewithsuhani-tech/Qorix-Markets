@@ -62,11 +62,13 @@ interface RecaptchaProps {
  * before captcha setup.
  */
 export function Recaptcha({ onVerify, onExpire }: RecaptchaProps) {
-  // TEMPORARILY DISABLED — render nothing until domains are whitelisted.
-  void onVerify; void onExpire;
-  return null;
-
-  // eslint-disable-next-line no-unreachable
+  // Re-enabled in Batch 6 hotfix B6.0.1 (2026-04-30). The previous
+  // unconditional `return null` stub was left over from when both this
+  // component AND CAPTCHA_ENABLED were kill-switched together; flipping
+  // CAPTCHA_ENABLED → true in B6 without removing this stub left
+  // /auth/login unable to obtain a token (server enforced verifyCaptcha
+  // → 400 "Captcha required" on every login). Removing the stub
+  // restores normal widget render + token flow.
   const siteKey = import.meta.env.VITE_RECAPTCHA_SITE_KEY as string | undefined;
   const containerRef = useRef<HTMLDivElement>(null);
   const widgetIdRef = useRef<number | null>(null);
