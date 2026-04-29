@@ -129,17 +129,6 @@ export function renderVerifyEmailOtpHtml(opts: {
   const { preheader, intro, otp } = opts;
   const year = new Date().getFullYear();
 
-  // Pad to 6 cells defensively in case OTP length varies one day.
-  const digits = otp.split("");
-  while (digits.length < 6) digits.push("");
-  const otpCellsHtml = digits
-    .map(
-      (d) => `              <td align="center" valign="middle" style="padding:0 3px;">
-                <div class="qx-cell" style="width:44px;height:56px;line-height:56px;background:#0A1726;border:1.5px solid rgba(34,211,238,0.42);border-radius:10px;font-family:'SF Mono','Menlo','Consolas',monospace;font-size:24px;font-weight:800;color:#67E8F9;box-shadow:0 0 18px rgba(34,211,238,0.22),inset 0 1px 0 rgba(255,255,255,0.06);">${escapeHtml(d || "·")}</div>
-              </td>`,
-    )
-    .join("\n");
-
   const safeIntro = escapeHtml(intro);
 
   return `<!DOCTYPE html>
@@ -202,29 +191,18 @@ export function renderVerifyEmailOtpHtml(opts: {
           </td>
         </tr>
 
-        <!-- SEGMENTED OTP — six independently-bordered glowing cells (visual brand) -->
+        <!-- OTP — single copyable code block (selectable, premium, no duplicate visual) -->
         <tr>
-          <td align="center" style="padding:22px 12px 0;">
+          <td align="center" style="padding:24px 12px 4px;">
             <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto;">
               <tr>
-${otpCellsHtml}
-              </tr>
-            </table>
-          </td>
-        </tr>
-
-        <!-- COPYABLE PLAIN OTP — selectable text for easy long-press copy on mobile -->
-        <tr>
-          <td align="center" style="padding:14px 12px 4px;">
-            <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto;">
-              <tr>
-                <td align="center" style="padding:9px 22px;background:rgba(34,211,238,0.06);border:1px dashed rgba(34,211,238,0.34);border-radius:10px;">
-                  <span style="font-family:'SF Mono','Menlo','Consolas','Courier New',monospace;font-size:17px;letter-spacing:6px;color:#67E8F9;font-weight:700;-webkit-user-select:all;-moz-user-select:all;user-select:all;line-height:1.2;">${escapeHtml(otp)}</span>
+                <td class="qx-otp-cell" align="center" style="padding:18px 36px;background:#0A1726;background-image:linear-gradient(180deg,#0A1726 0%,#06111E 100%);border:1.5px solid rgba(34,211,238,0.42);border-radius:14px;box-shadow:0 0 28px rgba(34,211,238,0.22),inset 0 1px 0 rgba(255,255,255,0.05);">
+                  <span class="qx-otp-text" style="font-family:'SF Mono','Menlo','Consolas','Courier New',monospace;font-size:34px;letter-spacing:10px;color:#67E8F9;font-weight:800;-webkit-user-select:all;-moz-user-select:all;user-select:all;line-height:1.1;text-shadow:0 0 14px rgba(34,211,238,0.45);">${escapeHtml(otp)}</span>
                 </td>
               </tr>
             </table>
-            <div style="margin-top:10px;font-size:10px;color:#64748B;letter-spacing:1.5px;text-transform:uppercase;font-weight:600;">
-              Tap &amp; hold to copy &nbsp;·&nbsp; Expires in 10 min &nbsp;·&nbsp; Single use
+            <div style="margin-top:14px;font-size:10.5px;color:#64748B;letter-spacing:1.8px;text-transform:uppercase;font-weight:600;">
+              Expires in 10 minutes &nbsp;·&nbsp; Single use
             </div>
           </td>
         </tr>
