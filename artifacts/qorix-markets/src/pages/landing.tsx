@@ -1165,7 +1165,11 @@ export default function Landing() {
         </div>
       </footer>
 
-      <QorixAssistant />
+      {/* guestMode lets the assistant render for not-yet-logged-in visitors
+          (who are the entire conversion funnel on the landing page). The
+          App.tsx-level mount is logged-in-only; here on the landing page
+          we want anonymous visitors to see the bot too. */}
+      <QorixAssistant guestMode />
     </div>
   );
 }

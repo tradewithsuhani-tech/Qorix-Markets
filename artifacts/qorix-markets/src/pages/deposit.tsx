@@ -29,6 +29,11 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { InrDepositTab } from "@/components/inr-deposit-tab";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { authFetch } from "@/lib/auth-fetch";
+import {
+  captureChatAttributionFromUrl,
+  logChatDepositVisit,
+  logChatDepositComplete,
+} from "@/lib/chat-attribution";
 import { useToast } from "@/hooks/use-toast";
 import { BadgePercent, Gift, Sparkles, ClipboardPaste, X } from "lucide-react";
 
@@ -182,6 +187,15 @@ export default function DepositPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [promoOffer?.redemption?.status]);
 
+  // Chat-assistant conversion attribution. If the user landed here from a
+  // chat CTA (?src=chat&sid=N), capture the session id, log a visit event,
+  // and stamp the chat session converted=true the moment a deposit confirms.
+  // All calls are fire-and-forget — they must never block the deposit flow.
+  useEffect(() => {
+    captureChatAttributionFromUrl();
+    logChatDepositVisit();
+  }, []);
+
   const { data: historyData, isLoading: historyLoading, refetch } = useGetBlockchainDepositHistory(
     { limit: 20 },
     { query: { refetchInterval: 15000 } },
@@ -228,6 +242,9 @@ export default function DepositPage() {
         clearInterval(pollRef.current!);
         setPolling(false);
         setStep("confirmed");
+        // Stamp the chat-driven conversion the moment USDT confirms. Safe
+        // no-op if the user did not arrive from a chat CTA.
+        logChatDepositComplete(amount || null);
         qc.invalidateQueries({ queryKey: getGetBlockchainDepositHistoryQueryKey() });
         refetch();
       }

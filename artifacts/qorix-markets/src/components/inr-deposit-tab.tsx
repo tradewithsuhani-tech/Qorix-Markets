@@ -363,6 +363,14 @@ export function InrDepositTab() {
     onSuccess: (resp: any) => {
       setSubmittedDepositId(resp?.deposit?.id ?? null);
       setStep("success");
+      // NOTE: We deliberately do NOT log chat conversion here. INR deposits
+      // are pending until an admin approves them, so there is no completed
+      // deposit transaction at submit time and the server-verified
+      // /chat/deposit-complete check would just return no_deposit_found.
+      // The authoritative chat-conversion stamp happens server-side inside
+      // the admin INR-approve handler (see artifacts/api-server/src/routes/
+      // inr-deposits.ts), which finds the user's recent open chat session
+      // and writes converted_at + a deposit_completed event.
       qc.invalidateQueries({ queryKey: ["inr-deposits-mine"] });
     },
     onError: (e: any) => {

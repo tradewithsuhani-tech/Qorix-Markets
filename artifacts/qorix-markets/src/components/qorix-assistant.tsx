@@ -15,6 +15,15 @@ interface Message {
   timestamp: Date;
   options?: QuickOption[];
   showInsights?: boolean;
+  cta?: CtaCard | null;
+}
+
+interface CtaCard {
+  variant: string;       // "small_deposit" | "view_dashboard" | "talk_to_expert"
+  label: string;
+  href?: string;
+  action?: string;       // "request_expert"
+  ackText?: string;      // language-aware "let me take you there" reply shown before navigation
 }
 
 interface QuickOption {
@@ -160,10 +169,64 @@ function LiveInsightsCard() {
   );
 }
 
+// ─── CTA Card (LLM-driven persuasive next step) ──────────────────────────────
+
+function ctaIconForVariant(variant: string) {
+  if (variant === "view_dashboard") return <TrendingUp className="w-4 h-4" />;
+  if (variant === "talk_to_expert") return <UserCheck className="w-4 h-4" />;
+  return <ChevronRight className="w-4 h-4" />;
+}
+
+function CtaCardButton({ cta, onClick }: { cta: CtaCard; onClick: (cta: CtaCard) => void }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.15, duration: 0.25 }}
+      className="ml-9 mb-3"
+    >
+      <motion.button
+        onClick={() => onClick(cta)}
+        whileHover={{ scale: 1.01 }}
+        whileTap={{ scale: 0.98 }}
+        className="w-full max-w-[260px] flex items-center justify-between gap-2 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all"
+        style={{
+          background: "linear-gradient(135deg, rgba(37,99,235,0.18) 0%, rgba(124,58,237,0.18) 100%)",
+          border: "1px solid rgba(99,102,241,0.35)",
+          color: "rgb(199,210,254)",
+          boxShadow: "0 4px 14px rgba(99,102,241,0.18)",
+        }}
+        data-cta-variant={cta.variant}
+      >
+        <span className="flex items-center gap-2">
+          {ctaIconForVariant(cta.variant)}
+          <span>{cta.label}</span>
+        </span>
+        <ChevronRight className="w-4 h-4 opacity-60" />
+      </motion.button>
+    </motion.div>
+  );
+}
+
 // ─── Message Bubble ───────────────────────────────────────────────────────────
 
-function parseMarkdown(text: string) {
+// XSS hardening: bot replies originate from the LLM and the LLM's input is
+// (transitively) attacker-controlled (the user types whatever they want).
+// We escape every HTML-significant character FIRST, then run the small
+// markdown substitution set against the escaped string — so any raw HTML
+// the model is coerced into emitting becomes inert text, while our own
+// `<strong>`, `<em>`, and `<br />` tags remain the only live HTML.
+function escapeHtml(text: string) {
   return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function parseMarkdown(text: string) {
+  return escapeHtml(text)
     .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
     .replace(/\*(.*?)\*/g, '<em>$1</em>')
     .replace(/\n/g, '<br />');
@@ -515,22 +578,143 @@ export function QorixAssistant({ guestMode = false }: { guestMode?: boolean } = 
     setIsSending(true);
 
     try {
-      await saveUserMessage(content);
-      if (!expertMode) {
-        // Auto-reply for free-text in bot mode
+      // ── Guest mode: no auth → no LLM call possible. Keep the original
+      // gentle nudge to sign in. We deliberately don't try to call the
+      // LLM endpoint without a token.
+      if (guestMode || !sessionId || !token) {
+        await saveUserMessage(content);
         setTimeout(() => {
           showBotMessage(
-            "I understand your query! For the best help, please select one of the options below, or connect with our expert team for personalized assistance.",
-            [
-              { label: "🚀 How to Start", value: "how_to_start" },
-              { label: "📊 Investment Guide", value: "investment_guide" },
-              { label: "💬 Talk to Expert", value: "expert" },
-            ]
+            guestMode
+              ? "Happy to help! For a personalized answer, sign in (it's free, takes 2 minutes) and I'll have full context — wallet, KYC, the works."
+              : "I understand your query! Please pick an option below or talk to our expert team.",
+            guestMode
+              ? [{ label: "🔐 Sign In / Register", value: "go_login" }, { label: "🏠 Back to Menu", value: "main_menu" }]
+              : [
+                  { label: "🚀 How to Start", value: "how_to_start" },
+                  { label: "💬 Talk to Expert", value: "expert" },
+                ]
           );
         }, 300);
+        return;
+      }
+
+      // ── Expert mode: humans handle the conversation. The LLM endpoint
+      // server-side detects this and only persists the user message
+      // without generating a reply — but we still call it so the
+      // message lands on the admin panel via the same code path.
+      //
+      // We briefly flash the typing indicator so the user gets the same
+      // "your message was received and someone's reading it" feedback
+      // they get on the LLM path. Without this the message just sits
+      // there with no acknowledgement and the chat feels broken.
+      // 1.8s matches the natural rhythm of "person opens chat, glances at
+      // message" — long enough to read as a real beat, short enough that
+      // it doesn't pretend an instant human reply is coming.
+      if (expertMode) {
+        setIsTyping(true);
+        try {
+          await saveUserMessage(content);
+        } finally {
+          setTimeout(() => setIsTyping(false), 1800);
+        }
+        return;
+      }
+
+      // ── LLM-driven reply.
+      setIsTyping(true);
+      try {
+        const data = await apiPost("/chat/llm-reply", { sessionId, content });
+        setIsTyping(false);
+
+        if (data?.expertMode) {
+          // Server flipped us into expert mode mid-stream — sync up.
+          setExpertMode(true);
+          return;
+        }
+
+        if (data?.reply?.content) {
+          // When the server supplies `quickOptions` (LLM bypassed because of
+          // budget/availability), render them as buttons via the same
+          // showBotMessage path the rule-tree uses. This keeps the chat
+          // navigable instead of degrading to a dead-end fallback string.
+          if (Array.isArray(data.quickOptions) && data.quickOptions.length) {
+            showBotMessage(data.reply.content, data.quickOptions);
+          } else {
+            const botMsg: Message = {
+              id: `bot-${data.reply.id ?? Date.now()}`,
+              type: "bot",
+              content: data.reply.content,
+              timestamp: new Date(data.reply.createdAt ?? Date.now()),
+              cta: data.cta ?? null,
+            };
+            setMessages((prev) => [...prev, botMsg]);
+          }
+        }
+      } catch (err: any) {
+        setIsTyping(false);
+        // Rate-limit messages and other 4xx errors come through `err.message`
+        // (authFetch flattens the body's `error`/`message` field there). For
+        // anything else we fall back to a gentle generic message — the user
+        // should never see a stack trace.
+        const msg = typeof err?.message === "string" && err.message.length < 240 ? err.message : null;
+        showBotMessage(
+          msg ??
+            "I'm having trouble pulling that up right now. You can try again or tap **Talk to Expert** for a human advisor.",
+          [
+            { label: "🚀 How to Start", value: "how_to_start" },
+            { label: "📊 Investment Plans", value: "investment_guide" },
+            { label: "💬 Talk to Expert", value: "expert" },
+            { label: "🏠 Back to Menu", value: "main_menu" },
+          ],
+        );
       }
     } finally {
       setIsSending(false);
+    }
+  }
+
+  async function handleCtaClick(cta: CtaCard) {
+    if (!sessionId || !token) return;
+    // Fire-and-forget audit log; do NOT block the navigation on the network.
+    apiPost("/chat/cta-click", { sessionId, variant: cta.variant }).catch(() => {});
+
+    if (cta.action === "request_expert") {
+      addUserMessage(cta.label);
+      // Server-provided ackText keeps the bot's voice consistent across
+      // languages; fall back to a sensible English line if the server didn't
+      // ship one (older payloads).
+      if (cta.ackText) {
+        showBotMessage(cta.ackText);
+      }
+      await handleExpertRequest();
+      return;
+    }
+
+    if (cta.href) {
+      // Append attribution params so the deposit page (and dashboard) can
+      // detect the chat-driven funnel and POST conversion events back.
+      const url = new URL(cta.href, window.location.origin);
+      url.searchParams.set("src", "chat");
+      url.searchParams.set("sid", String(sessionId));
+
+      // Echo the user's tap as a chat message so the conversation reads like
+      // a real exchange ("I'll show you the dashboard" → user clicks → user
+      // line "Show me the dashboard" → bot's warm acknowledgement → navigate).
+      // This is the difference between feeling like a bot redirect and
+      // feeling like a human concierge actually walking you over.
+      addUserMessage(cta.label);
+      const ack = cta.ackText
+        ?? "On it — taking you there now. Ping me back here whenever you'd like to chat.";
+      showBotMessage(ack);
+
+      // Brief pause so the user actually reads the acknowledgement before
+      // the page transitions. 900ms matches the "typing" rhythm elsewhere
+      // in the chat — long enough to register, short enough to not feel slow.
+      await new Promise((resolve) => setTimeout(resolve, 900));
+
+      setIsOpen(false);
+      navigate(url.pathname + url.search);
     }
   }
 
@@ -541,9 +725,15 @@ export function QorixAssistant({ guestMode = false }: { guestMode?: boolean } = 
     }
   }
 
-  // Get current quick options from last bot message
+  // Get current quick options from last bot message.
+  // UX rule: quick-reply buttons appear ONLY on the initial welcome state —
+  // once the user has typed anything (or tapped a quick-reply), the chat is
+  // a real conversation and the persistent button rail starts feeling like
+  // a menu the bot keeps shoving back. After the very first user message we
+  // suppress quick replies for the rest of the session.
+  const hasUserMessage = messages.some(m => m.type === "user");
   const lastBotMessage = [...messages].reverse().find(m => m.type === "bot" && m.options && m.options.length > 0);
-  const showOptions = lastBotMessage?.options && lastBotMessage.options.length > 0;
+  const showOptions = !hasUserMessage && Boolean(lastBotMessage?.options && lastBotMessage.options.length > 0);
 
   if (!token && !guestMode) return null;
 
@@ -793,6 +983,7 @@ export function QorixAssistant({ guestMode = false }: { guestMode?: boolean } = 
                   <React.Fragment key={msg.id}>
                     <MessageBubble msg={msg} />
                     {msg.showInsights && <LiveInsightsCard />}
+                    {msg.cta && <CtaCardButton cta={msg.cta} onClick={handleCtaClick} />}
                   </React.Fragment>
                 ))}
               </AnimatePresence>
