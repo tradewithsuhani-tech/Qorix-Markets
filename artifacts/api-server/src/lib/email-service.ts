@@ -7002,3 +7002,1018 @@ export async function sendKycPersonalVerified(args: {
 
   await sendEmail(to, subject, text, html);
 }
+
+// ===========================================================================
+// KYC level helper — maps "identity" / "address" to display labels used by
+// templates #25, #26, #27. Centralised so that copy stays consistent.
+// ===========================================================================
+type KycKind = "identity" | "address";
+
+function kycLevelLabel(kind: KycKind): {
+  shortName: string;       // "Identity"   | "Address"
+  fullName: string;        // "Identity Verification" | "Address Verification"
+  level: string;           // "Lv.2" | "Lv.3"
+  acceptedDocs: string;    // hint text — accepted document types
+} {
+  if (kind === "address") {
+    return {
+      shortName: "Address",
+      fullName: "Address Verification",
+      level: "Lv.3",
+      acceptedDocs: "Utility bill / Bank statement / Rental agreement (last 90 days, full address visible)",
+    };
+  }
+  return {
+    shortName: "Identity",
+    fullName: "Identity Verification",
+    level: "Lv.2",
+    acceptedDocs: "Aadhaar / Passport / Driving Licence (clear photo, all four corners visible)",
+  };
+}
+
+// ---------------------------------------------------------------------------
+// #25 — KYC SUBMITTED (Lv.2 IDENTITY or Lv.3 ADDRESS) — under-review email
+// ---------------------------------------------------------------------------
+// GRAPHITE + ELECTRIC-TEAL theme: deep graphite + bright teal scan glow.
+// Tone: CALM / PROCESSING — "we received it, scanning, decision within 24h."
+// 25th unique palette. Distinct from sapphire/twilight by the graphite base
+// and pure-teal (no gold/yellow) accents — feels like a security scanner.
+// Layout: hero pill ("UNDER REVIEW · Lv.X") · review-card centerpiece (doc
+// type + submitted-at + ETA bar) · "What happens next?" reassurance · footer.
+// ---------------------------------------------------------------------------
+export function renderKycSubmittedHtml(opts: {
+  preheader: string;
+  name: string;
+  kind: KycKind;
+  submittedAt: Date;
+}): string {
+  const { preheader, name, kind, submittedAt } = opts;
+  const labels = kycLevelLabel(kind);
+  const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const whenStr =
+    `${submittedAt.getUTCDate()} ${MONTHS_SHORT[submittedAt.getUTCMonth()]} ${submittedAt.getUTCFullYear()} · ` +
+    `${String(submittedAt.getUTCHours()).padStart(2, "0")}:${String(submittedAt.getUTCMinutes()).padStart(2, "0")} UTC`;
+  const safeFirstName = escapeHtml((name || "there").trim().split(/\s+/)[0] || "there");
+  const safeWhen = escapeHtml(whenStr);
+  const safeShort = escapeHtml(labels.shortName);
+  const safeFull = escapeHtml(labels.fullName);
+  const safeLevel = escapeHtml(labels.level);
+  const safeAcceptedDocs = escapeHtml(labels.acceptedDocs);
+  const year = new Date().getFullYear();
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="x-apple-disable-message-reformatting" />
+<meta name="color-scheme" content="dark light" />
+<meta name="supported-color-schemes" content="dark light" />
+<title>${safeFull} submitted — Qorix Markets</title>
+<style type="text/css">
+  @media only screen and (max-width:480px) {
+    .qx-outer { padding:20px 10px !important; }
+    .qx-card { border-radius:18px !important; }
+    .qx-hero-pad { padding:6px 18px 22px !important; }
+    .qx-hero-h { font-size:24px !important; line-height:1.22 !important; }
+    .qx-review-pad { padding:24px 18px 4px !important; }
+    .qx-foot-pad { padding:24px 18px 22px !important; }
+  }
+</style>
+</head>
+<body style="margin:0;padding:0;background:#10141A;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;">
+<div style="display:none;max-height:0;overflow:hidden;font-size:1px;line-height:1px;color:#10141A;opacity:0;">${escapeHtml(preheader)}</div>
+<div style="display:none;max-height:0;overflow:hidden;">&#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847;</div>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="qx-outer" style="background:#10141A;padding:32px 16px;">
+  <tr>
+    <td align="center">
+
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="qx-card" style="max-width:560px;background:#1A1F26;border:1px solid rgba(94,234,212,0.28);border-radius:22px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,0.70);">
+
+        <!-- LOGO BAR -->
+        <tr>
+          <td align="left" style="padding:20px 24px 0 28px;background:#10141A;background-image:linear-gradient(135deg,#10141A 0%,#2A3038 38%,#0D9488 76%,#5EEAD4 100%);">
+            <img src="cid:${BRAND_LOGO_CID}" alt="Qorix Markets" width="320" height="217" style="display:block;width:320px;max-width:90%;height:auto;border:0;outline:none;text-decoration:none;margin:0;" />
+          </td>
+        </tr>
+
+        <!-- HERO -->
+        <tr>
+          <td class="qx-hero-pad" align="center" style="padding:8px 32px 28px;background:#10141A;background-image:linear-gradient(135deg,#10141A 0%,#2A3038 38%,#0D9488 76%,#5EEAD4 100%);">
+            <div style="display:inline-block;padding:6px 14px;border-radius:999px;background:rgba(153,246,228,0.18);border:1px solid rgba(153,246,228,0.55);font-size:10.5px;letter-spacing:2.4px;color:#99F6E4;font-weight:700;text-transform:uppercase;margin-bottom:18px;">
+              <span style="display:inline-block;width:6px;height:6px;border-radius:999px;background:#5EEAD4;box-shadow:0 0 8px rgba(94,234,212,0.85);vertical-align:middle;margin-right:6px;"></span>
+              <span style="vertical-align:middle;">Under Review · ${safeLevel}</span>
+            </div>
+            <div class="qx-hero-h" style="font-size:30px;line-height:1.18;font-weight:800;color:#FFFFFF;letter-spacing:-0.5px;max-width:440px;margin:0 auto;">
+              We've Got Your ${safeShort}
+            </div>
+            <div style="font-size:13.5px;color:#99F6E4;margin-top:10px;font-weight:500;max-width:460px;margin-left:auto;margin-right:auto;line-height:1.5;">
+              ${safeFirstName}, your ${safeShort.toLowerCase()} document is queued for review. Decision typically arrives <strong style="color:#FFFFFF;">within 24 hours</strong>.
+            </div>
+            <div style="width:48px;height:3px;background:linear-gradient(90deg,#5EEAD4 0%,#0D9488 100%);margin:18px auto 0;border-radius:999px;"></div>
+          </td>
+        </tr>
+
+        <!-- REVIEW CARD centerpiece -->
+        <tr>
+          <td class="qx-review-pad" style="padding:30px 32px 8px;">
+            <div style="font-size:10.5px;letter-spacing:2.4px;color:#99F6E4;font-weight:700;text-transform:uppercase;text-align:left;padding:0 0 14px 0;">
+              Submission Receipt
+            </div>
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#0E1A1A;background-image:linear-gradient(180deg,#1A2627 0%,#0A1213 100%);border:1.5px solid rgba(94,234,212,0.35);border-radius:14px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.04),0 0 24px rgba(13,148,136,0.20);">
+              <tr>
+                <td style="padding:22px 22px 6px;">
+                  <div style="font-size:11px;letter-spacing:1.6px;color:#5E8A85;text-transform:uppercase;font-weight:600;line-height:1;margin-bottom:6px;">Submitted Document</div>
+                  <div style="font-size:16px;color:#FFFFFF;font-weight:700;line-height:1.4;letter-spacing:-0.2px;">${safeFull}</div>
+                  <div style="font-size:12px;color:#5EEAD4;font-weight:600;line-height:1.4;margin-top:2px;">Tier: ${safeLevel}</div>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:14px 22px;border-top:1px solid rgba(94,234,212,0.18);">
+                  <div style="font-size:11px;letter-spacing:1.6px;color:#5E8A85;text-transform:uppercase;font-weight:600;line-height:1;margin-bottom:6px;">Received At</div>
+                  <div style="font-size:14px;color:#FFFFFF;font-weight:600;line-height:1.4;">${safeWhen}</div>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:14px 22px 22px;border-top:1px solid rgba(94,234,212,0.18);">
+                  <div style="font-size:11px;letter-spacing:1.6px;color:#5E8A85;text-transform:uppercase;font-weight:600;line-height:1;margin-bottom:8px;">Review ETA</div>
+                  <!-- Scan-style progress bar: bright filled chunk + remaining -->
+                  <div style="width:100%;height:6px;background:rgba(94,234,212,0.10);border-radius:999px;overflow:hidden;position:relative;">
+                    <div style="width:35%;height:6px;background:linear-gradient(90deg,#5EEAD4 0%,#0D9488 100%);border-radius:999px;box-shadow:0 0 8px rgba(94,234,212,0.6);"></div>
+                  </div>
+                  <div style="font-size:13px;color:#FFFFFF;font-weight:700;line-height:1.4;margin-top:10px;">Within 24 hours</div>
+                  <div style="font-size:11.5px;color:#7AAAA5;font-weight:500;line-height:1.5;margin-top:2px;">No action needed from your side right now.</div>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- What happens next -->
+        <tr>
+          <td style="padding:24px 32px 8px;">
+            <div style="background:rgba(94,234,212,0.06);border-left:2px solid rgba(94,234,212,0.55);border-radius:6px;padding:14px 16px;font-size:12.5px;line-height:1.65;color:#A8C2BF;">
+              <div style="color:#5EEAD4;font-weight:600;margin-bottom:6px;">What happens next?</div>
+              Our team will check the document for clarity and validity. You'll get a separate email the moment a decision is made — approved or with a reason if anything needs re-submission.
+            </div>
+          </td>
+        </tr>
+
+        <!-- FOOTER -->
+        <tr>
+          <td class="qx-foot-pad" align="center" style="padding:30px 32px 28px;border-top:1px solid rgba(255,255,255,0.05);background:#080A0F;">
+            <div style="font-size:13px;color:#5EEAD4;margin-bottom:6px;font-weight:600;">
+              Trade smart 📈
+            </div>
+            <div style="font-size:11.5px;color:#475569;line-height:1.7;">
+              © ${year} Qorix Markets · AI-Powered Trading<br/>
+              Need help? <a href="mailto:support@qorixmarkets.com" style="color:#5EEAD4;text-decoration:none;">support@qorixmarkets.com</a>
+            </div>
+          </td>
+        </tr>
+
+      </table>
+
+      <div style="height:24px;line-height:24px;font-size:1px;">&nbsp;</div>
+    </td>
+  </tr>
+</table>
+</body>
+</html>`;
+}
+
+export async function sendKycSubmitted(args: {
+  to: string;
+  name: string;
+  kind: KycKind;
+  submittedAt: Date;
+}): Promise<void> {
+  const { to, name, kind, submittedAt } = args;
+  const labels = kycLevelLabel(kind);
+  const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const whenStr =
+    `${submittedAt.getUTCDate()} ${MONTHS_SHORT[submittedAt.getUTCMonth()]} ${submittedAt.getUTCFullYear()} · ` +
+    `${String(submittedAt.getUTCHours()).padStart(2, "0")}:${String(submittedAt.getUTCMinutes()).padStart(2, "0")} UTC`;
+
+  const subject = `Qorix Markets — ${labels.fullName} received · under review (${labels.level})`;
+  const preheader = `We received your ${labels.shortName.toLowerCase()} document. Decision typically arrives within 24 hours.`;
+  const html = renderKycSubmittedHtml({ preheader, name, kind, submittedAt });
+  const text =
+    `We've Got Your ${labels.shortName} — Under Review (${labels.level})\n\n` +
+    `Hi ${name},\n\n` +
+    `Your ${labels.shortName.toLowerCase()} document is queued for review. Decision\n` +
+    `typically arrives within 24 hours.\n\n` +
+    `Submission Receipt:\n` +
+    `  Document:    ${labels.fullName}\n` +
+    `  Tier:        ${labels.level}\n` +
+    `  Received at: ${whenStr}\n` +
+    `  Review ETA:  Within 24 hours\n\n` +
+    `What happens next?\n` +
+    `Our team will check for clarity and validity. You'll get a separate\n` +
+    `email the moment a decision is made — approved or with a reason if\n` +
+    `anything needs re-submission. No action needed from your side right now.\n\n` +
+    `— Qorix Markets`;
+
+  await sendEmail(to, subject, text, html);
+}
+
+// ---------------------------------------------------------------------------
+// #26 — KYC VERIFIED (Lv.2 IDENTITY or Lv.3 ADDRESS) — approval celebration
+// ---------------------------------------------------------------------------
+// IMPERIAL-PLUM + GOLD-LEAF theme: deep plum + rich warm gold. Tone:
+// CELEBRATION / ROYAL ACHIEVEMENT — verification is a passport-stamp moment.
+// 26th unique palette. Distinct from midnight-indigo+violet by being plum-
+// based (not indigo) + paired with gold-leaf (not violet/yellow).
+// Layout: hero pill ("VERIFIED ✓ · Lv.X") · big VERIFIED stamp centerpiece
+// with rotated seal + capability-unlock card · footer.
+// ---------------------------------------------------------------------------
+export function renderKycVerifiedHtml(opts: {
+  preheader: string;
+  name: string;
+  kind: KycKind;
+  verifiedAt: Date;
+}): string {
+  const { preheader, name, kind, verifiedAt } = opts;
+  const labels = kycLevelLabel(kind);
+  const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const whenStr =
+    `${verifiedAt.getUTCDate()} ${MONTHS_SHORT[verifiedAt.getUTCMonth()]} ${verifiedAt.getUTCFullYear()} · ` +
+    `${String(verifiedAt.getUTCHours()).padStart(2, "0")}:${String(verifiedAt.getUTCMinutes()).padStart(2, "0")} UTC`;
+  const safeFirstName = escapeHtml((name || "there").trim().split(/\s+/)[0] || "there");
+  const safeWhen = escapeHtml(whenStr);
+  const safeShort = escapeHtml(labels.shortName);
+  const safeFull = escapeHtml(labels.fullName);
+  const safeLevel = escapeHtml(labels.level);
+  const year = new Date().getFullYear();
+
+  // Capability-unlock copy — different per kind.
+  const unlockHeadline = kind === "address" ? "Account Fully Verified" : "Withdrawals Unlocked";
+  const unlockSubtitle =
+    kind === "address"
+      ? `Your account is now fully verified across all three tiers. Higher daily limits and full feature access are active.`
+      : `Withdrawals are now enabled on your account. You can also continue to ${labels.level === "Lv.2" ? "Lv.3 (address)" : "the next tier"} for higher daily limits and full account access.`;
+  const unlockChip = kind === "address" ? "Lv.1 · Lv.2 · Lv.3 · all complete" : "Withdrawals · ENABLED";
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="x-apple-disable-message-reformatting" />
+<meta name="color-scheme" content="dark light" />
+<meta name="supported-color-schemes" content="dark light" />
+<title>${safeShort} verified — Qorix Markets</title>
+<style type="text/css">
+  @media only screen and (max-width:480px) {
+    .qx-outer { padding:20px 10px !important; }
+    .qx-card { border-radius:18px !important; }
+    .qx-hero-pad { padding:6px 18px 22px !important; }
+    .qx-hero-h { font-size:24px !important; line-height:1.22 !important; }
+    .qx-stamp-pad { padding:24px 18px 4px !important; }
+    .qx-stamp-num { font-size:30px !important; }
+    .qx-foot-pad { padding:24px 18px 22px !important; }
+  }
+</style>
+</head>
+<body style="margin:0;padding:0;background:#1A0B1A;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;">
+<div style="display:none;max-height:0;overflow:hidden;font-size:1px;line-height:1px;color:#1A0B1A;opacity:0;">${escapeHtml(preheader)}</div>
+<div style="display:none;max-height:0;overflow:hidden;">&#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847;</div>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="qx-outer" style="background:#1A0B1A;padding:32px 16px;">
+  <tr>
+    <td align="center">
+
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="qx-card" style="max-width:560px;background:#251327;border:1px solid rgba(212,160,56,0.35);border-radius:22px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,0.70);">
+
+        <!-- LOGO BAR -->
+        <tr>
+          <td align="left" style="padding:20px 24px 0 28px;background:#1A0B1A;background-image:linear-gradient(135deg,#1A0B1A 0%,#5C1D5C 38%,#A855F7 72%,#D4A038 100%);">
+            <img src="cid:${BRAND_LOGO_CID}" alt="Qorix Markets" width="320" height="217" style="display:block;width:320px;max-width:90%;height:auto;border:0;outline:none;text-decoration:none;margin:0;" />
+          </td>
+        </tr>
+
+        <!-- HERO -->
+        <tr>
+          <td class="qx-hero-pad" align="center" style="padding:8px 32px 28px;background:#1A0B1A;background-image:linear-gradient(135deg,#1A0B1A 0%,#5C1D5C 38%,#A855F7 72%,#D4A038 100%);">
+            <div style="display:inline-block;padding:6px 14px;border-radius:999px;background:rgba(255,233,167,0.20);border:1px solid rgba(255,233,167,0.55);font-size:10.5px;letter-spacing:2.4px;color:#FFE9A7;font-weight:700;text-transform:uppercase;margin-bottom:18px;">
+              ✓ Verified · ${safeLevel}
+            </div>
+            <div class="qx-hero-h" style="font-size:30px;line-height:1.18;font-weight:800;color:#FFFFFF;letter-spacing:-0.5px;max-width:440px;margin:0 auto;">
+              ${safeShort} Verified
+            </div>
+            <div style="font-size:13.5px;color:#FFE9A7;margin-top:10px;font-weight:500;max-width:460px;margin-left:auto;margin-right:auto;line-height:1.5;">
+              ${safeFirstName}, ${unlockSubtitle}
+            </div>
+            <div style="width:48px;height:3px;background:linear-gradient(90deg,#FFE9A7 0%,#D4A038 100%);margin:18px auto 0;border-radius:999px;"></div>
+          </td>
+        </tr>
+
+        <!-- VERIFIED STAMP centerpiece -->
+        <tr>
+          <td class="qx-stamp-pad" align="center" style="padding:34px 24px 8px;">
+            <div style="font-size:10.5px;letter-spacing:2.4px;color:#FFE9A7;font-weight:700;text-transform:uppercase;text-align:left;padding:0 8px 14px 8px;">
+              Capability Unlocked
+            </div>
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td align="center" style="padding:30px 18px;background:#180A1A;background-image:linear-gradient(180deg,#251327 0%,#180A1A 100%);border:1.5px solid rgba(255,233,167,0.45);border-radius:14px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.04),0 0 28px rgba(212,160,56,0.25);">
+
+                  <!-- Stamp ring with VERIFIED text -->
+                  <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center">
+                    <tr>
+                      <td align="center" style="width:96px;height:96px;background:rgba(255,233,167,0.10);border:3px double rgba(255,233,167,0.85);border-radius:999px;text-align:center;vertical-align:middle;box-shadow:0 0 24px rgba(212,160,56,0.45),inset 0 0 16px rgba(255,233,167,0.18);">
+                        <div style="font-size:11px;letter-spacing:2.6px;color:#FFE9A7;font-weight:800;text-transform:uppercase;line-height:1;margin-bottom:4px;">QORIX</div>
+                        <div style="font-size:32px;color:#FFFFFF;font-weight:900;line-height:1;text-shadow:0 0 12px rgba(255,233,167,0.55);">✓</div>
+                        <div style="font-size:10px;letter-spacing:2.6px;color:#FFE9A7;font-weight:800;text-transform:uppercase;line-height:1;margin-top:4px;">Verified</div>
+                      </td>
+                    </tr>
+                  </table>
+
+                  <!-- Headline -->
+                  <div class="qx-stamp-num" style="margin-top:22px;font-size:24px;line-height:1.18;font-weight:800;color:#FFFFFF;letter-spacing:-0.4px;">
+                    ${unlockHeadline}
+                  </div>
+                  <!-- Capability chip -->
+                  <div style="display:inline-block;margin-top:12px;padding:6px 14px;border-radius:999px;background:rgba(212,160,56,0.18);border:1px solid rgba(212,160,56,0.65);font-size:11px;letter-spacing:1.6px;color:#FFE9A7;font-weight:700;text-transform:uppercase;">
+                    ${escapeHtml(unlockChip)}
+                  </div>
+
+                  <!-- Verified at -->
+                  <div style="margin-top:18px;font-size:11.5px;color:#9D8B7A;font-weight:500;line-height:1.5;letter-spacing:0.3px;">
+                    Verified at · ${safeWhen}
+                  </div>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- FOOTER -->
+        <tr>
+          <td class="qx-foot-pad" align="center" style="padding:30px 32px 28px;border-top:1px solid rgba(255,255,255,0.05);background:#0F060F;">
+            <div style="font-size:13px;color:#FFE9A7;margin-bottom:6px;font-weight:600;">
+              Trade smart 📈
+            </div>
+            <div style="font-size:11.5px;color:#5C4858;line-height:1.7;">
+              © ${year} Qorix Markets · AI-Powered Trading<br/>
+              Need help? <a href="mailto:support@qorixmarkets.com" style="color:#FFE9A7;text-decoration:none;">support@qorixmarkets.com</a>
+            </div>
+          </td>
+        </tr>
+
+      </table>
+
+      <div style="height:24px;line-height:24px;font-size:1px;">&nbsp;</div>
+    </td>
+  </tr>
+</table>
+</body>
+</html>`;
+}
+
+export async function sendKycVerified(args: {
+  to: string;
+  name: string;
+  kind: KycKind;
+  verifiedAt: Date;
+}): Promise<void> {
+  const { to, name, kind, verifiedAt } = args;
+  const labels = kycLevelLabel(kind);
+  const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const whenStr =
+    `${verifiedAt.getUTCDate()} ${MONTHS_SHORT[verifiedAt.getUTCMonth()]} ${verifiedAt.getUTCFullYear()} · ` +
+    `${String(verifiedAt.getUTCHours()).padStart(2, "0")}:${String(verifiedAt.getUTCMinutes()).padStart(2, "0")} UTC`;
+  const unlockHeadline = kind === "address" ? "Account Fully Verified" : "Withdrawals Unlocked";
+  const unlockBody =
+    kind === "address"
+      ? `Your account is now fully verified across all three tiers. Higher daily limits and full feature access are active.`
+      : `Withdrawals are now enabled on your account. You can also continue to Lv.3 (address) for higher daily limits and full account access.`;
+
+  const subject = `Qorix Markets — ${labels.shortName} verified ✓ · ${unlockHeadline.toLowerCase()} (${labels.level})`;
+  const preheader = `${labels.shortName} verified. ${unlockHeadline}.`;
+  const html = renderKycVerifiedHtml({ preheader, name, kind, verifiedAt });
+  const text =
+    `${labels.shortName} Verified · ${unlockHeadline}\n\n` +
+    `Hi ${name},\n\n` +
+    `${unlockBody}\n\n` +
+    `Verification Receipt:\n` +
+    `  Tier:        ${labels.level}\n` +
+    `  Document:    ${labels.fullName}\n` +
+    `  Verified at: ${whenStr}\n\n` +
+    `— Qorix Markets`;
+
+  await sendEmail(to, subject, text, html);
+}
+
+// ---------------------------------------------------------------------------
+// #27 — KYC REJECTED (Lv.2 IDENTITY or Lv.3 ADDRESS) — gentle action-needed
+// ---------------------------------------------------------------------------
+// BURNT-SIENNA + WARM-SAND theme: warm earthy clay-orange + sand. Tone:
+// GENTLE WARNING / ACTION NEEDED — NOT alarm-red, this isn't a security
+// breach. Frames it as "small re-do" not "rejected." 27th unique palette,
+// distinct from crimson (true red), oxblood (deep red-purple), bronze
+// (metallic), mocha (browner), coral (lighter pink-orange).
+// Layout: hero pill ("ACTION NEEDED · Lv.X") · reason highlight card ·
+// re-submit guidance ("what we accept") · CTA · footer.
+// ---------------------------------------------------------------------------
+export function renderKycRejectedHtml(opts: {
+  preheader: string;
+  name: string;
+  kind: KycKind;
+  reason: string;
+  rejectedAt: Date;
+}): string {
+  const { preheader, name, kind, reason, rejectedAt } = opts;
+  const labels = kycLevelLabel(kind);
+  const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const whenStr =
+    `${rejectedAt.getUTCDate()} ${MONTHS_SHORT[rejectedAt.getUTCMonth()]} ${rejectedAt.getUTCFullYear()} · ` +
+    `${String(rejectedAt.getUTCHours()).padStart(2, "0")}:${String(rejectedAt.getUTCMinutes()).padStart(2, "0")} UTC`;
+  const safeFirstName = escapeHtml((name || "there").trim().split(/\s+/)[0] || "there");
+  const safeWhen = escapeHtml(whenStr);
+  const safeShort = escapeHtml(labels.shortName);
+  const safeFull = escapeHtml(labels.fullName);
+  const safeLevel = escapeHtml(labels.level);
+  const safeReason = escapeHtml((reason || "Document not acceptable").trim());
+  const safeAcceptedDocs = escapeHtml(labels.acceptedDocs);
+  const year = new Date().getFullYear();
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="x-apple-disable-message-reformatting" />
+<meta name="color-scheme" content="dark light" />
+<meta name="supported-color-schemes" content="dark light" />
+<title>${safeFull} — action needed</title>
+<style type="text/css">
+  @media only screen and (max-width:480px) {
+    .qx-outer { padding:20px 10px !important; }
+    .qx-card { border-radius:18px !important; }
+    .qx-hero-pad { padding:6px 18px 22px !important; }
+    .qx-hero-h { font-size:24px !important; line-height:1.22 !important; }
+    .qx-reason-pad { padding:24px 18px 4px !important; }
+    .qx-cta { padding:14px 28px !important; font-size:14px !important; }
+    .qx-foot-pad { padding:24px 18px 22px !important; }
+  }
+</style>
+</head>
+<body style="margin:0;padding:0;background:#170A06;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;">
+<div style="display:none;max-height:0;overflow:hidden;font-size:1px;line-height:1px;color:#170A06;opacity:0;">${escapeHtml(preheader)}</div>
+<div style="display:none;max-height:0;overflow:hidden;">&#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847;</div>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="qx-outer" style="background:#170A06;padding:32px 16px;">
+  <tr>
+    <td align="center">
+
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="qx-card" style="max-width:560px;background:#221208;border:1px solid rgba(244,217,181,0.32);border-radius:22px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,0.70);">
+
+        <!-- LOGO BAR -->
+        <tr>
+          <td align="left" style="padding:20px 24px 0 28px;background:#170A06;background-image:linear-gradient(135deg,#170A06 0%,#5C2410 38%,#B7410E 76%,#F4D9B5 100%);">
+            <img src="cid:${BRAND_LOGO_CID}" alt="Qorix Markets" width="320" height="217" style="display:block;width:320px;max-width:90%;height:auto;border:0;outline:none;text-decoration:none;margin:0;" />
+          </td>
+        </tr>
+
+        <!-- HERO -->
+        <tr>
+          <td class="qx-hero-pad" align="center" style="padding:8px 32px 28px;background:#170A06;background-image:linear-gradient(135deg,#170A06 0%,#5C2410 38%,#B7410E 76%,#F4D9B5 100%);">
+            <div style="display:inline-block;padding:6px 14px;border-radius:999px;background:rgba(244,217,181,0.20);border:1px solid rgba(244,217,181,0.55);font-size:10.5px;letter-spacing:2.4px;color:#F4D9B5;font-weight:700;text-transform:uppercase;margin-bottom:18px;">
+              ⚠ Action Needed · ${safeLevel}
+            </div>
+            <div class="qx-hero-h" style="font-size:30px;line-height:1.18;font-weight:800;color:#FFFFFF;letter-spacing:-0.5px;max-width:460px;margin:0 auto;">
+              Quick Re-Submit Required
+            </div>
+            <div style="font-size:13.5px;color:#F4D9B5;margin-top:10px;font-weight:500;max-width:460px;margin-left:auto;margin-right:auto;line-height:1.5;">
+              ${safeFirstName}, your ${safeShort.toLowerCase()} document didn't pass review. The fix is usually small — see below and re-submit when ready.
+            </div>
+            <div style="width:48px;height:3px;background:linear-gradient(90deg,#F4D9B5 0%,#B7410E 100%);margin:18px auto 0;border-radius:999px;"></div>
+          </td>
+        </tr>
+
+        <!-- REASON HIGHLIGHT card -->
+        <tr>
+          <td class="qx-reason-pad" style="padding:30px 32px 8px;">
+            <div style="font-size:10.5px;letter-spacing:2.4px;color:#F4D9B5;font-weight:700;text-transform:uppercase;text-align:left;padding:0 0 14px 0;">
+              Why It Was Returned
+            </div>
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#1A0E08;background-image:linear-gradient(180deg,#241511 0%,#160A06 100%);border:1.5px solid rgba(183,65,14,0.55);border-radius:14px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.04),0 0 24px rgba(183,65,14,0.20);">
+              <tr>
+                <td style="padding:22px 22px;">
+                  <div style="font-size:11px;letter-spacing:1.6px;color:#A87358;text-transform:uppercase;font-weight:600;line-height:1;margin-bottom:8px;">Reviewer Note</div>
+                  <div style="font-size:15px;color:#FFFFFF;font-weight:600;line-height:1.55;letter-spacing:-0.1px;">${safeReason}</div>
+                  <div style="margin-top:14px;padding-top:14px;border-top:1px solid rgba(183,65,14,0.22);font-size:11.5px;color:#9C7860;font-weight:500;line-height:1.5;">
+                    Tier: <strong style="color:#F4D9B5;">${safeLevel} · ${safeFull}</strong> · Reviewed ${safeWhen}
+                  </div>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- What we accept -->
+        <tr>
+          <td style="padding:24px 32px 8px;">
+            <div style="background:rgba(244,217,181,0.06);border-left:2px solid rgba(244,217,181,0.55);border-radius:6px;padding:14px 16px;font-size:12.5px;line-height:1.65;color:#C4A88E;">
+              <div style="color:#F4D9B5;font-weight:600;margin-bottom:6px;">What we accept for ${safeShort.toLowerCase()}</div>
+              ${safeAcceptedDocs}
+            </div>
+          </td>
+        </tr>
+
+        <!-- CTA -->
+        <tr>
+          <td align="center" style="padding:24px 32px 12px;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td align="center" bgcolor="#B7410E" style="border-radius:12px;background:#B7410E;background-image:linear-gradient(135deg,#B7410E 0%,#D4621E 60%,#F4923E 100%);box-shadow:0 12px 28px rgba(183,65,14,0.45),inset 0 1px 0 rgba(255,255,255,0.18);">
+                  <a href="https://qorixmarkets.com/account/kyc" target="_blank" class="qx-cta" style="display:inline-block;padding:16px 36px;font-size:15px;font-weight:700;color:#FFFFFF;text-decoration:none;letter-spacing:0.4px;border-radius:12px;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+                    Re-submit ${safeShort} →
+                  </a>
+                </td>
+              </tr>
+            </table>
+            <div style="margin-top:10px;font-size:11.5px;color:#8C6B55;line-height:1.5;">
+              Takes about 2 minutes. Use a clearer photo in good light.
+            </div>
+          </td>
+        </tr>
+
+        <!-- FOOTER -->
+        <tr>
+          <td class="qx-foot-pad" align="center" style="padding:30px 32px 28px;border-top:1px solid rgba(255,255,255,0.05);background:#0E0604;">
+            <div style="font-size:13px;color:#F4D9B5;margin-bottom:6px;font-weight:600;">
+              Trade smart 📈
+            </div>
+            <div style="font-size:11.5px;color:#5A4838;line-height:1.7;">
+              © ${year} Qorix Markets · AI-Powered Trading<br/>
+              Need help? <a href="mailto:support@qorixmarkets.com" style="color:#F4D9B5;text-decoration:none;">support@qorixmarkets.com</a>
+            </div>
+          </td>
+        </tr>
+
+      </table>
+
+      <div style="height:24px;line-height:24px;font-size:1px;">&nbsp;</div>
+    </td>
+  </tr>
+</table>
+</body>
+</html>`;
+}
+
+export async function sendKycRejected(args: {
+  to: string;
+  name: string;
+  kind: KycKind;
+  reason: string;
+  rejectedAt: Date;
+}): Promise<void> {
+  const { to, name, kind, reason, rejectedAt } = args;
+  const labels = kycLevelLabel(kind);
+  const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const whenStr =
+    `${rejectedAt.getUTCDate()} ${MONTHS_SHORT[rejectedAt.getUTCMonth()]} ${rejectedAt.getUTCFullYear()} · ` +
+    `${String(rejectedAt.getUTCHours()).padStart(2, "0")}:${String(rejectedAt.getUTCMinutes()).padStart(2, "0")} UTC`;
+  const cleanReason = (reason || "Document not acceptable").trim();
+
+  const subject = `Qorix Markets — ${labels.fullName} needs re-submit (${labels.level})`;
+  const preheader = `Your ${labels.shortName.toLowerCase()} document didn't pass review. The fix is usually small — re-submit when ready.`;
+  const html = renderKycRejectedHtml({ preheader, name, kind, reason: cleanReason, rejectedAt });
+  const text =
+    `Quick Re-Submit Required — ${labels.fullName} (${labels.level})\n\n` +
+    `Hi ${name},\n\n` +
+    `Your ${labels.shortName.toLowerCase()} document didn't pass review. The fix is\n` +
+    `usually small — see the reviewer's note and re-submit when ready.\n\n` +
+    `Reviewer note:\n` +
+    `  ${cleanReason}\n\n` +
+    `Tier: ${labels.level} · ${labels.fullName}\n` +
+    `Reviewed: ${whenStr}\n\n` +
+    `What we accept for ${labels.shortName.toLowerCase()}:\n` +
+    `  ${labels.acceptedDocs}\n\n` +
+    `Re-submit (~2 minutes, use a clearer photo in good light):\n` +
+    `https://qorixmarkets.com/account/kyc\n\n` +
+    `— Qorix Markets`;
+
+  await sendEmail(to, subject, text, html);
+}
+
+// ---------------------------------------------------------------------------
+// #28 — USDT WITHDRAWAL SENT ON-CHAIN — broadcast confirmation
+// ---------------------------------------------------------------------------
+// HOLOGRAPHIC MIDNIGHT + IRIDESCENT-VIOLET-CYAN theme: deep midnight black +
+// holographic violet→cyan iridescence. Tone: BROADCAST / TRANSMITTED — your
+// money has been pushed onto the public ledger, here's the proof. 28th
+// unique palette. Distinct from cyan (#1, lighter base), midnight-indigo
+// (#18, no cyan), magenta-pipeline (#22, no violet/cyan iridescence). Pairs
+// violet + cyan together — uniquely "blockchain holographic" feel.
+// Layout: hero pill ("BROADCAST ON-CHAIN") · TX HASH mono card centerpiece
+// (amount, destination, hash, request id) · "View on Tronscan" CTA · footer.
+// ---------------------------------------------------------------------------
+export function renderUsdtWithdrawalSentHtml(opts: {
+  preheader: string;
+  name: string;
+  netAmount: number;
+  destinationAddress: string;
+  txHash: string;
+  requestId: string | number;
+  sentAt: Date;
+}): string {
+  const { preheader, name, netAmount, destinationAddress, txHash, requestId, sentAt } = opts;
+  const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const whenStr =
+    `${sentAt.getUTCDate()} ${MONTHS_SHORT[sentAt.getUTCMonth()]} ${sentAt.getUTCFullYear()} · ` +
+    `${String(sentAt.getUTCHours()).padStart(2, "0")}:${String(sentAt.getUTCMinutes()).padStart(2, "0")} UTC`;
+  const safeFirstName = escapeHtml((name || "there").trim().split(/\s+/)[0] || "there");
+  const safeAmount = escapeHtml(netAmount.toFixed(2));
+  const safeDestMasked = escapeHtml(maskWalletAddress(destinationAddress));
+  const safeDestFull = escapeHtml(destinationAddress);
+  const safeTxFull = escapeHtml(txHash);
+  const safeTxShort = escapeHtml(txHash.length > 24 ? `${txHash.slice(0, 12)}…${txHash.slice(-10)}` : txHash);
+  const safeId = escapeHtml(String(requestId));
+  const safeWhen = escapeHtml(whenStr);
+  const tronscanUrl = `https://tronscan.org/#/transaction/${encodeURIComponent(txHash)}`;
+  const year = new Date().getFullYear();
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="x-apple-disable-message-reformatting" />
+<meta name="color-scheme" content="dark light" />
+<meta name="supported-color-schemes" content="dark light" />
+<title>Withdrawal sent on-chain — Qorix Markets</title>
+<style type="text/css">
+  @media only screen and (max-width:480px) {
+    .qx-outer { padding:20px 10px !important; }
+    .qx-card { border-radius:18px !important; }
+    .qx-hero-pad { padding:6px 18px 22px !important; }
+    .qx-hero-h { font-size:24px !important; line-height:1.22 !important; }
+    .qx-tx-pad { padding:24px 18px 4px !important; }
+    .qx-tx-amount { font-size:34px !important; }
+    .qx-tx-hash { font-size:11px !important; }
+    .qx-cta { padding:14px 28px !important; font-size:14px !important; }
+    .qx-foot-pad { padding:24px 18px 22px !important; }
+  }
+</style>
+</head>
+<body style="margin:0;padding:0;background:#050414;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;">
+<div style="display:none;max-height:0;overflow:hidden;font-size:1px;line-height:1px;color:#050414;opacity:0;">${escapeHtml(preheader)}</div>
+<div style="display:none;max-height:0;overflow:hidden;">&#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847;</div>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="qx-outer" style="background:#050414;padding:32px 16px;">
+  <tr>
+    <td align="center">
+
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="qx-card" style="max-width:560px;background:#0F0F26;border:1px solid rgba(192,132,252,0.30);border-radius:22px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,0.75);">
+
+        <!-- LOGO BAR — holographic gradient violet→cyan -->
+        <tr>
+          <td align="left" style="padding:20px 24px 0 28px;background:#050414;background-image:linear-gradient(135deg,#050414 0%,#1E1B4B 32%,#06B6D4 68%,#C084FC 100%);">
+            <img src="cid:${BRAND_LOGO_CID}" alt="Qorix Markets" width="320" height="217" style="display:block;width:320px;max-width:90%;height:auto;border:0;outline:none;text-decoration:none;margin:0;" />
+          </td>
+        </tr>
+
+        <!-- HERO -->
+        <tr>
+          <td class="qx-hero-pad" align="center" style="padding:8px 32px 28px;background:#050414;background-image:linear-gradient(135deg,#050414 0%,#1E1B4B 32%,#06B6D4 68%,#C084FC 100%);">
+            <div style="display:inline-block;padding:6px 14px;border-radius:999px;background:rgba(186,230,253,0.20);border:1px solid rgba(186,230,253,0.55);font-size:10.5px;letter-spacing:2.4px;color:#BAE6FD;font-weight:700;text-transform:uppercase;margin-bottom:18px;">
+              <span style="display:inline-block;width:6px;height:6px;border-radius:999px;background:#67E8F9;box-shadow:0 0 8px rgba(103,232,249,0.95);vertical-align:middle;margin-right:6px;"></span>
+              <span style="vertical-align:middle;">Broadcast On-Chain · TRC20</span>
+            </div>
+            <div class="qx-hero-h" style="font-size:30px;line-height:1.18;font-weight:800;color:#FFFFFF;letter-spacing:-0.5px;max-width:440px;margin:0 auto;">
+              Funds On The Way
+            </div>
+            <div style="font-size:13.5px;color:#E0E7FF;margin-top:10px;font-weight:500;max-width:460px;margin-left:auto;margin-right:auto;line-height:1.5;">
+              ${safeFirstName}, your USDT withdrawal has been signed and broadcast to the Tron network. Funds typically arrive in <strong style="color:#FFFFFF;">1–3 minutes</strong> after confirmation.
+            </div>
+            <div style="width:48px;height:3px;background:linear-gradient(90deg,#67E8F9 0%,#C084FC 100%);margin:18px auto 0;border-radius:999px;"></div>
+          </td>
+        </tr>
+
+        <!-- TX hash centerpiece -->
+        <tr>
+          <td class="qx-tx-pad" style="padding:30px 32px 8px;">
+            <div style="font-size:10.5px;letter-spacing:2.4px;color:#67E8F9;font-weight:700;text-transform:uppercase;text-align:left;padding:0 0 14px 0;">
+              Transaction Receipt
+            </div>
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#0A0A1F;background-image:linear-gradient(180deg,#13132E 0%,#08081A 100%);border:1.5px solid rgba(192,132,252,0.40);border-radius:14px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.04),0 0 28px rgba(168,85,247,0.22);">
+
+              <!-- Amount centerpiece -->
+              <tr>
+                <td align="center" style="padding:26px 18px 18px;">
+                  <div style="font-size:11px;letter-spacing:2.0px;color:#A5B4FC;text-transform:uppercase;font-weight:700;margin-bottom:6px;">Amount Sent</div>
+                  <div class="qx-tx-amount" style="font-size:40px;line-height:1.05;font-weight:800;color:#FFFFFF;letter-spacing:-1px;">
+                    $${safeAmount} <span style="color:#67E8F9;font-weight:700;font-size:0.7em;">USDT</span>
+                  </div>
+                </td>
+              </tr>
+
+              <!-- Destination -->
+              <tr>
+                <td style="padding:14px 22px;border-top:1px solid rgba(192,132,252,0.18);">
+                  <div style="font-size:11px;letter-spacing:1.6px;color:#A5B4FC;text-transform:uppercase;font-weight:600;line-height:1;margin-bottom:6px;"><span style="margin-right:6px;">→</span>Destination Wallet</div>
+                  <div style="font-size:13px;color:#FFFFFF;font-weight:600;line-height:1.45;font-family:'SF Mono',Menlo,Consolas,monospace;letter-spacing:-0.2px;word-break:break-all;">${safeDestMasked}</div>
+                </td>
+              </tr>
+
+              <!-- TX hash -->
+              <tr>
+                <td style="padding:14px 22px;border-top:1px solid rgba(192,132,252,0.18);">
+                  <div style="font-size:11px;letter-spacing:1.6px;color:#A5B4FC;text-transform:uppercase;font-weight:600;line-height:1;margin-bottom:6px;"><span style="margin-right:6px;">⛓</span>Transaction Hash</div>
+                  <div class="qx-tx-hash" style="font-size:12px;color:#67E8F9;font-weight:600;line-height:1.5;font-family:'SF Mono',Menlo,Consolas,monospace;letter-spacing:-0.2px;word-break:break-all;">${safeTxFull}</div>
+                </td>
+              </tr>
+
+              <!-- Request id + timestamp -->
+              <tr>
+                <td style="padding:14px 22px 22px;border-top:1px solid rgba(192,132,252,0.18);">
+                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                    <tr>
+                      <td valign="top" style="padding-right:10px;">
+                        <div style="font-size:11px;letter-spacing:1.6px;color:#A5B4FC;text-transform:uppercase;font-weight:600;line-height:1;margin-bottom:6px;">Request ID</div>
+                        <div style="font-size:13px;color:#FFFFFF;font-weight:600;line-height:1.4;font-family:'SF Mono',Menlo,Consolas,monospace;">#${safeId}</div>
+                      </td>
+                      <td valign="top" align="right" style="padding-left:10px;">
+                        <div style="font-size:11px;letter-spacing:1.6px;color:#A5B4FC;text-transform:uppercase;font-weight:600;line-height:1;margin-bottom:6px;">Broadcast At</div>
+                        <div style="font-size:13px;color:#FFFFFF;font-weight:600;line-height:1.4;">${safeWhen}</div>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- CTA — view on Tronscan -->
+        <tr>
+          <td align="center" style="padding:24px 32px 12px;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td align="center" bgcolor="#7C3AED" style="border-radius:12px;background:#7C3AED;background-image:linear-gradient(135deg,#06B6D4 0%,#7C3AED 60%,#C084FC 100%);box-shadow:0 12px 28px rgba(124,58,237,0.45),inset 0 1px 0 rgba(255,255,255,0.18);">
+                  <a href="${tronscanUrl}" target="_blank" class="qx-cta" style="display:inline-block;padding:16px 32px;font-size:15px;font-weight:700;color:#FFFFFF;text-decoration:none;letter-spacing:0.4px;border-radius:12px;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+                    Track on Tronscan →
+                  </a>
+                </td>
+              </tr>
+            </table>
+            <div style="margin-top:10px;font-size:11.5px;color:#7B7E9A;line-height:1.5;">
+              Confirmations are visible on-chain within seconds.
+            </div>
+          </td>
+        </tr>
+
+        <!-- FOOTER -->
+        <tr>
+          <td class="qx-foot-pad" align="center" style="padding:30px 32px 28px;border-top:1px solid rgba(255,255,255,0.05);background:#03020E;">
+            <div style="font-size:13px;color:#67E8F9;margin-bottom:6px;font-weight:600;">
+              Trade smart 📈
+            </div>
+            <div style="font-size:11.5px;color:#3F3F66;line-height:1.7;">
+              © ${year} Qorix Markets · AI-Powered Trading<br/>
+              Need help? <a href="mailto:support@qorixmarkets.com" style="color:#67E8F9;text-decoration:none;">support@qorixmarkets.com</a>
+            </div>
+          </td>
+        </tr>
+
+      </table>
+
+      <div style="height:24px;line-height:24px;font-size:1px;">&nbsp;</div>
+    </td>
+  </tr>
+</table>
+</body>
+</html>`;
+}
+
+export async function sendUsdtWithdrawalSent(args: {
+  to: string;
+  name: string;
+  netAmount: number;
+  destinationAddress: string;
+  txHash: string;
+  requestId: string | number;
+  sentAt: Date;
+}): Promise<void> {
+  const { to, name, netAmount, destinationAddress, txHash, requestId, sentAt } = args;
+  const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const whenStr =
+    `${sentAt.getUTCDate()} ${MONTHS_SHORT[sentAt.getUTCMonth()]} ${sentAt.getUTCFullYear()} · ` +
+    `${String(sentAt.getUTCHours()).padStart(2, "0")}:${String(sentAt.getUTCMinutes()).padStart(2, "0")} UTC`;
+  const tronscanUrl = `https://tronscan.org/#/transaction/${encodeURIComponent(txHash)}`;
+
+  const subject = `Qorix Markets — $${netAmount.toFixed(2)} USDT broadcast on-chain ⛓`;
+  const preheader = `Your USDT withdrawal of $${netAmount.toFixed(2)} has been signed and broadcast to Tron. Funds typically arrive in 1–3 minutes.`;
+  const html = renderUsdtWithdrawalSentHtml({ preheader, name, netAmount, destinationAddress, txHash, requestId, sentAt });
+  const text =
+    `Funds On The Way — Broadcast On-Chain (TRC20)\n\n` +
+    `Hi ${name},\n\n` +
+    `Your USDT withdrawal has been signed and broadcast to the Tron network.\n` +
+    `Funds typically arrive in 1–3 minutes after network confirmation.\n\n` +
+    `Transaction Receipt:\n` +
+    `  Amount sent:        $${netAmount.toFixed(2)} USDT (TRC20)\n` +
+    `  Destination wallet: ${destinationAddress}\n` +
+    `  Transaction hash:   ${txHash}\n` +
+    `  Request ID:         #${requestId}\n` +
+    `  Broadcast at:       ${whenStr}\n\n` +
+    `Track on Tronscan:\n` +
+    `${tronscanUrl}\n\n` +
+    `— Qorix Markets`;
+
+  await sendEmail(to, subject, text, html);
+}
+
+// ---------------------------------------------------------------------------
+// #29 — USDT WITHDRAWAL REJECTED · FUNDS REFUNDED — gentle informational
+// ---------------------------------------------------------------------------
+// DUSTY-LAVENDER + WARM-IVORY theme: muted lavender-grey + soft warm ivory.
+// Tone: GENTLE / APOLOGETIC / REASSURING — money came back safely, no panic.
+// 29th unique palette. Distinct from dusty-plum/wine (more wine-red) and
+// pewter (more grey-silver) by the lavender undertone + ivory warmth.
+// Layout: hero pill ("REFUNDED") · refunded-amount card centerpiece showing
+// "credited back to: Main/Profit Balance" · common-reasons list · footer.
+// ---------------------------------------------------------------------------
+export function renderUsdtWithdrawalRejectedHtml(opts: {
+  preheader: string;
+  name: string;
+  refundedAmount: number;
+  refundSource: "main" | "profit";
+  requestId: string | number;
+  rejectedAt: Date;
+}): string {
+  const { preheader, name, refundedAmount, refundSource, requestId, rejectedAt } = opts;
+  const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const whenStr =
+    `${rejectedAt.getUTCDate()} ${MONTHS_SHORT[rejectedAt.getUTCMonth()]} ${rejectedAt.getUTCFullYear()} · ` +
+    `${String(rejectedAt.getUTCHours()).padStart(2, "0")}:${String(rejectedAt.getUTCMinutes()).padStart(2, "0")} UTC`;
+  const safeFirstName = escapeHtml((name || "there").trim().split(/\s+/)[0] || "there");
+  const safeAmount = escapeHtml(refundedAmount.toFixed(2));
+  const safeId = escapeHtml(String(requestId));
+  const safeWhen = escapeHtml(whenStr);
+  const balanceLabel = refundSource === "main" ? "Main Balance" : "Profit Balance";
+  const safeBalanceLabel = escapeHtml(balanceLabel);
+  const year = new Date().getFullYear();
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="x-apple-disable-message-reformatting" />
+<meta name="color-scheme" content="dark light" />
+<meta name="supported-color-schemes" content="dark light" />
+<title>Withdrawal returned — funds refunded</title>
+<style type="text/css">
+  @media only screen and (max-width:480px) {
+    .qx-outer { padding:20px 10px !important; }
+    .qx-card { border-radius:18px !important; }
+    .qx-hero-pad { padding:6px 18px 22px !important; }
+    .qx-hero-h { font-size:24px !important; line-height:1.22 !important; }
+    .qx-refund-pad { padding:24px 18px 4px !important; }
+    .qx-refund-amount { font-size:34px !important; }
+    .qx-foot-pad { padding:24px 18px 22px !important; }
+  }
+</style>
+</head>
+<body style="margin:0;padding:0;background:#0F0D14;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;">
+<div style="display:none;max-height:0;overflow:hidden;font-size:1px;line-height:1px;color:#0F0D14;opacity:0;">${escapeHtml(preheader)}</div>
+<div style="display:none;max-height:0;overflow:hidden;">&#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847;</div>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="qx-outer" style="background:#0F0D14;padding:32px 16px;">
+  <tr>
+    <td align="center">
+
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="qx-card" style="max-width:560px;background:#1A1822;border:1px solid rgba(250,240,226,0.22);border-radius:22px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,0.70);">
+
+        <!-- LOGO BAR -->
+        <tr>
+          <td align="left" style="padding:20px 24px 0 28px;background:#0F0D14;background-image:linear-gradient(135deg,#0F0D14 0%,#2A2535 38%,#6B5B7A 72%,#FAF0E2 100%);">
+            <img src="cid:${BRAND_LOGO_CID}" alt="Qorix Markets" width="320" height="217" style="display:block;width:320px;max-width:90%;height:auto;border:0;outline:none;text-decoration:none;margin:0;" />
+          </td>
+        </tr>
+
+        <!-- HERO -->
+        <tr>
+          <td class="qx-hero-pad" align="center" style="padding:8px 32px 28px;background:#0F0D14;background-image:linear-gradient(135deg,#0F0D14 0%,#2A2535 38%,#6B5B7A 72%,#FAF0E2 100%);">
+            <div style="display:inline-block;padding:6px 14px;border-radius:999px;background:rgba(250,240,226,0.18);border:1px solid rgba(250,240,226,0.50);font-size:10.5px;letter-spacing:2.4px;color:#FAF0E2;font-weight:700;text-transform:uppercase;margin-bottom:18px;">
+              ↩ Refunded · Money Returned Safely
+            </div>
+            <div class="qx-hero-h" style="font-size:30px;line-height:1.18;font-weight:800;color:#FFFFFF;letter-spacing:-0.5px;max-width:460px;margin:0 auto;">
+              Withdrawal Couldn't Be Processed
+            </div>
+            <div style="font-size:13.5px;color:#FAF0E2;margin-top:10px;font-weight:500;max-width:460px;margin-left:auto;margin-right:auto;line-height:1.5;">
+              ${safeFirstName}, your withdrawal request didn't go through this time — but the <strong style="color:#FFFFFF;">full amount has been returned to your account</strong>.
+            </div>
+            <div style="width:48px;height:3px;background:linear-gradient(90deg,#FAF0E2 0%,#6B5B7A 100%);margin:18px auto 0;border-radius:999px;"></div>
+          </td>
+        </tr>
+
+        <!-- REFUND CARD centerpiece -->
+        <tr>
+          <td class="qx-refund-pad" align="center" style="padding:30px 24px 4px;">
+            <div style="font-size:10.5px;letter-spacing:2.4px;color:#FAF0E2;font-weight:700;text-transform:uppercase;text-align:left;padding:0 8px 12px 8px;">
+              Amount Refunded
+            </div>
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td align="center" style="padding:30px 18px;background:#15121C;background-image:linear-gradient(180deg,#1F1B27 0%,#13101A 100%);border:1.5px solid rgba(250,240,226,0.32);border-radius:14px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.04),0 0 24px rgba(107,91,122,0.22);">
+
+                  <!-- Refund pill -->
+                  <div style="display:inline-block;padding:5px 12px;border-radius:999px;background:rgba(250,240,226,0.14);border:1px solid rgba(250,240,226,0.55);font-size:10px;letter-spacing:2.0px;color:#FFF6E0;font-weight:800;text-transform:uppercase;margin-bottom:14px;">
+                    ↩ Credited back
+                  </div>
+                  <!-- Big amount -->
+                  <div class="qx-refund-amount" style="font-size:40px;line-height:1.05;font-weight:800;color:#FFFFFF;letter-spacing:-1px;">
+                    $${safeAmount} <span style="color:#FAF0E2;font-weight:700;font-size:0.55em;">USDT</span>
+                  </div>
+                  <!-- Destination balance caption -->
+                  <div style="margin-top:14px;font-size:13px;color:#FAF0E2;font-weight:600;line-height:1.5;">
+                    Returned to your <strong style="color:#FFFFFF;">${safeBalanceLabel}</strong>
+                  </div>
+                  <div style="margin-top:6px;font-size:11.5px;color:#8C7E96;font-weight:500;line-height:1.5;letter-spacing:0.3px;">
+                    Request #${safeId} · ${safeWhen}
+                  </div>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- Common reasons + next steps -->
+        <tr>
+          <td style="padding:24px 32px 8px;">
+            <div style="background:rgba(250,240,226,0.05);border-left:2px solid rgba(250,240,226,0.45);border-radius:6px;padding:14px 16px;font-size:12.5px;line-height:1.65;color:#A89DB2;">
+              <div style="color:#FAF0E2;font-weight:600;margin-bottom:8px;">Common reasons withdrawals are returned</div>
+              Incomplete KYC · risk-management hold · invalid destination wallet · suspicious activity flag.
+              <div style="margin-top:10px;color:#FAF0E2;font-weight:600;">Next steps</div>
+              You can submit a new withdrawal once any flagged step is resolved. For details on this specific request, share <strong style="color:#FFFFFF;">#${safeId}</strong> with us at <a href="mailto:support@qorixmarkets.com" style="color:#FAF0E2;text-decoration:none;font-weight:600;">support@qorixmarkets.com</a>.
+            </div>
+          </td>
+        </tr>
+
+        <!-- FOOTER -->
+        <tr>
+          <td class="qx-foot-pad" align="center" style="padding:30px 32px 28px;border-top:1px solid rgba(255,255,255,0.05);background:#08070D;">
+            <div style="font-size:13px;color:#FAF0E2;margin-bottom:6px;font-weight:600;">
+              Trade smart 📈
+            </div>
+            <div style="font-size:11.5px;color:#4A4253;line-height:1.7;">
+              © ${year} Qorix Markets · AI-Powered Trading<br/>
+              Need help? <a href="mailto:support@qorixmarkets.com" style="color:#FAF0E2;text-decoration:none;">support@qorixmarkets.com</a>
+            </div>
+          </td>
+        </tr>
+
+      </table>
+
+      <div style="height:24px;line-height:24px;font-size:1px;">&nbsp;</div>
+    </td>
+  </tr>
+</table>
+</body>
+</html>`;
+}
+
+export async function sendUsdtWithdrawalRejected(args: {
+  to: string;
+  name: string;
+  refundedAmount: number;
+  refundSource: "main" | "profit";
+  requestId: string | number;
+  rejectedAt: Date;
+}): Promise<void> {
+  const { to, name, refundedAmount, refundSource, requestId, rejectedAt } = args;
+  const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const whenStr =
+    `${rejectedAt.getUTCDate()} ${MONTHS_SHORT[rejectedAt.getUTCMonth()]} ${rejectedAt.getUTCFullYear()} · ` +
+    `${String(rejectedAt.getUTCHours()).padStart(2, "0")}:${String(rejectedAt.getUTCMinutes()).padStart(2, "0")} UTC`;
+  const balanceLabel = refundSource === "main" ? "Main Balance" : "Profit Balance";
+
+  const subject = `Qorix Markets — $${refundedAmount.toFixed(2)} USDT refunded to your ${balanceLabel.toLowerCase()} ↩`;
+  const preheader = `Your withdrawal couldn't be processed — the full amount has been returned to your ${balanceLabel.toLowerCase()}.`;
+  const html = renderUsdtWithdrawalRejectedHtml({
+    preheader, name, refundedAmount, refundSource, requestId, rejectedAt,
+  });
+  const text =
+    `Withdrawal Couldn't Be Processed — Funds Refunded\n\n` +
+    `Hi ${name},\n\n` +
+    `Your withdrawal request didn't go through this time, but the full\n` +
+    `amount has been returned to your account.\n\n` +
+    `Refund Receipt:\n` +
+    `  Amount refunded: $${refundedAmount.toFixed(2)} USDT\n` +
+    `  Returned to:     ${balanceLabel}\n` +
+    `  Request ID:      #${requestId}\n` +
+    `  At:              ${whenStr}\n\n` +
+    `Common reasons: incomplete KYC · risk-management hold · invalid\n` +
+    `destination wallet · suspicious activity flag.\n\n` +
+    `Next steps: You can submit a new withdrawal once any flagged step\n` +
+    `is resolved. For details on this specific request, share #${requestId}\n` +
+    `with us at support@qorixmarkets.com.\n\n` +
+    `— Qorix Markets`;
+
+  await sendEmail(to, subject, text, html);
+}

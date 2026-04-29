@@ -36,6 +36,11 @@ import {
   renderUsdtWithdrawalRequestedHtml,
   renderInrWithdrawalSentHtml,
   renderKycPersonalVerifiedHtml,
+  renderKycSubmittedHtml,
+  renderKycVerifiedHtml,
+  renderKycRejectedHtml,
+  renderUsdtWithdrawalSentHtml,
+  renderUsdtWithdrawalRejectedHtml,
 } from "../lib/email-service";
 
 const DEFAULT_TO = "safepayu@gmail.com";
@@ -667,6 +672,117 @@ const TEMPLATES: Record<string, () => Preview> = {
         preheader: `[PREVIEW] Your personal details (Lv.1) are verified. Two short steps left to unlock full account capabilities.`,
         name,
         verifiedAt,
+      }),
+    };
+  },
+
+  "kyc-submitted-identity": () => {
+    const name = "Prem Kumar";
+    const submittedAt = new Date();
+    return {
+      subject: "[PREVIEW] Qorix Markets — Identity Verification received · under review (Lv.2) (graphite-teal)",
+      text: `[DESIGN PREVIEW]\n\nKYC #25 — Lv.2 Identity Submitted (under-review).\nGraphite + electric-teal palette. Scan-bar centerpiece.\n— Qorix Markets`,
+      html: renderKycSubmittedHtml({
+        preheader: `[PREVIEW] We received your identity document. Decision typically arrives within 24 hours.`,
+        name,
+        kind: "identity",
+        submittedAt,
+      }),
+    };
+  },
+
+  "kyc-submitted-address": () => {
+    const name = "Prem Kumar";
+    const submittedAt = new Date();
+    return {
+      subject: "[PREVIEW] Qorix Markets — Address Verification received · under review (Lv.3) (graphite-teal)",
+      text: `[DESIGN PREVIEW]\n\nKYC #25 — Lv.3 Address Submitted (parameterization variant).\n— Qorix Markets`,
+      html: renderKycSubmittedHtml({
+        preheader: `[PREVIEW] We received your address proof. Decision typically arrives within 24 hours.`,
+        name,
+        kind: "address",
+        submittedAt,
+      }),
+    };
+  },
+
+  "kyc-verified-identity": () => {
+    const name = "Prem Kumar";
+    const verifiedAt = new Date();
+    return {
+      subject: "[PREVIEW] Qorix Markets — Identity verified ✓ · withdrawals unlocked (Lv.2) (imperial-plum-gold)",
+      text: `[DESIGN PREVIEW]\n\nKYC #26 — Lv.2 Identity Verified.\nImperial-plum + gold-leaf. VERIFIED stamp + capability-unlock card.\n— Qorix Markets`,
+      html: renderKycVerifiedHtml({
+        preheader: `[PREVIEW] Identity verified. Withdrawals are now enabled on your account.`,
+        name,
+        kind: "identity",
+        verifiedAt,
+      }),
+    };
+  },
+
+  "kyc-verified-address": () => {
+    const name = "Prem Kumar";
+    const verifiedAt = new Date();
+    return {
+      subject: "[PREVIEW] Qorix Markets — Address verified ✓ · account fully verified (Lv.3) (imperial-plum-gold)",
+      text: `[DESIGN PREVIEW]\n\nKYC #26 — Lv.3 Address Verified (parameterization variant — account fully verified path).\n— Qorix Markets`,
+      html: renderKycVerifiedHtml({
+        preheader: `[PREVIEW] Address verified. Your account is now fully verified across all three tiers.`,
+        name,
+        kind: "address",
+        verifiedAt,
+      }),
+    };
+  },
+
+  "kyc-rejected-identity": () => {
+    const name = "Prem Kumar";
+    const rejectedAt = new Date();
+    return {
+      subject: "[PREVIEW] Qorix Markets — Identity Verification needs re-submit (Lv.2) (burnt-sienna)",
+      text: `[DESIGN PREVIEW]\n\nKYC #27 — Lv.2 Identity Rejected with reason.\nBurnt-sienna + warm-sand palette. Reason highlight + re-submit CTA.\n— Qorix Markets`,
+      html: renderKycRejectedHtml({
+        preheader: `[PREVIEW] Your identity document didn't pass review. The fix is usually small — re-submit when ready.`,
+        name,
+        kind: "identity",
+        reason: "Photo is blurry — three of the four corners of the ID are not clearly visible. Please re-take in good lighting with the entire document inside the frame.",
+        rejectedAt,
+      }),
+    };
+  },
+
+  "usdt-withdrawal-sent": () => {
+    const name = "Prem Kumar";
+    const sentAt = new Date();
+    return {
+      subject: "[PREVIEW] Qorix Markets — $250.00 USDT broadcast on-chain ⛓ (holographic)",
+      text: `[DESIGN PREVIEW]\n\nAdmin email #28 — USDT Withdrawal SENT on-chain.\nHolographic midnight + iridescent violet-cyan. TX hash centerpiece + Tronscan CTA.\n— Qorix Markets`,
+      html: renderUsdtWithdrawalSentHtml({
+        preheader: `[PREVIEW] Your USDT withdrawal of $250.00 has been signed and broadcast to Tron. Funds typically arrive in 1–3 minutes.`,
+        name,
+        netAmount: 250,
+        destinationAddress: "TQrZ8sV3kMwKtZ1n9dXvBeYpFqJ4yNxL2A",
+        txHash: "a7f3c9d1e2b8456789abcdef0123456789fedcba9876543210abcdef01234567",
+        requestId: 4821,
+        sentAt,
+      }),
+    };
+  },
+
+  "usdt-withdrawal-rejected": () => {
+    const name = "Prem Kumar";
+    const rejectedAt = new Date();
+    return {
+      subject: "[PREVIEW] Qorix Markets — $250.00 USDT refunded to your main balance ↩ (dusty-lavender)",
+      text: `[DESIGN PREVIEW]\n\nAdmin email #29 — USDT Withdrawal REJECTED · Funds REFUNDED.\nDusty-lavender + warm-ivory. Refunded-balance card showing destination (Main/Profit).\n— Qorix Markets`,
+      html: renderUsdtWithdrawalRejectedHtml({
+        preheader: `[PREVIEW] Your withdrawal couldn't be processed — the full amount has been returned to your main balance.`,
+        name,
+        refundedAmount: 250,
+        refundSource: "main",
+        requestId: 4821,
+        rejectedAt,
       }),
     };
   },
