@@ -26,6 +26,7 @@ import {
   renderAddressVerifiedHtml,
   renderAddressRejectedHtml,
   renderIdentitySubmittedHtml,
+  renderAddressSubmittedHtml,
 } from "../lib/email-service";
 
 const DEFAULT_TO = "safepayu@gmail.com";
@@ -353,6 +354,31 @@ const TEMPLATES: Record<string, () => Preview> = {
         preheader: `[PREVIEW] Your Passport is with our compliance team — we'll have an answer within 24 hours`,
         name,
         documentType,
+        submittedAt,
+      }),
+    };
+  },
+
+  "address-submitted": () => {
+    const name = "Prem Kumar";
+    const addressCity = "Mumbai";
+    const addressState = "Maharashtra";
+    const addressCountry = "India";
+    const submittedAt = new Date();
+    return {
+      subject: "[PREVIEW] Qorix Markets — Address Logged for Review (Lv.3 pending) (new design)",
+      text:
+        `[DESIGN PREVIEW]\n\n` +
+        `Lv.3 Address submitted by ${name} — ${addressCity}, ${addressState}, ${addressCountry}.\n\n` +
+        `Test render of the new pewter "Logged for Review" template.\n` +
+        `Reply with feedback.\n\n` +
+        `— Qorix Markets`,
+      html: renderAddressSubmittedHtml({
+        preheader: `[PREVIEW] Your Lv.3 address proof (${addressCity}, ${addressState}, ${addressCountry}) is in the compliance queue — decision usually within 24 hours`,
+        name,
+        addressCity,
+        addressState,
+        addressCountry,
         submittedAt,
       }),
     };
