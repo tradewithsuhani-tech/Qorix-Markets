@@ -165,8 +165,14 @@ export default function WalletPage() {
 
   const transferMutation = useTransferToTrading({
     mutation: {
-      onSuccess: () => {
-        toast({ title: "Transfer successful", description: "Funds moved to your trading balance." });
+      onSuccess: (_data, variables) => {
+        const wasToMain = variables?.data?.direction === "to_main";
+        toast({
+          title: "Transfer successful",
+          description: wasToMain
+            ? "Funds moved back to your main balance."
+            : "Funds moved to your trading balance.",
+        });
         queryClient.invalidateQueries({ queryKey: getGetWalletQueryKey() });
         setTransferAmount("");
       },
