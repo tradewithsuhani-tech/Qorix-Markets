@@ -45,7 +45,10 @@ export default function MerchantWithdrawalsPage() {
   const { data, isLoading } = useQuery<{ withdrawals: InrWithdrawal[] }>({
     queryKey: ["merchant-withdrawals", tab],
     queryFn: () => merchantAuthFetch(merchantApiUrl(`/merchant/inr-withdrawals?status=${tab}`)),
-    refetchInterval: tab === "pending" ? 15_000 : false,
+    refetchInterval: tab === "pending" ? 10_000 : false,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
+    staleTime: 0,
   });
 
   const claim = useMutation({

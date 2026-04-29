@@ -42,7 +42,10 @@ export default function MerchantDepositsPage() {
   const { data, isLoading } = useQuery<{ deposits: MerchantInrDeposit[] }>({
     queryKey: ["merchant-deposits", tab],
     queryFn: () => merchantAuthFetch(merchantApiUrl(`/merchant/inr-deposits?status=${tab}`)),
-    refetchInterval: tab === "pending" ? 15_000 : false,
+    refetchInterval: tab === "pending" ? 10_000 : false,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
+    staleTime: 0,
   });
 
   const approve = useMutation({

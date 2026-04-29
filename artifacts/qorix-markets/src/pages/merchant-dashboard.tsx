@@ -27,7 +27,10 @@ export default function MerchantDashboardPage() {
   const { data, isLoading } = useQuery<DashboardResponse>({
     queryKey: ["merchant-dashboard"],
     queryFn: () => merchantAuthFetch<DashboardResponse>(merchantApiUrl("/merchant/dashboard")),
-    refetchInterval: 30_000,
+    refetchInterval: 10_000,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
+    staleTime: 0,
   });
 
   const cards = [
