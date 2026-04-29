@@ -1665,8 +1665,7 @@ export function DemoDashboardBody({
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.22, duration: 0.4 }}
-              className="glass-card p-5 rounded-2xl flex flex-col w-full"
-              style={{ minHeight: swapEquityWithRolling && hideLiveTrades ? 460 : 340 }}
+              className="glass-card p-5 rounded-2xl flex flex-col w-full h-[460px]"
             >
               {swapEquityWithRolling ? rollingReturnsBody : equityCurveBody}
             </motion.div>
@@ -1678,8 +1677,7 @@ export function DemoDashboardBody({
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.3, duration: 0.4 }}
-            className="glass-card p-5 rounded-2xl flex flex-col"
-            style={{ minHeight: 340 }}
+            className="glass-card p-5 rounded-2xl flex flex-col h-[460px] overflow-hidden"
           >
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-semibold">Live Trades</h3>
