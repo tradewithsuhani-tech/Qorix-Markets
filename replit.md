@@ -1367,3 +1367,104 @@ the banner even though the session is genuinely blocked.
 - Main agent CANNOT use git CLI — all pushes via GitHub Git Data API
   (`/tmp/push_batch*.mjs` template).
 - Main agent CANNOT do DB writes.
+
+### Batch 9.1 (Apr 29, 2026)
+
+**Title:** Hybrid captcha system — Part 1 of 4: slider puzzle (UX default)
+
+**Why:** B9 hybrid spec calls for a slider puzzle as the smooth-UX
+default captcha (low-risk users), with reCAPTCHA reserved for
+risk-elevated flows (B9.2 risk score; B9.3 escalation glue). Login
+2FA + withdrawal OTP from the spec are already LIVE — no change
+there. B9.4 will add stricter trajectory/jitter checks that piggyback
+on the same component.
+
+**B9.1 — 4 source changes, ZERO schema, ZERO DB writes:**
+
+1. `artifacts/api-server/src/lib/slider-captcha-service.ts` (NEW)
+   - Issues a stateless HMAC-signed challenge envelope
+     `{rand.targetX.issuedAt.sig}`.
+   - Verifies the user's drag solution: ±5 px tolerance to targetX,
+     ≥5 trajectory samples, 200–15 000 ms total duration, y-variance
+     ≥ 0.5 (perfectly horizontal y = bot signature), monotonic
+     timestamps.
+   - On success issues a 90 s `slider.v1.<rand>.<verifiedAt>.<sig>`
+     token.
+   - `consumeSliderToken()` exported for B9.3 wiring into
+     `verifyCaptcha()`.
+   - HMAC key derived from `JWT_SECRET` so prod is automatically
+     protected; dev fallback warns loudly. Multi-instance safe
+     (BOM 2x + SIN 1x): challenge envelope is stateless; per-instance
+     consumed-tokens set bounds replay within a 10-minute window per
+     instance.
+
+2. `artifacts/api-server/src/routes/captcha.ts` (NEW)
+   - `POST /api/captcha/slider/challenge` issues a fresh challenge.
+   - `POST /api/captcha/slider/verify` accepts
+     `{challengeId, finalX, trajectory}` and returns
+     `{ok: true, token}` or `{ok: false, error}` (HTTP 200, vendor
+     convention — client treats it as "wrong answer, try again"
+     rather than network/server error).
+   - Mounted in the public block in `routes/index.ts` because both
+     endpoints need to be reachable PRE-auth (signup/login forms
+     must solve the puzzle before they have a JWT).
+
+3. `artifacts/api-server/src/routes/index.ts` (modified)
+   - New `import captchaRouter from "./captcha";`.
+   - Mounted between `publicRouter` and `authRouter` with a comment
+     documenting why it lives in the public block.
+
+4. `artifacts/qorix-markets/src/components/captcha/slider-puzzle-captcha.tsx` (NEW)
+   - Self-contained React component:
+     `<SliderPuzzleCaptcha onSuccess={fn} />`.
+   - Fetches challenge on mount, renders draggable piece + dashed
+     slot at server-returned `targetX`, captures pointer-event
+     trajectory (mouse + touch via `touch-action: none`).
+   - Posts the trajectory + finalX on pointer up; on success calls
+     `onSuccess(token)` so the parent form can submit the token as
+     `captchaToken` (B9.3 wires it into signup/login).
+   - Uses `${import.meta.env.BASE_URL}api` pattern (same as
+     `login.tsx`). Plain `fetch` (NOT `authFetch`) since this is
+     pre-auth. Strict-mode guard prevents double-fetch in React dev
+     mode.
+
+**Net behavior:**
+
+- New endpoints `POST /api/captcha/slider/{challenge,verify}`
+  reachable publicly — issue and verify slider tokens.
+- New `<SliderPuzzleCaptcha>` component available to consumers; NOT
+  yet wired into signup/login (that is B9.3's escalation glue).
+- All existing captcha flow (reCAPTCHA v3 on `/auth/signup` and
+  `/auth/login`) → completely unchanged. `verifyCaptcha()` still
+  only accepts reCAPTCHA tokens; B9.3 will extend it to also accept
+  `slider.v1.*` tokens via `consumeSliderToken()`.
+- All other flows (deposit, withdraw, 2FA, KYC, transfer, trading,
+  etc.) → completely unchanged.
+
+**Validation:**
+
+- `pnpm --filter @workspace/api-server typecheck` → clean (after
+  rebuilding stale `lib/db` project-references dist; not introduced
+  by B9.1).
+- `pnpm --filter @workspace/qorix-markets typecheck` → clean.
+- API server restarted, no startup errors.
+- Local end-to-end smoke (script `/tmp/slider_smoke.mjs`):
+  - Valid solve → `slider.v1.*` token issued ✅
+  - Off-target by 20 px → `{ok:false, error:"Off target"}` ✅
+  - Flat-y bot (y constant) →
+    `{ok:false, error:"Trajectory too rigid"}` ✅
+  - Too-fast (50 ms total) → `{ok:false, error:"Too fast"}` ✅
+- Production validation pending CI deploy.
+
+### Roadmap (Phase A continued, B9 series)
+
+- ~~**B9.1**: hybrid captcha — slider puzzle component + verify
+  endpoint~~ ✅ LIVE.
+- **B9.2**: risk score engine — SELECT-only signals (failed-attempts
+  in last 1 h, IP repetition, device freshness) → `low|medium|high`.
+- **B9.3**: risk-based escalation glue — `verifyCaptcha()` extended
+  to accept `slider.v1.*` tokens; signup/login form picks slider vs.
+  reCAPTCHA based on risk tier.
+- **B9.4**: behavior-signal hardening — trajectory linearity,
+  acceleration profile, keystroke jitter; tighter replay bound for
+  slider tokens.

@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import healthRouter from "./health";
+import captchaRouter from "./captcha";
 import authRouter from "./auth";
 import walletRouter from "./wallet";
 import transactionsRouter from "./transactions";
@@ -50,6 +51,13 @@ const router: IRouter = Router();
 // with 401 Unauthorized before ever reaching the intended handler.
 router.use(healthRouter);
 router.use(publicRouter);
+// Slider captcha (B9.1) — fully public; both endpoints
+// (POST /captcha/slider/challenge, /verify) need to be reachable
+// PRE-auth so signup/login forms can solve the puzzle before they
+// have a token. Mounted in the public block to make the public
+// intent obvious. State is in-memory + HMAC-signed envelopes (see
+// lib/slider-captcha-service.ts) — multi-instance safe.
+router.use(captchaRouter);
 // router.use(cryptoDepositRouter); // DISABLED — see import comment above
 router.use(authRouter);
 router.use(googleOauthRouter); // public OAuth — must be before auth-gated routers
