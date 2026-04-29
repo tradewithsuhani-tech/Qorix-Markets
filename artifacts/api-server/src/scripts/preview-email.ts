@@ -16,6 +16,7 @@ import {
   renderWithdrawalOtpHtml,
   renderDeviceLoginOtpHtml,
   renderWelcomeEmailHtml,
+  renderNewDeviceLoginAlertHtml,
 } from "../lib/email-service";
 
 const DEFAULT_TO = "safepayu@gmail.com";
@@ -95,6 +96,30 @@ const TEMPLATES: Record<string, () => Preview> = {
         firstName,
         email: DEFAULT_TO,
         referralCode: fakeReferral,
+      }),
+    };
+  },
+
+  "device-alert": () => {
+    const name = "Prem";
+    const whenUtc = new Date();
+    return {
+      subject: "[PREVIEW] Qorix Markets — New device signed in (new design)",
+      text:
+        `[DESIGN PREVIEW]\n\n` +
+        `New device signed in to your Qorix Markets account.\n\n` +
+        `Test render of the new crimson "shield" security alert template.\n` +
+        `Reply with feedback.\n\n` +
+        `— Qorix Markets`,
+      html: renderNewDeviceLoginAlertHtml({
+        preheader: "[PREVIEW] Sign-in from Mumbai, India · Chrome on macOS — was this you?",
+        name,
+        ip: "203.0.113.42",
+        city: "Mumbai",
+        country: "India",
+        browser: "Chrome 138",
+        os: "macOS 15.2",
+        whenUtc,
       }),
     };
   },

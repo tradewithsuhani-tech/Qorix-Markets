@@ -1204,9 +1204,193 @@ export async function getDevOtp(email: string, purpose: string): Promise<string 
 }
 
 // ---------------------------------------------------------------------------
-// New-device login alert (Exness/Vantage style). Fires the FIRST time a
-// user signs in from a fingerprint that's never been seen before for them.
-// Caller decides when to fire — see lib/device-tracking.ts.
+// New-Device Login ALERT — UNIQUE crimson/coral "shield" security design.
+// Fires the FIRST time a user signs in from a fingerprint that's never been
+// seen before. Different from the device-login OTP (sapphire/calm — that one
+// asks for a code BEFORE login). This one is informational, sent AFTER a
+// successful sign-in, with a strong "wasn't me — secure account" CTA.
+//
+// Visual differentiators (vs OTPs / welcome):
+//   • crimson/coral palette — alert without being aggressive (red-400 family)
+//   • "🛡️ NEW SIGN-IN DETECTED" hero pill + "New Device Signed In" headline
+//   • Premium device-snapshot card (📍 location · 🌐 IP · 🖥️ device · 🕐 time)
+//   • PRIMARY red CTA: "Wasn't Me — Secure My Account" → settings/security
+//   • Secondary muted "Yes, this was me — dismiss" reassurance line
+//   • "Stay safe out there 🛡️" footer
+// ---------------------------------------------------------------------------
+export function renderNewDeviceLoginAlertHtml(opts: {
+  preheader: string;
+  name: string;
+  ip: string;
+  city: string | null;
+  country: string | null;
+  browser: string;
+  os: string;
+  whenUtc: Date;
+}): string {
+  const { preheader, name, ip, city, country, browser, os, whenUtc } = opts;
+  const cityLine = city ? (country ? `${city}, ${country}` : city) : country || "Unknown";
+  const whenStr = whenUtc.toISOString().replace("T", " ").slice(0, 19) + " (UTC)";
+  const safeFirstName = escapeHtml((name || "there").trim().split(/\s+/)[0] || "there");
+  const safeCity = escapeHtml(cityLine);
+  const safeIp = escapeHtml(ip);
+  const safeBrowser = escapeHtml(browser);
+  const safeOs = escapeHtml(os);
+  const safeWhen = escapeHtml(whenStr);
+  const year = new Date().getFullYear();
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="x-apple-disable-message-reformatting" />
+<meta name="color-scheme" content="dark light" />
+<meta name="supported-color-schemes" content="dark light" />
+<title>New device signed in — Qorix Markets</title>
+<style type="text/css">
+  @media only screen and (max-width:480px) {
+    .qx-outer { padding:20px 10px !important; }
+    .qx-card { border-radius:18px !important; }
+    .qx-hero-pad { padding:6px 18px 22px !important; }
+    .qx-hero-h { font-size:24px !important; line-height:1.22 !important; }
+    .qx-intro { padding:24px 22px 4px !important; font-size:14px !important; }
+    .qx-snap-pad { padding:18px 18px 6px !important; }
+    .qx-snap-row td { padding:10px 14px !important; font-size:12.5px !important; }
+    .qx-cta-pad { padding:24px 18px 6px !important; }
+    .qx-cta { padding:14px 26px !important; font-size:14px !important; }
+    .qx-foot-pad { padding:24px 18px 22px !important; }
+  }
+</style>
+</head>
+<body style="margin:0;padding:0;background:#0F0608;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;">
+<div style="display:none;max-height:0;overflow:hidden;font-size:1px;line-height:1px;color:#0F0608;opacity:0;">${escapeHtml(preheader)}</div>
+<div style="display:none;max-height:0;overflow:hidden;">&#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847;</div>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="qx-outer" style="background:#0F0608;padding:32px 16px;">
+  <tr>
+    <td align="center">
+
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="qx-card" style="max-width:560px;background:#1A0A0E;border:1px solid rgba(248,113,113,0.30);border-radius:22px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,0.55);">
+
+        <!-- LOGO BAR — crimson alert gradient (unique to security alert) -->
+        <tr>
+          <td align="left" style="padding:20px 24px 0 28px;background:#0F0608;background-image:linear-gradient(135deg,#0F0608 0%,#2D0F1A 45%,#4A1325 80%,#7F1D1D 100%);">
+            <img src="cid:${BRAND_LOGO_CID}" alt="Qorix Markets" width="320" height="217" style="display:block;width:320px;max-width:90%;height:auto;border:0;outline:none;text-decoration:none;margin:0;" />
+          </td>
+        </tr>
+
+        <!-- HERO — alert pill + headline + crimson divider -->
+        <tr>
+          <td class="qx-hero-pad" align="center" style="padding:8px 32px 28px;background:#0F0608;background-image:linear-gradient(135deg,#0F0608 0%,#2D0F1A 45%,#4A1325 80%,#7F1D1D 100%);">
+            <div style="display:inline-block;padding:6px 14px;border-radius:999px;background:rgba(248,113,113,0.18);border:1px solid rgba(248,113,113,0.5);font-size:10.5px;letter-spacing:2.4px;color:#FCA5A5;font-weight:700;text-transform:uppercase;margin-bottom:18px;">
+              🛡️ New Sign-In Detected
+            </div>
+            <div class="qx-hero-h" style="font-size:30px;line-height:1.18;font-weight:800;color:#FFFFFF;letter-spacing:-0.5px;max-width:440px;margin:0 auto;">
+              New Device Signed In
+            </div>
+            <div style="font-size:13.5px;color:#FCA5A5;margin-top:10px;font-weight:500;">
+              ${safeFirstName}, was this you?
+            </div>
+            <div style="width:48px;height:3px;background:linear-gradient(90deg,#F87171 0%,#DC2626 100%);margin:18px auto 0;border-radius:999px;"></div>
+          </td>
+        </tr>
+
+        <!-- INTRO COPY -->
+        <tr>
+          <td class="qx-intro" align="center" style="padding:30px 36px 8px;color:#CBD5E1;font-size:14.5px;line-height:1.7;">
+            We noticed a sign-in to your Qorix Markets account from a device
+            you haven't used before. <strong style="color:#FFFFFF;">If this was you, no action needed</strong> —
+            your account is safe. If not, secure it right away below.
+          </td>
+        </tr>
+
+        <!-- DEVICE SNAPSHOT CARD — 4 rows with icons -->
+        <tr>
+          <td class="qx-snap-pad" style="padding:24px 32px 4px;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#15080A;background-image:linear-gradient(180deg,#15080A 0%,#1A0A0E 100%);border:1px solid rgba(248,113,113,0.22);border-radius:14px;">
+              <tr>
+                <td align="center" style="padding:18px 24px 6px;">
+                  <div style="display:inline-block;padding:5px 12px;border-radius:999px;background:rgba(248,113,113,0.10);border:1px solid rgba(248,113,113,0.32);font-size:10px;letter-spacing:2px;color:#FCA5A5;font-weight:700;text-transform:uppercase;margin-bottom:6px;">
+                    Sign-In Details
+                  </div>
+                </td>
+              </tr>
+              <tr class="qx-snap-row">
+                <td style="padding:12px 22px;font-size:13px;color:#94A3B8;border-top:1px solid rgba(248,113,113,0.12);">📍&nbsp; Location</td>
+                <td style="padding:12px 22px;font-size:13.5px;color:#FFFFFF;text-align:right;font-weight:600;border-top:1px solid rgba(248,113,113,0.12);">${safeCity}</td>
+              </tr>
+              <tr class="qx-snap-row">
+                <td style="padding:12px 22px;font-size:13px;color:#94A3B8;border-top:1px solid rgba(248,113,113,0.12);">🌐&nbsp; IP Address</td>
+                <td style="padding:12px 22px;font-size:13.5px;color:#FFFFFF;text-align:right;font-family:'SF Mono','Menlo','Consolas',monospace;font-weight:600;border-top:1px solid rgba(248,113,113,0.12);">${safeIp}</td>
+              </tr>
+              <tr class="qx-snap-row">
+                <td style="padding:12px 22px;font-size:13px;color:#94A3B8;border-top:1px solid rgba(248,113,113,0.12);">🖥️&nbsp; Device</td>
+                <td style="padding:12px 22px;font-size:13.5px;color:#FFFFFF;text-align:right;font-weight:600;border-top:1px solid rgba(248,113,113,0.12);">${safeBrowser} · ${safeOs}</td>
+              </tr>
+              <tr class="qx-snap-row">
+                <td style="padding:12px 22px 18px;font-size:13px;color:#94A3B8;border-top:1px solid rgba(248,113,113,0.12);">🕐&nbsp; Signed In At</td>
+                <td style="padding:12px 22px 18px;font-size:13.5px;color:#FFFFFF;text-align:right;font-weight:600;border-top:1px solid rgba(248,113,113,0.12);">${safeWhen}</td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- PRIMARY CTA — "Wasn't Me — Secure My Account" -->
+        <tr>
+          <td class="qx-cta-pad" align="center" style="padding:28px 32px 8px;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td align="center" style="border-radius:12px;background-image:linear-gradient(135deg,#F87171 0%,#DC2626 100%);background-color:#DC2626;box-shadow:0 8px 28px rgba(220,38,38,0.45);">
+                  <a href="https://qorixmarkets.com/settings" target="_blank" class="qx-cta" style="display:inline-block;padding:16px 38px;font-size:15px;font-weight:700;color:#FFFFFF;text-decoration:none;letter-spacing:0.4px;border-radius:12px;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+                    Wasn't Me — Secure My Account
+                  </a>
+                </td>
+              </tr>
+            </table>
+            <div style="margin-top:14px;font-size:12px;color:#64748B;line-height:1.6;">
+              Or open <strong style="color:#94A3B8;">Settings → Security</strong> to change your password.
+            </div>
+          </td>
+        </tr>
+
+        <!-- "Yes it was me" reassurance + support -->
+        <tr>
+          <td style="padding:22px 32px 8px;">
+            <div style="background:rgba(248,113,113,0.04);border-left:2px solid rgba(248,113,113,0.5);border-radius:6px;padding:12px 16px;font-size:12.5px;line-height:1.6;color:#94A3B8;">
+              <strong style="color:#FCA5A5;">Yes, that was me. </strong>
+              No action needed — you can safely ignore this email. We send these alerts whenever we see a sign-in from a brand-new device, so you stay in the loop.
+            </div>
+          </td>
+        </tr>
+
+        <!-- FOOTER -->
+        <tr>
+          <td class="qx-foot-pad" align="center" style="padding:30px 32px 28px;border-top:1px solid rgba(255,255,255,0.05);background:#0A0405;">
+            <div style="font-size:13px;color:#CBD5E1;margin-bottom:6px;font-weight:600;">
+              Stay safe out there 🛡️
+            </div>
+            <div style="font-size:11.5px;color:#475569;line-height:1.7;">
+              © ${year} Qorix Markets · AI-Powered Trading<br/>
+              Need help? <a href="mailto:support@qorixmarkets.com" style="color:#FCA5A5;text-decoration:none;">support@qorixmarkets.com</a>
+            </div>
+          </td>
+        </tr>
+
+      </table>
+
+      <!-- Outer spacing -->
+      <div style="height:24px;line-height:24px;font-size:1px;">&nbsp;</div>
+    </td>
+  </tr>
+</table>
+</body>
+</html>`;
+}
+
+// ---------------------------------------------------------------------------
+// Send the New-Device Login Alert. Caller decides when to fire — see
+// lib/device-tracking.ts. Uses renderNewDeviceLoginAlertHtml above.
 // ---------------------------------------------------------------------------
 export async function sendNewDeviceLoginAlert(args: {
   to: string;
@@ -1219,52 +1403,34 @@ export async function sendNewDeviceLoginAlert(args: {
   whenUtc: Date;
 }): Promise<void> {
   const { to, name, ip, city, country, browser, os, whenUtc } = args;
-  const cityLine = city
-    ? country
-      ? `${city}, ${country}`
-      : city
-    : country || "Unknown";
+  const cityLine = city ? (country ? `${city}, ${country}` : city) : country || "Unknown";
   const whenStr = whenUtc.toISOString().replace("T", " ").slice(0, 19) + " (UTC)";
-  const safeName = escapeHtml(name);
-  const safeBrowser = escapeHtml(browser);
-  const safeOs = escapeHtml(os);
 
-  const intro = `<p style="margin:0 0 16px 0;font-size:15px;line-height:1.6;color:#cbd5e1;">
-      Dear ${safeName},
-    </p>
-    <p style="margin:0 0 20px 0;font-size:15px;line-height:1.6;color:#cbd5e1;">
-      We have detected a sign-in to your Qorix Markets account from a device
-      you've never used before. If this was you, no further action is needed.
-      If you don't recognise this activity, please change your password
-      immediately and contact support.
-    </p>
-    <table cellpadding="0" cellspacing="0" border="0" role="presentation" style="border-collapse:separate;border-spacing:0;width:100%;background:rgba(15,23,42,0.6);border:1px solid rgba(148,163,184,0.18);border-radius:12px;margin:0 0 20px 0;">
-      <tr><td style="padding:14px 18px 4px 18px;font-size:13px;color:#94a3b8;">City</td>
-          <td style="padding:14px 18px 4px 18px;font-size:14px;color:#e2e8f0;text-align:right;font-weight:600;">${escapeHtml(cityLine)}</td></tr>
-      <tr><td style="padding:8px 18px;font-size:13px;color:#94a3b8;">IP address</td>
-          <td style="padding:8px 18px;font-size:14px;color:#e2e8f0;text-align:right;font-family:'SF Mono',Menlo,Consolas,monospace;font-weight:600;">${escapeHtml(ip)}</td></tr>
-      <tr><td style="padding:8px 18px;font-size:13px;color:#94a3b8;">Device</td>
-          <td style="padding:8px 18px;font-size:14px;color:#e2e8f0;text-align:right;font-weight:600;">${safeBrowser} · ${safeOs}</td></tr>
-      <tr><td style="padding:8px 18px 14px 18px;font-size:13px;color:#94a3b8;">Login time</td>
-          <td style="padding:8px 18px 14px 18px;font-size:14px;color:#e2e8f0;text-align:right;font-weight:600;">${escapeHtml(whenStr)}</td></tr>
-    </table>
-    <p style="margin:0 0 8px 0;font-size:13px;line-height:1.6;color:#94a3b8;">
-      <strong style="color:#fca5a5;">Wasn't you?</strong> Open
-      <a href="https://qorixmarkets.com/settings" style="color:#60a5fa;text-decoration:none;font-weight:600;">Settings → Security</a>
-      and change your password right away.
-    </p>`;
+  const subject = "Qorix Markets — New device signed in to your account";
+  const preheader = `Sign-in from ${cityLine} · ${browser} on ${os} — was this you?`;
 
-  const html = buildBrandedEmailHtml("Login from a new device detected", intro);
+  const html = renderNewDeviceLoginAlertHtml({
+    preheader,
+    name,
+    ip,
+    city,
+    country,
+    browser,
+    os,
+    whenUtc,
+  });
+
   const text =
-    `Login from a new device detected\n\n` +
-    `Dear ${name},\n\n` +
-    `A sign-in to your Qorix Markets account was detected from a device you've never used before.\n\n` +
-    `City: ${cityLine}\n` +
-    `IP address: ${ip}\n` +
-    `Device: ${browser} on ${os}\n` +
-    `Login time: ${whenStr}\n\n` +
-    `If this wasn't you, change your password immediately at https://qorixmarkets.com/settings.\n\n` +
+    `New device signed in to your Qorix Markets account\n\n` +
+    `Hi ${name},\n\n` +
+    `We noticed a sign-in from a device you haven't used before.\n\n` +
+    `Location:    ${cityLine}\n` +
+    `IP address:  ${ip}\n` +
+    `Device:      ${browser} on ${os}\n` +
+    `Signed in:   ${whenStr}\n\n` +
+    `If this was you, no action is needed.\n` +
+    `If not, secure your account immediately: https://qorixmarkets.com/settings\n\n` +
     `— Qorix Markets`;
 
-  await sendEmail(to, "Qorix Markets — Login from a new device detected", text, html);
+  await sendEmail(to, subject, text, html);
 }
