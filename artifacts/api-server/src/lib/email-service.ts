@@ -2586,6 +2586,18 @@ function prettifyDocumentType(raw: string): string {
     .join(" ");
 }
 
+// Format the timestamp 24 hours after `from` for display in the password-
+// changed (and any future "withdrawal hold") emails. Example output:
+// "30 Apr 2026 · 12:07 UTC".
+function formatHoldUntil(from: Date): string {
+  const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const u = new Date(from.getTime() + 24 * 60 * 60 * 1000);
+  return (
+    `${u.getUTCDate()} ${MONTHS_SHORT[u.getUTCMonth()]} ${u.getUTCFullYear()} · ` +
+    `${String(u.getUTCHours()).padStart(2, "0")}:${String(u.getUTCMinutes()).padStart(2, "0")} UTC`
+  );
+}
+
 export function renderIdentityVerifiedHtml(opts: {
   preheader: string;
   name: string;
@@ -4528,19 +4540,42 @@ export function renderPasswordChangedHtml(opts: {
           </td>
         </tr>
 
-        <!-- HERO — locked-down pill + headline + lime divider -->
+        <!-- HERO — alert pill + headline + lime divider -->
         <tr>
           <td class="qx-hero-pad" align="center" style="padding:8px 32px 28px;background:#08090B;background-image:linear-gradient(135deg,#08090B 0%,#13151A 45%,#1B3017 78%,#A3E635 100%);">
             <div style="display:inline-block;padding:6px 14px;border-radius:999px;background:rgba(217,249,157,0.18);border:1px solid rgba(217,249,157,0.55);font-size:10.5px;letter-spacing:2.4px;color:#D9F99D;font-weight:700;text-transform:uppercase;margin-bottom:18px;">
-              🔒 Password Updated
+              ⚠️ Password Changed
             </div>
             <div class="qx-hero-h" style="font-size:30px;line-height:1.18;font-weight:800;color:#FFFFFF;letter-spacing:-0.5px;max-width:440px;margin:0 auto;">
-              Locked Down
+              Password Just Changed
             </div>
-            <div style="font-size:13.5px;color:#D9F99D;margin-top:10px;font-weight:500;max-width:420px;margin-left:auto;margin-right:auto;line-height:1.5;">
-              ${safeFirstName}, your password was just changed. If this was you, you're all set.
+            <div style="font-size:13.5px;color:#D9F99D;margin-top:10px;font-weight:500;max-width:440px;margin-left:auto;margin-right:auto;line-height:1.5;">
+              ${safeFirstName}, your account password was just changed. If this <strong style="color:#FFFFFF;">wasn't you</strong>, reset your password immediately — your funds are safe.
             </div>
             <div style="width:48px;height:3px;background:linear-gradient(90deg,#D9F99D 0%,#84CC16 100%);margin:18px auto 0;border-radius:999px;"></div>
+          </td>
+        </tr>
+
+        <!-- 24-HOUR WITHDRAWAL HOLD banner — security pause notice -->
+        <tr>
+          <td align="center" style="padding:24px 24px 0;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td style="padding:16px 18px;background:#1A1308;background-image:linear-gradient(180deg,#241B0E 0%,#1A1308 100%);border:1.5px solid rgba(251,191,36,0.45);border-radius:12px;box-shadow:0 0 24px rgba(251,191,36,0.18);">
+                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                    <tr>
+                      <td width="32" valign="top" style="width:32px;padding:2px 12px 0 0;">
+                        <div style="width:28px;height:28px;line-height:28px;text-align:center;border-radius:999px;background:rgba(251,191,36,0.18);border:1px solid rgba(251,191,36,0.6);font-size:14px;color:#FBBF24;font-weight:700;">🛡</div>
+                      </td>
+                      <td valign="top">
+                        <div style="font-size:11.5px;letter-spacing:1.6px;color:#FBBF24;text-transform:uppercase;font-weight:700;line-height:1;margin-bottom:6px;">24-Hour Withdrawal Hold Active</div>
+                        <div style="font-size:13px;color:#E5D5A8;font-weight:500;line-height:1.55;">For your safety, all USDT &amp; INR withdrawals are paused until <strong style="color:#FFFFFF;">${escapeHtml(formatHoldUntil(changedAt))}</strong>. Trading and deposits continue as normal during this window.</div>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+            </table>
           </td>
         </tr>
 
@@ -4582,10 +4617,10 @@ export function renderPasswordChangedHtml(opts: {
                 </td>
               </tr>
             </table>
-            <!-- "Spot something off?" thin strip -->
+            <!-- "Verify nothing else changed" strip -->
             <div style="margin-top:14px;font-size:11.5px;color:#6B7C5A;line-height:1.5;text-align:center;">
               <span style="display:inline-block;width:7px;height:7px;border-radius:999px;background:#A3E635;box-shadow:0 0 10px rgba(163,230,53,0.7);vertical-align:middle;margin-right:6px;"></span>
-              <span style="vertical-align:middle;">Only your password was touched — nothing else.</span>
+              <span style="vertical-align:middle;">Only your password was touched — verify nothing else looks off.</span>
             </div>
           </td>
         </tr>
@@ -4642,8 +4677,8 @@ export function renderPasswordChangedHtml(opts: {
         <tr>
           <td style="padding:22px 32px 8px;">
             <div style="background:rgba(217,249,157,0.06);border-left:2px solid rgba(217,249,157,0.5);border-radius:6px;padding:14px 16px;font-size:12.5px;line-height:1.65;color:#7A8B6A;">
-              <div style="color:#D9F99D;font-weight:600;margin-bottom:6px;">Want to lock things down further?</div>
-              Enable <strong style="color:#D9F99D;">2-Factor Authentication</strong> in your security settings — even if someone gets your password, they still can't get in. We never ask for your password over email, social media, or phone.
+              <div style="color:#D9F99D;font-weight:600;margin-bottom:6px;">Why the 24-hour hold?</div>
+              Even if an attacker changed your password, they cannot move funds for 24 hours — giving you time to act. Enable <strong style="color:#D9F99D;">2-Factor Authentication</strong> as a second lock so even your password alone can't unlock your account. We never ask for your password over email, social media, or phone.
             </div>
           </td>
         </tr>
@@ -4696,8 +4731,8 @@ export async function sendPasswordChanged(args: {
   if (deviceParts.length > 0) sourceParts.push(deviceParts.join(" on "));
   const sourceLine = sourceParts.length > 0 ? sourceParts.join(" · ") : null;
 
-  const subject = `Qorix Markets — Password updated 🔒`;
-  const preheader = `Your password was just changed — only your password, nothing else. If this wasn't you, secure your account now.`;
+  const subject = `Qorix Markets — Password just changed ⚠️ — verify it was you`;
+  const preheader = `Your account password was just changed. If this wasn't you, reset immediately — your funds are safe (24h withdrawal hold active).`;
 
   const html = renderPasswordChangedHtml({
     preheader,
@@ -4709,21 +4744,26 @@ export async function sendPasswordChanged(args: {
   });
 
   const text =
-    `Password updated\n\n` +
+    `Password Just Changed\n\n` +
     `Hi ${name},\n\n` +
-    `Your Qorix Markets password was just changed. If this was you, no\n` +
-    `action needed.\n\n` +
+    `Your Qorix Markets account password was just changed. If this WASN'T\n` +
+    `you, reset your password immediately — your funds are safe.\n\n` +
+    `🛡 24-hour withdrawal hold active\n` +
+    `For your safety, all USDT & INR withdrawals are paused until\n` +
+    `${formatHoldUntil(changedAt)}. Trading and deposits continue as normal\n` +
+    `during this window.\n\n` +
     `Account changes snapshot:\n` +
     `  ✓ Changed:    Password (just now)\n` +
     `  · Unchanged:  Email · Phone · 2FA · Trusted devices\n\n` +
-    `Only your password was touched — nothing else.\n\n` +
+    `Only your password was touched — verify nothing else looks off.\n\n` +
     `Changed at:   ${whenStr}\n` +
     (sourceLine ? `Source:       ${sourceLine}\n\n` : `Status:       Password change applied successfully\n\n`) +
-    `Wasn't you? Secure account: https://qorixmarkets.com/forgot-password\n` +
+    `Wasn't you? Reset password: https://qorixmarkets.com/forgot-password\n` +
     `All good? View security settings: https://qorixmarkets.com/profile\n\n` +
-    `Want to lock things down further? Enable 2-Factor Authentication in\n` +
-    `your security settings. We never ask for your password over email,\n` +
-    `social media, or phone.\n\n` +
+    `Why the 24-hour hold? Even if an attacker changed your password, they\n` +
+    `cannot move funds for 24 hours — giving you time to act. Enable\n` +
+    `2-Factor Authentication as a second lock. We never ask for your\n` +
+    `password over email, social media, or phone.\n\n` +
     `— Qorix Markets`;
 
   await sendEmail(to, subject, text, html);
