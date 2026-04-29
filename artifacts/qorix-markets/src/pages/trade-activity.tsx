@@ -12,7 +12,6 @@ import { cn } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
-import { authFetch } from "@/lib/auth-fetch";
 
 type DateRange = { from?: Date; to?: Date };
 
@@ -171,10 +170,6 @@ function DateRangePicker({
   );
 }
 
-async function apiFetch(path: string) {
-  return authFetch(path);
-}
-
 type Trade = {
   id: number;
   symbol: string;
@@ -257,15 +252,10 @@ export default function TradeActivityPage() {
   const [page, setPage] = useState(1);
   const [tab, setTab] = useState<TradeTab>("closed");
 
-  const { data, isLoading } = useQuery({
-    queryKey: ["trades-activity"],
-    queryFn: () => apiFetch("/api/investment/trades?limit=500"),
-    refetchInterval: 15000,
-    placeholderData: keepPreviousData,
-  });
-
-  const personalTrades: Trade[] = Array.isArray(data) ? data : [];
-
+  // Trade Activity is a PLATFORM-WIDE live feed of Qorix signal trades — same
+  // view every user sees. We deliberately do NOT show per-user personal trades
+  // here. The user's own realized P&L appears as daily profit credits in the
+  // Transactions page (filter: Profit), which is the canonical user history.
   const { data: recentData, isLoading: recentLoading, isFetching: recentFetching } = useQuery<{ trades: SignalRecent[] }>({
     queryKey: ["signal-trades-recent-activity"],
     queryFn: async () => {
@@ -273,42 +263,43 @@ export default function TradeActivityPage() {
       if (!res.ok) throw new Error("failed");
       return res.json();
     },
-    enabled: !isLoading && personalTrades.length === 0,
     refetchInterval: 15000,
     placeholderData: keepPreviousData,
   });
 
-  const usingPlatformFallback = personalTrades.length === 0 && (recentData?.trades?.length ?? 0) > 0;
-
+  // Map a raw platform signal record to the unified Trade shape used by the UI.
   // Each platform signal trade renders with a randomly-picked lot in
   // [LOT_MIN..LOT_MAX] and USD = sign(pct) × lot × |exit-entry|. Same model as
   // a CFD: 1 lot of BTC over a 1000-point move = $1000 profit. This keeps the
   // displayed lot, USD, and price move all internally consistent on every card.
-  const allTrades: Trade[] = personalTrades.length > 0
-    ? personalTrades
-    : (recentData?.trades ?? []).map((t) => {
-        const pct = Number(t.realizedProfitPercent) || 0;
-        const entry = Number(t.entryPrice) || 0;
-        const exit = Number(t.realizedExitPrice) || 0;
-        const priceDiff = Math.abs(exit - entry);
-        // Round lot first, then derive USD from the rounded value so the
-        // displayed equation `lot × |exit-entry| = profit` always ties out
-        // exactly on screen (no precision drift).
-        const displayLot = +seededLot(t.id).toFixed(2);
-        const sign = pct > 0 ? 1 : pct < 0 ? -1 : 0;
-        const usd = sign * displayLot * priceDiff;
-        return {
-          id: t.id,
-          symbol: t.pair,
-          direction: t.direction,
-          entryPrice: entry,
-          exitPrice: exit,
-          profit: +usd.toFixed(2),
-          profitPercent: pct,
-          executedAt: t.closedAt,
-          lot: displayLot,
-        };
-      });
+  const mapSignal = (t: SignalRecent): Trade => {
+    const pct = Number(t.realizedProfitPercent) || 0;
+    const entry = Number(t.entryPrice) || 0;
+    const exit = Number(t.realizedExitPrice) || 0;
+    const priceDiff = Math.abs(exit - entry);
+    // Round lot first, then derive USD from the rounded value so the
+    // displayed equation `lot × |exit-entry| = profit` always ties out
+    // exactly on screen (no precision drift).
+    const displayLot = +seededLot(t.id).toFixed(2);
+    const sign = pct > 0 ? 1 : pct < 0 ? -1 : 0;
+    const usd = sign * displayLot * priceDiff;
+    return {
+      id: t.id,
+      symbol: t.pair,
+      direction: t.direction,
+      entryPrice: entry,
+      exitPrice: exit,
+      profit: +usd.toFixed(2),
+      profitPercent: pct,
+      executedAt: t.closedAt,
+      lot: displayLot,
+    };
+  };
+
+  const allTrades: Trade[] = useMemo(
+    () => (recentData?.trades ?? []).map(mapSignal),
+    [recentData],
+  );
 
   // Period filter (client-side)
   const { fromTs, toTs } = useMemo(() => {
@@ -350,10 +341,9 @@ export default function TradeActivityPage() {
     setPage(1);
   }
 
-  // Show loader only when we genuinely have nothing to render yet —
-  // either personal query still loading, or fallback is loading after personal resolved empty.
-  const fallbackPending = personalTrades.length === 0 && (recentLoading || (recentFetching && !recentData));
-  const showInitialLoader = allTrades.length === 0 && (isLoading || fallbackPending);
+  // Show loader only on the very first fetch when nothing has rendered yet.
+  const showInitialLoader =
+    allTrades.length === 0 && (recentLoading || (recentFetching && !recentData));
 
   const periodLabel = PERIODS.find((p) => p.key === period)?.label ?? "1M";
 
@@ -430,9 +420,7 @@ export default function TradeActivityPage() {
                 </span>
               </div>
               <p className="mt-1 text-[11px] sm:text-xs text-white/45 leading-snug line-clamp-2 sm:line-clamp-1">
-                {usingPlatformFallback
-                  ? "Live signal trades from Qorix Markets — fund your account to start trading"
-                  : "Your live trade history — Qorix-grade execution view"}
+                Live signal trades from Qorix Markets — real-time platform execution feed
               </p>
             </div>
           </div>
@@ -481,17 +469,16 @@ export default function TradeActivityPage() {
           </div>
         </div>
 
-        {/* ── Compact disclaimer banner (platform fallback only) ──────── */}
-        {usingPlatformFallback && (
-          <div className="flex items-center gap-2.5 rounded-xl border border-blue-400/15 bg-blue-500/[0.04] px-3.5 py-2.5">
-            <div className="shrink-0 flex h-7 w-7 items-center justify-center rounded-lg bg-blue-500/10 border border-blue-400/20">
-              <ShieldCheck className="w-3.5 h-3.5 text-blue-300" strokeWidth={2.25} />
-            </div>
-            <p className="text-[11px] sm:text-xs leading-relaxed text-blue-100/75">
-              All trades shown are executed by our automated trading system using pooled investor capital.
-            </p>
+        {/* ── Compact disclaimer banner (always shown — platform feed is the only data source here) ──────── */}
+        <div className="flex items-center gap-2.5 rounded-xl border border-blue-400/15 bg-blue-500/[0.04] px-3.5 py-2.5">
+          <div className="shrink-0 flex h-7 w-7 items-center justify-center rounded-lg bg-blue-500/10 border border-blue-400/20">
+            <ShieldCheck className="w-3.5 h-3.5 text-blue-300" strokeWidth={2.25} />
           </div>
-        )}
+          <p className="text-[11px] sm:text-xs leading-relaxed text-blue-100/75">
+            All trades shown are executed by our automated trading system using pooled investor capital. Your daily profit credits appear in{" "}
+            <a href="/transactions" className="text-blue-300 underline hover:text-blue-200 transition-colors">Transactions</a>.
+          </p>
+        </div>
 
         {/* Period filter */}
         <div className="flex flex-wrap items-center gap-2">

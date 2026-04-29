@@ -7,7 +7,7 @@ import {
   ArrowUpCircle,
   Settings as SettingsIcon,
   LogOut,
-  Store,
+  ShieldCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -17,6 +17,8 @@ import {
   merchantAuthFetch,
 } from "@/lib/merchant-auth-fetch";
 import { useQuery } from "@tanstack/react-query";
+import { MerchantDepositNotifier } from "./merchant-deposit-notifier";
+import { StatusPill } from "./merchant-ui";
 
 interface MeResponse {
   merchant: {
@@ -28,23 +30,24 @@ interface MeResponse {
   } | null;
 }
 
-const links = [
+const PRIMARY_LINKS = [
   { href: "/merchant", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/merchant/methods", label: "Payment Methods", icon: Landmark },
   { href: "/merchant/deposits", label: "INR Deposits", icon: ArrowDownCircle },
   { href: "/merchant/withdrawals", label: "INR Withdrawals", icon: ArrowUpCircle },
+];
+
+const ACCOUNT_LINKS = [
+  { href: "/merchant/methods", label: "Payment Methods", icon: Landmark },
   { href: "/merchant/settings", label: "Settings", icon: SettingsIcon },
 ];
+
+const ALL_LINKS = [...PRIMARY_LINKS, ...ACCOUNT_LINKS];
 
 export function MerchantLayout({ children }: { children: ReactNode }) {
   const [location, navigate] = useLocation();
 
-  // Bounce to login if no token. Done in an effect so SSR (if ever added)
-  // doesn't crash on missing localStorage.
   useEffect(() => {
-    if (!getMerchantToken()) {
-      navigate("/merchant/login");
-    }
+    if (!getMerchantToken()) navigate("/merchant/login");
   }, [navigate]);
 
   const { data, isError } = useQuery<MeResponse>({
@@ -55,7 +58,6 @@ export function MerchantLayout({ children }: { children: ReactNode }) {
     staleTime: 60_000,
   });
 
-  // Server says 401 / token rejected → useQuery throws → isError. Bounce.
   useEffect(() => {
     if (isError) {
       clearMerchantToken();
@@ -69,81 +71,144 @@ export function MerchantLayout({ children }: { children: ReactNode }) {
   }
 
   const merchant = data?.merchant;
+  const initials =
+    merchant?.fullName
+      ?.split(/\s+/)
+      .map((p) => p[0])
+      .filter(Boolean)
+      .slice(0, 2)
+      .join("")
+      .toUpperCase() || "M";
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
+    <div
+      className="relative min-h-screen text-slate-100 antialiased"
+      style={{ backgroundColor: "#0a0d12" }}
+    >
+      {/* Premium ambient gradient backdrop */}
+      <div
+        aria-hidden
+        className="pointer-events-none fixed inset-0 -z-10 overflow-hidden"
+      >
+        <div className="absolute -top-40 left-1/3 h-[500px] w-[500px] rounded-full bg-amber-500/[0.06] blur-3xl" />
+        <div className="absolute bottom-0 right-0 h-[400px] w-[400px] rounded-full bg-cyan-500/[0.04] blur-3xl" />
+      </div>
+
       <div className="flex">
-        {/* Desktop sidebar */}
-        <aside className="hidden md:flex md:w-64 md:flex-col md:fixed md:inset-y-0 bg-slate-900 border-r border-slate-800">
-          <div className="flex items-center gap-2 px-6 py-5 border-b border-slate-800">
-            <Store className="h-6 w-6 text-amber-400" />
-            <div>
-              <div className="text-sm font-semibold">Qorix Merchant</div>
-              <div className="text-xs text-slate-400">Operator Panel</div>
+        {/* ───── Desktop sidebar ───── */}
+        <aside
+          className="hidden md:fixed md:inset-y-0 md:flex md:w-64 md:flex-col md:border-r md:border-white/[0.06] md:bg-slate-950/80 md:backdrop-blur-xl"
+        >
+          {/* Brand */}
+          <div className="flex items-center gap-3 border-b border-white/[0.06] px-5 py-5">
+            <div className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-yellow-300 to-amber-500 shadow-[0_4px_16px_-2px_rgba(252,213,53,0.5)]">
+              <span className="text-base font-black text-slate-950">Q</span>
+              <span className="absolute -right-0.5 -top-0.5 flex h-3 w-3">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex h-3 w-3 rounded-full bg-emerald-500 ring-2 ring-slate-950" />
+              </span>
+            </div>
+            <div className="leading-tight">
+              <div className="text-sm font-bold tracking-tight text-white">
+                Qorix Merchant
+              </div>
+              <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+                Operator Console
+              </div>
             </div>
           </div>
-          <nav className="flex-1 px-3 py-4 space-y-1">
-            {links.map((l) => {
-              const active = location === l.href || (l.href !== "/merchant" && location.startsWith(l.href));
-              return (
-                <Link key={l.href} href={l.href}>
-                  <a
-                    className={cn(
-                      "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
-                      active
-                        ? "bg-amber-500/15 text-amber-300 border border-amber-500/30"
-                        : "text-slate-300 hover:bg-slate-800 hover:text-white",
-                    )}
-                  >
-                    <l.icon className="h-4 w-4" />
-                    {l.label}
-                  </a>
-                </Link>
-              );
-            })}
+
+          {/* Status row */}
+          <div className="px-5 py-3 border-b border-white/[0.06]">
+            <StatusPill variant="success" pulse>
+              Online · Live sync
+            </StatusPill>
+          </div>
+
+          {/* Nav */}
+          <nav className="flex-1 overflow-y-auto px-3 py-5">
+            <SidebarSection label="Operations" links={PRIMARY_LINKS} location={location} />
+            <SidebarSection
+              label="Account"
+              links={ACCOUNT_LINKS}
+              location={location}
+              className="mt-6"
+            />
           </nav>
-          <div className="border-t border-slate-800 px-4 py-4 space-y-3">
-            <div>
-              <div className="text-xs uppercase tracking-wide text-slate-500">Signed in</div>
-              <div className="text-sm font-medium truncate">{merchant?.fullName ?? "—"}</div>
-              <div className="text-xs text-slate-400 truncate">{merchant?.email ?? ""}</div>
+
+          {/* Footer / merchant card */}
+          <div className="border-t border-white/[0.06] p-4">
+            <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-amber-400 to-amber-600 text-sm font-bold text-slate-950 ring-2 ring-white/10">
+                  {initials}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-semibold text-white">
+                    {merchant?.fullName ?? "—"}
+                  </div>
+                  <div className="truncate text-[11px] text-slate-400">
+                    {merchant?.email ?? ""}
+                  </div>
+                </div>
+              </div>
+              <div className="mt-3 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-emerald-400">
+                  <ShieldCheck className="h-3 w-3" /> Verified
+                </div>
+                <button
+                  onClick={handleLogout}
+                  className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-slate-400 hover:bg-white/[0.04] hover:text-white"
+                >
+                  <LogOut className="h-3 w-3" /> Logout
+                </button>
+              </div>
             </div>
-            <button
-              onClick={handleLogout}
-              className="w-full flex items-center justify-center gap-2 rounded-lg border border-slate-700 px-3 py-2 text-sm text-slate-300 hover:bg-slate-800 hover:text-white"
-            >
-              <LogOut className="h-4 w-4" /> Logout
-            </button>
           </div>
         </aside>
 
-        {/* Mobile top bar */}
-        <header className="md:hidden fixed top-0 inset-x-0 z-30 bg-slate-900 border-b border-slate-800 px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Store className="h-5 w-5 text-amber-400" />
-            <span className="font-semibold text-sm">Merchant Panel</span>
+        {/* ───── Mobile top bar ───── */}
+        <header className="fixed inset-x-0 top-0 z-30 border-b border-white/[0.06] bg-slate-950/80 backdrop-blur-xl md:hidden">
+          <div className="flex items-center justify-between px-4 py-3">
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-yellow-300 to-amber-500 shadow-[0_3px_10px_-2px_rgba(252,213,53,0.5)]">
+                <span className="text-sm font-black text-slate-950">Q</span>
+              </div>
+              <div className="leading-tight">
+                <div className="text-[13px] font-bold text-white">
+                  Qorix Merchant
+                </div>
+                <div className="text-[9px] font-semibold uppercase tracking-[0.18em] text-emerald-400">
+                  ● Live
+                </div>
+              </div>
+            </div>
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-slate-400 hover:text-white"
+            >
+              <LogOut className="h-3.5 w-3.5" /> Logout
+            </button>
           </div>
-          <button
-            onClick={handleLogout}
-            className="text-xs text-slate-400 hover:text-white flex items-center gap-1"
-          >
-            <LogOut className="h-3.5 w-3.5" /> Logout
-          </button>
         </header>
 
-        {/* Mobile bottom nav */}
-        <nav className="md:hidden fixed bottom-0 inset-x-0 z-30 bg-slate-900 border-t border-slate-800 grid grid-cols-5">
-          {links.map((l) => {
-            const active = location === l.href || (l.href !== "/merchant" && location.startsWith(l.href));
+        {/* ───── Mobile bottom nav ───── */}
+        <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-white/[0.06] bg-slate-950/95 backdrop-blur-xl md:hidden">
+          {ALL_LINKS.map((l) => {
+            const active =
+              location === l.href ||
+              (l.href !== "/merchant" && location.startsWith(l.href));
             return (
               <Link key={l.href} href={l.href}>
                 <a
                   className={cn(
-                    "flex flex-col items-center justify-center py-2 text-[10px] gap-0.5",
-                    active ? "text-amber-300" : "text-slate-400",
+                    "flex flex-col items-center justify-center gap-0.5 py-2.5 text-[10px] font-medium transition-colors",
+                    active
+                      ? "text-amber-300"
+                      : "text-slate-500 hover:text-slate-300",
                   )}
                 >
-                  <l.icon className="h-4 w-4" />
+                  <l.icon className="h-[18px] w-[18px]" />
                   {l.label.split(" ")[0]}
                 </a>
               </Link>
@@ -151,9 +216,66 @@ export function MerchantLayout({ children }: { children: ReactNode }) {
           })}
         </nav>
 
-        <main className="flex-1 md:pl-64 pt-14 md:pt-0 pb-20 md:pb-0">
-          <div className="max-w-6xl mx-auto px-4 md:px-8 py-6">{children}</div>
+        {/* ───── Main ───── */}
+        <main className="flex-1 pb-24 pt-16 md:pb-0 md:pl-64 md:pt-0">
+          <div className="mx-auto max-w-7xl px-4 py-6 md:px-8 md:py-8">
+            {children}
+          </div>
         </main>
+      </div>
+
+      <MerchantDepositNotifier />
+    </div>
+  );
+}
+
+function SidebarSection({
+  label,
+  links,
+  location,
+  className,
+}: {
+  label: string;
+  links: typeof PRIMARY_LINKS;
+  location: string;
+  className?: string;
+}) {
+  return (
+    <div className={className}>
+      <div className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-600">
+        {label}
+      </div>
+      <div className="space-y-0.5">
+        {links.map((l) => {
+          const active =
+            location === l.href ||
+            (l.href !== "/merchant" && location.startsWith(l.href));
+          return (
+            <Link key={l.href} href={l.href}>
+              <a
+                className={cn(
+                  "group relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all",
+                  active
+                    ? "bg-gradient-to-r from-amber-500/15 via-amber-500/5 to-transparent text-amber-200"
+                    : "text-slate-400 hover:bg-white/[0.03] hover:text-white",
+                )}
+              >
+                {active && (
+                  <span className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-gradient-to-b from-yellow-300 to-amber-500" />
+                )}
+                <l.icon
+                  className={cn(
+                    "h-4 w-4 transition-colors",
+                    active
+                      ? "text-amber-300"
+                      : "text-slate-500 group-hover:text-slate-300",
+                  )}
+                />
+                {l.label}
+              </a>
+            </Link>
+          );
+        })}
       </div>
     </div>
   );

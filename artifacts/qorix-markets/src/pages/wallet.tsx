@@ -59,6 +59,10 @@ export default function WalletPage() {
   const [withdrawSource, setWithdrawSource] = useState<"profit" | "main">("profit");
   const [usePoints, setUsePoints] = useState(false);
   const [transferAmount, setTransferAmount] = useState("");
+  // Bidirectional transfer between Main and Trading balances. "toTrading"
+  // funds the Trading wallet from Main; "toMain" reverses unused Trading
+  // funds back to Main so the user can withdraw or re-deposit them.
+  const [transferDirection, setTransferDirection] = useState<"toTrading" | "toMain">("toTrading");
   const userPoints = (wallet as any)?.points ?? 0;
 
   // OTP withdrawal flow
@@ -161,8 +165,14 @@ export default function WalletPage() {
 
   const transferMutation = useTransferToTrading({
     mutation: {
-      onSuccess: () => {
-        toast({ title: "Transfer successful", description: "Funds moved to your trading balance." });
+      onSuccess: (_data, variables) => {
+        const wasToMain = variables?.data?.direction === "to_main";
+        toast({
+          title: "Transfer successful",
+          description: wasToMain
+            ? "Funds moved back to your main balance."
+            : "Funds moved to your trading balance.",
+        });
         queryClient.invalidateQueries({ queryKey: getGetWalletQueryKey() });
         setTransferAmount("");
       },
@@ -256,17 +266,48 @@ export default function WalletPage() {
         {/* Transfer + Withdraw */}
         <motion.div variants={item} className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
 
-          {/* Transfer */}
+          {/* Transfer — bidirectional (Main ↔ Trading) */}
           <div className="glass-card p-5 rounded-2xl space-y-4">
             <div className="flex items-center gap-2.5">
               <div className="p-2 rounded-xl bg-indigo-500/15 text-indigo-400">
                 <ArrowRightLeft style={{ width: 16, height: 16 }} />
               </div>
               <div>
-                <div className="font-semibold text-sm">Transfer to Trading</div>
-                <div className="text-xs text-muted-foreground">Fund your Trading balance</div>
+                <div className="font-semibold text-sm">
+                  {transferDirection === "toTrading" ? "Transfer to Trading" : "Transfer to Main"}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {transferDirection === "toTrading"
+                    ? "Fund your Trading balance"
+                    : "Move Trading funds back to Main"}
+                </div>
               </div>
             </div>
+
+            {/* Direction toggle: Main → Trading vs Trading → Main */}
+            <div className="grid grid-cols-2 gap-1 p-1 bg-black/30 rounded-xl">
+              <button
+                onClick={() => { setTransferDirection("toTrading"); setTransferAmount(""); }}
+                className={`px-3 py-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5 ${
+                  transferDirection === "toTrading"
+                    ? "bg-indigo-500/20 text-indigo-300 shadow-sm"
+                    : "text-muted-foreground hover:text-white"
+                }`}
+              >
+                Main <ArrowRightLeft style={{ width: 11, height: 11 }} /> Trading
+              </button>
+              <button
+                onClick={() => { setTransferDirection("toMain"); setTransferAmount(""); }}
+                className={`px-3 py-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5 ${
+                  transferDirection === "toMain"
+                    ? "bg-violet-500/20 text-violet-300 shadow-sm"
+                    : "text-muted-foreground hover:text-white"
+                }`}
+              >
+                Trading <ArrowRightLeft style={{ width: 11, height: 11 }} /> Main
+              </button>
+            </div>
+
             <div className="space-y-3">
               <div>
                 <label className="text-xs text-muted-foreground font-medium mb-1.5 block">Amount (USD)</label>
@@ -280,7 +321,11 @@ export default function WalletPage() {
                     min="0"
                   />
                   <button
-                    onClick={() => setTransferAmount(String(wallet?.mainBalance || 0))}
+                    onClick={() => setTransferAmount(String(
+                      transferDirection === "toTrading"
+                        ? (wallet?.mainBalance || 0)
+                        : (wallet?.tradingBalance || 0),
+                    ))}
                     className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-blue-400 font-bold px-2 py-1 bg-blue-500/10 rounded-lg hover:bg-blue-500/20 transition"
                   >
                     MAX
@@ -289,17 +334,32 @@ export default function WalletPage() {
               </div>
               {wallet && (
                 <div className="flex items-center justify-between text-xs text-muted-foreground px-1">
-                  <span>Available</span>
-                  <span className="font-medium text-white">${(wallet.mainBalance || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD</span>
+                  <span>
+                    Available {transferDirection === "toTrading" ? "(Main)" : "(Trading)"}
+                  </span>
+                  <span className="font-medium text-white">
+                    ${((transferDirection === "toTrading"
+                      ? wallet.mainBalance
+                      : wallet.tradingBalance) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD
+                  </span>
                 </div>
               )}
               <button
-                onClick={() => transferMutation.mutate({ data: { amount: Number(transferAmount) } })}
+                onClick={() => transferMutation.mutate({
+                  data: {
+                    amount: Number(transferAmount),
+                    direction: transferDirection === "toTrading" ? "to_trading" : "to_main",
+                  },
+                })}
                 disabled={transferMutation.isPending || !transferAmount || Number(transferAmount) <= 0}
                 className="btn w-full"
                 style={{ background: "linear-gradient(135deg,#4f46e5,#7c3aed)", color: "#fff", boxShadow: "0 4px 18px rgba(99,102,241,0.3)" }}
               >
-                {transferMutation.isPending ? "Processing…" : "Transfer Funds"}
+                {transferMutation.isPending
+                  ? "Processing…"
+                  : transferDirection === "toTrading"
+                    ? "Transfer to Trading"
+                    : "Transfer to Main"}
               </button>
             </div>
           </div>

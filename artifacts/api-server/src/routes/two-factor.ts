@@ -69,7 +69,14 @@ const ISSUER = "Qorix Markets";
 // secret the main session JWT uses — verifying scope is what keeps the
 // two namespaces apart.
 const JWT_SECRET = process.env.JWT_SECRET ?? "dev-secret-change-me";
-const TWO_FA_CHALLENGE_TTL_SECONDS = 5 * 60;
+// Challenge-token validity. Bumped from 5→12 minutes so the email-OTP
+// fallback (10-min OTP TTL + ~1-2 min for the user to read mail and type
+// the code) always finishes inside the challenge window. Security
+// trade-off is small: the token is still single-purpose ("2fa-challenge"
+// scope), still requires a valid TOTP/backup/email-OTP code to redeem,
+// and is invalidated by anything that bumps the user's session
+// (issueSessionAfterAuth handles forceLogoutAfter on next login).
+export const TWO_FA_CHALLENGE_TTL_SECONDS = 12 * 60;
 
 export interface TwoFactorChallengeJwt {
   userId: number;

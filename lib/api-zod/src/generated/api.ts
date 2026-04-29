@@ -126,10 +126,18 @@ export const WithdrawResponse = zod.object({
 });
 
 /**
- * @summary Transfer from main to trading balance
+ * @summary Transfer between main and trading balance (bidirectional)
  */
+export const transferToTradingBodyDirectionDefault = `to_trading`;
+
 export const TransferToTradingBody = zod.object({
   amount: zod.number(),
+  direction: zod
+    .enum(["to_trading", "to_main"])
+    .default(transferToTradingBodyDirectionDefault)
+    .describe(
+      'Transfer direction. \"to_trading\" debits main and credits trading\n(default — backward compatible). \"to_main\" debits trading and\ncredits main (reverse transfer).\n',
+    ),
 });
 
 export const TransferToTradingResponse = zod.object({
