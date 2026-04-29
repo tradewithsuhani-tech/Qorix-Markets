@@ -8,6 +8,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
 import { AnimatedCounter } from "@/components/animated-counter";
+import { authFetch } from "@/lib/auth-fetch";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -49,19 +50,6 @@ type Rewards = {
   };
   nextMilestone: Badge | null;
 };
-
-// ---------------------------------------------------------------------------
-// API
-// ---------------------------------------------------------------------------
-function authFetch<T>(url: string): Promise<T> {
-  const token = localStorage.getItem("qorix_token");
-  return fetch(url, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-  }).then((r) => {
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    return r.json();
-  });
-}
 
 // ---------------------------------------------------------------------------
 // Helpers

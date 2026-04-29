@@ -8,22 +8,12 @@ import {
   X, Sparkles, Hash, ArrowDownToLine, Copy, Check,
 } from "lucide-react";
 
+import { authFetch } from "@/lib/auth-fetch";
+
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
 function apiUrl(path: string) { return `${BASE_URL}/api${path}`; }
-function getToken() { try { return localStorage.getItem("qorix_token"); } catch { return null; } }
 async function apiFetch(path: string, options: RequestInit = {}) {
-  const token = getToken();
-  const res = await fetch(apiUrl(path), {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options.headers,
-    },
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw Object.assign(new Error(data.message || data.error || "Request failed"), { data, status: res.status });
-  return data;
+  return authFetch(apiUrl(path), options);
 }
 
 type Limits = {

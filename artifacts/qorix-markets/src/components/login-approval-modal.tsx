@@ -4,6 +4,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Button } from "@/components/ui/button";
 import { ShieldAlert, Globe, Smartphone, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { authFetch as baseAuthFetch } from "@/lib/auth-fetch";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
 
@@ -17,18 +18,7 @@ type PendingAttempt = {
 };
 
 async function authFetch(path: string, init: RequestInit = {}) {
-  const token = (() => { try { return localStorage.getItem("qorix_token"); } catch { return null; } })();
-  const res = await fetch(`${BASE_URL}/api${path}`, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...init.headers,
-    },
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw Object.assign(new Error(data.message || data.error || "Request failed"), { data, status: res.status });
-  return data;
+  return baseAuthFetch(`${BASE_URL}/api${path}`, init);
 }
 
 // Poll cadence — 5s is responsive enough for the new device's countdown
