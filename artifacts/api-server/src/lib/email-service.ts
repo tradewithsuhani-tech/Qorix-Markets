@@ -6492,3 +6492,263 @@ export async function sendUsdtWithdrawalRequested(args: {
 
   await sendEmail(to, subject, text, html);
 }
+
+// ---------------------------------------------------------------------------
+// Indian-locale rupee formatter — proper lakh/crore comma placement.
+// 50000  -> "50,000.00"
+// 100000 -> "1,00,000.00"
+// ---------------------------------------------------------------------------
+function formatInrAmount(amount: number | string): string {
+  const num = typeof amount === "string" ? parseFloat(amount) : amount;
+  if (!Number.isFinite(num)) return "0.00";
+  return new Intl.NumberFormat("en-IN", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(num);
+}
+
+// ---------------------------------------------------------------------------
+// INR WITHDRAWAL SENT — payout completed email
+// ---------------------------------------------------------------------------
+// FOREST-HONEY theme: deep forest + honey gold. Money-landed-in-bank vibe —
+// stable, complete, slightly celebratory. Distinct from emerald (brighter
+// crypto-deposit green) via depth + gold pairing. 23rd unique palette.
+// Layout flow:
+//   • Logo bar (forest → pine → forest-bright → honey-gold gradient)
+//   • Hero: ✓ WITHDRAWAL PAID OUT pill · "Money's in Your Bank" headline
+//   • AMOUNT card — big ₹amount with PAID badge above + "sent to your bank"
+//     caption below. NO fee/tier breakdown (per user direction).
+//   • PAYMENT DETAILS — method · reference (if any) · withdrawal id · paid at
+//   • ETA hint
+//   • Anti-phishing footer
+// ---------------------------------------------------------------------------
+export function renderInrWithdrawalSentHtml(opts: {
+  preheader: string;
+  name: string;
+  amountInr: number | string;
+  payoutMethod: string;
+  payoutReference?: string | null;
+  withdrawalId: string | number;
+  paidAt: Date;
+}): string {
+  const { preheader, name, amountInr, payoutMethod, payoutReference, withdrawalId, paidAt } = opts;
+  const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const whenStr =
+    `${paidAt.getUTCDate()} ${MONTHS_SHORT[paidAt.getUTCMonth()]} ${paidAt.getUTCFullYear()} · ` +
+    `${String(paidAt.getUTCHours()).padStart(2, "0")}:${String(paidAt.getUTCMinutes()).padStart(2, "0")} UTC`;
+  const safeFirstName = escapeHtml((name || "there").trim().split(/\s+/)[0] || "there");
+  const safeAmount = escapeHtml(formatInrAmount(amountInr));
+  const safeMethod = escapeHtml((payoutMethod || "").toUpperCase());
+  const safeRef = payoutReference && payoutReference.trim() ? escapeHtml(payoutReference.trim()) : null;
+  const safeId = escapeHtml(String(withdrawalId));
+  const safeWhen = escapeHtml(whenStr);
+  const year = new Date().getFullYear();
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="x-apple-disable-message-reformatting" />
+<meta name="color-scheme" content="dark light" />
+<meta name="supported-color-schemes" content="dark light" />
+<title>Withdrawal paid out — Qorix Markets</title>
+<style type="text/css">
+  @media only screen and (max-width:480px) {
+    .qx-outer { padding:20px 10px !important; }
+    .qx-card { border-radius:18px !important; }
+    .qx-hero-pad { padding:6px 18px 22px !important; }
+    .qx-hero-h { font-size:24px !important; line-height:1.22 !important; }
+    .qx-amount-pad { padding:24px 18px 4px !important; }
+    .qx-amount-num { font-size:36px !important; }
+    .qx-detail-pad { padding:24px 22px 4px !important; }
+    .qx-detail-label { font-size:10.5px !important; }
+    .qx-detail-value { font-size:14px !important; }
+    .qx-foot-pad { padding:24px 18px 22px !important; }
+  }
+</style>
+</head>
+<body style="margin:0;padding:0;background:#051712;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;">
+<div style="display:none;max-height:0;overflow:hidden;font-size:1px;line-height:1px;color:#051712;opacity:0;">${escapeHtml(preheader)}</div>
+<div style="display:none;max-height:0;overflow:hidden;">&#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847;</div>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="qx-outer" style="background:#051712;padding:32px 16px;">
+  <tr>
+    <td align="center">
+
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="qx-card" style="max-width:560px;background:#0E2419;border:1px solid rgba(202,138,4,0.32);border-radius:22px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,0.70);">
+
+        <!-- LOGO BAR — forest → honey-gold gradient -->
+        <tr>
+          <td align="left" style="padding:20px 24px 0 28px;background:#051712;background-image:linear-gradient(135deg,#051712 0%,#0F2C20 38%,#166534 72%,#CA8A04 100%);">
+            <img src="cid:${BRAND_LOGO_CID}" alt="Qorix Markets" width="320" height="217" style="display:block;width:320px;max-width:90%;height:auto;border:0;outline:none;text-decoration:none;margin:0;" />
+          </td>
+        </tr>
+
+        <!-- HERO -->
+        <tr>
+          <td class="qx-hero-pad" align="center" style="padding:8px 32px 28px;background:#051712;background-image:linear-gradient(135deg,#051712 0%,#0F2C20 38%,#166534 72%,#CA8A04 100%);">
+            <div style="display:inline-block;padding:6px 14px;border-radius:999px;background:rgba(254,243,199,0.20);border:1px solid rgba(254,243,199,0.55);font-size:10.5px;letter-spacing:2.4px;color:#FEF3C7;font-weight:700;text-transform:uppercase;margin-bottom:18px;">
+              ✓ Withdrawal Paid Out
+            </div>
+            <div class="qx-hero-h" style="font-size:30px;line-height:1.18;font-weight:800;color:#FFFFFF;letter-spacing:-0.5px;max-width:440px;margin:0 auto;">
+              Money's in Your Bank
+            </div>
+            <div style="font-size:13.5px;color:#FEF3C7;margin-top:10px;font-weight:500;max-width:460px;margin-left:auto;margin-right:auto;line-height:1.5;">
+              ${safeFirstName}, your INR withdrawal has been paid out. Funds typically reflect in your account within <strong style="color:#FFFFFF;">30 minutes</strong>.
+            </div>
+            <div style="width:48px;height:3px;background:linear-gradient(90deg,#F0D78C 0%,#CA8A04 100%);margin:18px auto 0;border-radius:999px;"></div>
+          </td>
+        </tr>
+
+        <!-- AMOUNT CARD — big ₹ with PAID badge -->
+        <tr>
+          <td class="qx-amount-pad" align="center" style="padding:30px 24px 4px;">
+            <div style="font-size:10.5px;letter-spacing:2.4px;color:#F0D78C;font-weight:700;text-transform:uppercase;text-align:left;padding:0 0 12px 0;">
+              Amount Paid Out
+            </div>
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td align="center" style="padding:30px 18px;background:#08200E;background-image:linear-gradient(180deg,#0E2419 0%,#061B11 100%);border:1.5px solid rgba(240,215,140,0.45);border-radius:14px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.04),0 0 28px rgba(202,138,4,0.22);">
+                  <!-- PAID badge above amount -->
+                  <div style="display:inline-block;padding:5px 12px;border-radius:999px;background:rgba(240,215,140,0.18);border:1px solid rgba(240,215,140,0.65);font-size:10px;letter-spacing:2.0px;color:#FBE08C;font-weight:800;text-transform:uppercase;margin-bottom:14px;">
+                    <span style="display:inline-block;width:6px;height:6px;border-radius:999px;background:#F0D78C;box-shadow:0 0 8px rgba(240,215,140,0.85);vertical-align:middle;margin-right:6px;"></span>
+                    <span style="vertical-align:middle;">Paid</span>
+                  </div>
+                  <!-- Big amount -->
+                  <div class="qx-amount-num" style="font-size:42px;line-height:1.05;font-weight:800;color:#FFFFFF;letter-spacing:-1px;">
+                    <span style="color:#F0D78C;font-weight:700;">₹</span>${safeAmount}
+                  </div>
+                  <!-- Caption -->
+                  <div style="margin-top:12px;font-size:12.5px;color:#9DB3A4;font-weight:500;line-height:1.5;">
+                    Sent to your registered bank account
+                  </div>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- PAYMENT DETAILS -->
+        <tr>
+          <td class="qx-detail-pad" style="padding:32px 32px 4px;">
+            <div style="font-size:10.5px;letter-spacing:2.4px;color:#F0D78C;text-transform:uppercase;font-weight:700;text-align:left;padding:0 0 14px 0;">
+              Payment Details
+            </div>
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td style="padding:14px 0;border-bottom:1px solid rgba(202,138,4,0.18);">
+                  <div class="qx-detail-label" style="font-size:11px;letter-spacing:1.6px;color:#7A8E81;text-transform:uppercase;font-weight:600;line-height:1;margin-bottom:6px;"><span style="margin-right:6px;">🏦</span>Method</div>
+                  <div class="qx-detail-value" style="font-size:15px;color:#FFFFFF;font-weight:600;line-height:1.4;letter-spacing:0.5px;">${safeMethod}</div>
+                </td>
+              </tr>
+              ${safeRef ? `
+              <tr>
+                <td style="padding:14px 0;border-bottom:1px solid rgba(202,138,4,0.18);">
+                  <div class="qx-detail-label" style="font-size:11px;letter-spacing:1.6px;color:#7A8E81;text-transform:uppercase;font-weight:600;line-height:1;margin-bottom:6px;"><span style="margin-right:6px;">🧾</span>Bank / UPI Reference</div>
+                  <div class="qx-detail-value" style="font-size:15px;color:#FFFFFF;font-weight:600;line-height:1.4;font-family:'SF Mono',Menlo,Consolas,monospace;letter-spacing:-0.2px;word-break:break-all;">${safeRef}</div>
+                </td>
+              </tr>` : ``}
+              <tr>
+                <td style="padding:14px 0;border-bottom:1px solid rgba(202,138,4,0.18);">
+                  <div class="qx-detail-label" style="font-size:11px;letter-spacing:1.6px;color:#7A8E81;text-transform:uppercase;font-weight:600;line-height:1;margin-bottom:6px;"><span style="margin-right:6px;">#</span>Withdrawal ID</div>
+                  <div class="qx-detail-value" style="font-size:15px;color:#FFFFFF;font-weight:600;line-height:1.4;font-family:'SF Mono',Menlo,Consolas,monospace;">#${safeId}</div>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:14px 0 4px;">
+                  <div class="qx-detail-label" style="font-size:11px;letter-spacing:1.6px;color:#7A8E81;text-transform:uppercase;font-weight:600;line-height:1;margin-bottom:6px;"><span style="margin-right:6px;">🕐</span>Paid At</div>
+                  <div class="qx-detail-value" style="font-size:15px;color:#FFFFFF;font-weight:600;line-height:1.4;">${safeWhen}</div>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- ETA reassurance -->
+        <tr>
+          <td style="padding:28px 32px 8px;">
+            <div style="background:rgba(202,138,4,0.07);border-left:2px solid rgba(202,138,4,0.55);border-radius:6px;padding:14px 16px;font-size:12.5px;line-height:1.65;color:#A8BCAF;">
+              <div style="color:#F0D78C;font-weight:600;margin-bottom:6px;">Don't see the funds yet?</div>
+              Bank transfers usually clear within 30 minutes. If it's been longer, share your withdrawal ID <strong style="color:#FFFFFF;">#${safeId}</strong> with us at <a href="mailto:support@qorixmarkets.com" style="color:#F0D78C;text-decoration:none;font-weight:600;">support@qorixmarkets.com</a> and we'll trace it on the bank's side.
+            </div>
+          </td>
+        </tr>
+
+        <!-- FOOTER -->
+        <tr>
+          <td class="qx-foot-pad" align="center" style="padding:30px 32px 28px;border-top:1px solid rgba(255,255,255,0.05);background:#03100B;">
+            <div style="font-size:13px;color:#F0D78C;margin-bottom:6px;font-weight:600;">
+              Trade smart 📈
+            </div>
+            <div style="font-size:11.5px;color:#4A5C50;line-height:1.7;">
+              © ${year} Qorix Markets · AI-Powered Trading<br/>
+              Need help? <a href="mailto:support@qorixmarkets.com" style="color:#F0D78C;text-decoration:none;">support@qorixmarkets.com</a>
+            </div>
+          </td>
+        </tr>
+
+      </table>
+
+      <div style="height:24px;line-height:24px;font-size:1px;">&nbsp;</div>
+    </td>
+  </tr>
+</table>
+</body>
+</html>`;
+}
+
+// ---------------------------------------------------------------------------
+// Send the INR Withdrawal Sent email — fires when admin approves an INR
+// withdrawal and the bank/UPI payout has been made. Used by
+// inr-withdrawals.ts:371 after bulk migration.
+// ---------------------------------------------------------------------------
+export async function sendInrWithdrawalSent(args: {
+  to: string;
+  name: string;
+  amountInr: number | string;
+  payoutMethod: string;
+  payoutReference?: string | null;
+  withdrawalId: string | number;
+  paidAt: Date;
+}): Promise<void> {
+  const { to, name, amountInr, payoutMethod, payoutReference, withdrawalId, paidAt } = args;
+  const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const whenStr =
+    `${paidAt.getUTCDate()} ${MONTHS_SHORT[paidAt.getUTCMonth()]} ${paidAt.getUTCFullYear()} · ` +
+    `${String(paidAt.getUTCHours()).padStart(2, "0")}:${String(paidAt.getUTCMinutes()).padStart(2, "0")} UTC`;
+  const formattedAmount = formatInrAmount(amountInr);
+  const methodUpper = (payoutMethod || "").toUpperCase();
+
+  const subject = `Qorix Markets — ₹${formattedAmount} paid out to your bank ✓`;
+  const preheader = `Your INR withdrawal of ₹${formattedAmount} via ${methodUpper} has been paid out. Funds typically reflect within 30 minutes.`;
+
+  const html = renderInrWithdrawalSentHtml({
+    preheader,
+    name,
+    amountInr,
+    payoutMethod,
+    payoutReference: payoutReference ?? null,
+    withdrawalId,
+    paidAt,
+  });
+
+  const text =
+    `Money's in Your Bank — Withdrawal Paid Out\n\n` +
+    `Hi ${name},\n\n` +
+    `Your INR withdrawal has been paid out. Funds typically reflect in\n` +
+    `your account within 30 minutes.\n\n` +
+    `Amount paid out: ₹${formattedAmount}\n` +
+    `Sent to your registered bank account.\n\n` +
+    `Payment Details:\n` +
+    `  Method:        ${methodUpper}\n` +
+    (payoutReference && payoutReference.trim() ? `  Reference:     ${payoutReference.trim()}\n` : ``) +
+    `  Withdrawal ID: #${withdrawalId}\n` +
+    `  Paid at:       ${whenStr}\n\n` +
+    `Don't see the funds yet? Bank transfers usually clear within 30\n` +
+    `minutes. If it's been longer, share withdrawal ID #${withdrawalId} with\n` +
+    `us at support@qorixmarkets.com and we'll trace it on the bank's side.\n\n` +
+    `— Qorix Markets`;
+
+  await sendEmail(to, subject, text, html);
+}

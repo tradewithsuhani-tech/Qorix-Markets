@@ -34,6 +34,7 @@ import {
   renderContactChangedAlertHtml,
   renderAccountLockedHtml,
   renderUsdtWithdrawalRequestedHtml,
+  renderInrWithdrawalSentHtml,
 } from "../lib/email-service";
 
 const DEFAULT_TO = "safepayu@gmail.com";
@@ -601,6 +602,50 @@ const TEMPLATES: Record<string, () => Preview> = {
         walletAddress: "TYPVjtQyUv9pCQvAbXKD1mGq8YFJg7XnKM",
         requestId: 48217,
         requestedAt,
+      }),
+    };
+  },
+
+  "inr-withdrawal-sent": () => {
+    const name = "Prem Kumar";
+    const paidAt = new Date();
+    return {
+      subject: "[PREVIEW] Qorix Markets — ₹50,000.00 paid out to your bank ✓ (forest-honey)",
+      text:
+        `[DESIGN PREVIEW]\n\n` +
+        `INR withdrawal sent for ${name}.\n\n` +
+        `Test render of the new deep-forest + honey-gold "Money's in Your Bank" template.\n` +
+        `Reply with feedback.\n\n` +
+        `— Qorix Markets`,
+      html: renderInrWithdrawalSentHtml({
+        preheader: `[PREVIEW] Your INR withdrawal of ₹50,000.00 via UPI has been paid out. Funds typically reflect within 30 minutes.`,
+        name,
+        amountInr: 50000,
+        payoutMethod: "upi",
+        payoutReference: "ICIC0001234567890",
+        withdrawalId: 9821,
+        paidAt,
+      }),
+    };
+  },
+
+  "inr-withdrawal-sent-no-ref": () => {
+    const name = "Prem Kumar";
+    const paidAt = new Date();
+    return {
+      subject: "[PREVIEW] Qorix Markets — ₹1,25,000.00 paid out to your bank ✓ (no reference)",
+      text:
+        `[DESIGN PREVIEW]\n\n` +
+        `INR withdrawal sent for ${name} — no reference variant + lakhs comma test.\n\n` +
+        `— Qorix Markets`,
+      html: renderInrWithdrawalSentHtml({
+        preheader: `[PREVIEW] Your INR withdrawal of ₹1,25,000.00 via IMPS has been paid out.`,
+        name,
+        amountInr: 125000,
+        payoutMethod: "imps",
+        payoutReference: null,
+        withdrawalId: 9822,
+        paidAt,
       }),
     };
   },
