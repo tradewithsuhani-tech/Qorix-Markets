@@ -3,9 +3,8 @@ import assert from "node:assert/strict";
 import type { Request } from "express";
 
 // Bare-import — describeDevice is a pure UA parser, no DB / app boot needed.
-const { describeDevice, describeDeviceFull, describeDeviceFromUserAgent } = await import(
-  "../../middlewares/auth"
-);
+const { describeDevice, describeDeviceFull, describeDeviceFromUserAgent, pickRicherLabel } =
+  await import("../../middlewares/auth");
 
 function reqWith(ua: string): Request {
   return { headers: { "user-agent": ua } } as unknown as Request;
@@ -237,4 +236,64 @@ test("describeDeviceFromUserAgent() yields the same labels as describeDeviceFull
   assert.equal(fromUa.deviceVendor, fromReq.deviceVendor);
   assert.equal(fromUa.osVersion, fromReq.osVersion);
   assert.equal(fromUa.browserVersion, fromReq.browserVersion);
+});
+
+test("pickRicherLabel() prefers hint-derived stored over UA-frozen re-parse (Batch 2 case)", () => {
+  // The exact regression Batch 2.1 fixes: an Android device that opted into
+  // UA-CH stored "Android 14.4.1" via Sec-CH-UA-Platform-Version, but on the
+  // admin read the lazy-refresh re-parses the FROZEN UA "Linux; Android 10; K"
+  // and yields "Android 10". Returning "Android 10" would silently downgrade
+  // the precise version Batch 2 captured.
+  assert.equal(pickRicherLabel("Android 14.4.1", "Android 10"), "Android 14.4.1");
+});
+
+test("pickRicherLabel() handles Mac frozen UA being LEXICALLY LONGER than hint-derived label", () => {
+  // The trap that broke a string-length heuristic: Apple's frozen UA
+  // sentinel parses to "Mac OS 10.15.7" (14 chars) but the hint-derived
+  // truth could be "Mac OS 14.4.1" (13 chars) — fewer characters but
+  // newer OS. Semver-style numeric compare must pick stored.
+  assert.equal(pickRicherLabel("Mac OS 14.4.1", "Mac OS 10.15.7"), "Mac OS 14.4.1");
+  assert.equal(pickRicherLabel("Mac OS 13.6.4", "Mac OS 10.15.7"), "Mac OS 13.6.4");
+  // Windows analogue: UA Reduction freezes to "Windows NT 10.0" → re-parse
+  // gives "Windows 10", but hint Sec-CH-UA-Platform-Version distinguishes 11.
+  assert.equal(pickRicherLabel("Windows 11", "Windows 10"), "Windows 11");
+});
+
+test("pickRicherLabel() prefers fresh re-parse over old generic stored (Batch 1.5 case)", () => {
+  // Pre-Batch-1 rows were inserted with the regex parser and stored generic
+  // labels like "Mac" / "Chrome" with no version. After ua-parser-js was
+  // adopted, re-parsing the stored UA yields "Mac OS 10.15.7" / "Chrome 147".
+  // The lazy-refresh path must still upgrade those — original Batch 1.5 goal.
+  // Only one side has a version → falls through to length tiebreaker → fresh.
+  assert.equal(pickRicherLabel("Mac", "Mac OS 10.15.7"), "Mac OS 10.15.7");
+  assert.equal(pickRicherLabel("Chrome", "Chrome 147"), "Chrome 147");
+});
+
+test("pickRicherLabel() prefers higher minor / patch when major ties", () => {
+  // Both have version, same major, deeper minor/patch wins — important so
+  // hint-derived "Android 14.4.1" beats hint-derived "Android 14" if a
+  // mixed read ever happens.
+  assert.equal(pickRicherLabel("Android 14.4.1", "Android 14"), "Android 14.4.1");
+  assert.equal(pickRicherLabel("Android 14", "Android 14.4.1"), "Android 14.4.1");
+  assert.equal(pickRicherLabel("iOS 17.2.1", "iOS 17.2"), "iOS 17.2.1");
+});
+
+test("pickRicherLabel() handles null / undefined / empty edges without throwing", () => {
+  assert.equal(pickRicherLabel(null, "Chrome 147"), "Chrome 147");
+  assert.equal(pickRicherLabel(undefined, "Chrome 147"), "Chrome 147");
+  assert.equal(pickRicherLabel("Chrome 147", null), "Chrome 147");
+  assert.equal(pickRicherLabel("Chrome 147", undefined), "Chrome 147");
+  assert.equal(pickRicherLabel(null, null), null);
+  assert.equal(pickRicherLabel(undefined, undefined), null);
+  assert.equal(pickRicherLabel("", "Chrome 147"), "Chrome 147");
+  assert.equal(pickRicherLabel("Chrome 147", ""), "Chrome 147");
+});
+
+test("pickRicherLabel() ties go to stored (no churn between identical labels)", () => {
+  // Common case: stored == fresh after Batch 1.5 UPDATE branch refresh.
+  // Returning either is correct; preferring stored avoids any latent
+  // re-parse divergence (e.g. parser micro-bumps between deploys) from
+  // showing up as visible jitter for the admin.
+  assert.equal(pickRicherLabel("Chrome 147", "Chrome 147"), "Chrome 147");
+  assert.equal(pickRicherLabel("Android 14.4.1", "Android 14.4.1"), "Android 14.4.1");
 });

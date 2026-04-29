@@ -106,6 +106,62 @@ function cleanModel(model: string | null | undefined): string | null {
  *   `Sec-CH-UA-Platform-Version` distinguishes 10 vs 11.
  */
 /**
+ * Extracts a 3-tuple of integers (major, minor, patch) from the first version
+ * number in a label like `"Android 14.4.1"` → `[14, 4, 1]`. Returns `null`
+ * when the label has no version digits (e.g. pre-Batch-1 generic `"Mac"` or
+ * `"Chrome"`). Used by `pickRicherLabel` to do a real numeric comparison
+ * instead of a fragile string-length heuristic.
+ */
+function extractVersionTuple(s: string): [number, number, number] | null {
+  const m = s.match(/(\d+)(?:\.(\d+))?(?:\.(\d+))?/);
+  if (!m) return null;
+  return [
+    Number.parseInt(m[1] ?? "0", 10),
+    Number.parseInt(m[2] ?? "0", 10),
+    Number.parseInt(m[3] ?? "0", 10),
+  ];
+}
+
+/**
+ * Picks the richer of two label candidates (stored vs freshly re-parsed).
+ *
+ * Lazy-refresh paths in admin routes re-parse the stored UA on every read
+ * to upgrade pre-Batch-1 generic labels (`"Mac"` / `"Chrome"`) into rich
+ * ones (`"Mac OS 10.15.7"` / `"Chrome 147"`). But after Batch 2 the stored
+ * label may itself be hint-derived and represent a NEWER OS version than
+ * the UA-only re-parse, even though the UA-derived string is sometimes
+ * lexically longer. Examples:
+ *
+ *   stored "Android 14.4.1"  vs  fresh "Android 10"        → stored wins
+ *   stored "Mac OS 14.4.1"   vs  fresh "Mac OS 10.15.7"    → stored wins
+ *                                  ^^^^^^^^^^^^^^^^^^ frozen Apple sentinel
+ *   stored "Mac"             vs  fresh "Mac OS 10.15.7"    → fresh wins
+ *   stored "Chrome"          vs  fresh "Chrome 147"        → fresh wins
+ *
+ * Strategy: when both sides have a version number, the higher major.minor.patch
+ * wins (a real semver-style compare — string length is unreliable because
+ * "10.15.7" is longer than "14.4.1"). When only one side has a version (or
+ * versions tie), the longer string wins as a fall-back so generic stored
+ * labels get upgraded by the re-parse. Ties go to `stored` for stability
+ * (avoids visible jitter from parser micro-bumps between deploys).
+ */
+export function pickRicherLabel(
+  stored: string | null | undefined,
+  fresh: string | null | undefined,
+): string | null {
+  if (!stored) return fresh ?? null;
+  if (!fresh) return stored;
+  const sV = extractVersionTuple(stored);
+  const fV = extractVersionTuple(fresh);
+  if (sV && fV) {
+    for (let i = 0; i < 3; i++) {
+      if (sV[i]! !== fV[i]!) return sV[i]! > fV[i]! ? stored : fresh;
+    }
+  }
+  return fresh.length > stored.length ? fresh : stored;
+}
+
+/**
  * Pure UA-string parser. Used both by request-shaped callers
  * (`describeDeviceFull(req)`) and by the lazy-refresh paths in admin
  * routes that re-parse stored `user_agent` columns from the DB so
