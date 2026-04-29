@@ -35,6 +35,7 @@ import {
   renderAccountLockedHtml,
   renderUsdtWithdrawalRequestedHtml,
   renderInrWithdrawalSentHtml,
+  renderKycPersonalVerifiedHtml,
 } from "../lib/email-service";
 
 const DEFAULT_TO = "safepayu@gmail.com";
@@ -646,6 +647,26 @@ const TEMPLATES: Record<string, () => Preview> = {
         payoutReference: null,
         withdrawalId: 9822,
         paidAt,
+      }),
+    };
+  },
+
+  "kyc-personal-verified": () => {
+    const name = "Prem Kumar";
+    const verifiedAt = new Date();
+    return {
+      subject: "[PREVIEW] Qorix Markets — Step 1 of 3 complete · personal details verified ✓ (prussian-pearl)",
+      text:
+        `[DESIGN PREVIEW]\n\n` +
+        `KYC Lv.1 verified for ${name}.\n\n` +
+        `Test render of the new prussian-navy + pearl "First Checkpoint Cleared" template.\n` +
+        `3-tier KYC ladder centerpiece (Lv.1 ✓ · Lv.2 up next · Lv.3 final).\n` +
+        `Reply with feedback.\n\n` +
+        `— Qorix Markets`,
+      html: renderKycPersonalVerifiedHtml({
+        preheader: `[PREVIEW] Your personal details (Lv.1) are verified. Two short steps left to unlock full account capabilities.`,
+        name,
+        verifiedAt,
       }),
     };
   },
