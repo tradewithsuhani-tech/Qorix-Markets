@@ -121,7 +121,7 @@ export async function sendEmail(
 //
 // Email-client safe: table layout, inline CSS, web-safe fonts, mobile @media.
 // ---------------------------------------------------------------------------
-function renderVerifyEmailOtpHtml(opts: {
+export function renderVerifyEmailOtpHtml(opts: {
   preheader: string;
   intro: string;
   otp: string;
