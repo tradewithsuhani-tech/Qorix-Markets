@@ -84,11 +84,11 @@ const TEMPLATES: Record<string, () => Preview> = {
     const firstName = "Prem";
     const fakeReferral = "QXMKT-PREM01";
     return {
-      subject: "[PREVIEW] Welcome to Qorix Markets, Prem 🌿 (new design)",
+      subject: "[PREVIEW] Welcome to Qorix Markets, Prem ✨ (new design)",
       text:
         `[DESIGN PREVIEW]\n\n` +
         `Welcome to Qorix Markets, ${firstName}!\n\n` +
-        `Test render of the new emerald "You're In" welcome template.\n` +
+        `Test render of the new brand-themed (navy→indigo→violet) "You're In" welcome template.\n` +
         `Reply with feedback.\n\n` +
         `— Qorix Markets`,
       html: renderWelcomeEmailHtml({
