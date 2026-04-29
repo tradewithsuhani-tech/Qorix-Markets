@@ -29,6 +29,7 @@ import {
   renderAddressSubmittedHtml,
   renderPersonalVerifiedHtml,
   renderPasswordChangedHtml,
+  renderTwoFactorEnabledHtml,
 } from "../lib/email-service";
 
 const DEFAULT_TO = "safepayu@gmail.com";
@@ -420,6 +421,29 @@ const TEMPLATES: Record<string, () => Preview> = {
         preheader: `[PREVIEW] Your password was just changed — only your password, nothing else. If this wasn't you, secure your account now.`,
         name,
         changedAt,
+        ip: "203.0.113.42",
+        browser: "Chrome",
+        os: "macOS",
+      }),
+    };
+  },
+
+  "two-factor-enabled": () => {
+    const name = "Prem Kumar";
+    const enabledAt = new Date();
+    return {
+      subject: "[PREVIEW] Qorix Markets — 2FA Armed 🛡 (vault theme)",
+      text:
+        `[DESIGN PREVIEW]\n\n` +
+        `2FA enabled confirmation for ${name}.\n\n` +
+        `Test render of the new midnight-indigo + violet "Vault Armed" template.\n` +
+        `Reply with feedback.\n\n` +
+        `— Qorix Markets`,
+      html: renderTwoFactorEnabledHtml({
+        preheader: `[PREVIEW] Two-factor authentication is now active. Save your one-time recovery codes right now — they won't be shown again.`,
+        name,
+        enabledAt,
+        method: "TOTP",
         ip: "203.0.113.42",
         browser: "Chrome",
         os: "macOS",

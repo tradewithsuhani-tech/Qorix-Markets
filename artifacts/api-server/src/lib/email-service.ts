@@ -4768,3 +4768,328 @@ export async function sendPasswordChanged(args: {
 
   await sendEmail(to, subject, text, html);
 }
+
+// ---------------------------------------------------------------------------
+// TWO-FACTOR AUTHENTICATION ENABLED — confirmation email
+// ---------------------------------------------------------------------------
+// VAULT theme: midnight indigo + electric violet.
+// Layout flow:
+//   • Logo bar (midnight → indigo → violet gradient)
+//   • Hero: 🛡 2FA ENABLED pill · "Vault Armed" headline · sub
+//   • RECOVERY CODES URGENCY banner (deep violet, glowing key icon) — the
+//     critical action: backup codes are one-time-shown
+//   • PROTECTION LAYERS centerpiece: dual-lock visual (🔒 Password + 🛡 2FA)
+//     side-by-side, both glowing, with "both required to sign in" footer
+//   • Event Details: armed at · method · source (IP + browser, optional)
+//   • Primary CTA "Save Recovery Codes →" (violet gradient)
+//   • Secondary "Wasn't you? Contact support →"
+//   • Reassurance card: "Lost your phone?" + recovery codes + anti-phishing
+//   • "Trade smart 📈" footer
+// ---------------------------------------------------------------------------
+function prettifyTwoFactorMethod(raw: string): string {
+  const m = raw.toLowerCase().trim();
+  if (m === "totp" || m === "authenticator" || m === "app") return "TOTP authenticator app";
+  if (m === "sms" || m === "phone" || m === "text") return "SMS to your phone";
+  if (m === "email" || m === "mail") return "Email code";
+  return raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
+}
+
+export function renderTwoFactorEnabledHtml(opts: {
+  preheader: string;
+  name: string;
+  enabledAt: Date;
+  method: string;
+  ip?: string | null;
+  browser?: string | null;
+  os?: string | null;
+}): string {
+  const { preheader, name, enabledAt, method, ip, browser, os } = opts;
+  const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const whenStr =
+    `${enabledAt.getUTCDate()} ${MONTHS_SHORT[enabledAt.getUTCMonth()]} ${enabledAt.getUTCFullYear()} · ` +
+    `${String(enabledAt.getUTCHours()).padStart(2, "0")}:${String(enabledAt.getUTCMinutes()).padStart(2, "0")} UTC`;
+  const safeFirstName = escapeHtml((name || "there").trim().split(/\s+/)[0] || "there");
+  const safeWhen = escapeHtml(whenStr);
+  const safeMethod = escapeHtml(prettifyTwoFactorMethod(method));
+  const sourceParts: string[] = [];
+  if (ip && ip.trim()) sourceParts.push(ip.trim());
+  const deviceParts: string[] = [];
+  if (browser && browser.trim()) deviceParts.push(browser.trim());
+  if (os && os.trim()) deviceParts.push(os.trim());
+  if (deviceParts.length > 0) sourceParts.push(deviceParts.join(" on "));
+  const safeSource = sourceParts.length > 0 ? escapeHtml(sourceParts.join(" · ")) : null;
+  const year = new Date().getFullYear();
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="x-apple-disable-message-reformatting" />
+<meta name="color-scheme" content="dark light" />
+<meta name="supported-color-schemes" content="dark light" />
+<title>2FA enabled — Qorix Markets</title>
+<style type="text/css">
+  @media only screen and (max-width:480px) {
+    .qx-outer { padding:20px 10px !important; }
+    .qx-card { border-radius:18px !important; }
+    .qx-hero-pad { padding:6px 18px 22px !important; }
+    .qx-hero-h { font-size:24px !important; line-height:1.22 !important; }
+    .qx-locks-pad { padding:24px 20px 4px !important; }
+    .qx-lock-cell { padding:18px 10px !important; }
+    .qx-lock-title { font-size:11px !important; }
+    .qx-lock-status { font-size:12px !important; }
+    .qx-detail-pad { padding:24px 22px 4px !important; }
+    .qx-detail-label { font-size:10.5px !important; }
+    .qx-detail-value { font-size:14px !important; }
+    .qx-cta-pad { padding:24px 18px 6px !important; }
+    .qx-cta { padding:13px 24px !important; font-size:13.5px !important; letter-spacing:0.2px !important; }
+    .qx-foot-pad { padding:24px 18px 22px !important; }
+  }
+</style>
+</head>
+<body style="margin:0;padding:0;background:#08081A;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;">
+<div style="display:none;max-height:0;overflow:hidden;font-size:1px;line-height:1px;color:#08081A;opacity:0;">${escapeHtml(preheader)}</div>
+<div style="display:none;max-height:0;overflow:hidden;">&#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847;</div>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="qx-outer" style="background:#08081A;padding:32px 16px;">
+  <tr>
+    <td align="center">
+
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="qx-card" style="max-width:560px;background:#13131F;border:1px solid rgba(167,139,250,0.30);border-radius:22px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,0.65);">
+
+        <!-- LOGO BAR — midnight → violet gradient -->
+        <tr>
+          <td align="left" style="padding:20px 24px 0 28px;background:#08081A;background-image:linear-gradient(135deg,#08081A 0%,#1E1B4B 45%,#4C1D95 78%,#A78BFA 100%);">
+            <img src="cid:${BRAND_LOGO_CID}" alt="Qorix Markets" width="320" height="217" style="display:block;width:320px;max-width:90%;height:auto;border:0;outline:none;text-decoration:none;margin:0;" />
+          </td>
+        </tr>
+
+        <!-- HERO — 2FA armed pill + headline + violet divider -->
+        <tr>
+          <td class="qx-hero-pad" align="center" style="padding:8px 32px 28px;background:#08081A;background-image:linear-gradient(135deg,#08081A 0%,#1E1B4B 45%,#4C1D95 78%,#A78BFA 100%);">
+            <div style="display:inline-block;padding:6px 14px;border-radius:999px;background:rgba(196,181,253,0.20);border:1px solid rgba(196,181,253,0.55);font-size:10.5px;letter-spacing:2.4px;color:#DDD6FE;font-weight:700;text-transform:uppercase;margin-bottom:18px;">
+              🛡 2FA Enabled
+            </div>
+            <div class="qx-hero-h" style="font-size:30px;line-height:1.18;font-weight:800;color:#FFFFFF;letter-spacing:-0.5px;max-width:440px;margin:0 auto;">
+              Vault Armed
+            </div>
+            <div style="font-size:13.5px;color:#DDD6FE;margin-top:10px;font-weight:500;max-width:440px;margin-left:auto;margin-right:auto;line-height:1.5;">
+              ${safeFirstName}, two-factor authentication is now <strong style="color:#FFFFFF;">active</strong>. Even if someone gets your password, they can't sign in without your second code.
+            </div>
+            <div style="width:48px;height:3px;background:linear-gradient(90deg,#DDD6FE 0%,#8B5CF6 100%);margin:18px auto 0;border-radius:999px;"></div>
+          </td>
+        </tr>
+
+        <!-- RECOVERY CODES URGENCY banner — critical one-time action -->
+        <tr>
+          <td align="center" style="padding:24px 24px 0;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td style="padding:16px 18px;background:#1A0A2E;background-image:linear-gradient(180deg,#220D3A 0%,#1A0A2E 100%);border:1.5px solid rgba(196,181,253,0.50);border-radius:12px;box-shadow:0 0 28px rgba(139,92,246,0.28);">
+                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                    <tr>
+                      <td width="32" valign="top" style="width:32px;padding:2px 12px 0 0;">
+                        <div style="width:28px;height:28px;line-height:28px;text-align:center;border-radius:999px;background:rgba(196,181,253,0.22);border:1px solid rgba(196,181,253,0.65);font-size:14px;color:#DDD6FE;font-weight:700;">🔑</div>
+                      </td>
+                      <td valign="top">
+                        <div style="font-size:11.5px;letter-spacing:1.6px;color:#DDD6FE;text-transform:uppercase;font-weight:700;line-height:1;margin-bottom:6px;">Save Your Recovery Codes Now</div>
+                        <div style="font-size:13px;color:#C4B5FD;font-weight:500;line-height:1.55;">Your one-time-shown backup codes are needed if you lose your phone. <strong style="color:#FFFFFF;">Save them somewhere safe right now</strong> — they will not be shown again.</div>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- PROTECTION LAYERS — dual-lock centerpiece -->
+        <tr>
+          <td class="qx-locks-pad" align="center" style="padding:32px 24px 4px;">
+            <div style="font-size:10.5px;letter-spacing:2.4px;color:#DDD6FE;font-weight:700;text-transform:uppercase;text-align:left;padding:0 0 12px 0;">
+              Protection Layers
+            </div>
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <!-- Lock 1: Password (existing) -->
+                <td class="qx-lock-cell" width="50%" valign="top" style="width:50%;padding:22px 14px;background:#13131F;background-image:linear-gradient(180deg,#1A1530 0%,#13131F 100%);border:1.5px solid rgba(167,139,250,0.30);border-radius:14px;text-align:center;box-shadow:inset 0 1px 0 rgba(255,255,255,0.03);">
+                  <div style="width:48px;height:48px;line-height:48px;border-radius:14px;background:rgba(167,139,250,0.14);border:1px solid rgba(167,139,250,0.40);font-size:22px;color:#A78BFA;margin:0 auto 12px;text-align:center;">🔒</div>
+                  <div class="qx-lock-title" style="font-size:11.5px;letter-spacing:1.8px;color:#A78BFA;text-transform:uppercase;font-weight:700;line-height:1;margin-bottom:8px;">Password</div>
+                  <div class="qx-lock-status" style="font-size:13px;color:#FFFFFF;font-weight:600;line-height:1.4;">
+                    <span style="display:inline-block;width:6px;height:6px;border-radius:999px;background:#A78BFA;vertical-align:middle;margin-right:5px;"></span>
+                    <span style="vertical-align:middle;">Active</span>
+                  </div>
+                </td>
+                <td width="14" style="width:14px;font-size:0;line-height:0;">&nbsp;</td>
+                <!-- Lock 2: 2FA (just armed — STRONGER glow) -->
+                <td class="qx-lock-cell" width="50%" valign="top" style="width:50%;padding:22px 14px;background:#13131F;background-image:linear-gradient(180deg,#1F1538 0%,#180D2E 100%);border:1.5px solid rgba(196,181,253,0.65);border-radius:14px;text-align:center;box-shadow:0 0 28px rgba(139,92,246,0.32),inset 0 1px 0 rgba(255,255,255,0.04);">
+                  <div style="width:48px;height:48px;line-height:48px;border-radius:14px;background:rgba(196,181,253,0.20);border:1px solid rgba(196,181,253,0.65);font-size:22px;color:#DDD6FE;margin:0 auto 12px;text-align:center;box-shadow:0 0 16px rgba(196,181,253,0.50);">🛡</div>
+                  <div class="qx-lock-title" style="font-size:11.5px;letter-spacing:1.8px;color:#DDD6FE;text-transform:uppercase;font-weight:700;line-height:1;margin-bottom:8px;">2-Factor</div>
+                  <div class="qx-lock-status" style="font-size:13px;color:#FFFFFF;font-weight:600;line-height:1.4;">
+                    <span style="display:inline-block;width:6px;height:6px;border-radius:999px;background:#DDD6FE;box-shadow:0 0 8px rgba(221,214,254,0.85);vertical-align:middle;margin-right:5px;"></span>
+                    <span style="vertical-align:middle;">Just armed</span>
+                  </div>
+                </td>
+              </tr>
+            </table>
+            <!-- "both required" strip -->
+            <div style="margin-top:14px;font-size:11.5px;color:#7C6F9A;line-height:1.5;text-align:center;">
+              <span style="display:inline-block;width:7px;height:7px;border-radius:999px;background:#A78BFA;box-shadow:0 0 10px rgba(167,139,250,0.7);vertical-align:middle;margin-right:6px;"></span>
+              <span style="vertical-align:middle;">Both layers required to sign in to your account.</span>
+            </div>
+          </td>
+        </tr>
+
+        <!-- DETAILS — stacked rows -->
+        <tr>
+          <td class="qx-detail-pad" style="padding:34px 32px 4px;">
+            <div style="font-size:10.5px;letter-spacing:2.4px;color:#DDD6FE;text-transform:uppercase;font-weight:700;text-align:left;padding:0 0 14px 0;">
+              Event Details
+            </div>
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td style="padding:14px 0;border-bottom:1px solid rgba(167,139,250,0.18);">
+                  <div class="qx-detail-label" style="font-size:11px;letter-spacing:1.6px;color:#7C6F9A;text-transform:uppercase;font-weight:600;line-height:1;margin-bottom:6px;"><span style="margin-right:6px;">🕐</span>Armed At</div>
+                  <div class="qx-detail-value" style="font-size:15px;color:#FFFFFF;font-weight:600;line-height:1.4;">${safeWhen}</div>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:14px 0;border-bottom:1px solid rgba(167,139,250,0.18);">
+                  <div class="qx-detail-label" style="font-size:11px;letter-spacing:1.6px;color:#7C6F9A;text-transform:uppercase;font-weight:600;line-height:1;margin-bottom:6px;"><span style="margin-right:6px;">🔐</span>Method</div>
+                  <div class="qx-detail-value" style="font-size:15px;color:#FFFFFF;font-weight:600;line-height:1.4;">${safeMethod}</div>
+                </td>
+              </tr>
+              ${safeSource ? `
+              <tr>
+                <td style="padding:14px 0 4px;">
+                  <div class="qx-detail-label" style="font-size:11px;letter-spacing:1.6px;color:#7C6F9A;text-transform:uppercase;font-weight:600;line-height:1;margin-bottom:6px;"><span style="margin-right:6px;">📍</span>Source</div>
+                  <div class="qx-detail-value" style="font-size:15px;color:#FFFFFF;font-weight:600;line-height:1.4;font-family:'SF Mono',Menlo,Consolas,monospace;letter-spacing:-0.2px;">${safeSource}</div>
+                </td>
+              </tr>` : `
+              <tr>
+                <td style="padding:14px 0 4px;">
+                  <div class="qx-detail-label" style="font-size:11px;letter-spacing:1.6px;color:#7C6F9A;text-transform:uppercase;font-weight:600;line-height:1;margin-bottom:6px;"><span style="margin-right:6px;">🛡</span>Status</div>
+                  <div class="qx-detail-value" style="font-size:15px;color:#FFFFFF;font-weight:600;line-height:1.4;">Two-factor authentication enabled successfully</div>
+                </td>
+              </tr>`}
+            </table>
+          </td>
+        </tr>
+
+        <!-- DUAL CTA — primary "Save Recovery Codes" violet + secondary "Wasn't you" -->
+        <tr>
+          <td class="qx-cta-pad" align="center" style="padding:30px 32px 6px;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td align="center" style="border-radius:12px;background-image:linear-gradient(135deg,#A78BFA 0%,#7C3AED 100%);background-color:#7C3AED;box-shadow:0 8px 28px rgba(124,58,237,0.50);">
+                  <a href="https://qorixmarkets.com/profile" target="_blank" class="qx-cta" style="display:inline-block;padding:16px 36px;font-size:14.5px;font-weight:700;color:#FFFFFF;text-decoration:none;letter-spacing:0.4px;border-radius:12px;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+                    Save Recovery Codes →
+                  </a>
+                </td>
+              </tr>
+            </table>
+            <div style="margin-top:14px;font-size:12.5px;color:#7C6F9A;line-height:1.6;">
+              Wasn't you? <a href="mailto:support@qorixmarkets.com" style="color:#DDD6FE;text-decoration:none;font-weight:600;border-bottom:1px dashed rgba(221,214,254,0.4);">Contact support →</a>
+            </div>
+          </td>
+        </tr>
+
+        <!-- Reassurance card -->
+        <tr>
+          <td style="padding:22px 32px 8px;">
+            <div style="background:rgba(167,139,250,0.07);border-left:2px solid rgba(167,139,250,0.55);border-radius:6px;padding:14px 16px;font-size:12.5px;line-height:1.65;color:#9989B5;">
+              <div style="color:#DDD6FE;font-weight:600;margin-bottom:6px;">Lost your phone? Don't panic.</div>
+              Use any one of your <strong style="color:#DDD6FE;">recovery codes</strong> to sign in — that's exactly what they're for. We never ask for your 2FA code over email, social media, or phone.
+            </div>
+          </td>
+        </tr>
+
+        <!-- FOOTER -->
+        <tr>
+          <td class="qx-foot-pad" align="center" style="padding:30px 32px 28px;border-top:1px solid rgba(255,255,255,0.05);background:#06061A;">
+            <div style="font-size:13px;color:#DDD6FE;margin-bottom:6px;font-weight:600;">
+              Trade smart 📈
+            </div>
+            <div style="font-size:11.5px;color:#5A5278;line-height:1.7;">
+              © ${year} Qorix Markets · AI-Powered Trading<br/>
+              Need help? <a href="mailto:support@qorixmarkets.com" style="color:#DDD6FE;text-decoration:none;">support@qorixmarkets.com</a>
+            </div>
+          </td>
+        </tr>
+
+      </table>
+
+      <div style="height:24px;line-height:24px;font-size:1px;">&nbsp;</div>
+    </td>
+  </tr>
+</table>
+</body>
+</html>`;
+}
+
+// ---------------------------------------------------------------------------
+// Send the 2FA Enabled confirmation email — fires after the user successfully
+// arms two-factor authentication on their account.
+// ---------------------------------------------------------------------------
+export async function sendTwoFactorEnabled(args: {
+  to: string;
+  name: string;
+  enabledAt: Date;
+  method: string;
+  ip?: string | null;
+  browser?: string | null;
+  os?: string | null;
+}): Promise<void> {
+  const { to, name, enabledAt, method, ip, browser, os } = args;
+  const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const whenStr =
+    `${enabledAt.getUTCDate()} ${MONTHS_SHORT[enabledAt.getUTCMonth()]} ${enabledAt.getUTCFullYear()} · ` +
+    `${String(enabledAt.getUTCHours()).padStart(2, "0")}:${String(enabledAt.getUTCMinutes()).padStart(2, "0")} UTC`;
+  const methodLabel = prettifyTwoFactorMethod(method);
+  const sourceParts: string[] = [];
+  if (ip && ip.trim()) sourceParts.push(ip.trim());
+  const deviceParts: string[] = [];
+  if (browser && browser.trim()) deviceParts.push(browser.trim());
+  if (os && os.trim()) deviceParts.push(os.trim());
+  if (deviceParts.length > 0) sourceParts.push(deviceParts.join(" on "));
+  const sourceLine = sourceParts.length > 0 ? sourceParts.join(" · ") : null;
+
+  const subject = `Qorix Markets — 2FA armed 🛡 — your account is now stronger`;
+  const preheader = `Two-factor authentication is now active. Save your one-time recovery codes right now — they won't be shown again.`;
+
+  const html = renderTwoFactorEnabledHtml({
+    preheader,
+    name,
+    enabledAt,
+    method,
+    ip: ip ?? null,
+    browser: browser ?? null,
+    os: os ?? null,
+  });
+
+  const text =
+    `Vault Armed — 2FA Enabled\n\n` +
+    `Hi ${name},\n\n` +
+    `Two-factor authentication is now ACTIVE on your Qorix Markets account.\n` +
+    `Even if someone gets your password, they can't sign in without your\n` +
+    `second code. Your account is significantly stronger.\n\n` +
+    `🔑 SAVE YOUR RECOVERY CODES NOW\n` +
+    `Your one-time-shown backup codes are needed if you lose your phone.\n` +
+    `Save them somewhere safe right now — they will not be shown again.\n\n` +
+    `Protection layers:\n` +
+    `  🔒 Password   · Active\n` +
+    `  🛡 2-Factor   · Just armed\n` +
+    `Both layers are required to sign in to your account.\n\n` +
+    `Armed at:    ${whenStr}\n` +
+    `Method:      ${methodLabel}\n` +
+    (sourceLine ? `Source:      ${sourceLine}\n\n` : `Status:      Two-factor authentication enabled successfully\n\n`) +
+    `Save recovery codes: https://qorixmarkets.com/profile\n` +
+    `Wasn't you? Contact support: support@qorixmarkets.com\n\n` +
+    `Lost your phone? Use any one of your recovery codes to sign in — that's\n` +
+    `exactly what they're for. We never ask for your 2FA code over email,\n` +
+    `social media, or phone.\n\n` +
+    `— Qorix Markets`;
+
+  await sendEmail(to, subject, text, html);
+}
