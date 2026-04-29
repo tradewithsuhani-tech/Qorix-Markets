@@ -91,8 +91,27 @@ export interface WithdrawBody {
   walletAddress: string;
 }
 
+/**
+ * Transfer direction. "to_trading" debits main and credits trading
+(default — backward compatible). "to_main" debits trading and
+credits main (reverse transfer).
+
+ */
+export type TransferBodyDirection =
+  (typeof TransferBodyDirection)[keyof typeof TransferBodyDirection];
+
+export const TransferBodyDirection = {
+  to_trading: "to_trading",
+  to_main: "to_main",
+} as const;
+
 export interface TransferBody {
   amount: number;
+  /** Transfer direction. "to_trading" debits main and credits trading
+(default — backward compatible). "to_main" debits trading and
+credits main (reverse transfer).
+ */
+  direction?: TransferBodyDirection;
 }
 
 export interface Transaction {

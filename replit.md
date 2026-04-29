@@ -911,5 +911,38 @@ Re-verified: both workspaces typecheck clean; `/admin/users?q=test` and
 **Verification (local)**: `pnpm typecheck` clean both workspaces. Web
 workflow restarted; admin sub-page renders.
 
+**Shipped to prod**: commit `dad280a` on origin/main (Apr 28, 2026) → CI auto-deployed qorix-markets-web (api skipped via paths-filter). Live and verified.
+
+---
+
+### Apr 29, 2026 — Phase 1+2 frontend consolidation push to prod
+
+**Pushed**: commit `527f2d8` on `origin/main` (parent: `dad280a`).
+CI run #25084688211 → success at T+150s. Web-only deploy
+(api-server skipped — no api/* files in commit).
+
+**Scope** — 31 frontend files, 724 insertions, 2842 deletions:
+
+- **Polling intervals + dashboard rename + portfolio hooks** (commits b31c530, 5e810f8, 84bc01b, ff27b94)
+- **UI consolidation Phase 1A+1B** (commit 0bb549e) — shared `<InputField>` + AnimatedCounter standardization.
+- **authFetch migration Phase 2 batches A-F** (commits f29598e..c83e68b) — 22 files migrated to canonical `authFetch` from `lib/auth-fetch.ts`. Project-wide `qorix_token` reads: 24 → 2.
+- **Dashboard polish** (commits 8e588c6, 906de1e, d1afea8) — Live Trades card height fix, empty-state polish, shimmer line removal.
+- **Marketing assets** — opengraph.jpg refresh + version.json cache-bust.
+
+**One deletion**: `artifacts/qorix-markets/src/pages/demo-dashboard.tsx` (consolidated into `dashboard.tsx`). Pushed as tree entry with `sha:null`.
+
+**DB safety**: zero schema files touched, zero db:push, zero PK changes. Pure render-layer.
+
+**Push tooling lessons captured** (for `/tmp/push-commit.sh`):
+- Always re-fetch real `origin/main` SHA via API before push (local mirror can be stale by days).
+- Auto-detect text vs binary blob encoding (utf-8 / base64) — needed for opengraph.jpg.
+- Detect missing local files and emit deletion tree entry (`sha:null`) — needed for demo-dashboard.tsx.
+
+**Still un-pushed (Group B — 207 commits since `3f4f77a`)**: includes 16 schema files + ~80 backend files + fly.toml/deploy.yml/package.json/pnpm-lock changes. Many commits already say "deployed to Fly" → likely already in Fly runtime via direct `fly deploy` from local Mac. Needs separate session to (a) verify Fly runtime matches, (b) decide what to backfill onto GitHub.
+
+---
+
+(Original Phase 7.3 follow-up notes below preserved for context.)
+
 **Ready to push**: commit + Fly deploy via `tools/push-commit.sh` (GitHub
 API → CI → Fly v113+).

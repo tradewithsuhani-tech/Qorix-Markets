@@ -16,11 +16,22 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Shield, Zap, BarChart2, Play, Square, RefreshCw,
   TrendingUp, AlertTriangle, CheckCircle, ChevronRight,
-  ArrowUpRight, Info, X
+  ArrowUpRight, Info, X, Wallet
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { Switch } from "@/components/ui/switch";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 const RISK_PROFILES = [
   {
@@ -36,7 +47,7 @@ const RISK_PROFILES = [
     monthlyMaxPct: 5,
     drawdownLimit: 3,
     volatility: "Low",
-    score: 2,
+    score: 1,
     color: "text-blue-400",
     gradientFrom: "from-blue-500/20",
     gradientTo: "to-blue-600/5",
@@ -46,7 +57,7 @@ const RISK_PROFILES = [
     glowActive: "0 0 30px rgba(59,130,246,0.2), 0 4px 24px rgba(0,0,0,0.4)",
     badgeColor: "bg-blue-500/15 text-blue-400 border-blue-500/25",
     barColor: "#3b82f6",
-    barWidth: "20%",
+    barWidth: "10%",
     features: [
       "Max 3% drawdown protection",
       "2–5% monthly target return",
@@ -66,7 +77,7 @@ const RISK_PROFILES = [
     monthlyMaxPct: 6,
     drawdownLimit: 5,
     volatility: "Medium",
-    score: 5,
+    score: 3,
     color: "text-indigo-400",
     gradientFrom: "from-indigo-500/20",
     gradientTo: "to-indigo-600/5",
@@ -76,7 +87,7 @@ const RISK_PROFILES = [
     glowActive: "0 0 30px rgba(99,102,241,0.2), 0 4px 24px rgba(0,0,0,0.4)",
     badgeColor: "bg-indigo-500/15 text-indigo-400 border-indigo-500/25",
     barColor: "#6366f1",
-    barWidth: "50%",
+    barWidth: "30%",
     features: [
       "Max 5% drawdown protection",
       "4–6% monthly target return",
@@ -97,7 +108,7 @@ const RISK_PROFILES = [
     monthlyMaxPct: 8,
     drawdownLimit: 10,
     volatility: "High",
-    score: 8,
+    score: 5,
     color: "text-orange-400",
     gradientFrom: "from-orange-500/20",
     gradientTo: "to-red-600/5",
@@ -107,7 +118,7 @@ const RISK_PROFILES = [
     glowActive: "0 0 30px rgba(249,115,22,0.2), 0 4px 24px rgba(0,0,0,0.4)",
     badgeColor: "bg-orange-500/15 text-orange-400 border-orange-500/25",
     barColor: "#f97316",
-    barWidth: "80%",
+    barWidth: "50%",
     features: [
       "Max 10% drawdown protection",
       "5–8% monthly target return",
@@ -194,10 +205,12 @@ type InvestmentData = {
   drawdownLimit: number;
   riskLevel: string;
   pausedAt?: string | null;
+  stoppedAt?: string | null;
   totalProfit: number;
   peakBalance?: number;
   drawdownFromPeak?: number;
   recoveryPct?: number;
+  autoCompound?: boolean;
 };
 
 function CapitalProtectionPanel({
@@ -845,14 +858,82 @@ export default function InvestPage() {
                       <span className="text-xs bg-blue-500/15 text-blue-400 border border-blue-500/25 px-2 py-0.5 rounded-full">ON</span>
                     )}
                   </div>
-                  <button
-                    onClick={() => stopMutation.mutate()}
-                    disabled={stopMutation.isPending}
-                    className="flex items-center gap-2 px-5 py-2.5 bg-red-500/10 text-red-400 hover:bg-red-500/15 border border-red-500/25 rounded-xl font-medium transition-all text-sm disabled:opacity-50"
-                  >
-                    <Square style={{ width: 14, height: 14 }} />
-                    {stopMutation.isPending ? "Stopping..." : "Stop Trading"}
-                  </button>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <button
+                        disabled={stopMutation.isPending}
+                        className="flex items-center gap-2 px-5 py-2.5 bg-red-500/10 text-red-400 hover:bg-red-500/15 border border-red-500/25 rounded-xl font-medium transition-all text-sm disabled:opacity-50"
+                      >
+                        <Square style={{ width: 14, height: 14 }} />
+                        {stopMutation.isPending ? "Stopping..." : "Stop Trading"}
+                      </button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent
+                      className="max-w-md border-red-500/30 bg-[#0a0d12] rounded-2xl p-0 gap-0 overflow-hidden shadow-[0_0_60px_-15px_rgba(239,68,68,0.35)]"
+                    >
+                      {/* Decorative red ambient glow — top-right corner */}
+                      <div
+                        aria-hidden
+                        className="pointer-events-none absolute -top-16 -right-16 w-48 h-48 rounded-full bg-red-500/15 blur-3xl"
+                      />
+
+                      <div className="relative p-6 pb-5">
+                        <AlertDialogHeader className="space-y-0">
+                          <div className="flex items-start gap-3.5">
+                            <div className="w-12 h-12 rounded-xl bg-red-500/15 border border-red-500/40 flex items-center justify-center shrink-0 shadow-[0_0_16px_-4px_rgba(239,68,68,0.4)]">
+                              <Square style={{ width: 18, height: 18 }} className="text-red-300" />
+                            </div>
+                            <div className="flex-1 min-w-0 pt-0.5">
+                              <AlertDialogTitle className="text-xl font-bold text-white tracking-tight">
+                                Stop Trading?
+                              </AlertDialogTitle>
+                              <p className="text-[11px] uppercase tracking-[0.18em] text-red-300/80 font-semibold mt-1">
+                                This will halt your active strategy
+                              </p>
+                            </div>
+                          </div>
+
+                          <AlertDialogDescription className="pt-5 text-sm text-white/65 leading-relaxed">
+                            Daily profits will stop being credited from the next cycle.
+                            Your capital is{" "}
+                            <span className="text-white font-medium">never locked</span>
+                            {" "}— you can resume or redeploy anytime.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+
+                        {/* Capital-safety info card */}
+                        <div className="mt-4 rounded-xl border border-emerald-500/25 bg-emerald-500/[0.04] p-3.5">
+                          <div className="flex items-center gap-3">
+                            <div className="w-9 h-9 rounded-lg bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center shrink-0">
+                              <Shield style={{ width: 15, height: 15 }} className="text-emerald-300" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-[10px] uppercase tracking-[0.18em] text-emerald-300/80 font-semibold">
+                                Capital Safe
+                              </p>
+                              <p className="text-sm text-white font-semibold mt-0.5 tabular-nums">
+                                ${investment.amount.toFixed(2)}{" "}
+                                <span className="text-white/50 font-normal">stays in trading balance</span>
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <AlertDialogFooter className="!flex-row !justify-stretch gap-2.5 px-6 pb-6 pt-4 sm:!space-x-0 border-t border-white/5 bg-white/[0.015]">
+                        <AlertDialogCancel className="!mt-0 flex-1 h-11 border-white/10 bg-white/[0.04] text-white/85 hover:bg-white/[0.08] hover:text-white hover:border-white/20 rounded-xl font-semibold transition-all">
+                          Cancel
+                        </AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={() => stopMutation.mutate()}
+                          className="flex-1 h-11 bg-gradient-to-b from-red-500 to-red-600 text-white border border-red-400/40 hover:from-red-400 hover:to-red-500 rounded-xl font-semibold transition-all shadow-[0_0_20px_-6px_rgba(239,68,68,0.55)] flex items-center justify-center gap-2"
+                        >
+                          <Square style={{ width: 13, height: 13 }} />
+                          Stop Trading
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
                 </div>
               </div>
             </motion.div>
@@ -899,6 +980,47 @@ export default function InvestPage() {
         ) : (
           /* ── SETUP VIEW ──────────────────────────────────────────── */
           <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
+            {/* Post-Stop Banner: shown when user has previously stopped an
+                investment but hasn't deployed a new one yet. Reassures them
+                that their capital is safe and withdrawable. */}
+            {investment?.stoppedAt && !investment.isActive && !investment.isPaused && (
+              <motion.div
+                initial={{ opacity: 0, y: -8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4 }}
+                className="lg:col-span-5 relative overflow-hidden rounded-2xl border border-amber-500/30 bg-gradient-to-r from-amber-500/[0.08] via-amber-500/[0.03] to-transparent p-4 sm:p-5"
+              >
+                <div
+                  aria-hidden
+                  className="absolute -top-12 -right-12 w-40 h-40 rounded-full bg-amber-500/15 blur-3xl pointer-events-none"
+                />
+                <div className="relative flex items-start gap-3 sm:gap-4">
+                  <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-amber-500/15 border border-amber-500/40 flex items-center justify-center shrink-0">
+                    <Wallet style={{ width: 18, height: 18 }} className="text-amber-300" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm sm:text-[15px] font-semibold text-white">
+                      Trading stopped on{" "}
+                      <span className="text-amber-300">
+                        {new Date(investment.stoppedAt).toLocaleDateString(undefined, {
+                          month: "short",
+                          day: "numeric",
+                          year: "numeric",
+                        })}
+                      </span>
+                    </p>
+                    <p className="text-xs sm:text-sm text-muted-foreground mt-1 leading-relaxed">
+                      Your{" "}
+                      <span className="text-amber-300 font-semibold tabular-nums">
+                        ${investment.amount.toFixed(2)}
+                      </span>{" "}
+                      capital is safe and ready to withdraw — or deploy a new strategy below.
+                    </p>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
             {/* Left: Strategy Selection + Amount */}
             <div className="lg:col-span-3 space-y-5">
 
@@ -1136,7 +1258,14 @@ export default function InvestPage() {
                   {[
                     { label: "Capital", value: numAmount > 0 ? `$${numAmount.toFixed(2)} USD` : "—" },
                     { label: "Strategy", value: selectedProfile.label },
-                    { label: "Daily Rate", value: `${selectedProfile.minDailyPct}–${selectedProfile.maxDailyPct}%`, highlight: true },
+                    {
+                      // User receives payouts monthly. Use the monthly target
+                      // range defined on the profile itself (matches the
+                      // numbers already shown in the strategy card features).
+                      label: "Monthly Target",
+                      value: `${selectedProfile.monthlyMinPct}–${selectedProfile.monthlyMaxPct}%`,
+                      highlight: true,
+                    },
                     { label: "Risk Level", value: selectedProfile.volatility },
                     { label: "Drawdown Limit", value: `${pendingLimit ?? (RISK_DEFAULT_DRAWDOWN[riskLevel.toLowerCase()] ?? selectedProfile.drawdownLimit)}%` },
                     { label: "Compounding", value: "Configurable post-start" },

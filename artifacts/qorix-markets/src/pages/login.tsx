@@ -3,7 +3,7 @@ import { useLogin, useRegister } from "@workspace/api-client-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useLocation, Link } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
-import { TrendingUp, Lock, Mail, User as UserIcon, ArrowLeft, Eye, EyeOff, ShieldCheck, CheckCircle2, Loader2 } from "lucide-react";
+import { TrendingUp, Lock, Mail, User as UserIcon, ArrowLeft, Eye, EyeOff, ShieldCheck, CheckCircle2, Loader2, KeyRound } from "lucide-react";
 import { QorixLogo } from "@/components/qorix-logo";
 import { useToast } from "@/hooks/use-toast";
 import { Recaptcha, CAPTCHA_ENABLED } from "@/components/recaptcha";
@@ -369,20 +369,104 @@ function TwoFactorPromptStep({
 }) {
   const [code, setCode] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  // 4-mode state machine for the 2FA step:
+  //   • "totp"    — default; show authenticator-app code input
+  //   • "chooser" — fallback picker (after the user clicks "Switch to
+  //                 Another Verification Method"); offers Backup Code OR
+  //                 Email Verification Code
+  //   • "backup"  — XXXX-XXXX one-time backup code input
+  //   • "email"   — 6-digit code we mailed to the user's registered address
+  // Backend `/auth/2fa/login-verify` accepts all three (TOTP/backup share
+  // the existing path; "email" sends `mode: "email_otp"` and we mailed the
+  // code via `/auth/2fa/email-fallback/request`).
+  const [verifyMode, setVerifyMode] = useState<"totp" | "chooser" | "backup" | "email">("totp");
+  // Email-fallback bookkeeping
+  const [requestingEmail, setRequestingEmail] = useState(false);
+  const [maskedEmail, setMaskedEmail] = useState("");
+  const [resendCooldown, setResendCooldown] = useState(0); // seconds remaining
   const { toast } = useToast();
+
+  // Resend-cooldown ticker — counts down once per second after we send an
+  // email. Disables the Resend button so users can't hammer the endpoint.
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const t = setTimeout(() => setResendCooldown((s) => s - 1), 1000);
+    return () => clearTimeout(t);
+  }, [resendCooldown]);
+
+  // Per-mode input handler. TOTP/email strip non-digits and cap at 6;
+  // backup uppercases, strips non-alphanumerics, auto-inserts the dash
+  // after 4 chars, and caps at 9 (XXXX-XXXX).
+  const handleCodeChange = (raw: string) => {
+    if (verifyMode === "backup") {
+      const cleaned = raw.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8);
+      const formatted = cleaned.length > 4
+        ? `${cleaned.slice(0, 4)}-${cleaned.slice(4)}`
+        : cleaned;
+      setCode(formatted);
+    } else {
+      // totp + email both want 6 digits
+      setCode(raw.replace(/\D/g, "").slice(0, 6));
+    }
+  };
+
+  // Request a fresh email OTP from the backend. Used both for the initial
+  // "Email me a code" choice and for the "Resend" button on the email
+  // input screen.
+  const requestEmailCode = async () => {
+    if (requestingEmail || resendCooldown > 0) return;
+    setRequestingEmail(true);
+    try {
+      const data = await apiFetch("/auth/2fa/email-fallback/request", {
+        method: "POST",
+        body: JSON.stringify({ twoFactorToken }),
+      });
+      setMaskedEmail(data?.email || "");
+      setVerifyMode("email");
+      setCode("");
+      setResendCooldown(45); // 45s before user can resend again
+      toast({
+        title: "Code sent",
+        description: data?.email
+          ? `Check ${data.email} for the 6-digit code.`
+          : "Check your registered email for the 6-digit code.",
+      });
+    } catch (err: any) {
+      toast({
+        title: "Could not send email",
+        description: err.message || "Please try again or use a backup code.",
+        variant: "destructive",
+      });
+    } finally {
+      setRequestingEmail(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const trimmed = code.trim();
     if (!trimmed) {
-      toast({ title: "Enter your 2FA code", variant: "destructive" });
+      toast({
+        title:
+          verifyMode === "backup"
+            ? "Enter your backup code"
+            : verifyMode === "email"
+              ? "Enter the email code"
+              : "Enter your 6-digit code",
+        variant: "destructive",
+      });
       return;
     }
     setSubmitting(true);
     try {
+      const body: { twoFactorToken: string; code: string; mode?: "email_otp" } = {
+        twoFactorToken,
+        code: trimmed,
+      };
+      if (verifyMode === "email") body.mode = "email_otp";
       const data = await apiFetch("/auth/2fa/login-verify", {
         method: "POST",
-        body: JSON.stringify({ twoFactorToken, code: trimmed }),
+        body: JSON.stringify(body),
       });
       onSuccess(data);
     } catch (err: any) {
@@ -396,6 +480,122 @@ function TwoFactorPromptStep({
     }
   };
 
+  // ─── Mode-switch helpers ───────────────────────────────────────────────
+  const goToChooser = () => {
+    setVerifyMode("chooser");
+    setCode("");
+  };
+  const goToTotp = () => {
+    setVerifyMode("totp");
+    setCode("");
+  };
+  const goToBackup = () => {
+    setVerifyMode("backup");
+    setCode("");
+  };
+
+  // ─── Render: chooser step ──────────────────────────────────────────────
+  if (verifyMode === "chooser") {
+    return (
+      <div className="min-h-screen w-full bg-background flex items-center justify-center px-4 relative overflow-hidden">
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[700px] h-[500px] bg-primary/8 rounded-full blur-[120px] pointer-events-none" />
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="w-full max-w-md"
+        >
+          <div className="glass-card rounded-2xl p-7">
+            <div className="flex flex-col items-center text-center mb-5">
+              <div className="p-3 rounded-2xl bg-purple-500/15 text-purple-300 mb-3">
+                <ShieldCheck style={{ width: 28, height: 28 }} />
+              </div>
+              <h2 className="text-xl font-semibold">Choose a Verification Method</h2>
+              <p className="text-sm text-muted-foreground mt-1">
+                Can't access your authenticator app? Pick one of the options below to finish signing in.
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              {/* Option 1: Backup code */}
+              <button
+                type="button"
+                onClick={goToBackup}
+                className="w-full text-left p-4 rounded-xl bg-amber-500/8 border border-amber-500/25 hover:bg-amber-500/12 hover:border-amber-500/40 transition-all group"
+              >
+                <div className="flex items-start gap-3">
+                  <div className="shrink-0 p-2 rounded-lg bg-amber-500/15 text-amber-400">
+                    <KeyRound style={{ width: 20, height: 20 }} />
+                  </div>
+                  <div className="flex-1">
+                    <div className="font-semibold text-sm text-amber-100">Use a Backup Code</div>
+                    <div className="text-xs text-muted-foreground mt-0.5">
+                      Enter one of the XXXX-XXXX codes you saved when enabling 2FA.
+                    </div>
+                  </div>
+                  <div className="shrink-0 text-amber-400/60 group-hover:text-amber-400 transition-colors text-lg">›</div>
+                </div>
+              </button>
+
+              {/* Option 2: Email OTP */}
+              <button
+                type="button"
+                onClick={requestEmailCode}
+                disabled={requestingEmail}
+                className="w-full text-left p-4 rounded-xl bg-cyan-500/8 border border-cyan-500/25 hover:bg-cyan-500/12 hover:border-cyan-500/40 transition-all group disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                <div className="flex items-start gap-3">
+                  <div className="shrink-0 p-2 rounded-lg bg-cyan-500/15 text-cyan-300">
+                    {requestingEmail ? (
+                      <Loader2 className="animate-spin" style={{ width: 20, height: 20 }} />
+                    ) : (
+                      <Mail style={{ width: 20, height: 20 }} />
+                    )}
+                  </div>
+                  <div className="flex-1">
+                    <div className="font-semibold text-sm text-cyan-100">
+                      {requestingEmail ? "Sending code…" : "Email me a verification code"}
+                    </div>
+                    <div className="text-xs text-muted-foreground mt-0.5">
+                      We'll send a 6-digit one-time code to your registered email address.
+                    </div>
+                  </div>
+                  {!requestingEmail && (
+                    <div className="shrink-0 text-cyan-300/60 group-hover:text-cyan-300 transition-colors text-lg">›</div>
+                  )}
+                </div>
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={goToTotp}
+              className="w-full text-sm text-blue-400 hover:text-blue-300 transition-colors py-3 mt-4"
+            >
+              ← Back to authenticator app
+            </button>
+            <button
+              type="button"
+              onClick={onCancel}
+              className="w-full text-xs text-muted-foreground hover:text-white transition-colors py-1"
+            >
+              Cancel and start over
+            </button>
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
+
+  // ─── Render: verification input (totp / backup / email) ────────────────
+  const isBackup = verifyMode === "backup";
+  const isEmail = verifyMode === "email";
+  const accent = isBackup
+    ? { bg: "bg-amber-500/15", text: "text-amber-400", border: "focus:border-amber-500/50", icon: KeyRound, link: "text-amber-400 hover:text-amber-300" }
+    : isEmail
+      ? { bg: "bg-cyan-500/15", text: "text-cyan-300", border: "focus:border-cyan-500/50", icon: Mail, link: "text-cyan-300 hover:text-cyan-200" }
+      : { bg: "bg-blue-500/15", text: "text-blue-400", border: "focus:border-blue-500/50", icon: ShieldCheck, link: "text-amber-400 hover:text-amber-300" };
+  const AccentIcon = accent.icon;
+
   return (
     <div className="min-h-screen w-full bg-background flex items-center justify-center px-4 relative overflow-hidden">
       <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[700px] h-[500px] bg-primary/8 rounded-full blur-[120px] pointer-events-none" />
@@ -406,30 +606,41 @@ function TwoFactorPromptStep({
       >
         <div className="glass-card rounded-2xl p-7">
           <div className="flex flex-col items-center text-center mb-5">
-            <div className="p-3 rounded-2xl bg-blue-500/15 text-blue-400 mb-3">
-              <ShieldCheck style={{ width: 28, height: 28 }} />
+            <div className={`p-3 rounded-2xl mb-3 ${accent.bg} ${accent.text}`}>
+              <AccentIcon style={{ width: 28, height: 28 }} />
             </div>
-            <h2 className="text-xl font-semibold">Two-Factor Authentication</h2>
+            <h2 className="text-xl font-semibold">
+              {isBackup ? "Use a Backup Code" : isEmail ? "Email Verification" : "Two-Factor Authentication"}
+            </h2>
             <p className="text-sm text-muted-foreground mt-1">
-              Enter the 6-digit code from your authenticator app, or one of your backup codes.
+              {isBackup
+                ? "Enter one of the 8-character backup codes you saved when enabling 2FA."
+                : isEmail
+                  ? maskedEmail
+                    ? <>We sent a 6-digit code to <span className="text-cyan-200 font-medium">{maskedEmail}</span>. It expires in 10 minutes.</>
+                    : "We sent a 6-digit code to your registered email. It expires in 10 minutes."
+                  : "Enter the 6-digit code from your authenticator app."}
             </p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <input
+              key={verifyMode}
               type="text"
-              inputMode="text"
+              inputMode={isBackup ? "text" : "numeric"}
               autoComplete="one-time-code"
               value={code}
-              onChange={(e) => setCode(e.target.value)}
-              placeholder="123456"
-              className="w-full px-4 py-3 rounded-xl bg-white/[0.04] border border-white/10 text-center text-lg font-mono tracking-[0.3em] focus:outline-none focus:border-blue-500/50"
+              onChange={(e) => handleCodeChange(e.target.value)}
+              placeholder={isBackup ? "XXXX-XXXX" : "123456"}
+              className={`w-full px-4 py-3 rounded-xl bg-white/[0.04] border border-white/10 text-center text-lg font-mono focus:outline-none ${
+                isBackup ? "tracking-[0.25em] uppercase" : "tracking-[0.3em]"
+              } ${accent.border}`}
               autoFocus
-              maxLength={16}
+              maxLength={isBackup ? 9 : 6}
             />
             <Button
               type="submit"
-              disabled={submitting || !code.trim()}
+              disabled={submitting || !code.trim() || (isBackup ? code.replace(/-/g, "").length < 8 : code.length < 6)}
               className="w-full h-11"
             >
               {submitting ? (
@@ -438,17 +649,49 @@ function TwoFactorPromptStep({
                 "Verify & Sign in"
               )}
             </Button>
+
+            {/* Email-mode-only: Resend button with cooldown */}
+            {isEmail && (
+              <button
+                type="button"
+                onClick={requestEmailCode}
+                disabled={requestingEmail || resendCooldown > 0}
+                className="w-full text-xs text-cyan-300/80 hover:text-cyan-200 transition-colors py-1 disabled:text-muted-foreground/60 disabled:cursor-not-allowed"
+              >
+                {requestingEmail
+                  ? "Resending…"
+                  : resendCooldown > 0
+                    ? `Resend code in ${resendCooldown}s`
+                    : "Didn't get the email? Resend code"}
+              </button>
+            )}
+
+            {/* Switch to chooser — primary fallback affordance */}
+            <button
+              type="button"
+              onClick={goToChooser}
+              className={`w-full text-sm font-semibold py-2 transition-colors ${accent.link}`}
+            >
+              {verifyMode === "totp"
+                ? "Switch to Another Verification Method"
+                : "Try a different method"}
+            </button>
+
             <button
               type="button"
               onClick={onCancel}
-              className="w-full text-xs text-muted-foreground hover:text-white transition-colors py-2"
+              className="w-full text-xs text-muted-foreground hover:text-white transition-colors py-1"
             >
               Cancel and start over
             </button>
           </form>
 
           <p className="text-[11px] text-center text-muted-foreground/70 mt-4">
-            Lost access? Each backup code (XXXX-XXXX) works once.
+            {isBackup
+              ? "Each backup code works only once and is then permanently used."
+              : isEmail
+                ? "Never share this code with anyone. Qorix staff will never ask for it."
+                : "Lost access to your authenticator? Use a backup code or get an email code."}
           </p>
         </div>
       </motion.div>

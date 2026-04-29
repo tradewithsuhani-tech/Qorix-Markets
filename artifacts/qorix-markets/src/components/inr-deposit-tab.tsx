@@ -20,6 +20,8 @@ import {
   ShieldCheck,
   Download,
   Maximize2,
+  Plus,
+  Info,
 } from "lucide-react";
 import { authFetch } from "@/lib/auth-fetch";
 import { useToast } from "@/hooks/use-toast";
@@ -237,7 +239,8 @@ export function InrDepositTab() {
 
   const [utr, setUtr] = useState("");
   const [payerName, setPayerName] = useState("");
-  const [proof, setProof] = useState<string | null>(null);
+  const [proofs, setProofs] = useState<string[]>([]);
+  const MAX_PROOFS = 4;
   const [orderNo, setOrderNo] = useState<string>("");
   const [secsLeft, setSecsLeft] = useState(COUNTDOWN_SECS);
   const [submittedDepositId, setSubmittedDepositId] = useState<number | null>(null);
@@ -302,7 +305,7 @@ export function InrDepositTab() {
     setAgreed(false);
     setUtr("");
     setPayerName("");
-    setProof(null);
+    setProofs([]);
     setOrderNo("");
     setSecsLeft(COUNTDOWN_SECS);
     setSubmittedDepositId(null);
@@ -336,7 +339,7 @@ export function InrDepositTab() {
   }
 
   const submit = useMutation({
-    mutationFn: () => {
+    mutationFn: async () => {
       // Append payer name + order ref to UTR if provided so admins can match
       // the payment slip without backend schema changes.
       const trimmedUtr = utr.trim();
@@ -344,13 +347,16 @@ export function InrDepositTab() {
       const utrWithMeta = trimmedPayer
         ? `${trimmedUtr} | ${trimmedPayer} | ${orderNo}`
         : `${trimmedUtr} | ${orderNo}`;
+      // Multi-image: combine into one tall stacked image client-side so the
+      // existing single-text proof column doesn't need a schema change.
+      const combinedProof = await combineProofsToSingleImage(proofs);
       return authFetch(getApiUrl("/inr-deposits"), {
         method: "POST",
         body: JSON.stringify({
           paymentMethodId: selectedId,
           amountInr: amount,
           utr: utrWithMeta,
-          proofImageBase64: proof,
+          proofImageBase64: combinedProof,
         }),
       });
     },
@@ -364,14 +370,42 @@ export function InrDepositTab() {
     },
   });
 
-  const handleFile = (file: File) => {
-    if (file.size > 2 * 1024 * 1024) {
-      toast({ title: "File too large", description: "Max 2 MB", variant: "destructive" });
+  const handleFiles = (files: FileList | File[]) => {
+    const list = Array.from(files);
+    const remaining = MAX_PROOFS - proofs.length;
+    if (remaining <= 0) {
+      toast({
+        title: "Maximum proofs reached",
+        description: `You can attach up to ${MAX_PROOFS} images.`,
+        variant: "destructive",
+      });
       return;
     }
-    const reader = new FileReader();
-    reader.onload = () => setProof(reader.result as string);
-    reader.readAsDataURL(file);
+    const accepted = list.slice(0, remaining);
+    if (list.length > remaining) {
+      toast({
+        title: "Some files skipped",
+        description: `Only ${remaining} more image${remaining === 1 ? "" : "s"} allowed.`,
+      });
+    }
+    for (const file of accepted) {
+      if (file.size > 2 * 1024 * 1024) {
+        toast({
+          title: `${file.name || "Image"} too large`,
+          description: "Each image must be under 2 MB.",
+          variant: "destructive",
+        });
+        continue;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        const dataUrl = reader.result as string;
+        setProofs((prev) =>
+          prev.length >= MAX_PROOFS ? prev : [...prev, dataUrl],
+        );
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   if (rateLoading) {
@@ -860,40 +894,116 @@ export function InrDepositTab() {
               </div>
 
               <div>
-                <label className="text-[11px] text-muted-foreground font-medium mb-1.5 block">
-                  Upload Payment Proof * <span className="text-muted-foreground/60">(max 2 MB)</span>
+                <label className="text-[11px] text-muted-foreground font-medium mb-1.5 flex items-center justify-between gap-2">
+                  <span>
+                    Upload Payment Proof *{" "}
+                    <span className="text-muted-foreground/60">
+                      (up to {MAX_PROOFS} images · 2 MB each)
+                    </span>
+                  </span>
+                  {proofs.length > 0 && (
+                    <span className="shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-[10px] font-bold text-emerald-300 tabular-nums">
+                      <CheckCircle2 className="w-3 h-3" />
+                      {proofs.length} / {MAX_PROOFS}
+                    </span>
+                  )}
                 </label>
-                {!proof ? (
+
+                {proofs.length === 0 ? (
                   <button
                     type="button"
                     onClick={() => fileRef.current?.click()}
-                    className="w-full border-2 border-dashed border-white/15 hover:border-white/30 rounded-xl p-6 flex flex-col items-center gap-2 transition-colors"
+                    className="w-full rounded-2xl border-2 border-dashed border-white/15 hover:border-emerald-400/60 hover:bg-emerald-500/5 px-4 py-7 flex flex-col items-center gap-2.5 transition-all group"
                   >
-                    <Upload className="w-6 h-6 text-muted-foreground" />
-                    <span className="text-xs text-muted-foreground font-semibold">Tap to upload screenshot</span>
-                    <span className="text-[10px] text-muted-foreground/60">PNG, JPG up to 2 MB</span>
+                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500/25 to-teal-500/10 border border-emerald-500/30 flex items-center justify-center group-hover:scale-105 transition-transform shadow-[0_0_20px_-6px_rgba(16,185,129,0.5)]">
+                      <Upload className="w-5 h-5 text-emerald-300" />
+                    </div>
+                    <span className="text-sm text-white font-semibold">
+                      Tap to upload screenshot
+                    </span>
+                    <span className="text-[10px] text-muted-foreground/70 text-center px-2">
+                      PNG / JPG · Add multiple if you paid in parts
+                    </span>
                   </button>
                 ) : (
-                  <div className="relative inline-block">
-                    <img src={proof} alt="proof" className="max-h-48 rounded-xl border border-white/10" />
-                    <button
-                      type="button"
-                      onClick={() => setProof(null)}
-                      className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-red-500 text-white flex items-center justify-center hover:bg-red-600 shadow-lg"
-                      aria-label="Remove image"
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
-                  </div>
+                  <>
+                    <div className="grid grid-cols-3 sm:grid-cols-4 gap-2.5">
+                      {proofs.map((p, i) => (
+                        <div
+                          key={i}
+                          className="relative group aspect-square rounded-xl overflow-hidden border border-emerald-500/30 bg-black/40 shadow-[0_4px_14px_-4px_rgba(0,0,0,0.6)]"
+                        >
+                          <img
+                            src={p}
+                            alt={`Proof ${i + 1}`}
+                            className="w-full h-full object-cover"
+                          />
+                          <span className="absolute top-1.5 left-1.5 min-w-[22px] h-5 px-1.5 rounded-full bg-black/75 backdrop-blur text-emerald-300 text-[10px] font-bold flex items-center justify-center">
+                            #{i + 1}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setProofs((prev) =>
+                                prev.filter((_, j) => j !== i),
+                              )
+                            }
+                            className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-red-500 text-white flex items-center justify-center hover:bg-red-600 shadow-lg transition-colors"
+                            aria-label={`Remove proof ${i + 1}`}
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                          <div className="absolute inset-x-0 bottom-0 px-2 py-1 bg-gradient-to-t from-black/85 via-black/40 to-transparent">
+                            <div className="text-[9px] font-semibold text-white/90 uppercase tracking-wider">
+                              Proof #{i + 1}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+
+                      {proofs.length < MAX_PROOFS && (
+                        <button
+                          type="button"
+                          onClick={() => fileRef.current?.click()}
+                          className="aspect-square rounded-xl border-2 border-dashed border-white/15 hover:border-emerald-400/60 hover:bg-emerald-500/5 flex flex-col items-center justify-center gap-1.5 transition-all group"
+                          aria-label="Add more proofs"
+                        >
+                          <div className="w-9 h-9 rounded-lg bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center group-hover:scale-110 transition-transform">
+                            <Plus className="w-4 h-4 text-emerald-300" />
+                          </div>
+                          <span className="text-[10px] text-white/80 font-semibold">
+                            Add more
+                          </span>
+                          <span className="text-[9px] text-muted-foreground/70">
+                            {MAX_PROOFS - proofs.length} left
+                          </span>
+                        </button>
+                      )}
+                    </div>
+
+                    <p className="text-[10px] text-muted-foreground/80 mt-2.5 flex items-start gap-1.5 leading-snug">
+                      <Info className="w-3 h-3 mt-0.5 shrink-0 text-emerald-400/80" />
+                      <span>
+                        Paid in parts? Add a screenshot for each transfer — all
+                        proofs are stitched into one image and sent together to
+                        the merchant for review.
+                      </span>
+                    </p>
+                  </>
                 )}
+
                 <input
                   ref={fileRef}
                   type="file"
                   accept="image/*"
+                  multiple
                   className="hidden"
                   onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (f) handleFile(f);
+                    if (e.target.files && e.target.files.length > 0) {
+                      handleFiles(e.target.files);
+                    }
+                    // Reset so the same file can be re-picked
+                    e.target.value = "";
                   }}
                 />
               </div>
@@ -911,7 +1021,7 @@ export function InrDepositTab() {
               <button
                 type="button"
                 onClick={() => submit.mutate()}
-                disabled={!utr.trim() || !proof || submit.isPending}
+                disabled={!utr.trim() || proofs.length === 0 || submit.isPending}
                 className="flex-[2] py-3 rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-bold text-sm hover:from-emerald-400 hover:to-teal-400 shadow-[0_0_24px_-6px_rgba(16,185,129,0.6)] disabled:opacity-40 disabled:cursor-not-allowed transition-all"
               >
                 {submit.isPending ? (
@@ -975,7 +1085,7 @@ export function InrDepositTab() {
                   resetFlow();
                   document.getElementById("inr-history")?.scrollIntoView({ behavior: "smooth" });
                 }}
-                className="flex-1 py-3 rounded-full bg-white text-gray-900 font-bold text-sm hover:bg-gray-100 transition-all"
+                className="flex-1 py-3 rounded-full bg-emerald-500/15 border border-emerald-500/40 text-emerald-200 font-bold text-sm hover:bg-emerald-500/25 hover:border-emerald-500/60 hover:text-emerald-100 shadow-[0_0_20px_-8px_rgba(16,185,129,0.45)] transition-all"
               >
                 View History
               </button>
@@ -1143,6 +1253,76 @@ export function InrDepositTab() {
       </AnimatePresence>
     </div>
   );
+}
+
+async function combineProofsToSingleImage(
+  dataUrls: string[],
+): Promise<string | null> {
+  if (dataUrls.length === 0) return null;
+  if (dataUrls.length === 1) return dataUrls[0];
+
+  // Load all images
+  const images = await Promise.all(
+    dataUrls.map(
+      (url) =>
+        new Promise<HTMLImageElement>((resolve, reject) => {
+          const img = new Image();
+          img.onload = () => resolve(img);
+          img.onerror = () =>
+            reject(new Error("Could not decode one of the proof images"));
+          img.src = url;
+        }),
+    ),
+  );
+
+  // Cap each image to MAX_W wide so the combined output stays manageable
+  const MAX_W = 1100;
+  const dims = images.map((img) => {
+    const scale = Math.min(1, MAX_W / Math.max(1, img.naturalWidth));
+    return {
+      w: Math.max(1, Math.round(img.naturalWidth * scale)),
+      h: Math.max(1, Math.round(img.naturalHeight * scale)),
+    };
+  });
+
+  const canvasW = Math.max(...dims.map((d) => d.w), 600);
+  const GAP = 14;
+  const LABEL_H = 32;
+  const totalH =
+    dims.reduce((sum, d) => sum + d.h + LABEL_H + GAP, 0) - GAP;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = canvasW;
+  canvas.height = totalH;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return dataUrls[0];
+
+  // Dark background to match panel theme
+  ctx.fillStyle = "#0a0d12";
+  ctx.fillRect(0, 0, canvasW, totalH);
+
+  let y = 0;
+  for (let i = 0; i < images.length; i++) {
+    // Label bar
+    ctx.fillStyle = "#1f2937";
+    ctx.fillRect(0, y, canvasW, LABEL_H);
+    ctx.fillStyle = "#fcd535";
+    ctx.font = "bold 16px system-ui, -apple-system, sans-serif";
+    ctx.textBaseline = "middle";
+    ctx.fillText(
+      `Proof #${i + 1} of ${images.length}`,
+      14,
+      y + LABEL_H / 2,
+    );
+    y += LABEL_H;
+    // Image (centered horizontally)
+    const x = Math.round((canvasW - dims[i].w) / 2);
+    ctx.drawImage(images[i], x, y, dims[i].w, dims[i].h);
+    y += dims[i].h + GAP;
+  }
+
+  // JPEG with reasonable quality keeps the size down vs PNG
+  return canvas.toDataURL("image/jpeg", 0.85);
 }
 
 function Row({
