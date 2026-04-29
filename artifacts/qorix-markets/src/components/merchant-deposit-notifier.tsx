@@ -243,7 +243,9 @@ export function MerchantDepositNotifier() {
   if (!popup) return null;
 
   const { utr, senderName, methodLabel } = parseDepositRef(popup.utr);
-  const displayName = senderName || `User #${popup.userId}`;
+  // Always show payer name in uppercase — matches bank statements & makes
+  // verification against the actual UPI/bank receipt easier for the merchant.
+  const displayName = (senderName || `User #${popup.userId}`).toUpperCase();
   const ageMin = Math.max(
     0,
     Math.round((Date.now() - new Date(popup.createdAt).getTime()) / 60_000),
