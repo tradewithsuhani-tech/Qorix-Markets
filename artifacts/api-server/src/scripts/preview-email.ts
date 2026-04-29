@@ -27,6 +27,7 @@ import {
   renderAddressRejectedHtml,
   renderIdentitySubmittedHtml,
   renderAddressSubmittedHtml,
+  renderPersonalVerifiedHtml,
 } from "../lib/email-service";
 
 const DEFAULT_TO = "safepayu@gmail.com";
@@ -380,6 +381,25 @@ const TEMPLATES: Record<string, () => Preview> = {
         addressState,
         addressCountry,
         submittedAt,
+      }),
+    };
+  },
+
+  "personal-verified": () => {
+    const name = "Prem Kumar";
+    const verifiedAt = new Date();
+    return {
+      subject: "[PREVIEW] Qorix Markets — Personal Verified 🌅 (Lv.1) (new design)",
+      text:
+        `[DESIGN PREVIEW]\n\n` +
+        `Lv.1 Personal verified for ${name} (auto-approved).\n\n` +
+        `Test render of the new warm-coral "First Step Done" template.\n` +
+        `Reply with feedback.\n\n` +
+        `— Qorix Markets`,
+      html: renderPersonalVerifiedHtml({
+        preheader: `[PREVIEW] Your basic profile is verified — continue to Lv.2 to unlock USDT & INR withdrawals`,
+        name,
+        verifiedAt,
       }),
     };
   },

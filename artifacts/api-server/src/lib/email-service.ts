@@ -4160,3 +4160,275 @@ export async function sendAddressSubmitted(args: {
 
   await sendEmail(to, subject, text, html);
 }
+
+// ---------------------------------------------------------------------------
+// Personal Verified (Lv.1 — auto-approved) — UNIQUE warm coral "First Step
+// Done" design with split Unlocked/What's-Next tiles. Fires when a user
+// submits their basic personal details and is auto-approved (no admin
+// review needed for Lv.1) — see routes/kyc.ts at the /kyc/personal
+// submit endpoint around line 111.
+//
+// Visual differentiators (vs all other emails):
+//   • warm coral / peach palette — sunny, encouraging, forward-momentum.
+//     Distinct from rose+gold (festive INR), orange (pure tangerine
+//     in-transit), mocha (sepia brown), bronze (metallic warm), crimson
+//     (pure red alert)
+//   • "🌅 STEP 1 COMPLETE" hero pill + "First Step Done" headline
+//   • Split centerpiece (UNIQUE) — TWO side-by-side intent tiles:
+//       a) "Unlocked Now" with green checkmarks (what Lv.1 grants)
+//       b) "Unlocks at Lv.2" with dim placeholders (forward hint)
+//     Frames Lv.1 as a gateway with concrete value, not just paperwork
+//   • Stacked rows: 🎖️ tier · 🕐 verified at
+//   • Primary CTA: "Continue to Lv.2" (forward momentum) +
+//     secondary "Browse Trading Dashboard"
+//   • Reassurance card with anti-phishing reminder
+//   • "Trade smart 📈" footer
+// ---------------------------------------------------------------------------
+export function renderPersonalVerifiedHtml(opts: {
+  preheader: string;
+  name: string;
+  verifiedAt: Date;
+}): string {
+  const { preheader, name, verifiedAt } = opts;
+  const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const whenStr =
+    `${verifiedAt.getUTCDate()} ${MONTHS_SHORT[verifiedAt.getUTCMonth()]} ${verifiedAt.getUTCFullYear()} · ` +
+    `${String(verifiedAt.getUTCHours()).padStart(2, "0")}:${String(verifiedAt.getUTCMinutes()).padStart(2, "0")} UTC`;
+  const safeFirstName = escapeHtml((name || "there").trim().split(/\s+/)[0] || "there");
+  const safeWhen = escapeHtml(whenStr);
+  const year = new Date().getFullYear();
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="x-apple-disable-message-reformatting" />
+<meta name="color-scheme" content="dark light" />
+<meta name="supported-color-schemes" content="dark light" />
+<title>First step done — Qorix Markets</title>
+<style type="text/css">
+  @media only screen and (max-width:480px) {
+    .qx-outer { padding:20px 10px !important; }
+    .qx-card { border-radius:18px !important; }
+    .qx-hero-pad { padding:6px 18px 22px !important; }
+    .qx-hero-h { font-size:24px !important; line-height:1.22 !important; }
+    .qx-tiles-pad { padding:24px 22px 4px !important; }
+    .qx-tile-cell { padding:18px 18px !important; }
+    .qx-tile-title { font-size:11px !important; }
+    .qx-tile-stack { display:block !important; width:100% !important; padding:0 !important; }
+    .qx-tile-stack-spacer { display:block !important; height:14px !important; line-height:14px !important; }
+    .qx-snap-pad { padding:24px 22px 4px !important; }
+    .qx-snap-label { font-size:10.5px !important; }
+    .qx-snap-value { font-size:14px !important; }
+    .qx-cta-pad { padding:24px 18px 6px !important; }
+    .qx-cta { padding:13px 24px !important; font-size:13.5px !important; letter-spacing:0.2px !important; }
+    .qx-foot-pad { padding:24px 18px 22px !important; }
+  }
+</style>
+</head>
+<body style="margin:0;padding:0;background:#15100D;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;">
+<div style="display:none;max-height:0;overflow:hidden;font-size:1px;line-height:1px;color:#15100D;opacity:0;">${escapeHtml(preheader)}</div>
+<div style="display:none;max-height:0;overflow:hidden;">&#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847;</div>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="qx-outer" style="background:#15100D;padding:32px 16px;">
+  <tr>
+    <td align="center">
+
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="qx-card" style="max-width:560px;background:#1F1612;border:1px solid rgba(255,200,175,0.28);border-radius:22px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,0.55);">
+
+        <!-- LOGO BAR — warm coral/peach gradient -->
+        <tr>
+          <td align="left" style="padding:20px 24px 0 28px;background:#15100D;background-image:linear-gradient(135deg,#15100D 0%,#1F1612 45%,#5C2818 78%,#FF7B5C 100%);">
+            <img src="cid:${BRAND_LOGO_CID}" alt="Qorix Markets" width="320" height="217" style="display:block;width:320px;max-width:90%;height:auto;border:0;outline:none;text-decoration:none;margin:0;" />
+          </td>
+        </tr>
+
+        <!-- HERO — step-1 pill + headline + coral divider -->
+        <tr>
+          <td class="qx-hero-pad" align="center" style="padding:8px 32px 28px;background:#15100D;background-image:linear-gradient(135deg,#15100D 0%,#1F1612 45%,#5C2818 78%,#FF7B5C 100%);">
+            <div style="display:inline-block;padding:6px 14px;border-radius:999px;background:rgba(255,200,175,0.18);border:1px solid rgba(255,200,175,0.55);font-size:10.5px;letter-spacing:2.4px;color:#FFD2B8;font-weight:700;text-transform:uppercase;margin-bottom:18px;">
+              🌅 Step 1 Complete
+            </div>
+            <div class="qx-hero-h" style="font-size:30px;line-height:1.18;font-weight:800;color:#FFFFFF;letter-spacing:-0.5px;max-width:440px;margin:0 auto;">
+              First Step Done
+            </div>
+            <div style="font-size:13.5px;color:#FFD2B8;margin-top:10px;font-weight:500;max-width:420px;margin-left:auto;margin-right:auto;line-height:1.5;">
+              ${safeFirstName}, your basic profile is verified — let's complete the next step to unlock more features.
+            </div>
+            <div style="width:48px;height:3px;background:linear-gradient(90deg,#FFAE8E 0%,#FF7B5C 100%);margin:18px auto 0;border-radius:999px;"></div>
+          </td>
+        </tr>
+
+        <!-- SPLIT TILES — Unlocked Now (left) + Unlocks at Lv.2 (right) -->
+        <tr>
+          <td class="qx-tiles-pad" align="center" style="padding:32px 24px 4px;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <!-- LEFT: Unlocked Now -->
+                <td class="qx-tile-stack" valign="top" width="50%" style="width:50%;padding-right:7px;">
+                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                    <tr>
+                      <td class="qx-tile-cell" style="padding:18px 18px;background:#1F1612;background-image:linear-gradient(180deg,#27190F 0%,#1F1612 100%);border:1.5px solid rgba(255,200,175,0.40);border-radius:14px;box-shadow:0 0 24px rgba(255,123,92,0.18),inset 0 1px 0 rgba(255,255,255,0.04);">
+                        <div class="qx-tile-title" style="font-size:11px;letter-spacing:1.8px;color:#FFD2B8;font-weight:700;text-transform:uppercase;margin-bottom:12px;">
+                          ✨ Unlocked Now
+                        </div>
+                        <div style="font-size:13px;color:#FFFFFF;font-weight:500;line-height:1.85;">
+                          <div><span style="color:#5EEAD4;margin-right:6px;font-weight:700;">✓</span>Browse markets</div>
+                          <div><span style="color:#5EEAD4;margin-right:6px;font-weight:700;">✓</span>Crypto trading</div>
+                          <div><span style="color:#5EEAD4;margin-right:6px;font-weight:700;">✓</span>INR deposits</div>
+                          <div><span style="color:#5EEAD4;margin-right:6px;font-weight:700;">✓</span>USDT deposits</div>
+                        </div>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+                <td class="qx-tile-stack-spacer" width="14" style="width:14px;font-size:1px;line-height:1px;">&nbsp;</td>
+                <!-- RIGHT: Unlocks at Lv.2 -->
+                <td class="qx-tile-stack" valign="top" width="50%" style="width:50%;padding-left:7px;">
+                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                    <tr>
+                      <td class="qx-tile-cell" style="padding:18px 18px;background:#1A1410;background-image:linear-gradient(180deg,#1F1812 0%,#1A1410 100%);border:1.5px dashed rgba(255,200,175,0.25);border-radius:14px;">
+                        <div class="qx-tile-title" style="font-size:11px;letter-spacing:1.8px;color:#A8867A;font-weight:700;text-transform:uppercase;margin-bottom:12px;">
+                          🔒 Unlocks at Lv.2
+                        </div>
+                        <div style="font-size:13px;color:#A8867A;font-weight:500;line-height:1.85;">
+                          <div><span style="color:#7A5C50;margin-right:6px;font-weight:700;">·</span>USDT withdrawals</div>
+                          <div><span style="color:#7A5C50;margin-right:6px;font-weight:700;">·</span>INR withdrawals</div>
+                          <div><span style="color:#7A5C50;margin-right:6px;font-weight:700;">·</span>Higher limits</div>
+                          <div><span style="color:#7A5C50;margin-right:6px;font-weight:700;">·</span>Verified badge</div>
+                        </div>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- ACCOUNT DETAILS — stacked rows -->
+        <tr>
+          <td class="qx-snap-pad" style="padding:34px 32px 4px;">
+            <div style="font-size:10.5px;letter-spacing:2.4px;color:#FFD2B8;text-transform:uppercase;font-weight:700;text-align:left;padding:0 0 14px 0;">
+              Account Details
+            </div>
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td style="padding:14px 0;border-bottom:1px solid rgba(255,200,175,0.16);">
+                  <div class="qx-snap-label" style="font-size:11px;letter-spacing:1.6px;color:#9C7B6E;text-transform:uppercase;font-weight:600;line-height:1;margin-bottom:6px;"><span style="margin-right:6px;">🎖️</span>Account Tier</div>
+                  <div class="qx-snap-value" style="font-size:15px;color:#FFFFFF;font-weight:600;line-height:1.4;">Verified Member · Lv.1</div>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:14px 0 4px;">
+                  <div class="qx-snap-label" style="font-size:11px;letter-spacing:1.6px;color:#9C7B6E;text-transform:uppercase;font-weight:600;line-height:1;margin-bottom:6px;"><span style="margin-right:6px;">🕐</span>Verified At</div>
+                  <div class="qx-snap-value" style="font-size:15px;color:#FFFFFF;font-weight:600;line-height:1.4;">${safeWhen}</div>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- DUAL CTA — primary "Continue to Lv.2" + secondary "Trading Dashboard" -->
+        <tr>
+          <td class="qx-cta-pad" align="center" style="padding:30px 32px 6px;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td align="center" style="border-radius:12px;background-image:linear-gradient(135deg,#FFAE8E 0%,#FF7B5C 100%);background-color:#FF7B5C;box-shadow:0 8px 28px rgba(255,123,92,0.55);">
+                  <a href="https://qorixmarkets.com/profile" target="_blank" class="qx-cta" style="display:inline-block;padding:16px 42px;font-size:15px;font-weight:700;color:#3A1408;text-decoration:none;letter-spacing:0.4px;border-radius:12px;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+                    Continue to Lv.2 →
+                  </a>
+                </td>
+              </tr>
+            </table>
+            <div style="margin-top:14px;font-size:12.5px;color:#9C7B6E;line-height:1.6;">
+              Or browse the <a href="https://qorixmarkets.com/trade" target="_blank" style="color:#FFD2B8;text-decoration:none;font-weight:600;border-bottom:1px dashed rgba(255,210,184,0.4);">Trading Dashboard →</a>
+            </div>
+          </td>
+        </tr>
+
+        <!-- Reassurance card -->
+        <tr>
+          <td style="padding:22px 32px 8px;">
+            <div style="background:rgba(255,200,175,0.06);border-left:2px solid rgba(255,200,175,0.5);border-radius:6px;padding:14px 16px;font-size:12.5px;line-height:1.65;color:#9C7B6E;">
+              <div style="color:#FFD2B8;font-weight:600;margin-bottom:6px;">What's next:</div>
+              Lv.2 is a quick ID upload (passport, national ID, driver's licence, Aadhaar, or PAN) — usually reviewed within 24 hours. We never ask for additional documents over email or social media — only inside your Qorix account.
+            </div>
+          </td>
+        </tr>
+
+        <!-- FOOTER -->
+        <tr>
+          <td class="qx-foot-pad" align="center" style="padding:30px 32px 28px;border-top:1px solid rgba(255,255,255,0.05);background:#0E0907;">
+            <div style="font-size:13px;color:#FFD2B8;margin-bottom:6px;font-weight:600;">
+              Trade smart 📈
+            </div>
+            <div style="font-size:11.5px;color:#705247;line-height:1.7;">
+              © ${year} Qorix Markets · AI-Powered Trading<br/>
+              Need help? <a href="mailto:support@qorixmarkets.com" style="color:#FFD2B8;text-decoration:none;">support@qorixmarkets.com</a>
+            </div>
+          </td>
+        </tr>
+
+      </table>
+
+      <div style="height:24px;line-height:24px;font-size:1px;">&nbsp;</div>
+    </td>
+  </tr>
+</table>
+</body>
+</html>`;
+}
+
+// ---------------------------------------------------------------------------
+// Send the Personal Verified (Lv.1 KYC auto-approved) email — confirms
+// the basic profile is verified and nudges the user toward Lv.2. Replaces
+// the previous generic sendTxnEmailToUser path inside the user-facing
+// /kyc/personal submit endpoint (see routes/kyc.ts).
+// ---------------------------------------------------------------------------
+export async function sendPersonalVerified(args: {
+  to: string;
+  name: string;
+  verifiedAt: Date;
+}): Promise<void> {
+  const { to, name, verifiedAt } = args;
+  const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const whenStr =
+    `${verifiedAt.getUTCDate()} ${MONTHS_SHORT[verifiedAt.getUTCMonth()]} ${verifiedAt.getUTCFullYear()} · ` +
+    `${String(verifiedAt.getUTCHours()).padStart(2, "0")}:${String(verifiedAt.getUTCMinutes()).padStart(2, "0")} UTC`;
+
+  const subject = `Qorix Markets — First step done 🌅 (Lv.1 verified)`;
+  const preheader = `Your basic profile is verified — continue to Lv.2 to unlock USDT & INR withdrawals`;
+
+  const html = renderPersonalVerifiedHtml({
+    preheader,
+    name,
+    verifiedAt,
+  });
+
+  const text =
+    `First step done — Lv.1 verified\n\n` +
+    `Hi ${name},\n\n` +
+    `Your basic profile has been verified. Welcome to Qorix Markets!\n\n` +
+    `Unlocked now:\n` +
+    `  ✓ Browse markets\n` +
+    `  ✓ Crypto trading\n` +
+    `  ✓ INR deposits\n` +
+    `  ✓ USDT deposits\n\n` +
+    `Unlocks at Lv.2:\n` +
+    `  · USDT withdrawals\n` +
+    `  · INR withdrawals\n` +
+    `  · Higher limits\n` +
+    `  · Verified badge\n\n` +
+    `Account tier:   Verified Member · Lv.1\n` +
+    `Verified at:    ${whenStr}\n\n` +
+    `Continue to Lv.2:    https://qorixmarkets.com/profile\n` +
+    `Trading dashboard:   https://qorixmarkets.com/trade\n\n` +
+    `Lv.2 is a quick ID upload (passport, national ID, driver's licence,\n` +
+    `Aadhaar, or PAN) — usually reviewed within 24 hours. We never ask for\n` +
+    `additional documents over email or social media.\n\n` +
+    `— Qorix Markets`;
+
+  await sendEmail(to, subject, text, html);
+}
