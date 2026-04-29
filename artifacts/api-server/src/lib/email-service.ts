@@ -1459,3 +1459,282 @@ export async function sendNewDeviceLoginAlert(args: {
 
   await sendEmail(to, subject, text, html);
 }
+
+// ---------------------------------------------------------------------------
+// USDT Deposit Confirmed — UNIQUE emerald "Funds Landed" celebration design.
+// Fires after an on-chain TRC20 USDT deposit clears confirmation gate (see
+// lib/tron-monitor.ts) OR after a manual /wallet/deposit credit
+// (see routes/wallet.ts).
+//
+// Visual differentiators (vs OTPs / welcome / device-alert):
+//   • emerald palette — calm confident "money in" green (emerald-400 family)
+//   • "✅ DEPOSIT CONFIRMED" hero pill + "Funds Credited" headline
+//   • PREMIUM amount tile — big bold $X,XXX.XX USDT display (like OTP block)
+//   • Stacked details: 💵 amount · 📥 destination · 📊 new balance · 🌐 network · 🔗 tx hash (Tronscan link) · 🕐 confirmed
+//   • Dual CTA: "Open Wallet" primary green + secondary "Start Trading" link
+//   • "Trade smart 📈" footer
+// ---------------------------------------------------------------------------
+export function renderDepositConfirmedHtml(opts: {
+  preheader: string;
+  name: string;
+  amount: number;
+  newMainBalance: number;
+  network: string;
+  txHash: string | null;
+  whenUtc: Date;
+}): string {
+  const { preheader, name, amount, newMainBalance, network, txHash, whenUtc } = opts;
+  const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const whenStr =
+    `${whenUtc.getUTCDate()} ${MONTHS_SHORT[whenUtc.getUTCMonth()]} ${whenUtc.getUTCFullYear()} · ` +
+    `${String(whenUtc.getUTCHours()).padStart(2, "0")}:${String(whenUtc.getUTCMinutes()).padStart(2, "0")} UTC`;
+  const fmt = (n: number) =>
+    n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const amountStr = `$${fmt(amount)}`;
+  const balanceStr = `$${fmt(newMainBalance)}`;
+  const safeFirstName = escapeHtml((name || "there").trim().split(/\s+/)[0] || "there");
+  const safeAmount = escapeHtml(amountStr);
+  const safeBalance = escapeHtml(balanceStr);
+  const safeNetwork = escapeHtml(network);
+  const safeWhen = escapeHtml(whenStr);
+  const txShort = txHash
+    ? `${txHash.slice(0, 10)}…${txHash.slice(-8)}`
+    : null;
+  const safeTxShort = txShort ? escapeHtml(txShort) : null;
+  const safeTxFull = txHash ? escapeHtml(txHash) : null;
+  const tronscanUrl = txHash ? `https://tronscan.org/#/transaction/${encodeURIComponent(txHash)}` : null;
+  const year = new Date().getFullYear();
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="x-apple-disable-message-reformatting" />
+<meta name="color-scheme" content="dark light" />
+<meta name="supported-color-schemes" content="dark light" />
+<title>Deposit confirmed — Qorix Markets</title>
+<style type="text/css">
+  @media only screen and (max-width:480px) {
+    .qx-outer { padding:20px 10px !important; }
+    .qx-card { border-radius:18px !important; }
+    .qx-hero-pad { padding:6px 18px 22px !important; }
+    .qx-hero-h { font-size:24px !important; line-height:1.22 !important; }
+    .qx-amount-text { font-size:32px !important; letter-spacing:-0.5px !important; }
+    .qx-amount-cell { padding:18px 22px !important; }
+    .qx-intro { padding:24px 22px 4px !important; font-size:13.5px !important; }
+    .qx-snap-pad { padding:24px 22px 4px !important; }
+    .qx-snap-label { font-size:10.5px !important; }
+    .qx-snap-value { font-size:14px !important; }
+    .qx-cta-pad { padding:24px 18px 6px !important; }
+    .qx-cta { padding:13px 24px !important; font-size:13.5px !important; letter-spacing:0.2px !important; }
+    .qx-foot-pad { padding:24px 18px 22px !important; }
+  }
+</style>
+</head>
+<body style="margin:0;padding:0;background:#04100C;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;">
+<div style="display:none;max-height:0;overflow:hidden;font-size:1px;line-height:1px;color:#04100C;opacity:0;">${escapeHtml(preheader)}</div>
+<div style="display:none;max-height:0;overflow:hidden;">&#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847;</div>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="qx-outer" style="background:#04100C;padding:32px 16px;">
+  <tr>
+    <td align="center">
+
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="qx-card" style="max-width:560px;background:#0A1A14;border:1px solid rgba(52,211,153,0.30);border-radius:22px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,0.55);">
+
+        <!-- LOGO BAR — emerald celebration gradient (unique to deposit confirmed) -->
+        <tr>
+          <td align="left" style="padding:20px 24px 0 28px;background:#04100C;background-image:linear-gradient(135deg,#04100C 0%,#052015 45%,#053823 80%,#047857 100%);">
+            <img src="cid:${BRAND_LOGO_CID}" alt="Qorix Markets" width="320" height="217" style="display:block;width:320px;max-width:90%;height:auto;border:0;outline:none;text-decoration:none;margin:0;" />
+          </td>
+        </tr>
+
+        <!-- HERO — confirmed pill + headline + emerald divider -->
+        <tr>
+          <td class="qx-hero-pad" align="center" style="padding:8px 32px 28px;background:#04100C;background-image:linear-gradient(135deg,#04100C 0%,#052015 45%,#053823 80%,#047857 100%);">
+            <div style="display:inline-block;padding:6px 14px;border-radius:999px;background:rgba(52,211,153,0.18);border:1px solid rgba(52,211,153,0.55);font-size:10.5px;letter-spacing:2.4px;color:#6EE7B7;font-weight:700;text-transform:uppercase;margin-bottom:18px;">
+              ✅ Deposit Confirmed
+            </div>
+            <div class="qx-hero-h" style="font-size:30px;line-height:1.18;font-weight:800;color:#FFFFFF;letter-spacing:-0.5px;max-width:440px;margin:0 auto;">
+              Funds Credited
+            </div>
+            <div style="font-size:13.5px;color:#6EE7B7;margin-top:10px;font-weight:500;">
+              ${safeFirstName}, your USDT has landed safely.
+            </div>
+            <div style="width:48px;height:3px;background:linear-gradient(90deg,#34D399 0%,#059669 100%);margin:18px auto 0;border-radius:999px;"></div>
+          </td>
+        </tr>
+
+        <!-- PREMIUM AMOUNT TILE — big bold green amount display -->
+        <tr>
+          <td align="center" style="padding:32px 12px 4px;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto;">
+              <tr>
+                <td class="qx-amount-cell" align="center" style="padding:22px 44px;background:#052015;background-image:linear-gradient(180deg,#052015 0%,#0A1A14 100%);border:1.5px solid rgba(52,211,153,0.5);border-radius:14px;box-shadow:0 0 28px rgba(52,211,153,0.25),inset 0 1px 0 rgba(255,255,255,0.04);">
+                  <div style="font-size:10.5px;letter-spacing:2.4px;color:#6EE7B7;font-weight:700;text-transform:uppercase;margin-bottom:8px;">
+                    Amount Credited
+                  </div>
+                  <div class="qx-amount-text" style="font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:38px;letter-spacing:-0.8px;color:#6EE7B7;font-weight:800;line-height:1.1;text-shadow:0 0 14px rgba(52,211,153,0.45);">
+                    ${safeAmount} <span style="font-size:0.5em;color:#A7F3D0;letter-spacing:0.5px;font-weight:600;">USDT</span>
+                  </div>
+                </td>
+              </tr>
+            </table>
+            <div style="margin-top:14px;font-size:10.5px;color:#475569;letter-spacing:1.8px;text-transform:uppercase;font-weight:600;">
+              Credited to Main Balance
+            </div>
+          </td>
+        </tr>
+
+        <!-- DEPOSIT DETAILS — stacked rows -->
+        <tr>
+          <td class="qx-snap-pad" style="padding:34px 32px 4px;">
+            <div style="font-size:10.5px;letter-spacing:2.4px;color:#6EE7B7;text-transform:uppercase;font-weight:700;text-align:left;padding:0 0 14px 0;">
+              Deposit Details
+            </div>
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td style="padding:14px 0;border-bottom:1px solid rgba(52,211,153,0.14);">
+                  <div class="qx-snap-label" style="font-size:11px;letter-spacing:1.6px;color:#94A3B8;text-transform:uppercase;font-weight:600;line-height:1;margin-bottom:6px;"><span style="margin-right:6px;">📥</span>Credited To</div>
+                  <div class="qx-snap-value" style="font-size:15px;color:#FFFFFF;font-weight:600;line-height:1.4;">Main Balance</div>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:14px 0;border-bottom:1px solid rgba(52,211,153,0.14);">
+                  <div class="qx-snap-label" style="font-size:11px;letter-spacing:1.6px;color:#94A3B8;text-transform:uppercase;font-weight:600;line-height:1;margin-bottom:6px;"><span style="margin-right:6px;">📊</span>New Main Balance</div>
+                  <div class="qx-snap-value" style="font-size:15px;color:#FFFFFF;font-weight:600;line-height:1.4;">${safeBalance} <span style="font-size:0.78em;color:#A7F3D0;font-weight:500;">USDT</span></div>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:14px 0;border-bottom:1px solid rgba(52,211,153,0.14);">
+                  <div class="qx-snap-label" style="font-size:11px;letter-spacing:1.6px;color:#94A3B8;text-transform:uppercase;font-weight:600;line-height:1;margin-bottom:6px;"><span style="margin-right:6px;">🌐</span>Network</div>
+                  <div class="qx-snap-value" style="font-size:15px;color:#FFFFFF;font-weight:600;line-height:1.4;">${safeNetwork}</div>
+                </td>
+              </tr>${
+                safeTxShort && tronscanUrl
+                  ? `
+              <tr>
+                <td style="padding:14px 0;border-bottom:1px solid rgba(52,211,153,0.14);">
+                  <div class="qx-snap-label" style="font-size:11px;letter-spacing:1.6px;color:#94A3B8;text-transform:uppercase;font-weight:600;line-height:1;margin-bottom:6px;"><span style="margin-right:6px;">🔗</span>Transaction Hash</div>
+                  <div class="qx-snap-value" style="font-size:13.5px;color:#FFFFFF;font-weight:600;line-height:1.4;font-family:'SF Mono','Menlo','Consolas',monospace;word-break:break-all;">
+                    <a href="${tronscanUrl}" target="_blank" style="color:#6EE7B7;text-decoration:none;border-bottom:1px dashed rgba(110,231,183,0.4);">${safeTxShort}</a>
+                  </div>
+                </td>
+              </tr>`
+                  : ""
+              }
+              <tr>
+                <td style="padding:14px 0 4px;">
+                  <div class="qx-snap-label" style="font-size:11px;letter-spacing:1.6px;color:#94A3B8;text-transform:uppercase;font-weight:600;line-height:1;margin-bottom:6px;"><span style="margin-right:6px;">🕐</span>Confirmed At</div>
+                  <div class="qx-snap-value" style="font-size:15px;color:#FFFFFF;font-weight:600;line-height:1.4;">${safeWhen}</div>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- PRIMARY CTA — "Open Wallet" -->
+        <tr>
+          <td class="qx-cta-pad" align="center" style="padding:30px 32px 6px;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td align="center" style="border-radius:12px;background-image:linear-gradient(135deg,#34D399 0%,#059669 100%);background-color:#059669;box-shadow:0 8px 28px rgba(5,150,105,0.45);">
+                  <a href="https://qorixmarkets.com/wallet" target="_blank" class="qx-cta" style="display:inline-block;padding:16px 42px;font-size:15px;font-weight:700;color:#FFFFFF;text-decoration:none;letter-spacing:0.4px;border-radius:12px;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+                    Open Wallet
+                  </a>
+                </td>
+              </tr>
+            </table>
+            <div style="margin-top:14px;font-size:12.5px;color:#94A3B8;line-height:1.6;">
+              Ready to grow it? <a href="https://qorixmarkets.com/trade" target="_blank" style="color:#6EE7B7;text-decoration:none;font-weight:600;border-bottom:1px dashed rgba(110,231,183,0.4);">Start Trading →</a>
+            </div>
+          </td>
+        </tr>
+
+        <!-- Reassurance / safety note -->
+        <tr>
+          <td style="padding:22px 32px 8px;">
+            <div style="background:rgba(52,211,153,0.05);border-left:2px solid rgba(52,211,153,0.5);border-radius:6px;padding:12px 16px;font-size:12.5px;line-height:1.6;color:#94A3B8;">
+              <strong style="color:#6EE7B7;">Funds are safely in your wallet. </strong>
+              You can move them to your Trading Balance anytime to start earning with our AI-powered strategies. Didn't make this deposit? Reply or email <a href="mailto:support@qorixmarkets.com" style="color:#6EE7B7;text-decoration:none;">support@qorixmarkets.com</a> right away.
+            </div>
+          </td>
+        </tr>
+
+        <!-- FOOTER -->
+        <tr>
+          <td class="qx-foot-pad" align="center" style="padding:30px 32px 28px;border-top:1px solid rgba(255,255,255,0.05);background:#040C09;">
+            <div style="font-size:13px;color:#CBD5E1;margin-bottom:6px;font-weight:600;">
+              Trade smart 📈
+            </div>
+            <div style="font-size:11.5px;color:#475569;line-height:1.7;">
+              © ${year} Qorix Markets · AI-Powered Trading<br/>
+              Need help? <a href="mailto:support@qorixmarkets.com" style="color:#6EE7B7;text-decoration:none;">support@qorixmarkets.com</a>
+            </div>
+          </td>
+        </tr>
+
+      </table>
+
+      <!-- Outer spacing -->
+      <div style="height:24px;line-height:24px;font-size:1px;">&nbsp;</div>
+    </td>
+  </tr>
+</table>
+</body>
+</html>`;
+}
+
+// ---------------------------------------------------------------------------
+// Send the USDT Deposit Confirmed email. Replaces the previous generic
+// sendTxnEmailToUser path for on-chain credits. Caller looks up email
+// + name and passes them in. Fire-and-forget caller pattern lives in
+// lib/tron-monitor.ts.
+// ---------------------------------------------------------------------------
+export async function sendDepositConfirmed(args: {
+  to: string;
+  name: string;
+  amount: number;
+  newMainBalance: number;
+  network: string;
+  txHash: string | null;
+  whenUtc: Date;
+}): Promise<void> {
+  const { to, name, amount, newMainBalance, network, txHash, whenUtc } = args;
+  const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const whenStr =
+    `${whenUtc.getUTCDate()} ${MONTHS_SHORT[whenUtc.getUTCMonth()]} ${whenUtc.getUTCFullYear()} · ` +
+    `${String(whenUtc.getUTCHours()).padStart(2, "0")}:${String(whenUtc.getUTCMinutes()).padStart(2, "0")} UTC`;
+  const fmt = (n: number) =>
+    n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  const subject = `Qorix Markets — Deposit confirmed: $${fmt(amount)} USDT credited`;
+  const preheader = `$${fmt(amount)} USDT (${network}) credited to your main balance · new balance $${fmt(newMainBalance)}`;
+
+  const html = renderDepositConfirmedHtml({
+    preheader,
+    name,
+    amount,
+    newMainBalance,
+    network,
+    txHash,
+    whenUtc,
+  });
+
+  const text =
+    `Deposit confirmed — funds credited\n\n` +
+    `Hi ${name},\n\n` +
+    `Great news — your on-chain USDT deposit has cleared and been credited.\n\n` +
+    `Amount credited:   $${fmt(amount)} USDT\n` +
+    `Credited to:       Main Balance\n` +
+    `New main balance:  $${fmt(newMainBalance)} USDT\n` +
+    `Network:           ${network}\n` +
+    (txHash ? `Transaction hash:  ${txHash}\n` : "") +
+    `Confirmed at:      ${whenStr}\n\n` +
+    `Open your wallet: https://qorixmarkets.com/wallet\n` +
+    `Start trading:    https://qorixmarkets.com/trade\n\n` +
+    `Didn't make this deposit? Contact support@qorixmarkets.com immediately.\n\n` +
+    `— Qorix Markets`;
+
+  await sendEmail(to, subject, text, html);
+}

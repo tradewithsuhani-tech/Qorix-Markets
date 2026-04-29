@@ -17,6 +17,7 @@ import {
   renderDeviceLoginOtpHtml,
   renderWelcomeEmailHtml,
   renderNewDeviceLoginAlertHtml,
+  renderDepositConfirmedHtml,
 } from "../lib/email-service";
 
 const DEFAULT_TO = "safepayu@gmail.com";
@@ -124,8 +125,34 @@ const TEMPLATES: Record<string, () => Preview> = {
     };
   },
 
+  "deposit-usdt": () => {
+    const name = "Prem";
+    const amount = 1250.0;
+    const newMainBalance = 3475.5;
+    const network = "TRC20";
+    const txHash = "f3b8c2a1d9e7c4b6a8f2d1e9c7b3a5f4e2d1c8b7a6f5e4d3c2b1a9f8e7d6c5b4";
+    const whenUtc = new Date();
+    return {
+      subject: "[PREVIEW] Qorix Markets — USDT Deposit Confirmed (new design)",
+      text:
+        `[DESIGN PREVIEW]\n\n` +
+        `Deposit confirmed: $${amount.toFixed(2)} USDT credited.\n\n` +
+        `Test render of the new emerald "Funds Landed" deposit confirmed template.\n` +
+        `Reply with feedback.\n\n` +
+        `— Qorix Markets`,
+      html: renderDepositConfirmedHtml({
+        preheader: `[PREVIEW] $${amount.toFixed(2)} USDT (TRC20) credited to your main balance — new balance $${newMainBalance.toFixed(2)}`,
+        name,
+        amount,
+        newMainBalance,
+        network,
+        txHash,
+        whenUtc,
+      }),
+    };
+  },
+
   // Future templates go here:
-  //   "deposit-confirm": () => ({ ... }),
   //   ...
 };
 
