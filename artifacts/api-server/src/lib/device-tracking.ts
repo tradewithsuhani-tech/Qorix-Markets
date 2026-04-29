@@ -80,6 +80,16 @@ async function trackLoginDeviceImpl(
     .select({
       id: userDevicesTable.id,
       alertSentAt: userDevicesTable.alertSentAt,
+      // Required by the UPDATE branch's `pickRicherLabel(stored, fresh)`
+      // high-water-mark guard — see the inline comment below. Without
+      // these in the SELECT, the helper sees `undefined` as the stored
+      // value and the guard silently degrades to "always take fresh",
+      // re-introducing the exact label-downgrade bug Batch 2.2 fixed.
+      // (TypeScript catches this at compile time, but list them
+      // explicitly so the dependency between SELECT and UPDATE is
+      // visible to a reader scanning either side in isolation.)
+      browserLabel: userDevicesTable.browserLabel,
+      osLabel: userDevicesTable.osLabel,
     })
     .from(userDevicesTable)
     .where(
