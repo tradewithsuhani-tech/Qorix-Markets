@@ -201,7 +201,7 @@ paths:
     post:
       operationId: transferToTrading
       tags: [wallet]
-      summary: Transfer from main to trading balance
+      summary: Transfer between main and trading balance (bidirectional)
       requestBody:
         required: true
         content:
@@ -1075,6 +1075,16 @@ components:
       properties:
         amount:
           type: number
+        direction:
+          type: string
+          enum:
+            - to_trading
+            - to_main
+          default: to_trading
+          description: |
+            Transfer direction. "to_trading" debits main and credits trading
+            (default — backward compatible). "to_main" debits trading and
+            credits main (reverse transfer).
       required:
         - amount
 

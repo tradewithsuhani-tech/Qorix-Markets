@@ -707,7 +707,7 @@ export const useWithdraw = <
 };
 
 /**
- * @summary Transfer from main to trading balance
+ * @summary Transfer between main and trading balance (bidirectional)
  */
 export const getTransferToTradingUrl = () => {
   return `/api/wallet/transfer`;
@@ -770,7 +770,7 @@ export type TransferToTradingMutationBody = BodyType<TransferBody>;
 export type TransferToTradingMutationError = ErrorType<unknown>;
 
 /**
- * @summary Transfer from main to trading balance
+ * @summary Transfer between main and trading balance (bidirectional)
  */
 export const useTransferToTrading = <
   TError = ErrorType<unknown>,
