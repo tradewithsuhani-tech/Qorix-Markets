@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 
 declare global {
   interface Window {
@@ -57,22 +57,47 @@ interface RecaptchaProps {
 }
 
 /**
+ * Imperative handle exposed via `forwardRef` so a parent form can
+ * programmatically reset the widget after a failed submit. Required in
+ * Batch 6.1 because v2 ("I'm not a robot") tokens are single-use; on a
+ * failed login the widget must be reset before the user can re-submit,
+ * otherwise they have to wait ~2 minutes for natural token expiry.
+ */
+export interface RecaptchaHandle {
+  reset: () => void;
+}
+
+/**
  * Google reCAPTCHA v2 ("I'm not a robot") widget. Renders nothing if
  * `VITE_RECAPTCHA_SITE_KEY` is not configured, so the app still works locally
- * before captcha setup.
+ * before captcha setup. Parents can hold a ref of type `RecaptchaHandle`
+ * and call `.reset()` to clear the widget after a failed submit.
  */
-export function Recaptcha({ onVerify, onExpire }: RecaptchaProps) {
-  // Re-enabled in Batch 6 hotfix B6.0.1 (2026-04-30). The previous
-  // unconditional `return null` stub was left over from when both this
-  // component AND CAPTCHA_ENABLED were kill-switched together; flipping
-  // CAPTCHA_ENABLED → true in B6 without removing this stub left
-  // /auth/login unable to obtain a token (server enforced verifyCaptcha
-  // → 400 "Captcha required" on every login). Removing the stub
-  // restores normal widget render + token flow.
+export const Recaptcha = forwardRef<RecaptchaHandle, RecaptchaProps>(
+  function Recaptcha({ onVerify, onExpire }, ref) {
   const siteKey = import.meta.env.VITE_RECAPTCHA_SITE_KEY as string | undefined;
   const containerRef = useRef<HTMLDivElement>(null);
   const widgetIdRef = useRef<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      reset: () => {
+        if (widgetIdRef.current !== null && window.grecaptcha) {
+          try {
+            window.grecaptcha.reset(widgetIdRef.current);
+          } catch {
+            /* widget already destroyed or out-of-sync — no-op */
+          }
+        }
+        // Tell the parent the token is gone too, so any local copy of
+        // the consumed token gets cleared in the same tick.
+        onExpire?.();
+      },
+    }),
+    [onExpire],
+  );
 
   useEffect(() => {
     if (!siteKey || !containerRef.current) return;
@@ -116,15 +141,13 @@ export function Recaptcha({ onVerify, onExpire }: RecaptchaProps) {
       {error && <p className="text-xs text-red-400 mt-1">{error}</p>}
     </div>
   );
-}
+});
 
-// Re-enabled in Batch 6 (2026-04-30) after the qorixmarkets.com +
-// www.qorixmarkets.com allowlist landed in the reCAPTCHA admin console.
-//
-// Currently consumed only by the /login page. The signup page does NOT
-// yet render the widget — that lands in B6.1 — so the matching server
-// route /auth/signup intentionally does NOT call verifyCaptcha until
-// then (see auth.ts). The /auth/login route DOES call verifyCaptcha.
+// Captcha is enforced server-side on BOTH /auth/login AND /auth/signup
+// after Batch 6.1 (2026-04-30). The widget is rendered once on the
+// shared login.tsx form and used for both modes (login + register tabs)
+// — see App.tsx:183-184 where /login, /register, /signup all route to
+// the same LoginPage.
 //
 // Driven by VITE_RECAPTCHA_SITE_KEY at build time so local/dev builds
 // without the env var continue to render the form without the widget.
