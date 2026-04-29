@@ -8,6 +8,7 @@ import {
 } from "../middlewares/auth";
 import {
   NEW_DEVICE_WITHDRAWAL_COOLDOWN_HOURS,
+  checkWithdrawDeviceCooldown,
   formatIstTimestamp,
 } from "../lib/withdraw-device-cooldown";
 
@@ -21,10 +22,12 @@ import {
  * google-oauth.ts). This route is a pure SELECT — it does not
  * create, update or delete any rows.
  *
- * For each device the response includes the B7 withdrawal-cooldown
- * status (whether it's currently locked for new-device withdrawals
- * and when it unlocks), so the UI can show a single source of
- * truth without re-implementing the math.
+ * The "is this session allowed to withdraw?" question is answered
+ * SOLELY by `checkWithdrawDeviceCooldown` (the same function
+ * /wallet/withdraw and /inr-withdrawals call) — the route does NOT
+ * re-derive that decision. This guarantees the page can never show
+ * "you are clear to withdraw" while the actual withdrawal endpoint
+ * still returns 403 (or vice versa).
  *
  * Per-device "sign out / revoke" is intentionally NOT in B8 — that
  * needs session-revocation infra (server-side JWT denylist or a
@@ -42,6 +45,21 @@ router.get("/devices", async (req: AuthRequest, res) => {
   // (UI shows the list normally without a "this device" badge).
   const currentFp = computeDeviceFingerprint(req);
   const haveCurrentFp = !!currentFp && currentFp !== "unknown";
+
+  // Single source of truth: ask the SAME helper the withdrawal
+  // endpoints ask. If this returns ok:false the user's session is
+  // blocked from withdrawals right now, regardless of what the
+  // per-row math below says about any other device.
+  const sessionCheck = await checkWithdrawDeviceCooldown(req, userId);
+  const currentSession = sessionCheck.ok
+    ? ({ withdrawalAllowed: true as const } as const)
+    : ({
+        withdrawalAllowed: false as const,
+        message: sessionCheck.body.message,
+        hoursLeft: sessionCheck.body.hoursLeft,
+        unlockAt: sessionCheck.body.unlockAt,
+        unlockIst: formatIstTimestamp(new Date(sessionCheck.body.unlockAt)),
+      } as const);
 
   const rows = await db
     .select({
@@ -69,8 +87,8 @@ router.get("/devices", async (req: AuthRequest, res) => {
     const unlockAt = withdrawalLocked
       ? new Date(firstSeenMs + cooldownMs)
       : null;
-    // Mirror the B7 helper: floor-protected so we never display
-    // "0h remaining" while still actually being locked.
+    // Mirror the B7 helper's per-row rounding: floor-protected so we
+    // never display "0h remaining" while still actually being locked.
     const hoursLeft = withdrawalLocked
       ? Math.max(1, Math.ceil((cooldownMs - elapsedMs) / 3600000))
       : 0;
@@ -98,9 +116,11 @@ router.get("/devices", async (req: AuthRequest, res) => {
     // True if the device making this request is in the list. False
     // means the caller is on a "ghost" session (user_devices row
     // missing — same fail-closed condition that B7 blocks
-    // withdrawals on). The UI uses this to surface a "log out and
-    // back in" hint.
+    // withdrawals on). Kept for diagnostic / UI use; the
+    // authoritative "can I withdraw right now?" answer is in
+    // currentSession.withdrawalAllowed.
     currentDeviceTracked: devices.some((d) => d.isCurrent),
+    currentSession,
   });
 });
 
