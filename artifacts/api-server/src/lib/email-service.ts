@@ -638,6 +638,286 @@ export function renderDeviceLoginOtpHtml(opts: {
 }
 
 // ---------------------------------------------------------------------------
+// Welcome Email — UNIQUE emerald/green "You're In" growth & onboarding design.
+// Sent post-signup (both password + Google OAuth flows). Celebrates the new
+// account, shows account snapshot (email + member-since + referral code),
+// and presents 3 next-step action cards with a big dashboard CTA.
+//
+// Visual differentiators (vs OTPs):
+//   • emerald/green palette — fresh growth vibe (not cyan / amber / sapphire)
+//   • "🌿 Account Active" hero pill + "You're In, {firstName}" headline
+//   • Account snapshot card (email · member since · prominent referral code)
+//   • 3 vertical action cards (Fund · Activate AI · Refer & Earn)
+//   • Big gradient CTA button → dashboard
+//   • Trust micro-pills (24/7 AI · Risk-Managed · Instant Withdraw)
+//   • "Welcome to the future" footer with first-name personalization
+// ---------------------------------------------------------------------------
+export function renderWelcomeEmailHtml(opts: {
+  firstName: string;
+  email: string;
+  referralCode: string;
+}): string {
+  const { firstName, email, referralCode } = opts;
+  const year = new Date().getFullYear();
+  const memberSince = new Date().toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+  const safeFirstName = escapeHtml(firstName || "Trader");
+  const safeEmail = escapeHtml(email);
+  const safeRef = escapeHtml(referralCode);
+  const preheader = `You're in, ${firstName || "Trader"} — your Qorix Markets account is active. Here's what to do next.`;
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="x-apple-disable-message-reformatting" />
+<meta name="color-scheme" content="dark light" />
+<meta name="supported-color-schemes" content="dark light" />
+<title>Welcome to Qorix Markets</title>
+<style type="text/css">
+  @media only screen and (max-width:480px) {
+    .qx-outer { padding:20px 10px !important; }
+    .qx-card { border-radius:18px !important; }
+    .qx-hero-pad { padding:6px 18px 22px !important; }
+    .qx-hero-h { font-size:25px !important; line-height:1.2 !important; }
+    .qx-intro { padding:24px 22px 4px !important; font-size:14px !important; }
+    .qx-snap-pad { padding:18px 18px 4px !important; }
+    .qx-snap-cell { padding:14px 18px !important; }
+    .qx-snap-ref { font-size:18px !important; letter-spacing:3px !important; padding:8px 16px !important; }
+    .qx-step-pad { padding:24px 18px 4px !important; }
+    .qx-step-icon { width:42px !important; height:42px !important; line-height:40px !important; font-size:19px !important; }
+    .qx-step-title { font-size:14px !important; }
+    .qx-step-desc { font-size:12.5px !important; }
+    .qx-cta-pad { padding:24px 22px 4px !important; }
+    .qx-cta { padding:14px 28px !important; font-size:14px !important; }
+    .qx-pill { font-size:10.5px !important; padding:5px 10px !important; }
+    .qx-pill-cell { padding:0 4px !important; }
+    .qx-foot-pad { padding:24px 18px 22px !important; }
+  }
+</style>
+</head>
+<body style="margin:0;padding:0;background:#02110A;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;">
+<div style="display:none;max-height:0;overflow:hidden;font-size:1px;line-height:1px;color:#02110A;opacity:0;">${escapeHtml(preheader)}</div>
+<div style="display:none;max-height:0;overflow:hidden;">&#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847;</div>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="qx-outer" style="background:#02110A;padding:32px 16px;">
+  <tr>
+    <td align="center">
+
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="qx-card" style="max-width:560px;background:#051A11;border:1px solid rgba(16,185,129,0.30);border-radius:22px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,0.55);">
+
+        <!-- LOGO BAR — emerald gradient -->
+        <tr>
+          <td align="left" style="padding:20px 24px 0 28px;background:#02110A;background-image:linear-gradient(135deg,#02110A 0%,#04220F 45%,#053D1F 80%,#065F32 100%);">
+            <img src="cid:${BRAND_LOGO_CID}" alt="Qorix Markets" width="260" height="176" style="display:block;width:260px;max-width:78%;height:auto;border:0;outline:none;text-decoration:none;margin:0;" />
+          </td>
+        </tr>
+
+        <!-- HERO — account active pill + headline + emerald divider -->
+        <tr>
+          <td class="qx-hero-pad" align="center" style="padding:8px 32px 28px;background:#02110A;background-image:linear-gradient(135deg,#02110A 0%,#04220F 45%,#053D1F 80%,#065F32 100%);">
+            <div style="display:inline-block;padding:6px 14px;border-radius:999px;background:rgba(16,185,129,0.18);border:1px solid rgba(16,185,129,0.5);font-size:10.5px;letter-spacing:2.4px;color:#6EE7B7;font-weight:700;text-transform:uppercase;margin-bottom:18px;">
+              🌿 Account Active
+            </div>
+            <div class="qx-hero-h" style="font-size:30px;line-height:1.18;font-weight:800;color:#FFFFFF;letter-spacing:-0.5px;max-width:440px;margin:0 auto;">
+              You're In, ${safeFirstName}
+            </div>
+            <div style="font-size:13.5px;color:#94A3B8;margin-top:10px;font-weight:500;">
+              Welcome to Qorix Markets
+            </div>
+            <div style="width:48px;height:3px;background:linear-gradient(90deg,#10B981 0%,#047857 100%);margin:18px auto 0;border-radius:999px;"></div>
+          </td>
+        </tr>
+
+        <!-- INTRO -->
+        <tr>
+          <td class="qx-intro" align="center" style="padding:30px 36px 8px;color:#94A3B8;font-size:14.5px;line-height:1.7;">
+            Your AI trading account is ready. Here's everything you need to start earning — <strong style="color:#FFFFFF;">24/7, on autopilot</strong>.
+          </td>
+        </tr>
+
+        <!-- ACCOUNT SNAPSHOT CARD -->
+        <tr>
+          <td class="qx-snap-pad" style="padding:24px 32px 8px;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#03130C;background-image:linear-gradient(180deg,#03130C 0%,#051A11 100%);border:1px solid rgba(16,185,129,0.22);border-radius:14px;">
+              <tr>
+                <td class="qx-snap-cell" style="padding:18px 22px;">
+                  <div style="font-size:10px;letter-spacing:2px;color:#6EE7B7;text-transform:uppercase;font-weight:700;margin-bottom:6px;">Email</div>
+                  <div style="font-size:14px;color:#FFFFFF;font-weight:600;word-break:break-all;">${safeEmail}</div>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:0 22px;">
+                  <div style="height:1px;background:rgba(16,185,129,0.15);line-height:1px;font-size:0;">&nbsp;</div>
+                </td>
+              </tr>
+              <tr>
+                <td class="qx-snap-cell" style="padding:18px 22px;">
+                  <div style="font-size:10px;letter-spacing:2px;color:#6EE7B7;text-transform:uppercase;font-weight:700;margin-bottom:6px;">Member Since</div>
+                  <div style="font-size:14px;color:#FFFFFF;font-weight:600;">${escapeHtml(memberSince)}</div>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:0 22px;">
+                  <div style="height:1px;background:rgba(16,185,129,0.15);line-height:1px;font-size:0;">&nbsp;</div>
+                </td>
+              </tr>
+              <tr>
+                <td class="qx-snap-cell" align="center" style="padding:18px 22px 22px;">
+                  <div style="font-size:10px;letter-spacing:2px;color:#6EE7B7;text-transform:uppercase;font-weight:700;margin-bottom:10px;">Your Referral Code · Earn 10% Lifetime</div>
+                  <div class="qx-snap-ref" style="display:inline-block;padding:10px 22px;background:rgba(16,185,129,0.10);border:1.5px solid rgba(16,185,129,0.5);border-radius:10px;font-family:'SF Mono','Menlo','Consolas','Courier New',monospace;font-size:20px;letter-spacing:4px;color:#6EE7B7;font-weight:800;-webkit-user-select:all;-moz-user-select:all;user-select:all;text-shadow:0 0 14px rgba(16,185,129,0.45);">${safeRef}</div>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- WHAT'S NEXT — 3 vertical action cards -->
+        <tr>
+          <td class="qx-step-pad" style="padding:32px 32px 8px;">
+            <div style="text-align:center;font-size:11px;letter-spacing:2.4px;color:#6EE7B7;text-transform:uppercase;font-weight:700;margin-bottom:18px;">
+              What's Next
+            </div>
+
+            <!-- Step 1: Fund -->
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#03130C;border:1px solid rgba(16,185,129,0.18);border-radius:12px;margin-bottom:10px;">
+              <tr>
+                <td width="64" valign="middle" style="padding:14px 0 14px 16px;">
+                  <div class="qx-step-icon" style="width:48px;height:48px;line-height:46px;border-radius:12px;background-image:linear-gradient(135deg,#10B981 0%,#047857 100%);background-color:#10B981;color:#02110A;font-size:22px;font-weight:800;text-align:center;border:1px solid rgba(110,231,183,0.5);box-shadow:0 0 18px rgba(16,185,129,0.35);">💰</div>
+                </td>
+                <td valign="middle" style="padding:14px 16px 14px 14px;">
+                  <div class="qx-step-title" style="font-size:15px;font-weight:700;color:#FFFFFF;letter-spacing:0.1px;">Fund Your Wallet</div>
+                  <div class="qx-step-desc" style="font-size:13px;color:#94A3B8;line-height:1.5;margin-top:3px;">Deposit USDT (TRC20) — minimum just $10</div>
+                </td>
+              </tr>
+            </table>
+
+            <!-- Step 2: Activate AI -->
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#03130C;border:1px solid rgba(16,185,129,0.18);border-radius:12px;margin-bottom:10px;">
+              <tr>
+                <td width="64" valign="middle" style="padding:14px 0 14px 16px;">
+                  <div class="qx-step-icon" style="width:48px;height:48px;line-height:46px;border-radius:12px;background-image:linear-gradient(135deg,#10B981 0%,#047857 100%);background-color:#10B981;color:#02110A;font-size:22px;font-weight:800;text-align:center;border:1px solid rgba(110,231,183,0.5);box-shadow:0 0 18px rgba(16,185,129,0.35);">🤖</div>
+                </td>
+                <td valign="middle" style="padding:14px 16px 14px 14px;">
+                  <div class="qx-step-title" style="font-size:15px;font-weight:700;color:#FFFFFF;letter-spacing:0.1px;">Activate AI Trading</div>
+                  <div class="qx-step-desc" style="font-size:13px;color:#94A3B8;line-height:1.5;margin-top:3px;">Pick a strategy — AI handles execution 24/7</div>
+                </td>
+              </tr>
+            </table>
+
+            <!-- Step 3: Refer & Earn -->
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#03130C;border:1px solid rgba(16,185,129,0.18);border-radius:12px;">
+              <tr>
+                <td width="64" valign="middle" style="padding:14px 0 14px 16px;">
+                  <div class="qx-step-icon" style="width:48px;height:48px;line-height:46px;border-radius:12px;background-image:linear-gradient(135deg,#10B981 0%,#047857 100%);background-color:#10B981;color:#02110A;font-size:22px;font-weight:800;text-align:center;border:1px solid rgba(110,231,183,0.5);box-shadow:0 0 18px rgba(16,185,129,0.35);">🎁</div>
+                </td>
+                <td valign="middle" style="padding:14px 16px 14px 14px;">
+                  <div class="qx-step-title" style="font-size:15px;font-weight:700;color:#FFFFFF;letter-spacing:0.1px;">Refer &amp; Earn 10%</div>
+                  <div class="qx-step-desc" style="font-size:13px;color:#94A3B8;line-height:1.5;margin-top:3px;">Lifetime commission on every friend who trades</div>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- CTA BUTTON -->
+        <tr>
+          <td class="qx-cta-pad" align="center" style="padding:30px 32px 8px;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td align="center" style="border-radius:12px;background-image:linear-gradient(135deg,#10B981 0%,#047857 100%);background-color:#10B981;box-shadow:0 8px 28px rgba(16,185,129,0.45);">
+                  <a href="https://qorixmarkets.com/dashboard" target="_blank" class="qx-cta" style="display:inline-block;padding:16px 38px;font-size:15px;font-weight:700;color:#02110A;text-decoration:none;letter-spacing:0.4px;border-radius:12px;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+                    Open Your Dashboard &rarr;
+                  </a>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- TRUST PILLS -->
+        <tr>
+          <td align="center" style="padding:24px 32px 8px;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto;">
+              <tr>
+                <td class="qx-pill-cell" align="center" style="padding:0 6px;">
+                  <span class="qx-pill" style="display:inline-block;padding:6px 12px;background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.32);border-radius:999px;font-size:11px;color:#94A3B8;font-weight:600;letter-spacing:0.3px;white-space:nowrap;">🤖 24/7 AI</span>
+                </td>
+                <td class="qx-pill-cell" align="center" style="padding:0 6px;">
+                  <span class="qx-pill" style="display:inline-block;padding:6px 12px;background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.32);border-radius:999px;font-size:11px;color:#94A3B8;font-weight:600;letter-spacing:0.3px;white-space:nowrap;">🛡️ Risk-Managed</span>
+                </td>
+                <td class="qx-pill-cell" align="center" style="padding:0 6px;">
+                  <span class="qx-pill" style="display:inline-block;padding:6px 12px;background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.32);border-radius:999px;font-size:11px;color:#94A3B8;font-weight:600;letter-spacing:0.3px;white-space:nowrap;">⚡ Instant Withdraw</span>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- HELP NOTE -->
+        <tr>
+          <td style="padding:24px 32px 8px;">
+            <div style="background:rgba(110,231,183,0.04);border-left:2px solid rgba(110,231,183,0.5);border-radius:6px;padding:12px 16px;font-size:12.5px;line-height:1.6;color:#94A3B8;">
+              <strong style="color:#6EE7B7;">Need a hand? </strong>
+              Reach our trader support at <a href="mailto:support@qorixmarkets.com" style="color:#6EE7B7;text-decoration:none;">support@qorixmarkets.com</a> — we usually reply within an hour.
+            </div>
+          </td>
+        </tr>
+
+        <!-- FOOTER -->
+        <tr>
+          <td class="qx-foot-pad" align="center" style="padding:30px 32px 28px;border-top:1px solid rgba(255,255,255,0.05);background:#020D07;">
+            <div style="font-size:13px;color:#CBD5E1;margin-bottom:6px;font-weight:600;">
+              Welcome to the future, ${safeFirstName} 🌿
+            </div>
+            <div style="font-size:11.5px;color:#475569;line-height:1.7;">
+              © ${year} Qorix Markets · AI-Powered Trading<br/>
+              <a href="https://qorixmarkets.com" style="color:#6EE7B7;text-decoration:none;">qorixmarkets.com</a>
+            </div>
+          </td>
+        </tr>
+
+      </table>
+
+      <div style="height:24px;line-height:24px;font-size:1px;">&nbsp;</div>
+    </td>
+  </tr>
+</table>
+</body>
+</html>`;
+}
+
+/**
+ * Send the branded Welcome email (post-signup).
+ * Use this from auth.ts (password signup) and google-oauth.ts (OAuth signup).
+ * Fire-and-forget at call site (wrap in setImmediate / try-catch).
+ */
+export async function sendWelcomeEmail(
+  to: string,
+  firstName: string,
+  referralCode: string,
+): Promise<void> {
+  const safeName = (firstName || "Trader").trim();
+  const subject = `Welcome to Qorix Markets, ${safeName} 🌿`;
+  const text =
+    `Welcome to Qorix Markets, ${safeName}!\n\n` +
+    `Your AI trading account is active. Here's what to do next:\n\n` +
+    `1. Fund Your Wallet — Deposit USDT (TRC20), minimum $10\n` +
+    `2. Activate AI Trading — Pick a strategy, AI handles 24/7\n` +
+    `3. Refer & Earn — 10% lifetime commission on every friend who trades\n\n` +
+    `Your referral code: ${referralCode}\n\n` +
+    `Open your dashboard: https://qorixmarkets.com/dashboard\n\n` +
+    `Need help? support@qorixmarkets.com\n\n` +
+    `— Qorix Markets`;
+  const html = renderWelcomeEmailHtml({ firstName: safeName, email: to, referralCode });
+  await sendEmail(to, subject, text, html);
+}
+
+// ---------------------------------------------------------------------------
 // Generic OTP template — fallback only. All three OTP purposes now have
 // dedicated designs (verify_email, withdrawal_confirm, device_login_approval).
 // Kept for safety in case dispatcher misses a future purpose.

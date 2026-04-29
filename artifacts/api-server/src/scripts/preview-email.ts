@@ -15,6 +15,7 @@ import {
   renderVerifyEmailOtpHtml,
   renderWithdrawalOtpHtml,
   renderDeviceLoginOtpHtml,
+  renderWelcomeEmailHtml,
 } from "../lib/email-service";
 
 const DEFAULT_TO = "looxprem@gmail.com";
@@ -75,6 +76,25 @@ const TEMPLATES: Record<string, () => Preview> = {
         preheader: `[PREVIEW] New device sign-in code: ${FAKE_OTP} (design test)`,
         intro,
         otp: FAKE_OTP,
+      }),
+    };
+  },
+
+  "welcome": () => {
+    const firstName = "Prem";
+    const fakeReferral = "QXMKT-PREM01";
+    return {
+      subject: "[PREVIEW] Welcome to Qorix Markets, Prem 🌿 (new design)",
+      text:
+        `[DESIGN PREVIEW]\n\n` +
+        `Welcome to Qorix Markets, ${firstName}!\n\n` +
+        `Test render of the new emerald "You're In" welcome template.\n` +
+        `Reply with feedback.\n\n` +
+        `— Qorix Markets`,
+      html: renderWelcomeEmailHtml({
+        firstName,
+        email: DEFAULT_TO,
+        referralCode: fakeReferral,
       }),
     };
   },

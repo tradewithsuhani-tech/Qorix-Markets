@@ -6,7 +6,7 @@ import { authMiddleware, signToken, computeDeviceFingerprint, describeDevice, in
 import { loginAttemptsTable } from "@workspace/db";
 import { RegisterBody, LoginBody } from "@workspace/api-zod";
 import { trackLoginEvent, runFraudChecks } from "../lib/fraud-service";
-import { sendOtp, verifyOtp, getDevOtp, sendEmail } from "../lib/email-service";
+import { sendOtp, verifyOtp, getDevOtp, sendEmail, sendWelcomeEmail } from "../lib/email-service";
 import { trackLoginDevice } from "../lib/device-tracking";
 import { buildBrandedEmailHtml } from "../lib/email-template";
 import { verifyCaptcha } from "../lib/captcha-service";
@@ -228,32 +228,12 @@ router.post("/auth/register", async (req, res) => {
     }
   });
 
-  // Send branded welcome email (fire-and-forget)
+  // Send branded welcome email (fire-and-forget) — emerald "You're In" template
   setImmediate(async () => {
     try {
       const firstName = (fullName ?? "").trim().split(/\s+/)[0] || "Trader";
-      const welcomeTitle = `Welcome to Qorix Markets, ${firstName} 👋`;
-      const welcomeMessage =
-        `Your account has been successfully created — welcome aboard!\n\n` +
-        `Qorix Markets is an institutional-grade AI trading platform that executes trades for you 24/7 — ` +
-        `zero emotion, zero delay, fully risk-managed.\n\n` +
-        `What you get:\n` +
-        `• AI-powered automated trading strategies\n` +
-        `• Built-in stop-loss and smart risk management\n` +
-        `• USDT (TRC20) deposits and withdrawals — anytime\n` +
-        `• Real-time portfolio dashboard and live P&L tracking\n` +
-        `• 24/7 dedicated support team\n\n` +
-        `To get started:\n` +
-        `1. Verify your email (we just sent you an OTP)\n` +
-        `2. Fund your trading balance with as little as $10\n` +
-        `3. Choose a strategy — the AI handles the rest\n\n` +
-        `Your referral code: ${referralCode}\n` +
-        `Earn 10% lifetime commission on every friend who joins and trades.\n\n` +
-        `Welcome to the future of automated trading.`;
-
-      const html = buildBrandedEmailHtml(welcomeTitle, welcomeMessage);
-      await sendEmail(email, welcomeTitle, welcomeMessage, html);
-    } catch (err) {
+      await sendWelcomeEmail(email, firstName, referralCode);
+    } catch {
       // Non-fatal — welcome email is a nice-to-have
     }
   });
