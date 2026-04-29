@@ -12,7 +12,7 @@ import { authMiddleware, adminMiddleware, type AuthRequest } from "../middleware
 import { auditAdminRequest, requireAdminPermission } from "../middlewares/admin-rbac";
 import { createNotification } from "../lib/notifications";
 import { transactionLogger, errorLogger } from "../lib/logger";
-import { sendTxnEmailToUser } from "../lib/email-service";
+import { sendTxnEmailToUser, verifyOtp } from "../lib/email-service";
 import { isSmokeTestUser } from "../lib/smoke-test-account";
 import { getWithdrawalCaps } from "../lib/withdrawal-caps";
 import { notifyAllActiveMerchantsOfNewWithdrawal } from "../lib/escalation-cron";
@@ -139,6 +139,41 @@ router.post("/inr-withdrawals", authMiddleware, async (req: AuthRequest, res) =>
       res.status(400).json({ error: "Invalid IFSC code" });
       return;
     }
+  }
+
+  // --- Withdrawal OTP verification (mirror of routes/wallet.ts USDT path) ---
+  // Server-side enforcement of the same email-OTP step-up the USDT/TRC20
+  // path requires. Without this, an attacker who has an active session can
+  // drain the INR channel with no second factor — even if the user has
+  // 2FA enabled (2FA only gates session issuance, not individual
+  // withdrawals). The client (`inr-withdraw-tab.tsx`) requests an OTP via
+  // `POST /auth/withdrawal-otp` (purpose `withdrawal_confirm`) and submits
+  // the 6-digit code in `body.otp` as part of this request.
+  //
+  // Placement note: this comes AFTER all client-validatable input checks
+  // (amount, payout method, UPI/IFSC shape) so a client-side typo doesn't
+  // silently consume the user's OTP. It comes BEFORE the rate fetch / cap
+  // check / atomic debit so a stolen session POSTing directly with no OTP
+  // is rejected before any DB work happens. Race semantics: OTP is one-shot
+  // (consumed on success); the same OTP cannot be reused for a second
+  // withdrawal. Purpose `withdrawal_confirm` is shared with the USDT path,
+  // so a single email OTP request can satisfy whichever channel the user
+  // chooses to submit first — but only one of them.
+  const submittedOtp = typeof body.otp === "string" ? body.otp.trim() : "";
+  if (!submittedOtp) {
+    res.status(400).json({
+      error: "withdrawal_otp_required",
+      message: "Please request a withdrawal OTP first",
+    });
+    return;
+  }
+  const otpResult = await verifyOtp(req.userId!, submittedOtp, "withdrawal_confirm");
+  if (!otpResult.valid) {
+    res.status(400).json({
+      error: "invalid_otp",
+      message: otpResult.error ?? "Invalid or expired OTP",
+    });
+    return;
   }
 
   const rate = await getInrRate();
