@@ -78,6 +78,13 @@ type LoginEvent = {
   userAgent: string | null;
   browserLabel: string | null;
   osLabel: string | null;
+  // Re-parsed from stored UA on the API side. Null when UA was not captured.
+  deviceType: string | null;
+  deviceModel: string | null;
+  deviceVendor: string | null;
+  browserVersion: string | null;
+  browserEngine: string | null;
+  osVersion: string | null;
   city: string | null;
   country: string | null;
   createdAt: string;
@@ -102,6 +109,14 @@ type UserDevice = {
   userAgent: string | null;
   browserLabel: string | null;
   osLabel: string | null;
+  // Re-parsed from stored UA on the API side. Null when UA was not captured.
+  // Lets the card render "Mac · macOS 14 · Chrome 121 (Apple SM-S918B)" style.
+  deviceType: string | null;
+  deviceModel: string | null;
+  deviceVendor: string | null;
+  browserVersion: string | null;
+  browserEngine: string | null;
+  osVersion: string | null;
   firstSeenIp: string | null;
   firstSeenAt: string;
   lastSeenIp: string | null;
@@ -446,15 +461,40 @@ function LoginEventsDrawer({ userId, email, onClose }: { userId: number; email: 
                         <Icon style={{ width: 18, height: 18 }} />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
+                        <div className="flex items-center gap-x-2 gap-y-1 flex-wrap">
                           <span className="text-sm font-semibold text-white">{cls.label}</span>
-                          <span className="text-xs text-muted-foreground">· {d.browserLabel ?? "Unknown browser"}</span>
+                          {/* Device model badge — only shown when the UA exposed
+                              a model (typically mobile devices, e.g. Samsung
+                              SM-S918B / iPhone15,3). Modern Chrome on Android
+                              with UA Reduction returns null model — that case
+                              is intentionally silent until UA Client Hints
+                              ship in a follow-up batch. */}
+                          {d.deviceModel && (
+                            <span
+                              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-mono font-medium border bg-blue-500/10 border-blue-500/25 text-blue-200"
+                              title={[d.deviceVendor, d.deviceModel].filter(Boolean).join(" ")}
+                            >
+                              {[d.deviceVendor, d.deviceModel].filter(Boolean).join(" ")}
+                            </span>
+                          )}
+                          <span className="text-xs text-muted-foreground">
+                            · {d.osLabel ?? "Unknown OS"}
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            · {d.browserLabel ?? "Unknown browser"}
+                          </span>
                         </div>
-                        <div className="flex items-center gap-1 text-[11px] text-muted-foreground mt-1">
+                        <div className="flex items-center gap-1 text-[11px] text-muted-foreground mt-1 flex-wrap">
                           <Clock className="w-3 h-3" />
                           Last seen {relTime(d.lastSeenAt)}
                           <span className="text-muted-foreground/50">·</span>
                           <span>First seen {relTime(d.firstSeenAt)}</span>
+                          {d.browserEngine && (
+                            <>
+                              <span className="text-muted-foreground/50">·</span>
+                              <span className="text-muted-foreground/70">{d.browserEngine}</span>
+                            </>
+                          )}
                         </div>
                       </div>
                     </div>
