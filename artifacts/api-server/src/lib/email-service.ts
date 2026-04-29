@@ -8225,8 +8225,8 @@ export function renderPromotionBroadcastHtml(opts: {
 
       <tr>
         <td class="qx-hero-pad" align="center" style="padding:8px 32px 28px;background:#180810;background-image:linear-gradient(135deg,#180810 0%,#5C1230 38%,#9B2C5A 72%,#FFEDD5 100%);">
-          <div style="display:inline-block;padding:6px 14px;border-radius:999px;background:rgba(255,237,213,0.20);border:1px solid rgba(255,237,213,0.60);font-size:10.5px;letter-spacing:2.6px;color:#FFEDD5;font-weight:800;text-transform:uppercase;margin-bottom:18px;">
-            ✦ Exclusive Offer · Limited Time
+          <div style="display:inline-block;padding:6px 14px;border-radius:999px;background:rgba(255,237,213,0.20);border:1px solid rgba(255,237,213,0.60);font-size:10.5px;letter-spacing:2.6px;color:#FFEDD5;font-weight:800;text-transform:uppercase;margin-bottom:18px;white-space:nowrap;">
+            ✦ Exclusive Offer
           </div>
           <div class="qx-hero-h" style="font-size:30px;line-height:1.18;font-weight:800;color:#FFFFFF;letter-spacing:-0.5px;max-width:480px;margin:0 auto;">
             ${safeTitle}
@@ -8827,8 +8827,8 @@ export function renderNextTradeFomoBroadcastHtml(opts: {
     .qx-card { border-radius:18px !important; }
     .qx-hero-pad { padding:6px 18px 22px !important; }
     .qx-hero-h { font-size:24px !important; line-height:1.22 !important; }
-    .qx-cd-pad { padding:24px 18px 4px !important; }
-    .qx-cd-time { font-size:24px !important; }
+    .qx-cd-pad { padding:24px 12px 4px !important; }
+    .qx-cd-time { font-size:19px !important; letter-spacing:-0.6px !important; }
     .qx-cta { padding:14px 28px !important; font-size:14px !important; }
     .qx-foot-pad { padding:24px 18px 22px !important; }
   }
@@ -8850,8 +8850,8 @@ export function renderNextTradeFomoBroadcastHtml(opts: {
 
       <tr>
         <td class="qx-hero-pad" align="center" style="padding:8px 32px 28px;background:#0A0518;background-image:linear-gradient(135deg,#0A0518 0%,#3B0A5C 28%,#06B6D4 62%,#F472B6 100%);">
-          <div style="display:inline-block;padding:6px 14px;border-radius:999px;background:rgba(244,114,182,0.22);border:1px solid rgba(244,114,182,0.65);font-size:10.5px;letter-spacing:2.6px;color:#FBCFE8;font-weight:800;text-transform:uppercase;margin-bottom:18px;">
-            ⏰ Next Trade Countdown · Don't Miss
+          <div style="display:inline-block;padding:6px 14px;border-radius:999px;background:rgba(244,114,182,0.22);border:1px solid rgba(244,114,182,0.65);font-size:10.5px;letter-spacing:2.6px;color:#FBCFE8;font-weight:800;text-transform:uppercase;margin-bottom:18px;white-space:nowrap;">
+            ⏰ Next Trade Countdown
           </div>
           <div class="qx-hero-h" style="font-size:30px;line-height:1.18;font-weight:800;color:#FFFFFF;letter-spacing:-0.5px;max-width:480px;margin:0 auto;text-shadow:0 2px 12px rgba(0,0,0,0.45);">
             The Next Move Is Loading
@@ -8871,8 +8871,10 @@ export function renderNextTradeFomoBroadcastHtml(opts: {
               <td align="center" style="padding:36px 18px;background:#0E0420;background-image:linear-gradient(180deg,#1A0A30 0%,#0A0518 100%);border:1.5px solid rgba(244,114,182,0.50);border-radius:14px;box-shadow:inset 0 1px 0 rgba(244,114,182,0.10),0 0 32px rgba(168,85,247,0.30),0 0 24px rgba(6,182,212,0.20);">
 
                 ${pair ? `<div style="display:inline-block;padding:5px 12px;border-radius:999px;background:rgba(6,182,212,0.20);border:1px solid rgba(6,182,212,0.65);font-size:10px;letter-spacing:2.0px;color:#A5F3FC;font-weight:800;text-transform:uppercase;margin-bottom:14px;">${safePair}</div>` : ""}
-                <!-- Big absolute time -->
-                <div class="qx-cd-time" style="font-size:30px;line-height:1.1;font-weight:900;color:#FFFFFF;letter-spacing:-0.4px;font-family:'SF Mono',Menlo,Consolas,monospace;text-shadow:0 0 18px rgba(244,114,182,0.45),0 0 28px rgba(6,182,212,0.35);">
+                <!-- Big absolute time — one-line lock; mobile shrinks to 19px
+                     to keep the full "DD MMM YYYY · HH:MM UTC" on a single
+                     visual line on narrow viewports. -->
+                <div class="qx-cd-time" style="font-size:28px;line-height:1.1;font-weight:900;color:#FFFFFF;letter-spacing:-0.4px;font-family:'SF Mono',Menlo,Consolas,monospace;text-shadow:0 0 18px rgba(244,114,182,0.45),0 0 28px rgba(6,182,212,0.35);white-space:nowrap;">
                   ${safeWhen}
                 </div>
                 <div style="margin-top:14px;font-size:11.5px;color:#C4B5FD;font-weight:600;line-height:1.5;letter-spacing:1.6px;text-transform:uppercase;">Set your alarm · Be ready</div>
