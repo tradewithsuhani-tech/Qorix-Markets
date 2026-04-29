@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db, usersTable, fraudFlagsTable, loginEventsTable, userDevicesTable } from "@workspace/db";
 import { eq, and, desc, count, ne, gte, inArray } from "drizzle-orm";
-import { authMiddleware, adminMiddleware, getParam, getQueryInt, getQueryString, type AuthRequest } from "../middlewares/auth";
+import { authMiddleware, adminMiddleware, getParam, getQueryInt, getQueryString, describeDeviceFromUserAgent, type AuthRequest } from "../middlewares/auth";
 import { getFraudStats } from "../lib/fraud-service";
 import { lookupGeoFull, type GeoFullResult } from "../lib/geo-ip";
 import { errorLogger } from "../lib/logger";
@@ -182,6 +182,12 @@ router.get("/admin/fraud/users/:userId/events", async (req, res) => {
     res.json(
       events.map((e) => {
         const dev = e.deviceFingerprint ? byFp.get(e.deviceFingerprint) : undefined;
+        // Lazy refresh: re-parse the event's stored UA at response time using
+        // the latest ua-parser-js. Stored labels from `user_devices` may be
+        // stale (older parser version); re-parsing gives every historical row
+        // the richest current labels with zero DB writes. Falls back to the
+        // joined device's stored labels only when the event has no UA captured.
+        const fresh = e.userAgent ? describeDeviceFromUserAgent(e.userAgent) : null;
         return {
           id: e.id,
           userId: e.userId,
@@ -189,8 +195,14 @@ router.get("/admin/fraud/users/:userId/events", async (req, res) => {
           deviceFingerprint: e.deviceFingerprint,
           eventType: e.eventType,
           userAgent: e.userAgent,
-          browserLabel: dev?.browserLabel ?? null,
-          osLabel: dev?.osLabel ?? null,
+          browserLabel: fresh?.browser ?? dev?.browserLabel ?? null,
+          osLabel: fresh?.os ?? dev?.osLabel ?? null,
+          deviceType: fresh?.deviceType ?? null,
+          deviceModel: fresh?.deviceModel ?? null,
+          deviceVendor: fresh?.deviceVendor ?? null,
+          browserVersion: fresh?.browserVersion ?? null,
+          browserEngine: fresh?.browserEngine ?? null,
+          osVersion: fresh?.osVersion ?? null,
           city: dev?.lastCity ?? null,
           country: dev?.lastCountry ?? null,
           createdAt: e.createdAt.toISOString(),
@@ -253,12 +265,25 @@ router.get("/admin/fraud/users/:userId/devices", async (req, res) => {
     res.json(
       devices.map((d) => {
         const intel = d.lastSeenIp ? ipIntel.get(d.lastSeenIp) ?? null : null;
+        // Lazy refresh: re-parse the stored UA at response time using the
+        // latest ua-parser-js. Older rows were inserted with the regex parser
+        // (only "Chrome" / "Android"); re-parsing now produces "Chrome 121"
+        // / "Android 14" plus model/vendor/version — all retroactively, with
+        // zero DB writes and no backfill migration needed. Stored labels are
+        // kept as fallback for rows where the UA column was never captured.
+        const fresh = d.userAgent ? describeDeviceFromUserAgent(d.userAgent) : null;
         return {
           id: String(d.id),
           deviceFingerprint: d.deviceFingerprint,
           userAgent: d.userAgent,
-          browserLabel: d.browserLabel,
-          osLabel: d.osLabel,
+          browserLabel: fresh?.browser ?? d.browserLabel,
+          osLabel: fresh?.os ?? d.osLabel,
+          deviceType: fresh?.deviceType ?? null,
+          deviceModel: fresh?.deviceModel ?? null,
+          deviceVendor: fresh?.deviceVendor ?? null,
+          browserVersion: fresh?.browserVersion ?? null,
+          browserEngine: fresh?.browserEngine ?? null,
+          osVersion: fresh?.osVersion ?? null,
           firstSeenIp: d.firstSeenIp,
           firstSeenAt: d.firstSeenAt.toISOString(),
           lastSeenIp: d.lastSeenIp,
