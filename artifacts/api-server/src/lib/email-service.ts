@@ -3600,3 +3600,285 @@ export async function sendAddressRejected(args: {
 
   await sendEmail(to, subject, text, html);
 }
+
+// ---------------------------------------------------------------------------
+// Identity Submitted (Lv.2 — pending review) — UNIQUE misty-sage "In Review"
+// design. Fires when a user uploads their Lv.2 identity document and the
+// submission is queued for admin review (see routes/kyc.ts at the
+// /kyc/identity submit endpoint).
+//
+// Visual differentiators (vs all other emails):
+//   • misty sage / slate-green palette — muted desaturated reading
+//     as "quietly working in background / nothing alarming". Distinct
+//     from bright emerald/teal (celebrations) and cool cyan (OTP)
+//   • "🔍 UNDER REVIEW" hero pill + "In Review" headline
+//   • REVIEW TIMELINE tile — 3-stage progress bar showing where the
+//     user is in the workflow (✓ Submitted · ⏳ Under Review now ·
+//     ⏸ Decision). UNIQUE to pending emails — visually differentiates
+//     from verified/rejected variants
+//   • Stacked rows: 🪪 document submitted · ⏱ submitted at ·
+//     ⏳ expected decision
+//   • Single CTA: "View KYC Status" (passive — no action required)
+//   • Reassurance card explaining what they can still do while waiting
+//   • "Trade smart 📈" footer
+// ---------------------------------------------------------------------------
+export function renderIdentitySubmittedHtml(opts: {
+  preheader: string;
+  name: string;
+  documentType: string;
+  submittedAt: Date;
+}): string {
+  const { preheader, name, documentType, submittedAt } = opts;
+  const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const whenStr =
+    `${submittedAt.getUTCDate()} ${MONTHS_SHORT[submittedAt.getUTCMonth()]} ${submittedAt.getUTCFullYear()} · ` +
+    `${String(submittedAt.getUTCHours()).padStart(2, "0")}:${String(submittedAt.getUTCMinutes()).padStart(2, "0")} UTC`;
+  const safeFirstName = escapeHtml((name || "there").trim().split(/\s+/)[0] || "there");
+  const safeDocType = escapeHtml(prettifyDocumentType(documentType));
+  const safeWhen = escapeHtml(whenStr);
+  const year = new Date().getFullYear();
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="x-apple-disable-message-reformatting" />
+<meta name="color-scheme" content="dark light" />
+<meta name="supported-color-schemes" content="dark light" />
+<title>Identity in review — Qorix Markets</title>
+<style type="text/css">
+  @media only screen and (max-width:480px) {
+    .qx-outer { padding:20px 10px !important; }
+    .qx-card { border-radius:18px !important; }
+    .qx-hero-pad { padding:6px 18px 22px !important; }
+    .qx-hero-h { font-size:24px !important; line-height:1.22 !important; }
+    .qx-tl-pad { padding:24px 22px 4px !important; }
+    .qx-tl-cell { padding:18px 18px !important; }
+    .qx-tl-label { font-size:13px !important; }
+    .qx-snap-pad { padding:24px 22px 4px !important; }
+    .qx-snap-label { font-size:10.5px !important; }
+    .qx-snap-value { font-size:14px !important; }
+    .qx-cta-pad { padding:24px 18px 6px !important; }
+    .qx-cta { padding:13px 24px !important; font-size:13.5px !important; letter-spacing:0.2px !important; }
+    .qx-foot-pad { padding:24px 18px 22px !important; }
+  }
+</style>
+</head>
+<body style="margin:0;padding:0;background:#0F1614;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;">
+<div style="display:none;max-height:0;overflow:hidden;font-size:1px;line-height:1px;color:#0F1614;opacity:0;">${escapeHtml(preheader)}</div>
+<div style="display:none;max-height:0;overflow:hidden;">&#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847;</div>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="qx-outer" style="background:#0F1614;padding:32px 16px;">
+  <tr>
+    <td align="center">
+
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="qx-card" style="max-width:560px;background:#1A2420;border:1px solid rgba(180,220,200,0.30);border-radius:22px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,0.55);">
+
+        <!-- LOGO BAR — misty sage gradient -->
+        <tr>
+          <td align="left" style="padding:20px 24px 0 28px;background:#0F1614;background-image:linear-gradient(135deg,#0F1614 0%,#1A2420 45%,#2D4138 80%,#5B8478 100%);">
+            <img src="cid:${BRAND_LOGO_CID}" alt="Qorix Markets" width="320" height="217" style="display:block;width:320px;max-width:90%;height:auto;border:0;outline:none;text-decoration:none;margin:0;" />
+          </td>
+        </tr>
+
+        <!-- HERO — under-review pill + headline + sage divider -->
+        <tr>
+          <td class="qx-hero-pad" align="center" style="padding:8px 32px 28px;background:#0F1614;background-image:linear-gradient(135deg,#0F1614 0%,#1A2420 45%,#2D4138 80%,#5B8478 100%);">
+            <div style="display:inline-block;padding:6px 14px;border-radius:999px;background:rgba(180,220,200,0.18);border:1px solid rgba(180,220,200,0.55);font-size:10.5px;letter-spacing:2.4px;color:#C8DDD2;font-weight:700;text-transform:uppercase;margin-bottom:18px;">
+              🔍 Under Review
+            </div>
+            <div class="qx-hero-h" style="font-size:30px;line-height:1.18;font-weight:800;color:#FFFFFF;letter-spacing:-0.5px;max-width:440px;margin:0 auto;">
+              In Review
+            </div>
+            <div style="font-size:13.5px;color:#C8DDD2;margin-top:10px;font-weight:500;max-width:420px;margin-left:auto;margin-right:auto;line-height:1.5;">
+              ${safeFirstName}, your Lv.2 identity is with our compliance team — we'll have an answer within 24 hours.
+            </div>
+            <div style="width:48px;height:3px;background:linear-gradient(90deg,#9DC3B5 0%,#5B8478 100%);margin:18px auto 0;border-radius:999px;"></div>
+          </td>
+        </tr>
+
+        <!-- REVIEW TIMELINE — 3-stage progress bar (UNIQUE to pending emails) -->
+        <tr>
+          <td class="qx-tl-pad" align="center" style="padding:32px 24px 4px;">
+            <div style="font-size:10.5px;letter-spacing:2.4px;color:#C8DDD2;font-weight:700;text-transform:uppercase;text-align:left;padding:0 0 12px 0;">
+              Review Timeline
+            </div>
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td class="qx-tl-cell" style="padding:20px 22px;background:#1A2420;background-image:linear-gradient(180deg,#1F2C27 0%,#1A2420 100%);border:1.5px solid rgba(180,220,200,0.35);border-radius:14px;box-shadow:0 0 28px rgba(91,132,120,0.18),inset 0 1px 0 rgba(255,255,255,0.04);">
+                  <!-- Step 1: Submitted (done) -->
+                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                    <tr>
+                      <td width="32" valign="middle" style="width:32px;padding:0 14px 0 0;">
+                        <div style="width:28px;height:28px;line-height:28px;text-align:center;border-radius:999px;background:rgba(180,220,200,0.20);border:1px solid rgba(180,220,200,0.55);font-size:14px;color:#C8DDD2;font-weight:700;">✓</div>
+                      </td>
+                      <td valign="middle">
+                        <div class="qx-tl-label" style="font-size:14px;color:#FFFFFF;font-weight:600;line-height:1.3;">Submitted</div>
+                        <div style="font-size:11px;color:#7A9990;font-weight:500;margin-top:2px;">Document received</div>
+                      </td>
+                    </tr>
+                  </table>
+                  <div style="height:1px;background:linear-gradient(90deg,rgba(180,220,200,0.4) 0%,rgba(180,220,200,0) 100%);margin:14px 0;"></div>
+                  <!-- Step 2: Under Review (current — highlighted glow) -->
+                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                    <tr>
+                      <td width="32" valign="middle" style="width:32px;padding:0 14px 0 0;">
+                        <div style="width:28px;height:28px;line-height:28px;text-align:center;border-radius:999px;background:#5B8478;background-image:linear-gradient(135deg,#9DC3B5 0%,#5B8478 100%);border:1px solid rgba(180,220,200,0.85);font-size:14px;color:#FFFFFF;font-weight:700;box-shadow:0 0 14px rgba(157,195,181,0.55);">⏳</div>
+                      </td>
+                      <td valign="middle">
+                        <div class="qx-tl-label" style="font-size:14px;color:#FFFFFF;font-weight:700;line-height:1.3;">Under Review</div>
+                        <div style="font-size:11px;color:#9DC3B5;font-weight:600;margin-top:2px;letter-spacing:0.5px;">Compliance team checking ✦</div>
+                      </td>
+                    </tr>
+                  </table>
+                  <div style="height:1px;background:linear-gradient(90deg,rgba(180,220,200,0.4) 0%,rgba(180,220,200,0) 100%);margin:14px 0;"></div>
+                  <!-- Step 3: Decision (upcoming — dim) -->
+                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                    <tr>
+                      <td width="32" valign="middle" style="width:32px;padding:0 14px 0 0;">
+                        <div style="width:28px;height:28px;line-height:28px;text-align:center;border-radius:999px;background:rgba(180,220,200,0.06);border:1px dashed rgba(180,220,200,0.30);font-size:13px;color:#5C7A72;font-weight:700;">·</div>
+                      </td>
+                      <td valign="middle">
+                        <div class="qx-tl-label" style="font-size:14px;color:#7A9990;font-weight:500;line-height:1.3;">Decision</div>
+                        <div style="font-size:11px;color:#5C7A72;font-weight:500;margin-top:2px;">Email + in-app notification</div>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- SUBMISSION DETAILS — stacked rows -->
+        <tr>
+          <td class="qx-snap-pad" style="padding:34px 32px 4px;">
+            <div style="font-size:10.5px;letter-spacing:2.4px;color:#C8DDD2;text-transform:uppercase;font-weight:700;text-align:left;padding:0 0 14px 0;">
+              Submission Details
+            </div>
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td style="padding:14px 0;border-bottom:1px solid rgba(180,220,200,0.16);">
+                  <div class="qx-snap-label" style="font-size:11px;letter-spacing:1.6px;color:#7A9990;text-transform:uppercase;font-weight:600;line-height:1;margin-bottom:6px;"><span style="margin-right:6px;">🪪</span>Document Submitted</div>
+                  <div class="qx-snap-value" style="font-size:15px;color:#FFFFFF;font-weight:600;line-height:1.4;">${safeDocType}</div>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:14px 0;border-bottom:1px solid rgba(180,220,200,0.16);">
+                  <div class="qx-snap-label" style="font-size:11px;letter-spacing:1.6px;color:#7A9990;text-transform:uppercase;font-weight:600;line-height:1;margin-bottom:6px;"><span style="margin-right:6px;">⏱</span>Submitted At</div>
+                  <div class="qx-snap-value" style="font-size:15px;color:#FFFFFF;font-weight:600;line-height:1.4;">${safeWhen}</div>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:14px 0 4px;">
+                  <div class="qx-snap-label" style="font-size:11px;letter-spacing:1.6px;color:#7A9990;text-transform:uppercase;font-weight:600;line-height:1;margin-bottom:6px;"><span style="margin-right:6px;">⏳</span>Expected Decision</div>
+                  <div class="qx-snap-value" style="font-size:15px;color:#FFFFFF;font-weight:600;line-height:1.4;">Within 24 hours</div>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- Single passive CTA — "View KYC Status" -->
+        <tr>
+          <td class="qx-cta-pad" align="center" style="padding:30px 32px 6px;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td align="center" style="border-radius:12px;background-image:linear-gradient(135deg,#7BA89B 0%,#5B8478 100%);background-color:#5B8478;box-shadow:0 8px 28px rgba(91,132,120,0.45);">
+                  <a href="https://qorixmarkets.com/profile" target="_blank" class="qx-cta" style="display:inline-block;padding:16px 42px;font-size:15px;font-weight:700;color:#FFFFFF;text-decoration:none;letter-spacing:0.4px;border-radius:12px;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+                    View KYC Status
+                  </a>
+                </td>
+              </tr>
+            </table>
+            <div style="margin-top:14px;font-size:12.5px;color:#7A9990;line-height:1.6;">
+              Need help? <a href="mailto:support@qorixmarkets.com" style="color:#C8DDD2;text-decoration:none;font-weight:600;border-bottom:1px dashed rgba(200,221,210,0.4);">Contact Support →</a>
+            </div>
+          </td>
+        </tr>
+
+        <!-- "What you can do while waiting" reassurance card -->
+        <tr>
+          <td style="padding:22px 32px 8px;">
+            <div style="background:rgba(180,220,200,0.06);border-left:2px solid rgba(180,220,200,0.5);border-radius:6px;padding:14px 16px;font-size:12.5px;line-height:1.65;color:#7A9990;">
+              <div style="color:#C8DDD2;font-weight:600;margin-bottom:6px;">While we review:</div>
+              You can still trade and make INR deposits. <strong style="color:#C8DDD2;">USDT &amp; INR withdrawals</strong> will unlock once Lv.2 is approved. We never ask for additional documents over email or social media — only inside your Qorix account.
+            </div>
+          </td>
+        </tr>
+
+        <!-- FOOTER -->
+        <tr>
+          <td class="qx-foot-pad" align="center" style="padding:30px 32px 28px;border-top:1px solid rgba(255,255,255,0.05);background:#0A100E;">
+            <div style="font-size:13px;color:#C8DDD2;margin-bottom:6px;font-weight:600;">
+              Trade smart 📈
+            </div>
+            <div style="font-size:11.5px;color:#506862;line-height:1.7;">
+              © ${year} Qorix Markets · AI-Powered Trading<br/>
+              Need help? <a href="mailto:support@qorixmarkets.com" style="color:#C8DDD2;text-decoration:none;">support@qorixmarkets.com</a>
+            </div>
+          </td>
+        </tr>
+
+      </table>
+
+      <div style="height:24px;line-height:24px;font-size:1px;">&nbsp;</div>
+    </td>
+  </tr>
+</table>
+</body>
+</html>`;
+}
+
+// ---------------------------------------------------------------------------
+// Send the Identity Submitted (Lv.2 KYC pending) email — confirms upload
+// receipt and sets review-time expectations. Replaces the previous generic
+// sendTxnEmailToUser path inside the user-facing /kyc/identity submit
+// endpoint (see routes/kyc.ts).
+// ---------------------------------------------------------------------------
+export async function sendIdentitySubmitted(args: {
+  to: string;
+  name: string;
+  documentType: string;
+  submittedAt: Date;
+}): Promise<void> {
+  const { to, name, documentType, submittedAt } = args;
+  const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const whenStr =
+    `${submittedAt.getUTCDate()} ${MONTHS_SHORT[submittedAt.getUTCMonth()]} ${submittedAt.getUTCFullYear()} · ` +
+    `${String(submittedAt.getUTCHours()).padStart(2, "0")}:${String(submittedAt.getUTCMinutes()).padStart(2, "0")} UTC`;
+  const docPretty = prettifyDocumentType(documentType);
+
+  const subject = `Qorix Markets — Identity in review (Lv.2)`;
+  const preheader = `Your ${docPretty} is with our compliance team — we'll have an answer within 24 hours`;
+
+  const html = renderIdentitySubmittedHtml({
+    preheader,
+    name,
+    documentType,
+    submittedAt,
+  });
+
+  const text =
+    `Identity in review — Lv.2\n\n` +
+    `Hi ${name},\n\n` +
+    `Thanks — your Lv.2 identity is with our compliance team. We'll have\n` +
+    `an answer within 24 hours.\n\n` +
+    `Review timeline:\n` +
+    `  ✓  Submitted (document received)\n` +
+    `  ⏳ Under review (compliance team checking)\n` +
+    `  ·  Decision (email + in-app notification)\n\n` +
+    `Document submitted:  ${docPretty}\n` +
+    `Submitted at:        ${whenStr}\n` +
+    `Expected decision:   Within 24 hours\n\n` +
+    `View KYC status: https://qorixmarkets.com/profile\n` +
+    `Contact support: support@qorixmarkets.com\n\n` +
+    `While we review, you can still trade and make INR deposits. USDT & INR\n` +
+    `withdrawals will unlock once Lv.2 is approved. We never ask for\n` +
+    `additional documents over email or social media — only inside your\n` +
+    `Qorix account.\n\n` +
+    `— Qorix Markets`;
+
+  await sendEmail(to, subject, text, html);
+}

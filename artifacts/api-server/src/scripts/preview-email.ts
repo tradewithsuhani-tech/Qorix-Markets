@@ -25,6 +25,7 @@ import {
   renderIdentityRejectedHtml,
   renderAddressVerifiedHtml,
   renderAddressRejectedHtml,
+  renderIdentitySubmittedHtml,
 } from "../lib/email-service";
 
 const DEFAULT_TO = "safepayu@gmail.com";
@@ -332,6 +333,27 @@ const TEMPLATES: Record<string, () => Preview> = {
         name,
         reason,
         rejectedAt,
+      }),
+    };
+  },
+
+  "identity-submitted": () => {
+    const name = "Prem Kumar";
+    const documentType = "passport";
+    const submittedAt = new Date();
+    return {
+      subject: "[PREVIEW] Qorix Markets — Identity in Review (Lv.2 pending) (new design)",
+      text:
+        `[DESIGN PREVIEW]\n\n` +
+        `Lv.2 Identity submitted by ${name} — ${documentType}.\n\n` +
+        `Test render of the new misty-sage "In Review" template.\n` +
+        `Reply with feedback.\n\n` +
+        `— Qorix Markets`,
+      html: renderIdentitySubmittedHtml({
+        preheader: `[PREVIEW] Your Passport is with our compliance team — we'll have an answer within 24 hours`,
+        name,
+        documentType,
+        submittedAt,
       }),
     };
   },
