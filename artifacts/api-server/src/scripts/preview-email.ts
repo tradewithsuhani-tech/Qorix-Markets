@@ -23,6 +23,7 @@ import {
   renderWithdrawalRejectedHtml,
   renderIdentityVerifiedHtml,
   renderIdentityRejectedHtml,
+  renderAddressVerifiedHtml,
 } from "../lib/email-service";
 
 const DEFAULT_TO = "safepayu@gmail.com";
@@ -281,6 +282,32 @@ const TEMPLATES: Record<string, () => Preview> = {
         documentType,
         reason,
         rejectedAt,
+      }),
+    };
+  },
+
+  "address-verified": () => {
+    const name = "Prem Kumar";
+    const addressCity = "Mumbai";
+    const addressState = "Maharashtra";
+    const addressCountry = "India";
+    const verifiedAt = new Date();
+    return {
+      subject: "[PREVIEW] Qorix Markets — Address Verified 🏆 Fully Verified (new design)",
+      text:
+        `[DESIGN PREVIEW]\n\n` +
+        `Lv.3 Address verified for ${name} — ${addressCity}, ${addressState}, ${addressCountry}.\n` +
+        `Account is now FULLY VERIFIED (all 3 KYC levels).\n\n` +
+        `Test render of the new deep-teal + mint "Fully Verified" template.\n` +
+        `Reply with feedback.\n\n` +
+        `— Qorix Markets`,
+      html: renderAddressVerifiedHtml({
+        preheader: `[PREVIEW] Lv.3 address (${addressCity}, ${addressState}, ${addressCountry}) verified — account is now fully verified across all 3 KYC levels`,
+        name,
+        addressCity,
+        addressState,
+        addressCountry,
+        verifiedAt,
       }),
     };
   },

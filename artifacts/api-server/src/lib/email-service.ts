@@ -3076,3 +3076,293 @@ export async function sendIdentityRejected(args: {
 
   await sendEmail(to, subject, text, html);
 }
+
+// ---------------------------------------------------------------------------
+// Address Verified (Lv.3) — UNIQUE deep-teal + mint "Fully Verified" design.
+// Fires when an admin approves a Lv.3 address proof — this is the FINAL
+// KYC unlock, account becomes "fully verified" across all 3 levels
+// (see routes/kyc.ts admin review handler at /admin/kyc/review with
+// action="approve" & kind="address").
+//
+// Visual differentiators (vs all other emails):
+//   • deep teal + electric mint palette — "elite tier reached" feel
+//     (distinct from bright emerald deposit, cool cyan OTP, warm bronze ID)
+//   • "🏆 FULLY VERIFIED" hero pill + "Fully Verified" headline
+//   • PROGRESS LADDER tile — visual 3-step checklist showing all KYC levels
+//     completed, with Lv.3 highlighted as the just-completed one
+//   • Stacked rows: 🏠 verified region · 🎖️ account tier · 🕐 verified at
+//   • DUAL CTA: "Start Trading" primary teal + "View KYC Status" link
+//   • "Trade smart 📈" footer
+// ---------------------------------------------------------------------------
+export function renderAddressVerifiedHtml(opts: {
+  preheader: string;
+  name: string;
+  addressCity: string;
+  addressState: string;
+  addressCountry: string;
+  verifiedAt: Date;
+}): string {
+  const { preheader, name, addressCity, addressState, addressCountry, verifiedAt } = opts;
+  const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const whenStr =
+    `${verifiedAt.getUTCDate()} ${MONTHS_SHORT[verifiedAt.getUTCMonth()]} ${verifiedAt.getUTCFullYear()} · ` +
+    `${String(verifiedAt.getUTCHours()).padStart(2, "0")}:${String(verifiedAt.getUTCMinutes()).padStart(2, "0")} UTC`;
+  const safeFirstName = escapeHtml((name || "there").trim().split(/\s+/)[0] || "there");
+  const region = [addressCity, addressState, addressCountry]
+    .map((s) => (s || "").trim())
+    .filter(Boolean)
+    .join(", ");
+  const safeRegion = escapeHtml(region || "On file");
+  const safeWhen = escapeHtml(whenStr);
+  const year = new Date().getFullYear();
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="x-apple-disable-message-reformatting" />
+<meta name="color-scheme" content="dark light" />
+<meta name="supported-color-schemes" content="dark light" />
+<title>Fully verified — Qorix Markets</title>
+<style type="text/css">
+  @media only screen and (max-width:480px) {
+    .qx-outer { padding:20px 10px !important; }
+    .qx-card { border-radius:18px !important; }
+    .qx-hero-pad { padding:6px 18px 22px !important; }
+    .qx-hero-h { font-size:24px !important; line-height:1.22 !important; }
+    .qx-ladder-pad { padding:24px 22px 4px !important; }
+    .qx-ladder-cell { padding:18px 18px !important; }
+    .qx-ladder-label { font-size:13px !important; }
+    .qx-snap-pad { padding:24px 22px 4px !important; }
+    .qx-snap-label { font-size:10.5px !important; }
+    .qx-snap-value { font-size:14px !important; }
+    .qx-cta-pad { padding:24px 18px 6px !important; }
+    .qx-cta { padding:13px 24px !important; font-size:13.5px !important; letter-spacing:0.2px !important; }
+    .qx-foot-pad { padding:24px 18px 22px !important; }
+  }
+</style>
+</head>
+<body style="margin:0;padding:0;background:#031817;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;">
+<div style="display:none;max-height:0;overflow:hidden;font-size:1px;line-height:1px;color:#031817;opacity:0;">${escapeHtml(preheader)}</div>
+<div style="display:none;max-height:0;overflow:hidden;">&#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847;</div>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="qx-outer" style="background:#031817;padding:32px 16px;">
+  <tr>
+    <td align="center">
+
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="qx-card" style="max-width:560px;background:#0A2624;border:1px solid rgba(94,234,212,0.30);border-radius:22px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,0.55);">
+
+        <!-- LOGO BAR — deep teal + mint glow gradient -->
+        <tr>
+          <td align="left" style="padding:20px 24px 0 28px;background:#031817;background-image:linear-gradient(135deg,#031817 0%,#0A2624 45%,#134E4A 80%,#14B8A6 100%);">
+            <img src="cid:${BRAND_LOGO_CID}" alt="Qorix Markets" width="320" height="217" style="display:block;width:320px;max-width:90%;height:auto;border:0;outline:none;text-decoration:none;margin:0;" />
+          </td>
+        </tr>
+
+        <!-- HERO — fully-verified pill + headline + mint divider -->
+        <tr>
+          <td class="qx-hero-pad" align="center" style="padding:8px 32px 28px;background:#031817;background-image:linear-gradient(135deg,#031817 0%,#0A2624 45%,#134E4A 80%,#14B8A6 100%);">
+            <div style="display:inline-block;padding:6px 14px;border-radius:999px;background:rgba(94,234,212,0.18);border:1px solid rgba(94,234,212,0.55);font-size:10.5px;letter-spacing:2.4px;color:#A7F3D0;font-weight:700;text-transform:uppercase;margin-bottom:18px;">
+              🏆 Fully Verified
+            </div>
+            <div class="qx-hero-h" style="font-size:30px;line-height:1.18;font-weight:800;color:#FFFFFF;letter-spacing:-0.5px;max-width:440px;margin:0 auto;">
+              Fully Verified
+            </div>
+            <div style="font-size:13.5px;color:#A7F3D0;margin-top:10px;font-weight:500;max-width:420px;margin-left:auto;margin-right:auto;line-height:1.5;">
+              ${safeFirstName}, all three KYC levels are complete — your account is fully verified.
+            </div>
+            <div style="width:48px;height:3px;background:linear-gradient(90deg,#5EEAD4 0%,#14B8A6 100%);margin:18px auto 0;border-radius:999px;"></div>
+          </td>
+        </tr>
+
+        <!-- PROGRESS LADDER — visual 3-step checklist, Lv.3 highlighted -->
+        <tr>
+          <td class="qx-ladder-pad" align="center" style="padding:32px 24px 4px;">
+            <div style="font-size:10.5px;letter-spacing:2.4px;color:#A7F3D0;font-weight:700;text-transform:uppercase;text-align:left;padding:0 0 12px 0;">
+              KYC Progress
+            </div>
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td class="qx-ladder-cell" style="padding:20px 22px;background:#0A2624;background-image:linear-gradient(180deg,#0F2E2C 0%,#0A2624 100%);border:1.5px solid rgba(94,234,212,0.35);border-radius:14px;box-shadow:0 0 28px rgba(20,184,166,0.20),inset 0 1px 0 rgba(255,255,255,0.04);">
+                  <!-- Step 1: Personal -->
+                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                    <tr>
+                      <td width="32" valign="middle" style="width:32px;padding:0 14px 0 0;">
+                        <div style="width:28px;height:28px;line-height:28px;text-align:center;border-radius:999px;background:rgba(94,234,212,0.20);border:1px solid rgba(94,234,212,0.55);font-size:14px;color:#A7F3D0;font-weight:700;">✓</div>
+                      </td>
+                      <td valign="middle">
+                        <div class="qx-ladder-label" style="font-size:14px;color:#FFFFFF;font-weight:600;line-height:1.3;">Lv.1 — Personal Details</div>
+                        <div style="font-size:11px;color:#5EAD9F;font-weight:500;margin-top:2px;">Verified</div>
+                      </td>
+                    </tr>
+                  </table>
+                  <div style="height:1px;background:linear-gradient(90deg,rgba(94,234,212,0.4) 0%,rgba(94,234,212,0) 100%);margin:14px 0;"></div>
+                  <!-- Step 2: Identity -->
+                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                    <tr>
+                      <td width="32" valign="middle" style="width:32px;padding:0 14px 0 0;">
+                        <div style="width:28px;height:28px;line-height:28px;text-align:center;border-radius:999px;background:rgba(94,234,212,0.20);border:1px solid rgba(94,234,212,0.55);font-size:14px;color:#A7F3D0;font-weight:700;">✓</div>
+                      </td>
+                      <td valign="middle">
+                        <div class="qx-ladder-label" style="font-size:14px;color:#FFFFFF;font-weight:600;line-height:1.3;">Lv.2 — Identity</div>
+                        <div style="font-size:11px;color:#5EAD9F;font-weight:500;margin-top:2px;">Verified</div>
+                      </td>
+                    </tr>
+                  </table>
+                  <div style="height:1px;background:linear-gradient(90deg,rgba(94,234,212,0.4) 0%,rgba(94,234,212,0) 100%);margin:14px 0;"></div>
+                  <!-- Step 3: Address (just completed — highlighted glow) -->
+                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                    <tr>
+                      <td width="32" valign="middle" style="width:32px;padding:0 14px 0 0;">
+                        <div style="width:28px;height:28px;line-height:28px;text-align:center;border-radius:999px;background:#14B8A6;background-image:linear-gradient(135deg,#5EEAD4 0%,#14B8A6 100%);border:1px solid rgba(94,234,212,0.85);font-size:14px;color:#FFFFFF;font-weight:700;box-shadow:0 0 14px rgba(94,234,212,0.55);">✓</div>
+                      </td>
+                      <td valign="middle">
+                        <div class="qx-ladder-label" style="font-size:14px;color:#FFFFFF;font-weight:700;line-height:1.3;">Lv.3 — Address</div>
+                        <div style="font-size:11px;color:#5EEAD4;font-weight:600;margin-top:2px;letter-spacing:0.5px;">Just verified ✦</div>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- VERIFICATION DETAILS — stacked rows -->
+        <tr>
+          <td class="qx-snap-pad" style="padding:34px 32px 4px;">
+            <div style="font-size:10.5px;letter-spacing:2.4px;color:#A7F3D0;text-transform:uppercase;font-weight:700;text-align:left;padding:0 0 14px 0;">
+              Verification Details
+            </div>
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td style="padding:14px 0;border-bottom:1px solid rgba(94,234,212,0.16);">
+                  <div class="qx-snap-label" style="font-size:11px;letter-spacing:1.6px;color:#6B9D95;text-transform:uppercase;font-weight:600;line-height:1;margin-bottom:6px;"><span style="margin-right:6px;">🏠</span>Verified Region</div>
+                  <div class="qx-snap-value" style="font-size:15px;color:#FFFFFF;font-weight:600;line-height:1.4;">${safeRegion}</div>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:14px 0;border-bottom:1px solid rgba(94,234,212,0.16);">
+                  <div class="qx-snap-label" style="font-size:11px;letter-spacing:1.6px;color:#6B9D95;text-transform:uppercase;font-weight:600;line-height:1;margin-bottom:6px;"><span style="margin-right:6px;">🎖️</span>Account Tier</div>
+                  <div class="qx-snap-value" style="font-size:15px;color:#FFFFFF;font-weight:600;line-height:1.4;">Fully Verified Member</div>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:14px 0 4px;">
+                  <div class="qx-snap-label" style="font-size:11px;letter-spacing:1.6px;color:#6B9D95;text-transform:uppercase;font-weight:600;line-height:1;margin-bottom:6px;"><span style="margin-right:6px;">🕐</span>Verified At</div>
+                  <div class="qx-snap-value" style="font-size:15px;color:#FFFFFF;font-weight:600;line-height:1.4;">${safeWhen}</div>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- DUAL CTA — primary "Start Trading" + secondary "View KYC Status" -->
+        <tr>
+          <td class="qx-cta-pad" align="center" style="padding:30px 32px 6px;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td align="center" style="border-radius:12px;background-image:linear-gradient(135deg,#5EEAD4 0%,#14B8A6 100%);background-color:#14B8A6;box-shadow:0 8px 28px rgba(20,184,166,0.45);">
+                  <a href="https://qorixmarkets.com/trade" target="_blank" class="qx-cta" style="display:inline-block;padding:16px 42px;font-size:15px;font-weight:700;color:#042F2C;text-decoration:none;letter-spacing:0.4px;border-radius:12px;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+                    Start Trading
+                  </a>
+                </td>
+              </tr>
+            </table>
+            <div style="margin-top:14px;font-size:12.5px;color:#6B9D95;line-height:1.6;">
+              Or check your <a href="https://qorixmarkets.com/profile" target="_blank" style="color:#A7F3D0;text-decoration:none;font-weight:600;border-bottom:1px dashed rgba(167,243,208,0.4);">KYC Status →</a>
+            </div>
+          </td>
+        </tr>
+
+        <!-- Reassurance card -->
+        <tr>
+          <td style="padding:22px 32px 8px;">
+            <div style="background:rgba(94,234,212,0.06);border-left:2px solid rgba(94,234,212,0.5);border-radius:6px;padding:12px 16px;font-size:12.5px;line-height:1.6;color:#6B9D95;">
+              <strong style="color:#A7F3D0;">Full verification is permanent.</strong>
+              All Qorix Markets services — trading, USDT &amp; INR deposits, withdrawals, AI signals — are now unlocked at the highest tier. No further KYC action needed unless your ID expires.
+            </div>
+          </td>
+        </tr>
+
+        <!-- FOOTER -->
+        <tr>
+          <td class="qx-foot-pad" align="center" style="padding:30px 32px 28px;border-top:1px solid rgba(255,255,255,0.05);background:#021110;">
+            <div style="font-size:13px;color:#A7F3D0;margin-bottom:6px;font-weight:600;">
+              Trade smart 📈
+            </div>
+            <div style="font-size:11.5px;color:#4F706A;line-height:1.7;">
+              © ${year} Qorix Markets · AI-Powered Trading<br/>
+              Need help? <a href="mailto:support@qorixmarkets.com" style="color:#A7F3D0;text-decoration:none;">support@qorixmarkets.com</a>
+            </div>
+          </td>
+        </tr>
+
+      </table>
+
+      <div style="height:24px;line-height:24px;font-size:1px;">&nbsp;</div>
+    </td>
+  </tr>
+</table>
+</body>
+</html>`;
+}
+
+// ---------------------------------------------------------------------------
+// Send the Address Verified (Lv.3 KYC approved) email — final KYC unlock,
+// account becomes fully verified. Caller looks up email + name + address
+// fields, and passes them in. Replaces the previous generic
+// sendTxnEmailToUser path inside the admin KYC review handler
+// (see routes/kyc.ts /admin/kyc/review).
+// ---------------------------------------------------------------------------
+export async function sendAddressVerified(args: {
+  to: string;
+  name: string;
+  addressCity: string;
+  addressState: string;
+  addressCountry: string;
+  verifiedAt: Date;
+}): Promise<void> {
+  const { to, name, addressCity, addressState, addressCountry, verifiedAt } = args;
+  const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const whenStr =
+    `${verifiedAt.getUTCDate()} ${MONTHS_SHORT[verifiedAt.getUTCMonth()]} ${verifiedAt.getUTCFullYear()} · ` +
+    `${String(verifiedAt.getUTCHours()).padStart(2, "0")}:${String(verifiedAt.getUTCMinutes()).padStart(2, "0")} UTC`;
+  const region = [addressCity, addressState, addressCountry]
+    .map((s) => (s || "").trim())
+    .filter(Boolean)
+    .join(", ");
+
+  const subject = `Qorix Markets — Fully verified 🏆 (all 3 KYC levels complete)`;
+  const preheader = `Your Lv.3 address (${region || "on file"}) is verified — account is now fully verified across all 3 KYC levels`;
+
+  const html = renderAddressVerifiedHtml({
+    preheader,
+    name,
+    addressCity,
+    addressState,
+    addressCountry,
+    verifiedAt,
+  });
+
+  const text =
+    `Fully verified — all 3 KYC levels complete\n\n` +
+    `Hi ${name},\n\n` +
+    `Great news — your Lv.3 address verification has been approved.\n` +
+    `Your account is now fully verified across all 3 KYC levels.\n\n` +
+    `KYC Progress:\n` +
+    `  ✓ Lv.1 — Personal Details (Verified)\n` +
+    `  ✓ Lv.2 — Identity (Verified)\n` +
+    `  ✓ Lv.3 — Address (Just verified)\n\n` +
+    `Verified region:  ${region || "On file"}\n` +
+    `Account tier:     Fully Verified Member\n` +
+    `Verified at:      ${whenStr}\n\n` +
+    `Start trading:        https://qorixmarkets.com/trade\n` +
+    `View KYC status:      https://qorixmarkets.com/profile\n\n` +
+    `Full verification is permanent. All Qorix services — trading, deposits,\n` +
+    `withdrawals, AI signals — are now unlocked at the highest tier.\n\n` +
+    `— Qorix Markets`;
+
+  await sendEmail(to, subject, text, html);
+}
