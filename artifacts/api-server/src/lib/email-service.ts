@@ -2833,3 +2833,246 @@ export async function sendIdentityVerified(args: {
 
   await sendEmail(to, subject, text, html);
 }
+
+// ---------------------------------------------------------------------------
+// Identity Rejected (Lv.2) — UNIQUE dusty-plum "Let's Try Again" design.
+// Fires when an admin rejects a Lv.2 identity submission (see routes/kyc.ts
+// admin review handler at /admin/kyc/review with action="reject" &
+// kind="identity"). Always includes the cleanReason — kyc.ts defaults
+// to "Document not acceptable" when blank.
+//
+// Visual differentiators (vs all other emails):
+//   • dusty plum / muted wine palette — refined empathetic "we need to chat"
+//     (distinct from crimson alert, slate-cold withdrawal-rejected)
+//   • "📋 ID UPDATE NEEDED" hero pill + "Let's Try Again" headline
+//   • PROMINENT REASON tile — the centerpiece is the rejection reason
+//     in a quote-style box (this is the most important info)
+//   • Stacked rows: 🪪 document type · 📋 decision · 🕐 reviewed at
+//   • DUAL CTA: "Resubmit Document" primary plum + "Contact Support" link
+//   • Helpful "Common issues" reassurance card
+//   • "Trade smart 📈" footer
+// ---------------------------------------------------------------------------
+export function renderIdentityRejectedHtml(opts: {
+  preheader: string;
+  name: string;
+  documentType: string;
+  reason: string;
+  rejectedAt: Date;
+}): string {
+  const { preheader, name, documentType, reason, rejectedAt } = opts;
+  const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const whenStr =
+    `${rejectedAt.getUTCDate()} ${MONTHS_SHORT[rejectedAt.getUTCMonth()]} ${rejectedAt.getUTCFullYear()} · ` +
+    `${String(rejectedAt.getUTCHours()).padStart(2, "0")}:${String(rejectedAt.getUTCMinutes()).padStart(2, "0")} UTC`;
+  const safeFirstName = escapeHtml((name || "there").trim().split(/\s+/)[0] || "there");
+  const safeDocType = escapeHtml(prettifyDocumentType(documentType));
+  const safeReason = escapeHtml((reason || "").trim() || "Document not acceptable");
+  const safeWhen = escapeHtml(whenStr);
+  const year = new Date().getFullYear();
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="x-apple-disable-message-reformatting" />
+<meta name="color-scheme" content="dark light" />
+<meta name="supported-color-schemes" content="dark light" />
+<title>ID update needed — Qorix Markets</title>
+<style type="text/css">
+  @media only screen and (max-width:480px) {
+    .qx-outer { padding:20px 10px !important; }
+    .qx-card { border-radius:18px !important; }
+    .qx-hero-pad { padding:6px 18px 22px !important; }
+    .qx-hero-h { font-size:24px !important; line-height:1.22 !important; }
+    .qx-reason-pad { padding:24px 22px 4px !important; }
+    .qx-reason-cell { padding:18px 20px !important; }
+    .qx-reason-text { font-size:15px !important; }
+    .qx-snap-pad { padding:24px 22px 4px !important; }
+    .qx-snap-label { font-size:10.5px !important; }
+    .qx-snap-value { font-size:14px !important; }
+    .qx-cta-pad { padding:24px 18px 6px !important; }
+    .qx-cta { padding:13px 24px !important; font-size:13.5px !important; letter-spacing:0.2px !important; }
+    .qx-foot-pad { padding:24px 18px 22px !important; }
+  }
+</style>
+</head>
+<body style="margin:0;padding:0;background:#1A0D14;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;">
+<div style="display:none;max-height:0;overflow:hidden;font-size:1px;line-height:1px;color:#1A0D14;opacity:0;">${escapeHtml(preheader)}</div>
+<div style="display:none;max-height:0;overflow:hidden;">&#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847;</div>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="qx-outer" style="background:#1A0D14;padding:32px 16px;">
+  <tr>
+    <td align="center">
+
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="qx-card" style="max-width:560px;background:#22131C;border:1px solid rgba(232,168,188,0.30);border-radius:22px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,0.55);">
+
+        <!-- LOGO BAR — dusty plum/wine gradient -->
+        <tr>
+          <td align="left" style="padding:20px 24px 0 28px;background:#1A0D14;background-image:linear-gradient(135deg,#1A0D14 0%,#2A1520 45%,#4A1F35 80%,#7B2D52 100%);">
+            <img src="cid:${BRAND_LOGO_CID}" alt="Qorix Markets" width="320" height="217" style="display:block;width:320px;max-width:90%;height:auto;border:0;outline:none;text-decoration:none;margin:0;" />
+          </td>
+        </tr>
+
+        <!-- HERO — needs-review pill + headline + plum divider -->
+        <tr>
+          <td class="qx-hero-pad" align="center" style="padding:8px 32px 28px;background:#1A0D14;background-image:linear-gradient(135deg,#1A0D14 0%,#2A1520 45%,#4A1F35 80%,#7B2D52 100%);">
+            <div style="display:inline-block;padding:6px 14px;border-radius:999px;background:rgba(232,168,188,0.18);border:1px solid rgba(232,168,188,0.55);font-size:10.5px;letter-spacing:2.4px;color:#F5D0DD;font-weight:700;text-transform:uppercase;margin-bottom:18px;">
+              📋 ID Update Needed
+            </div>
+            <div class="qx-hero-h" style="font-size:30px;line-height:1.18;font-weight:800;color:#FFFFFF;letter-spacing:-0.5px;max-width:440px;margin:0 auto;">
+              Let's Try Again
+            </div>
+            <div style="font-size:13.5px;color:#F5D0DD;margin-top:10px;font-weight:500;max-width:420px;margin-left:auto;margin-right:auto;line-height:1.5;">
+              ${safeFirstName}, your ID couldn't be verified this time — here's what we found.
+            </div>
+            <div style="width:48px;height:3px;background:linear-gradient(90deg,#E8A8BC 0%,#7B2D52 100%);margin:18px auto 0;border-radius:999px;"></div>
+          </td>
+        </tr>
+
+        <!-- PROMINENT REASON TILE — the centerpiece -->
+        <tr>
+          <td class="qx-reason-pad" align="center" style="padding:32px 24px 4px;">
+            <div style="font-size:10.5px;letter-spacing:2.4px;color:#E8A8BC;font-weight:700;text-transform:uppercase;text-align:left;padding:0 0 12px 0;">
+              Why It Was Held
+            </div>
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td class="qx-reason-cell" style="padding:22px 26px;background:#2A1520;background-image:linear-gradient(180deg,#2A1520 0%,#22131C 100%);border:1.5px solid rgba(232,168,188,0.45);border-left:4px solid #E8A8BC;border-radius:12px;box-shadow:0 0 28px rgba(123,45,82,0.30),inset 0 1px 0 rgba(255,255,255,0.04);">
+                  <div class="qx-reason-text" style="font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:16px;color:#FFFFFF;font-weight:500;line-height:1.55;text-align:left;font-style:italic;">
+                    &ldquo;${safeReason}&rdquo;
+                  </div>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- SUBMISSION DETAILS — stacked rows -->
+        <tr>
+          <td class="qx-snap-pad" style="padding:34px 32px 4px;">
+            <div style="font-size:10.5px;letter-spacing:2.4px;color:#E8A8BC;text-transform:uppercase;font-weight:700;text-align:left;padding:0 0 14px 0;">
+              Submission Details
+            </div>
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td style="padding:14px 0;border-bottom:1px solid rgba(232,168,188,0.16);">
+                  <div class="qx-snap-label" style="font-size:11px;letter-spacing:1.6px;color:#A88598;text-transform:uppercase;font-weight:600;line-height:1;margin-bottom:6px;"><span style="margin-right:6px;">🪪</span>Document Submitted</div>
+                  <div class="qx-snap-value" style="font-size:15px;color:#FFFFFF;font-weight:600;line-height:1.4;">${safeDocType}</div>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:14px 0;border-bottom:1px solid rgba(232,168,188,0.16);">
+                  <div class="qx-snap-label" style="font-size:11px;letter-spacing:1.6px;color:#A88598;text-transform:uppercase;font-weight:600;line-height:1;margin-bottom:6px;"><span style="margin-right:6px;">📋</span>Decision</div>
+                  <div class="qx-snap-value" style="font-size:15px;color:#FFFFFF;font-weight:600;line-height:1.4;">Resubmit Required</div>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:14px 0 4px;">
+                  <div class="qx-snap-label" style="font-size:11px;letter-spacing:1.6px;color:#A88598;text-transform:uppercase;font-weight:600;line-height:1;margin-bottom:6px;"><span style="margin-right:6px;">🕐</span>Reviewed At</div>
+                  <div class="qx-snap-value" style="font-size:15px;color:#FFFFFF;font-weight:600;line-height:1.4;">${safeWhen}</div>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- DUAL CTA — primary "Resubmit Document" + secondary "Contact Support" -->
+        <tr>
+          <td class="qx-cta-pad" align="center" style="padding:30px 32px 6px;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td align="center" style="border-radius:12px;background-image:linear-gradient(135deg,#9C3D6B 0%,#7B2D52 100%);background-color:#7B2D52;box-shadow:0 8px 28px rgba(123,45,82,0.55);">
+                  <a href="https://qorixmarkets.com/profile" target="_blank" class="qx-cta" style="display:inline-block;padding:16px 42px;font-size:15px;font-weight:700;color:#FFFFFF;text-decoration:none;letter-spacing:0.4px;border-radius:12px;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+                    Resubmit Document
+                  </a>
+                </td>
+              </tr>
+            </table>
+            <div style="margin-top:14px;font-size:12.5px;color:#A88598;line-height:1.6;">
+              Need help? <a href="mailto:support@qorixmarkets.com" style="color:#F5D0DD;text-decoration:none;font-weight:600;border-bottom:1px dashed rgba(245,208,221,0.4);">Contact Support →</a>
+            </div>
+          </td>
+        </tr>
+
+        <!-- Common-issues reassurance card -->
+        <tr>
+          <td style="padding:22px 32px 8px;">
+            <div style="background:rgba(232,168,188,0.06);border-left:2px solid rgba(232,168,188,0.5);border-radius:6px;padding:14px 16px;font-size:12.5px;line-height:1.65;color:#A88598;">
+              <div style="color:#F5D0DD;font-weight:600;margin-bottom:6px;">Tips for a smooth resubmission:</div>
+              Take a fresh, well-lit photo on a flat surface · all four corners visible · no glare or shadows · ID must not be expired · name should match the one on your Qorix account. We'll review again within 24 hours.
+            </div>
+          </td>
+        </tr>
+
+        <!-- FOOTER -->
+        <tr>
+          <td class="qx-foot-pad" align="center" style="padding:30px 32px 28px;border-top:1px solid rgba(255,255,255,0.05);background:#13080F;">
+            <div style="font-size:13px;color:#F5D0DD;margin-bottom:6px;font-weight:600;">
+              Trade smart 📈
+            </div>
+            <div style="font-size:11.5px;color:#7A5868;line-height:1.7;">
+              © ${year} Qorix Markets · AI-Powered Trading<br/>
+              Need help? <a href="mailto:support@qorixmarkets.com" style="color:#F5D0DD;text-decoration:none;">support@qorixmarkets.com</a>
+            </div>
+          </td>
+        </tr>
+
+      </table>
+
+      <div style="height:24px;line-height:24px;font-size:1px;">&nbsp;</div>
+    </td>
+  </tr>
+</table>
+</body>
+</html>`;
+}
+
+// ---------------------------------------------------------------------------
+// Send the Identity Rejected (Lv.2 KYC rejected) email. Caller looks up
+// email + name + document type + cleaned reason, and passes them in.
+// Replaces the previous generic sendTxnEmailToUser path inside the admin
+// KYC review handler (see routes/kyc.ts /admin/kyc/review).
+// ---------------------------------------------------------------------------
+export async function sendIdentityRejected(args: {
+  to: string;
+  name: string;
+  documentType: string;
+  reason: string;
+  rejectedAt: Date;
+}): Promise<void> {
+  const { to, name, documentType, reason, rejectedAt } = args;
+  const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const whenStr =
+    `${rejectedAt.getUTCDate()} ${MONTHS_SHORT[rejectedAt.getUTCMonth()]} ${rejectedAt.getUTCFullYear()} · ` +
+    `${String(rejectedAt.getUTCHours()).padStart(2, "0")}:${String(rejectedAt.getUTCMinutes()).padStart(2, "0")} UTC`;
+  const cleanReason = (reason || "").trim() || "Document not acceptable";
+
+  const subject = `Qorix Markets — Identity needs another look`;
+  const preheader = `Your Lv.2 identity (${prettifyDocumentType(documentType)}) needs to be resubmitted — ${cleanReason.slice(0, 80)}`;
+
+  const html = renderIdentityRejectedHtml({
+    preheader,
+    name,
+    documentType,
+    reason: cleanReason,
+    rejectedAt,
+  });
+
+  const text =
+    `Identity update needed — let's try again\n\n` +
+    `Hi ${name},\n\n` +
+    `Your Lv.2 identity verification couldn't be approved this time.\n\n` +
+    `Reason:             ${cleanReason}\n\n` +
+    `Document submitted: ${prettifyDocumentType(documentType)}\n` +
+    `Decision:           Resubmit Required\n` +
+    `Reviewed at:        ${whenStr}\n\n` +
+    `Resubmit document: https://qorixmarkets.com/profile\n` +
+    `Contact support:   support@qorixmarkets.com\n\n` +
+    `Tips for a smooth resubmission: well-lit photo on a flat surface, all\n` +
+    `four corners visible, no glare or shadows, ID not expired, name should\n` +
+    `match your Qorix account. We'll review again within 24 hours.\n\n` +
+    `— Qorix Markets`;
+
+  await sendEmail(to, subject, text, html);
+}

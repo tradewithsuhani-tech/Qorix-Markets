@@ -22,6 +22,7 @@ import {
   renderWithdrawalSentHtml,
   renderWithdrawalRejectedHtml,
   renderIdentityVerifiedHtml,
+  renderIdentityRejectedHtml,
 } from "../lib/email-service";
 
 const DEFAULT_TO = "safepayu@gmail.com";
@@ -255,6 +256,31 @@ const TEMPLATES: Record<string, () => Preview> = {
         name,
         documentType,
         verifiedAt,
+      }),
+    };
+  },
+
+  "identity-rejected": () => {
+    const name = "Prem Kumar";
+    const documentType = "passport";
+    const reason =
+      "Document image is blurry — please resubmit a clear, well-lit photo with all four corners visible.";
+    const rejectedAt = new Date();
+    return {
+      subject: "[PREVIEW] Qorix Markets — Identity Rejected (new design)",
+      text:
+        `[DESIGN PREVIEW]\n\n` +
+        `Lv.2 Identity (${documentType}) rejected for ${name}.\n` +
+        `Reason: ${reason}\n\n` +
+        `Test render of the new dusty-plum "Let's Try Again" template.\n` +
+        `Reply with feedback.\n\n` +
+        `— Qorix Markets`,
+      html: renderIdentityRejectedHtml({
+        preheader: `[PREVIEW] Lv.2 identity (Passport) needs to be resubmitted — ${reason.slice(0, 60)}`,
+        name,
+        documentType,
+        reason,
+        rejectedAt,
       }),
     };
   },
