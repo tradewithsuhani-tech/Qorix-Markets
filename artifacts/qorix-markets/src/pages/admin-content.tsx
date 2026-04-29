@@ -3,22 +3,10 @@ import { Layout } from "@/components/layout";
 import { motion } from "framer-motion";
 import { Globe, FileEdit, BarChart3, Megaphone, Save, RefreshCw, TrendingUp, Users, Wallet, Shield } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { authFetch } from "@/lib/auth-fetch";
 
-function token() {
-  try { return localStorage.getItem("qorix_token"); } catch { return null; }
-}
 async function adminFetch(path: string, init?: RequestInit) {
-  const t = token();
-  const res = await fetch(`/api${path}`, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...(t ? { Authorization: `Bearer ${t}` } : {}),
-      ...(init?.headers ?? {}),
-    },
-  });
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
+  return authFetch(`/api${path}`, init);
 }
 
 function FieldRow({ label, icon: Icon, children }: { label: string; icon?: any; children: React.ReactNode }) {

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Megaphone, ExternalLink } from "lucide-react";
+import { authFetch } from "@/lib/auth-fetch";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
 const STORAGE_KEY = "qorix_popup_dismissed";
@@ -20,14 +21,8 @@ export function AdminPopup() {
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
-    const token = (() => { try { return localStorage.getItem("qorix_token"); } catch { return null; } })();
-    if (!token) return;
-
-    fetch(`${BASE_URL}/api/popup`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((r) => r.json())
-      .then((data: PopupData) => {
+    authFetch<PopupData>(`${BASE_URL}/api/popup`)
+      .then((data) => {
         if (!data?.active) return;
         if (data.mode === "once") {
           const dismissed = (() => { try { return localStorage.getItem(STORAGE_KEY); } catch { return null; } })();

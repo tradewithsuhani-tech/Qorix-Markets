@@ -4,6 +4,7 @@ import { Plus, Trash2, Pencil, Loader2, Banknote, Smartphone, X } from "lucide-r
 import { MerchantLayout } from "@/components/merchant-layout";
 import { merchantApiUrl, merchantAuthFetch } from "@/lib/merchant-auth-fetch";
 import { useToast } from "@/hooks/use-toast";
+import { InputField } from "@/components/ui/input-field";
 
 interface PaymentMethod {
   id: number;
@@ -196,7 +197,7 @@ export default function MerchantPaymentMethodsPage() {
                 </button>
               </div>
 
-              <Field
+              <InputField
                 label="Display name (shown to user)"
                 value={editing.displayName ?? ""}
                 onChange={(v) => setEditing({ ...editing, displayName: v })}
@@ -204,7 +205,7 @@ export default function MerchantPaymentMethodsPage() {
 
               {editing.type === "upi" ? (
                 <>
-                  <Field
+                  <InputField
                     label="UPI ID"
                     value={editing.upiId ?? ""}
                     onChange={(v) => setEditing({ ...editing, upiId: v })}
@@ -231,22 +232,22 @@ export default function MerchantPaymentMethodsPage() {
                 </>
               ) : (
                 <>
-                  <Field
+                  <InputField
                     label="Account holder"
                     value={editing.accountHolder ?? ""}
                     onChange={(v) => setEditing({ ...editing, accountHolder: v })}
                   />
-                  <Field
+                  <InputField
                     label="Account number"
                     value={editing.accountNumber ?? ""}
                     onChange={(v) => setEditing({ ...editing, accountNumber: v })}
                   />
-                  <Field
+                  <InputField
                     label="IFSC"
                     value={editing.ifsc ?? ""}
                     onChange={(v) => setEditing({ ...editing, ifsc: v.toUpperCase() })}
                   />
-                  <Field
+                  <InputField
                     label="Bank name"
                     value={editing.bankName ?? ""}
                     onChange={(v) => setEditing({ ...editing, bankName: v })}
@@ -255,19 +256,19 @@ export default function MerchantPaymentMethodsPage() {
               )}
 
               <div className="grid grid-cols-2 gap-3">
-                <Field
+                <InputField
                   label="Min amount (₹)"
                   value={String(editing.minAmount ?? "100")}
                   onChange={(v) => setEditing({ ...editing, minAmount: v })}
                 />
-                <Field
+                <InputField
                   label="Max amount (₹)"
                   value={String(editing.maxAmount ?? "500000")}
                   onChange={(v) => setEditing({ ...editing, maxAmount: v })}
                 />
               </div>
 
-              <Field
+              <InputField
                 label="Instructions (optional)"
                 value={editing.instructions ?? ""}
                 onChange={(v) => setEditing({ ...editing, instructions: v })}
@@ -307,26 +308,3 @@ export default function MerchantPaymentMethodsPage() {
   );
 }
 
-function Field({
-  label,
-  value,
-  onChange,
-  placeholder,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  placeholder?: string;
-}) {
-  return (
-    <div>
-      <label className="block text-xs uppercase tracking-wide text-slate-400 mb-1">{label}</label>
-      <input
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        className="w-full rounded-lg bg-slate-800 border border-slate-700 px-3 py-2 text-sm focus:outline-none focus:border-amber-500"
-      />
-    </div>
-  );
-}

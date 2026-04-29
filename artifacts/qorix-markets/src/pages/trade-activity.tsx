@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
+import { authFetch } from "@/lib/auth-fetch";
 
 type DateRange = { from?: Date; to?: Date };
 
@@ -171,10 +172,7 @@ function DateRangePicker({
 }
 
 async function apiFetch(path: string) {
-  const token = localStorage.getItem("qorix_token");
-  const res = await fetch(path, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
-  if (!res.ok) throw new Error(`${res.status}`);
-  return res.json();
+  return authFetch(path);
 }
 
 type Trade = {

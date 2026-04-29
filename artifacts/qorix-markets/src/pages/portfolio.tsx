@@ -1,7 +1,7 @@
 import { Layout } from "@/components/layout";
 import { isFeatureHidden } from "@/lib/hidden-features";
 import { Link } from "wouter";
-import { DemoDashboardBody } from "@/pages/demo-dashboard";
+import { DemoDashboardBody } from "@/pages/dashboard";
 import {
   useGetInvestment,
   useGetDashboardSummary,
@@ -13,6 +13,8 @@ import {
   getGetInvestmentQueryKey,
   getGetDashboardSummaryQueryKey,
   type VipInfo,
+  type GetInvestmentQueryResult,
+  type GetDashboardSummaryQueryResult,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { VipCard } from "@/components/vip-badge";
@@ -466,12 +468,12 @@ function PerformanceBlock({
   todayPnl: number;
 }) {
   const { data: perf, isLoading: perfLoading } = useGetDashboardPerformance({
-    query: { refetchInterval: 30000 },
+    query: { refetchInterval: 120000 },
   });
   const { data: pnlHistory } = useQuery<Array<{ date: string; percent: number; amount: number }>>({
     queryKey: ["dashboard-pnl-history", 14],
     queryFn: () => authFetch(`/api/dashboard/pnl-history?days=14`),
-    refetchInterval: 30000,
+    refetchInterval: 120000,
   });
 
   const winRate = perf?.winRate ?? 0;
@@ -684,12 +686,23 @@ function fmtMoney(n: number) {
   return n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-function PortfolioInner() {
+// Investment + summary are owned by PortfolioPage and passed down so we don't
+// run two React Query subscriptions for the same query keys. Both pieces of
+// data are consumed heavily inside PortfolioInner *and* by the page-level
+// "Performance Insights" lock + VIP card, so lifting the queries to the parent
+// keeps the network fetch count to one per key.
+// React Query's `data` is `T | undefined` until first successful fetch.
+type InvestmentData = GetInvestmentQueryResult | undefined;
+type SummaryData = GetDashboardSummaryQueryResult | undefined;
+
+interface PortfolioInnerProps {
+  investment: InvestmentData;
+  invLoading: boolean;
+  summary: SummaryData;
+}
+
+function PortfolioInner({ investment, invLoading, summary }: PortfolioInnerProps) {
   const queryClient = useQueryClient();
-  const { data: investment, isLoading: invLoading } = useGetInvestment({
-    query: { refetchInterval: 10000 },
-  });
-  const { data: summary } = useGetDashboardSummary({ query: { refetchInterval: 5000 } });
   const stopMutation = useStopInvestment({
     mutation: {
       onSuccess: () => {
@@ -712,11 +725,11 @@ function PortfolioInner() {
   };
   const { data: equity, dataUpdatedAt: equityUpdatedAt } = useGetEquityChart(
     { days: 30 },
-    { query: { refetchInterval: 15000 } },
+    { query: { refetchInterval: 60000 } },
   );
   const { data: tradesData } = useGetTrades(
     { limit: 5 },
-    { query: { refetchInterval: 15000 } },
+    { query: { refetchInterval: 60000 } },
   );
 
   const investedAmount = investment?.amount ?? 0;
@@ -1774,7 +1787,7 @@ function PortfolioInner() {
 function RecentTradeAttribution() {
   const { data: tradesData } = useGetTrades(
     { limit: 5 },
-    { query: { refetchInterval: 15000 } },
+    { query: { refetchInterval: 60000 } },
   );
   const trades = tradesData ?? [];
   return (
@@ -1879,9 +1892,16 @@ function RecentTradeAttribution() {
 }
 
 export default function PortfolioPage() {
-  const { data: summary } = useGetDashboardSummary({ query: { refetchInterval: 60000 } });
+  // Single owner for investment + summary queries on the Portfolio page.
+  // PortfolioInner used to subscribe to these too — that produced two
+  // subscribers per key (extra renders + the shorter refetchInterval silently
+  // winning). Now we fetch once here and pass the data down as props.
+  // 30s for summary preserves the previous *effective* polling cadence (when
+  // both PortfolioPage @60s and PortfolioInner @30s were subscribed, React
+  // Query used the shorter interval).
+  const { data: summary } = useGetDashboardSummary({ query: { refetchInterval: 30000 } });
   const { data: investment, isLoading: invLoading } = useGetInvestment({
-    query: { refetchInterval: 10000 },
+    query: { refetchInterval: 60000 },
   });
   const investedAmount = investment?.amount ?? 0;
   const isActive = !!investment?.isActive;
@@ -1889,7 +1909,7 @@ export default function PortfolioPage() {
 
   return (
     <Layout>
-      <PortfolioInner />
+      <PortfolioInner investment={investment} invLoading={invLoading} summary={summary} />
       {/* Performance Insights — temporarily hidden via the
           hidden-features registry (`portfolio:performance-insights`).
           The block stays in code so we can bring it back later

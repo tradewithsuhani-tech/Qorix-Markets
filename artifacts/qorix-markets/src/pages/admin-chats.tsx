@@ -8,32 +8,14 @@ import {
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
 import { format } from "date-fns";
-
-function getToken() {
-  try { return localStorage.getItem("qorix_token"); } catch { return null; }
-}
+import { authFetch } from "@/lib/auth-fetch";
 
 async function apiGet(path: string) {
-  const token = getToken();
-  const res = await fetch(`/api${path}`, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-  });
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
+  return authFetch(`/api${path}`);
 }
 
 async function apiPost(path: string, body: object) {
-  const token = getToken();
-  const res = await fetch(`/api${path}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
+  return authFetch(`/api${path}`, { method: "POST", body: JSON.stringify(body) });
 }
 
 interface Session {

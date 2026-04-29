@@ -9,21 +9,13 @@ import {
   Bug, BarChart3, RefreshCw, ToggleLeft, ToggleRight, Clock,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-
-function authHeaders() {
-  const t = localStorage.getItem("qorix_token");
-  return { "Content-Type": "application/json", ...(t ? { Authorization: `Bearer ${t}` } : {}) };
-}
+import { authFetch } from "@/lib/auth-fetch";
 
 async function apiFetch(path: string, method = "GET", body?: unknown) {
-  const res = await fetch(path, {
+  return authFetch(path, {
     method,
-    headers: authHeaders(),
     body: body ? JSON.stringify(body) : undefined,
   });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || "Request failed");
-  return data;
 }
 
 const CATEGORY_ICONS: Record<string, any> = {

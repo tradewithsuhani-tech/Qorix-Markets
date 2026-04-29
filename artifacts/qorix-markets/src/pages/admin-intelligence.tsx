@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { authFetch } from "@/lib/auth-fetch";
 import { Layout } from "@/components/layout";
 import { AnimatedCounter } from "@/components/animated-counter";
 import { motion, type Variants } from "framer-motion";
@@ -52,14 +53,7 @@ type IntelligenceData = {
 function useIntelligence() {
   return useQuery<IntelligenceData>({
     queryKey: ["admin-intelligence"],
-    queryFn: async () => {
-      const token = localStorage.getItem("qorix_token");
-      const res = await fetch("/api/admin/intelligence", {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      if (!res.ok) throw new Error("Failed to fetch intelligence data");
-      return res.json();
-    },
+    queryFn: () => authFetch("/api/admin/intelligence"),
     refetchInterval: 60000,
   });
 }

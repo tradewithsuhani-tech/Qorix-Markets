@@ -4,6 +4,7 @@ import { X, Send, ChevronRight, MessageCircle, Headphones, UserCheck, CheckCheck
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
 import { useLocation } from "wouter";
+import { authFetch } from "@/lib/auth-fetch";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -81,31 +82,12 @@ const FLOWS: Record<FlowKey, { message: string; options?: QuickOption[] }> = {
 
 // ─── API helpers ──────────────────────────────────────────────────────────────
 
-function getToken() {
-  try { return localStorage.getItem("qorix_token"); } catch { return null; }
-}
-
 async function apiPost(path: string, body: object) {
-  const token = getToken();
-  const res = await fetch(`/api${path}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
+  return authFetch(`/api${path}`, { method: "POST", body: JSON.stringify(body) });
 }
 
 async function apiGet(path: string) {
-  const token = getToken();
-  const res = await fetch(`/api${path}`, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-  });
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
+  return authFetch(`/api${path}`);
 }
 
 // ─── Typing Indicator ─────────────────────────────────────────────────────────

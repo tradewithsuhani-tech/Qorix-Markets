@@ -16,23 +16,10 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { EMAIL_TEMPLATES } from "@/lib/email-templates";
-
-function token() {
-  try { return localStorage.getItem("qorix_token"); } catch { return null; }
-}
+import { authFetch } from "@/lib/auth-fetch";
 
 async function adminFetch(path: string, init?: RequestInit) {
-  const t = token();
-  const res = await fetch(`/api${path}`, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...(t ? { Authorization: `Bearer ${t}` } : {}),
-      ...(init?.headers ?? {}),
-    },
-  });
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
+  return authFetch(`/api${path}`, init);
 }
 
 function SectionCard({ icon: Icon, color, title, subtitle, children }: {

@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Layout } from "@/components/layout";
 import { authFetch } from "@/lib/auth-fetch";
 import { useToast } from "@/hooks/use-toast";
+import { InputField } from "@/components/ui/input-field";
 import {
   Plus,
   Loader2,
@@ -281,10 +282,10 @@ export default function AdminMerchantsPage() {
         {creating && (
           <Modal title="New merchant" onClose={() => setCreating(false)}>
             <div className="space-y-3">
-              <Field label="Full name" value={draft.fullName} onChange={(v) => setDraft({ ...draft, fullName: v })} />
-              <Field label="Email" value={draft.email} onChange={(v) => setDraft({ ...draft, email: v })} />
-              <Field label="Phone (for voice escalation)" value={draft.phone} onChange={(v) => setDraft({ ...draft, phone: v })} />
-              <Field label="Password (≥ 8 chars)" value={draft.password} onChange={(v) => setDraft({ ...draft, password: v })} type="password" />
+              <InputField label="Full name" value={draft.fullName} onChange={(v) => setDraft({ ...draft, fullName: v })} />
+              <InputField label="Email" value={draft.email} onChange={(v) => setDraft({ ...draft, email: v })} />
+              <InputField label="Phone (for voice escalation)" value={draft.phone} onChange={(v) => setDraft({ ...draft, phone: v })} />
+              <InputField label="Password (≥ 8 chars)" value={draft.password} onChange={(v) => setDraft({ ...draft, password: v })} type="password" />
             </div>
             <div className="mt-5 flex justify-end gap-3">
               <button
@@ -308,7 +309,7 @@ export default function AdminMerchantsPage() {
         {/* Reset password dialog */}
         {resetFor && (
           <Modal title={`Reset password — ${resetFor.fullName}`} onClose={() => setResetFor(null)}>
-            <Field label="New password (≥ 8 chars)" value={newPassword} onChange={setNewPassword} type="password" />
+            <InputField label="New password (≥ 8 chars)" value={newPassword} onChange={setNewPassword} type="password" />
             <div className="mt-5 flex justify-end gap-3">
               <button
                 onClick={() => setResetFor(null)}
@@ -346,7 +347,7 @@ export default function AdminMerchantsPage() {
                   <span className="font-mono text-emerald-300">{inr(topupFor.available)}</span>
                 </div>
               </div>
-              <Field
+              <InputField
                 label="Delta (₹) — positive credits, negative debits"
                 value={topupDelta}
                 onChange={setTopupDelta}
@@ -364,7 +365,7 @@ export default function AdminMerchantsPage() {
                   </button>
                 ))}
               </div>
-              <Field
+              <InputField
                 label="Note (optional, for audit)"
                 value={topupNote}
                 onChange={setTopupNote}
@@ -826,26 +827,3 @@ function Modal({ title, children, onClose }: { title: string; children: React.Re
   );
 }
 
-function Field({
-  label,
-  value,
-  onChange,
-  type = "text",
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  type?: string;
-}) {
-  return (
-    <div>
-      <label className="block text-xs uppercase tracking-wide text-slate-400 mb-1">{label}</label>
-      <input
-        type={type}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-lg bg-slate-800 border border-slate-700 px-3 py-2 text-sm focus:outline-none focus:border-amber-500"
-      />
-    </div>
-  );
-}
