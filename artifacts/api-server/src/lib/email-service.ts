@@ -1254,9 +1254,11 @@ export function renderNewDeviceLoginAlertHtml(opts: {
     .qx-card { border-radius:18px !important; }
     .qx-hero-pad { padding:6px 18px 22px !important; }
     .qx-hero-h { font-size:24px !important; line-height:1.22 !important; }
-    .qx-intro { padding:24px 22px 4px !important; font-size:14px !important; }
-    .qx-snap-pad { padding:18px 18px 6px !important; }
-    .qx-snap-row td { padding:10px 14px !important; font-size:12.5px !important; }
+    .qx-intro { padding:24px 22px 4px !important; font-size:13.5px !important; }
+    .qx-callout { font-size:19px !important; padding:12px 18px 4px !important; }
+    .qx-subline { padding:0 22px 4px !important; font-size:12.5px !important; }
+    .qx-snap-pad { padding:22px 22px 6px !important; }
+    .qx-snap-row td { padding:12px 0 !important; font-size:12.5px !important; }
     .qx-cta-pad { padding:24px 18px 6px !important; }
     .qx-cta { padding:14px 26px !important; font-size:14px !important; }
     .qx-foot-pad { padding:24px 18px 22px !important; }
@@ -1296,41 +1298,49 @@ export function renderNewDeviceLoginAlertHtml(opts: {
           </td>
         </tr>
 
-        <!-- INTRO COPY -->
+        <!-- INTRO COPY — lead-in sentence -->
         <tr>
-          <td class="qx-intro" align="center" style="padding:30px 36px 8px;color:#CBD5E1;font-size:14.5px;line-height:1.7;">
-            We noticed a sign-in to your Qorix Markets account from a device
-            you haven't used before. <strong style="color:#FFFFFF;">If this was you, no action needed</strong> —
-            your account is safe. If not, secure it right away below.
+          <td class="qx-intro" align="center" style="padding:30px 36px 4px;color:#94A3B8;font-size:14px;line-height:1.65;">
+            We noticed a sign-in to your Qorix Markets account from a device you haven't used before.
           </td>
         </tr>
 
-        <!-- DEVICE SNAPSHOT CARD — 4 rows with icons -->
+        <!-- BIG STANDOUT CALLOUT — "If this was you, no action needed." -->
         <tr>
-          <td class="qx-snap-pad" style="padding:24px 32px 4px;">
-            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#15080A;background-image:linear-gradient(180deg,#15080A 0%,#1A0A0E 100%);border:1px solid rgba(248,113,113,0.22);border-radius:14px;">
-              <tr>
-                <td align="center" style="padding:18px 24px 6px;">
-                  <div style="display:inline-block;padding:5px 12px;border-radius:999px;background:rgba(248,113,113,0.10);border:1px solid rgba(248,113,113,0.32);font-size:10px;letter-spacing:2px;color:#FCA5A5;font-weight:700;text-transform:uppercase;margin-bottom:6px;">
-                    Sign-In Details
-                  </div>
-                </td>
+          <td class="qx-callout" align="center" style="padding:16px 32px 4px;font-size:21px;line-height:1.32;font-weight:800;color:#FFFFFF;letter-spacing:-0.3px;">
+            If this was you, <span style="color:#FCA5A5;">no action needed.</span>
+          </td>
+        </tr>
+
+        <!-- Sub-line below callout -->
+        <tr>
+          <td class="qx-subline" align="center" style="padding:0 36px 8px;color:#94A3B8;font-size:13px;line-height:1.6;">
+            Your account is safe. If not, secure it right away below.
+          </td>
+        </tr>
+
+        <!-- DEVICE SNAPSHOT — flat single-line rows (no box) -->
+        <tr>
+          <td class="qx-snap-pad" style="padding:30px 32px 4px;">
+            <div style="font-size:10.5px;letter-spacing:2.4px;color:#FCA5A5;text-transform:uppercase;font-weight:700;text-align:left;padding:0 0 10px 4px;">
+              Sign-In Details
+            </div>
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr class="qx-snap-row">
+                <td style="padding:14px 4px;font-size:13.5px;color:#94A3B8;border-bottom:1px solid rgba(248,113,113,0.14);">📍&nbsp; Location</td>
+                <td style="padding:14px 4px;font-size:13.5px;color:#FFFFFF;text-align:right;font-weight:600;border-bottom:1px solid rgba(248,113,113,0.14);">${safeCity}</td>
               </tr>
               <tr class="qx-snap-row">
-                <td style="padding:12px 22px;font-size:13px;color:#94A3B8;border-top:1px solid rgba(248,113,113,0.12);">📍&nbsp; Location</td>
-                <td style="padding:12px 22px;font-size:13.5px;color:#FFFFFF;text-align:right;font-weight:600;border-top:1px solid rgba(248,113,113,0.12);">${safeCity}</td>
+                <td style="padding:14px 4px;font-size:13.5px;color:#94A3B8;border-bottom:1px solid rgba(248,113,113,0.14);">🌐&nbsp; IP Address</td>
+                <td style="padding:14px 4px;font-size:13.5px;color:#FFFFFF;text-align:right;font-family:'SF Mono','Menlo','Consolas',monospace;font-weight:600;border-bottom:1px solid rgba(248,113,113,0.14);">${safeIp}</td>
               </tr>
               <tr class="qx-snap-row">
-                <td style="padding:12px 22px;font-size:13px;color:#94A3B8;border-top:1px solid rgba(248,113,113,0.12);">🌐&nbsp; IP Address</td>
-                <td style="padding:12px 22px;font-size:13.5px;color:#FFFFFF;text-align:right;font-family:'SF Mono','Menlo','Consolas',monospace;font-weight:600;border-top:1px solid rgba(248,113,113,0.12);">${safeIp}</td>
+                <td style="padding:14px 4px;font-size:13.5px;color:#94A3B8;border-bottom:1px solid rgba(248,113,113,0.14);">🖥️&nbsp; Device</td>
+                <td style="padding:14px 4px;font-size:13.5px;color:#FFFFFF;text-align:right;font-weight:600;border-bottom:1px solid rgba(248,113,113,0.14);">${safeBrowser} · ${safeOs}</td>
               </tr>
               <tr class="qx-snap-row">
-                <td style="padding:12px 22px;font-size:13px;color:#94A3B8;border-top:1px solid rgba(248,113,113,0.12);">🖥️&nbsp; Device</td>
-                <td style="padding:12px 22px;font-size:13.5px;color:#FFFFFF;text-align:right;font-weight:600;border-top:1px solid rgba(248,113,113,0.12);">${safeBrowser} · ${safeOs}</td>
-              </tr>
-              <tr class="qx-snap-row">
-                <td style="padding:12px 22px 18px;font-size:13px;color:#94A3B8;border-top:1px solid rgba(248,113,113,0.12);">🕐&nbsp; Signed In At</td>
-                <td style="padding:12px 22px 18px;font-size:13.5px;color:#FFFFFF;text-align:right;font-weight:600;border-top:1px solid rgba(248,113,113,0.12);">${safeWhen}</td>
+                <td style="padding:14px 4px;font-size:13.5px;color:#94A3B8;">🕐&nbsp; Signed In At</td>
+                <td style="padding:14px 4px;font-size:13.5px;color:#FFFFFF;text-align:right;font-weight:600;">${safeWhen}</td>
               </tr>
             </table>
           </td>
