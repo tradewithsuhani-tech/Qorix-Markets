@@ -1698,11 +1698,6 @@ export function DemoDashboardBody({
                     <div className="pointer-events-none absolute -top-16 -left-16 w-48 h-48 rounded-full bg-blue-500/20 blur-3xl animate-pulse" />
                     <div className="pointer-events-none absolute -bottom-16 -right-16 w-48 h-48 rounded-full bg-purple-500/20 blur-3xl animate-pulse" style={{ animationDelay: "1s" }} />
 
-                    {/* Shimmer sweep */}
-                    <div className="pointer-events-none absolute inset-0 overflow-hidden">
-                      <div className="absolute -inset-x-10 top-1/2 h-px bg-gradient-to-r from-transparent via-blue-400/40 to-transparent animate-pulse" />
-                    </div>
-
                     {/* Icon with gradient ring */}
                     <div className="relative w-14 h-14 mb-3">
                       <span className="absolute inset-0 rounded-full bg-gradient-to-br from-blue-500/40 to-purple-500/30 blur-md animate-ping" />
