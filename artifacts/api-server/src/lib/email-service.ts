@@ -167,7 +167,7 @@ export function renderVerifyEmailOtpHtml(opts: {
         <!-- LOGO BAR — cyan/teal gradient (unique to verify-email) -->
         <tr>
           <td align="left" style="padding:20px 24px 0 28px;background:#04080F;background-image:linear-gradient(135deg,#04080F 0%,#0A1F2E 45%,#0E3343 80%,#134E4A 100%);">
-            <img src="cid:${BRAND_LOGO_CID}" alt="Qorix Markets" width="260" height="176" style="display:block;width:260px;max-width:78%;height:auto;border:0;outline:none;text-decoration:none;margin:0;" />
+            <img src="cid:${BRAND_LOGO_CID}" alt="Qorix Markets" width="320" height="217" style="display:block;width:320px;max-width:90%;height:auto;border:0;outline:none;text-decoration:none;margin:0;" />
           </td>
         </tr>
 
@@ -343,7 +343,7 @@ export function renderWithdrawalOtpHtml(opts: {
         <!-- LOGO BAR — amber/gold gradient (unique to withdrawal) -->
         <tr>
           <td align="left" style="padding:20px 24px 0 28px;background:#04080F;background-image:linear-gradient(135deg,#04080F 0%,#1A0F02 45%,#3A1F02 80%,#5C2D02 100%);">
-            <img src="cid:${BRAND_LOGO_CID}" alt="Qorix Markets" width="260" height="176" style="display:block;width:260px;max-width:78%;height:auto;border:0;outline:none;text-decoration:none;margin:0;" />
+            <img src="cid:${BRAND_LOGO_CID}" alt="Qorix Markets" width="320" height="217" style="display:block;width:320px;max-width:90%;height:auto;border:0;outline:none;text-decoration:none;margin:0;" />
           </td>
         </tr>
 
@@ -519,7 +519,7 @@ export function renderDeviceLoginOtpHtml(opts: {
         <!-- LOGO BAR — sapphire/electric-blue gradient (unique to device-login) -->
         <tr>
           <td align="left" style="padding:20px 24px 0 28px;background:#04080F;background-image:linear-gradient(135deg,#04080F 0%,#0A1228 45%,#102045 80%,#1E3A8A 100%);">
-            <img src="cid:${BRAND_LOGO_CID}" alt="Qorix Markets" width="260" height="176" style="display:block;width:260px;max-width:78%;height:auto;border:0;outline:none;text-decoration:none;margin:0;" />
+            <img src="cid:${BRAND_LOGO_CID}" alt="Qorix Markets" width="320" height="217" style="display:block;width:320px;max-width:90%;height:auto;border:0;outline:none;text-decoration:none;margin:0;" />
           </td>
         </tr>
 
@@ -712,7 +712,7 @@ export function renderWelcomeEmailHtml(opts: {
         <!-- LOGO BAR — emerald gradient -->
         <tr>
           <td align="left" style="padding:20px 24px 0 28px;background:#02110A;background-image:linear-gradient(135deg,#02110A 0%,#04220F 45%,#053D1F 80%,#065F32 100%);">
-            <img src="cid:${BRAND_LOGO_CID}" alt="Qorix Markets" width="260" height="176" style="display:block;width:260px;max-width:78%;height:auto;border:0;outline:none;text-decoration:none;margin:0;" />
+            <img src="cid:${BRAND_LOGO_CID}" alt="Qorix Markets" width="320" height="217" style="display:block;width:320px;max-width:90%;height:auto;border:0;outline:none;text-decoration:none;margin:0;" />
           </td>
         </tr>
 
@@ -947,7 +947,7 @@ function renderOtpHtml(opts: {
       <table width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#0F172A;border-radius:18px;overflow:hidden;border:1px solid #1F2937;">
         <tr>
           <td align="left" style="padding:20px 20px 14px 28px;background:linear-gradient(135deg,#05070D 0%,#0A0F1C 50%,#111B36 100%);">
-            <img src="cid:${BRAND_LOGO_CID}" alt="Qorix Markets" width="280" height="190" style="display:block;width:280px;max-width:80%;height:auto;border:0;outline:none;text-decoration:none;margin:0;" />
+            <img src="cid:${BRAND_LOGO_CID}" alt="Qorix Markets" width="320" height="217" style="display:block;width:320px;max-width:90%;height:auto;border:0;outline:none;text-decoration:none;margin:0;" />
           </td>
         </tr>
         <tr>

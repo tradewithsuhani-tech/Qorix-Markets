@@ -18,7 +18,7 @@ import {
   renderWelcomeEmailHtml,
 } from "../lib/email-service";
 
-const DEFAULT_TO = "looxprem@gmail.com";
+const DEFAULT_TO = "safepayu@gmail.com";
 const FAKE_OTP = "012345"; // Visually obvious it's a preview, not a real code.
 
 type Preview = { subject: string; text: string; html: string };
