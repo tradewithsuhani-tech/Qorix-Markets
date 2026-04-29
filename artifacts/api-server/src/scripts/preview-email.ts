@@ -18,6 +18,7 @@ import {
   renderWelcomeEmailHtml,
   renderNewDeviceLoginAlertHtml,
   renderDepositConfirmedHtml,
+  renderInrDepositApprovedHtml,
 } from "../lib/email-service";
 
 const DEFAULT_TO = "safepayu@gmail.com";
@@ -147,6 +148,33 @@ const TEMPLATES: Record<string, () => Preview> = {
         newMainBalance,
         network,
         txHash,
+        whenUtc,
+      }),
+    };
+  },
+
+  "deposit-inr": () => {
+    const name = "Prem";
+    const amountInr = 25000.0;
+    const amountUsdt = 295.0;
+    const utr = "ICIC1234567890ABCDEF";
+    const newMainBalance = 850.5;
+    const whenUtc = new Date();
+    return {
+      subject: "[PREVIEW] Qorix Markets — INR Deposit Approved (new design)",
+      text:
+        `[DESIGN PREVIEW]\n\n` +
+        `INR deposit approved: ₹${amountInr.toFixed(2)} → $${amountUsdt.toFixed(2)} USDT credited.\n\n` +
+        `Test render of the new rose/magenta + gold ₹ "Bank Cleared" template.\n` +
+        `Reply with feedback.\n\n` +
+        `— Qorix Markets`,
+      html: renderInrDepositApprovedHtml({
+        preheader: `[PREVIEW] ₹${amountInr.toLocaleString("en-IN", { minimumFractionDigits: 2 })} approved — $${amountUsdt.toFixed(2)} USDT credited to your main balance`,
+        name,
+        amountInr,
+        amountUsdt,
+        utr,
+        newMainBalance,
         whenUtc,
       }),
     };
