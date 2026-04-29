@@ -1261,6 +1261,95 @@ Exness, Binance, and Vantage.
   (auth middleware reached normally — imports load, no crash).
 - Production validation pending CI deploy.
 
+### Batch 8.0.1 (Apr 29, 2026, ~30 min after B8)
+
+**Title:** B8 fix — `/devices` page broken in browser + B7 source-of-truth divergence
+
+**Why:** Architect review of B8 (`90ed923`) flagged two SEVERE issues.
+
+**B8.0.1 — 2 source changes, ZERO schema:**
+
+1. `artifacts/qorix-markets/src/pages/devices.tsx`
+   • The original `queryFn` was written as if `authFetch` returned a
+     `Response` object: `if (!res.ok) throw …; return res.json();`.
+   • But `authFetch<T>(url): Promise<T>` returns the
+     ALREADY-PARSED payload. So `res.ok` was always `undefined`,
+     `!res.ok` always truthy → queryFn ALWAYS threw → page only
+     ever rendered the "Couldn't load your devices" error state.
+   • Fixed to `queryFn: () => authFetch<DevicesResponse>("/api/devices")`,
+     same pattern `settings.tsx` already uses for
+     `/api/kyc/status` and `/api/auth/security-status`.
+   • Updated the `currentSession` interface and the warning-banner
+     branch to read from the new field (see #2).
+
+2. `artifacts/api-server/src/routes/devices.ts`
+   • Original B8 derived per-row `withdrawalLocked` from
+     `firstSeenAt` only. That covers tracked devices, but cannot
+     represent B7's other two fail-closed branches:
+     (a) `computeDeviceFingerprint` returns empty/unknown,
+     (b) no `user_devices` row exists for (user, currentFingerprint).
+   • In both cases B7 BLOCKS at `/wallet/withdraw` and
+     `/inr-withdrawals`, but the unfixed page would happily show
+     every recorded device with `withdrawalLocked: false` —
+     leading the user to think they could withdraw and getting
+     a 403 at withdraw time. Different message in the page vs.
+     the API → bad trust signal, support tickets.
+   • Fixed: route now calls `checkWithdrawDeviceCooldown(req,
+     userId)` — the SAME helper the withdrawal endpoints call —
+     and surfaces the result on the response as
+     `currentSession: { withdrawalAllowed: true } |
+     { withdrawalAllowed: false, message, hoursLeft, unlockAt,
+     unlockIst }`.
+   • The page banner is now driven solely by
+     `currentSession.withdrawalAllowed` and shows the helper's own
+     message verbatim. The page can never disagree with the actual
+     enforcement.
+   • Per-row `withdrawalLocked` is kept for OTHER devices —
+     useful info ("home laptop fine, new tablet unlocks tomorrow
+     9am IST") and uses the same exported cooldown constant.
+
+**Validation:**
+- Local typecheck both workspaces → clean.
+- API server restarted, no startup errors.
+- Local no-auth smoke: `GET /api/devices` → 401.
+- CI run for `5caf802b` → success in 4m26s.
+- Prod smoke after redeploy:
+  • `GET /api/devices` no-auth → 401 ✅
+  • `GET /devices` SPA → 200 HTML ✅
+  • `POST /api/wallet/withdraw` no-auth → 401 ✅ (B7 intact)
+  • `POST /api/inr-withdrawals` no-auth → 401 ✅ (B7 intact)
+- Architect re-review of `5caf802b` → PASS (both prior SEVERE
+  findings closed, no new CRITICAL/SEVERE).
+
+### Batch 8.0.2 (Apr 29, 2026, immediately after B8.0.1)
+
+**Title:** B8 polish — banner shows in ghost-session-with-zero-devices edge case
+
+**Why:** Architect's NICE-TO-HAVE on B8.0.1: the
+`!data.currentSession.withdrawalAllowed` warning was rendered inside
+the `data.devices.length > 0` branch, so a session with `0` devices
+(rare — would only happen if a user has a valid JWT but their
+`user_devices` rows were administratively cleared, or a hypothetical
+2FA-only login path that bypassed `trackLoginDevice`) would not see
+the banner even though the session is genuinely blocked.
+
+**B8.0.2 — 1 source change, ZERO schema:**
+
+1. `artifacts/qorix-markets/src/pages/devices.tsx`
+   • Moved the `!data.currentSession.withdrawalAllowed` banner block
+     OUT of the `data.devices.length > 0` conditional and placed it
+     above the empty-state and the list. Banner now reflects the
+     authoritative session state regardless of how many devices the
+     user has.
+   • Replaced the `variants={item}` reference (only valid inside
+     a `<motion.div variants={container}>` parent) with explicit
+     inline initial/animate/transition so the banner animates
+     correctly on its own.
+
+**Validation:**
+- `pnpm --filter @workspace/qorix-markets typecheck` → clean.
+- No backend changes; no api-server restart needed.
+
 ### Roadmap (Phase A continued)
 
 - ~~**B6.1**: signup captcha + failed-submit widget reset~~ ✅ LIVE (`d5e1c63`).
