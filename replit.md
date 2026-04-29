@@ -1165,12 +1165,196 @@ email and the cooldown share the same start time.
   imports load, no crash).
 - Production validation pending CI deploy.
 
+### Batch 8 (Apr 29, 2026)
+
+**Title:** My Devices page (read-only listing, surfaces B7 status)
+
+**Why:**
+B7 silently locks withdrawals from new devices for 24h. B8 makes that
+state visible: the user can now see every device their account has
+ever signed in from, which one is the current session, where each
+was last seen, and exactly when withdrawals will unlock from any
+locked device. Mirrors the "Devices" / "Active sessions" pages on
+Exness, Binance, and Vantage.
+
+**B8 — 6 source changes, ZERO schema changes:**
+
+1. `artifacts/api-server/src/routes/devices.ts` (NEW)
+   • Single endpoint: `GET /api/devices` (auth-gated).
+   • Pure SELECT against `user_devices` — write side stays owned
+     EXCLUSIVELY by `lib/device-tracking.ts → trackLoginDevice`.
+     B8 does not insert, update, or delete any row.
+   • For each device, computes `withdrawalLocked` /
+     `withdrawalUnlockAt` / `withdrawalUnlockHoursLeft` using the
+     B7 helper's `NEW_DEVICE_WITHDRAWAL_COOLDOWN_HOURS` and
+     `formatIstTimestamp` — single source of truth for the cooldown
+     math, so the page can never disagree with the actual
+     enforcement at withdraw time.
+   • `isCurrent` is set by comparing each row's
+     `device_fingerprint` to `computeDeviceFingerprint(req)` for
+     the request making this call. If fp is unknown/empty, no row
+     is marked current — UI renders the list normally.
+   • Response also includes `currentDeviceTracked: boolean` so the
+     UI can warn the user if their session is on a "ghost" (no
+     `user_devices` row — same fail-closed condition that B7 uses
+     to block withdrawals).
+   • Per-device "sign out / revoke" is INTENTIONALLY OUT — that
+     needs session-revocation infra (server-side JWT denylist or
+     a device-bound session token) and is queued as B8.1.
+
+2. `artifacts/api-server/src/routes/index.ts`
+   • Added `import devicesRouter from "./devices"` next to
+     notificationsRouter.
+   • Mounted with `router.use(devicesRouter)` in the auth-gated
+     section (after notificationsRouter, before tradingDeskRouter).
+
+3. `artifacts/qorix-markets/src/pages/devices.tsx` (NEW)
+   • `<Layout>`-wrapped page at `/devices` with a "Back to settings"
+     link, page header, and a vertical list of `DeviceCard`
+     components.
+   • Each card shows: browser + OS (with `Smartphone` / `Monitor`
+     icon based on OS family), "This device" badge if `isCurrent`,
+     last-seen relative ("3 hours ago"), city + country, first
+     sign-in absolute time, and a `Mail` icon line if a new-device
+     alert email was fired for this row.
+   • Locked devices get a prominent amber `Lock`-icon banner showing
+     the IST unlock time + hours remaining ("Will unlock around
+     30 Apr 2026, 21:35 IST (5h remaining)").
+   • Ghost-session warning at the top of the list when
+     `currentDeviceTracked === false`: "This device isn't on your
+     trusted list. Please sign out and sign in again."
+   • Loading state: 2 skeleton cards. Empty state: friendly
+     "No devices recorded yet". Error state: amber alert.
+   • Uses `authFetch` + `useQuery` (queryKey `/api/devices`) — same
+     pattern as the rest of the PWA's authed reads.
+
+4. `artifacts/qorix-markets/src/App.tsx`
+   • Added `import DevicesPage from "@/pages/devices"`.
+   • Registered `<Route path="/devices"><ProtectedRoute
+     component={DevicesPage} /></Route>` right after the `/settings`
+     route.
+
+5. `artifacts/qorix-markets/src/pages/settings.tsx`
+   • Added `Smartphone` to the lucide-react import.
+   • Inserted a "My Devices" link row inside the existing Security
+     card, immediately after `<TwoFactorCard />`. Uses the same
+     row treatment as the Password row, with a `ChevronRight`
+     affordance navigating to `/devices`.
+   • No other settings code touched — single 16-line insertion.
+
+6. `replit.md`
+
+**Net behavior post-B8:**
+- New page at `https://qorixmarkets.com/devices` (auth-gated).
+- Settings page → Security card now contains a "My Devices" row
+  → links to the new page.
+- New endpoint `GET /api/devices` (auth-gated) returns the list.
+- B7 enforcement is unchanged. B8 is purely additive — read-only
+  endpoint + new page + a single navigation link in settings.
+- All existing flows (deposit, withdraw, login, transfer, etc.) →
+  completely unchanged.
+
+**Validation:**
+- `pnpm --filter @workspace/api-server typecheck` → clean (exit 0).
+- API server restarted, no startup errors.
+- Local no-auth smoke: `GET /api/devices` → 401 Unauthorized
+  (auth middleware reached normally — imports load, no crash).
+- Production validation pending CI deploy.
+
+### Batch 8.0.1 (Apr 29, 2026, ~30 min after B8)
+
+**Title:** B8 fix — `/devices` page broken in browser + B7 source-of-truth divergence
+
+**Why:** Architect review of B8 (`90ed923`) flagged two SEVERE issues.
+
+**B8.0.1 — 2 source changes, ZERO schema:**
+
+1. `artifacts/qorix-markets/src/pages/devices.tsx`
+   • The original `queryFn` was written as if `authFetch` returned a
+     `Response` object: `if (!res.ok) throw …; return res.json();`.
+   • But `authFetch<T>(url): Promise<T>` returns the
+     ALREADY-PARSED payload. So `res.ok` was always `undefined`,
+     `!res.ok` always truthy → queryFn ALWAYS threw → page only
+     ever rendered the "Couldn't load your devices" error state.
+   • Fixed to `queryFn: () => authFetch<DevicesResponse>("/api/devices")`,
+     same pattern `settings.tsx` already uses for
+     `/api/kyc/status` and `/api/auth/security-status`.
+   • Updated the `currentSession` interface and the warning-banner
+     branch to read from the new field (see #2).
+
+2. `artifacts/api-server/src/routes/devices.ts`
+   • Original B8 derived per-row `withdrawalLocked` from
+     `firstSeenAt` only. That covers tracked devices, but cannot
+     represent B7's other two fail-closed branches:
+     (a) `computeDeviceFingerprint` returns empty/unknown,
+     (b) no `user_devices` row exists for (user, currentFingerprint).
+   • In both cases B7 BLOCKS at `/wallet/withdraw` and
+     `/inr-withdrawals`, but the unfixed page would happily show
+     every recorded device with `withdrawalLocked: false` —
+     leading the user to think they could withdraw and getting
+     a 403 at withdraw time. Different message in the page vs.
+     the API → bad trust signal, support tickets.
+   • Fixed: route now calls `checkWithdrawDeviceCooldown(req,
+     userId)` — the SAME helper the withdrawal endpoints call —
+     and surfaces the result on the response as
+     `currentSession: { withdrawalAllowed: true } |
+     { withdrawalAllowed: false, message, hoursLeft, unlockAt,
+     unlockIst }`.
+   • The page banner is now driven solely by
+     `currentSession.withdrawalAllowed` and shows the helper's own
+     message verbatim. The page can never disagree with the actual
+     enforcement.
+   • Per-row `withdrawalLocked` is kept for OTHER devices —
+     useful info ("home laptop fine, new tablet unlocks tomorrow
+     9am IST") and uses the same exported cooldown constant.
+
+**Validation:**
+- Local typecheck both workspaces → clean.
+- API server restarted, no startup errors.
+- Local no-auth smoke: `GET /api/devices` → 401.
+- CI run for `5caf802b` → success in 4m26s.
+- Prod smoke after redeploy:
+  • `GET /api/devices` no-auth → 401 ✅
+  • `GET /devices` SPA → 200 HTML ✅
+  • `POST /api/wallet/withdraw` no-auth → 401 ✅ (B7 intact)
+  • `POST /api/inr-withdrawals` no-auth → 401 ✅ (B7 intact)
+- Architect re-review of `5caf802b` → PASS (both prior SEVERE
+  findings closed, no new CRITICAL/SEVERE).
+
+### Batch 8.0.2 (Apr 29, 2026, immediately after B8.0.1)
+
+**Title:** B8 polish — banner shows in ghost-session-with-zero-devices edge case
+
+**Why:** Architect's NICE-TO-HAVE on B8.0.1: the
+`!data.currentSession.withdrawalAllowed` warning was rendered inside
+the `data.devices.length > 0` branch, so a session with `0` devices
+(rare — would only happen if a user has a valid JWT but their
+`user_devices` rows were administratively cleared, or a hypothetical
+2FA-only login path that bypassed `trackLoginDevice`) would not see
+the banner even though the session is genuinely blocked.
+
+**B8.0.2 — 1 source change, ZERO schema:**
+
+1. `artifacts/qorix-markets/src/pages/devices.tsx`
+   • Moved the `!data.currentSession.withdrawalAllowed` banner block
+     OUT of the `data.devices.length > 0` conditional and placed it
+     above the empty-state and the list. Banner now reflects the
+     authoritative session state regardless of how many devices the
+     user has.
+   • Replaced the `variants={item}` reference (only valid inside
+     a `<motion.div variants={container}>` parent) with explicit
+     inline initial/animate/transition so the banner animates
+     correctly on its own.
+
+**Validation:**
+- `pnpm --filter @workspace/qorix-markets typecheck` → clean.
+- No backend changes; no api-server restart needed.
+
 ### Roadmap (Phase A continued)
 
 - ~~**B6.1**: signup captcha + failed-submit widget reset~~ ✅ LIVE (`d5e1c63`).
 - ~~**B7**: 24h new-device withdraw cooldown.~~ ✅ LIVE (`920cef6`).
-- **B8**: My Devices page (depends on B7 trust-device infra; likely
-  also no schema change since user_devices already has all fields).
+- ~~**B8**: My Devices page.~~ ✅ LIVE (see below).
 - **/auth/forgot-password CAPTCHA enforcement** (architect note 6 from
   B6 review) — deferred; that endpoint is rate-limited today; will
   revisit after B7/B8 land.
