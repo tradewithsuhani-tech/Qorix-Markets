@@ -10,12 +10,64 @@ import { TTLCache } from "../lib/cache/ttl-cache";
 import { getRedisConnection } from "../lib/redis";
 
 // ─── Device fingerprint ────────────────────────────────────────────────────
-// SHA-256 of the raw User-Agent header (first 32 hex chars) — stable across
-// IP changes (mobile data → wifi etc.) so we don't false-positive a single
-// browser as "two devices". Two genuinely different devices in the wild
-// almost always have distinct UAs. The fingerprint is paired with the
-// raw IP/UA in the approval popup so the user can sanity-check.
+//
+// Two-tier strategy after Batch 3:
+//
+//   1. PREFERRED — `X-Device-Id` header: a UUID the PWA generates once per
+//      browser and persists in localStorage. Hashed before use so a leaked
+//      DB row can't be correlated back to the raw localStorage value.
+//      This is stable across:
+//        * IP changes (mobile data ↔ wifi ↔ tether) — fixes the major
+//          false-positive "new device login" alert source.
+//        * Browser version bumps that change the UA string within the
+//          same session (Chrome auto-updates).
+//      And changes when:
+//        * User wipes site data / browses in private mode / switches
+//          browsers — all of which are correctly NEW devices from a
+//          security perspective (no continuity with prior sessions).
+//
+//   2. FALLBACK — `hash(User-Agent)`: kept exactly identical to the pre-
+//      Batch-3 algorithm so existing rows in `user_devices` continue to
+//      match their owning browser. Old PWA installs that haven't shipped
+//      the new client code yet keep working unchanged. New rows for
+//      hint-aware browsers will use the (different) X-Device-Id-derived
+//      fingerprint and one-time generate a "new device" alert — that's
+//      the expected migration cost and it improves accuracy permanently.
+//
+// The fingerprint is paired with the raw IP/UA in the approval popup so
+// the user can sanity-check what they're approving.
+
+/** Permissive UUID-shape check (any RFC 4122 version 1-8). */
+const UUID_SHAPE_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-9a-f][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/**
+ * Reads and validates the `X-Device-Id` request header sent by the PWA.
+ * Returns the canonical (lowercased) UUID when valid, `null` when the
+ * header is absent, malformed, or otherwise untrustworthy.
+ *
+ * Validation matters because the value is hashed into a fingerprint that
+ * gates the security UI ("is this device known?"). A tampered or junk
+ * value would create a phantom "device" in the user's Account Security
+ * list every time the attacker varies the header. Requiring UUID shape
+ * keeps the fingerprint space bounded to actual PWA-generated IDs.
+ */
+export function parseClientDeviceId(req: Request): string | null {
+  const raw = req.headers["x-device-id"];
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  if (!value || typeof value !== "string") return null;
+  if (!UUID_SHAPE_RE.test(value)) return null;
+  return value.toLowerCase();
+}
+
 export function computeDeviceFingerprint(req: Request): string {
+  const clientId = parseClientDeviceId(req);
+  if (clientId) {
+    // The "v2:" prefix namespaces the hash so it cannot collide with the
+    // legacy hash(UA) fingerprint space. (A real UA string starting with
+    // literally "v2:" followed by a UUID is implausible, but explicit
+    // namespacing also documents the intent for any future migration.)
+    return crypto.createHash("sha256").update(`v2:${clientId}`).digest("hex").slice(0, 32);
+  }
   const ua = (req.headers["user-agent"] ?? "") as string;
   return crypto.createHash("sha256").update(ua).digest("hex").slice(0, 32);
 }

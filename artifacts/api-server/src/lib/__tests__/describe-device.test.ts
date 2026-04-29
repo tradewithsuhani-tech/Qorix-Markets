@@ -3,8 +3,14 @@ import assert from "node:assert/strict";
 import type { Request } from "express";
 
 // Bare-import — describeDevice is a pure UA parser, no DB / app boot needed.
-const { describeDevice, describeDeviceFull, describeDeviceFromUserAgent, pickRicherLabel } =
-  await import("../../middlewares/auth");
+const {
+  describeDevice,
+  describeDeviceFull,
+  describeDeviceFromUserAgent,
+  pickRicherLabel,
+  computeDeviceFingerprint,
+  parseClientDeviceId,
+} = await import("../../middlewares/auth");
 
 function reqWith(ua: string): Request {
   return { headers: { "user-agent": ua } } as unknown as Request;
@@ -296,4 +302,101 @@ test("pickRicherLabel() ties go to stored (no churn between identical labels)", 
   // showing up as visible jitter for the admin.
   assert.equal(pickRicherLabel("Chrome 147", "Chrome 147"), "Chrome 147");
   assert.equal(pickRicherLabel("Android 14.4.1", "Android 14.4.1"), "Android 14.4.1");
+});
+
+// ───── Batch 3: client device_id ─────────────────────────────────────────────
+
+const VALID_UUID_V4 = "550e8400-e29b-41d4-a716-446655440000";
+const VALID_UUID_V7 = "01935f8a-1d2c-7fab-bc3d-1234567890ab"; // hypothetical v7
+const SAMPLE_ANDROID_UA =
+  "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Mobile Safari/537.36";
+
+function reqWithHeaders(headers: Record<string, string | undefined>): Request {
+  return { headers } as unknown as Request;
+}
+
+test("parseClientDeviceId() accepts a valid UUID v4 from X-Device-Id", () => {
+  assert.equal(parseClientDeviceId(reqWithHeaders({ "x-device-id": VALID_UUID_V4 })), VALID_UUID_V4);
+});
+
+test("parseClientDeviceId() accepts UUID v7 (forward compatibility)", () => {
+  // crypto.randomUUID() currently emits v4, but Batch 3 must not lock
+  // future client implementations to v4 only — v7 (sortable) is on track
+  // for browser standardization and would be a sensible upgrade.
+  assert.equal(parseClientDeviceId(reqWithHeaders({ "x-device-id": VALID_UUID_V7 })), VALID_UUID_V7);
+});
+
+test("parseClientDeviceId() lowercases mixed-case UUID for canonical form", () => {
+  // Defence-in-depth: a tampered client could send uppercase to try and
+  // create two phantom devices ("AAAA" vs "aaaa") in the security UI.
+  // Canonicalising the value before hashing makes the fingerprint
+  // case-insensitive in practice.
+  const upper = VALID_UUID_V4.toUpperCase();
+  assert.equal(parseClientDeviceId(reqWithHeaders({ "x-device-id": upper })), VALID_UUID_V4);
+});
+
+test("parseClientDeviceId() returns null for missing / malformed / empty header", () => {
+  assert.equal(parseClientDeviceId(reqWithHeaders({})), null);
+  assert.equal(parseClientDeviceId(reqWithHeaders({ "x-device-id": "" })), null);
+  assert.equal(parseClientDeviceId(reqWithHeaders({ "x-device-id": "not-a-uuid" })), null);
+  assert.equal(parseClientDeviceId(reqWithHeaders({ "x-device-id": "550e8400-e29b-41d4-a716" })), null); // truncated
+  assert.equal(parseClientDeviceId(reqWithHeaders({ "x-device-id": "<script>alert(1)</script>" })), null);
+});
+
+test("parseClientDeviceId() handles array-valued header (some proxies repeat headers)", () => {
+  const req = { headers: { "x-device-id": [VALID_UUID_V4, "second-value"] } } as unknown as Request;
+  assert.equal(parseClientDeviceId(req), VALID_UUID_V4);
+});
+
+test("computeDeviceFingerprint() prefers X-Device-Id over UA hash when both present", () => {
+  const fpUaOnly = computeDeviceFingerprint(reqWithHeaders({ "user-agent": SAMPLE_ANDROID_UA }));
+  const fpWithId = computeDeviceFingerprint(
+    reqWithHeaders({ "user-agent": SAMPLE_ANDROID_UA, "x-device-id": VALID_UUID_V4 }),
+  );
+  assert.notEqual(fpUaOnly, fpWithId, "ID-derived fingerprint must differ from UA-only fingerprint");
+  assert.equal(fpWithId.length, 32, "fingerprint shape (32 hex chars) preserved across both paths");
+});
+
+test("computeDeviceFingerprint() with same X-Device-Id but different UA → SAME fingerprint (the whole Batch 3 point)", () => {
+  // The core security improvement: a browser that updates its Chrome
+  // version mid-session (different UA) but keeps the same persisted
+  // device ID must STILL be recognised as the same device — no
+  // false-positive "new device login" alert.
+  const fp1 = computeDeviceFingerprint(
+    reqWithHeaders({ "user-agent": SAMPLE_ANDROID_UA, "x-device-id": VALID_UUID_V4 }),
+  );
+  const newerUa = SAMPLE_ANDROID_UA.replace("Chrome/121", "Chrome/147");
+  const fp2 = computeDeviceFingerprint(
+    reqWithHeaders({ "user-agent": newerUa, "x-device-id": VALID_UUID_V4 }),
+  );
+  assert.equal(fp1, fp2);
+});
+
+test("computeDeviceFingerprint() falls back to hash(UA) when X-Device-Id is invalid or missing", () => {
+  // Backward compatibility: rows in user_devices created before Batch 3
+  // shipped were keyed by hash(UA). Their owners must keep being
+  // recognised as the same device until they reload the PWA (which then
+  // sends X-Device-Id and creates a NEW row — the one-time migration
+  // cost we accept).
+  const reqNoId = reqWithHeaders({ "user-agent": SAMPLE_ANDROID_UA });
+  const reqJunkId = reqWithHeaders({ "user-agent": SAMPLE_ANDROID_UA, "x-device-id": "garbage" });
+  const reqEmptyId = reqWithHeaders({ "user-agent": SAMPLE_ANDROID_UA, "x-device-id": "" });
+  const baseline = computeDeviceFingerprint(reqNoId);
+  assert.equal(computeDeviceFingerprint(reqJunkId), baseline);
+  assert.equal(computeDeviceFingerprint(reqEmptyId), baseline);
+});
+
+test("computeDeviceFingerprint() returns 32 hex chars regardless of which path is taken", () => {
+  const idPath = computeDeviceFingerprint(reqWithHeaders({ "x-device-id": VALID_UUID_V4 }));
+  const uaPath = computeDeviceFingerprint(reqWithHeaders({ "user-agent": SAMPLE_ANDROID_UA }));
+  assert.match(idPath, /^[0-9a-f]{32}$/, "ID path produces 32-char lowercase hex");
+  assert.match(uaPath, /^[0-9a-f]{32}$/, "UA path produces 32-char lowercase hex");
+});
+
+test("computeDeviceFingerprint() ID-derived hash is stable across calls (deterministic)", () => {
+  // No accidental nondeterminism (random salts, timestamps in the digest).
+  // Required for the device row to remain matchable login-after-login.
+  const a = computeDeviceFingerprint(reqWithHeaders({ "x-device-id": VALID_UUID_V4 }));
+  const b = computeDeviceFingerprint(reqWithHeaders({ "x-device-id": VALID_UUID_V4 }));
+  assert.equal(a, b);
 });
