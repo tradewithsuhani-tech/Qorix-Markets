@@ -2597,13 +2597,11 @@ export function renderIdentityVerifiedHtml(opts: {
   const whenStr =
     `${verifiedAt.getUTCDate()} ${MONTHS_SHORT[verifiedAt.getUTCMonth()]} ${verifiedAt.getUTCFullYear()} · ` +
     `${String(verifiedAt.getUTCHours()).padStart(2, "0")}:${String(verifiedAt.getUTCMinutes()).padStart(2, "0")} UTC`;
-  const cardMonthYear = `${MONTHS_SHORT[verifiedAt.getUTCMonth()]} ${verifiedAt.getUTCFullYear()}`;
   const fullName = (name || "Member").trim() || "Member";
   const safeFirstName = escapeHtml(fullName.split(/\s+/)[0] || "there");
   const safeFullName = escapeHtml(fullName);
   const safeDocType = escapeHtml(prettifyDocumentType(documentType));
   const safeWhen = escapeHtml(whenStr);
-  const safeCardWhen = escapeHtml(cardMonthYear);
   const year = new Date().getFullYear();
 
   return `<!DOCTYPE html>
@@ -2690,11 +2688,11 @@ export function renderIdentityVerifiedHtml(opts: {
                   <!-- Bottom row: tier + verified date -->
                   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
                     <tr>
-                      <td align="left" style="font-size:9.5px;letter-spacing:1.8px;color:#E0B084;font-weight:600;text-transform:uppercase;">
-                        Member · Lv.2 Identity
+                      <td align="left" style="font-size:9.5px;letter-spacing:1.8px;color:#E0B084;font-weight:600;text-transform:uppercase;white-space:nowrap;">
+                        Member · Identity
                       </td>
-                      <td align="right" style="font-size:9.5px;letter-spacing:1.8px;color:#F4D9B5;font-weight:600;text-transform:uppercase;">
-                        ✓ ${safeCardWhen}
+                      <td align="right" style="font-size:9.5px;letter-spacing:1.8px;color:#F4D9B5;font-weight:600;text-transform:uppercase;white-space:nowrap;">
+                        ✓ Lv.2
                       </td>
                     </tr>
                   </table>
