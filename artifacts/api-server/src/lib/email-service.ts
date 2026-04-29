@@ -8480,8 +8480,8 @@ export function renderInfoUpdateBroadcastHtml(opts: {
 
       <tr>
         <td class="qx-hero-pad" align="center" style="padding:8px 32px 28px;background:#0C0E1A;background-image:linear-gradient(135deg,#0C0E1A 0%,#1E2247 38%,#6366F1 72%,#E0E7FF 100%);">
-          <div style="display:inline-block;padding:6px 14px;border-radius:999px;background:rgba(224,231,255,0.20);border:1px solid rgba(224,231,255,0.55);font-size:10.5px;letter-spacing:2.6px;color:#E0E7FF;font-weight:800;text-transform:uppercase;margin-bottom:18px;">
-            ℹ Platform Update · What's New
+          <div style="display:inline-block;padding:6px 14px;border-radius:999px;background:rgba(224,231,255,0.20);border:1px solid rgba(224,231,255,0.55);font-size:10.5px;letter-spacing:2.6px;color:#E0E7FF;font-weight:800;text-transform:uppercase;margin-bottom:18px;white-space:nowrap;">
+            ℹ Platform Update
           </div>
           <div class="qx-hero-h" style="font-size:30px;line-height:1.18;font-weight:800;color:#FFFFFF;letter-spacing:-0.5px;max-width:480px;margin:0 auto;">
             ${safeTitle}
