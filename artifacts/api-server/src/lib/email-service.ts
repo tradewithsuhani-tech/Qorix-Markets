@@ -236,17 +236,17 @@ export function renderVerifyEmailOtpHtml(opts: {
               <tr>
                 <td align="center" style="padding-top:12px;">
                   <div style="font-size:12.5px;font-weight:700;color:#FFFFFF;letter-spacing:0.2px;">Verify</div>
-                  <div style="font-size:10.5px;color:#64748B;line-height:1.5;margin-top:2px;white-space:nowrap;">your email</div>
+                  <div style="font-size:10.5px;color:#64748B;line-height:1.5;margin-top:2px;white-space:nowrap;">Your Email</div>
                 </td>
                 <td>&nbsp;</td>
                 <td align="center" style="padding-top:12px;">
                   <div style="font-size:12.5px;font-weight:700;color:#FFFFFF;letter-spacing:0.2px;">Fund</div>
-                  <div style="font-size:10.5px;color:#64748B;line-height:1.5;margin-top:2px;white-space:nowrap;">from $10</div>
+                  <div style="font-size:10.5px;color:#64748B;line-height:1.5;margin-top:2px;white-space:nowrap;">From $10</div>
                 </td>
                 <td>&nbsp;</td>
                 <td align="center" style="padding-top:12px;">
                   <div style="font-size:12.5px;font-weight:700;color:#FFFFFF;letter-spacing:0.2px;">Trade</div>
-                  <div style="font-size:10.5px;color:#64748B;line-height:1.5;margin-top:2px;white-space:nowrap;">AI runs 24/7</div>
+                  <div style="font-size:10.5px;color:#64748B;line-height:1.5;margin-top:2px;white-space:nowrap;">AI Runs 24/7</div>
                 </td>
               </tr>
             </table>
@@ -410,17 +410,17 @@ export function renderWithdrawalOtpHtml(opts: {
               <tr>
                 <td align="center" style="padding-top:12px;">
                   <div style="font-size:12.5px;font-weight:700;color:#FFFFFF;letter-spacing:0.2px;">Identity</div>
-                  <div style="font-size:10.5px;color:#78716C;line-height:1.5;margin-top:2px;white-space:nowrap;">verified</div>
+                  <div style="font-size:10.5px;color:#78716C;line-height:1.5;margin-top:2px;white-space:nowrap;">Verified</div>
                 </td>
                 <td>&nbsp;</td>
                 <td align="center" style="padding-top:12px;">
                   <div style="font-size:12.5px;font-weight:700;color:#FFFFFF;letter-spacing:0.2px;">Device</div>
-                  <div style="font-size:10.5px;color:#78716C;line-height:1.5;margin-top:2px;white-space:nowrap;">trusted</div>
+                  <div style="font-size:10.5px;color:#78716C;line-height:1.5;margin-top:2px;white-space:nowrap;">Trusted</div>
                 </td>
                 <td>&nbsp;</td>
                 <td align="center" style="padding-top:12px;">
-                  <div style="font-size:12.5px;font-weight:700;color:#FFFFFF;letter-spacing:0.2px;">Final code</div>
-                  <div style="font-size:10.5px;color:#FCD34D;line-height:1.5;margin-top:2px;white-space:nowrap;">enter above</div>
+                  <div style="font-size:12.5px;font-weight:700;color:#FFFFFF;letter-spacing:0.2px;">Final Code</div>
+                  <div style="font-size:10.5px;color:#FCD34D;line-height:1.5;margin-top:2px;white-space:nowrap;">Enter Above</div>
                 </td>
               </tr>
             </table>
@@ -586,17 +586,17 @@ export function renderDeviceLoginOtpHtml(opts: {
               <tr>
                 <td align="center" style="padding-top:12px;">
                   <div style="font-size:12.5px;font-weight:700;color:#FFFFFF;letter-spacing:0.2px;">Detected</div>
-                  <div style="font-size:10.5px;color:#64748B;line-height:1.5;margin-top:2px;white-space:nowrap;">new device</div>
+                  <div style="font-size:10.5px;color:#64748B;line-height:1.5;margin-top:2px;white-space:nowrap;">New Device</div>
                 </td>
                 <td>&nbsp;</td>
                 <td align="center" style="padding-top:12px;">
                   <div style="font-size:12.5px;font-weight:700;color:#FFFFFF;letter-spacing:0.2px;">Verify</div>
-                  <div style="font-size:10.5px;color:#93C5FD;line-height:1.5;margin-top:2px;white-space:nowrap;">enter code</div>
+                  <div style="font-size:10.5px;color:#93C5FD;line-height:1.5;margin-top:2px;white-space:nowrap;">Enter Code</div>
                 </td>
                 <td>&nbsp;</td>
                 <td align="center" style="padding-top:12px;">
                   <div style="font-size:12.5px;font-weight:700;color:#FFFFFF;letter-spacing:0.2px;">Approve</div>
-                  <div style="font-size:10.5px;color:#64748B;line-height:1.5;margin-top:2px;white-space:nowrap;">sign in</div>
+                  <div style="font-size:10.5px;color:#64748B;line-height:1.5;margin-top:2px;white-space:nowrap;">Sign In</div>
                 </td>
               </tr>
             </table>
