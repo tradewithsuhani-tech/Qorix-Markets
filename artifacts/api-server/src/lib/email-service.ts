@@ -6196,3 +6196,333 @@ export async function sendAccountLocked(args: {
 
   await sendEmail(to, subject, text, html);
 }
+
+// ---------------------------------------------------------------------------
+// Mask helper for crypto wallet addresses (TRC20 / ERC20 etc).
+// Keeps first 6 + last 4 chars; replaces middle with dots. Standard pattern.
+// ---------------------------------------------------------------------------
+function maskWalletAddress(addr: string): string {
+  const a = (addr || "").trim();
+  if (a.length <= 12) return a;
+  return `${a.slice(0, 6)}${"•".repeat(8)}${a.slice(-4)}`;
+}
+
+// ---------------------------------------------------------------------------
+// USDT WITHDRAWAL REQUESTED — request acknowledged, pending review email
+// ---------------------------------------------------------------------------
+// MAGENTA-PIPELINE theme: deep magenta + electric pink. Tone: PROCESSING /
+// IN-MOTION — your money is in the pipeline. Hopeful, energetic, distinct
+// from all prior 21 palettes (no pink/magenta family used).
+// Layout flow:
+//   • Logo bar (deep-magenta → magenta → pink → light-pink gradient)
+//   • Hero: ⏳ WITHDRAWAL REQUESTED pill · "In the Pipeline" headline
+//   • AMOUNT card — large net USDT amount + gross/fee breakdown
+//   • JOURNEY centerpiece — 3-step pipeline: ✓ Submitted (done) →
+//     ⏳ Review (current, pulsing) → ◯ Broadcast (pending) with progress
+//     bar underneath
+//   • DESTINATION block — masked TRC20 address, monospace, copy-friendly
+//   • Event Details: request ID · requested at · VIP tier
+//   • Reassurance card "What happens next?"
+//   • Anti-phishing footer
+// ---------------------------------------------------------------------------
+export function renderUsdtWithdrawalRequestedHtml(opts: {
+  preheader: string;
+  name: string;
+  grossAmount: string;
+  feeAmount: string;
+  netAmount: string;
+  feeRatePercent: string;
+  vipTierLabel: string;
+  walletAddress: string;
+  requestId: string | number;
+  requestedAt: Date;
+}): string {
+  const {
+    preheader, name, grossAmount, feeAmount, netAmount,
+    feeRatePercent, vipTierLabel, walletAddress, requestId, requestedAt,
+  } = opts;
+  const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const whenStr =
+    `${requestedAt.getUTCDate()} ${MONTHS_SHORT[requestedAt.getUTCMonth()]} ${requestedAt.getUTCFullYear()} · ` +
+    `${String(requestedAt.getUTCHours()).padStart(2, "0")}:${String(requestedAt.getUTCMinutes()).padStart(2, "0")} UTC`;
+  const safeFirstName = escapeHtml((name || "there").trim().split(/\s+/)[0] || "there");
+  const safeWhen = escapeHtml(whenStr);
+  const safeGross = escapeHtml(grossAmount);
+  const safeFee = escapeHtml(feeAmount);
+  const safeNet = escapeHtml(netAmount);
+  const safeFeeRate = escapeHtml(feeRatePercent);
+  const safeVip = escapeHtml(vipTierLabel);
+  const safeWallet = escapeHtml(maskWalletAddress(walletAddress));
+  const safeRequestId = escapeHtml(String(requestId));
+  const year = new Date().getFullYear();
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="x-apple-disable-message-reformatting" />
+<meta name="color-scheme" content="dark light" />
+<meta name="supported-color-schemes" content="dark light" />
+<title>Withdrawal requested — Qorix Markets</title>
+<style type="text/css">
+  @media only screen and (max-width:480px) {
+    .qx-outer { padding:20px 10px !important; }
+    .qx-card { border-radius:18px !important; }
+    .qx-hero-pad { padding:6px 18px 22px !important; }
+    .qx-hero-h { font-size:24px !important; line-height:1.22 !important; }
+    .qx-amount-pad { padding:24px 18px 4px !important; }
+    .qx-amount-num { font-size:32px !important; }
+    .qx-amount-break { font-size:11.5px !important; }
+    .qx-journey-pad { padding:24px 18px 4px !important; }
+    .qx-step-icon { width:36px !important; height:36px !important; line-height:36px !important; font-size:14px !important; }
+    .qx-step-label { font-size:10.5px !important; }
+    .qx-step-state { font-size:10px !important; }
+    .qx-dest-pad { padding:24px 22px 4px !important; }
+    .qx-dest-addr { font-size:13px !important; word-break:break-all !important; }
+    .qx-detail-pad { padding:24px 22px 4px !important; }
+    .qx-detail-label { font-size:10.5px !important; }
+    .qx-detail-value { font-size:14px !important; }
+    .qx-foot-pad { padding:24px 18px 22px !important; }
+  }
+</style>
+</head>
+<body style="margin:0;padding:0;background:#0F0419;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;">
+<div style="display:none;max-height:0;overflow:hidden;font-size:1px;line-height:1px;color:#0F0419;opacity:0;">${escapeHtml(preheader)}</div>
+<div style="display:none;max-height:0;overflow:hidden;">&#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847;</div>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="qx-outer" style="background:#0F0419;padding:32px 16px;">
+  <tr>
+    <td align="center">
+
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="qx-card" style="max-width:560px;background:#1E0A28;border:1px solid rgba(244,114,182,0.30);border-radius:22px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,0.70);">
+
+        <!-- LOGO BAR — magenta → pink gradient -->
+        <tr>
+          <td align="left" style="padding:20px 24px 0 28px;background:#0F0419;background-image:linear-gradient(135deg,#0F0419 0%,#4A0B5C 45%,#BE185D 78%,#F472B6 100%);">
+            <img src="cid:${BRAND_LOGO_CID}" alt="Qorix Markets" width="320" height="217" style="display:block;width:320px;max-width:90%;height:auto;border:0;outline:none;text-decoration:none;margin:0;" />
+          </td>
+        </tr>
+
+        <!-- HERO -->
+        <tr>
+          <td class="qx-hero-pad" align="center" style="padding:8px 32px 28px;background:#0F0419;background-image:linear-gradient(135deg,#0F0419 0%,#4A0B5C 45%,#BE185D 78%,#F472B6 100%);">
+            <div style="display:inline-block;padding:6px 14px;border-radius:999px;background:rgba(249,168,212,0.22);border:1px solid rgba(249,168,212,0.55);font-size:10.5px;letter-spacing:2.4px;color:#FBCFE8;font-weight:700;text-transform:uppercase;margin-bottom:18px;">
+              ⏳ Withdrawal Requested
+            </div>
+            <div class="qx-hero-h" style="font-size:30px;line-height:1.18;font-weight:800;color:#FFFFFF;letter-spacing:-0.5px;max-width:440px;margin:0 auto;">
+              In the Pipeline
+            </div>
+            <div style="font-size:13.5px;color:#FBCFE8;margin-top:10px;font-weight:500;max-width:460px;margin-left:auto;margin-right:auto;line-height:1.5;">
+              ${safeFirstName}, we received your USDT withdrawal request. It's <strong style="color:#FFFFFF;">in the queue</strong> for review and broadcast — typically processed within a few hours.
+            </div>
+            <div style="width:48px;height:3px;background:linear-gradient(90deg,#F9A8D4 0%,#BE185D 100%);margin:18px auto 0;border-radius:999px;"></div>
+          </td>
+        </tr>
+
+        <!-- AMOUNT CARD — net + breakdown -->
+        <tr>
+          <td class="qx-amount-pad" align="center" style="padding:30px 24px 4px;">
+            <div style="font-size:10.5px;letter-spacing:2.4px;color:#FBCFE8;font-weight:700;text-transform:uppercase;text-align:left;padding:0 0 12px 0;">
+              You'll Receive
+            </div>
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td align="center" style="padding:24px 18px;background:#16071F;background-image:linear-gradient(180deg,#1E0A28 0%,#11051A 100%);border:1.5px solid rgba(244,114,182,0.45);border-radius:14px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.04),0 0 28px rgba(190,24,93,0.22);">
+                  <div class="qx-amount-num" style="font-size:38px;line-height:1.1;font-weight:800;color:#FFFFFF;letter-spacing:-1px;margin-bottom:6px;">
+                    $${safeNet} <span style="font-size:18px;color:#F9A8D4;font-weight:700;letter-spacing:0.2px;">USDT</span>
+                  </div>
+                  <div class="qx-amount-break" style="font-size:12.5px;color:#C99CB3;font-weight:500;line-height:1.5;">
+                    Gross <span style="color:#FFFFFF;font-weight:700;">$${safeGross}</span>  ·  Fee <span style="color:#FFFFFF;font-weight:700;">$${safeFee}</span> <span style="opacity:0.7;">(${safeFeeRate}% — ${safeVip} tier)</span>
+                  </div>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- JOURNEY centerpiece — 3-step pipeline -->
+        <tr>
+          <td class="qx-journey-pad" align="center" style="padding:32px 24px 4px;">
+            <div style="font-size:10.5px;letter-spacing:2.4px;color:#FBCFE8;font-weight:700;text-transform:uppercase;text-align:left;padding:0 0 16px 0;">
+              Withdrawal Journey
+            </div>
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <!-- Step 1: Submitted (DONE) -->
+                <td width="33%" valign="top" align="center" style="width:33%;padding:0 4px;">
+                  <div class="qx-step-icon" style="width:42px;height:42px;line-height:42px;border-radius:999px;background:rgba(249,168,212,0.20);border:1.5px solid rgba(249,168,212,0.65);font-size:16px;color:#FBCFE8;text-align:center;font-weight:800;margin:0 auto 10px;">✓</div>
+                  <div class="qx-step-label" style="font-size:11.5px;letter-spacing:1.2px;color:#FFFFFF;text-transform:uppercase;font-weight:700;line-height:1.3;margin-bottom:3px;">Submitted</div>
+                  <div class="qx-step-state" style="font-size:10.5px;color:#C99CB3;font-weight:500;line-height:1.3;">Done</div>
+                </td>
+                <!-- Step 2: Review (CURRENT — pulse) -->
+                <td width="33%" valign="top" align="center" style="width:33%;padding:0 4px;">
+                  <div class="qx-step-icon" style="width:42px;height:42px;line-height:42px;border-radius:999px;background:rgba(236,72,153,0.30);border:2px solid rgba(249,168,212,0.95);font-size:16px;color:#FFFFFF;text-align:center;font-weight:800;margin:0 auto 10px;box-shadow:0 0 20px rgba(236,72,153,0.65);">⏳</div>
+                  <div class="qx-step-label" style="font-size:11.5px;letter-spacing:1.2px;color:#FFFFFF;text-transform:uppercase;font-weight:700;line-height:1.3;margin-bottom:3px;">Review</div>
+                  <div class="qx-step-state" style="font-size:10.5px;color:#FBCFE8;font-weight:700;line-height:1.3;">
+                    <span style="display:inline-block;width:5px;height:5px;border-radius:999px;background:#F9A8D4;box-shadow:0 0 8px rgba(249,168,212,0.85);vertical-align:middle;margin-right:4px;"></span>
+                    <span style="vertical-align:middle;">In progress</span>
+                  </div>
+                </td>
+                <!-- Step 3: Broadcast (PENDING) -->
+                <td width="33%" valign="top" align="center" style="width:33%;padding:0 4px;">
+                  <div class="qx-step-icon" style="width:42px;height:42px;line-height:42px;border-radius:999px;background:rgba(249,168,212,0.05);border:1.5px dashed rgba(249,168,212,0.35);font-size:16px;color:#7C5566;text-align:center;font-weight:800;margin:0 auto 10px;">◯</div>
+                  <div class="qx-step-label" style="font-size:11.5px;letter-spacing:1.2px;color:#9D7989;text-transform:uppercase;font-weight:700;line-height:1.3;margin-bottom:3px;">Broadcast</div>
+                  <div class="qx-step-state" style="font-size:10.5px;color:#7C5566;font-weight:500;line-height:1.3;">Pending</div>
+                </td>
+              </tr>
+            </table>
+            <!-- Progress bar (33% complete to reflect step 1 done, step 2 in progress) -->
+            <div style="margin-top:18px;height:4px;background:rgba(249,168,212,0.12);border-radius:999px;overflow:hidden;">
+              <div style="width:50%;height:4px;background:linear-gradient(90deg,#F9A8D4 0%,#EC4899 100%);border-radius:999px;box-shadow:0 0 12px rgba(236,72,153,0.55);"></div>
+            </div>
+            <div style="margin-top:10px;font-size:11.5px;color:#9D7989;line-height:1.5;text-align:center;">
+              Next email lands when the on-chain broadcast goes out.
+            </div>
+          </td>
+        </tr>
+
+        <!-- DESTINATION -->
+        <tr>
+          <td class="qx-dest-pad" style="padding:32px 32px 4px;">
+            <div style="font-size:10.5px;letter-spacing:2.4px;color:#FBCFE8;text-transform:uppercase;font-weight:700;text-align:left;padding:0 0 14px 0;">
+              Destination Wallet
+            </div>
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td style="padding:14px 16px;background:#160620;border:1px solid rgba(244,114,182,0.25);border-radius:10px;">
+                  <div style="font-size:10.5px;letter-spacing:1.6px;color:#9D7989;text-transform:uppercase;font-weight:600;line-height:1;margin-bottom:6px;">TRC20 (Tron Network)</div>
+                  <div class="qx-dest-addr" style="font-size:14px;color:#FFFFFF;font-weight:600;line-height:1.45;font-family:'SF Mono',Menlo,Consolas,monospace;letter-spacing:-0.2px;word-break:break-all;">${safeWallet}</div>
+                  <div style="margin-top:6px;font-size:11px;color:#7C5566;font-style:italic;line-height:1.4;">Address shown is masked for your security.</div>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- DETAILS -->
+        <tr>
+          <td class="qx-detail-pad" style="padding:24px 32px 4px;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td style="padding:14px 0;border-bottom:1px solid rgba(244,114,182,0.18);">
+                  <div class="qx-detail-label" style="font-size:11px;letter-spacing:1.6px;color:#9D7989;text-transform:uppercase;font-weight:600;line-height:1;margin-bottom:6px;"><span style="margin-right:6px;">#</span>Request ID</div>
+                  <div class="qx-detail-value" style="font-size:15px;color:#FFFFFF;font-weight:600;line-height:1.4;font-family:'SF Mono',Menlo,Consolas,monospace;">#${safeRequestId}</div>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:14px 0;border-bottom:1px solid rgba(244,114,182,0.18);">
+                  <div class="qx-detail-label" style="font-size:11px;letter-spacing:1.6px;color:#9D7989;text-transform:uppercase;font-weight:600;line-height:1;margin-bottom:6px;"><span style="margin-right:6px;">🕐</span>Requested At</div>
+                  <div class="qx-detail-value" style="font-size:15px;color:#FFFFFF;font-weight:600;line-height:1.4;">${safeWhen}</div>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:14px 0 4px;">
+                  <div class="qx-detail-label" style="font-size:11px;letter-spacing:1.6px;color:#9D7989;text-transform:uppercase;font-weight:600;line-height:1;margin-bottom:6px;"><span style="margin-right:6px;">⭐</span>VIP Tier</div>
+                  <div class="qx-detail-value" style="font-size:15px;color:#FFFFFF;font-weight:600;line-height:1.4;">${safeVip} <span style="color:#9D7989;font-weight:500;">(${safeFeeRate}% withdrawal fee)</span></div>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- Reassurance card -->
+        <tr>
+          <td style="padding:28px 32px 8px;">
+            <div style="background:rgba(244,114,182,0.07);border-left:2px solid rgba(244,114,182,0.55);border-radius:6px;padding:14px 16px;font-size:12.5px;line-height:1.65;color:#B895A5;">
+              <div style="color:#FBCFE8;font-weight:600;margin-bottom:6px;">What happens next?</div>
+              Our team reviews your request, then broadcasts it on the Tron network. You'll get a follow-up email with the transaction hash the moment it goes on-chain. If something looks unusual, we may pause and reach out — that's normal. Didn't make this request? <a href="mailto:support@qorixmarkets.com?subject=Unauthorized%20Withdrawal%20Request%20%23${safeRequestId}" style="color:#FBCFE8;text-decoration:none;font-weight:600;">Contact support immediately →</a>
+            </div>
+          </td>
+        </tr>
+
+        <!-- FOOTER -->
+        <tr>
+          <td class="qx-foot-pad" align="center" style="padding:30px 32px 28px;border-top:1px solid rgba(255,255,255,0.05);background:#0B0214;">
+            <div style="font-size:13px;color:#FBCFE8;margin-bottom:6px;font-weight:600;">
+              Trade smart 📈
+            </div>
+            <div style="font-size:11.5px;color:#5A4452;line-height:1.7;">
+              © ${year} Qorix Markets · AI-Powered Trading<br/>
+              Need help? <a href="mailto:support@qorixmarkets.com" style="color:#FBCFE8;text-decoration:none;">support@qorixmarkets.com</a>
+            </div>
+          </td>
+        </tr>
+
+      </table>
+
+      <div style="height:24px;line-height:24px;font-size:1px;">&nbsp;</div>
+    </td>
+  </tr>
+</table>
+</body>
+</html>`;
+}
+
+// ---------------------------------------------------------------------------
+// Send the USDT Withdrawal Requested email — fires when the user submits a
+// withdrawal request and it enters the review queue. Used by wallet.ts:560
+// after bulk migration.
+// ---------------------------------------------------------------------------
+export async function sendUsdtWithdrawalRequested(args: {
+  to: string;
+  name: string;
+  grossAmount: string;
+  feeAmount: string;
+  netAmount: string;
+  feeRatePercent: string;
+  vipTierLabel: string;
+  walletAddress: string;
+  requestId: string | number;
+  requestedAt: Date;
+}): Promise<void> {
+  const {
+    to, name, grossAmount, feeAmount, netAmount,
+    feeRatePercent, vipTierLabel, walletAddress, requestId, requestedAt,
+  } = args;
+  const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const whenStr =
+    `${requestedAt.getUTCDate()} ${MONTHS_SHORT[requestedAt.getUTCMonth()]} ${requestedAt.getUTCFullYear()} · ` +
+    `${String(requestedAt.getUTCHours()).padStart(2, "0")}:${String(requestedAt.getUTCMinutes()).padStart(2, "0")} UTC`;
+  const maskedWallet = maskWalletAddress(walletAddress);
+
+  const subject = `Qorix Markets — Withdrawal request #${requestId} received ⏳`;
+  const preheader = `We received your $${netAmount} USDT withdrawal request. It's in the queue for review and broadcast.`;
+
+  const html = renderUsdtWithdrawalRequestedHtml({
+    preheader,
+    name,
+    grossAmount,
+    feeAmount,
+    netAmount,
+    feeRatePercent,
+    vipTierLabel,
+    walletAddress,
+    requestId,
+    requestedAt,
+  });
+
+  const text =
+    `In the Pipeline — Withdrawal Requested\n\n` +
+    `Hi ${name},\n\n` +
+    `We received your USDT withdrawal request. It's in the queue for\n` +
+    `review and broadcast — typically processed within a few hours.\n\n` +
+    `You'll receive:\n` +
+    `  $${netAmount} USDT (net)\n` +
+    `  Gross: $${grossAmount}   Fee: $${feeAmount} (${feeRatePercent}% — ${vipTierLabel} tier)\n\n` +
+    `Withdrawal journey:\n` +
+    `  ✓ Submitted   (Done)\n` +
+    `  ⏳ Review      (In progress)\n` +
+    `  ◯ Broadcast   (Pending)\n` +
+    `Next email lands when the on-chain broadcast goes out.\n\n` +
+    `Destination Wallet (TRC20, masked for security):\n` +
+    `  ${maskedWallet}\n\n` +
+    `Request ID:    #${requestId}\n` +
+    `Requested at:  ${whenStr}\n` +
+    `VIP tier:      ${vipTierLabel} (${feeRatePercent}% withdrawal fee)\n\n` +
+    `Didn't make this request? Reply or write to\n` +
+    `support@qorixmarkets.com immediately.\n\n` +
+    `— Qorix Markets`;
+
+  await sendEmail(to, subject, text, html);
+}

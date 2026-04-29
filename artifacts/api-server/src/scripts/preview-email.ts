@@ -33,6 +33,7 @@ import {
   renderTwoFactorDisabledHtml,
   renderContactChangedAlertHtml,
   renderAccountLockedHtml,
+  renderUsdtWithdrawalRequestedHtml,
 } from "../lib/email-service";
 
 const DEFAULT_TO = "safepayu@gmail.com";
@@ -577,6 +578,33 @@ const TEMPLATES: Record<string, () => Preview> = {
         ip: "198.51.100.7",
         browser: "Chrome",
         os: "Windows",
+      }),
+    };
+  },
+
+  "usdt-withdrawal-requested": () => {
+    const name = "Prem Kumar";
+    const requestedAt = new Date();
+    return {
+      subject: "[PREVIEW] Qorix Markets — Withdrawal request #48217 received ⏳ (magenta-pipeline)",
+      text:
+        `[DESIGN PREVIEW]\n\n` +
+        `USDT withdrawal requested for ${name}.\n\n` +
+        `Test render of the new deep-magenta + electric-pink "In the Pipeline" template.\n` +
+        `3-step journey centerpiece (Submitted ✓ → Review ⏳ → Broadcast ◯).\n` +
+        `Reply with feedback.\n\n` +
+        `— Qorix Markets`,
+      html: renderUsdtWithdrawalRequestedHtml({
+        preheader: `[PREVIEW] We received your $98.50 USDT withdrawal request. It's in the queue for review and broadcast.`,
+        name,
+        grossAmount: "100.00",
+        feeAmount: "1.50",
+        netAmount: "98.50",
+        feeRatePercent: "1.5",
+        vipTierLabel: "Gold",
+        walletAddress: "TYPVjtQyUv9pCQvAbXKD1mGq8YFJg7XnKM",
+        requestId: 48217,
+        requestedAt,
       }),
     };
   },
