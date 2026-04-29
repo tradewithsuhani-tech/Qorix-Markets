@@ -16,11 +16,22 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Shield, Zap, BarChart2, Play, Square, RefreshCw,
   TrendingUp, AlertTriangle, CheckCircle, ChevronRight,
-  ArrowUpRight, Info, X
+  ArrowUpRight, Info, X, Wallet
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { Switch } from "@/components/ui/switch";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 const RISK_PROFILES = [
   {
@@ -194,10 +205,12 @@ type InvestmentData = {
   drawdownLimit: number;
   riskLevel: string;
   pausedAt?: string | null;
+  stoppedAt?: string | null;
   totalProfit: number;
   peakBalance?: number;
   drawdownFromPeak?: number;
   recoveryPct?: number;
+  autoCompound?: boolean;
 };
 
 function CapitalProtectionPanel({
@@ -845,14 +858,43 @@ export default function InvestPage() {
                       <span className="text-xs bg-blue-500/15 text-blue-400 border border-blue-500/25 px-2 py-0.5 rounded-full">ON</span>
                     )}
                   </div>
-                  <button
-                    onClick={() => stopMutation.mutate()}
-                    disabled={stopMutation.isPending}
-                    className="flex items-center gap-2 px-5 py-2.5 bg-red-500/10 text-red-400 hover:bg-red-500/15 border border-red-500/25 rounded-xl font-medium transition-all text-sm disabled:opacity-50"
-                  >
-                    <Square style={{ width: 14, height: 14 }} />
-                    {stopMutation.isPending ? "Stopping..." : "Stop Trading"}
-                  </button>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <button
+                        disabled={stopMutation.isPending}
+                        className="flex items-center gap-2 px-5 py-2.5 bg-red-500/10 text-red-400 hover:bg-red-500/15 border border-red-500/25 rounded-xl font-medium transition-all text-sm disabled:opacity-50"
+                      >
+                        <Square style={{ width: 14, height: 14 }} />
+                        {stopMutation.isPending ? "Stopping..." : "Stop Trading"}
+                      </button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent className="border-red-500/25 bg-[#0a0d12]">
+                      <AlertDialogHeader>
+                        <AlertDialogTitle className="flex items-center gap-2 text-white">
+                          <div className="w-9 h-9 rounded-xl bg-red-500/15 border border-red-500/30 flex items-center justify-center">
+                            <Square style={{ width: 14, height: 14 }} className="text-red-400" />
+                          </div>
+                          Stop Trading?
+                        </AlertDialogTitle>
+                        <AlertDialogDescription className="pt-2 text-muted-foreground leading-relaxed">
+                          Stopping will halt daily profits. Your capital stays in your trading balance and can be withdrawn anytime.
+                          <br /><br />
+                          <span className="text-white/80">Are you sure you want to continue?</span>
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel className="border-white/10 bg-white/[0.03] text-white/80 hover:bg-white/[0.08] hover:text-white">
+                          Cancel
+                        </AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={() => stopMutation.mutate()}
+                          className="bg-red-500/20 text-red-300 border border-red-500/40 hover:bg-red-500/30 hover:text-red-200"
+                        >
+                          Yes, Stop Trading
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
                 </div>
               </div>
             </motion.div>
@@ -899,6 +941,47 @@ export default function InvestPage() {
         ) : (
           /* ── SETUP VIEW ──────────────────────────────────────────── */
           <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
+            {/* Post-Stop Banner: shown when user has previously stopped an
+                investment but hasn't deployed a new one yet. Reassures them
+                that their capital is safe and withdrawable. */}
+            {investment?.stoppedAt && !investment.isActive && !investment.isPaused && (
+              <motion.div
+                initial={{ opacity: 0, y: -8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4 }}
+                className="lg:col-span-5 relative overflow-hidden rounded-2xl border border-amber-500/30 bg-gradient-to-r from-amber-500/[0.08] via-amber-500/[0.03] to-transparent p-4 sm:p-5"
+              >
+                <div
+                  aria-hidden
+                  className="absolute -top-12 -right-12 w-40 h-40 rounded-full bg-amber-500/15 blur-3xl pointer-events-none"
+                />
+                <div className="relative flex items-start gap-3 sm:gap-4">
+                  <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-amber-500/15 border border-amber-500/40 flex items-center justify-center shrink-0">
+                    <Wallet style={{ width: 18, height: 18 }} className="text-amber-300" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm sm:text-[15px] font-semibold text-white">
+                      Trading stopped on{" "}
+                      <span className="text-amber-300">
+                        {new Date(investment.stoppedAt).toLocaleDateString(undefined, {
+                          month: "short",
+                          day: "numeric",
+                          year: "numeric",
+                        })}
+                      </span>
+                    </p>
+                    <p className="text-xs sm:text-sm text-muted-foreground mt-1 leading-relaxed">
+                      Your{" "}
+                      <span className="text-amber-300 font-semibold tabular-nums">
+                        ${investment.amount.toFixed(2)}
+                      </span>{" "}
+                      capital is safe and ready to withdraw — or deploy a new strategy below.
+                    </p>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
             {/* Left: Strategy Selection + Amount */}
             <div className="lg:col-span-3 space-y-5">
 
