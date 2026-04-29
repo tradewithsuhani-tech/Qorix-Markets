@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { logger } from "../lib/logger";
+import { makeRedisLimiter } from "../middlewares/rate-limit";
 import {
   issueSliderChallenge,
   verifySliderSolution,
@@ -20,9 +21,29 @@ import {
  * behaviour of the major captcha vendors and lets us keep one error
  * surface in the React component.
  */
+
+// B9.4 — Per-IP rate limit on both captcha endpoints. 60/min/IP is
+// generous enough that a real user retrying the puzzle several times
+// (or refreshing a signup form) will never see a 429, while bounding
+// brute-force trajectory mining at 1 attempt/sec/IP. Same Redis-backed
+// store used by /auth/login etc., so the cap survives across all Fly
+// instances (BOM 2x + SIN 1x). One shared bucket for both endpoints
+// because the issue→verify pair is always called together by the
+// React component — splitting them would let an attacker double their
+// effective verify budget by burning the challenge bucket separately.
+const sliderCaptchaLimiter = makeRedisLimiter({
+  name: "slider-captcha",
+  windowMs: 60_000,
+  limit: 60,
+  message: {
+    error: "Too many captcha requests, slow down.",
+    code: "rate_limited",
+  },
+});
+
 const router = Router();
 
-router.post("/captcha/slider/challenge", (_req, res) => {
+router.post("/captcha/slider/challenge", sliderCaptchaLimiter, (_req, res) => {
   try {
     const challenge = issueSliderChallenge();
     res.json(challenge);
@@ -32,7 +53,7 @@ router.post("/captcha/slider/challenge", (_req, res) => {
   }
 });
 
-router.post("/captcha/slider/verify", (req, res) => {
+router.post("/captcha/slider/verify", sliderCaptchaLimiter, (req, res) => {
   const body = (req.body ?? {}) as {
     challengeId?: unknown;
     finalX?: unknown;
