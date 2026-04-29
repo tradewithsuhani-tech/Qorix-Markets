@@ -834,8 +834,8 @@ const TEMPLATES: Record<string, () => Preview> = {
       html: renderAlertBroadcastHtml({
         preheader: `[PREVIEW] We've detected phishing sites mimicking Qorix Markets — please verify the URL before logging in.`,
         title: "Phishing Sites Mimicking Qorix Markets",
-        bodyHtml: `<p style="margin:0 0 10px;">In the last 24 hours we've identified several lookalike domains (such as <strong style="color:#FFFFFF;">qorixmarket.co</strong>, <strong style="color:#FFFFFF;">qorix-markets.io</strong>) attempting to harvest user credentials.</p><p style="margin:0;">Your account is safe — but please always check the address bar reads exactly <strong style="color:#FFFFFF;">qorixmarkets.com</strong> before entering your password or 2FA code.</p>`,
-        recommendedAction: "Bookmark the official site (qorixmarkets.com) and never log in from links shared on social media or messaging apps.",
+        bodyHtml: `<p style="margin:0 0 10px;">We've identified lookalike domains impersonating Qorix Markets to harvest user credentials.</p><p style="margin:0;">Your account remains secure — always verify the URL reads exactly <strong style="color:#FFFFFF;">qorixmarkets.com</strong> before entering your password or 2FA code.</p>`,
+        recommendedAction: "Bookmark qorixmarkets.com and never log in via links shared on social media, SMS, or messaging apps.",
         ctaLabel: "Review Login Activity",
         ctaUrl: "https://qorixmarkets.com/account/security",
       }),

@@ -8375,13 +8375,17 @@ export function renderAlertBroadcastHtml(opts: {
         </td>
       </tr>
 
-      <!-- Recommended action callout -->
+      <!-- Recommended action callout: dark bg + bright amber accents (border
+           + heading) so it stays readable in both light and dark mode. A
+           solid yellow bg + dark text gets auto-inverted by some mobile
+           clients and ends up unreadable; this layered approach preserves
+           the CAUTION feel without that risk. -->
       <tr>
         <td style="padding:18px 32px 8px;">
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#FBBF24;background-image:linear-gradient(135deg,#FBBF24 0%,#F59E0B 100%);border-radius:12px;box-shadow:0 10px 24px rgba(251,191,36,0.30);">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#1A1709;background-image:linear-gradient(135deg,#221E0E 0%,#15110A 100%);border:1.5px solid #FBBF24;border-radius:12px;box-shadow:0 10px 24px rgba(251,191,36,0.28),inset 0 0 14px rgba(251,191,36,0.10);">
             <tr><td style="padding:18px 20px;">
-              <div style="font-size:10.5px;letter-spacing:2.4px;color:#1A1709;font-weight:800;text-transform:uppercase;line-height:1;margin-bottom:6px;">⚡ Recommended Action</div>
-              <div style="font-size:14.5px;color:#0A0A0A;font-weight:700;line-height:1.45;">${safeAction}</div>
+              <div style="font-size:10.5px;letter-spacing:2.4px;color:#FBBF24;font-weight:800;text-transform:uppercase;line-height:1;margin-bottom:8px;">⚡ Recommended Action</div>
+              <div style="font-size:14.5px;color:#FEF3C7;font-weight:600;line-height:1.55;">${safeAction}</div>
             </td></tr>
           </table>
         </td>
