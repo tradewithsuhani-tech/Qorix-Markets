@@ -946,3 +946,102 @@ CI run #25084688211 → success at T+150s. Web-only deploy
 
 **Ready to push**: commit + Fly deploy via `tools/push-commit.sh` (GitHub
 API → CI → Fly v113+).
+
+---
+
+## Phase A — Auth/security hardening (Apr 28-29, 2026)
+
+Small, prod-safe batches pushed via GitHub Git Data API → CI deploy.yml → Fly.
+ZERO schema changes across this entire phase. Read-only DB access pattern preserved.
+
+### Batch 5–5.7 (already shipped — see commits ab4d1d5, 86d6675, f62da16, 343d74e)
+
+- B5: INR withdrawal step-up OTP path.
+- B5.5: parity locks on settings/limits flow.
+- B5.6: misc auth/UX polish.
+- B5.7: rate-limit hardening — added optional `passOnStoreError` to
+  `MakeRedisLimiterOptions` (default `true` preserves fail-open semantics
+  for login/forgot/etc); `withdrawalOtpLimiter` overrides to `false` so
+  it fail-closes on Redis errors. Pattern reusable for any future
+  fail-closed limiter. See `artifacts/api-server/src/middlewares/rate-limit.ts`.
+
+### Batch 6 (Apr 29, 2026 — commits `3b9344c` + hotfix `d0def66`)
+
+**Goal**: re-enable Google reCAPTCHA classic v2 on `POST /auth/login`
+after the prod domains (`qorixmarkets.com`, `www.qorixmarkets.com`)
+were added to the reCAPTCHA admin-console allowlist. Stayed on **free
+classic v2/v3**, NOT reCAPTCHA Enterprise.
+
+**B6** (`3b9344c`) — 3 files:
+
+- `artifacts/api-server/src/lib/captcha-service.ts` — removed the
+  unconditional `return { ok: true, skipped: true }` early-return
+  bypass. The remaining `!process.env.RECAPTCHA_SECRET_KEY` skip
+  branch is the intentional local/dev escape hatch.
+- `artifacts/qorix-markets/src/components/recaptcha.tsx` — removed
+  the literal `false &&` kill-switch on `CAPTCHA_ENABLED` so it now
+  resolves to `!!import.meta.env.VITE_RECAPTCHA_SITE_KEY`.
+- `artifacts/api-server/src/routes/auth.ts` — `/auth/signup` branch
+  ONLY: commented out the `verifyCaptcha` call with `TODO B6.1`,
+  because the signup flow lives inside `login.tsx` (shared form for
+  `/login`, `/register`, `/signup` — see App.tsx:183-184) but the
+  Recaptcha widget is only mandatory client-side once B6.1 lands;
+  enabling server enforcement here without the matching widget would
+  400 every signup. `/auth/login` branch unchanged — its existing
+  `verifyCaptcha` call is now actually enforced after the bypass
+  removal.
+
+**B6 sleeper bug** (caught by post-merge architect review within
+~minutes of CI green): the `<Recaptcha/>` component itself ALSO had
+a leftover unconditional `return null` stub from the original
+kill-switch — flipping `CAPTCHA_ENABLED → true` without removing
+this stub left the widget unable to render → no token → login locked
+in prod for ~10-15 minutes.
+
+**B6.0.1 hotfix** (`d0def66`) — 1 file, 4 lines removed:
+
+- `artifacts/qorix-markets/src/components/recaptcha.tsx` — removed
+  the early `return null` + `void onVerify; void onExpire;` discards
+  + the `// eslint-disable-next-line no-unreachable` comment so the
+  real `useEffect → loadRecaptchaScript → grecaptcha.render` path
+  executes again.
+
+**Verified post-deploy** via direct API smoke test:
+
+```
+$ curl -sS -o /dev/null -w '%{http_code}\n' \
+    -X POST https://qorix-api.fly.dev/api/auth/login \
+    -H 'Content-Type: application/json' \
+    -d '{"email":"...","password":"..."}'
+400
+$ # body: {"error":"Captcha required"}
+```
+
+End-to-end B6 state on prod:
+
+- `POST /auth/login`           → captcha **enforced** ✅
+- `POST /auth/signup`          → captcha intentionally **NOT** enforced
+                                  on the server (B6.1 will flip it);
+                                  client widget still gates submit.
+- `POST /auth/forgot-password` → unchanged (no captcha; rate-limited).
+- Local/dev (no `VITE_RECAPTCHA_SITE_KEY`) → widget hidden + client
+  gate skipped — unchanged dev DX.
+
+### Roadmap (Phase A continued)
+
+- **B6.1**: render Recaptcha widget on signup tab + un-comment the
+  `/auth/signup` `verifyCaptcha` call. Also fix the v2-checkbox
+  token-reset-on-failed-login UX (call `grecaptcha.reset(widgetId)`
+  in `login.tsx` after a failed submit instead of just clearing
+  local state).
+- **B7**: 24h new-device withdraw cooldown.
+- **B8**: My Devices page.
+
+### Hard rules across all of Phase A
+
+- ZERO `db:push`, ZERO PK type changes, ZERO schema edits.
+- Read-only DB access only. Hand-written SQL only when DB writes
+  ever become necessary.
+- Main agent CANNOT use git CLI — all pushes via GitHub Git Data API
+  (`/tmp/push_batch*.mjs` template).
+- Main agent CANNOT do DB writes.
