@@ -597,11 +597,7 @@ const TEMPLATES: Record<string, () => Preview> = {
       html: renderUsdtWithdrawalRequestedHtml({
         preheader: `[PREVIEW] We received your $98.50 USDT withdrawal request. It's in the queue for review and broadcast.`,
         name,
-        grossAmount: "100.00",
-        feeAmount: "1.50",
         netAmount: "98.50",
-        feeRatePercent: "1.5",
-        vipTierLabel: "Gold",
         walletAddress: "TYPVjtQyUv9pCQvAbXKD1mGq8YFJg7XnKM",
         requestId: 48217,
         requestedAt,

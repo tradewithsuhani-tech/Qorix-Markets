@@ -6228,30 +6228,19 @@ function maskWalletAddress(addr: string): string {
 export function renderUsdtWithdrawalRequestedHtml(opts: {
   preheader: string;
   name: string;
-  grossAmount: string;
-  feeAmount: string;
   netAmount: string;
-  feeRatePercent: string;
-  vipTierLabel: string;
   walletAddress: string;
   requestId: string | number;
   requestedAt: Date;
 }): string {
-  const {
-    preheader, name, grossAmount, feeAmount, netAmount,
-    feeRatePercent, vipTierLabel, walletAddress, requestId, requestedAt,
-  } = opts;
+  const { preheader, name, netAmount, walletAddress, requestId, requestedAt } = opts;
   const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
   const whenStr =
     `${requestedAt.getUTCDate()} ${MONTHS_SHORT[requestedAt.getUTCMonth()]} ${requestedAt.getUTCFullYear()} · ` +
     `${String(requestedAt.getUTCHours()).padStart(2, "0")}:${String(requestedAt.getUTCMinutes()).padStart(2, "0")} UTC`;
   const safeFirstName = escapeHtml((name || "there").trim().split(/\s+/)[0] || "there");
   const safeWhen = escapeHtml(whenStr);
-  const safeGross = escapeHtml(grossAmount);
-  const safeFee = escapeHtml(feeAmount);
   const safeNet = escapeHtml(netAmount);
-  const safeFeeRate = escapeHtml(feeRatePercent);
-  const safeVip = escapeHtml(vipTierLabel);
   const safeWallet = escapeHtml(maskWalletAddress(walletAddress));
   const safeRequestId = escapeHtml(String(requestId));
   const year = new Date().getFullYear();
@@ -6328,12 +6317,9 @@ export function renderUsdtWithdrawalRequestedHtml(opts: {
             </div>
             <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
               <tr>
-                <td align="center" style="padding:24px 18px;background:#16071F;background-image:linear-gradient(180deg,#1E0A28 0%,#11051A 100%);border:1.5px solid rgba(244,114,182,0.45);border-radius:14px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.04),0 0 28px rgba(190,24,93,0.22);">
-                  <div class="qx-amount-num" style="font-size:38px;line-height:1.1;font-weight:800;color:#FFFFFF;letter-spacing:-1px;margin-bottom:6px;">
+                <td align="center" style="padding:28px 18px;background:#16071F;background-image:linear-gradient(180deg,#1E0A28 0%,#11051A 100%);border:1.5px solid rgba(244,114,182,0.45);border-radius:14px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.04),0 0 28px rgba(190,24,93,0.22);">
+                  <div class="qx-amount-num" style="font-size:38px;line-height:1.1;font-weight:800;color:#FFFFFF;letter-spacing:-1px;">
                     $${safeNet} <span style="font-size:18px;color:#F9A8D4;font-weight:700;letter-spacing:0.2px;">USDT</span>
-                  </div>
-                  <div class="qx-amount-break" style="font-size:12.5px;color:#C99CB3;font-weight:500;line-height:1.5;">
-                    Gross <span style="color:#FFFFFF;font-weight:700;">$${safeGross}</span>  ·  Fee <span style="color:#FFFFFF;font-weight:700;">$${safeFee}</span> <span style="opacity:0.7;">(${safeFeeRate}% — ${safeVip} tier)</span>
                   </div>
                 </td>
               </tr>
@@ -6411,15 +6397,9 @@ export function renderUsdtWithdrawalRequestedHtml(opts: {
                 </td>
               </tr>
               <tr>
-                <td style="padding:14px 0;border-bottom:1px solid rgba(244,114,182,0.18);">
+                <td style="padding:14px 0 4px;">
                   <div class="qx-detail-label" style="font-size:11px;letter-spacing:1.6px;color:#9D7989;text-transform:uppercase;font-weight:600;line-height:1;margin-bottom:6px;"><span style="margin-right:6px;">🕐</span>Requested At</div>
                   <div class="qx-detail-value" style="font-size:15px;color:#FFFFFF;font-weight:600;line-height:1.4;">${safeWhen}</div>
-                </td>
-              </tr>
-              <tr>
-                <td style="padding:14px 0 4px;">
-                  <div class="qx-detail-label" style="font-size:11px;letter-spacing:1.6px;color:#9D7989;text-transform:uppercase;font-weight:600;line-height:1;margin-bottom:6px;"><span style="margin-right:6px;">⭐</span>VIP Tier</div>
-                  <div class="qx-detail-value" style="font-size:15px;color:#FFFFFF;font-weight:600;line-height:1.4;">${safeVip} <span style="color:#9D7989;font-weight:500;">(${safeFeeRate}% withdrawal fee)</span></div>
                 </td>
               </tr>
             </table>
@@ -6467,19 +6447,12 @@ export function renderUsdtWithdrawalRequestedHtml(opts: {
 export async function sendUsdtWithdrawalRequested(args: {
   to: string;
   name: string;
-  grossAmount: string;
-  feeAmount: string;
   netAmount: string;
-  feeRatePercent: string;
-  vipTierLabel: string;
   walletAddress: string;
   requestId: string | number;
   requestedAt: Date;
 }): Promise<void> {
-  const {
-    to, name, grossAmount, feeAmount, netAmount,
-    feeRatePercent, vipTierLabel, walletAddress, requestId, requestedAt,
-  } = args;
+  const { to, name, netAmount, walletAddress, requestId, requestedAt } = args;
   const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
   const whenStr =
     `${requestedAt.getUTCDate()} ${MONTHS_SHORT[requestedAt.getUTCMonth()]} ${requestedAt.getUTCFullYear()} · ` +
@@ -6492,11 +6465,7 @@ export async function sendUsdtWithdrawalRequested(args: {
   const html = renderUsdtWithdrawalRequestedHtml({
     preheader,
     name,
-    grossAmount,
-    feeAmount,
     netAmount,
-    feeRatePercent,
-    vipTierLabel,
     walletAddress,
     requestId,
     requestedAt,
@@ -6507,9 +6476,7 @@ export async function sendUsdtWithdrawalRequested(args: {
     `Hi ${name},\n\n` +
     `We received your USDT withdrawal request. It's in the queue for\n` +
     `review and broadcast — typically processed within a few hours.\n\n` +
-    `You'll receive:\n` +
-    `  $${netAmount} USDT (net)\n` +
-    `  Gross: $${grossAmount}   Fee: $${feeAmount} (${feeRatePercent}% — ${vipTierLabel} tier)\n\n` +
+    `You'll receive: $${netAmount} USDT\n\n` +
     `Withdrawal journey:\n` +
     `  ✓ Submitted   (Done)\n` +
     `  ⏳ Review      (In progress)\n` +
@@ -6518,8 +6485,7 @@ export async function sendUsdtWithdrawalRequested(args: {
     `Destination Wallet (TRC20, masked for security):\n` +
     `  ${maskedWallet}\n\n` +
     `Request ID:    #${requestId}\n` +
-    `Requested at:  ${whenStr}\n` +
-    `VIP tier:      ${vipTierLabel} (${feeRatePercent}% withdrawal fee)\n\n` +
+    `Requested at:  ${whenStr}\n\n` +
     `Didn't make this request? Reply or write to\n` +
     `support@qorixmarkets.com immediately.\n\n` +
     `— Qorix Markets`;
