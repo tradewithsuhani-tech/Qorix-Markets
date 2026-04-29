@@ -19,6 +19,7 @@ import {
   renderNewDeviceLoginAlertHtml,
   renderDepositConfirmedHtml,
   renderInrDepositApprovedHtml,
+  renderWithdrawalSentHtml,
 } from "../lib/email-service";
 
 const DEFAULT_TO = "safepayu@gmail.com";
@@ -175,6 +176,35 @@ const TEMPLATES: Record<string, () => Preview> = {
         amountUsdt,
         utr,
         newMainBalance,
+        whenUtc,
+      }),
+    };
+  },
+
+  "withdrawal-sent": () => {
+    const name = "Prem";
+    const netAmount = 500.0;
+    const toAddress = "TXYZabc1234567890DEFghi9876543210JKLm";
+    const txHash = "a1b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef123456";
+    const network = "TRC20";
+    const requestId = 12345;
+    const whenUtc = new Date();
+    return {
+      subject: "[PREVIEW] Qorix Markets — Withdrawal Sent (new design)",
+      text:
+        `[DESIGN PREVIEW]\n\n` +
+        `Withdrawal of $${netAmount.toFixed(2)} USDT broadcast on-chain.\n\n` +
+        `Test render of the new orange "Funds Dispatched 🚀" template.\n` +
+        `Reply with feedback.\n\n` +
+        `— Qorix Markets`,
+      html: renderWithdrawalSentHtml({
+        preheader: `[PREVIEW] $${netAmount.toFixed(2)} USDT (TRC20) broadcast on-chain — typically lands in 1–3 minutes`,
+        name,
+        netAmount,
+        toAddress,
+        txHash,
+        network,
+        requestId,
         whenUtc,
       }),
     };
