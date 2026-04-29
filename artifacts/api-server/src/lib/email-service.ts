@@ -7319,16 +7319,21 @@ export function renderKycVerifiedHtml(opts: {
               <tr>
                 <td align="center" style="padding:30px 18px;background:#180A1A;background-image:linear-gradient(180deg,#251327 0%,#180A1A 100%);border:1.5px solid rgba(255,233,167,0.45);border-radius:14px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.04),0 0 28px rgba(212,160,56,0.25);">
 
-                  <!-- Stamp ring with VERIFIED text -->
+                  <!-- Iconic verified tick — Twitter/Meta-style blue badge on
+                       white ring, instantly recognised as "verified identity".
+                       Sized 108px so it dominates the centerpiece. Cold blue
+                       on warm plum-gold = high-contrast "sapphire on gold". -->
                   <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center">
                     <tr>
-                      <td align="center" style="width:96px;height:96px;background:rgba(255,233,167,0.10);border:3px double rgba(255,233,167,0.85);border-radius:999px;text-align:center;vertical-align:middle;box-shadow:0 0 24px rgba(212,160,56,0.45),inset 0 0 16px rgba(255,233,167,0.18);">
-                        <div style="font-size:11px;letter-spacing:2.6px;color:#FFE9A7;font-weight:800;text-transform:uppercase;line-height:1;margin-bottom:4px;">QORIX</div>
-                        <div style="font-size:32px;color:#FFFFFF;font-weight:900;line-height:1;text-shadow:0 0 12px rgba(255,233,167,0.55);">✓</div>
-                        <div style="font-size:10px;letter-spacing:2.6px;color:#FFE9A7;font-weight:800;text-transform:uppercase;line-height:1;margin-top:4px;">Verified</div>
+                      <td align="center" valign="middle" style="width:108px;height:108px;background:#1D9BF0;background-image:linear-gradient(135deg,#0EA5E9 0%,#1D4ED8 100%);border:4px solid #FFFFFF;border-radius:999px;text-align:center;vertical-align:middle;box-shadow:0 10px 28px rgba(29,155,240,0.55),0 0 36px rgba(96,165,250,0.40),inset 0 2px 6px rgba(255,255,255,0.30);">
+                        <div style="font-size:62px;color:#FFFFFF;font-weight:900;line-height:1;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Roboto,Helvetica,Arial,sans-serif;text-shadow:0 1px 3px rgba(0,0,0,0.25);">&#10003;</div>
                       </td>
                     </tr>
                   </table>
+                  <!-- Wordmark caption below the badge -->
+                  <div style="margin-top:14px;font-size:10.5px;letter-spacing:2.8px;color:#FFE9A7;font-weight:800;text-transform:uppercase;line-height:1;">
+                    Qorix Verified
+                  </div>
 
                   <!-- Headline -->
                   <div class="qx-stamp-num" style="margin-top:22px;font-size:24px;line-height:1.18;font-weight:800;color:#FFFFFF;letter-spacing:-0.4px;">
