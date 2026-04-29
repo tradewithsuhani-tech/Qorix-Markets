@@ -8724,8 +8724,8 @@ export function renderTradeAlertFomoBroadcastHtml(opts: {
 
       <tr>
         <td class="qx-hero-pad" align="center" style="padding:8px 32px 28px;background:#020202;background-image:linear-gradient(135deg,#020202 0%,#3D1A05 28%,#EA580C 60%,#BEF264 100%);">
-          <div style="display:inline-block;padding:6px 14px;border-radius:999px;background:rgba(190,242,100,0.25);border:1px solid rgba(190,242,100,0.70);font-size:10.5px;letter-spacing:2.6px;color:#1A1A0A;font-weight:800;text-transform:uppercase;margin-bottom:18px;">
-            🚀 Profit Booked · Trade Alert
+          <div style="display:inline-block;padding:6px 14px;border-radius:999px;background:rgba(190,242,100,0.25);border:1px solid rgba(190,242,100,0.70);font-size:10.5px;letter-spacing:2.6px;color:#1A1A0A;font-weight:800;text-transform:uppercase;margin-bottom:18px;white-space:nowrap;">
+            🚀 Profit Booked
           </div>
           <div class="qx-hero-h" style="font-size:30px;line-height:1.18;font-weight:800;color:#FFFFFF;letter-spacing:-0.5px;max-width:480px;margin:0 auto;text-shadow:0 2px 12px rgba(0,0,0,0.55);">
             We Just Closed a Win
