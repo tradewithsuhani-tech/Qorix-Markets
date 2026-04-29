@@ -1,6 +1,7 @@
 import type { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
+import UAParser from "ua-parser-js";
 import { db, systemSettingsTable, usersTable, adminPermissionsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { getMaintenanceState } from "./maintenance";
@@ -19,24 +20,130 @@ export function computeDeviceFingerprint(req: Request): string {
   return crypto.createHash("sha256").update(ua).digest("hex").slice(0, 32);
 }
 
-// Best-effort browser/OS pretty labels for the approval popup. Pure
-// UA-string parsing — no external library, no PII beyond what the UA
-// already exposes.
+/**
+ * Rich device description parsed from the User-Agent header via ua-parser-js.
+ *
+ * `browser` and `os` are pretty single-line labels safe to show in approval
+ * popups, alert emails and the admin LoginEvents drawer (e.g.
+ * "Chrome 120" / "Android 14"). The lower-level fields below are kept
+ * separate so callers that need exact device intel — login_events row
+ * enrichment, the user-facing Account Security panel, fraud heuristics —
+ * can use them without re-parsing the UA.
+ *
+ * IMPORTANT: ua-parser-js v1.x is the last MIT-licensed release. v2.x is
+ * AGPL-3.0 which would force open-sourcing the api-server. Pin to ^1.0.40.
+ */
+export interface DeviceDescription {
+  /** Pretty single-line label, e.g. "Chrome 120" or "Safari 17". */
+  browser: string;
+  /** Pretty single-line label, e.g. "Android 14" or "macOS 14.4". */
+  os: string;
+  /** "mobile" | "tablet" | "desktop" | "smarttv" | "wearable" | "embedded" | "unknown" */
+  deviceType: string;
+  /** Device model code from UA, e.g. "SM-S918B" (Samsung Galaxy S23 Ultra) or "iPhone15,3". */
+  deviceModel: string | null;
+  /** Vendor, e.g. "Samsung", "Apple", "Xiaomi". */
+  deviceVendor: string | null;
+  browserName: string | null;
+  /** Full version, e.g. "120.0.0.0" (callers can extract major themselves). */
+  browserVersion: string | null;
+  /** Engine + major version, e.g. "Blink 120" or "WebKit 605". */
+  browserEngine: string | null;
+  osName: string | null;
+  osVersion: string | null;
+  /** "amd64" | "arm64" | etc. — only populated when UA exposes it. */
+  cpuArchitecture: string | null;
+}
+
+/**
+ * Full parsed device intel from the request's User-Agent header. Pure
+ * function over the UA string — no external service calls, no PII beyond
+ * what the UA already exposes, safe to call on the hot login path.
+ *
+ * Notes on UA limitations (deliberate, not bugs):
+ * - Modern Chrome on Android with UA Reduction sends "Linux; Android 10; K"
+ *   — we'll get model=null. Solving this needs UA Client Hints
+ *   (`Sec-CH-UA-Model`, `Sec-CH-UA-Platform-Version`); planned for a
+ *   follow-up batch.
+ * - Windows 11 still reports as "Windows NT 10.0" — distinguishing 10 vs
+ *   11 also needs `Sec-CH-UA-Platform-Version`.
+ */
+export function describeDeviceFull(req: Request): DeviceDescription {
+  const ua = (req.headers["user-agent"] ?? "") as string;
+  const result = new UAParser(ua).getResult();
+
+  const browserName = result.browser.name ?? null;
+  const browserVersion = result.browser.version ?? null;
+  const browserMajor = browserVersion ? browserVersion.split(".")[0] ?? null : null;
+  const browserLabel = browserName
+    ? browserMajor
+      ? `${browserName} ${browserMajor}`
+      : browserName
+    : "Unknown browser";
+
+  const osName = result.os.name ?? null;
+  const osVersion = result.os.version ?? null;
+  const osLabel = osName
+    ? osVersion
+      ? `${osName} ${osVersion}`
+      : osName
+    : "Unknown OS";
+
+  const engineName = result.engine.name ?? null;
+  const engineVersion = result.engine.version ?? null;
+  const engineMajor = engineVersion ? engineVersion.split(".")[0] ?? null : null;
+  const browserEngine = engineName
+    ? engineMajor
+      ? `${engineName} ${engineMajor}`
+      : engineName
+    : null;
+
+  // ua-parser-js leaves device.type undefined for desktops. Infer from OS
+  // when missing so downstream filters always have a usable bucket.
+  // Note: ua-parser-js v1.x labels macOS as "Mac OS" (not "macOS") and may
+  // also report "Chromium OS" / "Chrome OS" — match all desktop variants
+  // case-insensitively to avoid silent "unknown" classifications.
+  const desktopOsNames = new Set([
+    "windows", "mac os", "macos", "linux", "chromium os", "chrome os", "ubuntu", "debian", "fedora",
+  ]);
+  const mobileOsNames = new Set(["android", "ios"]);
+  const osNameLower = osName?.toLowerCase() ?? null;
+  const inferredType = result.device.type
+    ? result.device.type
+    : osNameLower && mobileOsNames.has(osNameLower)
+      ? "mobile"
+      : osNameLower && desktopOsNames.has(osNameLower)
+        ? "desktop"
+        : "unknown";
+
+  return {
+    browser: browserLabel,
+    os: osLabel,
+    deviceType: inferredType,
+    deviceModel: result.device.model ?? null,
+    deviceVendor: result.device.vendor ?? null,
+    browserName,
+    browserVersion,
+    browserEngine,
+    osName,
+    osVersion,
+    cpuArchitecture: result.cpu.architecture ?? null,
+  };
+}
+
+/**
+ * Backwards-compatible thin wrapper. Returns just the pretty
+ * `{ browser, os }` labels expected by existing callers
+ * (device-tracking, routes/auth.ts approval popup, alert emails).
+ *
+ * Labels are now richer than the old hand-rolled regex: e.g. "Chrome 120"
+ * instead of "Chrome", "Android 14" instead of "Android". Callers who
+ * need exact device model / OS version / engine should call
+ * describeDeviceFull() instead.
+ */
 export function describeDevice(req: Request): { browser: string; os: string } {
-  const ua = ((req.headers["user-agent"] ?? "") as string).toLowerCase();
-  let browser = "Unknown browser";
-  if (ua.includes("edg/")) browser = "Edge";
-  else if (ua.includes("chrome/") && !ua.includes("chromium/")) browser = "Chrome";
-  else if (ua.includes("firefox/")) browser = "Firefox";
-  else if (ua.includes("safari/")) browser = "Safari";
-  else if (ua.includes("opera") || ua.includes("opr/")) browser = "Opera";
-  let os = "Unknown OS";
-  if (ua.includes("windows")) os = "Windows";
-  else if (ua.includes("android")) os = "Android";
-  else if (ua.includes("iphone") || ua.includes("ipad") || ua.includes("ios")) os = "iOS";
-  else if (ua.includes("mac os") || ua.includes("macintosh")) os = "macOS";
-  else if (ua.includes("linux")) os = "Linux";
-  return { browser, os };
+  const full = describeDeviceFull(req);
+  return { browser: full.browser, os: full.os };
 }
 
 // SESSION_SECRET is the signing key for every Bearer JWT the api hands out.
