@@ -37,8 +37,14 @@ import { getRedisConnection } from "../lib/redis";
 // The fingerprint is paired with the raw IP/UA in the approval popup so
 // the user can sanity-check what they're approving.
 
-/** Permissive UUID-shape check (any RFC 4122 version 1-8). */
-const UUID_SHAPE_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-9a-f][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+/**
+ * Permissive UUID-shape check (any RFC 4122 version 1-8 — current spec
+ * defines 1-5 plus the draft 6/7/8). Tighter than `[1-9a-f]` because
+ * version nibbles 9 / a-f are not assigned and a value with one of those
+ * is more likely a tampered or junk header than a future UUID variant
+ * — and if a v9 ever ships, this regex is a one-character update.
+ */
+const UUID_SHAPE_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 /**
  * Reads and validates the `X-Device-Id` request header sent by the PWA.

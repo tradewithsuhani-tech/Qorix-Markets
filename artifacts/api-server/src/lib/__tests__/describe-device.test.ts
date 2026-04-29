@@ -304,6 +304,34 @@ test("pickRicherLabel() ties go to stored (no churn between identical labels)", 
   assert.equal(pickRicherLabel("Android 14.4.1", "Android 14.4.1"), "Android 14.4.1");
 });
 
+test("pickRicherLabel() — device-tracking.ts UPDATE branch high-water-mark contract", () => {
+  // These are the EXACT scenarios the UPDATE branch in
+  // artifacts/api-server/src/lib/device-tracking.ts has to handle
+  // correctly. Documents the contract so a future refactor of the
+  // UPDATE branch can be verified against the same expectations:
+  //
+  //   1. Hint-derived stored beats hint-less fresh re-parse: this is
+  //      the whole point of Batch 2.2. A request where the
+  //      Critical-CH retry didn't fire (cold session, browser quirk)
+  //      must NOT downgrade an already-precise stored label.
+  assert.equal(pickRicherLabel("Android 14.4.1", "Android 10"), "Android 14.4.1");
+  assert.equal(pickRicherLabel("Mac OS 14.4.1", "Mac OS 10.15.7"), "Mac OS 14.4.1");
+  assert.equal(pickRicherLabel("Chrome 147", "Chrome 121"), "Chrome 147");
+
+  //   2. First-write scenario: stored is null on a brand-new device row;
+  //      fresh wins unconditionally so the row gets populated. (Note:
+  //      device-tracking.ts INSERT branch never reaches the UPDATE
+  //      pickRicherLabel call, but a row that was inserted with null
+  //      labels by older code reaches here on its first refresh.)
+  assert.equal(pickRicherLabel(null, "Android 14.4.1"), "Android 14.4.1");
+
+  //   3. Self-heal scenario (Batch 1.5 goal still works): a row stored
+  //      with the legacy regex parser's generic "Mac" / "Chrome" labels
+  //      gets upgraded the moment a precise re-parse arrives.
+  assert.equal(pickRicherLabel("Mac", "Mac OS 14.4.1"), "Mac OS 14.4.1");
+  assert.equal(pickRicherLabel("Chrome", "Chrome 147"), "Chrome 147");
+});
+
 // ───── Batch 3: client device_id ─────────────────────────────────────────────
 
 const VALID_UUID_V4 = "550e8400-e29b-41d4-a716-446655440000";
