@@ -155,7 +155,11 @@ router.post("/wallet/deposit", async (req: AuthRequest, res) => {
 });
 
 // Withdrawal lock window for brand-new accounts (anti-fraud cool-off)
-const NEW_ACCOUNT_WITHDRAWAL_LOCK_HOURS = 24;
+// Exported so the INR-withdraw route in routes/inr-withdrawals.ts can apply
+// the same first-withdrawal lock (parity with the USDT path; without that
+// parity an attacker who got past 2FA on a freshly-funded account could
+// drain the INR channel even though the USDT channel is locked).
+export const NEW_ACCOUNT_WITHDRAWAL_LOCK_HOURS = 24;
 // 1 point = $0.01 fee discount; max 50% of fee can be redeemed
 const POINTS_TO_FEE_RATE = 0.01;
 const MAX_FEE_DISCOUNT_RATIO = 0.5;

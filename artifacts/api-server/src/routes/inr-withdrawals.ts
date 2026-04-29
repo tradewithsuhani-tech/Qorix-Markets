@@ -16,6 +16,8 @@ import { sendTxnEmailToUser, verifyOtp } from "../lib/email-service";
 import { isSmokeTestUser } from "../lib/smoke-test-account";
 import { getWithdrawalCaps } from "../lib/withdrawal-caps";
 import { notifyAllActiveMerchantsOfNewWithdrawal } from "../lib/escalation-cron";
+import { WITHDRAWAL_LOCK_HOURS_AFTER_PASSWORD_CHANGE } from "./auth";
+import { NEW_ACCOUNT_WITHDRAWAL_LOCK_HOURS } from "./wallet";
 
 const router = Router();
 
@@ -101,6 +103,49 @@ router.post("/inr-withdrawals", authMiddleware, async (req: AuthRequest, res) =>
   if (user.kycStatus !== "approved") {
     res.status(403).json({ error: "kyc_required", message: "Complete KYC verification before withdrawing" });
     return;
+  }
+
+  // --- New-account 24h withdrawal lock (parity with routes/wallet.ts:244-252) ---
+  // A brand-new account that just deposited via INR (UPI/Bank) used to be
+  // able to immediately withdraw via INR while USDT enforced this 24h gate.
+  // That gap turned the INR channel into the preferred path for any "drop
+  // a deposit, immediately withdraw to a different beneficiary" laundering
+  // attempt, and into the lower-friction path for a freshly-phished login.
+  // Same constant, same wording, same status code — only the channel differs.
+  const accountAgeMs = Date.now() - new Date(user.createdAt).getTime();
+  if (accountAgeMs < NEW_ACCOUNT_WITHDRAWAL_LOCK_HOURS * 60 * 60 * 1000) {
+    const hoursLeft = Math.ceil(NEW_ACCOUNT_WITHDRAWAL_LOCK_HOURS - accountAgeMs / 3_600_000);
+    res.status(403).json({
+      error: "withdrawal_locked_new_account",
+      message: `New accounts must wait ${NEW_ACCOUNT_WITHDRAWAL_LOCK_HOURS}h before first withdrawal (${hoursLeft}h remaining)`,
+    });
+    return;
+  }
+
+  // --- 24h post-password-change lock (parity with routes/wallet.ts:260-276) ---
+  // Pairs with /auth/change-password and /auth/reset-password. If the
+  // password was rotated in the last 24h, withdrawals are frozen on EVERY
+  // channel so a stolen-password attacker who immediately rotates can't
+  // drain the account before the real owner reads the "your password was
+  // changed" email. /auth/security-status surfaces the same window to the
+  // UI for honest users so they understand why the flow is paused.
+  // Without this on INR, the USDT lock was a paper tiger — a hijacker
+  // simply switched channels.
+  if (user.passwordChangedAt) {
+    const lockMs = WITHDRAWAL_LOCK_HOURS_AFTER_PASSWORD_CHANGE * 60 * 60 * 1000;
+    const sinceChangeMs = Date.now() - new Date(user.passwordChangedAt).getTime();
+    if (sinceChangeMs < lockMs) {
+      const hoursLeft = Math.ceil((lockMs - sinceChangeMs) / 3_600_000);
+      res.status(403).json({
+        error: "withdrawal_locked_password_change",
+        message:
+          `Withdrawals are paused for ${WITHDRAWAL_LOCK_HOURS_AFTER_PASSWORD_CHANGE}h after a password change ` +
+          `for your security (${hoursLeft}h remaining). Deposits and trading continue as normal.`,
+        hoursLeft,
+        lockedUntil: new Date(new Date(user.passwordChangedAt).getTime() + lockMs).toISOString(),
+      });
+      return;
+    }
   }
 
   const body = req.body ?? {};
@@ -207,6 +252,26 @@ router.post("/inr-withdrawals", authMiddleware, async (req: AuthRequest, res) =>
   let created: typeof inrWithdrawalsTable.$inferSelect | undefined;
   try {
     created = await db.transaction(async (tx) => {
+      // --- TOCTOU re-check: 24h post-password-change lock INSIDE the txn
+      //     (parity with routes/wallet.ts:341-350 USDT path) ---
+      // Closes the tiny race where a concurrent /auth/change-password or
+      // /auth/reset-password could land between the outer pre-check above
+      // and the moment we touch the wallet here. Reads the freshly-committed
+      // users row; if the lock has just become active, we abort and roll
+      // back instead of letting an attacker who races a password rotation
+      // slip a withdrawal through. The new-account lock doesn't need a
+      // re-check (createdAt is immutable).
+      const lockMs = WITHDRAWAL_LOCK_HOURS_AFTER_PASSWORD_CHANGE * 60 * 60 * 1000;
+      const recheck = await tx
+        .select({ passwordChangedAt: usersTable.passwordChangedAt })
+        .from(usersTable)
+        .where(eq(usersTable.id, req.userId!))
+        .limit(1);
+      const pwdChangedAt = recheck[0]?.passwordChangedAt;
+      if (pwdChangedAt && Date.now() - new Date(pwdChangedAt).getTime() < lockMs) {
+        throw new Error("WITHDRAWAL_LOCKED_PASSWORD_CHANGE");
+      }
+
       const debit = await tx
         .update(walletsTable)
         .set({
@@ -266,6 +331,17 @@ router.post("/inr-withdrawals", authMiddleware, async (req: AuthRequest, res) =>
   } catch (err: any) {
     if (err?.message === "INSUFFICIENT_BALANCE") {
       res.status(400).json({ error: "insufficient_main_balance", message: "Insufficient main balance" });
+      return;
+    }
+    if (err?.message === "WITHDRAWAL_LOCKED_PASSWORD_CHANGE") {
+      // Same shape as the outer pre-check rejection so the client can
+      // surface a single error path regardless of which guard fired.
+      res.status(403).json({
+        error: "withdrawal_locked_password_change",
+        message:
+          `Withdrawals are paused for ${WITHDRAWAL_LOCK_HOURS_AFTER_PASSWORD_CHANGE}h after a password change ` +
+          `for your security. Deposits and trading continue as normal.`,
+      });
       return;
     }
     if (err?.message === "INR_CHANNEL_CAP_EXCEEDED") {
