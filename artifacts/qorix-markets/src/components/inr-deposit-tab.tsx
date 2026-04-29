@@ -1085,7 +1085,7 @@ export function InrDepositTab() {
                   resetFlow();
                   document.getElementById("inr-history")?.scrollIntoView({ behavior: "smooth" });
                 }}
-                className="flex-1 py-3 rounded-full bg-white text-gray-900 font-bold text-sm hover:bg-gray-100 transition-all"
+                className="flex-1 py-3 rounded-full bg-emerald-500/15 border border-emerald-500/40 text-emerald-200 font-bold text-sm hover:bg-emerald-500/25 hover:border-emerald-500/60 hover:text-emerald-100 shadow-[0_0_20px_-8px_rgba(16,185,129,0.45)] transition-all"
               >
                 View History
               </button>
