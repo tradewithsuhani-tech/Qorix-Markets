@@ -1230,7 +1230,10 @@ export function renderNewDeviceLoginAlertHtml(opts: {
 }): string {
   const { preheader, name, ip, city, country, browser, os, whenUtc } = opts;
   const cityLine = city ? (country ? `${city}, ${country}` : city) : country || "Unknown";
-  const whenStr = whenUtc.toISOString().replace("T", " ").slice(0, 19) + " (UTC)";
+  const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const whenStr =
+    `${whenUtc.getUTCDate()} ${MONTHS_SHORT[whenUtc.getUTCMonth()]} ${whenUtc.getUTCFullYear()} · ` +
+    `${String(whenUtc.getUTCHours()).padStart(2, "0")}:${String(whenUtc.getUTCMinutes()).padStart(2, "0")} UTC`;
   const safeFirstName = escapeHtml((name || "there").trim().split(/\s+/)[0] || "there");
   const safeCity = escapeHtml(cityLine);
   const safeIp = escapeHtml(ip);
@@ -1255,12 +1258,13 @@ export function renderNewDeviceLoginAlertHtml(opts: {
     .qx-hero-pad { padding:6px 18px 22px !important; }
     .qx-hero-h { font-size:24px !important; line-height:1.22 !important; }
     .qx-intro { padding:24px 22px 4px !important; font-size:13.5px !important; }
-    .qx-callout { font-size:19px !important; padding:12px 18px 4px !important; }
+    .qx-callout { font-size:16px !important; padding:14px 18px 4px !important; line-height:1.35 !important; }
     .qx-subline { padding:0 22px 4px !important; font-size:12.5px !important; }
-    .qx-snap-pad { padding:22px 22px 6px !important; }
-    .qx-snap-row td { padding:12px 0 !important; font-size:12.5px !important; }
+    .qx-snap-pad { padding:24px 22px 4px !important; }
+    .qx-snap-label { font-size:10.5px !important; }
+    .qx-snap-value { font-size:14px !important; }
     .qx-cta-pad { padding:24px 18px 6px !important; }
-    .qx-cta { padding:14px 26px !important; font-size:14px !important; }
+    .qx-cta { padding:13px 22px !important; font-size:13.5px !important; letter-spacing:0.2px !important; }
     .qx-foot-pad { padding:24px 18px 22px !important; }
   }
 </style>
@@ -1305,9 +1309,9 @@ export function renderNewDeviceLoginAlertHtml(opts: {
           </td>
         </tr>
 
-        <!-- BIG STANDOUT CALLOUT — "If this was you, no action needed." -->
+        <!-- STANDOUT CALLOUT — "If this was you, no action needed." -->
         <tr>
-          <td class="qx-callout" align="center" style="padding:16px 32px 4px;font-size:21px;line-height:1.32;font-weight:800;color:#FFFFFF;letter-spacing:-0.3px;">
+          <td class="qx-callout" align="center" style="padding:18px 32px 4px;font-size:18px;line-height:1.35;font-weight:800;color:#FFFFFF;letter-spacing:-0.2px;">
             If this was you, <span style="color:#FCA5A5;">no action needed.</span>
           </td>
         </tr>
@@ -1319,28 +1323,36 @@ export function renderNewDeviceLoginAlertHtml(opts: {
           </td>
         </tr>
 
-        <!-- DEVICE SNAPSHOT — flat single-line rows (no box) -->
+        <!-- DEVICE SNAPSHOT — STACKED rows (label top, value bottom — never overflows) -->
         <tr>
           <td class="qx-snap-pad" style="padding:30px 32px 4px;">
-            <div style="font-size:10.5px;letter-spacing:2.4px;color:#FCA5A5;text-transform:uppercase;font-weight:700;text-align:left;padding:0 0 10px 4px;">
+            <div style="font-size:10.5px;letter-spacing:2.4px;color:#FCA5A5;text-transform:uppercase;font-weight:700;text-align:left;padding:0 0 14px 0;">
               Sign-In Details
             </div>
             <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
-              <tr class="qx-snap-row">
-                <td style="padding:14px 4px;font-size:13.5px;color:#94A3B8;border-bottom:1px solid rgba(248,113,113,0.14);">📍&nbsp; Location</td>
-                <td style="padding:14px 4px;font-size:13.5px;color:#FFFFFF;text-align:right;font-weight:600;border-bottom:1px solid rgba(248,113,113,0.14);">${safeCity}</td>
+              <tr>
+                <td style="padding:14px 0;border-bottom:1px solid rgba(248,113,113,0.14);">
+                  <div class="qx-snap-label" style="font-size:11px;letter-spacing:1.6px;color:#94A3B8;text-transform:uppercase;font-weight:600;line-height:1;margin-bottom:6px;"><span style="margin-right:6px;">📍</span>Location</div>
+                  <div class="qx-snap-value" style="font-size:15px;color:#FFFFFF;font-weight:600;line-height:1.4;">${safeCity}</div>
+                </td>
               </tr>
-              <tr class="qx-snap-row">
-                <td style="padding:14px 4px;font-size:13.5px;color:#94A3B8;border-bottom:1px solid rgba(248,113,113,0.14);">🌐&nbsp; IP Address</td>
-                <td style="padding:14px 4px;font-size:13.5px;color:#FFFFFF;text-align:right;font-family:'SF Mono','Menlo','Consolas',monospace;font-weight:600;border-bottom:1px solid rgba(248,113,113,0.14);">${safeIp}</td>
+              <tr>
+                <td style="padding:14px 0;border-bottom:1px solid rgba(248,113,113,0.14);">
+                  <div class="qx-snap-label" style="font-size:11px;letter-spacing:1.6px;color:#94A3B8;text-transform:uppercase;font-weight:600;line-height:1;margin-bottom:6px;"><span style="margin-right:6px;">🌐</span>IP Address</div>
+                  <div class="qx-snap-value" style="font-size:15px;color:#FFFFFF;font-weight:600;line-height:1.4;font-family:'SF Mono','Menlo','Consolas',monospace;">${safeIp}</div>
+                </td>
               </tr>
-              <tr class="qx-snap-row">
-                <td style="padding:14px 4px;font-size:13.5px;color:#94A3B8;border-bottom:1px solid rgba(248,113,113,0.14);">🖥️&nbsp; Device</td>
-                <td style="padding:14px 4px;font-size:13.5px;color:#FFFFFF;text-align:right;font-weight:600;border-bottom:1px solid rgba(248,113,113,0.14);">${safeBrowser} · ${safeOs}</td>
+              <tr>
+                <td style="padding:14px 0;border-bottom:1px solid rgba(248,113,113,0.14);">
+                  <div class="qx-snap-label" style="font-size:11px;letter-spacing:1.6px;color:#94A3B8;text-transform:uppercase;font-weight:600;line-height:1;margin-bottom:6px;"><span style="margin-right:6px;">🖥️</span>Device</div>
+                  <div class="qx-snap-value" style="font-size:15px;color:#FFFFFF;font-weight:600;line-height:1.4;">${safeBrowser} · ${safeOs}</div>
+                </td>
               </tr>
-              <tr class="qx-snap-row">
-                <td style="padding:14px 4px;font-size:13.5px;color:#94A3B8;">🕐&nbsp; Signed In At</td>
-                <td style="padding:14px 4px;font-size:13.5px;color:#FFFFFF;text-align:right;font-weight:600;">${safeWhen}</td>
+              <tr>
+                <td style="padding:14px 0 4px;">
+                  <div class="qx-snap-label" style="font-size:11px;letter-spacing:1.6px;color:#94A3B8;text-transform:uppercase;font-weight:600;line-height:1;margin-bottom:6px;"><span style="margin-right:6px;">🕐</span>Signed In At</div>
+                  <div class="qx-snap-value" style="font-size:15px;color:#FFFFFF;font-weight:600;line-height:1.4;">${safeWhen}</div>
+                </td>
               </tr>
             </table>
           </td>
@@ -1414,7 +1426,10 @@ export async function sendNewDeviceLoginAlert(args: {
 }): Promise<void> {
   const { to, name, ip, city, country, browser, os, whenUtc } = args;
   const cityLine = city ? (country ? `${city}, ${country}` : city) : country || "Unknown";
-  const whenStr = whenUtc.toISOString().replace("T", " ").slice(0, 19) + " (UTC)";
+  const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const whenStr =
+    `${whenUtc.getUTCDate()} ${MONTHS_SHORT[whenUtc.getUTCMonth()]} ${whenUtc.getUTCFullYear()} · ` +
+    `${String(whenUtc.getUTCHours()).padStart(2, "0")}:${String(whenUtc.getUTCMinutes()).padStart(2, "0")} UTC`;
 
   const subject = "Qorix Markets — New device signed in to your account";
   const preheader = `Sign-in from ${cityLine} · ${browser} on ${os} — was this you?`;
