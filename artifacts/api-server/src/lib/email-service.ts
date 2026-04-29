@@ -148,7 +148,7 @@ export function renderVerifyEmailOtpHtml(opts: {
     .qx-hero-h { font-size:23px !important; line-height:1.25 !important; }
     .qx-cell { width:38px !important; height:48px !important; line-height:48px !important; font-size:20px !important; }
     .qx-intro { padding:24px 22px 4px !important; font-size:14px !important; }
-    .qx-step-pad { padding:24px 14px 4px !important; }
+    .qx-step-pad { padding:24px 8px 4px !important; }
     .qx-step-cell { padding:0 4px !important; }
     .qx-foot-pad { padding:24px 18px 22px !important; }
   }
@@ -216,19 +216,19 @@ export function renderVerifyEmailOtpHtml(opts: {
             <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:440px;margin:0 auto;">
               <!-- Row 1: numbered circles + gradient connector lines -->
               <tr>
-                <td width="46" align="center" valign="middle">
+                <td width="20%" align="center" valign="middle">
                   <div class="qx-step-num qx-step-active" style="width:42px;height:42px;line-height:38px;border-radius:999px;background-image:linear-gradient(135deg,#22D3EE 0%,#14B8A6 100%);background-color:#22D3EE;color:#04080F;font-size:15px;font-weight:800;text-align:center;border:2px solid rgba(103,232,249,0.45);box-shadow:0 0 22px rgba(34,211,238,0.55),inset 0 1px 0 rgba(255,255,255,0.35);">1</div>
                 </td>
-                <td valign="middle" style="height:42px;padding:0 6px;">
+                <td width="20%" valign="middle" style="height:42px;padding:0 6px;">
                   <div style="height:2px;background-image:linear-gradient(90deg,rgba(34,211,238,0.55) 0%,rgba(34,211,238,0.20) 100%);background-color:rgba(34,211,238,0.32);border-radius:2px;line-height:2px;font-size:0;">&nbsp;</div>
                 </td>
-                <td width="46" align="center" valign="middle">
+                <td width="20%" align="center" valign="middle">
                   <div class="qx-step-num" style="width:42px;height:42px;line-height:38px;border-radius:999px;background:#0A1726;color:#67E8F9;font-size:15px;font-weight:800;text-align:center;border:2px solid rgba(34,211,238,0.42);box-shadow:0 0 12px rgba(34,211,238,0.18);">2</div>
                 </td>
-                <td valign="middle" style="height:42px;padding:0 6px;">
+                <td width="20%" valign="middle" style="height:42px;padding:0 6px;">
                   <div style="height:2px;background-image:linear-gradient(90deg,rgba(34,211,238,0.20) 0%,rgba(34,211,238,0.12) 100%);background-color:rgba(34,211,238,0.16);border-radius:2px;line-height:2px;font-size:0;">&nbsp;</div>
                 </td>
-                <td width="46" align="center" valign="middle">
+                <td width="20%" align="center" valign="middle">
                   <div class="qx-step-num" style="width:42px;height:42px;line-height:38px;border-radius:999px;background:#0A1726;color:#67E8F9;font-size:15px;font-weight:800;text-align:center;border:2px solid rgba(34,211,238,0.42);box-shadow:0 0 12px rgba(34,211,238,0.18);">3</div>
                 </td>
               </tr>
@@ -236,17 +236,17 @@ export function renderVerifyEmailOtpHtml(opts: {
               <tr>
                 <td align="center" style="padding-top:12px;">
                   <div style="font-size:12.5px;font-weight:700;color:#FFFFFF;letter-spacing:0.2px;">Verify</div>
-                  <div style="font-size:10.5px;color:#64748B;line-height:1.5;margin-top:2px;">your email</div>
+                  <div style="font-size:10.5px;color:#64748B;line-height:1.5;margin-top:2px;white-space:nowrap;">your email</div>
                 </td>
                 <td>&nbsp;</td>
                 <td align="center" style="padding-top:12px;">
                   <div style="font-size:12.5px;font-weight:700;color:#FFFFFF;letter-spacing:0.2px;">Fund</div>
-                  <div style="font-size:10.5px;color:#64748B;line-height:1.5;margin-top:2px;">from $10</div>
+                  <div style="font-size:10.5px;color:#64748B;line-height:1.5;margin-top:2px;white-space:nowrap;">from $10</div>
                 </td>
                 <td>&nbsp;</td>
                 <td align="center" style="padding-top:12px;">
                   <div style="font-size:12.5px;font-weight:700;color:#FFFFFF;letter-spacing:0.2px;">Trade</div>
-                  <div style="font-size:10.5px;color:#64748B;line-height:1.5;margin-top:2px;">AI runs 24/7</div>
+                  <div style="font-size:10.5px;color:#64748B;line-height:1.5;margin-top:2px;white-space:nowrap;">AI runs 24/7</div>
                 </td>
               </tr>
             </table>
@@ -325,7 +325,7 @@ export function renderWithdrawalOtpHtml(opts: {
     .qx-otp-text { font-size:28px !important; letter-spacing:8px !important; }
     .qx-otp-cell { padding:16px 22px !important; }
     .qx-intro { padding:24px 22px 4px !important; font-size:14px !important; }
-    .qx-step-pad { padding:24px 14px 4px !important; }
+    .qx-step-pad { padding:24px 8px 4px !important; }
     .qx-foot-pad { padding:24px 18px 22px !important; }
   }
 </style>
@@ -391,36 +391,36 @@ export function renderWithdrawalOtpHtml(opts: {
             </div>
             <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:440px;margin:0 auto;">
               <tr>
-                <td width="46" align="center" valign="middle">
+                <td width="20%" align="center" valign="middle">
                   <div style="width:42px;height:42px;line-height:38px;border-radius:999px;background:#0E0A06;color:#34D399;font-size:18px;font-weight:800;text-align:center;border:2px solid rgba(52,211,153,0.55);box-shadow:0 0 14px rgba(52,211,153,0.30);">&#10003;</div>
                 </td>
-                <td valign="middle" style="height:42px;padding:0 6px;">
+                <td width="20%" valign="middle" style="height:42px;padding:0 6px;">
                   <div style="height:2px;background-image:linear-gradient(90deg,rgba(52,211,153,0.45) 0%,rgba(52,211,153,0.30) 100%);background-color:rgba(52,211,153,0.30);border-radius:2px;line-height:2px;font-size:0;">&nbsp;</div>
                 </td>
-                <td width="46" align="center" valign="middle">
+                <td width="20%" align="center" valign="middle">
                   <div style="width:42px;height:42px;line-height:38px;border-radius:999px;background:#0E0A06;color:#34D399;font-size:18px;font-weight:800;text-align:center;border:2px solid rgba(52,211,153,0.55);box-shadow:0 0 14px rgba(52,211,153,0.30);">&#10003;</div>
                 </td>
-                <td valign="middle" style="height:42px;padding:0 6px;">
+                <td width="20%" valign="middle" style="height:42px;padding:0 6px;">
                   <div style="height:2px;background-image:linear-gradient(90deg,rgba(52,211,153,0.30) 0%,rgba(245,158,11,0.55) 100%);background-color:rgba(245,158,11,0.32);border-radius:2px;line-height:2px;font-size:0;">&nbsp;</div>
                 </td>
-                <td width="46" align="center" valign="middle">
+                <td width="20%" align="center" valign="middle">
                   <div style="width:42px;height:42px;line-height:38px;border-radius:999px;background-image:linear-gradient(135deg,#F59E0B 0%,#D97706 100%);background-color:#F59E0B;color:#1A0F02;font-size:15px;font-weight:800;text-align:center;border:2px solid rgba(252,211,77,0.5);box-shadow:0 0 22px rgba(245,158,11,0.6),inset 0 1px 0 rgba(255,255,255,0.35);">3</div>
                 </td>
               </tr>
               <tr>
                 <td align="center" style="padding-top:12px;">
                   <div style="font-size:12.5px;font-weight:700;color:#FFFFFF;letter-spacing:0.2px;">Identity</div>
-                  <div style="font-size:10.5px;color:#78716C;line-height:1.5;margin-top:2px;">verified</div>
+                  <div style="font-size:10.5px;color:#78716C;line-height:1.5;margin-top:2px;white-space:nowrap;">verified</div>
                 </td>
                 <td>&nbsp;</td>
                 <td align="center" style="padding-top:12px;">
                   <div style="font-size:12.5px;font-weight:700;color:#FFFFFF;letter-spacing:0.2px;">Device</div>
-                  <div style="font-size:10.5px;color:#78716C;line-height:1.5;margin-top:2px;">trusted</div>
+                  <div style="font-size:10.5px;color:#78716C;line-height:1.5;margin-top:2px;white-space:nowrap;">trusted</div>
                 </td>
                 <td>&nbsp;</td>
                 <td align="center" style="padding-top:12px;">
                   <div style="font-size:12.5px;font-weight:700;color:#FFFFFF;letter-spacing:0.2px;">Final code</div>
-                  <div style="font-size:10.5px;color:#FCD34D;line-height:1.5;margin-top:2px;">enter above</div>
+                  <div style="font-size:10.5px;color:#FCD34D;line-height:1.5;margin-top:2px;white-space:nowrap;">enter above</div>
                 </td>
               </tr>
             </table>
@@ -501,7 +501,7 @@ export function renderDeviceLoginOtpHtml(opts: {
     .qx-otp-text { font-size:28px !important; letter-spacing:8px !important; }
     .qx-otp-cell { padding:16px 22px !important; }
     .qx-intro { padding:24px 22px 4px !important; font-size:14px !important; }
-    .qx-step-pad { padding:24px 14px 4px !important; }
+    .qx-step-pad { padding:24px 8px 4px !important; }
     .qx-foot-pad { padding:24px 18px 22px !important; }
   }
 </style>
@@ -567,36 +567,36 @@ export function renderDeviceLoginOtpHtml(opts: {
             </div>
             <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:440px;margin:0 auto;">
               <tr>
-                <td width="46" align="center" valign="middle">
+                <td width="20%" align="center" valign="middle">
                   <div style="width:42px;height:42px;line-height:38px;border-radius:999px;background:#0A1228;color:#93C5FD;font-size:18px;font-weight:800;text-align:center;border:2px solid rgba(59,130,246,0.55);box-shadow:0 0 14px rgba(59,130,246,0.28);">&#128269;</div>
                 </td>
-                <td valign="middle" style="height:42px;padding:0 6px;">
+                <td width="20%" valign="middle" style="height:42px;padding:0 6px;">
                   <div style="height:2px;background-image:linear-gradient(90deg,rgba(59,130,246,0.30) 0%,rgba(59,130,246,0.55) 100%);background-color:rgba(59,130,246,0.40);border-radius:2px;line-height:2px;font-size:0;">&nbsp;</div>
                 </td>
-                <td width="46" align="center" valign="middle">
+                <td width="20%" align="center" valign="middle">
                   <div style="width:42px;height:42px;line-height:38px;border-radius:999px;background-image:linear-gradient(135deg,#3B82F6 0%,#1D4ED8 100%);background-color:#3B82F6;color:#04080F;font-size:15px;font-weight:800;text-align:center;border:2px solid rgba(147,197,253,0.5);box-shadow:0 0 22px rgba(59,130,246,0.6),inset 0 1px 0 rgba(255,255,255,0.35);">2</div>
                 </td>
-                <td valign="middle" style="height:42px;padding:0 6px;">
+                <td width="20%" valign="middle" style="height:42px;padding:0 6px;">
                   <div style="height:2px;background-image:linear-gradient(90deg,rgba(59,130,246,0.30) 0%,rgba(59,130,246,0.18) 100%);background-color:rgba(59,130,246,0.20);border-radius:2px;line-height:2px;font-size:0;">&nbsp;</div>
                 </td>
-                <td width="46" align="center" valign="middle">
+                <td width="20%" align="center" valign="middle">
                   <div style="width:42px;height:42px;line-height:38px;border-radius:999px;background:#0A1228;color:#93C5FD;font-size:18px;font-weight:800;text-align:center;border:2px solid rgba(59,130,246,0.45);box-shadow:0 0 12px rgba(59,130,246,0.18);">&#10003;</div>
                 </td>
               </tr>
               <tr>
                 <td align="center" style="padding-top:12px;">
                   <div style="font-size:12.5px;font-weight:700;color:#FFFFFF;letter-spacing:0.2px;">Detected</div>
-                  <div style="font-size:10.5px;color:#64748B;line-height:1.5;margin-top:2px;">new device</div>
+                  <div style="font-size:10.5px;color:#64748B;line-height:1.5;margin-top:2px;white-space:nowrap;">new device</div>
                 </td>
                 <td>&nbsp;</td>
                 <td align="center" style="padding-top:12px;">
                   <div style="font-size:12.5px;font-weight:700;color:#FFFFFF;letter-spacing:0.2px;">Verify</div>
-                  <div style="font-size:10.5px;color:#93C5FD;line-height:1.5;margin-top:2px;">enter code</div>
+                  <div style="font-size:10.5px;color:#93C5FD;line-height:1.5;margin-top:2px;white-space:nowrap;">enter code</div>
                 </td>
                 <td>&nbsp;</td>
                 <td align="center" style="padding-top:12px;">
                   <div style="font-size:12.5px;font-weight:700;color:#FFFFFF;letter-spacing:0.2px;">Approve</div>
-                  <div style="font-size:10.5px;color:#64748B;line-height:1.5;margin-top:2px;">sign in</div>
+                  <div style="font-size:10.5px;color:#64748B;line-height:1.5;margin-top:2px;white-space:nowrap;">sign in</div>
                 </td>
               </tr>
             </table>
