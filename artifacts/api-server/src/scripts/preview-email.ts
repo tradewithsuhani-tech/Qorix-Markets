@@ -41,6 +41,13 @@ import {
   renderKycRejectedHtml,
   renderUsdtWithdrawalSentHtml,
   renderUsdtWithdrawalRejectedHtml,
+  renderAnnouncementBroadcastHtml,
+  renderPromotionBroadcastHtml,
+  renderAlertBroadcastHtml,
+  renderInfoUpdateBroadcastHtml,
+  renderMaintenanceBroadcastHtml,
+  renderTradeAlertFomoBroadcastHtml,
+  renderNextTradeFomoBroadcastHtml,
 } from "../lib/email-service";
 
 const DEFAULT_TO = "safepayu@gmail.com";
@@ -783,6 +790,117 @@ const TEMPLATES: Record<string, () => Preview> = {
         refundSource: "main",
         requestId: 4821,
         rejectedAt,
+      }),
+    };
+  },
+
+  "broadcast-announcement": () => {
+    const publishedAt = new Date();
+    return {
+      subject: "[PREVIEW] Qorix Markets — Important Platform Announcement (slate-parchment)",
+      text: `[DESIGN PREVIEW]\n\nBroadcast #30 — Announcement.\nSlate-gunmetal + warm-parchment palette. Newspaper masthead vibe.\n— Qorix Markets`,
+      html: renderAnnouncementBroadcastHtml({
+        preheader: `[PREVIEW] An important update from the Qorix Markets team.`,
+        title: "New AI Trading Engine Now Live",
+        bodyHtml: `<p style="margin:0 0 12px;">Today we are rolling out the next generation of our AI trading engine across all accounts. The upgraded engine processes market signals 4× faster and adds two new risk-managed strategies on top of the existing core book.</p><p style="margin:0 0 12px;">Your existing positions, balances, and tier limits remain unchanged — the upgrade is fully transparent to live users. You'll start seeing the new strategies labelled <strong>"AI-v2"</strong> in your trade history starting today.</p><p style="margin:0;">As always, thank you for trading with us.</p>`,
+        ctaLabel: "View Update Notes",
+        ctaUrl: "https://qorixmarkets.com/announcements",
+        publishedAt,
+      }),
+    };
+  },
+
+  "broadcast-promotion": () => {
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    return {
+      subject: "[PREVIEW] Qorix Markets — ✦ 20% USDT Deposit Bonus · This Week Only (merlot-pearl)",
+      text: `[DESIGN PREVIEW]\n\nBroadcast #31 — Promotion.\nDeep-merlot + iridescent-pearl-champagne. Pearl-shimmer offer tile.\n— Qorix Markets`,
+      html: renderPromotionBroadcastHtml({
+        preheader: `[PREVIEW] Limited-time bonus on every USDT deposit this week.`,
+        title: "Your Exclusive Deposit Bonus",
+        offerHighlight: "+20% USDT BONUS",
+        bodyHtml: `<p style="margin:0 0 10px;">For the next 7 days, every USDT deposit on your account is matched with an instant <strong style="color:#FFFFFF;">20% bonus credit</strong> to your Main Balance — no minimum, no max cap.</p><p style="margin:0;">Bonus credits are tradeable and withdrawable per standard rules. One-tap deposit, instant credit — no codes, no forms.</p>`,
+        expiresAt,
+        ctaLabel: "Claim Your Bonus",
+        ctaUrl: "https://qorixmarkets.com/wallet/deposit",
+      }),
+    };
+  },
+
+  "broadcast-alert": () => {
+    return {
+      subject: "[PREVIEW] Qorix Markets — ⚠ Phishing Alert · Beware Fake Lookalike Sites (hazard-amber)",
+      text: `[DESIGN PREVIEW]\n\nBroadcast #32 — Alert / Warning.\nIndustrial-black + hazard-amber. Caution-tape striped border + recommended-action callout.\n— Qorix Markets`,
+      html: renderAlertBroadcastHtml({
+        preheader: `[PREVIEW] We've detected phishing sites mimicking Qorix Markets — please verify the URL before logging in.`,
+        title: "Phishing Sites Mimicking Qorix Markets",
+        bodyHtml: `<p style="margin:0 0 10px;">In the last 24 hours we've identified several lookalike domains (such as <strong style="color:#FFFFFF;">qorixmarket.co</strong>, <strong style="color:#FFFFFF;">qorix-markets.io</strong>) attempting to harvest user credentials.</p><p style="margin:0;">Your account is safe — but please always check the address bar reads exactly <strong style="color:#FFFFFF;">qorixmarkets.com</strong> before entering your password or 2FA code.</p>`,
+        recommendedAction: "Bookmark the official site (qorixmarkets.com) and never log in from links shared on social media or messaging apps.",
+        ctaLabel: "Review Login Activity",
+        ctaUrl: "https://qorixmarkets.com/account/security",
+      }),
+    };
+  },
+
+  "broadcast-info-update": () => {
+    return {
+      subject: "[PREVIEW] Qorix Markets — ℹ Platform Update v2.4 · What's New (periwinkle-snow)",
+      text: `[DESIGN PREVIEW]\n\nBroadcast #33 — Info Update.\nCool-periwinkle + crisp-snow. Calm informational vibe.\n— Qorix Markets`,
+      html: renderInfoUpdateBroadcastHtml({
+        preheader: `[PREVIEW] What's new in Qorix Markets v2.4 — see the highlights inside.`,
+        title: "Qorix Markets v2.4 Is Here",
+        bodyHtml: `<p style="margin:0 0 12px;font-weight:700;color:#0F172A;">Highlights in this release:</p><ul style="margin:0 0 12px;padding-left:20px;color:#1E293B;"><li style="margin:0 0 6px;">Faster wallet load times — dashboard renders 2× faster on mobile</li><li style="margin:0 0 6px;">New "Profit History" graph with 30-day / 90-day toggle</li><li style="margin:0 0 6px;">Email notifications can now be customised per category</li><li style="margin:0 0 6px;">Fixes for INR deposit reconciliation edge-cases</li></ul><p style="margin:0;">Update applies automatically — no action needed from you.</p>`,
+        ctaLabel: "Open Dashboard",
+        ctaUrl: "https://qorixmarkets.com/dashboard",
+      }),
+    };
+  },
+
+  "broadcast-maintenance": () => {
+    const windowStart = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000);
+    const windowEnd = new Date(windowStart.getTime() + 90 * 60 * 1000);
+    return {
+      subject: "[PREVIEW] Qorix Markets — 🛠 Scheduled Maintenance · Brief 90-min Window (oxford-aqua)",
+      text: `[DESIGN PREVIEW]\n\nBroadcast #34 — Maintenance.\nDark-oxford + electric-aqua. Maintenance-window card with start→end times.\n— Qorix Markets`,
+      html: renderMaintenanceBroadcastHtml({
+        preheader: `[PREVIEW] Brief 90-minute maintenance window scheduled — wallet and trade endpoints will be paused.`,
+        title: "Brief Maintenance · Wallet Endpoints",
+        windowStart,
+        windowEnd,
+        impactedServices: "Wallet (deposits / withdrawals), Trade execution, Public API",
+        bodyHtml: `<p style="margin:0 0 8px;">During the window above, wallet and trade endpoints will be paused for a database migration and infrastructure upgrade. Read-only dashboard access remains available throughout.</p><p style="margin:0;">All in-flight transactions will resume automatically once the window closes. No user action is required.</p>`,
+        statusUrl: "https://status.qorixmarkets.com",
+      }),
+    };
+  },
+
+  "broadcast-trade-alert-fomo": () => {
+    return {
+      subject: "[PREVIEW] Qorix Markets — 🚀 +$847 Profit Just Booked · BTC/USDT (jet-lava-lime)",
+      text: `[DESIGN PREVIEW]\n\nBroadcast #35 — Trade Alert (FOMO).\nJet-black + lava-orange + neon-lime DUAL-NEON palette. Big profit centerpiece.\n— Qorix Markets`,
+      html: renderTradeAlertFomoBroadcastHtml({
+        preheader: `[PREVIEW] Our AI engine just closed a +$847 profit on BTC/USDT — here's what just happened.`,
+        profitAmount: "$847.20",
+        pair: "BTC / USDT",
+        bodyHtml: `<p style="margin:0 0 10px;">Our AI engine just closed a long position on <strong style="color:#FFFFFF;">BTC/USDT</strong> with a clean <strong style="color:#BEF264;">+$847.20</strong> in pure profit — held for 4 hours, exited at market resistance.</p><p style="margin:0;">Active subscribers got the entry signal in real-time. The next setup is being scoped right now.</p>`,
+        ctaLabel: "See Live Trades",
+        ctaUrl: "https://qorixmarkets.com/trades",
+      }),
+    };
+  },
+
+  "broadcast-next-trade-fomo": () => {
+    const nextTradeAt = new Date(Date.now() + 6 * 60 * 60 * 1000);
+    return {
+      subject: "[PREVIEW] Qorix Markets — ⏰ Next Trade Coming Soon · Don't Miss It (cosmic-aurora)",
+      text: `[DESIGN PREVIEW]\n\nBroadcast #36 — Next Trade FOMO (countdown).\nCosmic-violet-night + aurora cyan-pink palette. Countdown card with absolute trade time.\n— Qorix Markets`,
+      html: renderNextTradeFomoBroadcastHtml({
+        preheader: `[PREVIEW] Our AI engine has a fresh setup loaded — set your alarm so you don't miss the entry.`,
+        nextTradeAt,
+        pair: "ETH / USDT",
+        bodyHtml: `<p style="margin:0 0 10px;">A fresh setup is loaded on <strong style="color:#FFFFFF;">ETH/USDT</strong>. The AI engine is waiting for the technical confirmation — entry expected within the next few hours.</p><p style="margin:0;">Make sure your account is funded and your push notifications are on. The signal arrives without warning.</p>`,
+        ctaLabel: "Top Up Wallet",
+        ctaUrl: "https://qorixmarkets.com/wallet/deposit",
       }),
     };
   },

@@ -8022,3 +8022,890 @@ export async function sendUsdtWithdrawalRejected(args: {
 
   await sendEmail(to, subject, text, html);
 }
+
+// ===========================================================================
+// BROADCAST EMAIL TEMPLATES (#30 - #36)
+// ---------------------------------------------------------------------------
+// Templates 25-29 covered transactional events (KYC, USDT withdrawals).
+// Templates 30-36 cover the seven admin-broadcast categories shown in the
+// Email Broadcast Templates panel: Announcement, Promotion, Alert/Warning,
+// Info Update, Maintenance, Trade Alert (FOMO), Next Trade FOMO.
+//
+// Each broadcast template is parameterized so the admin can plug in the
+// title, body HTML, CTA, and any category-specific data (offer highlight,
+// maintenance window, profit amount, next-trade timestamp, etc.) before
+// pushing to the user list. The render functions accept admin-supplied
+// `bodyHtml` AS-IS (sanitization is handled at the API boundary, not here).
+// ---------------------------------------------------------------------------
+
+function fmtUtcDateTime(d: Date): string {
+  const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  return `${d.getUTCDate()} ${MONTHS_SHORT[d.getUTCMonth()]} ${d.getUTCFullYear()} · ` +
+    `${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")} UTC`;
+}
+
+// ---------------------------------------------------------------------------
+// #30 — ANNOUNCEMENT BROADCAST
+// ---------------------------------------------------------------------------
+// SLATE-GUNMETAL + WARM-PARCHMENT-IVORY: dark steel base + cream/parchment
+// surface for the body card. Tone: OFFICIAL / NEWSPAPER MASTHEAD — "hear ye,
+// hear ye". 30th unique palette. Distinct from pewter (silvery) and
+// graphite-teal (#25) by the warm parchment body card on a neutral steel.
+// Layout: hero "OFFICIAL ANNOUNCEMENT" pill · masthead title · parchment
+// body card · optional CTA · date stamp.
+// ---------------------------------------------------------------------------
+export function renderAnnouncementBroadcastHtml(opts: {
+  preheader: string;
+  title: string;
+  bodyHtml: string;
+  ctaLabel?: string;
+  ctaUrl?: string;
+  publishedAt: Date;
+}): string {
+  const { preheader, title, bodyHtml, ctaLabel, ctaUrl, publishedAt } = opts;
+  const safeTitle = escapeHtml(title);
+  const safePublished = escapeHtml(fmtUtcDateTime(publishedAt));
+  const showCta = Boolean(ctaLabel && ctaUrl);
+  const safeCtaLabel = escapeHtml(ctaLabel || "");
+  const safeCtaUrl = ctaUrl || "#";
+  const year = new Date().getFullYear();
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="x-apple-disable-message-reformatting" />
+<meta name="color-scheme" content="dark light" />
+<title>${safeTitle} — Qorix Markets</title>
+<style type="text/css">
+  @media only screen and (max-width:480px) {
+    .qx-outer { padding:20px 10px !important; }
+    .qx-card { border-radius:18px !important; }
+    .qx-hero-pad { padding:6px 18px 22px !important; }
+    .qx-hero-h { font-size:24px !important; line-height:1.22 !important; }
+    .qx-body-pad { padding:24px 18px 4px !important; }
+    .qx-cta { padding:14px 28px !important; font-size:14px !important; }
+    .qx-foot-pad { padding:24px 18px 22px !important; }
+  }
+</style>
+</head>
+<body style="margin:0;padding:0;background:#0F1216;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;">
+<div style="display:none;max-height:0;overflow:hidden;font-size:1px;line-height:1px;color:#0F1216;opacity:0;">${escapeHtml(preheader)}</div>
+<div style="display:none;max-height:0;overflow:hidden;">&#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847;</div>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="qx-outer" style="background:#0F1216;padding:32px 16px;">
+  <tr><td align="center">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="qx-card" style="max-width:560px;background:#1A1F26;border:1px solid rgba(245,236,210,0.22);border-radius:22px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,0.70);">
+
+      <tr>
+        <td align="left" style="padding:20px 24px 0 28px;background:#0F1216;background-image:linear-gradient(135deg,#0F1216 0%,#2A323D 38%,#475569 72%,#F5ECD2 100%);">
+          <img src="cid:${BRAND_LOGO_CID}" alt="Qorix Markets" width="320" height="217" style="display:block;width:320px;max-width:90%;height:auto;border:0;outline:none;text-decoration:none;margin:0;" />
+        </td>
+      </tr>
+
+      <tr>
+        <td class="qx-hero-pad" align="center" style="padding:8px 32px 28px;background:#0F1216;background-image:linear-gradient(135deg,#0F1216 0%,#2A323D 38%,#475569 72%,#F5ECD2 100%);">
+          <div style="display:inline-block;padding:6px 14px;border-radius:999px;background:rgba(245,236,210,0.18);border:1px solid rgba(245,236,210,0.55);font-size:10.5px;letter-spacing:3.0px;color:#F5ECD2;font-weight:800;text-transform:uppercase;margin-bottom:18px;">
+            Official · Qorix Markets
+          </div>
+          <div class="qx-hero-h" style="font-size:30px;line-height:1.18;font-weight:800;color:#FFFFFF;letter-spacing:-0.5px;max-width:480px;margin:0 auto;">
+            ${safeTitle}
+          </div>
+          <div style="width:48px;height:3px;background:linear-gradient(90deg,#F5ECD2 0%,#475569 100%);margin:18px auto 0;border-radius:999px;"></div>
+        </td>
+      </tr>
+
+      <!-- Parchment body card -->
+      <tr>
+        <td class="qx-body-pad" style="padding:30px 32px 8px;">
+          <div style="font-size:10.5px;letter-spacing:2.4px;color:#475569;font-weight:700;text-transform:uppercase;text-align:left;padding:0 0 14px 0;">
+            Announcement
+          </div>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#F5ECD2;background-image:linear-gradient(180deg,#F5ECD2 0%,#E8DDB8 100%);border:1.5px solid rgba(71,85,105,0.40);border-radius:14px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.40),0 6px 18px rgba(0,0,0,0.30);">
+            <tr>
+              <td style="padding:24px 24px 26px;font-size:14px;color:#1F2937;line-height:1.65;font-weight:500;">${bodyHtml}</td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+
+      ${showCta ? `<tr>
+        <td align="center" style="padding:24px 32px 12px;">
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+            <tr>
+              <td align="center" bgcolor="#475569" style="border-radius:12px;background:#475569;background-image:linear-gradient(135deg,#475569 0%,#64748B 60%,#94A3B8 100%);box-shadow:0 12px 28px rgba(71,85,105,0.45),inset 0 1px 0 rgba(255,255,255,0.18);">
+                <a href="${safeCtaUrl}" target="_blank" class="qx-cta" style="display:inline-block;padding:16px 36px;font-size:15px;font-weight:700;color:#FFFFFF;text-decoration:none;letter-spacing:0.4px;border-radius:12px;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Roboto,Helvetica,Arial,sans-serif;">${safeCtaLabel} →</a>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>` : ""}
+
+      <tr>
+        <td align="center" style="padding:18px 32px 4px;">
+          <div style="font-size:11px;letter-spacing:1.6px;color:#5E6878;text-transform:uppercase;font-weight:600;line-height:1.4;">Published · ${safePublished}</div>
+        </td>
+      </tr>
+
+      <tr>
+        <td class="qx-foot-pad" align="center" style="padding:30px 32px 28px;border-top:1px solid rgba(255,255,255,0.05);background:#080A0E;">
+          <div style="font-size:13px;color:#F5ECD2;margin-bottom:6px;font-weight:600;">Trade smart 📈</div>
+          <div style="font-size:11.5px;color:#475569;line-height:1.7;">© ${year} Qorix Markets · AI-Powered Trading<br/>Need help? <a href="mailto:support@qorixmarkets.com" style="color:#F5ECD2;text-decoration:none;">support@qorixmarkets.com</a></div>
+        </td>
+      </tr>
+
+    </table>
+    <div style="height:24px;line-height:24px;font-size:1px;">&nbsp;</div>
+  </td></tr>
+</table>
+</body></html>`;
+}
+
+// ---------------------------------------------------------------------------
+// #31 — PROMOTION BROADCAST
+// ---------------------------------------------------------------------------
+// DEEP-MERLOT + IRIDESCENT-PEARL-CHAMPAGNE: rich wine-velvet base + pearly
+// champagne shimmer. Tone: PREMIUM / EXCLUSIVE-OFFER / GIFT-WRAPPED. 31st
+// unique palette. Distinct from oxblood (#19 ember, redder), wine, dusty-
+// plum. Centerpiece: pearl-shimmer offer tile with the offer highlight.
+// ---------------------------------------------------------------------------
+export function renderPromotionBroadcastHtml(opts: {
+  preheader: string;
+  title: string;
+  offerHighlight: string;
+  bodyHtml: string;
+  expiresAt?: Date;
+  ctaLabel?: string;
+  ctaUrl?: string;
+}): string {
+  const { preheader, title, offerHighlight, bodyHtml, expiresAt, ctaLabel, ctaUrl } = opts;
+  const safeTitle = escapeHtml(title);
+  const safeOffer = escapeHtml(offerHighlight);
+  const safeExpires = expiresAt ? escapeHtml(fmtUtcDateTime(expiresAt)) : "";
+  const showCta = Boolean(ctaLabel && ctaUrl);
+  const safeCtaLabel = escapeHtml(ctaLabel || "");
+  const safeCtaUrl = ctaUrl || "#";
+  const year = new Date().getFullYear();
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="x-apple-disable-message-reformatting" />
+<meta name="color-scheme" content="dark light" />
+<title>${safeTitle} — Qorix Markets</title>
+<style type="text/css">
+  @media only screen and (max-width:480px) {
+    .qx-outer { padding:20px 10px !important; }
+    .qx-card { border-radius:18px !important; }
+    .qx-hero-pad { padding:6px 18px 22px !important; }
+    .qx-hero-h { font-size:24px !important; line-height:1.22 !important; }
+    .qx-offer-pad { padding:24px 18px 4px !important; }
+    .qx-offer-num { font-size:34px !important; }
+    .qx-cta { padding:14px 28px !important; font-size:14px !important; }
+    .qx-foot-pad { padding:24px 18px 22px !important; }
+  }
+</style>
+</head>
+<body style="margin:0;padding:0;background:#180810;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;">
+<div style="display:none;max-height:0;overflow:hidden;font-size:1px;line-height:1px;color:#180810;opacity:0;">${escapeHtml(preheader)}</div>
+<div style="display:none;max-height:0;overflow:hidden;">&#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847;</div>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="qx-outer" style="background:#180810;padding:32px 16px;">
+  <tr><td align="center">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="qx-card" style="max-width:560px;background:#22101B;border:1px solid rgba(255,237,213,0.30);border-radius:22px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,0.75);">
+
+      <tr>
+        <td align="left" style="padding:20px 24px 0 28px;background:#180810;background-image:linear-gradient(135deg,#180810 0%,#5C1230 38%,#9B2C5A 72%,#FFEDD5 100%);">
+          <img src="cid:${BRAND_LOGO_CID}" alt="Qorix Markets" width="320" height="217" style="display:block;width:320px;max-width:90%;height:auto;border:0;outline:none;text-decoration:none;margin:0;" />
+        </td>
+      </tr>
+
+      <tr>
+        <td class="qx-hero-pad" align="center" style="padding:8px 32px 28px;background:#180810;background-image:linear-gradient(135deg,#180810 0%,#5C1230 38%,#9B2C5A 72%,#FFEDD5 100%);">
+          <div style="display:inline-block;padding:6px 14px;border-radius:999px;background:rgba(255,237,213,0.20);border:1px solid rgba(255,237,213,0.60);font-size:10.5px;letter-spacing:2.6px;color:#FFEDD5;font-weight:800;text-transform:uppercase;margin-bottom:18px;">
+            ✦ Exclusive Offer · Limited Time
+          </div>
+          <div class="qx-hero-h" style="font-size:30px;line-height:1.18;font-weight:800;color:#FFFFFF;letter-spacing:-0.5px;max-width:480px;margin:0 auto;">
+            ${safeTitle}
+          </div>
+          <div style="width:48px;height:3px;background:linear-gradient(90deg,#FFEDD5 0%,#9B2C5A 100%);margin:18px auto 0;border-radius:999px;"></div>
+        </td>
+      </tr>
+
+      <!-- Pearl-shimmer offer tile -->
+      <tr>
+        <td class="qx-offer-pad" align="center" style="padding:30px 24px 4px;">
+          <div style="font-size:10.5px;letter-spacing:2.4px;color:#FFEDD5;font-weight:700;text-transform:uppercase;text-align:left;padding:0 8px 14px 8px;">
+            Your Offer
+          </div>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+            <tr>
+              <td align="center" style="padding:36px 18px;background:#1B0815;background-image:linear-gradient(135deg,#2A1020 0%,#1B0815 50%,#FFF7E6 100%),linear-gradient(45deg,rgba(255,237,213,0.25) 0%,transparent 30%,rgba(255,237,213,0.15) 60%,transparent 100%);border:1.5px solid rgba(255,237,213,0.50);border-radius:14px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.10),0 0 32px rgba(155,44,90,0.40),0 6px 18px rgba(0,0,0,0.50);">
+                <div style="display:inline-block;padding:5px 12px;border-radius:999px;background:rgba(255,237,213,0.18);border:1px solid rgba(255,237,213,0.60);font-size:10px;letter-spacing:2.0px;color:#FFEDD5;font-weight:800;text-transform:uppercase;margin-bottom:14px;">✦ Just for you</div>
+                <div class="qx-offer-num" style="font-size:42px;line-height:1.05;font-weight:900;color:#FFFFFF;letter-spacing:-1px;text-shadow:0 2px 14px rgba(255,237,213,0.45);">
+                  ${safeOffer}
+                </div>
+                ${expiresAt ? `<div style="margin-top:14px;font-size:11.5px;color:#E5C9A8;font-weight:600;line-height:1.5;letter-spacing:0.3px;">Expires · ${safeExpires}</div>` : ""}
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+
+      <tr>
+        <td style="padding:24px 32px 8px;">
+          <div style="background:rgba(255,237,213,0.06);border-left:2px solid rgba(255,237,213,0.55);border-radius:6px;padding:16px 18px;font-size:13.5px;line-height:1.65;color:#E5C9A8;">${bodyHtml}</div>
+        </td>
+      </tr>
+
+      ${showCta ? `<tr>
+        <td align="center" style="padding:24px 32px 12px;">
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+            <tr>
+              <td align="center" bgcolor="#9B2C5A" style="border-radius:12px;background:#9B2C5A;background-image:linear-gradient(135deg,#5C1230 0%,#9B2C5A 50%,#FFEDD5 110%);box-shadow:0 12px 28px rgba(155,44,90,0.50),inset 0 1px 0 rgba(255,255,255,0.20);">
+                <a href="${safeCtaUrl}" target="_blank" class="qx-cta" style="display:inline-block;padding:16px 36px;font-size:15px;font-weight:700;color:#FFFFFF;text-decoration:none;letter-spacing:0.4px;border-radius:12px;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Roboto,Helvetica,Arial,sans-serif;">${safeCtaLabel} →</a>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>` : ""}
+
+      <tr>
+        <td class="qx-foot-pad" align="center" style="padding:30px 32px 28px;border-top:1px solid rgba(255,255,255,0.05);background:#0E0408;">
+          <div style="font-size:13px;color:#FFEDD5;margin-bottom:6px;font-weight:600;">Trade smart 📈</div>
+          <div style="font-size:11.5px;color:#5C3A4A;line-height:1.7;">© ${year} Qorix Markets · AI-Powered Trading<br/>Need help? <a href="mailto:support@qorixmarkets.com" style="color:#FFEDD5;text-decoration:none;">support@qorixmarkets.com</a></div>
+        </td>
+      </tr>
+
+    </table>
+    <div style="height:24px;line-height:24px;font-size:1px;">&nbsp;</div>
+  </td></tr>
+</table>
+</body></html>`;
+}
+
+// ---------------------------------------------------------------------------
+// #32 — ALERT / WARNING BROADCAST (Important Security Notice)
+// ---------------------------------------------------------------------------
+// INDUSTRIAL-BLACK + HAZARD-AMBER-YELLOW: pitch-black base + bright
+// hazard-amber stripes. Tone: ATTENTION / SAFETY-NOTICE — feels like a
+// caution-tape banner. 32nd unique palette. Distinct from amber-gold (deep
+// navy base), carbon-lime (greener), red-alert (more crimson).
+// Layout: hazard-tape striped top border · hero "IMPORTANT SECURITY NOTICE"
+// pill · title · body · recommended-action callout box · CTA · footer.
+// ---------------------------------------------------------------------------
+export function renderAlertBroadcastHtml(opts: {
+  preheader: string;
+  title: string;
+  bodyHtml: string;
+  recommendedAction: string;
+  ctaLabel?: string;
+  ctaUrl?: string;
+}): string {
+  const { preheader, title, bodyHtml, recommendedAction, ctaLabel, ctaUrl } = opts;
+  const safeTitle = escapeHtml(title);
+  const safeAction = escapeHtml(recommendedAction);
+  const showCta = Boolean(ctaLabel && ctaUrl);
+  const safeCtaLabel = escapeHtml(ctaLabel || "");
+  const safeCtaUrl = ctaUrl || "#";
+  const year = new Date().getFullYear();
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="x-apple-disable-message-reformatting" />
+<meta name="color-scheme" content="dark light" />
+<title>${safeTitle} — Qorix Markets</title>
+<style type="text/css">
+  @media only screen and (max-width:480px) {
+    .qx-outer { padding:20px 10px !important; }
+    .qx-card { border-radius:18px !important; }
+    .qx-hero-pad { padding:6px 18px 22px !important; }
+    .qx-hero-h { font-size:24px !important; line-height:1.22 !important; }
+    .qx-body-pad { padding:24px 18px 4px !important; }
+    .qx-cta { padding:14px 28px !important; font-size:14px !important; }
+    .qx-foot-pad { padding:24px 18px 22px !important; }
+  }
+</style>
+</head>
+<body style="margin:0;padding:0;background:#0A0A0A;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;">
+<div style="display:none;max-height:0;overflow:hidden;font-size:1px;line-height:1px;color:#0A0A0A;opacity:0;">${escapeHtml(preheader)}</div>
+<div style="display:none;max-height:0;overflow:hidden;">&#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847;</div>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="qx-outer" style="background:#0A0A0A;padding:32px 16px;">
+  <tr><td align="center">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="qx-card" style="max-width:560px;background:#15140E;border:1px solid rgba(251,191,36,0.40);border-radius:22px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,0.75);">
+
+        <!-- Hazard tape stripe header -->
+        <tr>
+          <td style="height:14px;line-height:14px;font-size:1px;background:#0A0A0A;background-image:repeating-linear-gradient(135deg,#FBBF24 0,#FBBF24 14px,#0A0A0A 14px,#0A0A0A 28px);">&nbsp;</td>
+        </tr>
+
+      <tr>
+        <td align="left" style="padding:20px 24px 0 28px;background:#0A0A0A;background-image:linear-gradient(135deg,#0A0A0A 0%,#1A1A0A 38%,#78580A 72%,#FBBF24 100%);">
+          <img src="cid:${BRAND_LOGO_CID}" alt="Qorix Markets" width="320" height="217" style="display:block;width:320px;max-width:90%;height:auto;border:0;outline:none;text-decoration:none;margin:0;" />
+        </td>
+      </tr>
+
+      <tr>
+        <td class="qx-hero-pad" align="center" style="padding:8px 32px 28px;background:#0A0A0A;background-image:linear-gradient(135deg,#0A0A0A 0%,#1A1A0A 38%,#78580A 72%,#FBBF24 100%);">
+          <div style="display:inline-block;padding:6px 14px;border-radius:999px;background:rgba(251,191,36,0.25);border:1px solid rgba(251,191,36,0.70);font-size:10.5px;letter-spacing:2.6px;color:#FEF3C7;font-weight:800;text-transform:uppercase;margin-bottom:18px;">
+            ⚠ Important Security Notice
+          </div>
+          <div class="qx-hero-h" style="font-size:30px;line-height:1.18;font-weight:800;color:#FFFFFF;letter-spacing:-0.5px;max-width:480px;margin:0 auto;">
+            ${safeTitle}
+          </div>
+          <div style="width:48px;height:3px;background:linear-gradient(90deg,#FBBF24 0%,#78580A 100%);margin:18px auto 0;border-radius:999px;"></div>
+        </td>
+      </tr>
+
+      <tr>
+        <td class="qx-body-pad" style="padding:30px 32px 8px;">
+          <div style="font-size:10.5px;letter-spacing:2.4px;color:#FEF3C7;font-weight:700;text-transform:uppercase;text-align:left;padding:0 0 14px 0;">
+            What's happening
+          </div>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#1A1709;background-image:linear-gradient(180deg,#221E0E 0%,#15110A 100%);border:1.5px solid rgba(251,191,36,0.45);border-radius:14px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.04),0 0 28px rgba(251,191,36,0.18);">
+            <tr><td style="padding:22px 22px;font-size:14px;color:#FEF3C7;line-height:1.65;font-weight:500;">${bodyHtml}</td></tr>
+          </table>
+        </td>
+      </tr>
+
+      <!-- Recommended action callout -->
+      <tr>
+        <td style="padding:18px 32px 8px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#FBBF24;background-image:linear-gradient(135deg,#FBBF24 0%,#F59E0B 100%);border-radius:12px;box-shadow:0 10px 24px rgba(251,191,36,0.30);">
+            <tr><td style="padding:18px 20px;">
+              <div style="font-size:10.5px;letter-spacing:2.4px;color:#1A1709;font-weight:800;text-transform:uppercase;line-height:1;margin-bottom:6px;">⚡ Recommended Action</div>
+              <div style="font-size:14.5px;color:#0A0A0A;font-weight:700;line-height:1.45;">${safeAction}</div>
+            </td></tr>
+          </table>
+        </td>
+      </tr>
+
+      ${showCta ? `<tr>
+        <td align="center" style="padding:18px 32px 12px;">
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+            <tr>
+              <td align="center" bgcolor="#FBBF24" style="border-radius:12px;background:#0A0A0A;background-image:linear-gradient(135deg,#0A0A0A 0%,#FBBF24 100%);box-shadow:0 12px 28px rgba(251,191,36,0.45),inset 0 1px 0 rgba(255,255,255,0.18);border:1px solid rgba(251,191,36,0.70);">
+                <a href="${safeCtaUrl}" target="_blank" class="qx-cta" style="display:inline-block;padding:16px 36px;font-size:15px;font-weight:700;color:#0A0A0A;text-decoration:none;letter-spacing:0.4px;border-radius:12px;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Roboto,Helvetica,Arial,sans-serif;">${safeCtaLabel} →</a>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>` : ""}
+
+      <tr>
+        <td class="qx-foot-pad" align="center" style="padding:30px 32px 28px;border-top:1px solid rgba(255,255,255,0.05);background:#050505;">
+          <div style="font-size:13px;color:#FEF3C7;margin-bottom:6px;font-weight:600;">Trade smart 📈</div>
+          <div style="font-size:11.5px;color:#4A4530;line-height:1.7;">© ${year} Qorix Markets · AI-Powered Trading<br/>Need help? <a href="mailto:support@qorixmarkets.com" style="color:#FEF3C7;text-decoration:none;">support@qorixmarkets.com</a></div>
+        </td>
+      </tr>
+
+      <!-- Hazard tape stripe footer -->
+      <tr>
+        <td style="height:14px;line-height:14px;font-size:1px;background:#0A0A0A;background-image:repeating-linear-gradient(135deg,#FBBF24 0,#FBBF24 14px,#0A0A0A 14px,#0A0A0A 28px);">&nbsp;</td>
+      </tr>
+
+    </table>
+    <div style="height:24px;line-height:24px;font-size:1px;">&nbsp;</div>
+  </td></tr>
+</table>
+</body></html>`;
+}
+
+// ---------------------------------------------------------------------------
+// #33 — INFO UPDATE BROADCAST (Platform Update)
+// ---------------------------------------------------------------------------
+// COOL-PERIWINKLE + CRISP-SNOW: airy periwinkle blue + crisp white-snow.
+// Tone: CALM / INFORMATIONAL — "FYI, here's what's new." 33rd unique
+// palette. Distinct from sapphire (deeper, with gold), prussian-pearl
+// (greyer), cyan (warmer cyan family).
+// ---------------------------------------------------------------------------
+export function renderInfoUpdateBroadcastHtml(opts: {
+  preheader: string;
+  title: string;
+  bodyHtml: string;
+  ctaLabel?: string;
+  ctaUrl?: string;
+}): string {
+  const { preheader, title, bodyHtml, ctaLabel, ctaUrl } = opts;
+  const safeTitle = escapeHtml(title);
+  const showCta = Boolean(ctaLabel && ctaUrl);
+  const safeCtaLabel = escapeHtml(ctaLabel || "");
+  const safeCtaUrl = ctaUrl || "#";
+  const year = new Date().getFullYear();
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="x-apple-disable-message-reformatting" />
+<meta name="color-scheme" content="dark light" />
+<title>${safeTitle} — Qorix Markets</title>
+<style type="text/css">
+  @media only screen and (max-width:480px) {
+    .qx-outer { padding:20px 10px !important; }
+    .qx-card { border-radius:18px !important; }
+    .qx-hero-pad { padding:6px 18px 22px !important; }
+    .qx-hero-h { font-size:24px !important; line-height:1.22 !important; }
+    .qx-body-pad { padding:24px 18px 4px !important; }
+    .qx-cta { padding:14px 28px !important; font-size:14px !important; }
+    .qx-foot-pad { padding:24px 18px 22px !important; }
+  }
+</style>
+</head>
+<body style="margin:0;padding:0;background:#0C0E1A;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;">
+<div style="display:none;max-height:0;overflow:hidden;font-size:1px;line-height:1px;color:#0C0E1A;opacity:0;">${escapeHtml(preheader)}</div>
+<div style="display:none;max-height:0;overflow:hidden;">&#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847;</div>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="qx-outer" style="background:#0C0E1A;padding:32px 16px;">
+  <tr><td align="center">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="qx-card" style="max-width:560px;background:#161A2E;border:1px solid rgba(199,210,254,0.32);border-radius:22px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,0.65);">
+
+      <tr>
+        <td align="left" style="padding:20px 24px 0 28px;background:#0C0E1A;background-image:linear-gradient(135deg,#0C0E1A 0%,#1E2247 38%,#6366F1 72%,#E0E7FF 100%);">
+          <img src="cid:${BRAND_LOGO_CID}" alt="Qorix Markets" width="320" height="217" style="display:block;width:320px;max-width:90%;height:auto;border:0;outline:none;text-decoration:none;margin:0;" />
+        </td>
+      </tr>
+
+      <tr>
+        <td class="qx-hero-pad" align="center" style="padding:8px 32px 28px;background:#0C0E1A;background-image:linear-gradient(135deg,#0C0E1A 0%,#1E2247 38%,#6366F1 72%,#E0E7FF 100%);">
+          <div style="display:inline-block;padding:6px 14px;border-radius:999px;background:rgba(224,231,255,0.20);border:1px solid rgba(224,231,255,0.55);font-size:10.5px;letter-spacing:2.6px;color:#E0E7FF;font-weight:800;text-transform:uppercase;margin-bottom:18px;">
+            ℹ Platform Update · What's New
+          </div>
+          <div class="qx-hero-h" style="font-size:30px;line-height:1.18;font-weight:800;color:#FFFFFF;letter-spacing:-0.5px;max-width:480px;margin:0 auto;">
+            ${safeTitle}
+          </div>
+          <div style="width:48px;height:3px;background:linear-gradient(90deg,#E0E7FF 0%,#6366F1 100%);margin:18px auto 0;border-radius:999px;"></div>
+        </td>
+      </tr>
+
+      <tr>
+        <td class="qx-body-pad" style="padding:30px 32px 8px;">
+          <div style="font-size:10.5px;letter-spacing:2.4px;color:#A5B4FC;font-weight:700;text-transform:uppercase;text-align:left;padding:0 0 14px 0;">
+            What's New
+          </div>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#FAFAFF;background-image:linear-gradient(180deg,#FFFFFF 0%,#EEF1FF 100%);border:1.5px solid rgba(99,102,241,0.40);border-radius:14px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.60),0 6px 18px rgba(0,0,0,0.35);">
+            <tr><td style="padding:24px 24px 26px;font-size:14px;color:#1E293B;line-height:1.65;font-weight:500;">${bodyHtml}</td></tr>
+          </table>
+        </td>
+      </tr>
+
+      ${showCta ? `<tr>
+        <td align="center" style="padding:24px 32px 12px;">
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+            <tr>
+              <td align="center" bgcolor="#6366F1" style="border-radius:12px;background:#6366F1;background-image:linear-gradient(135deg,#4F46E5 0%,#6366F1 60%,#A5B4FC 100%);box-shadow:0 12px 28px rgba(99,102,241,0.45),inset 0 1px 0 rgba(255,255,255,0.18);">
+                <a href="${safeCtaUrl}" target="_blank" class="qx-cta" style="display:inline-block;padding:16px 36px;font-size:15px;font-weight:700;color:#FFFFFF;text-decoration:none;letter-spacing:0.4px;border-radius:12px;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Roboto,Helvetica,Arial,sans-serif;">${safeCtaLabel} →</a>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>` : ""}
+
+      <tr>
+        <td class="qx-foot-pad" align="center" style="padding:30px 32px 28px;border-top:1px solid rgba(255,255,255,0.05);background:#06070F;">
+          <div style="font-size:13px;color:#E0E7FF;margin-bottom:6px;font-weight:600;">Trade smart 📈</div>
+          <div style="font-size:11.5px;color:#3F4470;line-height:1.7;">© ${year} Qorix Markets · AI-Powered Trading<br/>Need help? <a href="mailto:support@qorixmarkets.com" style="color:#E0E7FF;text-decoration:none;">support@qorixmarkets.com</a></div>
+        </td>
+      </tr>
+
+    </table>
+    <div style="height:24px;line-height:24px;font-size:1px;">&nbsp;</div>
+  </td></tr>
+</table>
+</body></html>`;
+}
+
+// ---------------------------------------------------------------------------
+// #34 — MAINTENANCE BROADCAST
+// ---------------------------------------------------------------------------
+// DARK-OXFORD + ELECTRIC-AQUA-MARINE: deep oxford-navy base + bright
+// electric aqua. Tone: ENGINEERING / SCHEDULED-DOWNTIME / TECHNICAL.
+// 34th unique palette. Distinct from twilight-navy (paired with violet),
+// cyan (warmer), prussian-pearl (paired with pearl) by being THIS specific
+// oxford+aqua combo.
+// Centerpiece: Maintenance-window card with Start → End times prominent.
+// ---------------------------------------------------------------------------
+export function renderMaintenanceBroadcastHtml(opts: {
+  preheader: string;
+  title: string;
+  windowStart: Date;
+  windowEnd: Date;
+  impactedServices: string;
+  bodyHtml: string;
+  statusUrl?: string;
+}): string {
+  const { preheader, title, windowStart, windowEnd, impactedServices, bodyHtml, statusUrl } = opts;
+  const safeTitle = escapeHtml(title);
+  const safeStart = escapeHtml(fmtUtcDateTime(windowStart));
+  const safeEnd = escapeHtml(fmtUtcDateTime(windowEnd));
+  const safeServices = escapeHtml(impactedServices);
+  const showCta = Boolean(statusUrl);
+  const safeStatusUrl = statusUrl || "#";
+  const year = new Date().getFullYear();
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="x-apple-disable-message-reformatting" />
+<meta name="color-scheme" content="dark light" />
+<title>${safeTitle} — Qorix Markets</title>
+<style type="text/css">
+  @media only screen and (max-width:480px) {
+    .qx-outer { padding:20px 10px !important; }
+    .qx-card { border-radius:18px !important; }
+    .qx-hero-pad { padding:6px 18px 22px !important; }
+    .qx-hero-h { font-size:24px !important; line-height:1.22 !important; }
+    .qx-window-pad { padding:24px 18px 4px !important; }
+    .qx-cta { padding:14px 28px !important; font-size:14px !important; }
+    .qx-foot-pad { padding:24px 18px 22px !important; }
+  }
+</style>
+</head>
+<body style="margin:0;padding:0;background:#040814;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;">
+<div style="display:none;max-height:0;overflow:hidden;font-size:1px;line-height:1px;color:#040814;opacity:0;">${escapeHtml(preheader)}</div>
+<div style="display:none;max-height:0;overflow:hidden;">&#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847;</div>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="qx-outer" style="background:#040814;padding:32px 16px;">
+  <tr><td align="center">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="qx-card" style="max-width:560px;background:#0E1428;border:1px solid rgba(94,234,212,0.32);border-radius:22px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,0.75);">
+
+      <tr>
+        <td align="left" style="padding:20px 24px 0 28px;background:#040814;background-image:linear-gradient(135deg,#040814 0%,#0F1A40 38%,#1B7FA0 72%,#5EEAD4 100%);">
+          <img src="cid:${BRAND_LOGO_CID}" alt="Qorix Markets" width="320" height="217" style="display:block;width:320px;max-width:90%;height:auto;border:0;outline:none;text-decoration:none;margin:0;" />
+        </td>
+      </tr>
+
+      <tr>
+        <td class="qx-hero-pad" align="center" style="padding:8px 32px 28px;background:#040814;background-image:linear-gradient(135deg,#040814 0%,#0F1A40 38%,#1B7FA0 72%,#5EEAD4 100%);">
+          <div style="display:inline-block;padding:6px 14px;border-radius:999px;background:rgba(94,234,212,0.20);border:1px solid rgba(94,234,212,0.60);font-size:10.5px;letter-spacing:2.6px;color:#5EEAD4;font-weight:800;text-transform:uppercase;margin-bottom:18px;">
+            🛠 Scheduled Maintenance
+          </div>
+          <div class="qx-hero-h" style="font-size:30px;line-height:1.18;font-weight:800;color:#FFFFFF;letter-spacing:-0.5px;max-width:480px;margin:0 auto;">
+            ${safeTitle}
+          </div>
+          <div style="width:48px;height:3px;background:linear-gradient(90deg,#5EEAD4 0%,#1B7FA0 100%);margin:18px auto 0;border-radius:999px;"></div>
+        </td>
+      </tr>
+
+      <!-- Maintenance window card -->
+      <tr>
+        <td class="qx-window-pad" style="padding:30px 32px 8px;">
+          <div style="font-size:10.5px;letter-spacing:2.4px;color:#5EEAD4;font-weight:700;text-transform:uppercase;text-align:left;padding:0 0 14px 0;">
+            Maintenance Window
+          </div>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#08111F;background-image:linear-gradient(180deg,#0F1A2E 0%,#070D17 100%);border:1.5px solid rgba(94,234,212,0.40);border-radius:14px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.04),0 0 28px rgba(27,127,160,0.25);">
+            <tr>
+              <td style="padding:18px 22px 6px;">
+                <div style="font-size:11px;letter-spacing:1.6px;color:#7DD3C4;text-transform:uppercase;font-weight:600;line-height:1;margin-bottom:6px;">▸ Start</div>
+                <div style="font-size:15px;color:#FFFFFF;font-weight:700;line-height:1.4;font-family:'SF Mono',Menlo,Consolas,monospace;letter-spacing:-0.2px;">${safeStart}</div>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:14px 22px;border-top:1px solid rgba(94,234,212,0.20);">
+                <div style="font-size:11px;letter-spacing:1.6px;color:#7DD3C4;text-transform:uppercase;font-weight:600;line-height:1;margin-bottom:6px;">▸ End</div>
+                <div style="font-size:15px;color:#FFFFFF;font-weight:700;line-height:1.4;font-family:'SF Mono',Menlo,Consolas,monospace;letter-spacing:-0.2px;">${safeEnd}</div>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:14px 22px 22px;border-top:1px solid rgba(94,234,212,0.20);">
+                <div style="font-size:11px;letter-spacing:1.6px;color:#7DD3C4;text-transform:uppercase;font-weight:600;line-height:1;margin-bottom:6px;">▸ Impacted Services</div>
+                <div style="font-size:13.5px;color:#FFFFFF;font-weight:600;line-height:1.5;">${safeServices}</div>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+
+      <tr>
+        <td style="padding:24px 32px 8px;">
+          <div style="background:rgba(94,234,212,0.06);border-left:2px solid rgba(94,234,212,0.55);border-radius:6px;padding:14px 16px;font-size:13px;line-height:1.65;color:#A8C2BF;">${bodyHtml}</div>
+        </td>
+      </tr>
+
+      ${showCta ? `<tr>
+        <td align="center" style="padding:18px 32px 12px;">
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+            <tr>
+              <td align="center" bgcolor="#1B7FA0" style="border-radius:12px;background:#1B7FA0;background-image:linear-gradient(135deg,#0F1A40 0%,#1B7FA0 60%,#5EEAD4 100%);box-shadow:0 12px 28px rgba(27,127,160,0.45),inset 0 1px 0 rgba(255,255,255,0.18);">
+                <a href="${safeStatusUrl}" target="_blank" class="qx-cta" style="display:inline-block;padding:16px 36px;font-size:15px;font-weight:700;color:#FFFFFF;text-decoration:none;letter-spacing:0.4px;border-radius:12px;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Roboto,Helvetica,Arial,sans-serif;">View Status Page →</a>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>` : ""}
+
+      <tr>
+        <td class="qx-foot-pad" align="center" style="padding:30px 32px 28px;border-top:1px solid rgba(255,255,255,0.05);background:#02040C;">
+          <div style="font-size:13px;color:#5EEAD4;margin-bottom:6px;font-weight:600;">Trade smart 📈</div>
+          <div style="font-size:11.5px;color:#2F4B5F;line-height:1.7;">© ${year} Qorix Markets · AI-Powered Trading<br/>Need help? <a href="mailto:support@qorixmarkets.com" style="color:#5EEAD4;text-decoration:none;">support@qorixmarkets.com</a></div>
+        </td>
+      </tr>
+
+    </table>
+    <div style="height:24px;line-height:24px;font-size:1px;">&nbsp;</div>
+  </td></tr>
+</table>
+</body></html>`;
+}
+
+// ---------------------------------------------------------------------------
+// #35 — TRADE ALERT (FOMO) — Profit Just Booked
+// ---------------------------------------------------------------------------
+// JET-BLACK + LAVA-ORANGE + NEON-LIME (DUAL-NEON): pitch-jet base + lava
+// orange + lime-green profit accents. Tone: HOT / VOLCANIC / MONEY-JUST-MADE
+// FOMO. 35th unique palette. Distinct via the DUAL-NEON pairing of orange
+// AND lime together — no other template uses this combo.
+// Centerpiece: BIG +$ profit amount with neon-lime glow on jet.
+// ---------------------------------------------------------------------------
+export function renderTradeAlertFomoBroadcastHtml(opts: {
+  preheader: string;
+  profitAmount: string;
+  pair: string;
+  bodyHtml: string;
+  ctaLabel?: string;
+  ctaUrl?: string;
+}): string {
+  const { preheader, profitAmount, pair, bodyHtml, ctaLabel, ctaUrl } = opts;
+  const safeProfit = escapeHtml(profitAmount);
+  const safePair = escapeHtml(pair);
+  const showCta = Boolean(ctaLabel && ctaUrl);
+  const safeCtaLabel = escapeHtml(ctaLabel || "");
+  const safeCtaUrl = ctaUrl || "#";
+  const year = new Date().getFullYear();
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="x-apple-disable-message-reformatting" />
+<meta name="color-scheme" content="dark light" />
+<title>Trade alert · profit booked — Qorix Markets</title>
+<style type="text/css">
+  @media only screen and (max-width:480px) {
+    .qx-outer { padding:20px 10px !important; }
+    .qx-card { border-radius:18px !important; }
+    .qx-hero-pad { padding:6px 18px 22px !important; }
+    .qx-hero-h { font-size:24px !important; line-height:1.22 !important; }
+    .qx-profit-pad { padding:24px 18px 4px !important; }
+    .qx-profit-num { font-size:46px !important; }
+    .qx-cta { padding:14px 28px !important; font-size:14px !important; }
+    .qx-foot-pad { padding:24px 18px 22px !important; }
+  }
+</style>
+</head>
+<body style="margin:0;padding:0;background:#020202;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;">
+<div style="display:none;max-height:0;overflow:hidden;font-size:1px;line-height:1px;color:#020202;opacity:0;">${escapeHtml(preheader)}</div>
+<div style="display:none;max-height:0;overflow:hidden;">&#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847;</div>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="qx-outer" style="background:#020202;padding:32px 16px;">
+  <tr><td align="center">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="qx-card" style="max-width:560px;background:#0A0A0A;border:1px solid rgba(190,242,100,0.40);border-radius:22px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,0.85);">
+
+      <tr>
+        <td align="left" style="padding:20px 24px 0 28px;background:#020202;background-image:linear-gradient(135deg,#020202 0%,#3D1A05 28%,#EA580C 60%,#BEF264 100%);">
+          <img src="cid:${BRAND_LOGO_CID}" alt="Qorix Markets" width="320" height="217" style="display:block;width:320px;max-width:90%;height:auto;border:0;outline:none;text-decoration:none;margin:0;" />
+        </td>
+      </tr>
+
+      <tr>
+        <td class="qx-hero-pad" align="center" style="padding:8px 32px 28px;background:#020202;background-image:linear-gradient(135deg,#020202 0%,#3D1A05 28%,#EA580C 60%,#BEF264 100%);">
+          <div style="display:inline-block;padding:6px 14px;border-radius:999px;background:rgba(190,242,100,0.25);border:1px solid rgba(190,242,100,0.70);font-size:10.5px;letter-spacing:2.6px;color:#1A1A0A;font-weight:800;text-transform:uppercase;margin-bottom:18px;">
+            🚀 Profit Booked · Trade Alert
+          </div>
+          <div class="qx-hero-h" style="font-size:30px;line-height:1.18;font-weight:800;color:#FFFFFF;letter-spacing:-0.5px;max-width:480px;margin:0 auto;text-shadow:0 2px 12px rgba(0,0,0,0.55);">
+            We Just Closed a Win
+          </div>
+          <div style="width:48px;height:3px;background:linear-gradient(90deg,#EA580C 0%,#BEF264 100%);margin:18px auto 0;border-radius:999px;box-shadow:0 0 12px rgba(190,242,100,0.85);"></div>
+        </td>
+      </tr>
+
+      <!-- Profit centerpiece -->
+      <tr>
+        <td class="qx-profit-pad" align="center" style="padding:34px 24px 4px;">
+          <div style="font-size:10.5px;letter-spacing:2.4px;color:#BEF264;font-weight:800;text-transform:uppercase;text-align:left;padding:0 8px 14px 8px;">
+            Just Booked
+          </div>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+            <tr>
+              <td align="center" style="padding:36px 18px;background:#070707;background-image:linear-gradient(180deg,#0F0F0F 0%,#050505 100%);border:1.5px solid rgba(190,242,100,0.55);border-radius:14px;box-shadow:inset 0 1px 0 rgba(190,242,100,0.10),0 0 36px rgba(190,242,100,0.30),0 0 24px rgba(234,88,12,0.25);">
+
+                <div style="display:inline-block;padding:5px 12px;border-radius:999px;background:rgba(234,88,12,0.20);border:1px solid rgba(234,88,12,0.65);font-size:10px;letter-spacing:2.0px;color:#FBBF24;font-weight:800;text-transform:uppercase;margin-bottom:14px;">${safePair}</div>
+                <div class="qx-profit-num" style="font-size:54px;line-height:1.0;font-weight:900;color:#BEF264;letter-spacing:-1.5px;text-shadow:0 0 20px rgba(190,242,100,0.65),0 0 40px rgba(190,242,100,0.35);">
+                  +${safeProfit}
+                </div>
+                <div style="margin-top:12px;font-size:11.5px;color:#9CA3AF;font-weight:600;line-height:1.5;letter-spacing:1.6px;text-transform:uppercase;">Pure Profit · Booked</div>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+
+      <tr>
+        <td style="padding:24px 32px 8px;">
+          <div style="background:rgba(190,242,100,0.06);border-left:2px solid rgba(190,242,100,0.55);border-radius:6px;padding:14px 16px;font-size:13.5px;line-height:1.65;color:#D4D4D8;">${bodyHtml}</div>
+        </td>
+      </tr>
+
+      ${showCta ? `<tr>
+        <td align="center" style="padding:24px 32px 12px;">
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+            <tr>
+              <td align="center" bgcolor="#EA580C" style="border-radius:12px;background:#EA580C;background-image:linear-gradient(135deg,#EA580C 0%,#FB923C 60%,#BEF264 110%);box-shadow:0 12px 32px rgba(234,88,12,0.55),0 0 24px rgba(190,242,100,0.30),inset 0 1px 0 rgba(255,255,255,0.20);">
+                <a href="${safeCtaUrl}" target="_blank" class="qx-cta" style="display:inline-block;padding:16px 36px;font-size:15px;font-weight:800;color:#0A0A0A;text-decoration:none;letter-spacing:0.4px;border-radius:12px;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Roboto,Helvetica,Arial,sans-serif;">${safeCtaLabel} →</a>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>` : ""}
+
+      <tr>
+        <td class="qx-foot-pad" align="center" style="padding:30px 32px 28px;border-top:1px solid rgba(255,255,255,0.05);background:#000000;">
+          <div style="font-size:13px;color:#BEF264;margin-bottom:6px;font-weight:600;">Trade smart 📈</div>
+          <div style="font-size:11.5px;color:#3F3F46;line-height:1.7;">© ${year} Qorix Markets · AI-Powered Trading<br/>Need help? <a href="mailto:support@qorixmarkets.com" style="color:#BEF264;text-decoration:none;">support@qorixmarkets.com</a></div>
+        </td>
+      </tr>
+
+    </table>
+    <div style="height:24px;line-height:24px;font-size:1px;">&nbsp;</div>
+  </td></tr>
+</table>
+</body></html>`;
+}
+
+// ---------------------------------------------------------------------------
+// #36 — NEXT TRADE FOMO (COUNTDOWN)
+// ---------------------------------------------------------------------------
+// COSMIC-VIOLET-NIGHT + AURORA-CYAN-PINK: deep cosmic-violet base + aurora
+// gradient (cyan→pink). Tone: ANTICIPATION / COUNTDOWN / "SET YOUR ALARM".
+// 36th unique palette. Distinct from holographic (#28 violet+cyan, no
+// pink) and midnight-indigo+violet (no aurora gradient) by adding the
+// pink-magenta into the aurora alongside cyan + violet.
+// Centerpiece: countdown card with the absolute trade-time prominent.
+// ---------------------------------------------------------------------------
+export function renderNextTradeFomoBroadcastHtml(opts: {
+  preheader: string;
+  nextTradeAt: Date;
+  pair?: string;
+  bodyHtml: string;
+  ctaLabel?: string;
+  ctaUrl?: string;
+}): string {
+  const { preheader, nextTradeAt, pair, bodyHtml, ctaLabel, ctaUrl } = opts;
+  const safeWhen = escapeHtml(fmtUtcDateTime(nextTradeAt));
+  const safePair = pair ? escapeHtml(pair) : "";
+  const showCta = Boolean(ctaLabel && ctaUrl);
+  const safeCtaLabel = escapeHtml(ctaLabel || "");
+  const safeCtaUrl = ctaUrl || "#";
+  const year = new Date().getFullYear();
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="x-apple-disable-message-reformatting" />
+<meta name="color-scheme" content="dark light" />
+<title>Next trade countdown — Qorix Markets</title>
+<style type="text/css">
+  @media only screen and (max-width:480px) {
+    .qx-outer { padding:20px 10px !important; }
+    .qx-card { border-radius:18px !important; }
+    .qx-hero-pad { padding:6px 18px 22px !important; }
+    .qx-hero-h { font-size:24px !important; line-height:1.22 !important; }
+    .qx-cd-pad { padding:24px 18px 4px !important; }
+    .qx-cd-time { font-size:24px !important; }
+    .qx-cta { padding:14px 28px !important; font-size:14px !important; }
+    .qx-foot-pad { padding:24px 18px 22px !important; }
+  }
+</style>
+</head>
+<body style="margin:0;padding:0;background:#0A0518;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;">
+<div style="display:none;max-height:0;overflow:hidden;font-size:1px;line-height:1px;color:#0A0518;opacity:0;">${escapeHtml(preheader)}</div>
+<div style="display:none;max-height:0;overflow:hidden;">&#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847;</div>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="qx-outer" style="background:#0A0518;padding:32px 16px;">
+  <tr><td align="center">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="qx-card" style="max-width:560px;background:#150A2A;border:1px solid rgba(244,114,182,0.35);border-radius:22px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,0.80);">
+
+      <tr>
+        <td align="left" style="padding:20px 24px 0 28px;background:#0A0518;background-image:linear-gradient(135deg,#0A0518 0%,#3B0A5C 28%,#06B6D4 62%,#F472B6 100%);">
+          <img src="cid:${BRAND_LOGO_CID}" alt="Qorix Markets" width="320" height="217" style="display:block;width:320px;max-width:90%;height:auto;border:0;outline:none;text-decoration:none;margin:0;" />
+        </td>
+      </tr>
+
+      <tr>
+        <td class="qx-hero-pad" align="center" style="padding:8px 32px 28px;background:#0A0518;background-image:linear-gradient(135deg,#0A0518 0%,#3B0A5C 28%,#06B6D4 62%,#F472B6 100%);">
+          <div style="display:inline-block;padding:6px 14px;border-radius:999px;background:rgba(244,114,182,0.22);border:1px solid rgba(244,114,182,0.65);font-size:10.5px;letter-spacing:2.6px;color:#FBCFE8;font-weight:800;text-transform:uppercase;margin-bottom:18px;">
+            ⏰ Next Trade Countdown · Don't Miss
+          </div>
+          <div class="qx-hero-h" style="font-size:30px;line-height:1.18;font-weight:800;color:#FFFFFF;letter-spacing:-0.5px;max-width:480px;margin:0 auto;text-shadow:0 2px 12px rgba(0,0,0,0.45);">
+            The Next Move Is Loading
+          </div>
+          <div style="width:48px;height:3px;background:linear-gradient(90deg,#06B6D4 0%,#F472B6 100%);margin:18px auto 0;border-radius:999px;box-shadow:0 0 14px rgba(244,114,182,0.65);"></div>
+        </td>
+      </tr>
+
+      <!-- Countdown card -->
+      <tr>
+        <td class="qx-cd-pad" align="center" style="padding:30px 24px 4px;">
+          <div style="font-size:10.5px;letter-spacing:2.4px;color:#FBCFE8;font-weight:800;text-transform:uppercase;text-align:left;padding:0 8px 14px 8px;">
+            Trade Goes Live
+          </div>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+            <tr>
+              <td align="center" style="padding:36px 18px;background:#0E0420;background-image:linear-gradient(180deg,#1A0A30 0%,#0A0518 100%);border:1.5px solid rgba(244,114,182,0.50);border-radius:14px;box-shadow:inset 0 1px 0 rgba(244,114,182,0.10),0 0 32px rgba(168,85,247,0.30),0 0 24px rgba(6,182,212,0.20);">
+
+                ${pair ? `<div style="display:inline-block;padding:5px 12px;border-radius:999px;background:rgba(6,182,212,0.20);border:1px solid rgba(6,182,212,0.65);font-size:10px;letter-spacing:2.0px;color:#A5F3FC;font-weight:800;text-transform:uppercase;margin-bottom:14px;">${safePair}</div>` : ""}
+                <!-- Big absolute time -->
+                <div class="qx-cd-time" style="font-size:30px;line-height:1.1;font-weight:900;color:#FFFFFF;letter-spacing:-0.4px;font-family:'SF Mono',Menlo,Consolas,monospace;text-shadow:0 0 18px rgba(244,114,182,0.45),0 0 28px rgba(6,182,212,0.35);">
+                  ${safeWhen}
+                </div>
+                <div style="margin-top:14px;font-size:11.5px;color:#C4B5FD;font-weight:600;line-height:1.5;letter-spacing:1.6px;text-transform:uppercase;">Set your alarm · Be ready</div>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+
+      <tr>
+        <td style="padding:24px 32px 8px;">
+          <div style="background:rgba(244,114,182,0.06);border-left:2px solid rgba(244,114,182,0.55);border-radius:6px;padding:14px 16px;font-size:13.5px;line-height:1.65;color:#D8B4FE;">${bodyHtml}</div>
+        </td>
+      </tr>
+
+      ${showCta ? `<tr>
+        <td align="center" style="padding:24px 32px 12px;">
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+            <tr>
+              <td align="center" bgcolor="#A855F7" style="border-radius:12px;background:#A855F7;background-image:linear-gradient(135deg,#06B6D4 0%,#A855F7 60%,#F472B6 110%);box-shadow:0 12px 32px rgba(168,85,247,0.55),0 0 24px rgba(244,114,182,0.30),inset 0 1px 0 rgba(255,255,255,0.20);">
+                <a href="${safeCtaUrl}" target="_blank" class="qx-cta" style="display:inline-block;padding:16px 36px;font-size:15px;font-weight:800;color:#FFFFFF;text-decoration:none;letter-spacing:0.4px;border-radius:12px;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Roboto,Helvetica,Arial,sans-serif;">${safeCtaLabel} →</a>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>` : ""}
+
+      <tr>
+        <td class="qx-foot-pad" align="center" style="padding:30px 32px 28px;border-top:1px solid rgba(255,255,255,0.05);background:#06030F;">
+          <div style="font-size:13px;color:#FBCFE8;margin-bottom:6px;font-weight:600;">Trade smart 📈</div>
+          <div style="font-size:11.5px;color:#4A2F5F;line-height:1.7;">© ${year} Qorix Markets · AI-Powered Trading<br/>Need help? <a href="mailto:support@qorixmarkets.com" style="color:#FBCFE8;text-decoration:none;">support@qorixmarkets.com</a></div>
+        </td>
+      </tr>
+
+    </table>
+    <div style="height:24px;line-height:24px;font-size:1px;">&nbsp;</div>
+  </td></tr>
+</table>
+</body></html>`;
+}
