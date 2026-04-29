@@ -1,7 +1,7 @@
 import type { Request } from "express";
 import { db, userDevicesTable, usersTable } from "@workspace/db";
 import { and, eq, sql } from "drizzle-orm";
-import { computeDeviceFingerprint, describeDevice } from "../middlewares/auth.js";
+import { computeDeviceFingerprint, describeDevice, pickRicherLabel } from "../middlewares/auth.js";
 import { lookupGeo } from "./geo-ip.js";
 import { sendNewDeviceLoginAlert } from "./email-service.js";
 import { logger } from "./logger.js";
@@ -99,6 +99,19 @@ async function trackLoginDeviceImpl(
     // (a Chrome 120 row inserted last week becomes "Chrome 121" the moment
     // the user logs in again from the upgraded browser). Also self-heals
     // older rows that were inserted with the legacy regex parser.
+    //
+    // CRITICAL: use `pickRicherLabel(stored, fresh)` rather than blindly
+    // overwriting. After Batch 2 the stored label may be hint-derived
+    // ("Android 14.4.1") and MORE precise than the current request can
+    // produce — this happens when the UA-CH `Critical-CH` retry didn't
+    // fire on this particular request (cold session, race, browser quirk).
+    // Without `pickRicherLabel`, that one degraded write would permanently
+    // downgrade the row to "Android 10" until the next hint-enabled login
+    // — and the read-side `pickRicherLabel` in routes/fraud.ts couldn't
+    // recover, because both stored and fresh would now be the same coarse
+    // value. Guarding the WRITE keeps `user_devices` a high-water mark.
+    const richBrowser = pickRicherLabel(existing[0]!.browserLabel, browser);
+    const richOs = pickRicherLabel(existing[0]!.osLabel, os);
     const geo = await lookupGeo(ip);
     await db
       .update(userDevicesTable)
@@ -107,8 +120,8 @@ async function trackLoginDeviceImpl(
         lastSeenIp: ip || null,
         lastCity: geo.city,
         lastCountry: geo.country,
-        browserLabel: browser.slice(0, 80),
-        osLabel: os.slice(0, 80),
+        browserLabel: richBrowser?.slice(0, 80) ?? null,
+        osLabel: richOs?.slice(0, 80) ?? null,
         // Keep the stored UA in sync too — useful for the lazy re-parse path
         // in routes/fraud.ts (re-parsing yields fresh device model / version
         // even on rows from before this code shipped).

@@ -1,9 +1,15 @@
 import { notifyMaintenance } from "./maintenance-state";
+import { DEVICE_ID_HEADER, getOrCreateDeviceId } from "./device-id";
 
 export async function authFetch<T = any>(url: string, init?: RequestInit): Promise<T> {
   const token = localStorage.getItem("qorix_token");
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
+    // Stable per-browser device identity for the security stack — the
+    // server prefers this over hash(UA + IP) so a browser that roams
+    // networks isn't false-flagged as a new device. See lib/device-id.ts
+    // for the full rationale and the storage / fallback semantics.
+    [DEVICE_ID_HEADER]: getOrCreateDeviceId(),
     ...((init?.headers as Record<string, string>) ?? {}),
   };
   if (token) headers.Authorization = `Bearer ${token}`;
