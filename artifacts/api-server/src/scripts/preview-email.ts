@@ -10,7 +10,12 @@
  *   pnpm --filter @workspace/api-server exec tsx src/scripts/preview-email.ts verify-otp
  *   pnpm --filter @workspace/api-server exec tsx src/scripts/preview-email.ts verify-otp other@email.com
  */
-import { sendEmail, renderVerifyEmailOtpHtml } from "../lib/email-service";
+import {
+  sendEmail,
+  renderVerifyEmailOtpHtml,
+  renderWithdrawalOtpHtml,
+  renderDeviceLoginOtpHtml,
+} from "../lib/email-service";
 
 const DEFAULT_TO = "looxprem@gmail.com";
 const FAKE_OTP = "012345"; // Visually obvious it's a preview, not a real code.
@@ -36,9 +41,45 @@ const TEMPLATES: Record<string, () => Preview> = {
       }),
     };
   },
+  "withdraw-otp": () => {
+    const intro =
+      "You're confirming a withdrawal request. Use the code below to authorize and complete this transaction.";
+    return {
+      subject: "[PREVIEW] Qorix Markets — Withdrawal Confirmation (new design)",
+      text:
+        `[DESIGN PREVIEW — not a real code]\n\n` +
+        `Your Withdrawal Confirmation code is: ${FAKE_OTP}\n\n` +
+        `This is a test render of the new amber-gold "vault" template.\n` +
+        `Reply with feedback.\n\n` +
+        `— Qorix Markets`,
+      html: renderWithdrawalOtpHtml({
+        preheader: `[PREVIEW] Withdrawal confirmation code: ${FAKE_OTP} (design test)`,
+        intro,
+        otp: FAKE_OTP,
+      }),
+    };
+  },
+
+  "device-otp": () => {
+    const intro =
+      "A new device is trying to sign in to your Qorix Markets account. If this was you, use the code below to approve the login. If not, ignore this email and change your password immediately.";
+    return {
+      subject: "[PREVIEW] Qorix Markets — New Device Login (new design)",
+      text:
+        `[DESIGN PREVIEW — not a real code]\n\n` +
+        `Your New Device Login code is: ${FAKE_OTP}\n\n` +
+        `This is a test render of the new sapphire-blue "shield" template.\n` +
+        `Reply with feedback.\n\n` +
+        `— Qorix Markets`,
+      html: renderDeviceLoginOtpHtml({
+        preheader: `[PREVIEW] New device sign-in code: ${FAKE_OTP} (design test)`,
+        intro,
+        otp: FAKE_OTP,
+      }),
+    };
+  },
+
   // Future templates go here:
-  //   "withdraw-otp": () => ({ ... }),
-  //   "device-otp":   () => ({ ... }),
   //   "deposit-confirm": () => ({ ... }),
   //   ...
 };

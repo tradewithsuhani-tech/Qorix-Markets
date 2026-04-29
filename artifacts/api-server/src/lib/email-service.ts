@@ -286,10 +286,361 @@ export function renderVerifyEmailOtpHtml(opts: {
 }
 
 // ---------------------------------------------------------------------------
-// Generic OTP template — currently still used for withdrawal_confirm and
-// device_login_approval. Each will get its own unique design as the redesign
-// rolls out (see roadmap in email-service.ts dispatcher in sendOtp).
-// Uses table-based layout for maximum email-client compatibility.
+// Withdrawal-Confirm OTP — UNIQUE amber/gold "vault" security design.
+// Used only for purpose === "withdrawal_confirm". Warm amber palette
+// signals value + caution (different from welcome cyan / device sapphire).
+//
+// Visual differentiators:
+//   • amber/gold palette + warm glow
+//   • "Secure withdrawal" hero pill with vault emoji
+//   • Premium copyable OTP code block with amber gradient border
+//   • 3-checkpoint verification strip (Identity ✓ / Device ✓ / Final code →)
+//   • AMBER (not teal) security warning — more serious than welcome flow
+//   • "Stay safe, trader 🔒" footer sign-off
+// ---------------------------------------------------------------------------
+export function renderWithdrawalOtpHtml(opts: {
+  preheader: string;
+  intro: string;
+  otp: string;
+}): string {
+  const { preheader, intro, otp } = opts;
+  const year = new Date().getFullYear();
+  const safeIntro = escapeHtml(intro);
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="x-apple-disable-message-reformatting" />
+<meta name="color-scheme" content="dark light" />
+<meta name="supported-color-schemes" content="dark light" />
+<title>Confirm your Qorix Markets withdrawal</title>
+<style type="text/css">
+  @media only screen and (max-width:480px) {
+    .qx-outer { padding:20px 10px !important; }
+    .qx-card { border-radius:18px !important; }
+    .qx-hero-pad { padding:6px 18px 22px !important; }
+    .qx-hero-h { font-size:23px !important; line-height:1.25 !important; }
+    .qx-otp-text { font-size:28px !important; letter-spacing:8px !important; }
+    .qx-otp-cell { padding:16px 22px !important; }
+    .qx-intro { padding:24px 22px 4px !important; font-size:14px !important; }
+    .qx-step-pad { padding:24px 14px 4px !important; }
+    .qx-foot-pad { padding:24px 18px 22px !important; }
+  }
+</style>
+</head>
+<body style="margin:0;padding:0;background:#04080F;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;">
+<div style="display:none;max-height:0;overflow:hidden;font-size:1px;line-height:1px;color:#04080F;opacity:0;">${escapeHtml(preheader)}</div>
+<div style="display:none;max-height:0;overflow:hidden;">&#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847;</div>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="qx-outer" style="background:#04080F;padding:32px 16px;">
+  <tr>
+    <td align="center">
+
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="qx-card" style="max-width:560px;background:#0E0A06;border:1px solid rgba(245,158,11,0.28);border-radius:22px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,0.55);">
+
+        <!-- LOGO BAR — amber/gold gradient (unique to withdrawal) -->
+        <tr>
+          <td align="left" style="padding:20px 24px 0 28px;background:#04080F;background-image:linear-gradient(135deg,#04080F 0%,#1A0F02 45%,#3A1F02 80%,#5C2D02 100%);">
+            <img src="cid:${BRAND_LOGO_CID}" alt="Qorix Markets" width="260" height="176" style="display:block;width:260px;max-width:78%;height:auto;border:0;outline:none;text-decoration:none;margin:0;" />
+          </td>
+        </tr>
+
+        <!-- HERO — secure pill + headline + thin amber divider -->
+        <tr>
+          <td class="qx-hero-pad" align="center" style="padding:8px 32px 28px;background:#04080F;background-image:linear-gradient(135deg,#04080F 0%,#1A0F02 45%,#3A1F02 80%,#5C2D02 100%);">
+            <div style="display:inline-block;padding:6px 14px;border-radius:999px;background:rgba(245,158,11,0.14);border:1px solid rgba(245,158,11,0.45);font-size:10.5px;letter-spacing:2.4px;color:#FCD34D;font-weight:700;text-transform:uppercase;margin-bottom:18px;">
+              🔐 Secure withdrawal
+            </div>
+            <div class="qx-hero-h" style="font-size:28px;line-height:1.22;font-weight:800;color:#FFFFFF;letter-spacing:-0.4px;max-width:420px;margin:0 auto;">
+              Confirm your withdrawal
+            </div>
+            <div style="width:48px;height:3px;background:linear-gradient(90deg,#F59E0B 0%,#D97706 100%);margin:18px auto 0;border-radius:999px;"></div>
+          </td>
+        </tr>
+
+        <!-- INTRO COPY -->
+        <tr>
+          <td class="qx-intro" align="center" style="padding:30px 36px 8px;color:#94A3B8;font-size:14.5px;line-height:1.7;">
+            ${safeIntro}
+          </td>
+        </tr>
+
+        <!-- OTP — amber-gold premium code block -->
+        <tr>
+          <td align="center" style="padding:24px 12px 4px;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto;">
+              <tr>
+                <td class="qx-otp-cell" align="center" style="padding:18px 36px;background:#1A0F02;background-image:linear-gradient(180deg,#1A0F02 0%,#0E0A06 100%);border:1.5px solid rgba(245,158,11,0.5);border-radius:14px;box-shadow:0 0 28px rgba(245,158,11,0.25),inset 0 1px 0 rgba(255,255,255,0.05);">
+                  <span class="qx-otp-text" style="font-family:'SF Mono','Menlo','Consolas','Courier New',monospace;font-size:34px;letter-spacing:10px;color:#FCD34D;font-weight:800;-webkit-user-select:all;-moz-user-select:all;user-select:all;line-height:1.1;text-shadow:0 0 14px rgba(245,158,11,0.5);">${escapeHtml(otp)}</span>
+                </td>
+              </tr>
+            </table>
+            <div style="margin-top:14px;font-size:10.5px;color:#78716C;letter-spacing:1.8px;text-transform:uppercase;font-weight:600;">
+              Expires in 10 minutes &nbsp;·&nbsp; Single use
+            </div>
+          </td>
+        </tr>
+
+        <!-- VERIFICATION CHECKPOINTS — Identity ✓ / Device ✓ / Code (active) -->
+        <tr>
+          <td class="qx-step-pad" style="padding:36px 28px 8px;">
+            <div style="text-align:center;font-size:11px;letter-spacing:2.4px;color:#FCD34D;text-transform:uppercase;font-weight:700;margin-bottom:20px;">
+              Verification checkpoints
+            </div>
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:440px;margin:0 auto;">
+              <tr>
+                <td width="46" align="center" valign="middle">
+                  <div style="width:42px;height:42px;line-height:38px;border-radius:999px;background:#0E0A06;color:#34D399;font-size:18px;font-weight:800;text-align:center;border:2px solid rgba(52,211,153,0.55);box-shadow:0 0 14px rgba(52,211,153,0.30);">&#10003;</div>
+                </td>
+                <td valign="middle" style="height:42px;padding:0 6px;">
+                  <div style="height:2px;background-image:linear-gradient(90deg,rgba(52,211,153,0.45) 0%,rgba(52,211,153,0.30) 100%);background-color:rgba(52,211,153,0.30);border-radius:2px;line-height:2px;font-size:0;">&nbsp;</div>
+                </td>
+                <td width="46" align="center" valign="middle">
+                  <div style="width:42px;height:42px;line-height:38px;border-radius:999px;background:#0E0A06;color:#34D399;font-size:18px;font-weight:800;text-align:center;border:2px solid rgba(52,211,153,0.55);box-shadow:0 0 14px rgba(52,211,153,0.30);">&#10003;</div>
+                </td>
+                <td valign="middle" style="height:42px;padding:0 6px;">
+                  <div style="height:2px;background-image:linear-gradient(90deg,rgba(52,211,153,0.30) 0%,rgba(245,158,11,0.55) 100%);background-color:rgba(245,158,11,0.32);border-radius:2px;line-height:2px;font-size:0;">&nbsp;</div>
+                </td>
+                <td width="46" align="center" valign="middle">
+                  <div style="width:42px;height:42px;line-height:38px;border-radius:999px;background-image:linear-gradient(135deg,#F59E0B 0%,#D97706 100%);background-color:#F59E0B;color:#1A0F02;font-size:15px;font-weight:800;text-align:center;border:2px solid rgba(252,211,77,0.5);box-shadow:0 0 22px rgba(245,158,11,0.6),inset 0 1px 0 rgba(255,255,255,0.35);">3</div>
+                </td>
+              </tr>
+              <tr>
+                <td align="center" style="padding-top:12px;">
+                  <div style="font-size:12.5px;font-weight:700;color:#FFFFFF;letter-spacing:0.2px;">Identity</div>
+                  <div style="font-size:10.5px;color:#78716C;line-height:1.5;margin-top:2px;">verified</div>
+                </td>
+                <td>&nbsp;</td>
+                <td align="center" style="padding-top:12px;">
+                  <div style="font-size:12.5px;font-weight:700;color:#FFFFFF;letter-spacing:0.2px;">Device</div>
+                  <div style="font-size:10.5px;color:#78716C;line-height:1.5;margin-top:2px;">trusted</div>
+                </td>
+                <td>&nbsp;</td>
+                <td align="center" style="padding-top:12px;">
+                  <div style="font-size:12.5px;font-weight:700;color:#FFFFFF;letter-spacing:0.2px;">Final code</div>
+                  <div style="font-size:10.5px;color:#FCD34D;line-height:1.5;margin-top:2px;">enter above</div>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- SECURITY WARNING — amber-bordered (more serious than welcome flow) -->
+        <tr>
+          <td style="padding:28px 32px 8px;">
+            <div style="background:rgba(245,158,11,0.06);border-left:3px solid rgba(245,158,11,0.7);border-radius:6px;padding:14px 16px;font-size:12.5px;line-height:1.6;color:#94A3B8;">
+              <strong style="color:#FCD34D;">Didn't request this withdrawal?</strong><br/>
+              Do <strong style="color:#FFFFFF;">not</strong> share this code. Lock your account immediately and contact <a href="mailto:support@qorixmarkets.com" style="color:#FCD34D;text-decoration:none;">support@qorixmarkets.com</a>. Qorix staff will <strong style="color:#FFFFFF;">never</strong> ask for this code.
+            </div>
+          </td>
+        </tr>
+
+        <!-- FOOTER -->
+        <tr>
+          <td class="qx-foot-pad" align="center" style="padding:30px 32px 28px;border-top:1px solid rgba(255,255,255,0.05);background:#040810;">
+            <div style="font-size:13px;color:#CBD5E1;margin-bottom:6px;font-weight:600;">
+              Stay safe, trader 🔒
+            </div>
+            <div style="font-size:11.5px;color:#475569;line-height:1.7;">
+              © ${year} Qorix Markets · AI-Powered Trading<br/>
+              Need help? <a href="mailto:support@qorixmarkets.com" style="color:#FCD34D;text-decoration:none;">support@qorixmarkets.com</a>
+            </div>
+          </td>
+        </tr>
+
+      </table>
+
+      <!-- Outer spacing -->
+      <div style="height:24px;line-height:24px;font-size:1px;">&nbsp;</div>
+    </td>
+  </tr>
+</table>
+</body>
+</html>`;
+}
+
+// ---------------------------------------------------------------------------
+// Device-Login-Approval OTP — UNIQUE sapphire/electric-blue "shield" design.
+// Used only for purpose === "device_login_approval". Cool-blue palette
+// signals identity / security / device-trust (different from amber vault).
+//
+// Visual differentiators:
+//   • sapphire/electric-blue palette + cool glow
+//   • "New sign-in detected" hero pill with shield emoji
+//   • Premium copyable OTP code block with sapphire gradient border
+//   • 3-step approval timeline (Detected → Verify → Approve)
+//   • RED-tinted "not you?" reject CTA — strongest warning of all OTP types
+//   • "Account safety matters 🛡️" footer
+// ---------------------------------------------------------------------------
+export function renderDeviceLoginOtpHtml(opts: {
+  preheader: string;
+  intro: string;
+  otp: string;
+}): string {
+  const { preheader, intro, otp } = opts;
+  const year = new Date().getFullYear();
+  const safeIntro = escapeHtml(intro);
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="x-apple-disable-message-reformatting" />
+<meta name="color-scheme" content="dark light" />
+<meta name="supported-color-schemes" content="dark light" />
+<title>Approve new device sign-in — Qorix Markets</title>
+<style type="text/css">
+  @media only screen and (max-width:480px) {
+    .qx-outer { padding:20px 10px !important; }
+    .qx-card { border-radius:18px !important; }
+    .qx-hero-pad { padding:6px 18px 22px !important; }
+    .qx-hero-h { font-size:23px !important; line-height:1.25 !important; }
+    .qx-otp-text { font-size:28px !important; letter-spacing:8px !important; }
+    .qx-otp-cell { padding:16px 22px !important; }
+    .qx-intro { padding:24px 22px 4px !important; font-size:14px !important; }
+    .qx-step-pad { padding:24px 14px 4px !important; }
+    .qx-foot-pad { padding:24px 18px 22px !important; }
+  }
+</style>
+</head>
+<body style="margin:0;padding:0;background:#04080F;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;">
+<div style="display:none;max-height:0;overflow:hidden;font-size:1px;line-height:1px;color:#04080F;opacity:0;">${escapeHtml(preheader)}</div>
+<div style="display:none;max-height:0;overflow:hidden;">&#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847;</div>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="qx-outer" style="background:#04080F;padding:32px 16px;">
+  <tr>
+    <td align="center">
+
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="qx-card" style="max-width:560px;background:#070C1A;border:1px solid rgba(59,130,246,0.30);border-radius:22px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,0.55);">
+
+        <!-- LOGO BAR — sapphire/electric-blue gradient (unique to device-login) -->
+        <tr>
+          <td align="left" style="padding:20px 24px 0 28px;background:#04080F;background-image:linear-gradient(135deg,#04080F 0%,#0A1228 45%,#102045 80%,#1E3A8A 100%);">
+            <img src="cid:${BRAND_LOGO_CID}" alt="Qorix Markets" width="260" height="176" style="display:block;width:260px;max-width:78%;height:auto;border:0;outline:none;text-decoration:none;margin:0;" />
+          </td>
+        </tr>
+
+        <!-- HERO — shield pill + headline + sapphire divider -->
+        <tr>
+          <td class="qx-hero-pad" align="center" style="padding:8px 32px 28px;background:#04080F;background-image:linear-gradient(135deg,#04080F 0%,#0A1228 45%,#102045 80%,#1E3A8A 100%);">
+            <div style="display:inline-block;padding:6px 14px;border-radius:999px;background:rgba(59,130,246,0.16);border:1px solid rgba(59,130,246,0.5);font-size:10.5px;letter-spacing:2.4px;color:#93C5FD;font-weight:700;text-transform:uppercase;margin-bottom:18px;">
+              🛡️ New sign-in detected
+            </div>
+            <div class="qx-hero-h" style="font-size:28px;line-height:1.22;font-weight:800;color:#FFFFFF;letter-spacing:-0.4px;max-width:420px;margin:0 auto;">
+              Approve this device
+            </div>
+            <div style="width:48px;height:3px;background:linear-gradient(90deg,#3B82F6 0%,#1D4ED8 100%);margin:18px auto 0;border-radius:999px;"></div>
+          </td>
+        </tr>
+
+        <!-- INTRO COPY -->
+        <tr>
+          <td class="qx-intro" align="center" style="padding:30px 36px 8px;color:#94A3B8;font-size:14.5px;line-height:1.7;">
+            ${safeIntro}
+          </td>
+        </tr>
+
+        <!-- OTP — sapphire premium code block -->
+        <tr>
+          <td align="center" style="padding:24px 12px 4px;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto;">
+              <tr>
+                <td class="qx-otp-cell" align="center" style="padding:18px 36px;background:#0A1228;background-image:linear-gradient(180deg,#0A1228 0%,#070C1A 100%);border:1.5px solid rgba(59,130,246,0.5);border-radius:14px;box-shadow:0 0 28px rgba(59,130,246,0.28),inset 0 1px 0 rgba(255,255,255,0.05);">
+                  <span class="qx-otp-text" style="font-family:'SF Mono','Menlo','Consolas','Courier New',monospace;font-size:34px;letter-spacing:10px;color:#93C5FD;font-weight:800;-webkit-user-select:all;-moz-user-select:all;user-select:all;line-height:1.1;text-shadow:0 0 14px rgba(59,130,246,0.55);">${escapeHtml(otp)}</span>
+                </td>
+              </tr>
+            </table>
+            <div style="margin-top:14px;font-size:10.5px;color:#64748B;letter-spacing:1.8px;text-transform:uppercase;font-weight:600;">
+              Expires in 10 minutes &nbsp;·&nbsp; Single use
+            </div>
+          </td>
+        </tr>
+
+        <!-- APPROVAL TIMELINE — Detected → Verify → Approve -->
+        <tr>
+          <td class="qx-step-pad" style="padding:36px 28px 8px;">
+            <div style="text-align:center;font-size:11px;letter-spacing:2.4px;color:#93C5FD;text-transform:uppercase;font-weight:700;margin-bottom:20px;">
+              Approval flow
+            </div>
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:440px;margin:0 auto;">
+              <tr>
+                <td width="46" align="center" valign="middle">
+                  <div style="width:42px;height:42px;line-height:38px;border-radius:999px;background:#0A1228;color:#93C5FD;font-size:18px;font-weight:800;text-align:center;border:2px solid rgba(59,130,246,0.55);box-shadow:0 0 14px rgba(59,130,246,0.28);">&#128269;</div>
+                </td>
+                <td valign="middle" style="height:42px;padding:0 6px;">
+                  <div style="height:2px;background-image:linear-gradient(90deg,rgba(59,130,246,0.30) 0%,rgba(59,130,246,0.55) 100%);background-color:rgba(59,130,246,0.40);border-radius:2px;line-height:2px;font-size:0;">&nbsp;</div>
+                </td>
+                <td width="46" align="center" valign="middle">
+                  <div style="width:42px;height:42px;line-height:38px;border-radius:999px;background-image:linear-gradient(135deg,#3B82F6 0%,#1D4ED8 100%);background-color:#3B82F6;color:#04080F;font-size:15px;font-weight:800;text-align:center;border:2px solid rgba(147,197,253,0.5);box-shadow:0 0 22px rgba(59,130,246,0.6),inset 0 1px 0 rgba(255,255,255,0.35);">2</div>
+                </td>
+                <td valign="middle" style="height:42px;padding:0 6px;">
+                  <div style="height:2px;background-image:linear-gradient(90deg,rgba(59,130,246,0.30) 0%,rgba(59,130,246,0.18) 100%);background-color:rgba(59,130,246,0.20);border-radius:2px;line-height:2px;font-size:0;">&nbsp;</div>
+                </td>
+                <td width="46" align="center" valign="middle">
+                  <div style="width:42px;height:42px;line-height:38px;border-radius:999px;background:#0A1228;color:#93C5FD;font-size:18px;font-weight:800;text-align:center;border:2px solid rgba(59,130,246,0.45);box-shadow:0 0 12px rgba(59,130,246,0.18);">&#10003;</div>
+                </td>
+              </tr>
+              <tr>
+                <td align="center" style="padding-top:12px;">
+                  <div style="font-size:12.5px;font-weight:700;color:#FFFFFF;letter-spacing:0.2px;">Detected</div>
+                  <div style="font-size:10.5px;color:#64748B;line-height:1.5;margin-top:2px;">new device</div>
+                </td>
+                <td>&nbsp;</td>
+                <td align="center" style="padding-top:12px;">
+                  <div style="font-size:12.5px;font-weight:700;color:#FFFFFF;letter-spacing:0.2px;">Verify</div>
+                  <div style="font-size:10.5px;color:#93C5FD;line-height:1.5;margin-top:2px;">enter code</div>
+                </td>
+                <td>&nbsp;</td>
+                <td align="center" style="padding-top:12px;">
+                  <div style="font-size:12.5px;font-weight:700;color:#FFFFFF;letter-spacing:0.2px;">Approve</div>
+                  <div style="font-size:10.5px;color:#64748B;line-height:1.5;margin-top:2px;">sign in</div>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- RED-tinted reject warning — strongest of all OTPs -->
+        <tr>
+          <td style="padding:28px 32px 8px;">
+            <div style="background:rgba(239,68,68,0.06);border-left:3px solid rgba(239,68,68,0.7);border-radius:6px;padding:14px 16px;font-size:12.5px;line-height:1.6;color:#94A3B8;">
+              <strong style="color:#FCA5A5;">Wasn't you?</strong><br/>
+              Ignore this email — the sign-in won't be approved without this code. Then change your password and contact <a href="mailto:support@qorixmarkets.com" style="color:#FCA5A5;text-decoration:none;">support@qorixmarkets.com</a> immediately.
+            </div>
+          </td>
+        </tr>
+
+        <!-- FOOTER -->
+        <tr>
+          <td class="qx-foot-pad" align="center" style="padding:30px 32px 28px;border-top:1px solid rgba(255,255,255,0.05);background:#040810;">
+            <div style="font-size:13px;color:#CBD5E1;margin-bottom:6px;font-weight:600;">
+              Account safety matters 🛡️
+            </div>
+            <div style="font-size:11.5px;color:#475569;line-height:1.7;">
+              © ${year} Qorix Markets · AI-Powered Trading<br/>
+              Need help? <a href="mailto:support@qorixmarkets.com" style="color:#93C5FD;text-decoration:none;">support@qorixmarkets.com</a>
+            </div>
+          </td>
+        </tr>
+
+      </table>
+
+      <!-- Outer spacing -->
+      <div style="height:24px;line-height:24px;font-size:1px;">&nbsp;</div>
+    </td>
+  </tr>
+</table>
+</body>
+</html>`;
+}
+
+// ---------------------------------------------------------------------------
+// Generic OTP template — fallback only. All three OTP purposes now have
+// dedicated designs (verify_email, withdrawal_confirm, device_login_approval).
+// Kept for safety in case dispatcher misses a future purpose.
 // ---------------------------------------------------------------------------
 function renderOtpHtml(opts: {
   purposeLabel: string;
@@ -402,16 +753,20 @@ export async function sendOtp(
     `If you did not request this, you can safely ignore this email.\n\n` +
     `— Qorix Markets\nhttps://qorixmarkets.com`;
 
-  // Per-purpose template dispatch — each OTP type gets its own visual
-  // identity over time. Currently:
-  //   • verify_email          → renderVerifyEmailOtpHtml (cyan/teal welcome)
-  //   • withdrawal_confirm    → renderOtpHtml (generic — pending redesign)
-  //   • device_login_approval → renderOtpHtml (generic — pending redesign)
+  // Per-purpose template dispatch — each OTP type has its own visual identity:
+  //   • verify_email          → renderVerifyEmailOtpHtml      (cyan/teal welcome)
+  //   • withdrawal_confirm    → renderWithdrawalOtpHtml       (amber/gold vault)
+  //   • device_login_approval → renderDeviceLoginOtpHtml      (sapphire shield)
+  //   • <fallback>            → renderOtpHtml                 (generic, safety net)
   const preheader = `Your Qorix Markets ${purposeLabel.toLowerCase()} code: ${otp} (expires in 10 minutes)`;
   const html =
     purpose === "verify_email"
       ? renderVerifyEmailOtpHtml({ preheader, intro, otp })
-      : renderOtpHtml({ purposeLabel, preheader, intro, otp, noteLines });
+      : purpose === "withdrawal_confirm"
+        ? renderWithdrawalOtpHtml({ preheader, intro, otp })
+        : purpose === "device_login_approval"
+          ? renderDeviceLoginOtpHtml({ preheader, intro, otp })
+          : renderOtpHtml({ purposeLabel, preheader, intro, otp, noteLines });
 
   await sendEmail(email, `Qorix Markets — ${purposeLabel} Code`, text, html);
 
