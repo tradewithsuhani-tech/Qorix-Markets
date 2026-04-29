@@ -125,6 +125,7 @@ function makeStubFactories() {
     startTronMonitor: 0,
     startDepositWatcher: 0,
     startTelegramPoller: 0,
+    startQuizScheduler: 0,
     initCronJobs: 0,
   };
   const closeable = { close: async () => {} };
@@ -152,6 +153,10 @@ function makeStubFactories() {
     },
     startTelegramPoller: async () => {
       calls.startTelegramPoller++;
+      return stoppable;
+    },
+    startQuizScheduler: async () => {
+      calls.startQuizScheduler++;
       return stoppable;
     },
     initCronJobs: async () => {
@@ -226,6 +231,7 @@ test("registerBackgroundJobs DOES register everything when maintenance is OFF (p
     assert.equal(calls.startTronMonitor, 1);
     assert.equal(calls.startDepositWatcher, 1);
     assert.equal(calls.startTelegramPoller, 1);
+    assert.equal(calls.startQuizScheduler, 1);
     // Cron init is fire-and-forget inside registerBackgroundJobs; give the
     // microtask queue a tick so the .catch chain has run and the call counter
     // is up-to-date before we assert on it.

@@ -43,6 +43,7 @@ import {
   ShieldCheck,
   Store,
   PhoneCall,
+  Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -586,6 +587,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/transactions", label: "History", icon: History },
     { href: "/referral", label: "Referrals", icon: Users },
     { href: "/rewards", label: "Promotions", icon: Trophy },
+    { href: "/quizzes", label: "Quizzes", icon: Sparkles },
     { href: "/tasks", label: "Tasks", icon: ListChecks },
     { href: "/settings", label: "Settings", icon: Settings },
   ];
@@ -610,6 +612,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/admin/fraud", label: "Fraud Monitor", icon: Shield },
     { href: "/admin/chats", label: "Support Chats", icon: MessageCircle },
     { href: "/admin/task-proofs", label: "Task Proofs", icon: ClipboardCheck },
+    { href: "/admin/quizzes", label: "Quizzes", icon: Sparkles },
   ];
 
   const allLinks = isAdminArea ? adminLinks : userLinks;

@@ -22,6 +22,7 @@ export interface BackgroundJobFactories {
   startTronMonitor: () => Promise<StoppableWatcher>;
   startDepositWatcher: () => Promise<StoppableWatcher>;
   startTelegramPoller: () => Promise<StoppableWatcher>;
+  startQuizScheduler: () => Promise<StoppableWatcher>;
   initCronJobs: () => Promise<void>;
 }
 
@@ -32,6 +33,7 @@ export interface BackgroundJobs {
   tronMonitor: StoppableWatcher;
   depositWatcher: StoppableWatcher;
   telegramPoller: StoppableWatcher;
+  quizScheduler: StoppableWatcher;
 }
 
 // Real factories used in production (and Replit dev when not in maintenance).
@@ -71,6 +73,10 @@ export const realBackgroundJobFactories: BackgroundJobFactories = {
     const { startTelegramPoller } = await import("./telegram-poller");
     return startTelegramPoller();
   },
+  startQuizScheduler: async () => {
+    const { startQuizScheduler } = await import("./quiz-scheduler");
+    return startQuizScheduler();
+  },
   initCronJobs: async () => {
     const { initCronJobs } = await import("./cron");
     await initCronJobs();
@@ -93,6 +99,7 @@ export async function registerBackgroundJobs(
   const tronMonitor = await factories.startTronMonitor();
   const depositWatcher = await factories.startDepositWatcher();
   const telegramPoller = await factories.startTelegramPoller();
+  const quizScheduler = await factories.startQuizScheduler();
 
   // Cron init is fire-and-forget in prod (matches the historical pattern of
   // kicking it off from inside app.listen's callback) — surfacing the error
@@ -110,5 +117,6 @@ export async function registerBackgroundJobs(
     tronMonitor,
     depositWatcher,
     telegramPoller,
+    quizScheduler,
   };
 }

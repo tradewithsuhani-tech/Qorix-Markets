@@ -40,6 +40,7 @@ import phoneChangeRouter from "./phone-change";
 import merchantRouter from "./merchant";
 import adminMerchantsRouter from "./admin-merchants";
 import adminEscalationRouter from "./admin-escalation";
+import quizRouter from "./quiz";
 
 const router: IRouter = Router();
 
@@ -102,5 +103,6 @@ router.use(phoneChangeRouter);
 router.use(merchantRouter);
 router.use(adminMerchantsRouter);
 router.use(adminEscalationRouter);
+router.use(quizRouter);
 
 export default router;

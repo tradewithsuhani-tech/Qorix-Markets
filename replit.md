@@ -206,6 +206,33 @@ Frontend:
 - `artifacts/qorix-markets/src/pages/wallet.tsx` — Withdraw card has tab switcher: USDT (TRC20) | INR (UPI/Bank)
 - `artifacts/qorix-markets/src/pages/admin-payment-methods.tsx` — "Pending INR withdrawals" section with Approve (with payout ref input) / Reject & Refund actions
 
+## Quiz Giveaway System
+
+KYC users join scheduled quizzes, answer 5 timed MCQs, see a live SSE-driven leaderboard, top 3 win prizes (manually marked paid by admins — no auto wallet credit).
+
+Schema (`lib/db/src/schema/quizzes.ts`): `quizzes`, `quiz_questions` (max 5), `quiz_participants` (KYC gate), `quiz_answers` (unique on (participantId, questionId) — anti-cheat), `quiz_winners` (unpaid|paid).
+
+Backend (`artifacts/api-server/src/lib/`):
+- `quiz-event-bus.ts` — per-instance EventEmitter + Redis pub/sub bridge so SSE fans out across multiple Fly machines.
+- `quiz-runner.ts` — drives a quiz through 5 rounds with server-authoritative timing (BASE=500, TIME_BONUS_MAX=500, ANSWER_GRACE_MS=250).
+- `quiz-scheduler.ts` — interval worker (in `background-jobs.ts`) that flips `scheduled→live` and starts runners.
+- `quiz-scoring.ts` — Redis ZSET leaderboard helpers.
+- `quiz-ai.ts` — gpt-5-mini drafts via `openai-client`.
+
+Routes (`artifacts/api-server/src/routes/quiz.ts`, all paths absolute):
+- User: `GET /api/quiz`, `GET /api/quiz/mine/past`, `GET /api/quiz/:id`, `POST /api/quiz/:id/join`, `POST /api/quiz/:id/answer`, `GET /api/quiz/:id/standing`, `GET /api/quiz/:id/stream` (SSE).
+- Admin: `GET/POST /api/admin/quizzes`, `PATCH /api/admin/quizzes/:id`, `POST /api/admin/quizzes/:id/cancel`, `POST /api/admin/quizzes/:id/force-start`, full questions CRUD + reorder + AI generate, `GET /api/admin/quizzes/:id/monitor`, `GET /api/admin/quizzes/:id/results`, `POST /api/admin/quizzes/:id/winners/:wid/mark-paid`.
+
+SSE endpoint accepts JWT via `Authorization: Bearer …` OR `?token=…` (browser EventSource has no headers). Headers: `text/event-stream`, `no-cache,no-transform`, `X-Accel-Buffering: no`. Heartbeat every 20s. Each event has a numeric `id:` so EventSource auto-resumes via `Last-Event-ID`.
+
+Frontend:
+- `artifacts/qorix-markets/src/hooks/use-quiz-stream.ts` — EventSource hook with reconnect/backoff, per-event-id dedup, server-clock offset for honest countdowns.
+- `artifacts/qorix-markets/src/pages/quizzes.tsx` — lobby + countdown + live play + final winners.
+- `artifacts/qorix-markets/src/pages/admin-quizzes.tsx` — list, schedule/edit, manual + AI question editor, live monitor, results & mark-paid.
+- Nav links added in `layout.tsx` (user "Quizzes" + admin "Quizzes").
+
+Load smoke: `node artifacts/api-server/scripts/quiz-load-test.mjs` — simulates N KYC users (token list file) joining + answering. Reports SSE connect p50/p95, answer-latency, accept/reject counts, final winners.
+
 ## Cron Jobs (node-cron)
 
 Defined in `artifacts/api-server/src/lib/cron.ts`, initialized on server start:

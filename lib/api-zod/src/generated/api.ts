@@ -919,3 +919,563 @@ export const GetBlockchainDepositHistoryResponse = zod.object({
     }),
   ),
 });
+
+/**
+ * @summary List scheduled / live / recently-ended quizzes
+ */
+export const ListVisibleQuizzesResponse = zod.object({
+  data: zod.array(
+    zod.object({
+      id: zod.number(),
+      title: zod.string(),
+      description: zod.string(),
+      status: zod.enum(["scheduled", "live", "ended", "cancelled"]),
+      scheduledStartAt: zod.string(),
+      startedAt: zod.string().nullish(),
+      endedAt: zod.string().nullish(),
+      prizePool: zod.string(),
+      prizeCurrency: zod.string(),
+      prizeSplit: zod.array(zod.number()),
+      questionTimeMs: zod.number(),
+      entryRules: zod
+        .object({
+          requireKyc: zod.boolean().optional(),
+        })
+        .optional(),
+      createdAt: zod.string(),
+      updatedAt: zod.string(),
+      joined: zod.boolean().optional(),
+    }),
+  ),
+});
+
+/**
+ * @summary Past quizzes the user joined
+ */
+export const getMyPastQuizzesQueryLimitDefault = 20;
+
+export const GetMyPastQuizzesQueryParams = zod.object({
+  limit: zod.coerce.number().default(getMyPastQuizzesQueryLimitDefault),
+});
+
+export const GetMyPastQuizzesResponse = zod.object({
+  data: zod.array(
+    zod
+      .object({
+        id: zod.number(),
+        title: zod.string(),
+        description: zod.string(),
+        status: zod.enum(["scheduled", "live", "ended", "cancelled"]),
+        scheduledStartAt: zod.string(),
+        startedAt: zod.string().nullish(),
+        endedAt: zod.string().nullish(),
+        prizePool: zod.string(),
+        prizeCurrency: zod.string(),
+        prizeSplit: zod.array(zod.number()),
+        questionTimeMs: zod.number(),
+        entryRules: zod
+          .object({
+            requireKyc: zod.boolean().optional(),
+          })
+          .optional(),
+        createdAt: zod.string(),
+        updatedAt: zod.string(),
+      })
+      .and(
+        zod.object({
+          myScore: zod.number(),
+          myRank: zod.number().nullish(),
+          myPrize: zod
+            .object({
+              amount: zod.string(),
+              currency: zod.string(),
+            })
+            .optional(),
+        }),
+      ),
+  ),
+});
+
+/**
+ * @summary Quiz detail (no answers)
+ */
+export const GetQuizDetailParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const GetQuizDetailResponse = zod.object({
+  quiz: zod.object({
+    id: zod.number(),
+    title: zod.string(),
+    description: zod.string(),
+    status: zod.enum(["scheduled", "live", "ended", "cancelled"]),
+    scheduledStartAt: zod.string(),
+    startedAt: zod.string().nullish(),
+    endedAt: zod.string().nullish(),
+    prizePool: zod.string(),
+    prizeCurrency: zod.string(),
+    prizeSplit: zod.array(zod.number()),
+    questionTimeMs: zod.number(),
+    entryRules: zod
+      .object({
+        requireKyc: zod.boolean().optional(),
+      })
+      .optional(),
+    createdAt: zod.string(),
+    updatedAt: zod.string(),
+  }),
+  joined: zod.boolean(),
+  participants: zod.number(),
+  winners: zod.array(
+    zod.object({
+      rank: zod.number(),
+      displayName: zod.string(),
+      finalScore: zod.number(),
+      prizeAmount: zod.string(),
+      prizeCurrency: zod.string(),
+      userId: zod.number(),
+    }),
+  ),
+});
+
+/**
+ * @summary Join a quiz (KYC required)
+ */
+export const JoinQuizParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const JoinQuizResponse = zod.object({
+  success: zod.boolean(),
+});
+
+/**
+ * @summary Submit an answer for the live question
+ */
+export const SubmitQuizAnswerParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const submitQuizAnswerBodySelectedOptionMin = 0;
+export const submitQuizAnswerBodySelectedOptionMax = 3;
+
+export const SubmitQuizAnswerBody = zod.object({
+  questionId: zod.number(),
+  selectedOption: zod
+    .number()
+    .min(submitQuizAnswerBodySelectedOptionMin)
+    .max(submitQuizAnswerBodySelectedOptionMax),
+});
+
+export const SubmitQuizAnswerResponse = zod.object({
+  accepted: zod.boolean(),
+  scoreAwarded: zod.number(),
+  totalScore: zod.number(),
+  rank: zod.number().nullish(),
+  locked: zod.boolean(),
+});
+
+/**
+ * @summary Current rank/score on the live quiz
+ */
+export const GetMyQuizStandingParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const GetMyQuizStandingResponse = zod.object({
+  score: zod.number(),
+  rank: zod.number().nullish(),
+  participants: zod.number(),
+});
+
+/**
+ * @summary List quizzes (admin)
+ */
+export const adminListQuizzesQueryLimitDefault = 50;
+
+export const AdminListQuizzesQueryParams = zod.object({
+  status: zod.enum(["scheduled", "live", "ended", "cancelled"]).optional(),
+  limit: zod.coerce.number().default(adminListQuizzesQueryLimitDefault),
+});
+
+export const AdminListQuizzesResponse = zod.object({
+  data: zod.array(
+    zod.object({
+      id: zod.number(),
+      title: zod.string(),
+      description: zod.string(),
+      status: zod.enum(["scheduled", "live", "ended", "cancelled"]),
+      scheduledStartAt: zod.string(),
+      startedAt: zod.string().nullish(),
+      endedAt: zod.string().nullish(),
+      prizePool: zod.string(),
+      prizeCurrency: zod.string(),
+      prizeSplit: zod.array(zod.number()),
+      questionTimeMs: zod.number(),
+      entryRules: zod
+        .object({
+          requireKyc: zod.boolean().optional(),
+        })
+        .optional(),
+      createdAt: zod.string(),
+      updatedAt: zod.string(),
+    }),
+  ),
+});
+
+/**
+ * @summary Schedule a new quiz
+ */
+export const AdminCreateQuizBody = zod.object({
+  title: zod.string(),
+  description: zod.string().optional(),
+  scheduledStartAt: zod.string(),
+  prizePool: zod.string(),
+  prizeCurrency: zod.string().optional(),
+  prizeSplit: zod.array(zod.number()).optional(),
+  questionTimeMs: zod.number().optional(),
+  entryRules: zod
+    .object({
+      requireKyc: zod.boolean().optional(),
+    })
+    .optional(),
+});
+
+/**
+ * @summary Update a scheduled quiz
+ */
+export const AdminUpdateQuizParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const AdminUpdateQuizBody = zod.object({
+  title: zod.string().optional(),
+  description: zod.string().optional(),
+  scheduledStartAt: zod.string().optional(),
+  prizePool: zod.string().optional(),
+  prizeCurrency: zod.string().optional(),
+  prizeSplit: zod.array(zod.number()).optional(),
+  questionTimeMs: zod.number().optional(),
+  entryRules: zod
+    .object({
+      requireKyc: zod.boolean().optional(),
+    })
+    .optional(),
+});
+
+export const AdminUpdateQuizResponse = zod.object({
+  id: zod.number(),
+  title: zod.string(),
+  description: zod.string(),
+  status: zod.enum(["scheduled", "live", "ended", "cancelled"]),
+  scheduledStartAt: zod.string(),
+  startedAt: zod.string().nullish(),
+  endedAt: zod.string().nullish(),
+  prizePool: zod.string(),
+  prizeCurrency: zod.string(),
+  prizeSplit: zod.array(zod.number()),
+  questionTimeMs: zod.number(),
+  entryRules: zod
+    .object({
+      requireKyc: zod.boolean().optional(),
+    })
+    .optional(),
+  createdAt: zod.string(),
+  updatedAt: zod.string(),
+});
+
+/**
+ * @summary Cancel a scheduled quiz
+ */
+export const AdminCancelQuizParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const AdminCancelQuizResponse = zod.object({
+  success: zod.boolean(),
+});
+
+/**
+ * @summary Force-start a scheduled quiz now
+ */
+export const AdminForceStartQuizParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const AdminForceStartQuizResponse = zod.object({
+  success: zod.boolean(),
+  startedHere: zod.boolean(),
+});
+
+/**
+ * @summary List quiz questions (with answers)
+ */
+export const AdminListQuizQuestionsParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const AdminListQuizQuestionsResponse = zod.object({
+  data: zod.array(
+    zod.object({
+      id: zod.number(),
+      quizId: zod.number(),
+      position: zod.number(),
+      prompt: zod.string(),
+      options: zod.array(zod.string()),
+      correctIndex: zod.number(),
+      explanation: zod.string().optional(),
+      source: zod.enum(["manual", "ai"]),
+    }),
+  ),
+});
+
+/**
+ * @summary Add a single question or bulk-replace all questions
+ */
+export const AdminAddQuizQuestionsParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const adminAddQuizQuestionsBodyQuestionCorrectIndexMin = 0;
+export const adminAddQuizQuestionsBodyQuestionCorrectIndexMax = 3;
+
+export const adminAddQuizQuestionsBodyQuestionsItemCorrectIndexMin = 0;
+export const adminAddQuizQuestionsBodyQuestionsItemCorrectIndexMax = 3;
+
+export const AdminAddQuizQuestionsBody = zod.object({
+  question: zod
+    .object({
+      prompt: zod.string(),
+      options: zod.array(zod.string()),
+      correctIndex: zod
+        .number()
+        .min(adminAddQuizQuestionsBodyQuestionCorrectIndexMin)
+        .max(adminAddQuizQuestionsBodyQuestionCorrectIndexMax),
+      explanation: zod.string().optional(),
+      source: zod.enum(["manual", "ai"]).optional(),
+    })
+    .optional(),
+  questions: zod
+    .array(
+      zod.object({
+        prompt: zod.string(),
+        options: zod.array(zod.string()),
+        correctIndex: zod
+          .number()
+          .min(adminAddQuizQuestionsBodyQuestionsItemCorrectIndexMin)
+          .max(adminAddQuizQuestionsBodyQuestionsItemCorrectIndexMax),
+        explanation: zod.string().optional(),
+        source: zod.enum(["manual", "ai"]).optional(),
+      }),
+    )
+    .optional(),
+  replace: zod.boolean().optional(),
+});
+
+/**
+ * @summary Update a single question
+ */
+export const AdminUpdateQuizQuestionParams = zod.object({
+  id: zod.coerce.number(),
+  qid: zod.coerce.number(),
+});
+
+export const adminUpdateQuizQuestionBodyCorrectIndexMin = 0;
+export const adminUpdateQuizQuestionBodyCorrectIndexMax = 3;
+
+export const AdminUpdateQuizQuestionBody = zod.object({
+  prompt: zod.string(),
+  options: zod.array(zod.string()),
+  correctIndex: zod
+    .number()
+    .min(adminUpdateQuizQuestionBodyCorrectIndexMin)
+    .max(adminUpdateQuizQuestionBodyCorrectIndexMax),
+  explanation: zod.string().optional(),
+  source: zod.enum(["manual", "ai"]).optional(),
+});
+
+export const AdminUpdateQuizQuestionResponse = zod.object({
+  id: zod.number(),
+  quizId: zod.number(),
+  position: zod.number(),
+  prompt: zod.string(),
+  options: zod.array(zod.string()),
+  correctIndex: zod.number(),
+  explanation: zod.string().optional(),
+  source: zod.enum(["manual", "ai"]),
+});
+
+/**
+ * @summary Delete a question
+ */
+export const AdminDeleteQuizQuestionParams = zod.object({
+  id: zod.coerce.number(),
+  qid: zod.coerce.number(),
+});
+
+export const AdminDeleteQuizQuestionResponse = zod.object({
+  success: zod.boolean(),
+});
+
+/**
+ * @summary Reorder questions
+ */
+export const AdminReorderQuizQuestionsParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const AdminReorderQuizQuestionsBody = zod.object({
+  order: zod.array(zod.number()),
+});
+
+export const AdminReorderQuizQuestionsResponse = zod.object({
+  data: zod.array(
+    zod.object({
+      id: zod.number(),
+      quizId: zod.number(),
+      position: zod.number(),
+      prompt: zod.string(),
+      options: zod.array(zod.string()),
+      correctIndex: zod.number(),
+      explanation: zod.string().optional(),
+      source: zod.enum(["manual", "ai"]),
+    }),
+  ),
+});
+
+/**
+ * @summary AI-generate 5 question drafts
+ */
+export const AdminGenerateQuizQuestionsAiParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const AdminGenerateQuizQuestionsAiBody = zod.object({
+  topicHint: zod.string().optional(),
+});
+
+export const AdminGenerateQuizQuestionsAiResponse = zod.object({
+  data: zod.array(
+    zod.object({
+      prompt: zod.string(),
+      options: zod.array(zod.string()),
+      correctIndex: zod.number(),
+      explanation: zod.string(),
+    }),
+  ),
+});
+
+/**
+ * @summary Live monitor snapshot
+ */
+export const AdminMonitorQuizParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const AdminMonitorQuizResponse = zod.object({
+  quiz: zod.object({
+    id: zod.number(),
+    title: zod.string(),
+    description: zod.string(),
+    status: zod.enum(["scheduled", "live", "ended", "cancelled"]),
+    scheduledStartAt: zod.string(),
+    startedAt: zod.string().nullish(),
+    endedAt: zod.string().nullish(),
+    prizePool: zod.string(),
+    prizeCurrency: zod.string(),
+    prizeSplit: zod.array(zod.number()),
+    questionTimeMs: zod.number(),
+    entryRules: zod
+      .object({
+        requireKyc: zod.boolean().optional(),
+      })
+      .optional(),
+    createdAt: zod.string(),
+    updatedAt: zod.string(),
+  }),
+  runner: zod
+    .object({
+      currentQuestionIndex: zod.number().nullish(),
+      currentQuestionId: zod.number().nullish(),
+      questionStartedAtMs: zod.number().nullish(),
+      questionDeadlineMs: zod.number().nullish(),
+      windowMs: zod.number().optional(),
+      phase: zod.string().optional(),
+    })
+    .optional(),
+  leaderboard: zod.array(
+    zod.object({
+      userId: zod.number(),
+      score: zod.number(),
+      rank: zod.number(),
+      displayName: zod.string(),
+    }),
+  ),
+  participants: zod.number(),
+});
+
+/**
+ * @summary Final results with PII for payout
+ */
+export const AdminGetQuizResultsParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const AdminGetQuizResultsResponse = zod.object({
+  quiz: zod.object({
+    id: zod.number(),
+    title: zod.string(),
+    description: zod.string(),
+    status: zod.enum(["scheduled", "live", "ended", "cancelled"]),
+    scheduledStartAt: zod.string(),
+    startedAt: zod.string().nullish(),
+    endedAt: zod.string().nullish(),
+    prizePool: zod.string(),
+    prizeCurrency: zod.string(),
+    prizeSplit: zod.array(zod.number()),
+    questionTimeMs: zod.number(),
+    entryRules: zod
+      .object({
+        requireKyc: zod.boolean().optional(),
+      })
+      .optional(),
+    createdAt: zod.string(),
+    updatedAt: zod.string(),
+  }),
+  participants: zod.number(),
+  winners: zod.array(
+    zod.object({
+      id: zod.number(),
+      rank: zod.number(),
+      finalScore: zod.number(),
+      prizeAmount: zod.string(),
+      prizeCurrency: zod.string(),
+      paidStatus: zod.enum(["unpaid", "paid"]),
+      paidAt: zod.string().nullish(),
+      paidNote: zod.string().nullish(),
+      userId: zod.number(),
+      userEmail: zod.string().nullish(),
+      userName: zod.string().nullish(),
+      userPhone: zod.string().nullish(),
+    }),
+  ),
+});
+
+/**
+ * @summary Mark a winner as paid (manual settlement)
+ */
+export const AdminMarkQuizWinnerPaidParams = zod.object({
+  id: zod.coerce.number(),
+  wid: zod.coerce.number(),
+});
+
+export const AdminMarkQuizWinnerPaidBody = zod.object({
+  note: zod.string().optional(),
+});
+
+export const AdminMarkQuizWinnerPaidResponse = zod.object({
+  id: zod.number(),
+  paidStatus: zod.string(),
+  paidAt: zod.string().nullish(),
+  paidNote: zod.string().nullish(),
+});
