@@ -56,23 +56,64 @@ export interface DeviceDescription {
 }
 
 /**
+ * Models reported by ua-parser-js that aren't real device identifiers and
+ * would render as misleading badges in the admin Account Security drawer:
+ *
+ * - "K" — Chrome 110+ on Android freezes the UA to "Linux; Android 10; K"
+ *   under the UA Reduction policy. The literal letter K is a placeholder,
+ *   not a model. The real model only arrives via the `Sec-CH-UA-Model`
+ *   client hint (handled below).
+ * - "Macintosh" — every Mac UA is "Macintosh; Intel Mac OS X 10_15_7"
+ *   regardless of the actual hardware. ua-parser-js surfaces "Macintosh"
+ *   as the model, which is just the platform name and tells you nothing.
+ *   Apple deliberately doesn't expose Mac models on any browser, so no
+ *   hint will ever fix this — surface as null and rely on the OS / browser
+ *   labels for identification.
+ *
+ * "iPhone" / "iPad" are intentionally NOT filtered: they distinguish
+ * Apple mobile form factors and are a useful signal even without the
+ * specific generation.
+ */
+const PLACEHOLDER_DEVICE_MODELS = new Set([
+  "K",
+  "Macintosh",
+]);
+
+function cleanModel(model: string | null | undefined): string | null {
+  if (!model) return null;
+  const trimmed = model.trim();
+  if (trimmed.length === 0) return null;
+  if (PLACEHOLDER_DEVICE_MODELS.has(trimmed)) return null;
+  return trimmed;
+}
+
+/**
  * Full parsed device intel from the request's User-Agent header. Pure
  * function over the UA string — no external service calls, no PII beyond
  * what the UA already exposes, safe to call on the hot login path.
  *
  * Notes on UA limitations (deliberate, not bugs):
  * - Modern Chrome on Android with UA Reduction sends "Linux; Android 10; K"
- *   — we'll get model=null. Solving this needs UA Client Hints
- *   (`Sec-CH-UA-Model`, `Sec-CH-UA-Platform-Version`); planned for a
- *   follow-up batch.
- * - Windows 11 still reports as "Windows NT 10.0" — distinguishing 10 vs
- *   11 also needs `Sec-CH-UA-Platform-Version`.
+ *   — model from UA alone is the placeholder "K", filtered to null here.
+ *   The real model arrives via `Sec-CH-UA-Model`, merged in
+ *   `describeDeviceFull(req)` below once the browser sends the hint.
+ * - Mac never exposes hardware model on any browser (Apple privacy stance);
+ *   "Macintosh" is filtered to null and the card relies on OS / browser
+ *   labels.
+ * - Safari on iOS does NOT support UA Client Hints — those clients keep
+ *   exposing only what the (unchanged) UA string reveals.
+ * - Windows 11 still reports as "Windows NT 10.0" in the UA;
+ *   `Sec-CH-UA-Platform-Version` distinguishes 10 vs 11.
  */
 /**
  * Pure UA-string parser. Used both by request-shaped callers
  * (`describeDeviceFull(req)`) and by the lazy-refresh paths in admin
  * routes that re-parse stored `user_agent` columns from the DB so
  * historical rows show the latest, richest labels without any DB writes.
+ *
+ * Note: this path has no access to Client Hints (the stored row is just
+ * the UA string), so it represents the floor of what we can know about
+ * a device. `describeDeviceFull(req)` layers hints on top when available.
  */
 export function describeDeviceFromUserAgent(
   ua: string | null | undefined,
@@ -127,7 +168,7 @@ export function describeDeviceFromUserAgent(
     browser: browserLabel,
     os: osLabel,
     deviceType: inferredType,
-    deviceModel: result.device.model ?? null,
+    deviceModel: cleanModel(result.device.model),
     deviceVendor: result.device.vendor ?? null,
     browserName,
     browserVersion,
@@ -138,9 +179,108 @@ export function describeDeviceFromUserAgent(
   };
 }
 
+// ─── Client Hints parsing ────────────────────────────────────────────────
+// `Sec-CH-UA-*` header values are wrapped in double quotes per RFC 8941
+// structured-headers (e.g. `Sec-CH-UA-Model: "Pixel 7"`). Booleans use
+// `?1` / `?0`. Empty strings should be treated as "not provided" — Chrome
+// sometimes sends `""` for high-entropy hints when the page hasn't yet
+// promised to handle them.
+
+function getHeader(req: Request, name: string): string | undefined {
+  const v = req.headers[name];
+  if (Array.isArray(v)) return v[0];
+  return v;
+}
+
+function parseStructuredString(raw: string | undefined): string | null {
+  if (!raw) return null;
+  const trimmed = raw.trim();
+  if (trimmed.length === 0) return null;
+  // Strip surrounding double quotes if present — RFC 8941 structured
+  // header strings are quoted. Some intermediaries strip them, so accept
+  // both forms.
+  const unquoted = trimmed.startsWith('"') && trimmed.endsWith('"') && trimmed.length >= 2
+    ? trimmed.slice(1, -1)
+    : trimmed;
+  return unquoted.length === 0 ? null : unquoted;
+}
+
+interface ClientHints {
+  /** Real device model ("Pixel 7", "SM-S918B"). Android Chrome only — Safari doesn't ship hints. */
+  model: string | null;
+  /** OS family per the browser ("Android", "macOS", "Windows"). */
+  platform: string | null;
+  /** OS version with patch level ("14.4.1") — distinguishes Win 10 vs 11. */
+  platformVersion: string | null;
+  /** True if the browser self-identifies as mobile, per `Sec-CH-UA-Mobile: ?1`. */
+  isMobile: boolean | null;
+}
+
+/**
+ * Read the four high-entropy UA Client Hints we ask for in `Accept-CH`
+ * (set globally in app.ts). All return null if the browser didn't ship
+ * the hint, including the common case of Safari/iOS which never sends
+ * any UA-CH headers.
+ */
+export function parseClientHints(req: Request): ClientHints {
+  const mobileRaw = getHeader(req, "sec-ch-ua-mobile");
+  const isMobile = mobileRaw === "?1" ? true : mobileRaw === "?0" ? false : null;
+  return {
+    model: parseStructuredString(getHeader(req, "sec-ch-ua-model")),
+    platform: parseStructuredString(getHeader(req, "sec-ch-ua-platform")),
+    platformVersion: parseStructuredString(getHeader(req, "sec-ch-ua-platform-version")),
+    isMobile,
+  };
+}
+
+/**
+ * Like `describeDeviceFromUserAgent` but layers UA Client Hints on top.
+ * Hints are a strictly more accurate signal than the (frequently frozen)
+ * UA string, so they win where present:
+ *
+ * - `Sec-CH-UA-Model` → overrides `deviceModel` (this is the whole point —
+ *   it's what surfaces "Pixel 7" instead of the UA Reduction "K"
+ *   placeholder on modern Chrome for Android).
+ * - `Sec-CH-UA-Platform-Version` → overrides `osVersion` and rebuilds
+ *   `os` label so the card shows e.g. "Android 14.4.1" or "Windows 11".
+ * - `Sec-CH-UA-Mobile` → corrects `deviceType` if the UA-derived bucket
+ *   contradicts the browser's own self-classification.
+ *
+ * Stored UA-only paths (admin lazy-refresh in routes/fraud.ts) keep
+ * calling `describeDeviceFromUserAgent` because they don't have access
+ * to the hints from the original request.
+ */
 export function describeDeviceFull(req: Request): DeviceDescription {
   const ua = (req.headers["user-agent"] ?? "") as string;
-  return describeDeviceFromUserAgent(ua);
+  const base = describeDeviceFromUserAgent(ua);
+  const hints = parseClientHints(req);
+
+  const deviceModel = cleanModel(hints.model) ?? base.deviceModel;
+  const osVersion = hints.platformVersion ?? base.osVersion;
+  // Reuse base.osName — UA-CH `Sec-CH-UA-Platform` is "Android" / "macOS"
+  // / "Windows" which is essentially what UAParser already gives us. No
+  // value in overriding the family name; just refresh the label so the
+  // more precise platform-version flows into it.
+  const osLabel = base.osName
+    ? osVersion
+      ? `${base.osName} ${osVersion}`
+      : base.osName
+    : "Unknown OS";
+
+  // If hints contradict the inferred type (e.g. iPad Safari with "Request
+  // Desktop Site" sends a Mac UA but `Sec-CH-UA-Mobile: ?1`), trust the
+  // hint — the browser knows its own form factor better than UA regex.
+  let deviceType = base.deviceType;
+  if (hints.isMobile === true && deviceType === "desktop") deviceType = "mobile";
+  if (hints.isMobile === false && deviceType === "mobile") deviceType = "desktop";
+
+  return {
+    ...base,
+    deviceModel,
+    osVersion,
+    os: osLabel,
+    deviceType,
+  };
 }
 
 /**

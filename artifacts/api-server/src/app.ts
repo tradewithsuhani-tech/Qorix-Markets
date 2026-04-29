@@ -117,6 +117,62 @@ app.use((req, res, next) => {
   next();
 });
 
+// ─── User-Agent Client Hints opt-in ───────────────────────────────────────
+// Modern Chromium browsers (Chrome 89+, Edge 90+) freeze the User-Agent
+// string under "UA Reduction" and instead expose granular device info via
+// `Sec-CH-UA-*` request headers — but ONLY if the server explicitly opts
+// in via `Accept-CH`. Without this header the admin Account Security
+// drawer shows "Linux; Android 10; K" with model="K" instead of the real
+// "Pixel 7" / "SM-S918B".
+//
+// What each header does:
+// - `Accept-CH`: tells the browser which hints to send on FUTURE requests
+//   to this origin. The browser caches this opt-in per-origin and starts
+//   including the hints from the next request onward.
+// - `Critical-CH`: a subset of `Accept-CH` that the browser will retry
+//   the CURRENT request for if it didn't already include them — closes
+//   the "first request after opt-in misses the hints" gap.
+// - `Permissions-Policy`: explicitly delegates the hints to this origin
+//   so cross-origin XHR (qorixmarkets.com → qorix-api.fly.dev) flows
+//   them through. By default top-level documents have all hints enabled,
+//   but being explicit is safer against future browser policy changes.
+//
+// Browser support reality:
+// - Chrome / Edge / Brave / Samsung Internet on Android: full support →
+//   we get the real model.
+// - Chrome / Edge / Brave on Mac: hints supported but Apple still doesn't
+//   expose a hardware model (privacy stance). OS version becomes precise
+//   though ("14.4.1" instead of "10.15.7").
+// - Safari (macOS + iOS): does NOT support UA-CH at all. iPhone / iPad /
+//   Safari on Mac users will continue to surface only what their UA says.
+// - Firefox: does NOT support UA-CH (intentional — privacy concerns).
+//
+// Mounted before the rate limiter so 429 responses also carry the opt-in
+// (otherwise a rate-limited client never gets the chance to learn it).
+const ACCEPT_CH_HINTS = [
+  "Sec-CH-UA-Model",
+  "Sec-CH-UA-Platform",
+  "Sec-CH-UA-Platform-Version",
+  "Sec-CH-UA-Mobile",
+  "Sec-CH-UA-Full-Version-List",
+  "Sec-CH-UA-Arch",
+].join(", ");
+const CRITICAL_CH_HINTS = "Sec-CH-UA-Model, Sec-CH-UA-Platform-Version";
+const PERMISSIONS_POLICY_CH = [
+  "ch-ua-model=*",
+  "ch-ua-platform=*",
+  "ch-ua-platform-version=*",
+  "ch-ua-mobile=*",
+  "ch-ua-full-version-list=*",
+  "ch-ua-arch=*",
+].join(", ");
+app.use((_req, res, next) => {
+  res.setHeader("Accept-CH", ACCEPT_CH_HINTS);
+  res.setHeader("Critical-CH", CRITICAL_CH_HINTS);
+  res.setHeader("Permissions-Policy", PERMISSIONS_POLICY_CH);
+  next();
+});
+
 // ─── Global per-IP rate limit (backstop) ──────────────────────────────────
 // Mounted BEFORE the maintenance gate so a runaway client can't burn DB
 // pool slots inside maintenanceMiddleware just to get rejected after the
