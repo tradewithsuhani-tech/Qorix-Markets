@@ -2302,3 +2302,253 @@ export async function sendWithdrawalSent(args: {
 
   await sendEmail(to, subject, text, html);
 }
+
+// ---------------------------------------------------------------------------
+// Withdrawal Rejected — UNIQUE refined-slate "Refund Credited" design.
+// Fires when an admin rejects a USDT withdrawal — full amount is refunded
+// back to the source balance the user debited from (see routes/admin.ts
+// reject handler).
+//
+// Visual differentiators (vs all other emails):
+//   • slate/charcoal neutral palette — calm, refined, NOT alarming
+//     (alert = crimson, this is informational + reassuring)
+//   • "↩️ REFUND CREDITED" hero pill + "Funds Returned" headline
+//   • PREMIUM amount tile — $X,XXX.XX USDT in clean slate-100 white
+//   • Stacked rows: 💵 refunded amount · 🏦 credited back to
+//                   · 🆔 original request ID · 🕐 refunded at
+//   • Empathetic reassurance card with common rejection reasons
+//   • DUAL CTA: "Submit New Request" primary slate + "Contact Support" link
+//   • "Trade smart 📈" footer
+// ---------------------------------------------------------------------------
+export function renderWithdrawalRejectedHtml(opts: {
+  preheader: string;
+  name: string;
+  refundedAmount: number;
+  refundedTo: string;
+  requestId: number;
+  whenUtc: Date;
+}): string {
+  const { preheader, name, refundedAmount, refundedTo, requestId, whenUtc } = opts;
+  const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const whenStr =
+    `${whenUtc.getUTCDate()} ${MONTHS_SHORT[whenUtc.getUTCMonth()]} ${whenUtc.getUTCFullYear()} · ` +
+    `${String(whenUtc.getUTCHours()).padStart(2, "0")}:${String(whenUtc.getUTCMinutes()).padStart(2, "0")} UTC`;
+  const fmt = (n: number) =>
+    n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const amountStr = `$${fmt(refundedAmount)}`;
+  const safeFirstName = escapeHtml((name || "there").trim().split(/\s+/)[0] || "there");
+  const safeAmount = escapeHtml(amountStr);
+  const safeRefundedTo = escapeHtml(refundedTo);
+  const safeRequestId = escapeHtml(String(requestId));
+  const safeWhen = escapeHtml(whenStr);
+  const year = new Date().getFullYear();
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="x-apple-disable-message-reformatting" />
+<meta name="color-scheme" content="dark light" />
+<meta name="supported-color-schemes" content="dark light" />
+<title>Refund credited — Qorix Markets</title>
+<style type="text/css">
+  @media only screen and (max-width:480px) {
+    .qx-outer { padding:20px 10px !important; }
+    .qx-card { border-radius:18px !important; }
+    .qx-hero-pad { padding:6px 18px 22px !important; }
+    .qx-hero-h { font-size:24px !important; line-height:1.22 !important; }
+    .qx-amount-text { font-size:32px !important; letter-spacing:-0.5px !important; }
+    .qx-amount-cell { padding:18px 22px !important; }
+    .qx-snap-pad { padding:24px 22px 4px !important; }
+    .qx-snap-label { font-size:10.5px !important; }
+    .qx-snap-value { font-size:14px !important; }
+    .qx-cta-pad { padding:24px 18px 6px !important; }
+    .qx-cta { padding:13px 24px !important; font-size:13.5px !important; letter-spacing:0.2px !important; }
+    .qx-foot-pad { padding:24px 18px 22px !important; }
+  }
+</style>
+</head>
+<body style="margin:0;padding:0;background:#0E1014;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;">
+<div style="display:none;max-height:0;overflow:hidden;font-size:1px;line-height:1px;color:#0E1014;opacity:0;">${escapeHtml(preheader)}</div>
+<div style="display:none;max-height:0;overflow:hidden;">&#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847;</div>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="qx-outer" style="background:#0E1014;padding:32px 16px;">
+  <tr>
+    <td align="center">
+
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="qx-card" style="max-width:560px;background:#15181F;border:1px solid rgba(148,163,184,0.30);border-radius:22px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,0.55);">
+
+        <!-- LOGO BAR — refined slate gradient -->
+        <tr>
+          <td align="left" style="padding:20px 24px 0 28px;background:#0E1014;background-image:linear-gradient(135deg,#0E1014 0%,#1A1D26 45%,#2C3340 80%,#475569 100%);">
+            <img src="cid:${BRAND_LOGO_CID}" alt="Qorix Markets" width="320" height="217" style="display:block;width:320px;max-width:90%;height:auto;border:0;outline:none;text-decoration:none;margin:0;" />
+          </td>
+        </tr>
+
+        <!-- HERO — refund pill + headline + slate divider -->
+        <tr>
+          <td class="qx-hero-pad" align="center" style="padding:8px 32px 28px;background:#0E1014;background-image:linear-gradient(135deg,#0E1014 0%,#1A1D26 45%,#2C3340 80%,#475569 100%);">
+            <div style="display:inline-block;padding:6px 14px;border-radius:999px;background:rgba(148,163,184,0.18);border:1px solid rgba(148,163,184,0.55);font-size:10.5px;letter-spacing:2.4px;color:#CBD5E1;font-weight:700;text-transform:uppercase;margin-bottom:18px;">
+              ↩️ Refund Credited
+            </div>
+            <div class="qx-hero-h" style="font-size:30px;line-height:1.18;font-weight:800;color:#FFFFFF;letter-spacing:-0.5px;max-width:440px;margin:0 auto;">
+              Funds Returned
+            </div>
+            <div style="font-size:13.5px;color:#CBD5E1;margin-top:10px;font-weight:500;max-width:420px;margin-left:auto;margin-right:auto;line-height:1.5;">
+              ${safeFirstName}, your withdrawal couldn't be processed — funds are safely back in your wallet.
+            </div>
+            <div style="width:48px;height:3px;background:linear-gradient(90deg,#94A3B8 0%,#475569 100%);margin:18px auto 0;border-radius:999px;"></div>
+          </td>
+        </tr>
+
+        <!-- PREMIUM AMOUNT TILE — clean slate-white amount display -->
+        <tr>
+          <td align="center" style="padding:32px 12px 4px;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto;">
+              <tr>
+                <td class="qx-amount-cell" align="center" style="padding:22px 44px;background:#1A1D26;background-image:linear-gradient(180deg,#1A1D26 0%,#15181F 100%);border:1.5px solid rgba(148,163,184,0.5);border-radius:14px;box-shadow:0 0 28px rgba(148,163,184,0.18),inset 0 1px 0 rgba(255,255,255,0.04);">
+                  <div style="font-size:10.5px;letter-spacing:2.4px;color:#CBD5E1;font-weight:700;text-transform:uppercase;margin-bottom:8px;">
+                    Refunded Amount
+                  </div>
+                  <div class="qx-amount-text" style="font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:38px;letter-spacing:-0.8px;color:#F1F5F9;font-weight:800;line-height:1.1;text-shadow:0 0 14px rgba(203,213,225,0.20);">
+                    ${safeAmount} <span style="font-size:0.5em;color:#CBD5E1;letter-spacing:0.5px;font-weight:600;">USDT</span>
+                  </div>
+                </td>
+              </tr>
+            </table>
+            <div style="margin-top:14px;font-size:10.5px;color:#475569;letter-spacing:1.8px;text-transform:uppercase;font-weight:600;">
+              Credited back to ${safeRefundedTo}
+            </div>
+          </td>
+        </tr>
+
+        <!-- REFUND DETAILS — stacked rows -->
+        <tr>
+          <td class="qx-snap-pad" style="padding:34px 32px 4px;">
+            <div style="font-size:10.5px;letter-spacing:2.4px;color:#CBD5E1;text-transform:uppercase;font-weight:700;text-align:left;padding:0 0 14px 0;">
+              Refund Details
+            </div>
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td style="padding:14px 0;border-bottom:1px solid rgba(148,163,184,0.14);">
+                  <div class="qx-snap-label" style="font-size:11px;letter-spacing:1.6px;color:#94A3B8;text-transform:uppercase;font-weight:600;line-height:1;margin-bottom:6px;"><span style="margin-right:6px;">🏦</span>Credited Back To</div>
+                  <div class="qx-snap-value" style="font-size:15px;color:#FFFFFF;font-weight:600;line-height:1.4;">${safeRefundedTo}</div>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:14px 0;border-bottom:1px solid rgba(148,163,184,0.14);">
+                  <div class="qx-snap-label" style="font-size:11px;letter-spacing:1.6px;color:#94A3B8;text-transform:uppercase;font-weight:600;line-height:1;margin-bottom:6px;"><span style="margin-right:6px;">🆔</span>Original Request ID</div>
+                  <div class="qx-snap-value" style="font-size:15px;color:#FFFFFF;font-weight:600;line-height:1.4;">#${safeRequestId}</div>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:14px 0 4px;">
+                  <div class="qx-snap-label" style="font-size:11px;letter-spacing:1.6px;color:#94A3B8;text-transform:uppercase;font-weight:600;line-height:1;margin-bottom:6px;"><span style="margin-right:6px;">🕐</span>Refunded At</div>
+                  <div class="qx-snap-value" style="font-size:15px;color:#FFFFFF;font-weight:600;line-height:1.4;">${safeWhen}</div>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- DUAL CTA — primary "Submit New Request" + secondary "Contact Support" -->
+        <tr>
+          <td class="qx-cta-pad" align="center" style="padding:30px 32px 6px;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td align="center" style="border-radius:12px;background-image:linear-gradient(135deg,#64748B 0%,#334155 100%);background-color:#334155;box-shadow:0 8px 28px rgba(51,65,85,0.55);">
+                  <a href="https://qorixmarkets.com/wallet" target="_blank" class="qx-cta" style="display:inline-block;padding:16px 42px;font-size:15px;font-weight:700;color:#FFFFFF;text-decoration:none;letter-spacing:0.4px;border-radius:12px;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+                    Submit New Request
+                  </a>
+                </td>
+              </tr>
+            </table>
+            <div style="margin-top:14px;font-size:12.5px;color:#94A3B8;line-height:1.6;">
+              Need clarification? <a href="mailto:support@qorixmarkets.com" style="color:#CBD5E1;text-decoration:none;font-weight:600;border-bottom:1px dashed rgba(203,213,225,0.4);">Contact Support →</a>
+            </div>
+          </td>
+        </tr>
+
+        <!-- Reassurance / common reasons card -->
+        <tr>
+          <td style="padding:22px 32px 8px;">
+            <div style="background:rgba(148,163,184,0.05);border-left:2px solid rgba(148,163,184,0.5);border-radius:6px;padding:14px 16px;font-size:12.5px;line-height:1.65;color:#94A3B8;">
+              <div style="color:#E2E8F0;font-weight:600;margin-bottom:6px;">Common reasons for review holds:</div>
+              KYC verification incomplete · suspicious activity flag · invalid destination wallet · risk-management hold. Re-check the destination address and KYC status, then submit a new request — or write to <a href="mailto:support@qorixmarkets.com" style="color:#CBD5E1;text-decoration:none;">support@qorixmarkets.com</a> for specifics on this request.
+            </div>
+          </td>
+        </tr>
+
+        <!-- FOOTER -->
+        <tr>
+          <td class="qx-foot-pad" align="center" style="padding:30px 32px 28px;border-top:1px solid rgba(255,255,255,0.05);background:#0A0C10;">
+            <div style="font-size:13px;color:#CBD5E1;margin-bottom:6px;font-weight:600;">
+              Trade smart 📈
+            </div>
+            <div style="font-size:11.5px;color:#475569;line-height:1.7;">
+              © ${year} Qorix Markets · AI-Powered Trading<br/>
+              Need help? <a href="mailto:support@qorixmarkets.com" style="color:#CBD5E1;text-decoration:none;">support@qorixmarkets.com</a>
+            </div>
+          </td>
+        </tr>
+
+      </table>
+
+      <div style="height:24px;line-height:24px;font-size:1px;">&nbsp;</div>
+    </td>
+  </tr>
+</table>
+</body>
+</html>`;
+}
+
+// ---------------------------------------------------------------------------
+// Send the USDT Withdrawal Rejected email. Caller looks up email + name and
+// passes them in. Replaces previous generic sendTxnEmailToUser path
+// (see routes/admin.ts reject handler).
+// ---------------------------------------------------------------------------
+export async function sendWithdrawalRejected(args: {
+  to: string;
+  name: string;
+  refundedAmount: number;
+  refundedTo: string;
+  requestId: number;
+  whenUtc: Date;
+}): Promise<void> {
+  const { to, name, refundedAmount, refundedTo, requestId, whenUtc } = args;
+  const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const whenStr =
+    `${whenUtc.getUTCDate()} ${MONTHS_SHORT[whenUtc.getUTCMonth()]} ${whenUtc.getUTCFullYear()} · ` +
+    `${String(whenUtc.getUTCHours()).padStart(2, "0")}:${String(whenUtc.getUTCMinutes()).padStart(2, "0")} UTC`;
+  const fmt = (n: number) =>
+    n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  const subject = `Qorix Markets — Refund credited: $${fmt(refundedAmount)} USDT back in your wallet`;
+  const preheader = `$${fmt(refundedAmount)} USDT refunded to your ${refundedTo} — request #${requestId} couldn't be processed`;
+
+  const html = renderWithdrawalRejectedHtml({
+    preheader,
+    name,
+    refundedAmount,
+    refundedTo,
+    requestId,
+    whenUtc,
+  });
+
+  const text =
+    `Refund credited — funds returned\n\n` +
+    `Hi ${name},\n\n` +
+    `Your withdrawal request couldn't be processed — the full amount has been refunded.\n\n` +
+    `Refunded amount:    $${fmt(refundedAmount)} USDT\n` +
+    `Credited back to:   ${refundedTo}\n` +
+    `Original request:   #${requestId}\n` +
+    `Refunded at:        ${whenStr}\n\n` +
+    `Common reasons for review holds: KYC pending, suspicious activity flag,\n` +
+    `invalid destination wallet, or risk-management hold.\n\n` +
+    `Submit a new request: https://qorixmarkets.com/wallet\n` +
+    `Contact support:     support@qorixmarkets.com\n\n` +
+    `— Qorix Markets`;
+
+  await sendEmail(to, subject, text, html);
+}

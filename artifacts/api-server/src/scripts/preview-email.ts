@@ -20,6 +20,7 @@ import {
   renderDepositConfirmedHtml,
   renderInrDepositApprovedHtml,
   renderWithdrawalSentHtml,
+  renderWithdrawalRejectedHtml,
 } from "../lib/email-service";
 
 const DEFAULT_TO = "safepayu@gmail.com";
@@ -204,6 +205,31 @@ const TEMPLATES: Record<string, () => Preview> = {
         toAddress,
         txHash,
         network,
+        requestId,
+        whenUtc,
+      }),
+    };
+  },
+
+  "withdrawal-rejected": () => {
+    const name = "Prem";
+    const refundedAmount = 500.0;
+    const refundedTo = "Main Balance";
+    const requestId = 12345;
+    const whenUtc = new Date();
+    return {
+      subject: "[PREVIEW] Qorix Markets — Withdrawal Rejected & Refunded (new design)",
+      text:
+        `[DESIGN PREVIEW]\n\n` +
+        `Withdrawal of $${refundedAmount.toFixed(2)} USDT couldn't be processed — refunded to ${refundedTo}.\n\n` +
+        `Test render of the new refined-slate "Refund Credited" template.\n` +
+        `Reply with feedback.\n\n` +
+        `— Qorix Markets`,
+      html: renderWithdrawalRejectedHtml({
+        preheader: `[PREVIEW] $${refundedAmount.toFixed(2)} USDT refunded to your ${refundedTo} — request #${requestId} couldn't be processed`,
+        name,
+        refundedAmount,
+        refundedTo,
         requestId,
         whenUtc,
       }),
