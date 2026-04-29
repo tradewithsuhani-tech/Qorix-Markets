@@ -116,6 +116,14 @@ export function Recaptcha({ onVerify, onExpire }: RecaptchaProps) {
   );
 }
 
-// TEMPORARILY DISABLED — re-enable by removing the `false &&` once
-// reCAPTCHA admin console has the production + dev domains whitelisted.
-export const CAPTCHA_ENABLED = false && !!import.meta.env.VITE_RECAPTCHA_SITE_KEY;
+// Re-enabled in Batch 6 (2026-04-30) after the qorixmarkets.com +
+// www.qorixmarkets.com allowlist landed in the reCAPTCHA admin console.
+//
+// Currently consumed only by the /login page. The signup page does NOT
+// yet render the widget — that lands in B6.1 — so the matching server
+// route /auth/signup intentionally does NOT call verifyCaptcha until
+// then (see auth.ts). The /auth/login route DOES call verifyCaptcha.
+//
+// Driven by VITE_RECAPTCHA_SITE_KEY at build time so local/dev builds
+// without the env var continue to render the form without the widget.
+export const CAPTCHA_ENABLED = !!import.meta.env.VITE_RECAPTCHA_SITE_KEY;

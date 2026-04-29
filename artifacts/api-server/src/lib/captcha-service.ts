@@ -17,12 +17,12 @@ export async function verifyCaptcha(
   token: string | undefined | null,
   ip: string | undefined,
 ): Promise<{ ok: boolean; skipped?: boolean; error?: string }> {
-  // TEMPORARILY DISABLED — captcha verification bypassed until reCAPTCHA admin
-  // console has the production + dev domains whitelisted. Remove this early
-  // return to re-enable captcha verification.
-  return { ok: true, skipped: true };
-
-  // eslint-disable-next-line no-unreachable
+  // Re-enabled in Batch 6 (2026-04-30) after qorixmarkets.com +
+  // www.qorixmarkets.com were added to the reCAPTCHA admin-console
+  // domain allowlist. The auto-skip below (no `RECAPTCHA_SECRET_KEY`
+  // configured) is the only remaining bypass and is the intended
+  // local/dev escape hatch — production has the secret set as a
+  // Fly app secret so this branch is not taken in prod.
   const secret = process.env.RECAPTCHA_SECRET_KEY;
   if (!secret) {
     return { ok: true, skipped: true };
