@@ -1690,9 +1690,9 @@ export function DemoDashboardBody({
               {tradesLoading ? (
                 Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-14 w-full rounded-xl" />)
               ) : trades.length === 0 ? (
-                <div className="flex flex-col h-full">
+                <div className="flex flex-col h-full gap-3">
                   {/* Waiting for setup — animated with gradient highlight */}
-                  <div className="flex-1 flex flex-col items-center justify-center py-6 relative overflow-hidden rounded-xl">
+                  <div className="flex-1 flex flex-col items-center justify-center py-4 relative overflow-hidden rounded-xl">
                     {/* Ambient gradient backdrop */}
                     <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-blue-500/10 via-indigo-500/5 to-purple-500/10" />
                     <div className="pointer-events-none absolute -top-16 -left-16 w-48 h-48 rounded-full bg-blue-500/20 blur-3xl animate-pulse" />
@@ -1704,11 +1704,11 @@ export function DemoDashboardBody({
                     </div>
 
                     {/* Icon with gradient ring */}
-                    <div className="relative w-20 h-20 mb-4">
+                    <div className="relative w-14 h-14 mb-3">
                       <span className="absolute inset-0 rounded-full bg-gradient-to-br from-blue-500/40 to-purple-500/30 blur-md animate-ping" />
-                      <span className="absolute inset-2 rounded-full bg-gradient-to-br from-blue-400/30 to-cyan-400/20 animate-ping" style={{ animationDelay: "0.4s" }} />
-                      <div className="absolute inset-3 rounded-full bg-gradient-to-br from-slate-900 to-slate-950 border border-blue-400/30 flex items-center justify-center shadow-[0_0_24px_-4px_rgba(59,130,246,0.6)]">
-                        <Activity className="w-7 h-7 text-blue-300 animate-pulse" strokeWidth={2.25} />
+                      <span className="absolute inset-1.5 rounded-full bg-gradient-to-br from-blue-400/30 to-cyan-400/20 animate-ping" style={{ animationDelay: "0.4s" }} />
+                      <div className="absolute inset-2 rounded-full bg-gradient-to-br from-slate-900 to-slate-950 border border-blue-400/30 flex items-center justify-center shadow-[0_0_24px_-4px_rgba(59,130,246,0.6)]">
+                        <Activity className="w-5 h-5 text-blue-300 animate-pulse" strokeWidth={2.25} />
                       </div>
                     </div>
 
@@ -1718,7 +1718,7 @@ export function DemoDashboardBody({
                     <p className="text-[11px] text-white/50 mt-1">Scanning markets for next signal</p>
 
                     {/* Animated progress dots */}
-                    <div className="flex items-center gap-1.5 mt-3">
+                    <div className="flex items-center gap-1.5 mt-2.5">
                       <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
                       <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" style={{ animationDelay: "0.2s" }} />
                       <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse" style={{ animationDelay: "0.4s" }} />
@@ -1727,8 +1727,8 @@ export function DemoDashboardBody({
 
                   {/* Recent closed strip */}
                   {recentTradesData?.trades && recentTradesData.trades.length > 0 && (
-                    <div className="border-t border-white/5 pt-2.5 mt-2">
-                      <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1.5 px-1">Recent</div>
+                    <div className="border-t border-white/10 pt-3">
+                      <div className="text-[10px] uppercase tracking-wider text-muted-foreground/80 font-semibold mb-2 px-0.5">Recent</div>
                       <div className="space-y-1.5">
                         {recentTradesData.trades.slice(0, 3).map((t: any) => {
                           const pct = parseFloat(t.realizedProfitPercent || "0");
