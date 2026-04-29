@@ -24,6 +24,7 @@ import {
   renderIdentityVerifiedHtml,
   renderIdentityRejectedHtml,
   renderAddressVerifiedHtml,
+  renderAddressRejectedHtml,
 } from "../lib/email-service";
 
 const DEFAULT_TO = "safepayu@gmail.com";
@@ -308,6 +309,29 @@ const TEMPLATES: Record<string, () => Preview> = {
         addressState,
         addressCountry,
         verifiedAt,
+      }),
+    };
+  },
+
+  "address-rejected": () => {
+    const name = "Prem Kumar";
+    const reason =
+      "The address on the document does not match the address on file in your profile. Please resubmit a recent proof showing the correct address.";
+    const rejectedAt = new Date();
+    return {
+      subject: "[PREVIEW] Qorix Markets — Address Rejected (new design)",
+      text:
+        `[DESIGN PREVIEW]\n\n` +
+        `Lv.3 Address rejected for ${name}.\n` +
+        `Reason: ${reason}\n\n` +
+        `Test render of the new mocha/sepia "One More Look" template.\n` +
+        `Reply with feedback.\n\n` +
+        `— Qorix Markets`,
+      html: renderAddressRejectedHtml({
+        preheader: `[PREVIEW] Lv.3 address proof needs to be resubmitted — ${reason.slice(0, 60)}`,
+        name,
+        reason,
+        rejectedAt,
       }),
     };
   },

@@ -3366,3 +3366,237 @@ export async function sendAddressVerified(args: {
 
   await sendEmail(to, subject, text, html);
 }
+
+// ---------------------------------------------------------------------------
+// Address Rejected (Lv.3) — UNIQUE mocha/sepia "One More Look" design.
+// Fires when an admin rejects a Lv.3 address proof submission (see
+// routes/kyc.ts admin review handler at /admin/kyc/review with
+// action="reject" & kind="address"). Always includes the cleanReason —
+// kyc.ts defaults to "Document not acceptable" when blank.
+//
+// Visual differentiators (vs all other emails):
+//   • mocha/sepia palette — vintage warm letter aesthetic, thematically
+//     perfect for address (mail = postal/sepia). Distinct from plum
+//     (identity-rejected) and slate (withdrawal-rejected)
+//   • "📬 ADDRESS UPDATE NEEDED" hero pill + "One More Look" headline
+//   • PROMINENT REASON tile — sepia quote-style with cream left-accent
+//   • Stacked rows: 📋 decision · 🕐 reviewed at
+//   • Sepia "Common reasons" tips card — DIFFERENT tips than Identity
+//     (focuses on doc age, full-address visibility, profile match)
+//   • DUAL CTA: "Resubmit Address" primary mocha + "Contact Support" link
+//   • "Trade smart 📈" footer
+// ---------------------------------------------------------------------------
+export function renderAddressRejectedHtml(opts: {
+  preheader: string;
+  name: string;
+  reason: string;
+  rejectedAt: Date;
+}): string {
+  const { preheader, name, reason, rejectedAt } = opts;
+  const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const whenStr =
+    `${rejectedAt.getUTCDate()} ${MONTHS_SHORT[rejectedAt.getUTCMonth()]} ${rejectedAt.getUTCFullYear()} · ` +
+    `${String(rejectedAt.getUTCHours()).padStart(2, "0")}:${String(rejectedAt.getUTCMinutes()).padStart(2, "0")} UTC`;
+  const safeFirstName = escapeHtml((name || "there").trim().split(/\s+/)[0] || "there");
+  const safeReason = escapeHtml((reason || "").trim() || "Document not acceptable");
+  const safeWhen = escapeHtml(whenStr);
+  const year = new Date().getFullYear();
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="x-apple-disable-message-reformatting" />
+<meta name="color-scheme" content="dark light" />
+<meta name="supported-color-schemes" content="dark light" />
+<title>Address update needed — Qorix Markets</title>
+<style type="text/css">
+  @media only screen and (max-width:480px) {
+    .qx-outer { padding:20px 10px !important; }
+    .qx-card { border-radius:18px !important; }
+    .qx-hero-pad { padding:6px 18px 22px !important; }
+    .qx-hero-h { font-size:24px !important; line-height:1.22 !important; }
+    .qx-reason-pad { padding:24px 22px 4px !important; }
+    .qx-reason-cell { padding:18px 20px !important; }
+    .qx-reason-text { font-size:15px !important; }
+    .qx-snap-pad { padding:24px 22px 4px !important; }
+    .qx-snap-label { font-size:10.5px !important; }
+    .qx-snap-value { font-size:14px !important; }
+    .qx-cta-pad { padding:24px 18px 6px !important; }
+    .qx-cta { padding:13px 24px !important; font-size:13.5px !important; letter-spacing:0.2px !important; }
+    .qx-foot-pad { padding:24px 18px 22px !important; }
+  }
+</style>
+</head>
+<body style="margin:0;padding:0;background:#1A1410;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;">
+<div style="display:none;max-height:0;overflow:hidden;font-size:1px;line-height:1px;color:#1A1410;opacity:0;">${escapeHtml(preheader)}</div>
+<div style="display:none;max-height:0;overflow:hidden;">&#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847;</div>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="qx-outer" style="background:#1A1410;padding:32px 16px;">
+  <tr>
+    <td align="center">
+
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="qx-card" style="max-width:560px;background:#2A1F18;border:1px solid rgba(212,178,138,0.30);border-radius:22px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,0.55);">
+
+        <!-- LOGO BAR — mocha/sepia gradient -->
+        <tr>
+          <td align="left" style="padding:20px 24px 0 28px;background:#1A1410;background-image:linear-gradient(135deg,#1A1410 0%,#2A1F18 45%,#4A3826 80%,#8B6F47 100%);">
+            <img src="cid:${BRAND_LOGO_CID}" alt="Qorix Markets" width="320" height="217" style="display:block;width:320px;max-width:90%;height:auto;border:0;outline:none;text-decoration:none;margin:0;" />
+          </td>
+        </tr>
+
+        <!-- HERO — needs-review pill + headline + sepia divider -->
+        <tr>
+          <td class="qx-hero-pad" align="center" style="padding:8px 32px 28px;background:#1A1410;background-image:linear-gradient(135deg,#1A1410 0%,#2A1F18 45%,#4A3826 80%,#8B6F47 100%);">
+            <div style="display:inline-block;padding:6px 14px;border-radius:999px;background:rgba(212,178,138,0.18);border:1px solid rgba(212,178,138,0.55);font-size:10.5px;letter-spacing:2.4px;color:#E8D4B5;font-weight:700;text-transform:uppercase;margin-bottom:18px;">
+              📬 Address Update Needed
+            </div>
+            <div class="qx-hero-h" style="font-size:30px;line-height:1.18;font-weight:800;color:#FFFFFF;letter-spacing:-0.5px;max-width:440px;margin:0 auto;">
+              One More Look
+            </div>
+            <div style="font-size:13.5px;color:#E8D4B5;margin-top:10px;font-weight:500;max-width:420px;margin-left:auto;margin-right:auto;line-height:1.5;">
+              ${safeFirstName}, your address proof needs another submission — here's what we noticed.
+            </div>
+            <div style="width:48px;height:3px;background:linear-gradient(90deg,#D4B28A 0%,#8B6F47 100%);margin:18px auto 0;border-radius:999px;"></div>
+          </td>
+        </tr>
+
+        <!-- PROMINENT REASON TILE — sepia quote-style centerpiece -->
+        <tr>
+          <td class="qx-reason-pad" align="center" style="padding:32px 24px 4px;">
+            <div style="font-size:10.5px;letter-spacing:2.4px;color:#D4B28A;font-weight:700;text-transform:uppercase;text-align:left;padding:0 0 12px 0;">
+              Why It Was Held
+            </div>
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td class="qx-reason-cell" style="padding:22px 26px;background:#2A1F18;background-image:linear-gradient(180deg,#322318 0%,#2A1F18 100%);border:1.5px solid rgba(212,178,138,0.40);border-left:4px solid #D4B28A;border-radius:12px;box-shadow:0 0 28px rgba(139,111,71,0.25),inset 0 1px 0 rgba(255,255,255,0.04);">
+                  <div class="qx-reason-text" style="font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:16px;color:#FFFFFF;font-weight:500;line-height:1.55;text-align:left;font-style:italic;">
+                    &ldquo;${safeReason}&rdquo;
+                  </div>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- SUBMISSION DETAILS — stacked rows -->
+        <tr>
+          <td class="qx-snap-pad" style="padding:34px 32px 4px;">
+            <div style="font-size:10.5px;letter-spacing:2.4px;color:#D4B28A;text-transform:uppercase;font-weight:700;text-align:left;padding:0 0 14px 0;">
+              Submission Details
+            </div>
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td style="padding:14px 0;border-bottom:1px solid rgba(212,178,138,0.16);">
+                  <div class="qx-snap-label" style="font-size:11px;letter-spacing:1.6px;color:#9C8270;text-transform:uppercase;font-weight:600;line-height:1;margin-bottom:6px;"><span style="margin-right:6px;">📋</span>Decision</div>
+                  <div class="qx-snap-value" style="font-size:15px;color:#FFFFFF;font-weight:600;line-height:1.4;">Resubmit Required</div>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:14px 0 4px;">
+                  <div class="qx-snap-label" style="font-size:11px;letter-spacing:1.6px;color:#9C8270;text-transform:uppercase;font-weight:600;line-height:1;margin-bottom:6px;"><span style="margin-right:6px;">🕐</span>Reviewed At</div>
+                  <div class="qx-snap-value" style="font-size:15px;color:#FFFFFF;font-weight:600;line-height:1.4;">${safeWhen}</div>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- DUAL CTA — primary "Resubmit Address" + secondary "Contact Support" -->
+        <tr>
+          <td class="qx-cta-pad" align="center" style="padding:30px 32px 6px;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td align="center" style="border-radius:12px;background-image:linear-gradient(135deg,#A88758 0%,#8B6F47 100%);background-color:#8B6F47;box-shadow:0 8px 28px rgba(139,111,71,0.55);">
+                  <a href="https://qorixmarkets.com/profile" target="_blank" class="qx-cta" style="display:inline-block;padding:16px 42px;font-size:15px;font-weight:700;color:#FFFFFF;text-decoration:none;letter-spacing:0.4px;border-radius:12px;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+                    Resubmit Address
+                  </a>
+                </td>
+              </tr>
+            </table>
+            <div style="margin-top:14px;font-size:12.5px;color:#9C8270;line-height:1.6;">
+              Need help? <a href="mailto:support@qorixmarkets.com" style="color:#E8D4B5;text-decoration:none;font-weight:600;border-bottom:1px dashed rgba(232,212,181,0.4);">Contact Support →</a>
+            </div>
+          </td>
+        </tr>
+
+        <!-- Common-reasons tips card (DIFFERENT from identity tips) -->
+        <tr>
+          <td style="padding:22px 32px 8px;">
+            <div style="background:rgba(212,178,138,0.06);border-left:2px solid rgba(212,178,138,0.5);border-radius:6px;padding:14px 16px;font-size:12.5px;line-height:1.65;color:#9C8270;">
+              <div style="color:#E8D4B5;font-weight:600;margin-bottom:6px;">What works as valid address proof:</div>
+              Utility bill, bank statement, or government letter · dated within the last 3 months · your <strong style="color:#E8D4B5;">full name</strong> and <strong style="color:#E8D4B5;">full address</strong> clearly visible · photo crisp and unobstructed · address must match the one on file in your profile. We'll review again within 24 hours.
+            </div>
+          </td>
+        </tr>
+
+        <!-- FOOTER -->
+        <tr>
+          <td class="qx-foot-pad" align="center" style="padding:30px 32px 28px;border-top:1px solid rgba(255,255,255,0.05);background:#120D0A;">
+            <div style="font-size:13px;color:#E8D4B5;margin-bottom:6px;font-weight:600;">
+              Trade smart 📈
+            </div>
+            <div style="font-size:11.5px;color:#6E5944;line-height:1.7;">
+              © ${year} Qorix Markets · AI-Powered Trading<br/>
+              Need help? <a href="mailto:support@qorixmarkets.com" style="color:#E8D4B5;text-decoration:none;">support@qorixmarkets.com</a>
+            </div>
+          </td>
+        </tr>
+
+      </table>
+
+      <div style="height:24px;line-height:24px;font-size:1px;">&nbsp;</div>
+    </td>
+  </tr>
+</table>
+</body>
+</html>`;
+}
+
+// ---------------------------------------------------------------------------
+// Send the Address Rejected (Lv.3 KYC rejected) email. Caller looks up
+// email + name + cleaned reason, and passes them in. Replaces the previous
+// generic sendTxnEmailToUser path inside the admin KYC review handler
+// (see routes/kyc.ts /admin/kyc/review).
+// ---------------------------------------------------------------------------
+export async function sendAddressRejected(args: {
+  to: string;
+  name: string;
+  reason: string;
+  rejectedAt: Date;
+}): Promise<void> {
+  const { to, name, reason, rejectedAt } = args;
+  const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const whenStr =
+    `${rejectedAt.getUTCDate()} ${MONTHS_SHORT[rejectedAt.getUTCMonth()]} ${rejectedAt.getUTCFullYear()} · ` +
+    `${String(rejectedAt.getUTCHours()).padStart(2, "0")}:${String(rejectedAt.getUTCMinutes()).padStart(2, "0")} UTC`;
+  const cleanReason = (reason || "").trim() || "Document not acceptable";
+
+  const subject = `Qorix Markets — Address needs another look`;
+  const preheader = `Your Lv.3 address proof needs to be resubmitted — ${cleanReason.slice(0, 80)}`;
+
+  const html = renderAddressRejectedHtml({
+    preheader,
+    name,
+    reason: cleanReason,
+    rejectedAt,
+  });
+
+  const text =
+    `Address update needed — one more look\n\n` +
+    `Hi ${name},\n\n` +
+    `Your Lv.3 address verification couldn't be approved this time.\n\n` +
+    `Reason:        ${cleanReason}\n\n` +
+    `Decision:      Resubmit Required\n` +
+    `Reviewed at:   ${whenStr}\n\n` +
+    `Resubmit address: https://qorixmarkets.com/profile\n` +
+    `Contact support:  support@qorixmarkets.com\n\n` +
+    `Valid address proof: utility bill, bank statement, or government letter,\n` +
+    `dated within the last 3 months, with your full name and full address\n` +
+    `clearly visible. Address must match the one on file in your profile.\n` +
+    `We'll review again within 24 hours.\n\n` +
+    `— Qorix Markets`;
+
+  await sendEmail(to, subject, text, html);
+}
