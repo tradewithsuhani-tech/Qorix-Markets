@@ -1137,11 +1137,11 @@ export default function InvestPage() {
                     { label: "Capital", value: numAmount > 0 ? `$${numAmount.toFixed(2)} USD` : "—" },
                     { label: "Strategy", value: selectedProfile.label },
                     {
-                      // User receives payouts monthly, not daily — so we show
-                      // the monthly target range (daily % × 30) instead of the
-                      // raw daily rate to avoid confusion.
+                      // User receives payouts monthly. Use the monthly target
+                      // range defined on the profile itself (matches the
+                      // numbers already shown in the strategy card features).
                       label: "Monthly Target",
-                      value: `${(selectedProfile.minDailyPct * 30).toFixed(1).replace(/\.0$/, "")}–${(selectedProfile.maxDailyPct * 30).toFixed(1).replace(/\.0$/, "")}%`,
+                      value: `${selectedProfile.monthlyMinPct}–${selectedProfile.monthlyMaxPct}%`,
                       highlight: true,
                     },
                     { label: "Risk Level", value: selectedProfile.volatility },
