@@ -10,6 +10,7 @@ import { PWAInstallPrompt } from "@/components/pwa-install-prompt";
 import { SplashScreen, useSplash } from "@/components/splash-screen";
 import { QorixAssistant } from "@/components/qorix-assistant";
 import AdminChatsPage from "@/pages/admin-chats";
+import AdminChatAnalyticsPage from "@/pages/admin-chat-analytics";
 import AdminCommunicationPage from "@/pages/admin-communication";
 import AdminContentPage from "@/pages/admin-content";
 import AdminTestPage from "@/pages/admin-test";
@@ -232,6 +233,7 @@ function Router() {
       <Route path="/admin/task-proofs"><ProtectedRoute component={AdminTaskProofsPage} adminOnly={true} /></Route>
       <Route path="/admin/quizzes"><ProtectedRoute component={AdminQuizzesPage} adminOnly={true} /></Route>
       <Route path="/admin/chats"><ProtectedRoute component={AdminChatsPage} adminOnly={true} /></Route>
+      <Route path="/admin/chat-analytics"><ProtectedRoute component={AdminChatAnalyticsPage} adminOnly={true} /></Route>
       <Route path="/admin/communication"><ProtectedRoute component={AdminCommunicationPage} adminOnly={true} /></Route>
       <Route path="/admin/content"><ProtectedRoute component={AdminContentPage} adminOnly={true} /></Route>
       <Route path="/admin/test"><ProtectedRoute component={AdminTestPage} adminOnly={true} /></Route>

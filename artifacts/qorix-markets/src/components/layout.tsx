@@ -19,6 +19,7 @@ import {
   X,
   AlertTriangle,
   BarChart2,
+  BarChart3,
   Bell,
   BellDot,
   TrendingDown,
@@ -611,6 +612,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/admin/logs", label: "Logs", icon: Database },
     { href: "/admin/fraud", label: "Fraud Monitor", icon: Shield },
     { href: "/admin/chats", label: "Support Chats", icon: MessageCircle },
+    { href: "/admin/chat-analytics", label: "Chat Analytics", icon: BarChart3 },
     { href: "/admin/task-proofs", label: "Task Proofs", icon: ClipboardCheck },
     { href: "/admin/quizzes", label: "Quizzes", icon: Sparkles },
   ];

@@ -9,7 +9,7 @@ import {
   investmentsTable,
   transactionsTable,
 } from "@workspace/db/schema";
-import { eq, desc, and, sql } from "drizzle-orm";
+import { eq, desc, and, sql, gte, lt } from "drizzle-orm";
 import { authMiddleware, adminMiddleware, getParam, type AuthRequest } from "../middlewares/auth";
 import { makeRedisLimiter } from "../middlewares/rate-limit";
 import {
@@ -833,5 +833,375 @@ router.post("/admin/chats/:id/resolve", authMiddleware, adminMiddleware, async (
     res.status(500).json({ error: "Failed to resolve session" });
   }
 });
+
+// ─── Chat analytics dashboard (Task 103) ────────────────────────────────────
+// Aggregate funnel + cost view across the chat assistant. Powers the
+// /admin/chat-analytics page so ops can see at a glance how many chats are
+// converting, where users drop off, which intents convert best, and roughly
+// what we're spending on the LLM per conversion.
+//
+// Cost model: gpt-5-mini blended (input + output) is roughly $1 per 1M
+// tokens. We track total tokens per session in `chat_sessions.llm_tokens_used`
+// (the sum of `usage.total_tokens` returned by the chat completion call), so
+// we just multiply by a per-token rate. This is intentionally a rough
+// estimate — exact billing comes from the OpenAI dashboard.
+const EST_OPENAI_USD_PER_TOKEN = 0.000001;
+
+// Engagement threshold for the funnel "engaged" stage. Mirrors the
+// ENGAGEMENT_CTA_THRESHOLD constant above so the funnel and the live CTA
+// gating stay aligned.
+const ENGAGED_FUNNEL_THRESHOLD = ENGAGEMENT_CTA_THRESHOLD;
+
+// Internal helper: compute the headline totals + funnel-stage counts for
+// a single time window. Re-used for the requested range AND the previous
+// equivalent window, so the dashboard can render period-over-period deltas
+// without doubling the route handler's branching.
+async function computeChatAnalyticsTotals(fromDate: Date, toDate: Date) {
+  const upperBound = new Date(toDate.getTime() + 1);
+  const sessionRange = and(
+    gte(chatSessionsTable.createdAt, fromDate),
+    lt(chatSessionsTable.createdAt, upperBound),
+  );
+
+  const totalsRows = await db
+    .select({
+      sessions: sql<string>`COUNT(*)::text`,
+      aiReplies: sql<string>`COALESCE(SUM(${chatSessionsTable.llmReplyCount}), 0)::text`,
+      tokensUsed: sql<string>`COALESCE(SUM(${chatSessionsTable.llmTokensUsed}), 0)::text`,
+      ctaShown: sql<string>`COALESCE(SUM(${chatSessionsTable.ctaShownCount}), 0)::text`,
+      ctaClicked: sql<string>`COALESCE(SUM(${chatSessionsTable.ctaClickedCount}), 0)::text`,
+      sessionsWithCtaShown: sql<string>`COUNT(*) FILTER (WHERE ${chatSessionsTable.ctaShownCount} > 0)::text`,
+      sessionsWithCtaClick: sql<string>`COUNT(*) FILTER (WHERE ${chatSessionsTable.ctaClickedCount} > 0)::text`,
+      engagedSessions: sql<string>`COUNT(*) FILTER (WHERE ${chatSessionsTable.engagementScore} >= ${ENGAGED_FUNNEL_THRESHOLD})::text`,
+      convertedSessions: sql<string>`COUNT(*) FILTER (WHERE ${chatSessionsTable.convertedAt} IS NOT NULL)::text`,
+      avgEngagement: sql<string>`COALESCE(AVG(${chatSessionsTable.engagementScore})::numeric(10,2), 0)::text`,
+      // Median time-to-conversion in seconds. Uses PERCENTILE_CONT for a
+      // continuous median — far more representative than AVG when a few
+      // long-tail "user converted 3 weeks later" sessions are mixed in
+      // with normal same-session conversions.
+      medianTimeToConvertSec: sql<string>`COALESCE(
+        PERCENTILE_CONT(0.5) WITHIN GROUP (
+          ORDER BY EXTRACT(EPOCH FROM (${chatSessionsTable.convertedAt} - ${chatSessionsTable.createdAt}))
+        ) FILTER (WHERE ${chatSessionsTable.convertedAt} IS NOT NULL),
+        0
+      )::text`,
+    })
+    .from(chatSessionsTable)
+    .where(sessionRange);
+
+  const t = totalsRows[0]!;
+
+  const depositVisitRows = await db
+    .select({
+      sessions: sql<string>`COUNT(DISTINCT ${chatConversionEventsTable.sessionId})::text`,
+    })
+    .from(chatConversionEventsTable)
+    .innerJoin(
+      chatSessionsTable,
+      eq(chatConversionEventsTable.sessionId, chatSessionsTable.id),
+    )
+    .where(
+      and(
+        sessionRange,
+        eq(chatConversionEventsTable.eventType, "deposit_page_visited"),
+      ),
+    );
+
+  return {
+    sessions: parseInt(t.sessions, 10),
+    aiReplies: parseInt(t.aiReplies, 10),
+    tokensUsed: parseInt(t.tokensUsed, 10),
+    ctaShown: parseInt(t.ctaShown, 10),
+    ctaClicked: parseInt(t.ctaClicked, 10),
+    sessionsWithCtaShown: parseInt(t.sessionsWithCtaShown, 10),
+    sessionsWithCtaClick: parseInt(t.sessionsWithCtaClick, 10),
+    engagedSessions: parseInt(t.engagedSessions, 10),
+    convertedSessions: parseInt(t.convertedSessions, 10),
+    depositVisitSessions: parseInt(depositVisitRows[0]?.sessions ?? "0", 10),
+    avgEngagement: parseFloat(t.avgEngagement) || 0,
+    medianTimeToConvertSec: parseFloat(t.medianTimeToConvertSec) || 0,
+  };
+}
+
+router.get(
+  "/admin/chat-analytics",
+  authMiddleware,
+  adminMiddleware,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      // Parse optional ISO date range. Defaults: last 30 days.
+      const now = new Date();
+      const defaultFrom = new Date(now);
+      defaultFrom.setUTCDate(defaultFrom.getUTCDate() - 30);
+
+      const fromRaw = typeof req.query.from === "string" ? req.query.from : null;
+      const toRaw = typeof req.query.to === "string" ? req.query.to : null;
+      const fromDate = fromRaw && !Number.isNaN(Date.parse(fromRaw)) ? new Date(fromRaw) : defaultFrom;
+      // For an inclusive `to` date (UI sends a calendar day), bump the upper
+      // bound to the start of the next day so events on the `to` day count.
+      const toBase = toRaw && !Number.isNaN(Date.parse(toRaw)) ? new Date(toRaw) : now;
+      const toDate = new Date(toBase);
+      if (toRaw) {
+        toDate.setUTCHours(23, 59, 59, 999);
+      }
+      if (toDate < fromDate) {
+        res.status(400).json({ error: "`to` must be on or after `from`" });
+        return;
+      }
+
+      // Previous equivalent window for period-over-period deltas. Spans
+      // exactly the same length as the requested range, immediately before
+      // `fromDate`. e.g. selecting "last 7 days" compares against the 7
+      // days BEFORE that.
+      const rangeMs = toDate.getTime() - fromDate.getTime();
+      const prevTo = new Date(fromDate.getTime() - 1);
+      const prevFrom = new Date(prevTo.getTime() - rangeMs);
+
+      const sessionRange = and(
+        gte(chatSessionsTable.createdAt, fromDate),
+        lt(chatSessionsTable.createdAt, new Date(toDate.getTime() + 1)),
+      );
+
+      // Run current totals, previous-period totals, and the per-intent /
+      // per-language / variant / objections / time-series queries in
+      // parallel — all read-only and independent.
+      const [
+        currentTotals,
+        previousTotals,
+        intentRows,
+        languageRows,
+        variantRows,
+        objectionRows,
+        timeseriesRows,
+      ] = await Promise.all([
+        computeChatAnalyticsTotals(fromDate, toDate),
+        computeChatAnalyticsTotals(prevFrom, prevTo),
+
+        // ── Per-intent breakdown ────────────────────────────────────────
+        db
+          .select({
+            intent: sql<string>`COALESCE(${chatSessionsTable.detectedIntent}, 'unknown')`,
+            sessions: sql<string>`COUNT(*)::text`,
+            conversions: sql<string>`COUNT(*) FILTER (WHERE ${chatSessionsTable.convertedAt} IS NOT NULL)::text`,
+            ctaShown: sql<string>`COALESCE(SUM(${chatSessionsTable.ctaShownCount}), 0)::text`,
+            ctaClicked: sql<string>`COALESCE(SUM(${chatSessionsTable.ctaClickedCount}), 0)::text`,
+            engaged: sql<string>`COUNT(*) FILTER (WHERE ${chatSessionsTable.engagementScore} >= ${ENGAGED_FUNNEL_THRESHOLD})::text`,
+          })
+          .from(chatSessionsTable)
+          .where(sessionRange)
+          .groupBy(sql`COALESCE(${chatSessionsTable.detectedIntent}, 'unknown')`),
+
+        // ── Per-language breakdown ──────────────────────────────────────
+        db
+          .select({
+            language: sql<string>`COALESCE(${chatSessionsTable.language}, 'unknown')`,
+            sessions: sql<string>`COUNT(*)::text`,
+            conversions: sql<string>`COUNT(*) FILTER (WHERE ${chatSessionsTable.convertedAt} IS NOT NULL)::text`,
+          })
+          .from(chatSessionsTable)
+          .where(sessionRange)
+          .groupBy(sql`COALESCE(${chatSessionsTable.language}, 'unknown')`),
+
+        // ── CTA variant breakdown ───────────────────────────────────────
+        // Joins conversion events to sessions so we can scope by the
+        // session's createdAt. Counts (impressions, clicks) per variant
+        // and the click-through rate is computed in JS afterwards.
+        db
+          .select({
+            variant: sql<string>`COALESCE(${chatConversionEventsTable.metadata}->>'variant', 'unknown')`,
+            shown: sql<string>`COUNT(*) FILTER (WHERE ${chatConversionEventsTable.eventType} = 'cta_shown')::text`,
+            clicked: sql<string>`COUNT(*) FILTER (WHERE ${chatConversionEventsTable.eventType} = 'cta_clicked')::text`,
+          })
+          .from(chatConversionEventsTable)
+          .innerJoin(
+            chatSessionsTable,
+            eq(chatConversionEventsTable.sessionId, chatSessionsTable.id),
+          )
+          .where(
+            and(
+              sessionRange,
+              sql`${chatConversionEventsTable.eventType} IN ('cta_shown', 'cta_clicked')`,
+            ),
+          )
+          .groupBy(sql`COALESCE(${chatConversionEventsTable.metadata}->>'variant', 'unknown')`),
+
+        // ── Top objections ──────────────────────────────────────────────
+        // Unfolds the JSONB profile.mentioned_objections array per session
+        // and counts each objection. Capped at 8 to keep the UI
+        // digestible.
+        db.execute<{ objection: string; count: string }>(sql`
+          SELECT obj AS objection, COUNT(*)::text AS count
+          FROM (
+            SELECT jsonb_array_elements_text(profile->'mentioned_objections') AS obj
+            FROM chat_sessions
+            WHERE created_at >= ${fromDate}
+              AND created_at < ${new Date(toDate.getTime() + 1)}
+              AND profile ? 'mentioned_objections'
+              AND jsonb_typeof(profile->'mentioned_objections') = 'array'
+          ) sub
+          GROUP BY obj
+          ORDER BY COUNT(*) DESC
+          LIMIT 8
+        `),
+
+        // ── Daily time series ───────────────────────────────────────────
+        // Grouped by UTC calendar day. Smaller-than-7-day ranges still
+        // return a usable curve; larger ranges naturally aggregate.
+        db
+          .select({
+            day: sql<string>`DATE_TRUNC('day', ${chatSessionsTable.createdAt})::date::text`,
+            sessions: sql<string>`COUNT(*)::text`,
+            conversions: sql<string>`COUNT(*) FILTER (WHERE ${chatSessionsTable.convertedAt} IS NOT NULL)::text`,
+            ctaShown: sql<string>`COALESCE(SUM(${chatSessionsTable.ctaShownCount}), 0)::text`,
+            ctaClicked: sql<string>`COALESCE(SUM(${chatSessionsTable.ctaClickedCount}), 0)::text`,
+            tokensUsed: sql<string>`COALESCE(SUM(${chatSessionsTable.llmTokensUsed}), 0)::text`,
+          })
+          .from(chatSessionsTable)
+          .where(sessionRange)
+          .groupBy(sql`DATE_TRUNC('day', ${chatSessionsTable.createdAt})`)
+          .orderBy(sql`DATE_TRUNC('day', ${chatSessionsTable.createdAt})`),
+      ]);
+
+      const safeRatio = (num: number, denom: number) => (denom > 0 ? num / denom : 0);
+
+      function buildTotalsView(t: Awaited<ReturnType<typeof computeChatAnalyticsTotals>>) {
+        const estimatedCostUsd = t.tokensUsed * EST_OPENAI_USD_PER_TOKEN;
+        return {
+          sessions: t.sessions,
+          aiReplies: t.aiReplies,
+          tokensUsed: t.tokensUsed,
+          estimatedCostUsd,
+          costPerConvertedUsd: safeRatio(estimatedCostUsd, t.convertedSessions),
+          ctaShown: t.ctaShown,
+          ctaClicked: t.ctaClicked,
+          ctaCtr: safeRatio(t.ctaClicked, t.ctaShown),
+          depositVisitSessions: t.depositVisitSessions,
+          convertedSessions: t.convertedSessions,
+          conversionRate: safeRatio(t.convertedSessions, t.sessions),
+          avgEngagement: t.avgEngagement,
+          avgAiRepliesPerSession: safeRatio(t.aiReplies, t.sessions),
+          avgTokensPerSession: safeRatio(t.tokensUsed, t.sessions),
+          medianTimeToConvertSec: t.medianTimeToConvertSec,
+          estOpenaiUsdPerToken: EST_OPENAI_USD_PER_TOKEN,
+        };
+      }
+
+      // Densify the time series so the chart has a continuous x-axis even
+      // on quiet days (otherwise gaps misrepresent "no traffic" as
+      // "didn't ask for that day"). One bucket per UTC day from `from` to
+      // `to` inclusive.
+      const seriesByDay = new Map(
+        timeseriesRows.map((r) => [
+          r.day,
+          {
+            sessions: parseInt(r.sessions, 10),
+            conversions: parseInt(r.conversions, 10),
+            ctaShown: parseInt(r.ctaShown, 10),
+            ctaClicked: parseInt(r.ctaClicked, 10),
+            tokensUsed: parseInt(r.tokensUsed, 10),
+          },
+        ]),
+      );
+      const densifiedSeries: Array<{
+        date: string;
+        sessions: number;
+        conversions: number;
+        ctaShown: number;
+        ctaClicked: number;
+        tokensUsed: number;
+        estCostUsd: number;
+      }> = [];
+      const cursor = new Date(Date.UTC(fromDate.getUTCFullYear(), fromDate.getUTCMonth(), fromDate.getUTCDate()));
+      const endCursor = new Date(Date.UTC(toDate.getUTCFullYear(), toDate.getUTCMonth(), toDate.getUTCDate()));
+      // Hard cap at 365 days to protect the UI / payload size.
+      let safety = 0;
+      while (cursor <= endCursor && safety < 365) {
+        const key = cursor.toISOString().slice(0, 10);
+        const r = seriesByDay.get(key) ?? {
+          sessions: 0,
+          conversions: 0,
+          ctaShown: 0,
+          ctaClicked: 0,
+          tokensUsed: 0,
+        };
+        densifiedSeries.push({
+          date: key,
+          ...r,
+          estCostUsd: r.tokensUsed * EST_OPENAI_USD_PER_TOKEN,
+        });
+        cursor.setUTCDate(cursor.getUTCDate() + 1);
+        safety++;
+      }
+
+      res.json({
+        range: {
+          from: fromDate.toISOString(),
+          to: toDate.toISOString(),
+        },
+        previousRange: {
+          from: prevFrom.toISOString(),
+          to: prevTo.toISOString(),
+        },
+        totals: buildTotalsView(currentTotals),
+        previousTotals: buildTotalsView(previousTotals),
+        funnel: [
+          { stage: "chat_started", label: "Chat started", count: currentTotals.sessions },
+          { stage: "engaged", label: `Engaged (score≥${ENGAGED_FUNNEL_THRESHOLD})`, count: currentTotals.engagedSessions },
+          { stage: "cta_shown", label: "CTA shown", count: currentTotals.sessionsWithCtaShown },
+          { stage: "cta_clicked", label: "CTA clicked", count: currentTotals.sessionsWithCtaClick },
+          { stage: "deposit_visit", label: "Deposit page visit", count: currentTotals.depositVisitSessions },
+          { stage: "deposit_complete", label: "Deposit complete", count: currentTotals.convertedSessions },
+        ],
+        intents: intentRows
+          .map((r) => {
+            const s = parseInt(r.sessions, 10);
+            const c = parseInt(r.conversions, 10);
+            return {
+              intent: r.intent,
+              sessions: s,
+              conversions: c,
+              conversionRate: safeRatio(c, s),
+              ctaShown: parseInt(r.ctaShown, 10),
+              ctaClicked: parseInt(r.ctaClicked, 10),
+              engaged: parseInt(r.engaged, 10),
+            };
+          })
+          .sort((a, b) => b.sessions - a.sessions),
+        languages: languageRows
+          .map((r) => {
+            const s = parseInt(r.sessions, 10);
+            const c = parseInt(r.conversions, 10);
+            return {
+              language: r.language,
+              sessions: s,
+              conversions: c,
+              conversionRate: safeRatio(c, s),
+            };
+          })
+          .sort((a, b) => b.sessions - a.sessions),
+        ctaVariants: variantRows
+          .map((r) => {
+            const shown = parseInt(r.shown, 10);
+            const clicked = parseInt(r.clicked, 10);
+            return {
+              variant: r.variant,
+              shown,
+              clicked,
+              ctr: safeRatio(clicked, shown),
+            };
+          })
+          .sort((a, b) => b.shown - a.shown),
+        topObjections: (objectionRows.rows ?? objectionRows).map((r: { objection: string; count: string }) => ({
+          objection: r.objection,
+          count: parseInt(r.count, 10),
+        })),
+        timeseries: densifiedSeries,
+      });
+    } catch (err) {
+      logger.warn({ err: (err as Error).message }, "[chat] /admin/chat-analytics failed");
+      res.status(500).json({ error: "Failed to fetch chat analytics" });
+    }
+  },
+);
 
 export default router;
