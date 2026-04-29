@@ -657,16 +657,14 @@ export function renderWelcomeEmailHtml(opts: {
   email: string;
   referralCode: string;
 }): string {
-  const { firstName, email, referralCode } = opts;
+  const { firstName } = opts;
+  // `email` and `referralCode` are accepted for API stability + plain-text
+  // fallback (in sendWelcomeEmail) but intentionally NOT shown in the HTML body:
+  //   • email is redundant — the message itself was delivered to it
+  //   • referral code is already featured in the "Refer & Earn 10%" card below;
+  //     showing it twice would feel pushy / MLM-ish.
   const year = new Date().getFullYear();
-  const memberSince = new Date().toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
   const safeFirstName = escapeHtml(firstName || "Trader");
-  const safeEmail = escapeHtml(email);
-  const safeRef = escapeHtml(referralCode);
   const preheader = `You're in, ${firstName || "Trader"} — your Qorix Markets account is active. Here's what to do next.`;
 
   return `<!DOCTYPE html>
@@ -685,9 +683,10 @@ export function renderWelcomeEmailHtml(opts: {
     .qx-hero-pad { padding:6px 18px 22px !important; }
     .qx-hero-h { font-size:25px !important; line-height:1.2 !important; }
     .qx-intro { padding:24px 22px 4px !important; font-size:14px !important; }
-    .qx-snap-pad { padding:18px 18px 4px !important; }
-    .qx-snap-cell { padding:14px 18px !important; }
-    .qx-snap-ref { font-size:18px !important; letter-spacing:3px !important; padding:8px 16px !important; }
+    .qx-trust-pad { padding:18px 14px 4px !important; }
+    .qx-trust-copy { font-size:13px !important; }
+    .qx-stat-num { font-size:19px !important; }
+    .qx-stat-label { font-size:9.5px !important; letter-spacing:0.5px !important; }
     .qx-step-pad { padding:24px 18px 4px !important; }
     .qx-step-icon { width:42px !important; height:42px !important; line-height:40px !important; font-size:19px !important; }
     .qx-step-title { font-size:14px !important; }
@@ -740,36 +739,37 @@ export function renderWelcomeEmailHtml(opts: {
           </td>
         </tr>
 
-        <!-- ACCOUNT SNAPSHOT CARD -->
+        <!-- TRUST / VALUE CARD — institutional positioning + 3 concrete stat tiles
+             (replaces personal snapshot to avoid redundancy + MLM-style refer hype) -->
         <tr>
-          <td class="qx-snap-pad" style="padding:24px 32px 8px;">
+          <td class="qx-trust-pad" style="padding:24px 32px 8px;">
             <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#03130C;background-image:linear-gradient(180deg,#03130C 0%,#051A11 100%);border:1px solid rgba(16,185,129,0.22);border-radius:14px;">
               <tr>
-                <td class="qx-snap-cell" style="padding:18px 22px;">
-                  <div style="font-size:10px;letter-spacing:2px;color:#6EE7B7;text-transform:uppercase;font-weight:700;margin-bottom:6px;">Email</div>
-                  <div style="font-size:14px;color:#FFFFFF;font-weight:600;word-break:break-all;">${safeEmail}</div>
+                <td align="center" style="padding:22px 24px 6px;">
+                  <div style="display:inline-block;padding:5px 12px;border-radius:999px;background:rgba(16,185,129,0.10);border:1px solid rgba(16,185,129,0.32);font-size:10px;letter-spacing:2px;color:#6EE7B7;font-weight:700;text-transform:uppercase;margin-bottom:14px;">⚡ Built For Serious Traders</div>
+                  <div class="qx-trust-copy" style="font-size:13.5px;color:#CBD5E1;line-height:1.65;max-width:430px;margin:0 auto;">
+                    Institutional-grade AI strategies — the same kind used by quant funds — now executing trades on your behalf, around the clock.
+                  </div>
                 </td>
               </tr>
               <tr>
-                <td style="padding:0 22px;">
-                  <div style="height:1px;background:rgba(16,185,129,0.15);line-height:1px;font-size:0;">&nbsp;</div>
-                </td>
-              </tr>
-              <tr>
-                <td class="qx-snap-cell" style="padding:18px 22px;">
-                  <div style="font-size:10px;letter-spacing:2px;color:#6EE7B7;text-transform:uppercase;font-weight:700;margin-bottom:6px;">Member Since</div>
-                  <div style="font-size:14px;color:#FFFFFF;font-weight:600;">${escapeHtml(memberSince)}</div>
-                </td>
-              </tr>
-              <tr>
-                <td style="padding:0 22px;">
-                  <div style="height:1px;background:rgba(16,185,129,0.15);line-height:1px;font-size:0;">&nbsp;</div>
-                </td>
-              </tr>
-              <tr>
-                <td class="qx-snap-cell" align="center" style="padding:18px 22px 22px;">
-                  <div style="font-size:10px;letter-spacing:2px;color:#6EE7B7;text-transform:uppercase;font-weight:700;margin-bottom:10px;">Your Referral Code · Earn 10% Lifetime</div>
-                  <div class="qx-snap-ref" style="display:inline-block;padding:10px 22px;background:rgba(16,185,129,0.10);border:1.5px solid rgba(16,185,129,0.5);border-radius:10px;font-family:'SF Mono','Menlo','Consolas','Courier New',monospace;font-size:20px;letter-spacing:4px;color:#6EE7B7;font-weight:800;-webkit-user-select:all;-moz-user-select:all;user-select:all;text-shadow:0 0 14px rgba(16,185,129,0.45);">${safeRef}</div>
+                <td style="padding:14px 18px 22px;">
+                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                    <tr>
+                      <td width="33%" align="center" valign="middle" style="padding:10px 6px;">
+                        <div class="qx-stat-num" style="font-size:22px;font-weight:800;color:#6EE7B7;letter-spacing:-0.5px;line-height:1.1;text-shadow:0 0 14px rgba(16,185,129,0.35);">24/7</div>
+                        <div class="qx-stat-label" style="font-size:10.5px;color:#94A3B8;font-weight:600;letter-spacing:0.6px;text-transform:uppercase;margin-top:5px;white-space:nowrap;">AI Monitoring</div>
+                      </td>
+                      <td width="34%" align="center" valign="middle" style="padding:10px 6px;border-left:1px solid rgba(16,185,129,0.18);border-right:1px solid rgba(16,185,129,0.18);">
+                        <div class="qx-stat-num" style="font-size:22px;font-weight:800;color:#6EE7B7;letter-spacing:-0.5px;line-height:1.1;text-shadow:0 0 14px rgba(16,185,129,0.35);">&lt;&nbsp;1s</div>
+                        <div class="qx-stat-label" style="font-size:10.5px;color:#94A3B8;font-weight:600;letter-spacing:0.6px;text-transform:uppercase;margin-top:5px;white-space:nowrap;">Trade Execution</div>
+                      </td>
+                      <td width="33%" align="center" valign="middle" style="padding:10px 6px;">
+                        <div class="qx-stat-num" style="font-size:22px;font-weight:800;color:#6EE7B7;letter-spacing:-0.5px;line-height:1.1;text-shadow:0 0 14px rgba(16,185,129,0.35);">USDT</div>
+                        <div class="qx-stat-label" style="font-size:10.5px;color:#94A3B8;font-weight:600;letter-spacing:0.6px;text-transform:uppercase;margin-top:5px;white-space:nowrap;">TRC20 Withdraw</div>
+                      </td>
+                    </tr>
+                  </table>
                 </td>
               </tr>
             </table>
