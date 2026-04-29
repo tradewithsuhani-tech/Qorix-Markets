@@ -14,6 +14,7 @@ import {
 } from "../lib/ledger-service";
 import { verifyOtp, sendTxnEmailToUser } from "../lib/email-service";
 import { isSmokeTestUser } from "../lib/smoke-test-account";
+import { checkWithdrawDeviceCooldown } from "../lib/withdraw-device-cooldown";
 
 const router = Router();
 router.use(authMiddleware);
@@ -275,6 +276,32 @@ router.post("/wallet/withdraw", async (req: AuthRequest, res) => {
         hoursLeft,
         lockedUntil: new Date(new Date(user.passwordChangedAt).getTime() + lockMs).toISOString(),
       });
+      return;
+    }
+  }
+
+  // --- 24h NEW-DEVICE withdrawal cooldown (B7, parity with INR path) ---
+  // Mirrors the write side owned by `lib/device-tracking.ts` →
+  // `trackLoginDevice`, which stamps `user_devices.first_seen_at` the
+  // first time a (user, device-fingerprint) pair successfully completes
+  // a login. Until 24h has elapsed on that row, BOTH withdrawal endpoints
+  // (this one + /inr-withdrawals) refuse to accept a withdrawal even if
+  // the session is valid and the OTP is supplied — this closes the
+  // session-hijack / new-machine takeover window.
+  //
+  // Why mirror to the INR endpoint as well: every other "freshness" lock
+  // in this file (NEW_ACCOUNT_WITHDRAWAL_LOCK_HOURS, the password-change
+  // lock above) already has a parity copy in inr-withdrawals.ts for
+  // exactly this reason — without it the INR channel becomes the easy
+  // bypass and the USDT lock is a paper tiger.
+  //
+  // Placement: BEFORE OTP verification so a blocked user never burns a
+  // single-use email OTP. AFTER user/kyc/account-age/password-change
+  // so the user sees the most informative early reject first.
+  {
+    const cooldown = await checkWithdrawDeviceCooldown(req, req.userId!);
+    if (!cooldown.ok) {
+      res.status(cooldown.status).json(cooldown.body);
       return;
     }
   }

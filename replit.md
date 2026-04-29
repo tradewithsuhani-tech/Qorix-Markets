@@ -946,3 +946,240 @@ CI run #25084688211 → success at T+150s. Web-only deploy
 
 **Ready to push**: commit + Fly deploy via `tools/push-commit.sh` (GitHub
 API → CI → Fly v113+).
+
+---
+
+## Phase A — Auth/security hardening (Apr 28-29, 2026)
+
+Small, prod-safe batches pushed via GitHub Git Data API → CI deploy.yml → Fly.
+ZERO schema changes across this entire phase. Read-only DB access pattern preserved.
+
+### Batch 5–5.7 (already shipped — see commits ab4d1d5, 86d6675, f62da16, 343d74e)
+
+- B5: INR withdrawal step-up OTP path.
+- B5.5: parity locks on settings/limits flow.
+- B5.6: misc auth/UX polish.
+- B5.7: rate-limit hardening — added optional `passOnStoreError` to
+  `MakeRedisLimiterOptions` (default `true` preserves fail-open semantics
+  for login/forgot/etc); `withdrawalOtpLimiter` overrides to `false` so
+  it fail-closes on Redis errors. Pattern reusable for any future
+  fail-closed limiter. See `artifacts/api-server/src/middlewares/rate-limit.ts`.
+
+### Batch 6 (Apr 29, 2026 — commits `3b9344c` + hotfix `d0def66`)
+
+**Goal**: re-enable Google reCAPTCHA classic v2 on `POST /auth/login`
+after the prod domains (`qorixmarkets.com`, `www.qorixmarkets.com`)
+were added to the reCAPTCHA admin-console allowlist. Stayed on **free
+classic v2/v3**, NOT reCAPTCHA Enterprise.
+
+**B6** (`3b9344c`) — 3 files:
+
+- `artifacts/api-server/src/lib/captcha-service.ts` — removed the
+  unconditional `return { ok: true, skipped: true }` early-return
+  bypass. The remaining `!process.env.RECAPTCHA_SECRET_KEY` skip
+  branch is the intentional local/dev escape hatch.
+- `artifacts/qorix-markets/src/components/recaptcha.tsx` — removed
+  the literal `false &&` kill-switch on `CAPTCHA_ENABLED` so it now
+  resolves to `!!import.meta.env.VITE_RECAPTCHA_SITE_KEY`.
+- `artifacts/api-server/src/routes/auth.ts` — `/auth/signup` branch
+  ONLY: commented out the `verifyCaptcha` call with `TODO B6.1`,
+  because the signup flow lives inside `login.tsx` (shared form for
+  `/login`, `/register`, `/signup` — see App.tsx:183-184) but the
+  Recaptcha widget is only mandatory client-side once B6.1 lands;
+  enabling server enforcement here without the matching widget would
+  400 every signup. `/auth/login` branch unchanged — its existing
+  `verifyCaptcha` call is now actually enforced after the bypass
+  removal.
+
+**B6 sleeper bug** (caught by post-merge architect review within
+~minutes of CI green): the `<Recaptcha/>` component itself ALSO had
+a leftover unconditional `return null` stub from the original
+kill-switch — flipping `CAPTCHA_ENABLED → true` without removing
+this stub left the widget unable to render → no token → login locked
+in prod for ~10-15 minutes.
+
+**B6.0.1 hotfix** (`d0def66`) — 1 file, 4 lines removed:
+
+- `artifacts/qorix-markets/src/components/recaptcha.tsx` — removed
+  the early `return null` + `void onVerify; void onExpire;` discards
+  + the `// eslint-disable-next-line no-unreachable` comment so the
+  real `useEffect → loadRecaptchaScript → grecaptcha.render` path
+  executes again.
+
+**Verified post-deploy** via direct API smoke test:
+
+```
+$ curl -sS -o /dev/null -w '%{http_code}\n' \
+    -X POST https://qorix-api.fly.dev/api/auth/login \
+    -H 'Content-Type: application/json' \
+    -d '{"email":"...","password":"..."}'
+400
+$ # body: {"error":"Captcha required"}
+```
+
+End-to-end B6 state on prod:
+
+- `POST /auth/login`           → captcha **enforced** ✅
+- `POST /auth/signup`          → captcha intentionally **NOT** enforced
+                                  on the server (B6.1 will flip it);
+                                  client widget still gates submit.
+- `POST /auth/forgot-password` → unchanged (no captcha; rate-limited).
+- Local/dev (no `VITE_RECAPTCHA_SITE_KEY`) → widget hidden + client
+  gate skipped — unchanged dev DX.
+
+### Batch 6.1 (Apr 29, 2026 — commit `d5e1c63`)
+
+**Title:** signup-side captcha enforcement + failed-submit widget reset
+
+**Problem:**
+1. `/auth/register` (the actual API route — `/signup` is the frontend
+   URL only) was deferred from B6 because the signup screen had no
+   widget. But `login.tsx` is the SHARED form for `/login`, `/register`,
+   and `/signup` (App.tsx routing) so it ALREADY rendered the widget
+   for every mode — server enforcement could safely ship for the
+   signup endpoint too.
+2. reCAPTCHA v2 ("I'm not a robot") tokens are SINGLE-USE. After a
+   failed login/signup the consumed token left the user blocked for
+   ~2 minutes (natural expiry) before they could re-submit.
+
+**B6.1** (`d5e1c63`) — 3 files, ZERO schema:
+
+1. `artifacts/api-server/src/routes/auth.ts` (POST /auth/register)
+   • Un-commented the `verifyCaptcha` call + 400 response that B6
+     intentionally left as a TODO. Now mirrors POST /auth/login.
+   • Local/dev builds with no `RECAPTCHA_SECRET_KEY` auto-skip via
+     `captcha-service.ts` (unchanged).
+
+2. `artifacts/qorix-markets/src/components/recaptcha.tsx`
+   • Converted `function Recaptcha` → `forwardRef<RecaptchaHandle,
+     RecaptchaProps>` so parents can hold a ref.
+   • Exposes new exported interface `RecaptchaHandle { reset(): void }`
+     via `useImperativeHandle`. The reset method calls
+     `window.grecaptcha.reset(widgetIdRef.current)` (try/catch around
+     the grecaptcha call so a destroyed widget can't throw) and
+     invokes `onExpire?.()` so the parent's local copy of the consumed
+     token is cleared in the same tick.
+
+3. `artifacts/qorix-markets/src/pages/login.tsx`
+   • Added `recaptchaRef = useRef<RecaptchaHandle | null>(null)` and
+     passed `ref={recaptchaRef}` to `<Recaptcha/>`.
+   • `submitLogin()` finally block: added
+     `setCaptchaToken(""); recaptchaRef.current?.reset();`. Runs on
+     success-redirect paths too (harmless no-op).
+   • `registerMutation` onError: added the same reset+clear pair.
+   • REMOVED the synchronous `setCaptchaToken("")` at the bottom of
+     `handleSubmit` — that line was a latent bug (ran BEFORE the async
+     submit completed). Lifecycle now owned cleanly by submitLogin
+     (finally) + registerMutation (onError).
+
+**Net behavior post-B6.1:**
+- `POST /api/auth/login`    w/o captchaToken → `400 Captcha required` ✅
+- `POST /api/auth/register` w/o captchaToken → `400 Captcha required` ✅ NEW
+- Failed /login form submit  → widget resets, user can re-submit instantly ✅ NEW
+- Failed /signup form submit → widget resets, user can re-submit instantly ✅ NEW
+
+**Validation:**
+- Both packages typecheck clean.
+- Local /login renders correctly (forwardRef syntax accepted; widget
+  shows expected "Localhost not in supported domains" message because
+  the reCAPTCHA site key is allowlisted only for qorixmarkets.com).
+- CI deploy: `d5e1c63` → SUCCESS in 5m39s.
+- Prod smoke (live): `POST /api/auth/login` → 400 Captcha required ✅,
+  `POST /api/auth/register` → 400 Captcha required ✅.
+
+### Batch 7 (Apr 29, 2026)
+
+**Title:** 24h new-device withdrawal cooldown (INR + USDT)
+
+**Problem solved:**
+A session-hijacker / new-machine-takeover attacker who has just got
+into a session can drain the wallet INSTANTLY — even with KYC, 2FA
+session issuance, withdrawal-OTP, the new-account 24h lock and the
+post-password-change 24h lock all already in place — provided the
+real owner created the account >24h ago, never changed their password
+recently, and the attacker can intercept the email OTP. The "Login
+from a new device detected" email IS sent (via `trackLoginDevice`),
+but it's *just an email* — by the time the real owner reads it the
+funds have already moved.
+
+B7 closes that window by refusing withdrawals from a device until
+that (user, device-fingerprint) pair has been recorded in
+`user_devices` for >= 24h. The clock starts at first successful
+LOGIN from the device (not at the withdraw click), so the alert
+email and the cooldown share the same start time.
+
+**B7 — 4 files, ZERO schema changes:**
+
+1. `artifacts/api-server/src/lib/withdraw-device-cooldown.ts` (NEW)
+   • Exports `NEW_DEVICE_WITHDRAWAL_COOLDOWN_HOURS = 24`,
+     `formatIstTimestamp(d)`, and async
+     `checkWithdrawDeviceCooldown(req, userId)`.
+   • Read-only against `user_devices` — write side is owned
+     EXCLUSIVELY by `lib/device-tracking.ts` → `trackLoginDevice`,
+     which has been writing `first_seen_at` for months.
+   • `formatIstTimestamp` is hand-rolled (UTC + 5:30 fixed offset,
+     no DST) so it doesn't depend on icu/Intl data being present in
+     the prod container — historical pain point on slim base images.
+   • Fail-closed: if `computeDeviceFingerprint` returns empty/unknown,
+     OR if no `user_devices` row exists for (user, fingerprint), we
+     BLOCK with a "log out and back in" message (the no-row case
+     covers legacy sessions issued before device-tracking shipped or
+     any hypothetical 2FA-only path that bypassed `trackLoginDevice`).
+   • `Math.max(1, Math.ceil(...))` so we never display "0h remaining"
+     while still actually blocking.
+
+2. `artifacts/api-server/src/routes/wallet.ts` (POST /wallet/withdraw)
+   • Added `import { checkWithdrawDeviceCooldown } from "../lib/withdraw-device-cooldown"`.
+   • Inserted the cooldown check AFTER the password-change lock and
+     BEFORE OTP verification — so a blocked user never burns a
+     single-use email OTP.
+
+3. `artifacts/api-server/src/routes/inr-withdrawals.ts` (POST /inr-withdrawals)
+   • Same import + same insertion point (after password-change lock,
+     before body parsing / OTP). The INR endpoint MUST mirror the
+     USDT endpoint or the lock becomes a paper tiger — every other
+     freshness lock in this codebase has the same parity for the
+     same reason (see the comment block on lines 109-113 of the
+     pre-B7 inr-withdrawals.ts about channel-bypass).
+
+4. `replit.md` (this file)
+
+**Net behavior post-B7:**
+- `POST /api/wallet/withdraw`   from a device first-seen <24h ago →
+  `403 {"error":"withdrawal_locked_new_device","message":"Withdrawals
+  are locked from new devices for 24h. Please try again at
+  29 Apr 2026, 20:43 IST (Xh remaining).","hoursLeft":X,"unlockAt":"…"}`
+- `POST /api/inr-withdrawals`   from a device first-seen <24h ago →
+  same shape.
+- Both endpoints from a device first-seen >=24h ago → unchanged
+  (continues to OTP / cap / debit pipeline).
+- All other endpoints (deposit, transfer, login, etc.) → completely
+  unchanged.
+
+**Validation:**
+- `pnpm --filter @workspace/api-server typecheck` → clean (exit 0).
+- API server restarted, no startup errors, all existing endpoints
+  still serving 200/304.
+- Local no-auth smoke: `POST /api/wallet/withdraw` → 401, `POST
+  /api/inr-withdrawals` → 401 (auth middleware reached normally —
+  imports load, no crash).
+- Production validation pending CI deploy.
+
+### Roadmap (Phase A continued)
+
+- ~~**B6.1**: signup captcha + failed-submit widget reset~~ ✅ LIVE (`d5e1c63`).
+- ~~**B7**: 24h new-device withdraw cooldown.~~ ✅ LIVE (see below).
+- **B8**: My Devices page (depends on B7 trust-device infra; likely
+  also no schema change since user_devices already has all fields).
+- **/auth/forgot-password CAPTCHA enforcement** (architect note 6 from
+  B6 review) — deferred; that endpoint is rate-limited today; will
+  revisit after B7/B8 land.
+
+### Hard rules across all of Phase A
+
+- ZERO `db:push`, ZERO PK type changes, ZERO schema edits.
+- Read-only DB access only. Hand-written SQL only when DB writes
+  ever become necessary.
+- Main agent CANNOT use git CLI — all pushes via GitHub Git Data API
+  (`/tmp/push_batch*.mjs` template).
+- Main agent CANNOT do DB writes.
