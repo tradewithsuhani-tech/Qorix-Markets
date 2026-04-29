@@ -1,7 +1,7 @@
 import { Layout } from "@/components/layout";
 import { useAuth } from "@/hooks/use-auth";
 import { motion, type Variants } from "framer-motion";
-import { User as UserIcon, Mail, Calendar, Shield, Crown, Copy, CheckCircle2, LogOut, Volume2, VolumeX, ShieldCheck, ChevronRight, Clock, XCircle, Send, ExternalLink, Loader2, Unlink, Eye, EyeOff, AlertTriangle, KeyRound, X } from "lucide-react";
+import { User as UserIcon, Mail, Calendar, Shield, Crown, Copy, CheckCircle2, LogOut, Volume2, VolumeX, ShieldCheck, ChevronRight, Clock, XCircle, Send, ExternalLink, Loader2, Unlink, Eye, EyeOff, AlertTriangle, KeyRound, X, Smartphone } from "lucide-react";
 import { Link } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { authFetch } from "@/lib/auth-fetch";
@@ -277,6 +277,23 @@ export default function SettingsPage() {
             </div>
 
             <TwoFactorCard />
+
+            <Link href="/devices">
+              <a className="flex items-center justify-between p-3.5 rounded-xl bg-white/[0.03] border border-white/[0.06] hover:border-blue-500/30 transition-colors">
+                <div className="flex items-center gap-3 min-w-0 pr-3">
+                  <div className="p-2 rounded-xl bg-blue-500/15 text-blue-400 shrink-0">
+                    <Smartphone style={{ width: 16, height: 16 }} />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium">My Devices</div>
+                    <div className="text-xs text-muted-foreground mt-0.5 truncate">
+                      See where your account is signed in
+                    </div>
+                  </div>
+                </div>
+                <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
+              </a>
+            </Link>
           </div>
         </motion.div>
 

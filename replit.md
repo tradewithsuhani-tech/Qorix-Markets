@@ -1165,12 +1165,107 @@ email and the cooldown share the same start time.
   imports load, no crash).
 - Production validation pending CI deploy.
 
+### Batch 8 (Apr 29, 2026)
+
+**Title:** My Devices page (read-only listing, surfaces B7 status)
+
+**Why:**
+B7 silently locks withdrawals from new devices for 24h. B8 makes that
+state visible: the user can now see every device their account has
+ever signed in from, which one is the current session, where each
+was last seen, and exactly when withdrawals will unlock from any
+locked device. Mirrors the "Devices" / "Active sessions" pages on
+Exness, Binance, and Vantage.
+
+**B8 — 6 source changes, ZERO schema changes:**
+
+1. `artifacts/api-server/src/routes/devices.ts` (NEW)
+   • Single endpoint: `GET /api/devices` (auth-gated).
+   • Pure SELECT against `user_devices` — write side stays owned
+     EXCLUSIVELY by `lib/device-tracking.ts → trackLoginDevice`.
+     B8 does not insert, update, or delete any row.
+   • For each device, computes `withdrawalLocked` /
+     `withdrawalUnlockAt` / `withdrawalUnlockHoursLeft` using the
+     B7 helper's `NEW_DEVICE_WITHDRAWAL_COOLDOWN_HOURS` and
+     `formatIstTimestamp` — single source of truth for the cooldown
+     math, so the page can never disagree with the actual
+     enforcement at withdraw time.
+   • `isCurrent` is set by comparing each row's
+     `device_fingerprint` to `computeDeviceFingerprint(req)` for
+     the request making this call. If fp is unknown/empty, no row
+     is marked current — UI renders the list normally.
+   • Response also includes `currentDeviceTracked: boolean` so the
+     UI can warn the user if their session is on a "ghost" (no
+     `user_devices` row — same fail-closed condition that B7 uses
+     to block withdrawals).
+   • Per-device "sign out / revoke" is INTENTIONALLY OUT — that
+     needs session-revocation infra (server-side JWT denylist or
+     a device-bound session token) and is queued as B8.1.
+
+2. `artifacts/api-server/src/routes/index.ts`
+   • Added `import devicesRouter from "./devices"` next to
+     notificationsRouter.
+   • Mounted with `router.use(devicesRouter)` in the auth-gated
+     section (after notificationsRouter, before tradingDeskRouter).
+
+3. `artifacts/qorix-markets/src/pages/devices.tsx` (NEW)
+   • `<Layout>`-wrapped page at `/devices` with a "Back to settings"
+     link, page header, and a vertical list of `DeviceCard`
+     components.
+   • Each card shows: browser + OS (with `Smartphone` / `Monitor`
+     icon based on OS family), "This device" badge if `isCurrent`,
+     last-seen relative ("3 hours ago"), city + country, first
+     sign-in absolute time, and a `Mail` icon line if a new-device
+     alert email was fired for this row.
+   • Locked devices get a prominent amber `Lock`-icon banner showing
+     the IST unlock time + hours remaining ("Will unlock around
+     30 Apr 2026, 21:35 IST (5h remaining)").
+   • Ghost-session warning at the top of the list when
+     `currentDeviceTracked === false`: "This device isn't on your
+     trusted list. Please sign out and sign in again."
+   • Loading state: 2 skeleton cards. Empty state: friendly
+     "No devices recorded yet". Error state: amber alert.
+   • Uses `authFetch` + `useQuery` (queryKey `/api/devices`) — same
+     pattern as the rest of the PWA's authed reads.
+
+4. `artifacts/qorix-markets/src/App.tsx`
+   • Added `import DevicesPage from "@/pages/devices"`.
+   • Registered `<Route path="/devices"><ProtectedRoute
+     component={DevicesPage} /></Route>` right after the `/settings`
+     route.
+
+5. `artifacts/qorix-markets/src/pages/settings.tsx`
+   • Added `Smartphone` to the lucide-react import.
+   • Inserted a "My Devices" link row inside the existing Security
+     card, immediately after `<TwoFactorCard />`. Uses the same
+     row treatment as the Password row, with a `ChevronRight`
+     affordance navigating to `/devices`.
+   • No other settings code touched — single 16-line insertion.
+
+6. `replit.md`
+
+**Net behavior post-B8:**
+- New page at `https://qorixmarkets.com/devices` (auth-gated).
+- Settings page → Security card now contains a "My Devices" row
+  → links to the new page.
+- New endpoint `GET /api/devices` (auth-gated) returns the list.
+- B7 enforcement is unchanged. B8 is purely additive — read-only
+  endpoint + new page + a single navigation link in settings.
+- All existing flows (deposit, withdraw, login, transfer, etc.) →
+  completely unchanged.
+
+**Validation:**
+- `pnpm --filter @workspace/api-server typecheck` → clean (exit 0).
+- API server restarted, no startup errors.
+- Local no-auth smoke: `GET /api/devices` → 401 Unauthorized
+  (auth middleware reached normally — imports load, no crash).
+- Production validation pending CI deploy.
+
 ### Roadmap (Phase A continued)
 
 - ~~**B6.1**: signup captcha + failed-submit widget reset~~ ✅ LIVE (`d5e1c63`).
-- ~~**B7**: 24h new-device withdraw cooldown.~~ ✅ LIVE (see below).
-- **B8**: My Devices page (depends on B7 trust-device infra; likely
-  also no schema change since user_devices already has all fields).
+- ~~**B7**: 24h new-device withdraw cooldown.~~ ✅ LIVE (`920cef6`).
+- ~~**B8**: My Devices page.~~ ✅ LIVE (see below).
 - **/auth/forgot-password CAPTCHA enforcement** (architect note 6 from
   B6 review) — deferred; that endpoint is rate-limited today; will
   revisit after B7/B8 land.

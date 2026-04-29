@@ -47,6 +47,7 @@ import AdminTaskProofsPage from "@/pages/admin-task-proofs";
 import AdminSignalTradesPage from "@/pages/admin-signal-trades";
 import SignalHistoryPage from "@/pages/signal-history";
 import SettingsPage from "@/pages/settings";
+import DevicesPage from "@/pages/devices";
 import KycPage from "@/pages/kyc";
 import AdminKycPage from "@/pages/admin-kyc";
 import {
@@ -232,6 +233,7 @@ function Router() {
       <Route path="/admin/test"><ProtectedRoute component={AdminTestPage} adminOnly={true} /></Route>
       <Route path="/admin/hidden-features"><ProtectedRoute component={AdminHiddenFeaturesPage} adminOnly={true} /></Route>
       <Route path="/settings"><ProtectedRoute component={SettingsPage} /></Route>
+      <Route path="/devices"><ProtectedRoute component={DevicesPage} /></Route>
       <Route path="/kyc"><ProtectedRoute component={KycPage} /></Route>
       <Route path="/admin/kyc"><ProtectedRoute component={AdminKycPage} adminOnly={true} /></Route>
       <Route path="/verify/:hashId" component={VerifyPage} />
