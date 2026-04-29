@@ -179,7 +179,11 @@ function renderOtpHtml(opts: {
 export async function sendOtp(
   userId: number,
   email: string,
-  purpose: "verify_email" | "withdrawal_confirm" | "device_login_approval",
+  purpose:
+    | "verify_email"
+    | "withdrawal_confirm"
+    | "device_login_approval"
+    | "two_factor_login",
 ): Promise<{ otp: string; expiresAt: Date }> {
   const otp = generateOtp(6);
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
@@ -203,13 +207,17 @@ export async function sendOtp(
       ? "Email Verification"
       : purpose === "withdrawal_confirm"
         ? "Withdrawal Confirmation"
-        : "New Device Login";
+        : purpose === "two_factor_login"
+          ? "Two-Factor Sign-in"
+          : "New Device Login";
   const intro =
     purpose === "verify_email"
       ? "Welcome to Qorix Markets. Use the code below to verify your email and finish creating your account."
       : purpose === "withdrawal_confirm"
         ? "You're confirming a withdrawal request. Use the code below to authorize and complete this transaction."
-        : "A new device is trying to sign in to your Qorix Markets account. If this was you, use the code below to approve the login. If not, ignore this email and change your password immediately.";
+        : purpose === "two_factor_login"
+          ? "You requested a one-time email code to complete sign-in to your Qorix Markets account because you couldn't access your authenticator app. Enter the code below to finish signing in. If this wasn't you, ignore this email and change your password immediately."
+          : "A new device is trying to sign in to your Qorix Markets account. If this was you, use the code below to approve the login. If not, ignore this email and change your password immediately.";
   const noteLines = [
     "<strong style=\"color:#cbd5e1;\">Never share this code</strong> with anyone — Qorix staff will never ask for it.",
     "If you did not initiate this request, please secure your account and contact support immediately.",
@@ -321,7 +329,11 @@ export function sendTxnEmailToUser(
 export async function verifyOtp(
   userId: number,
   otp: string,
-  purpose: "verify_email" | "withdrawal_confirm" | "device_login_approval",
+  purpose:
+    | "verify_email"
+    | "withdrawal_confirm"
+    | "device_login_approval"
+    | "two_factor_login",
 ): Promise<{ valid: boolean; error?: string }> {
   const now = new Date();
 
@@ -331,9 +343,17 @@ export async function verifyOtp(
     return { valid: true };
   }
 
-  const rows = await db
-    .select()
-    .from(emailOtpsTable)
+  // Atomic verify+consume in a single SQL statement: UPDATE the row only
+  // if it's still un-used, un-expired, and matches userId/otp/purpose, and
+  // RETURN the row id we just claimed. Postgres row-locks the matched row
+  // for the duration of the UPDATE, so two concurrent /login-verify
+  // requests with the SAME 6-digit OTP can never both win — the second one
+  // sees the row already flipped to is_used=true and gets nothing back.
+  // This closes the SELECT-then-UPDATE race that previously allowed the
+  // same email OTP to authorize two parallel sessions.
+  const claimed = await db
+    .update(emailOtpsTable)
+    .set({ isUsed: true })
     .where(
       and(
         eq(emailOtpsTable.userId, userId),
@@ -343,18 +363,11 @@ export async function verifyOtp(
         gt(emailOtpsTable.expiresAt, now),
       ),
     )
-    .limit(1);
+    .returning({ id: emailOtpsTable.id });
 
-  if (rows.length === 0) {
+  if (claimed.length === 0) {
     return { valid: false, error: "Invalid or expired OTP" };
   }
-
-  // Mark as used
-  await db
-    .update(emailOtpsTable)
-    .set({ isUsed: true })
-    .where(eq(emailOtpsTable.id, rows[0]!.id));
-
   return { valid: true };
 }
 
