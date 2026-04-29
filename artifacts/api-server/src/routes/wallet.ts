@@ -591,6 +591,11 @@ router.post("/wallet/transfer", async (req: AuthRequest, res) => {
   if (await blockSmokeTestRealMoney(req.userId!, res, "transfer")) return;
 
   const { amount } = result.data;
+  // Default to "to_trading" when omitted — preserves backward compatibility
+  // with legacy clients that called this endpoint before bidirectional
+  // transfers were introduced.
+  const direction = result.data.direction ?? "to_trading";
+
   const wallets = await db.select().from(walletsTable).where(eq(walletsTable.userId, req.userId!)).limit(1);
   const wallet = wallets[0];
   if (!wallet) {
@@ -599,12 +604,50 @@ router.post("/wallet/transfer", async (req: AuthRequest, res) => {
   }
 
   const mainBalance = parseFloat(wallet.mainBalance as string);
-  if (amount > mainBalance) {
-    res.status(400).json({ error: "Insufficient main balance" });
-    return;
-  }
-
   const tradingBalance = parseFloat(wallet.tradingBalance as string);
+
+  // Direction-aware source-balance check + computed new balances. We compute
+  // the deltas once here so the DB transaction below is purely about writes.
+  let newMainBalance: number;
+  let newTradingBalance: number;
+  let txnDescription: string;
+  let debitAccountCode: string;
+  let creditAccountCode: string;
+  let debitDescription: string;
+  let creditDescription: string;
+  let logEvent: string;
+  let logMessage: string;
+
+  if (direction === "to_trading") {
+    if (amount > mainBalance) {
+      res.status(400).json({ error: "Insufficient main balance" });
+      return;
+    }
+    newMainBalance = mainBalance - amount;
+    newTradingBalance = tradingBalance + amount;
+    txnDescription = `Transfer $${amount.toFixed(2)} to trading balance`;
+    debitAccountCode = `user:${req.userId!}:main`;
+    creditAccountCode = `user:${req.userId!}:trading`;
+    debitDescription = `Transfer out of main wallet`;
+    creditDescription = `Transfer into trading wallet`;
+    logEvent = "transfer_to_trading";
+    logMessage = "Transfer to trading balance completed";
+  } else {
+    // direction === "to_main" — reverse transfer (Trading → Main)
+    if (amount > tradingBalance) {
+      res.status(400).json({ error: "Insufficient trading balance" });
+      return;
+    }
+    newMainBalance = mainBalance + amount;
+    newTradingBalance = tradingBalance - amount;
+    txnDescription = `Transfer $${amount.toFixed(2)} to main balance`;
+    debitAccountCode = `user:${req.userId!}:trading`;
+    creditAccountCode = `user:${req.userId!}:main`;
+    debitDescription = `Transfer out of trading wallet`;
+    creditDescription = `Transfer into main wallet`;
+    logEvent = "transfer_to_main";
+    logMessage = "Transfer to main balance completed";
+  }
 
   const [updated] = await db.transaction(async (tx) => {
     await ensureUserAccounts(req.userId!, tx);
@@ -612,8 +655,8 @@ router.post("/wallet/transfer", async (req: AuthRequest, res) => {
     const [w] = await tx
       .update(walletsTable)
       .set({
-        mainBalance: (mainBalance - amount).toString(),
-        tradingBalance: (tradingBalance + amount).toString(),
+        mainBalance: newMainBalance.toString(),
+        tradingBalance: newTradingBalance.toString(),
         updatedAt: new Date(),
       })
       .where(eq(walletsTable.userId, req.userId!))
@@ -626,15 +669,15 @@ router.post("/wallet/transfer", async (req: AuthRequest, res) => {
         type: "transfer",
         amount: amount.toString(),
         status: "completed",
-        description: `Transfer $${amount.toFixed(2)} to trading balance`,
+        description: txnDescription,
       })
       .returning();
 
     await postJournalEntry(
       journalForTransaction(txn!.id),
       [
-        { accountCode: `user:${req.userId!}:main`, entryType: "debit", amount, description: `Transfer out of main wallet` },
-        { accountCode: `user:${req.userId!}:trading`, entryType: "credit", amount, description: `Transfer into trading wallet` },
+        { accountCode: debitAccountCode, entryType: "debit", amount, description: debitDescription },
+        { accountCode: creditAccountCode, entryType: "credit", amount, description: creditDescription },
       ],
       txn!.id,
       tx,
@@ -645,13 +688,14 @@ router.post("/wallet/transfer", async (req: AuthRequest, res) => {
 
   transactionLogger.info(
     {
-      event: "transfer_to_trading",
+      event: logEvent,
       userId: req.userId!,
       amount,
-      newMainBalance: mainBalance - amount,
-      newTradingBalance: tradingBalance + amount,
+      direction,
+      newMainBalance,
+      newTradingBalance,
     },
-    "Transfer to trading balance completed",
+    logMessage,
   );
 
   res.json(formatWallet(updated!));
