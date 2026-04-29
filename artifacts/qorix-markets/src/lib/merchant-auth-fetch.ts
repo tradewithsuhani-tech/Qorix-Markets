@@ -1,4 +1,5 @@
 import { notifyMaintenance } from "./maintenance-state";
+import { DEVICE_ID_HEADER, getOrCreateDeviceId } from "./device-id";
 
 // Separate token storage from user/admin so a merchant signing in on a shared
 // browser doesn't clobber the user's session, and vice versa.
@@ -20,6 +21,11 @@ export async function merchantAuthFetch<T = unknown>(url: string, init?: Request
   const token = getMerchantToken();
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
+    // Stable per-browser device identity — same rationale as in auth-fetch.ts.
+    // Server-side `computeDeviceFingerprint(req)` reads this header and
+    // prefers it over hash(UA + IP) so the merchant card stays stable when
+    // the merchant browser roams between networks (mobile data ↔ wifi).
+    [DEVICE_ID_HEADER]: getOrCreateDeviceId(),
     ...((init?.headers as Record<string, string>) ?? {}),
   };
   if (token) headers.Authorization = `Bearer ${token}`;
