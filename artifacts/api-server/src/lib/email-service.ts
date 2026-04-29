@@ -1309,17 +1309,17 @@ export function renderNewDeviceLoginAlertHtml(opts: {
           </td>
         </tr>
 
-        <!-- STANDOUT CALLOUT — "If this was you, no action needed." -->
+        <!-- STANDOUT CALLOUT — balanced 2-line headline -->
         <tr>
-          <td class="qx-callout" align="center" style="padding:18px 32px 4px;font-size:18px;line-height:1.35;font-weight:800;color:#FFFFFF;letter-spacing:-0.2px;">
-            If this was you, <span style="color:#FCA5A5;">no action needed.</span>
+          <td class="qx-callout" align="center" style="padding:18px 32px 4px;font-size:18px;line-height:1.4;font-weight:800;color:#FFFFFF;letter-spacing:-0.2px;">
+            If this was you, <span style="color:#FCA5A5;">no action is needed</span> — your account is safe.
           </td>
         </tr>
 
         <!-- Sub-line below callout -->
         <tr>
           <td class="qx-subline" align="center" style="padding:0 36px 8px;color:#94A3B8;font-size:13px;line-height:1.6;">
-            Your account is safe. If not, secure it right away below.
+            If not, tap the button below to secure your account right away.
           </td>
         </tr>
 
