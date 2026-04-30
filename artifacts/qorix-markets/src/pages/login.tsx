@@ -6,7 +6,11 @@ import { motion, AnimatePresence } from "framer-motion";
 import { TrendingUp, Lock, Mail, User as UserIcon, ArrowLeft, Eye, EyeOff, ShieldCheck, CheckCircle2, Loader2, KeyRound } from "lucide-react";
 import { QorixLogo } from "@/components/qorix-logo";
 import { useToast } from "@/hooks/use-toast";
-import { Recaptcha, CAPTCHA_ENABLED, type RecaptchaHandle } from "@/components/recaptcha";
+import {
+  CaptchaWidget,
+  CAPTCHA_ENABLED,
+  type CaptchaWidgetHandle,
+} from "@/components/captcha-widget";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -715,8 +719,10 @@ export default function LoginPage() {
   const [captchaToken, setCaptchaToken] = useState("");
   // B6.1: imperative ref so failed login/signup can reset the v2 widget
   // (single-use tokens — without reset the user has to wait ~2min before
-  // re-submitting). See recaptcha.tsx:RecaptchaHandle.
-  const recaptchaRef = useRef<RecaptchaHandle | null>(null);
+  // re-submitting). See captcha-widget.tsx:CaptchaWidgetHandle which
+  // forwards to either Recaptcha or Turnstile depending on the
+  // build-time VITE_CAPTCHA_PROVIDER (B9.6).
+  const recaptchaRef = useRef<CaptchaWidgetHandle | null>(null);
   const autoHideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pageLoadTime = useRef<number>(Date.now());
 
@@ -1182,7 +1188,7 @@ export default function LoginPage() {
 
             {CAPTCHA_ENABLED && (
               <div className="pt-1">
-                <Recaptcha
+                <CaptchaWidget
                   ref={recaptchaRef}
                   onVerify={(t) => setCaptchaToken(t)}
                   onExpire={() => setCaptchaToken("")}

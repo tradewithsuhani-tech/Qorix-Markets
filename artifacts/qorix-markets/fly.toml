@@ -21,10 +21,21 @@ primary_region = "bom"
   # MUST pass it via `--build-arg VITE_RECAPTCHA_SITE_KEY=$VITE_RECAPTCHA_SITE_KEY`
   # — otherwise login captcha breaks. Empty default here is intentional so a
   # forgotten flag fails loudly in QA instead of silently shipping no key.
+  #
+  # B9.6: Cloudflare Turnstile lives alongside reCAPTCHA, switched on by the
+  # build-time `VITE_CAPTCHA_PROVIDER` arg (default "recaptcha"). When the
+  # B9.6 cutover lands the deploy will pass:
+  #   --build-arg VITE_CAPTCHA_PROVIDER=turnstile
+  #   --build-arg VITE_TURNSTILE_SITE_KEY=$VITE_TURNSTILE_SITE_KEY
+  # The api-server side flips with the matching `CAPTCHA_PROVIDER=turnstile`
+  # Fly secret. Until then the new args ship empty / default and the bundle's
+  # behavior is identical to pre-B9.6.
   [build.args]
     VITE_API_URL            = "https://api.qorixmarkets.com"
     BASE_PATH               = "/"
     VITE_RECAPTCHA_SITE_KEY = ""
+    VITE_TURNSTILE_SITE_KEY = ""
+    VITE_CAPTCHA_PROVIDER   = "recaptcha"
 
 # ─── Runtime env ────────────────────────────────────────────────────────────
 [env]

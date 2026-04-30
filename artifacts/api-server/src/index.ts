@@ -107,6 +107,7 @@ async function main() {
     jobs?.tronMonitor.stop();
     jobs?.depositWatcher.stop();
     jobs?.telegramPoller.stop();
+    jobs?.quizScheduler.stop();
     if (jobs) {
       await Promise.all([
         jobs.profitDistributionWorker.close(),
@@ -129,10 +130,18 @@ async function main() {
       process.exit(1);
     }
     logger.info({ port }, "Server listening");
-    if (!process.env.RECAPTCHA_SECRET_KEY) {
-      const msg = "RECAPTCHA_SECRET_KEY not set — captcha is DISABLED on /auth routes";
+    // B9.6: which captcha provider is active is decided by CAPTCHA_PROVIDER
+    // (defaults to "recaptcha"). The matching secret for the active provider
+    // must be set, or all captcha-gated routes auto-skip captcha — fine in
+    // dev, dangerous in prod.
+    const captchaProvider = process.env.CAPTCHA_PROVIDER === "turnstile" ? "turnstile" : "recaptcha";
+    const requiredSecretEnv = captchaProvider === "turnstile" ? "TURNSTILE_SECRET_KEY" : "RECAPTCHA_SECRET_KEY";
+    if (!process.env[requiredSecretEnv]) {
+      const msg = `${requiredSecretEnv} not set (CAPTCHA_PROVIDER=${captchaProvider}) — captcha is DISABLED on /auth routes`;
       if (process.env.NODE_ENV === "production") errorLogger.error(msg);
       else logger.warn(msg);
+    } else {
+      logger.info({ provider: captchaProvider }, "Captcha provider active");
     }
     if (!process.env.SES_FROM_EMAIL || !process.env.SMTP_PASS) {
       const msg = "SMTP not fully configured (need SES_FROM_EMAIL + SMTP_PASS) — emails will NOT be delivered";

@@ -1691,3 +1691,184 @@ high-risk). Sequence now reflects the pivot.
   4. Production telemetry on `r²`, `vCoV`, `firstX`, and per-reason
      reject counts to tune thresholds empirically.
 
+## Batch 9.6 — Cloudflare Turnstile dispatcher landed alongside reCAPTCHA (Apr 30, 2026)
+
+**Phase 1 of the Turnstile cutover.** Adds a complete provider-
+agnostic captcha layer (server-side dispatcher + client-side
+wrapper) that routes verification to either Google reCAPTCHA or
+Cloudflare Turnstile based on a single env-var switch
+(`CAPTCHA_PROVIDER` / `VITE_CAPTCHA_PROVIDER`). The default is
+`recaptcha`, so this Phase 1 deploy is a **NO-OP behavior change
+in production** — both code paths ship in the binary, but only
+the existing reCAPTCHA path runs until the Phase 2 cutover (a
+separate user decision: flip the env var on the api-server +
+redeploy the web with `VITE_CAPTCHA_PROVIDER=turnstile`).
+
+Strategy chosen with the user out of three options: A = ship the
+swap behind a flag first (this batch), B = full cutover in one
+shot, C = canary by user-id. We picked A because it gives us a
+low-risk roll-forward path: prove the dispatcher in prod against
+the existing reCAPTCHA workload (no regression), then flip the
+flag with a one-line redeploy and roll back the same way if needed.
+
+ZERO schema changes, ZERO DB writes. 8 files touched (3 NEW, 5
+EDITED). Token field on the request body remains `captchaToken`
+for both providers — the dispatcher hides which vendor verifies
+it from the routes.
+
+### Backend (api-server)
+
+1. **NEW** `artifacts/api-server/src/lib/turnstile-service.ts`:
+   - `verifyTurnstileToken(token, ip)` — POSTs to
+     `https://challenges.cloudflare.com/turnstile/v0/siteverify`
+     with `secret`/`response`/`remoteip` form-encoded body.
+   - Same return shape as `verifyRecaptchaToken`:
+     `{ ok: boolean; skipped?: boolean; error?: string }`.
+   - Auto-skip when `TURNSTILE_SECRET_KEY` is missing (mirrors the
+     reCAPTCHA dev-escape-hatch behavior).
+   - Logs Cloudflare's `error-codes` array on `success: false`.
+2. **EDITED** `artifacts/api-server/src/lib/captcha-service.ts` —
+   converted from a single reCAPTCHA verifier into a dispatcher:
+   - New exported `getCaptchaProvider()` reads
+     `process.env.CAPTCHA_PROVIDER` and returns `"turnstile" |
+     "recaptcha"`. Anything other than `"turnstile"` → falls back
+     to `"recaptcha"` (defensive against typos / empty env).
+   - Existing reCAPTCHA verification body extracted into a
+     private `verifyRecaptchaToken(...)` (unchanged logic — still
+     validates Google `success: true` AND optional v3 score ≥ 0.5).
+   - `verifyCaptcha(token, ip)` is now a 1-line dispatcher:
+     `getCaptchaProvider() === "turnstile" ? verifyTurnstileToken(...) : verifyRecaptchaToken(...)`.
+   - `isCaptchaEnabled()` is now provider-aware — reports the
+     active provider's secret presence (used by the startup
+     warning below).
+3. **EDITED** `artifacts/api-server/src/index.ts` (lines 135-148):
+   - The "secret missing" startup warning now branches on the
+     active provider and names the right env var — e.g.
+     `TURNSTILE_SECRET_KEY not set (CAPTCHA_PROVIDER=turnstile) —
+     captcha is DISABLED on /auth routes` instead of the hard-
+     coded reCAPTCHA message.
+   - Adds an `INFO` log on success: `Captcha provider active
+     (provider: "recaptcha" | "turnstile")` so we can
+     unambiguously confirm which provider is live by reading
+     the boot log of any Fly machine.
+4. **EDITED** `artifacts/api-server/src/routes/auth.ts` (line 370-
+   377 comment): replaced the stale "skipped if
+   TURNSTILE_SECRET_KEY not configured" comment with an accurate
+   description of the dispatcher behavior. Code at the call site
+   is unchanged — both `/auth/login` and `/auth/register` keep
+   calling `verifyCaptcha(req.body.captchaToken, ip)`.
+
+### Frontend (qorix-markets web)
+
+5. **NEW** `artifacts/qorix-markets/src/components/turnstile.tsx`:
+   - `<Turnstile>` widget mirroring the public surface of the
+     existing `<Recaptcha>` (same `forwardRef` pattern, same
+     `TurnstileHandle.reset()` imperative API, same
+     `onVerify` / `onExpire` props).
+   - Loads `https://challenges.cloudflare.com/turnstile/v0/api.js`
+     once globally (with the same in-flight-promise dedupe trick
+     used in `recaptcha.tsx` for StrictMode double-mount safety).
+   - Reads `VITE_TURNSTILE_SITE_KEY`; renders nothing when empty
+     (so dev builds without the env var work the same as the
+     reCAPTCHA equivalent).
+   - Exports `TURNSTILE_ENABLED = !!siteKey` for parity with
+     `CAPTCHA_ENABLED` from the recaptcha module.
+6. **NEW** `artifacts/qorix-markets/src/components/captcha-widget.tsx`:
+   - `<CaptchaWidget>` — the FE counterpart to the server
+     dispatcher. Picks `<Turnstile>` or `<Recaptcha>` based on
+     the build-time `VITE_CAPTCHA_PROVIDER` (defaults to
+     `recaptcha`).
+   - Forwards a single `CaptchaWidgetHandle.reset()` to whichever
+     child is mounted, so the parent form can keep one ref and
+     reset the captcha after a failed submit regardless of
+     provider.
+   - Exports `CAPTCHA_PROVIDER` (active provider) and
+     `CAPTCHA_ENABLED` (active provider's site key configured)
+     so any future code can branch on which captcha shipped
+     without re-reading the env.
+7. **EDITED** `artifacts/qorix-markets/src/pages/login.tsx`:
+   - Lines 12-16: import switched from
+     `@/components/recaptcha` (with `Recaptcha` /
+     `RecaptchaHandle`) to `@/components/captcha-widget` (with
+     `CaptchaWidget` / `CaptchaWidgetHandle`).
+   - Line 728: ref type `CaptchaWidgetHandle | null`.
+   - Lines 1192-1200: `<Recaptcha …/>` swapped to
+     `<CaptchaWidget …/>` with the same `onVerify` / `onExpire`
+     / `ref` wiring. The render gate (`{CAPTCHA_ENABLED && …}`)
+     and the post-submit body field (`captchaToken`) are
+     unchanged.
+
+### Build & deploy plumbing
+
+8. **EDITED** `artifacts/qorix-markets/Dockerfile`:
+   - Added `ARG VITE_TURNSTILE_SITE_KEY=""` and
+     `ARG VITE_CAPTCHA_PROVIDER="recaptcha"` (default safe).
+   - `ENV` block extended to bake both new vars into the Vite
+     bundle alongside the existing `VITE_RECAPTCHA_SITE_KEY`.
+9. **EDITED** `artifacts/qorix-markets/fly.toml` `[build.args]`
+   block:
+   - `VITE_TURNSTILE_SITE_KEY = ""` and
+     `VITE_CAPTCHA_PROVIDER = "recaptcha"` registered as build
+     args. Empty default for the site key matches the existing
+     reCAPTCHA pattern (a Phase-2 deploy passes the real value
+     via `--build-arg`).
+   - `.github/workflows/deploy.yml` was **deliberately not
+     touched** in this batch — Phase 2 will add the matching
+     `--build-arg VITE_TURNSTILE_SITE_KEY=…` and
+     `--build-arg VITE_CAPTCHA_PROVIDER=turnstile` lines plus a
+     `flyctl secrets set TURNSTILE_SECRET_KEY=…` step on
+     qorix-api at the same time the env switches. Until then
+     this Phase 1 ships entirely as inert code.
+
+### Net behavior
+
+- **Production behavior unchanged.** With `CAPTCHA_PROVIDER`
+  unset on qorix-api and `VITE_CAPTCHA_PROVIDER` unset in the
+  web build, both the server dispatcher AND the client wrapper
+  fall through to reCAPTCHA. The browser still loads
+  `recaptcha/api.js`, the user still sees Google's "I'm not a
+  robot" widget, the api-server still calls Google's
+  `siteverify`. Identical request shape, identical response
+  shape, identical error codes — verified by smoke (below).
+- **Phase 2 cutover is a one-line redeploy on each side**
+  (api-server: `flyctl secrets set CAPTCHA_PROVIDER=turnstile
+  TURNSTILE_SECRET_KEY=… -a qorix-api`; web: redeploy with
+  `--build-arg VITE_CAPTCHA_PROVIDER=turnstile --build-arg
+  VITE_TURNSTILE_SITE_KEY=…`). Rollback is the same shape:
+  unset/flip back and redeploy.
+- **`captchaToken` body field is provider-agnostic** — the
+  routes don't know or care whether the token came from
+  reCAPTCHA's `g-recaptcha-response` or Turnstile's
+  `cf-turnstile-response`. The widget shipped to the browser
+  decides which vendor's token it produces; the dispatcher on
+  the server decides which vendor's `siteverify` to call.
+
+### Validation
+
+- `pnpm --filter @workspace/api-server typecheck` → clean.
+- `pnpm --filter @workspace/qorix-markets typecheck` → clean.
+- API server restarted, boot log confirms the new INFO line:
+  `Captcha provider active (provider: "recaptcha")` — proves
+  the new code path is live AND the default branch is what
+  ships in this batch.
+- **Local dispatcher smoke** (`/tmp/captcha_dispatcher_smoke_b9_6.mjs`,
+  exercises both provider branches via Cloudflare's published
+  test secrets): **8/8 PASS**:
+  1. Default `getCaptchaProvider()` → `"recaptcha"` ✅
+  2. `CAPTCHA_PROVIDER=turnstile` → `"turnstile"` ✅
+  3. `CAPTCHA_PROVIDER=garbage` → falls back to `"recaptcha"` ✅
+  4. Turnstile always-fails secret
+     (`2x0000000000000000000000000000000AA`) →
+     `{ ok: false, error: "Captcha verification failed" }` ✅
+  5. Turnstile always-passes secret
+     (`1x0000000000000000000000000000000AA`) → `{ ok: true }` ✅
+  6. Turnstile + no secret → `{ ok: true, skipped: true }` ✅
+  7. reCAPTCHA branch with bogus token (real Google siteverify
+     against the dev secret) → `{ ok: false }` ✅ (proves the
+     reCAPTCHA path didn't regress)
+  8. `isCaptchaEnabled()` flips with the active provider's
+     secret presence ✅
+- Production validation pending CI deploy. Post-deploy smoke
+  will repeat the existing B9.5 6-call rate-limit check
+  (proves recaptcha path still works end-to-end through prod
+  Cloudflare → fly proxy → api-server).
