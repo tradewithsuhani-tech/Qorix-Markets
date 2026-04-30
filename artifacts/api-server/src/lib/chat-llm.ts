@@ -293,7 +293,7 @@ const FORBIDDEN_PATTERNS: Array<{ pattern: RegExp; replacement: string }> = [
 // style language with safe wording), but we no longer append the
 // disclaimer string to chat replies.
 
-function applySafetyGuard(reply: string, _isInvestmentRelated: boolean, _language: string): string {
+export function applySafetyGuard(reply: string, _isInvestmentRelated: boolean, _language: string): string {
   let cleaned = reply;
   for (const { pattern, replacement } of FORBIDDEN_PATTERNS) {
     cleaned = cleaned.replace(pattern, replacement);
