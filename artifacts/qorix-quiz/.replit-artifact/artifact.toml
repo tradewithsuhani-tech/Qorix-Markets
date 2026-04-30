@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/qorix-quiz/"
+title = "Qorix Quiz"
+version = "1.0.0"
+id = "artifacts/qorix-quiz"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/qorix-quiz/" ]
+localPort = 22276
+
+[services.development]
+run = "pnpm --filter @workspace/qorix-quiz run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/qorix-quiz", "run", "build" ]
+publicDir = "artifacts/qorix-quiz/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "22276"
+BASE_PATH = "/qorix-quiz/"
