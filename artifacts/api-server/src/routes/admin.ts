@@ -939,6 +939,7 @@ const ALLOWED_DIRECT_EMAIL_TEMPLATE_IDS = new Set([
   "maintenance",
   "trade_alert",
   "next_trade",
+  "kyc",
 ]);
 const DIRECT_EMAIL_SUBJECT_MAX = 200;
 const DIRECT_EMAIL_MESSAGE_MAX = 10_000;
