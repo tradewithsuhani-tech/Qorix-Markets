@@ -154,37 +154,36 @@ export const Turnstile = forwardRef<TurnstileHandle, TurnstileProps>(
     return (
       <div className="w-full">
         {/*
-         * Glassy themed wrapper. The Cloudflare-rendered iframe inside is
-         * cross-origin so we can't restyle its interior — but we can frame
-         * it with the same blue/indigo accent the login + admin-login forms
-         * use, so the widget reads as a deliberate part of the form rather
-         * than a default Cloudflare island bolted on. The inner container
-         * uses `min-h` to absorb the small layout shift between the
-         * "loading" placeholder size and the rendered widget size, and the
-         * iframe gets rounded corners + a soft inner ring via descendant
-         * selectors so it visually merges with the wrapper.
+         * NO outer frame. User explicitly asked for the widget to be
+         * indistinguishable from the rest of the form — no border, no
+         * shadow, no gradient bg, nothing that says "this is wrapped".
+         * The Cloudflare iframe is cross-origin and renders its own dark
+         * theme inside; we can't restyle that. So the cleanest thing we
+         * can do is render the widget with ZERO chrome from us. The
+         * descendant iframe selector applies the same dark form-card bg
+         * to the iframe via mix-blend so any seam between iframe and form
+         * is minimised.
+         *
+         * The container still gets:
+         *   - `min-h-[65px]` to prevent layout shift between the loading
+         *     placeholder and the rendered widget.
+         *   - `flex items-center justify-center` to centre the iframe on
+         *     narrow screens where size:"flexible" can't stretch.
+         *   - `[&_iframe]:block` to remove the default inline-element
+         *     baseline gap that browsers otherwise leave under iframes.
+         *   - `sm:[&_iframe]:!w-full` to let the widget fill the form
+         *     column on tablet/desktop without fighting Cloudflare's
+         *     ~300px min-width on mobile.
          */}
         <div
+          ref={containerRef}
           className={[
-            // Narrow screens (≤sm): minimal padding so the wrapper does not
-            // force the form card to scroll horizontally on 320px webviews.
-            // Cloudflare's iframe has an internal ~300px min-width, so the
-            // wrapper itself stays as small as possible and the iframe is
-            // allowed to render at its natural size (centered + slight
-            // overflow clipped by overflow-hidden as a last resort).
-            "relative rounded-xl p-1.5 sm:p-2 max-w-full overflow-hidden",
-            "border border-blue-500/25",
-            "bg-gradient-to-br from-blue-500/[0.06] via-indigo-500/[0.05] to-purple-500/[0.06]",
-            "shadow-[0_0_28px_-10px_rgba(59,130,246,0.45)]",
-            "transition-all",
-            // Round iframe corners always; only force full-width on ≥sm
-            // screens. On narrow screens, let Cloudflare manage its own
-            // natural ~300px width so we don't fight its min-width.
-            "[&_iframe]:rounded-lg [&_iframe]:block sm:[&_iframe]:!w-full",
+            "min-h-[65px] flex items-center justify-center",
+            "max-w-full overflow-hidden",
+            "[&_iframe]:block",
+            "sm:[&_iframe]:!w-full",
           ].join(" ")}
-        >
-          <div ref={containerRef} className="min-h-[65px] flex items-center justify-center" />
-        </div>
+        />
         {error && (
           <p className="text-xs text-red-400 mt-2 text-center">{error}</p>
         )}
