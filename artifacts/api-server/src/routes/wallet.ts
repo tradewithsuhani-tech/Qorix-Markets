@@ -613,6 +613,7 @@ router.post("/wallet/withdraw", async (req: AuthRequest, res) => {
 });
 
 router.post("/wallet/transfer", async (req: AuthRequest, res) => {
+ try {
   const result = TransferToTradingBody.safeParse(req.body);
   if (!result.success) {
     res.status(400).json({ error: "Invalid request" });
@@ -730,6 +731,31 @@ router.post("/wallet/transfer", async (req: AuthRequest, res) => {
   );
 
   res.json(formatWallet(updated!));
+ } catch (err) {
+    // Catch-all for ledger imbalances, unknown account codes, FK violations,
+    // negative-balance guard trips, and any other unexpected error inside the
+    // db.transaction block. Without this, Express returns a generic 500 with
+    // no diagnostic trail.
+    const userId = req.userId ?? null;
+    const body = (req.body ?? {}) as { amount?: unknown; direction?: unknown };
+    errorLogger.error(
+      {
+        err,
+        event: "transfer_failed",
+        userId,
+        amount: body.amount,
+        direction: body.direction ?? "to_trading",
+        message: err instanceof Error ? err.message : String(err),
+      },
+      "Wallet transfer failed",
+    );
+    if (!res.headersSent) {
+      res.status(500).json({
+        error:
+          "Transfer could not be completed. Please try again or contact support if this keeps happening.",
+      });
+    }
+  }
 });
 
 export default router;

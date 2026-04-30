@@ -89,7 +89,15 @@ export async function initSystemAccounts(): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// Ensure a user's three GL accounts exist (lazy creation)
+// Ensure a user's GL accounts exist (lazy creation) + post opening-balance
+// reconciliation journal when accounts are created lazily for a user that
+// already has a non-zero wallet balance (e.g., deposits credited via raw SQL
+// before the ledger system existed, or during platform migrations).
+//
+// Without the opening-balance reconciliation, downstream postJournalEntry
+// calls (transfers, trades, withdrawals) fail the negative-balance guard
+// on `user:UID:main` / `user:UID:trading` because the ledger trail starts
+// from zero while the wallet shows a real balance.
 // ---------------------------------------------------------------------------
 export async function ensureUserAccounts(userId: number, txn?: any): Promise<void> {
   const db_ = txn ?? db;
@@ -100,10 +108,14 @@ export async function ensureUserAccounts(userId: number, txn?: any): Promise<voi
     .where(inArray(glAccountsTable.code, codes));
   const existingCodes = new Set(existing.map((r: { code: string }) => r.code));
 
+  // Track which accounts WE actually inserted (race-safe via INSERT ... RETURNING
+  // — concurrent transactions racing on the same user will see only the rows
+  // that their own statement actually created).
+  const newlyCreated = new Set<string>();
   for (const def of USER_ACCOUNT_DEFS) {
     const code = `user:${userId}:${def.suffix}`;
     if (!existingCodes.has(code)) {
-      await db_
+      const inserted = await db_
         .insert(glAccountsTable)
         .values({
           code,
@@ -113,7 +125,63 @@ export async function ensureUserAccounts(userId: number, txn?: any): Promise<voi
           userId,
           isSystem: false,
         })
-        .onConflictDoNothing();
+        .onConflictDoNothing()
+        .returning({ code: glAccountsTable.code });
+      if (inserted.length > 0) newlyCreated.add(code);
+    }
+  }
+
+  // Opening-balance reconciliation: if we just created the user's main/trading
+  // GL account AND the wallets table already shows a non-zero balance, post a
+  // one-time journal that mirrors the wallet balance into the ledger.
+  // Contra-account is `platform:hot_wallet` (debit-normal asset) — these funds
+  // were on-chain deposits whose journal entries were missed.
+  const mainCode = `user:${userId}:main`;
+  const tradingCode = `user:${userId}:trading`;
+  if (newlyCreated.has(mainCode) || newlyCreated.has(tradingCode)) {
+    const wallets = await db_
+      .select({
+        mainBalance: walletsTable.mainBalance,
+        tradingBalance: walletsTable.tradingBalance,
+      })
+      .from(walletsTable)
+      .where(eq(walletsTable.userId, userId))
+      .limit(1);
+    const wallet = wallets[0];
+    if (wallet) {
+      const mainBal = parseFloat(wallet.mainBalance as string);
+      const tradingBal = parseFloat(wallet.tradingBalance as string);
+      const lines: JournalLine[] = [];
+      if (newlyCreated.has(mainCode) && mainBal > 0) {
+        lines.push({
+          accountCode: mainCode,
+          entryType: "credit",
+          amount: mainBal,
+          description: `Opening balance — main wallet (reconciled from wallets table)`,
+        });
+      }
+      if (newlyCreated.has(tradingCode) && tradingBal > 0) {
+        lines.push({
+          accountCode: tradingCode,
+          entryType: "credit",
+          amount: tradingBal,
+          description: `Opening balance — trading wallet (reconciled from wallets table)`,
+        });
+      }
+      if (lines.length > 0) {
+        const total = lines.reduce((s, l) => s + l.amount, 0);
+        lines.push({
+          accountCode: "platform:hot_wallet",
+          entryType: "debit",
+          amount: total,
+          description: `Opening balance reconciliation for user ${userId}`,
+        });
+        await postJournalEntry(`sys:opening:u${userId}`, lines, null, txn);
+        logger.info(
+          { userId, mainBal, tradingBal, total },
+          "Ledger: opening balance reconciled from wallets table",
+        );
+      }
     }
   }
 }
