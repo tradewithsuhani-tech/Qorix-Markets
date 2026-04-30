@@ -2243,3 +2243,60 @@ contains all expected new responsive markers
 B10 admin-captcha markers (`Please complete the captcha`,
 `Enter Admin Panel`). Desktop prod screenshot confirms widget
 still renders at full column width inside the themed frame.
+
+### B11.2 (2026-04-30 04:21Z) — Strip captcha wrapper frame entirely (0390d7031d)
+
+User reviewed B11.1 and said the themed glow frame was still
+too visible — captcha should look indistinguishable from the
+rest of the form, not framed in a glow box. So we stripped
+ALL wrapper styling and rendered the widget with zero chrome
+from us:
+
+**Removed (vs B11/B11.1):**
+- `border border-blue-500/25`
+- `bg-gradient-to-br from-blue-500/[0.06] via-indigo-500/[0.05]
+  to-purple-500/[0.06]`
+- `shadow-[0_0_28px_-10px_rgba(59,130,246,0.45)]`
+- `rounded-xl p-1.5 sm:p-2`
+- `transition-all`
+- `[&_iframe]:rounded-lg`
+- The wrapper `<div>` itself (now the ref attaches directly to
+  the centred container)
+
+**Kept (structural only):**
+- `min-h-[65px]` (Turnstile) / `min-h-[78px]` (reCAPTCHA) —
+  prevent layout shift
+- `flex items-center justify-center` — centre iframe
+- `max-w-full overflow-hidden` — prevent narrow-screen overflow
+- `[&_iframe]:block` — drop inline-element baseline gap
+- `sm:[&_iframe]:!w-full` (Turnstile only) — let flexible
+  widget fill column on tablet/desktop
+- `size: "flexible"` Turnstile render config — unchanged
+
+**What's still visually distinct (and we can't fix it):**
+The Cloudflare iframe is cross-origin and renders its own
+dark theme inside (~#1d1d1d gray bg, fixed by Cloudflare).
+That gray rectangle on the form card's near-black bg is the
+only remaining visible "this is a third-party widget" cue.
+We could only fully hide it by switching Turnstile to
+invisible mode (no widget UI at all — backend integration
+change required) or by repainting the form card bg to match
+Cloudflare's gray (bigger redesign).
+
+**Verification.** CI run `25147135139` green. Prod
+`/version.json` builtAt `2026-04-30T04:21:30Z`, JS bundle hash
+flipped to `index-xWOKHKP_.js`, all wrapper-frame markers
+absent (`shadow-[0_0_28px...]` → 0,
+`from-blue-500/[0.06]` → 0, `rounded-xl p-1.5` → 0). All
+preserved structural markers present (`size:"flexible"`,
+`min-h-[65px]`, `min-h-[78px]`, `max-w-full overflow-hidden`,
+`[&_iframe]:block`, `sm:[&_iframe]:!w-full`) and the B10
+admin-captcha integration markers preserved
+(`Please complete the captcha`). Note: `border-blue-500/25`
+still appears 7× in the prod bundle but those are from 10
+unrelated app pages (portfolio, dashboard, tasks,
+trading-desk, landing, deposit, admin-chats, invest,
+admin-fraud, growth-panel) using the same Tailwind class for
+their own legitimate UI work — captcha files have ZERO
+border classes. Prod desktop screenshot confirms widget now
+sits inline with the form, no border/glow visible from us.
