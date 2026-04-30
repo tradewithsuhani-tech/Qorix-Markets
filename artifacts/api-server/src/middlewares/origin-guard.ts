@@ -42,14 +42,21 @@ import { verifyCsrfToken } from "../lib/csrf-token";
 
 const STATE_CHANGING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
+// IMPORTANT: this middleware is mounted via `app.use("/api", originGuard)`,
+// so inside the handler `req.path` is MOUNT-RELATIVE (e.g. "/healthz"),
+// not absolute ("/api/healthz"). We list both forms so the exemption
+// matches whether the middleware is mounted at /api or at the root.
+// (B30.1 — caught by architect review.)
 const PATH_EXEMPTIONS = new Set([
+  // Mount-relative (matches req.path under app.use("/api", ...)):
+  "/healthz",
+  "/version",
+  "/version.json",
+  "/csrf",
+  // Absolute (matches req.path if remounted at root):
   "/api/healthz",
   "/api/version",
   "/api/version.json",
-  // /api/csrf must be exempt because the WHOLE point of that endpoint
-  // is to issue a token to a client that doesn't yet have one. If it
-  // required a token to call it, the client could never bootstrap.
-  // It's a GET anyway so this only matters defensively.
   "/api/csrf",
 ]);
 
@@ -85,33 +92,28 @@ export function originGuard(req: Request, res: Response, next: NextFunction): vo
     return;
   }
 
+  // ─── ORIGIN / REFERER CHECK ──────────────────────────────────────────────
   // Dev / test mode where no allowlist is configured: behave like the
-  // permissive cors() default in app.ts and pass through. This keeps
-  // local development and the smoke-test suite working without
-  // forcing a CORS_ORIGIN value.
+  // permissive cors() default in app.ts and SKIP the origin check. We
+  // intentionally do NOT early-return from the middleware here — we still
+  // want the CSRF check below to run when CSRF_HMAC_SECRET is set, even
+  // in dev/test. (B30.1 fix — was previously returning early, which
+  // silently disabled CSRF whenever CORS_ORIGIN was unset.)
   const allowed = parseAllowedOrigins();
-  if (!allowed || allowed.length === 0) {
-    next();
-    return;
-  }
-
-  const origin = (req.headers["origin"] as string | undefined)?.trim();
-  if (origin && allowed.includes(origin)) {
-    next();
-    return;
-  }
-
-  // Some browsers / proxies strip the Origin header on certain navigations
-  // but preserve Referer. Accept Referer as a fallback if its origin
-  // matches the allowlist.
-  const refererOrigin = originFromReferer(req.headers["referer"] as string | undefined);
-  const originOk = (origin && allowed.includes(origin)) || (refererOrigin && allowed.includes(refererOrigin));
-  if (!originOk) {
-    res.status(403).json({
-      error: "Direct API access is not allowed. Requests must originate from the official Qorix Markets web app.",
-      code: "ORIGIN_REQUIRED",
-    });
-    return;
+  if (allowed && allowed.length > 0) {
+    const origin = (req.headers["origin"] as string | undefined)?.trim();
+    // Some browsers / proxies strip Origin on certain navigations but
+    // preserve Referer. Accept Referer as a fallback when its origin
+    // matches the allowlist.
+    const refererOrigin = originFromReferer(req.headers["referer"] as string | undefined);
+    const originOk = (origin && allowed.includes(origin)) || (refererOrigin && allowed.includes(refererOrigin));
+    if (!originOk) {
+      res.status(403).json({
+        error: "Direct API access is not allowed. Requests must originate from the official Qorix Markets web app.",
+        code: "ORIGIN_REQUIRED",
+      });
+      return;
+    }
   }
 
   // ─── B30 L6: HMAC CSRF nonce check ───────────────────────────────────────

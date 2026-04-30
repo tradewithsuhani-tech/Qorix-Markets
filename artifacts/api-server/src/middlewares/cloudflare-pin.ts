@@ -63,7 +63,19 @@
 
 import type { Request, Response, NextFunction } from "express";
 
+// IMPORTANT: this middleware is mounted via `app.use("/api", cloudflarePin)`,
+// so inside the handler `req.path` is the MOUNT-RELATIVE subpath (e.g.
+// "/healthz"), not the absolute URL ("/api/healthz"). We list both the
+// mount-relative form (what req.path actually contains at runtime) AND the
+// absolute form (in case this middleware is ever remounted at the app
+// root) so the exemption matches in either configuration. Without this
+// fix, enabling CLOUDFLARE_ORIGIN_SECRET would 403 every Fly LB health
+// probe (which hits /healthz directly, not via Cloudflare) and pull the
+// instance out of rotation. (B30.1 — caught by architect review.)
 const PATH_EXEMPTIONS = new Set<string>([
+  "/healthz",
+  "/version",
+  "/version.json",
   "/api/healthz",
   "/api/version",
   "/api/version.json",
