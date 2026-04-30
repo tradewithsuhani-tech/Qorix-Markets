@@ -146,7 +146,12 @@ export const Recaptcha = forwardRef<RecaptchaHandle, RecaptchaProps>(
        */}
       <div
         className={[
-          "relative rounded-xl p-2",
+          // Same narrow-width handling as turnstile.tsx: smaller padding on
+          // mobile webviews + overflow-hidden as a last resort, since the
+          // reCAPTCHA v2 iframe is fixed 304×78 (no flexible mode) and
+          // could otherwise force the form card to scroll horizontally on
+          // 320px viewports.
+          "relative rounded-xl p-1.5 sm:p-2 max-w-full overflow-hidden",
           "border border-blue-500/25",
           "bg-gradient-to-br from-blue-500/[0.06] via-indigo-500/[0.05] to-purple-500/[0.06]",
           "shadow-[0_0_28px_-10px_rgba(59,130,246,0.45)]",
