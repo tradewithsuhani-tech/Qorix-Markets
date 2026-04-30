@@ -21,10 +21,25 @@ import { makeRedisLimiter } from "../middlewares/rate-limit";
 
 const router = Router();
 
+// B9.5 (Apr 2026) — tightened from 20 / 15min to 5 / 1min to bring the
+// brute-force ceiling in line with fintech norms (Coinbase / Binance use
+// a similar 5-attempts-then-cool-down shape). Honest users with a couple
+// of password / 2FA typos still finish in ≤ 4 calls; brute forcers hit
+// the wall inside the first ~6 seconds.
+//
+// Bucket is INTENTIONALLY shared across /auth/login,
+// /auth/2fa/login-verify, and /auth/2fa/email-fallback/request because
+// those three endpoints are the same authentication attempt — counting
+// them separately would let an attacker get 5 password tries AND
+// 5 2FA-verify tries AND 5 OTP-email-resend tries from the same IP per
+// minute, which defeats the cap. The header on rate-limit.ts warns
+// against sharing buckets across DIFFERENT concerns (login vs forgot
+// vs 2FA-mgmt setup) — those still use their own dedicated limiters
+// further down this file.
 const loginRateLimit = makeRedisLimiter({
   name: "login",
-  windowMs: 15 * 60 * 1000,
-  limit: 20,
+  windowMs: 60 * 1000,
+  limit: 5,
 });
 
 // Max 5 new accounts per IP per day
@@ -557,7 +572,7 @@ router.post("/auth/2fa/login-verify", loginRateLimit, async (req, res) => {
 // Security:
 //   • Requires a valid 2FA challenge token (proves password was just
 //     verified) — random people can't trigger emails to arbitrary users.
-//   • Rate-limited via loginRateLimit (20/15min per IP).
+//   • Rate-limited via loginRateLimit (5/min per IP, B9.5).
 //   • sendOtp invalidates any prior pending OTP for the same purpose, so
 //     spamming "resend" only ever leaves the latest code valid.
 //   • Email is masked in the response (a***@d***.com) so we never leak
