@@ -113,7 +113,16 @@ router.post("/auth/register", async (req, res) => {
     return;
   }
 
-  const { email, password, fullName, referralCode: sponsorCode } = result.data;
+  const { email: rawEmail, password, fullName, referralCode: sponsorCode } = result.data;
+  // ─── Email normalization (B24) ─────────────────────────────────────────
+  // Lowercase + trim so "Foo@x.com", "foo@x.com" and " foo@x.com " all
+  // resolve to the same canonical address. Without this, the unique
+  // index on `email` (case-sensitive btree) lets the same human sign up
+  // multiple times by varying capitalization (e.g., the prod
+  // Vimlesh1group@gmail.com vs vimlesh1group@gmail.com pair). We use
+  // the normalized form for BOTH the duplicate check and the INSERT
+  // so all new rows are stored canonical.
+  const email = rawEmail.toLowerCase().trim();
 
   // --- IP rate limit check ---
   const rawIp = getClientIp(req);
@@ -153,7 +162,14 @@ router.post("/auth/register", async (req, res) => {
     }
   }
 
-  const existing = await db.select().from(usersTable).where(eq(usersTable.email, email)).limit(1);
+  // B24: case-insensitive duplicate check — covers BOTH new normalized
+  // rows AND legacy mixed-case rows (e.g., prod Vimlesh1group vs
+  // vimlesh1group, SAFEPAYU vs safepayu) that pre-date this fix.
+  const existing = await db
+    .select()
+    .from(usersTable)
+    .where(sql`LOWER(${usersTable.email}) = ${email}`)
+    .limit(1);
   if (existing.length > 0) {
     res.status(409).json({ error: "Email already registered" });
     return;
@@ -183,16 +199,32 @@ router.post("/auth/register", async (req, res) => {
   const referralCode = generateReferralCode();
   const ua = req.headers["user-agent"];
 
-  const [newUser] = await db.insert(usersTable).values({
-    email,
-    passwordHash,
-    fullName,
-    isAdmin: false,
-    referralCode,
-    sponsorId: sponsorId ?? 0,
-    emailVerified: false,
-    points: 0,
-  }).returning();
+  // B24: race-safe insert. The pre-check above resolves the common
+  // case, but two concurrent signups for the same email could both
+  // pass the existence check and reach the INSERT — the unique index
+  // on `email` rejects the second one with Postgres error 23505. We
+  // surface that as the same friendly 409 instead of a 500.
+  let newUser: typeof usersTable.$inferSelect | undefined;
+  try {
+    [newUser] = await db.insert(usersTable).values({
+      email,
+      passwordHash,
+      fullName,
+      isAdmin: false,
+      referralCode,
+      sponsorId: sponsorId ?? 0,
+      emailVerified: false,
+      points: 0,
+    }).returning();
+  } catch (e: any) {
+    const code = e?.code ?? e?.cause?.code;
+    const msg = String(e?.message ?? "");
+    if (code === "23505" || /duplicate key|unique constraint/i.test(msg)) {
+      res.status(409).json({ error: "Email already registered" });
+      return;
+    }
+    throw e;
+  }
 
   if (!newUser) {
     res.status(500).json({ error: "Failed to create user" });
@@ -275,13 +307,19 @@ router.post("/auth/register", async (req, res) => {
 // auth JWT so the user can be logged in.
 // ---------------------------------------------------------------------------
 router.post("/auth/verify-email-public", async (req, res) => {
-  const { email, otp } = req.body ?? {};
-  if (!email || typeof email !== "string" || !otp || typeof otp !== "string") {
+  const { email: rawEmail, otp } = req.body ?? {};
+  if (!rawEmail || typeof rawEmail !== "string" || !otp || typeof otp !== "string") {
     res.status(400).json({ error: "Email and OTP are required" });
     return;
   }
+  // B24: same normalization /auth/register applies on insert.
+  const email = rawEmail.toLowerCase().trim();
 
-  const users = await db.select().from(usersTable).where(eq(usersTable.email, email)).limit(1);
+  const users = await db
+    .select()
+    .from(usersTable)
+    .where(sql`LOWER(${usersTable.email}) = ${email}`)
+    .limit(1);
   if (users.length === 0) {
     // Generic error to avoid email enumeration
     res.status(400).json({ error: "Invalid or expired code" });
@@ -330,16 +368,18 @@ router.post("/auth/verify-email-public", async (req, res) => {
 // Always returns generic success to prevent email enumeration.
 // ---------------------------------------------------------------------------
 router.post("/auth/resend-verification", async (req, res) => {
-  const { email } = req.body ?? {};
-  if (!email || typeof email !== "string") {
+  const { email: rawEmail } = req.body ?? {};
+  if (!rawEmail || typeof rawEmail !== "string") {
     res.status(400).json({ error: "Email is required" });
     return;
   }
+  // B24: same normalization /auth/register applies on insert.
+  const email = rawEmail.toLowerCase().trim();
 
   const users = await db
     .select({ id: usersTable.id, email: usersTable.email, emailVerified: usersTable.emailVerified, isDisabled: usersTable.isDisabled })
     .from(usersTable)
-    .where(eq(usersTable.email, email))
+    .where(sql`LOWER(${usersTable.email}) = ${email}`)
     .limit(1);
 
   if (users.length > 0 && !users[0]!.isDisabled && !users[0]!.emailVerified) {
@@ -362,7 +402,12 @@ router.post("/auth/login", loginRateLimit, async (req, res) => {
     return;
   }
 
-  const { email, password } = result.data;
+  const { email: rawEmailLogin, password } = result.data;
+  // B24: normalize email same way /auth/register now does so a user
+  // who signed up as "Foo@x.com" can sign in as "foo@x.com" (and any
+  // other case variation). The DB lookup uses LOWER(email) below to
+  // also match legacy mixed-case rows that pre-date this fix.
+  const email = rawEmailLogin.toLowerCase().trim();
 
   // --- Captcha check ---
   // B9.6: verifyCaptcha() is a provider dispatcher (lib/captcha-service.ts);
@@ -378,7 +423,11 @@ router.post("/auth/login", loginRateLimit, async (req, res) => {
     return;
   }
 
-  const users = await db.select().from(usersTable).where(eq(usersTable.email, email)).limit(1);
+  const users = await db
+    .select()
+    .from(usersTable)
+    .where(sql`LOWER(${usersTable.email}) = ${email}`)
+    .limit(1);
   if (users.length === 0) {
     res.status(401).json({ error: "Invalid credentials" });
     return;
