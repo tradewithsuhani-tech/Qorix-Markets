@@ -1,10 +1,13 @@
 import express, { type Express, type Request, type Response, type NextFunction } from "express";
 import cors from "cors";
+import helmet from "helmet";
 import pinoHttp from "pino-http";
 import router from "./routes";
 import { logger } from "./lib/logger";
 import { maintenanceMiddleware, peekMaintenanceState } from "./middlewares/maintenance";
 import { globalApiLimiter } from "./middlewares/rate-limit";
+import { originGuard } from "./middlewares/origin-guard";
+import { adminIpAllowlist, adminIpAllowlistEnabled } from "./middlewares/admin-ip-allowlist";
 import { getCaptchaProvider } from "./lib/captcha-service";
 
 const app: Express = express();
@@ -35,6 +38,63 @@ app.use(
     },
   }),
 );
+
+// ─── B28 L3: HTTP method allowlist ─────────────────────────────────────────
+// Reject exotic verbs (TRACE, CONNECT, custom methods) that no legitimate
+// client of this API ever sends. TRACE in particular has historical XSS
+// implications via Cross-Site Tracing; blocking it removes any chance of
+// a future infra change accidentally re-enabling it. Mounted at the very
+// top so a TRACE request doesn't even consume rate-limit budget.
+const ALLOWED_METHODS = new Set([
+  "GET",
+  "POST",
+  "PUT",
+  "PATCH",
+  "DELETE",
+  "HEAD",
+  "OPTIONS",
+]);
+app.use((req, res, next) => {
+  if (!ALLOWED_METHODS.has(req.method.toUpperCase())) {
+    res.status(405).json({ error: "Method Not Allowed", code: "METHOD_NOT_ALLOWED" });
+    return;
+  }
+  next();
+});
+
+// ─── B28 L1: Helmet security headers ───────────────────────────────────────
+// Adds the standard set of defensive HTTP response headers fintech APIs
+// are expected to ship:
+//   - Strict-Transport-Security: lock browsers to HTTPS for 1y w/
+//     subdomains. Fly already redirects HTTP → HTTPS via fly.toml
+//     `force_https = true`, so the header is purely belt-and-braces.
+//   - X-Content-Type-Options: nosniff — block MIME confusion attacks.
+//   - X-Frame-Options: DENY — defeats clickjacking by refusing to be
+//     iframed at all. The web app never embeds the API.
+//   - Referrer-Policy: strict-origin-when-cross-origin — limits how
+//     much of the request URL is leaked to third parties.
+//   - X-DNS-Prefetch-Control: off — minor privacy hardening.
+//   - Cross-Origin-Resource-Policy: same-site — blocks naive
+//     embedding of API responses by other origins.
+//
+// Skipped on purpose:
+//   - Content-Security-Policy: meaningful only for HTML responses;
+//     our API only serves JSON. Helmet's default CSP would
+//     interfere with the few image responses we do serve (e.g. the
+//     slider-puzzle captcha PNG) without protecting anything real.
+//   - Cross-Origin-Embedder-Policy: blocks the cross-origin XHR
+//     pattern the web app actually uses; would break legitimate
+//     traffic.
+app.use(
+  helmet({
+    contentSecurityPolicy: false,
+    crossOriginEmbedderPolicy: false,
+    crossOriginResourcePolicy: { policy: "same-site" },
+    hsts: { maxAge: 31536000, includeSubDomains: true, preload: false },
+    referrerPolicy: { policy: "strict-origin-when-cross-origin" },
+  }),
+);
+
 // CORS — when the web app and api are served on different origins (Fly prod:
 // qorixmarkets.com → api.qorixmarkets.com) the browser needs an explicit
 // allow-list and `credentials: true` for cookie-based auth to work. In
@@ -60,6 +120,28 @@ if (corsOriginEnv) {
 } else {
   app.use(cors());
 }
+
+// ─── B28 L2: Origin / Referer guard for state-changing requests ────────────
+// Mounted on /api ONLY (so it never touches /healthz at the root) and
+// BEFORE the body parsers so a 12MB no-Origin POST gets rejected with
+// 403 ORIGIN_REQUIRED *without* the server first allocating + parsing a
+// 12MB JSON body. This is the difference between an attacker costing
+// us microseconds vs. tens of milliseconds + 12MB of RAM per blocked
+// request, and matters for sustained scraping/abuse traffic.
+//
+// CORS still runs first because preflight OPTIONS responses must carry
+// Access-Control-* headers regardless of the Origin guard outcome.
+//
+// Idempotent reads (GET/HEAD/OPTIONS) and a small set of path
+// exemptions (healthz, version) pass through untouched. State-changing
+// methods without a recognised Origin/Referer get 403 ORIGIN_REQUIRED.
+// See origin-guard.ts for full rationale.
+//
+// Net effect: a `curl -X POST https://qorix-api.fly.dev/api/auth/register`
+// with no Origin header is rejected at the edge before body parse,
+// rate-limit budget consumption, captcha verification, or DB lookup.
+app.use("/api", originGuard);
+
 app.use(express.json({ limit: "12mb" }));
 app.use(express.urlencoded({ extended: true }));
 
@@ -185,6 +267,27 @@ app.use((_req, res, next) => {
 // and apply stricter caps to sensitive endpoints (login, password reset,
 // 2FA management).
 app.use("/api", globalApiLimiter);
+
+// ─── B28 L4: Admin IP allowlist (opt-in via ADMIN_IP_ALLOWLIST env) ───────
+// Mounted BEFORE the per-router authMiddleware in routes/admin*.ts so a
+// rejected IP never even consumes a JWT-verify CPU cycle. With the env
+// unset (current state) this is a pure no-op pass-through; setting the
+// env to a comma-separated IP list via `flyctl secrets set
+// ADMIN_IP_ALLOWLIST=...` flips on the gate after the next deploy. See
+// admin-ip-allowlist.ts for details.
+//
+// Logged once at startup so ops can confirm whether the gate is armed
+// without grepping env vars on the running machine.
+if (adminIpAllowlistEnabled) {
+  logger.info(
+    "B28: admin IP allowlist ARMED — only listed IPs may reach /api/admin",
+  );
+} else {
+  logger.info(
+    "B28: admin IP allowlist UNSET — /api/admin gated only by JWT + RBAC",
+  );
+}
+app.use("/api/admin", adminIpAllowlist);
 
 // Maintenance gate sits in front of every /api route. When MAINTENANCE_MODE=true
 // (set as a Fly secret during the cutover window) it lets reads through with a
