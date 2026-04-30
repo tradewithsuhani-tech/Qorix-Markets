@@ -2467,3 +2467,55 @@ status` 1×, `phone-change/start` 1×, `phone-change/cancel` 1×,
 `Mobile Number` 1×, `Verified via voice OTP` 1×. The old throw
 literal `status_fetch_failed` is gone from the bundle (0×
 hits) — confirms the broken queryFn is no longer compiled in.
+
+### B15 (2026-04-30 05:18Z) — /devices: hide withdrawal messages and location (60d29e61d4)
+
+**Trigger.** User screenshot of `/devices` ("My Devices") asked
+to remove the withdrawal-related messaging and location info:
+"Yaha par withdrawal wala message show mat karo loction mat
+dikhao".
+
+**Removed (visual only — no API contract changes).**
+
+  1. Top amber banner "Withdrawals paused on this session"
+     (`{!data.currentSession.withdrawalAllowed}` block, ~22 lines)
+  2. Per-card location row (MapPin icon + city, country e.g.
+     "Noida, India") and the `formatLocation` helper
+  3. Per-card amber box "Withdrawals locked from this device"
+     with the 24-hour cooldown explanation (~32 lines)
+  4. Withdrawal sentence in the page intro paragraph
+  5. Footer line "Cooldown for new devices: Xh"
+  6. Newly-unused imports: `MapPin`, `Lock` from lucide-react
+
+**Kept on each card.** Device icon, browser + OS, "This device"
+badge, "Last seen", "First sign-in", and the new-device email
+alert chip when applicable.
+
+**Server contract intact.** `GET /api/devices` still returns
+`devices[].city / country / withdrawalLocked /
+withdrawalUnlockAt / withdrawalUnlockHoursLeft /
+withdrawalUnlockIst`, `cooldownHours`, and
+`currentSession.withdrawalAllowed` — the page just stops
+rendering them. The `DevicesResponse` / `DeviceRow` /
+`CurrentSession` interfaces also unchanged so the wire shape
+keeps matching the server.
+
+**Backend untouched.** The actual withdrawal cooldown
+enforcement lives at `/wallet/withdraw` (and the helper that
+populates `currentSession.withdrawalAllowed`) — neither was
+touched, so security behaviour is unchanged. The user just
+won't see the explanation on this screen.
+
+**File.** `artifacts/qorix-markets/src/pages/devices.tsx`
+331 → 255 lines (76 removed).
+
+**Verification.** CI run `25148716891` completed success.
+Prod `/version.json` builtAt `2026-04-30T05:18:17Z`, JS bundle
+hash flipped to `index-DvvH4KKg.js`. Bundle markers:
+`Withdrawals paused on this session` 0×, `Withdrawals locked
+from this device` 0×, `Cooldown for new devices` 0×, all gone.
+Kept `My Devices` 1×, `First sign-in` 1×, `New-device email
+alert sent at first sign-in` 1×. Note: `Location unknown`
+still appears 1× in the prod bundle but that hit comes from
+`admin-fraud.tsx` (separate admin-only page), confirmed via
+ripgrep on local source — devices.tsx itself is clean.

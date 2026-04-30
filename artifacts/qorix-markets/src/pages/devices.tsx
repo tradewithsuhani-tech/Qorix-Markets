@@ -7,11 +7,9 @@ import { format, formatDistanceToNow } from "date-fns";
 import {
   Smartphone,
   Monitor,
-  MapPin,
   Clock,
   CheckCircle2,
   AlertTriangle,
-  Lock,
   ChevronLeft,
   Shield,
   Mail,
@@ -72,11 +70,6 @@ function isMobileOs(os: string): boolean {
     lower.includes("iphone") ||
     lower.includes("mobile")
   );
-}
-
-function formatLocation(city: string | null, country: string | null): string {
-  const parts = [city, country].filter((p): p is string => !!p && p.length > 0);
-  return parts.length > 0 ? parts.join(", ") : "Location unknown";
 }
 
 function DeviceRowSkeleton() {
@@ -151,10 +144,6 @@ function DeviceCard({ d }: { d: DeviceRow }) {
           </span>
         </div>
         <div className="flex items-center gap-2 text-muted-foreground">
-          <MapPin style={{ width: 12, height: 12 }} className="shrink-0" />
-          <span className="truncate">{formatLocation(d.city, d.country)}</span>
-        </div>
-        <div className="flex items-center gap-2 text-muted-foreground">
           <Shield style={{ width: 12, height: 12 }} className="shrink-0" />
           <span className="truncate">
             First sign-in: <span className="text-white/80">{firstSeenAbs}</span>
@@ -170,38 +159,6 @@ function DeviceCard({ d }: { d: DeviceRow }) {
         )}
       </div>
 
-      {/* Withdrawal-lock badge */}
-      {d.withdrawalLocked && (
-        <div className="mt-4 flex items-start gap-2.5 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-200">
-          <Lock className="w-4 h-4 shrink-0 mt-0.5" />
-          <div className="text-xs leading-relaxed min-w-0">
-            <div className="font-semibold">
-              Withdrawals locked from this device
-            </div>
-            <div className="text-amber-200/80 mt-0.5">
-              For your security, withdrawals from a new device are paused for
-              the first 24 hours.
-              {d.withdrawalUnlockIst && (
-                <>
-                  {" "}
-                  Will unlock around{" "}
-                  <span className="font-semibold text-amber-200">
-                    {d.withdrawalUnlockIst}
-                  </span>
-                  {d.withdrawalUnlockHoursLeft > 0 && (
-                    <>
-                      {" "}
-                      ({d.withdrawalUnlockHoursLeft}h remaining)
-                    </>
-                  )}
-                  .
-                </>
-              )}{" "}
-              Deposits and trading continue as normal.
-            </div>
-          </div>
-        </div>
-      )}
     </motion.div>
   );
 }
@@ -236,10 +193,8 @@ export default function DevicesPage() {
             <h1 className="text-xl font-bold">My Devices</h1>
           </div>
           <p className="text-xs text-muted-foreground leading-relaxed">
-            Every device you've successfully signed in from. New devices are
-            blocked from withdrawals for the first 24 hours as a security
-            precaution. If you see a device you don't recognise, change your
-            password immediately.
+            Every device you've successfully signed in from. If you see a
+            device you don't recognise, change your password immediately.
           </p>
         </motion.div>
 
@@ -261,35 +216,6 @@ export default function DevicesPage() {
               </div>
             </div>
           </div>
-        )}
-
-        {/* Authoritative "this session is blocked from withdrawals"
-            banner — driven by the same helper that gates the actual
-            withdrawal endpoints, so the message here can never
-            disagree with what /wallet/withdraw will tell you.
-            Rendered OUTSIDE the device-list branch so it still
-            appears in the (rare) ghost-session-with-zero-devices
-            edge case. */}
-        {data && !data.currentSession.withdrawalAllowed && (
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.32, ease: "easeOut" }}
-            className="glass-card rounded-2xl p-4 border-amber-500/30 bg-amber-500/[0.05]"
-          >
-            <div className="flex items-start gap-2.5 text-amber-200">
-              <Lock className="w-4 h-4 shrink-0 mt-0.5" />
-              <div className="text-xs leading-relaxed">
-                <div className="font-semibold">
-                  Withdrawals paused on this session
-                </div>
-                <div className="text-amber-200/80 mt-0.5">
-                  {data.currentSession.message}
-                  {" "}Deposits and trading continue as normal.
-                </div>
-              </div>
-            </div>
-          </motion.div>
         )}
 
         {data && data.devices.length === 0 && !isLoading && (
@@ -319,8 +245,7 @@ export default function DevicesPage() {
 
             <div className="text-[11px] text-muted-foreground text-center pt-2">
               Showing {data.devices.length} device
-              {data.devices.length !== 1 ? "s" : ""}. Cooldown for new devices:{" "}
-              {data.cooldownHours}h.
+              {data.devices.length !== 1 ? "s" : ""}.
             </div>
           </>
         )}
