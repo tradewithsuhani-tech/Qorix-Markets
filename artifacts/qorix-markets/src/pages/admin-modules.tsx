@@ -47,6 +47,8 @@ import {
   MoreVertical,
   Smartphone,
   LogOut,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { HIDDEN_FEATURES } from "@/lib/hidden-features";
 import { AddressDisplay } from "@/components/address-display";
@@ -699,6 +701,15 @@ export function AdminUsersPage() {
   // network call per keystroke while still feeling instant (300ms is the
   // sweet spot between "felt" lag and request thrash).
   const [debouncedQuery, setDebouncedQuery] = useState("");
+  // B22: server-driven pagination — page size is fixed at 10 (admin's
+  // "1st recent 10" request) and the API returns `{ total, page,
+  // totalPages }` so we render the footer Prev/Next + counts directly
+  // from server truth. With 33+ users we were silently dropping the
+  // tail of the list under the previous hardcoded `limit=20`.
+  const PAGE_SIZE = 10;
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
   const [adjustUser, setAdjustUser] = useState<any | null>(null);
   const [editUser, setEditUser] = useState<any | null>(null);
   const [emailUser, setEmailUser] = useState<any | null>(null);
@@ -712,25 +723,33 @@ export function AdminUsersPage() {
     return () => clearTimeout(handle);
   }, [query]);
 
+  // B22: any filter change (search text or smoke-test toggle) snaps the
+  // view back to page 1 — otherwise the user could be sitting on page 3
+  // of an old result set when the new query only returns 1 page.
+  useEffect(() => { setPage(1); }, [debouncedQuery, showSmokeTest]);
+
   async function load() {
     setLoading(true);
     try {
-      // Phase 7.3: limit 100 → 20 + server-side `q` search. Loading 100 rows
-      // on every page-mount wasted ~50KB and render time when only ~20 fit
-      // on screen. Server-side search (added to /admin/users in the same
-      // phase) closes the correctness gap — the in-page filter alone would
-      // have hidden any user outside the latest 20.
-      const params = new URLSearchParams({ limit: "20" });
+      // B22: paginate at PAGE_SIZE=10 with `?page=N`. The API returns
+      // `{ data, total, page, totalPages }` and orders by id DESC so
+      // page 1 is always the most recent 10 sign-ups.
+      const params = new URLSearchParams({
+        limit: String(PAGE_SIZE),
+        page: String(page),
+      });
       if (showSmokeTest) params.set("includeSmokeTest", "true");
       if (debouncedQuery) params.set("q", debouncedQuery);
       const data = await adminFetch(`/admin/users?${params.toString()}`);
       setUsers(data.data ?? []);
+      setTotal(Number(data.total ?? 0));
+      setTotalPages(Math.max(1, Number(data.totalPages ?? 1)));
     } finally {
       setLoading(false);
     }
   }
 
-  useEffect(() => { load(); }, [showSmokeTest, debouncedQuery]);
+  useEffect(() => { load(); }, [showSmokeTest, debouncedQuery, page]);
 
   // The list is already filtered server-side, so no extra client filtering
   // needed — but keep it as a no-op-friendly pass-through for any case
@@ -902,6 +921,37 @@ export function AdminUsersPage() {
               </tbody>
             </table>
           </div>
+          {/* B22: pagination footer — Prev/Next + page X of Y · total N.
+              Server returns `total` and `totalPages` so the controls
+              stay accurate as users register / get filtered. Hidden
+              while loading the very first page (no totals yet) and
+              when there are zero results. */}
+          {!loading && total > 0 && (
+            <div className="flex items-center justify-between gap-3 px-4 py-3 border-t border-white/5 bg-white/[0.02] flex-wrap">
+              <div className="text-xs text-muted-foreground">
+                Page <span className="text-white font-mono">{page}</span> of{" "}
+                <span className="text-white font-mono">{totalPages}</span>
+                {" · "}
+                <span className="text-white font-mono">{total}</span> total user{total === 1 ? "" : "s"}
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page <= 1 || loading}
+                  className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed text-xs flex items-center gap-1.5 transition-colors"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" /> Prev
+                </button>
+                <button
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={page >= totalPages || loading}
+                  className="px-3 py-1.5 rounded-lg bg-blue-500/15 hover:bg-blue-500/25 text-blue-300 disabled:opacity-30 disabled:cursor-not-allowed text-xs flex items-center gap-1.5 transition-colors"
+                >
+                  Next <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </motion.div>
     </Layout>

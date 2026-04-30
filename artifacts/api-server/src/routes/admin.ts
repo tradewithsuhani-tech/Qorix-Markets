@@ -325,10 +325,14 @@ router.get("/admin/users", async (req, res) => {
     .where(usersFilter);
   const total = Number(totalResult?.count ?? 0);
 
+  // B22: order by id DESC so the most recently registered users surface
+  // on page 1 — the admin asks for "1st recent 10" and the previous
+  // implicit insertion-order (id ASC) showed the oldest accounts first.
   const allUsers = await db
     .select()
     .from(usersTable)
     .where(usersFilter)
+    .orderBy(desc(usersTable.id))
     .limit(limit)
     .offset(offset);
 
