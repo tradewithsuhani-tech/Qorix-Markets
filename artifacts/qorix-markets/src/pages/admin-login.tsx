@@ -1,16 +1,29 @@
 import { useEffect, useRef, useState } from "react";
-import { useLogin } from "@workspace/api-client-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useLocation } from "wouter";
 import { motion } from "framer-motion";
 import { ArrowLeft, Eye, EyeOff, Lock, Mail, ShieldCheck } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import {
+  CaptchaWidget,
+  CAPTCHA_ENABLED,
+  type CaptchaWidgetHandle,
+} from "@/components/captcha-widget";
+import { authFetch } from "@/lib/auth-fetch";
+
+const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
+function apiUrl(path: string) {
+  return `${BASE_URL}/api${path}`;
+}
 
 export default function AdminLoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState("");
+  const [submitting, setSubmitting] = useState(false);
   const autoHideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const recaptchaRef = useRef<CaptchaWidgetHandle | null>(null);
   const { login: setAuthData } = useAuth();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
@@ -31,47 +44,76 @@ export default function AdminLoginPage() {
     };
   }, []);
 
-  const loginMutation = useLogin({
-    mutation: {
-      onSuccess: (data: any) => {
-        // 2FA-enabled admins land on the regular /login page (which has the
-        // full TOTP prompt UI). The codegen useLogin shape doesn't know
-        // about the 2FA-challenge branch, so we sniff it defensively here
-        // before touching `data.user`.
-        if (data?.requires2FA) {
-          toast({
-            title: "Use the main login page",
-            description: "Your account has Two-Factor Auth enabled. Sign in via the regular login.",
-            variant: "destructive",
-          });
-          setLocation("/login");
-          return;
-        }
-        if (!data.user || !data.user.isAdmin) {
-          toast({
-            title: "Admin access only",
-            description: "This login is only for admin accounts.",
-            variant: "destructive",
-          });
-          return;
-        }
-        setAuthData(data.token, data.user);
-        setLocation("/admin");
-      },
-      onError: (err: any) => {
+  // We bypass the codegen `useLogin` hook here for the same reason
+  // login.tsx does: the /auth/login response is a discriminated union
+  // (token+user OR requires2FA+twoFactorToken OR requiresApproval+...)
+  // AND the request body now requires `captchaToken` after the B9.6
+  // captcha rollout, which the codegen `LoginBody` type doesn't expose.
+  // Direct fetch keeps both halves honest without an `as any` cast.
+  const submitLogin = async () => {
+    setSubmitting(true);
+    try {
+      const data = await authFetch<any>(apiUrl("/auth/login"), {
+        method: "POST",
+        body: JSON.stringify({ email, password, captchaToken }),
+      });
+
+      // 2FA-enabled admins can't finish here — the regular /login page
+      // owns the TOTP / backup-code / email-fallback UI. Bounce them
+      // there so they don't get stuck on the captcha-only form.
+      if (data?.requires2FA) {
         toast({
-          title: "Admin login failed",
-          description: err.message || "Invalid admin credentials",
+          title: "Use the main login page",
+          description:
+            "Your account has Two-Factor Auth enabled. Sign in via the regular login.",
           variant: "destructive",
         });
-      },
-    },
-  });
+        setLocation("/login");
+        return;
+      }
+
+      if (!data?.user || !data.user.isAdmin) {
+        toast({
+          title: "Admin access only",
+          description: "This login is only for admin accounts.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      setAuthData(data.token, data.user);
+      setLocation("/admin");
+    } catch (err: any) {
+      toast({
+        title: "Admin login failed",
+        description: err?.message || "Invalid admin credentials",
+        variant: "destructive",
+      });
+    } finally {
+      setSubmitting(false);
+      // Captcha tokens (Turnstile + reCAPTCHA v2) are single-use. Clear
+      // local copy and reset the widget so the admin can re-submit
+      // immediately after a failed attempt without a full page reload.
+      // Idempotent on the success-redirect path.
+      setCaptchaToken("");
+      recaptchaRef.current?.reset();
+    }
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    loginMutation.mutate({ data: { email, password } });
+    if (CAPTCHA_ENABLED && !captchaToken) {
+      toast({
+        title: "Please complete the captcha",
+        variant: "destructive",
+      });
+      return;
+    }
+    void submitLogin();
   };
+
+  const canSubmit =
+    !submitting && (!CAPTCHA_ENABLED || !!captchaToken);
 
   return (
     <div className="min-h-screen w-full bg-background flex items-center justify-center px-4 relative overflow-hidden">
@@ -141,8 +183,22 @@ export default function AdminLoginPage() {
               </button>
             </div>
 
-            <button type="submit" disabled={loginMutation.isPending} className="btn btn-primary w-full mt-1">
-              {loginMutation.isPending ? "Checking access…" : "Enter Admin Panel"}
+            {CAPTCHA_ENABLED && (
+              <div className="flex justify-center pt-1">
+                <CaptchaWidget
+                  ref={recaptchaRef}
+                  onVerify={setCaptchaToken}
+                  onExpire={() => setCaptchaToken("")}
+                />
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={!canSubmit}
+              className="btn btn-primary w-full mt-1 disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {submitting ? "Checking access…" : "Enter Admin Panel"}
             </button>
           </form>
         </div>
