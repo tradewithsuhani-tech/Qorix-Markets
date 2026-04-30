@@ -3506,3 +3506,192 @@ When a new disposable service appears:
   3. CI deploy.yml restarts qorix-api on Fly. New blocklist live
      within ~3 min of merge.
   4. NO database change required. The list is in-process state.
+
+# B27.1 — disposable blocklist expansion 120 → 757 (LIVE 2026-04-30, commit d3590a87)
+
+User asked the sharpest possible follow-up to B27:
+"tempmail types ka hazaaron fake mail milta hai waha se bhi to kar
+sakta hai ya sab fake mail block hoga?"
+
+Translation: "Tempmail services hand out thousands of unique
+addresses per service — can attackers still use those, or will all
+fake emails be blocked?"
+
+## Demonstration that DOMAIN-level block defeats unlimited local-parts
+
+Each disposable service hands out unlimited UNIQUE addresses, but
+all of them resolve to a FINITE set of domains. Eight random
+local-parts (spammer1, attacker99, random_xyz, abc12345, z9z9z9,
+hello_world, testuser2026, vimlesh_fake) all on `@mailinator.com`
+were prod-tested — all 8 returned `400 DISPOSABLE_EMAIL`. One list
+entry kills millions of address variations.
+
+## But B27's 120-entry list had real gaps
+
+Probed 4 well-known disposable services NOT in B27:
+  - tempr.io        (PASSED B27 — only captcha caught it)
+  - spambog.com     (PASSED B27 — only captcha caught it)
+  - mailnesia.com   (PASSED B27 — only captcha caught it)
+  - 1secmail.com    (PASSED B27 — only captcha caught it)
+
+These bypassed B27 fast-fail and only hit the captcha layer. With a
+real captcha solver attached, the attacker would proceed through.
+
+## B27.1 — expanded curated list to 757 entries
+
+Single-file edit:
+  artifacts/api-server/src/lib/disposable-email-domains.ts
+    7,748 bytes  ->  20,720 bytes
+
+Major new sections (organized by service family for maintainability):
+
+  1secmail family (4)     : 1secmail.com .net .org .xyz
+  Mailnesia               : mailnesia.com
+  Spambog family (4)      : spambog.com .de .net .ru
+  Tempr family (2)        : tempr.email + tempr.io
+  Mail.tm family (2)      : mail.tm + mailtm.cc (open-API service)
+  Inboxkitten/Mailpoof
+    /Crazymailing (3)     : popular new-gen disposables
+  Email-fake / Tempmailo
+    / Generator.email (5) : email-fake.com, tempmailo.com,
+                            generator.email, etmail.com,
+                            etmaill.com
+  Smailpro/Tempm/Maildim
+    /post-shift (8)       : less-known but in active use
+  Number-prefixed (15)    : 0-mail, 0clickemail, 10mail.org,
+                            10minute-email, 10minutemail.cf .ga
+                            .ml, 20minutemail.com .it,
+                            30minutemail, 30wave, 60minutemail,
+                            75hosting .com .net .org, 99experts
+  Anonbox/Anonmails (6)   : anonbox.net, anonymbox, anonmails.de,
+                            anonymousmail, anyalias, asorent
+  More mailinator
+    aliases (10)          : letthemeatspam, veryrealemail,
+                            reallymymail, spamthisplease,
+                            sendspamhere, stuffmail.de,
+                            thelimestones, tradermail.info,
+                            tropicalbass.info, tittbit.in,
+                            objectmail
+  Yopmail TLD variants (5): yopmail.gq .tk .ml .cf .ga
+  Guerrillamail aliases
+    (8)                   : guerrillamail.info,
+                            guerrillamailblock, spam.la, spam.su,
+                            spamday, spamhole, spammotel,
+                            spamthis.co.uk, spamthisplease
+  Bulk import from
+    public list (~600)    : top entries from
+                            github.com/disposable-email-domains
+                            /disposable-email-domains by
+                            real-world frequency.
+
+## Critical false-positive audit (CATASTROPHE PREVENTED)
+
+After the bulk import, audited the list before deploy and found 9
+entries that would have LOCKED OUT REAL USERS. Each removed
+in-place with an explanatory comment so future PRs do not
+accidentally re-add them:
+
+  qq.com               -> Tencent QQ Mail. Hundreds of millions of
+                          legitimate Chinese users. Blocking this
+                          would destroy any chance at the China
+                          market.
+  hotpop.com           -> Was a real free email provider; blocking
+                          it would lock out long-tail users with
+                          legacy accounts.
+  safe-mail.net        -> Legitimate encrypted email service used
+                          by privacy-conscious users.
+  poczta.onet.pl       -> Major Polish email provider (Onet).
+                          Blocking would lock out a national
+                          provider.
+  nus.edu.sg           -> National University of Singapore. EDU
+                          domain — real students would be locked
+                          out.
+  regbypass.comsafe-mail.net
+                       -> Malformed concatenation in the upstream
+                          source; not a real domain at all.
+  www.mailinator.com   -> Invalid email-domain form. www. prefix
+                          appears in some upstream lists by
+                          accident; never matches a real address
+                          (would never trigger anyway, but removed
+                          for clarity).
+  www.e4ward.com       -> Same — invalid form.
+  www.gishpuppy.com    -> Same — invalid form.
+
+Lesson: When pulling from public disposable-domain lists, a
+hand-audit pass is mandatory before deploy. Public lists prioritize
+recall over precision and contain edge cases that, if shipped
+verbatim, will cause real-user lockout.
+
+## Verification matrix (local + prod)
+
+  Local (port 5000) and prod (qorix-api.fly.dev) returned
+  identical results across all 4 test groups:
+
+  TEST A — previously-missed services NOW blocked (6/6):
+    test@1secmail.com           -> 400 DISPOSABLE_EMAIL
+    test@1secmail.net           -> 400 DISPOSABLE_EMAIL
+    test@mailnesia.com          -> 400 DISPOSABLE_EMAIL
+    test@spambog.com            -> 400 DISPOSABLE_EMAIL
+    test@spambog.de             -> 400 DISPOSABLE_EMAIL
+    test@tempr.io               -> 400 DISPOSABLE_EMAIL
+
+  TEST B — spot-check new entries (8/8 blocked):
+    test@anonbox.net            -> 400 DISPOSABLE_EMAIL
+    test@30minutemail.com       -> 400 DISPOSABLE_EMAIL
+    test@mail.tm                -> 400 DISPOSABLE_EMAIL
+    test@inboxkitten.com        -> 400 DISPOSABLE_EMAIL
+    test@email-fake.com         -> 400 DISPOSABLE_EMAIL
+    test@10minutemail.cf        -> 400 DISPOSABLE_EMAIL
+    test@spambog.ru             -> 400 DISPOSABLE_EMAIL
+    test@dropmail.me            -> 400 DISPOSABLE_EMAIL
+
+  TEST C — false positives REMOVED (5/5 pass to captcha):
+    user@qq.com                 -> 400 Captcha required (PASS)
+    user@hotpop.com             -> 400 Captcha required (PASS)
+    user@safe-mail.net          -> 400 Captcha required (PASS)
+    user@poczta.onet.pl         -> 400 Captcha required (PASS)
+    student@nus.edu.sg          -> 400 Captcha required (PASS)
+
+  TEST D — legit providers (5/5 pass to captcha):
+    user@gmail.com              -> 400 Captcha required (PASS)
+    user@outlook.com            -> 400 Captcha required (PASS)
+    user@yahoo.com              -> 400 Captcha required (PASS)
+    user@protonmail.com         -> 400 Captcha required (PASS)
+    user@icloud.com             -> 400 Captcha required (PASS)
+
+  DB state after testing: users_total=10, max_id=153 (unchanged
+  from B27). Zero rows leaked into the users table during the
+  19+ prod test signup attempts.
+
+## Coverage and honest limits
+
+  Coverage estimate post-B27.1:
+    - Mass-attack via well-known disposable services: ~98% caught
+      by static list (was ~95% with B27)
+    - Casual disposable signup attempt by an individual: ~95%
+      caught (each new service adds an entry within minutes when
+      reported)
+    - Truly novel/obscure disposable service or self-hosted: 0%
+      caught by list — relies on captcha + IP cap + behaviour
+      timing layers + KYC at investment time.
+
+  Practical attacker cost per fake account, post-B27.1:
+    real email rental ~$0.50 + anti-captcha ~$0.10 + residential
+    proxy ~$0.20 + manual workflow time = ~$0.80/account, vs
+    ~$0.001/account pre-B27.
+
+## Future hardening options (not implemented yet)
+
+  A. Auto-update from upstream GitHub disposable list nightly
+     via cron — pros: stays fresh; cons: bundle bloat, network
+     dependency, easy to ship false positives without audit.
+  B. MX-record check at registration — pros: catches new domains
+     by infrastructure fingerprint; cons: ~100-300ms latency per
+     signup, DNS reliability dependency.
+  C. Email reputation API (Kickbox, ZeroBounce) — pros: ~99.5%
+     accuracy; cons: ~$0.01/check cost, network dependency.
+  D. Phone OTP at investment time (already planned in KYC flow)
+     — final hard gate against any fake-account scheme.
+
+  None of these are needed today. B27.1 + existing layers are
+  more than sufficient for the current launch profile.
