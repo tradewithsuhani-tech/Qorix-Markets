@@ -3992,3 +3992,272 @@ follow-up curl test from a non-listed IP will confirm the
 ```
 M  artifacts/api-server/src/app.ts   (originGuard moved up; comment expanded)
 ```
+
+---
+
+## B29 (commit `1f83bef1`, deployed 2026-04-30) — Cloudflare-pinned origin enforcement (opt-in)
+
+### What & why
+Layer L5 of the originGuard hardening plan from B28. Closes the
+"attacker just sets `-H Origin: https://qorixmarkets.com` on curl"
+gap from the operator side: when the operator wires Cloudflare to
+inject a shared secret header on every proxied request, the API
+becomes a **white-box** that only accepts requests it can prove
+came through the CDN.
+
+Currently shipped **OFF** (`CLOUDFLARE_ORIGIN_SECRET` env unset on
+prod). Pure middleware — no DB, no schema, no behavior change in
+current state. Operator opts in by:
+1. `flyctl secrets set -a qorix-api CLOUDFLARE_ORIGIN_SECRET=<32+ char hex>`
+2. Configure a Cloudflare Transform Rule to inject
+   `X-Origin-Auth: <same secret>` on every request to
+   `qorix-api.fly.dev/*`.
+After both are in place, any request that bypasses Cloudflare
+(direct fly.dev access, curl, etc.) returns 403 ORIGIN_PIN_REQUIRED.
+
+### Files in commit `1f83bef1`
+```
+A  artifacts/api-server/src/middlewares/cloudflare-pin.ts   (NEW — 105 LOC)
+M  artifacts/api-server/src/app.ts                          (mount line 168, after originGuard, before body parsers)
+A  artifacts/api-server/src/middlewares/cloudflare-pin.test.ts (NEW — 6 unit cases, all pass)
+```
+
+### Behavior matrix
+| `CLOUDFLARE_ORIGIN_SECRET` | Request                          | Response                |
+|----------------------------|----------------------------------|-------------------------|
+| unset (current prod)       | any                              | passes through (no-op)  |
+| set                        | `X-Origin-Auth: <correct>`       | passes                  |
+| set                        | `X-Origin-Auth: <wrong>`         | 403 ORIGIN_PIN_INVALID  |
+| set                        | header missing                   | 403 ORIGIN_PIN_REQUIRED |
+| set                        | GET /api/healthz or /api/version | passes (PATH_EXEMPTIONS)|
+
+### Prod verification (env unset)
+```
+GET  https://qorix-api.fly.dev/api/healthz                               -> 200
+POST https://qorix-api.fly.dev/api/auth/register (with Origin)           -> 400 (captcha — proves no-op)
+POST https://qorix-api.fly.dev/api/auth/register (without Origin)        -> 403 ORIGIN_REQUIRED (B28 still active)
+DB:  10 users, max_id=153 (unchanged), all 6 indexes intact.
+```
+
+---
+
+## B30 (commit `cbc98346`, deployed 2026-04-30) — HMAC CSRF nonce on state-changing requests (opt-in)
+
+### What & why
+Layer L6 of the B28 hardening plan. Closes the architect's highest-
+severity remaining concern after B28: an attacker can spoof the
+`Origin` header on curl and bypass originGuard. Adds a server-issued,
+HMAC-signed, UA-bound nonce that the web client must attach as
+`X-CSRF-Token` on every POST/PUT/PATCH/DELETE.
+
+Token format:
+```
+"<expUnix>:<sha256(UA).slice(0,16)>:<base64url(HMAC_SHA256(secret, expUnix + ':' + uaHash))>"
+```
+- 1h TTL (`expUnix`)
+- UA-binding (`uaHash`) — caching one user's token and replaying
+  from a different browser fails CSRF_UA_MISMATCH
+- Timing-safe Buffer compare for both signature and UA hash
+- Disabled when `CSRF_HMAC_SECRET` env is unset (returns
+  `{ enabled: false, token: null }` from /api/csrf and `{ ok: true,
+  reason: "CSRF_DISABLED" }` from verify) — current prod default,
+  zero behavior change.
+- Throws on first call if secret < 32 chars — forces operator to
+  use `openssl rand -hex 32` strength.
+
+### Files in commit `cbc98346`
+**Server:**
+```
+A  artifacts/api-server/src/lib/csrf-token.ts                (NEW — 138 LOC, HMAC issue/verify)
+M  artifacts/api-server/src/middlewares/origin-guard.ts      (CSRF check after origin check, /api/csrf in PATH_EXEMPTIONS)
+M  artifacts/api-server/src/app.ts                           (GET /api/csrf endpoint at line 224, no-store + Vary: User-Agent)
+A  artifacts/api-server/src/lib/csrf-token.test.ts           (NEW — 8 unit cases, all pass)
+```
+**Web client:**
+```
+A  artifacts/qorix-markets/src/lib/csrf-token.ts             (NEW — 130 LOC, in-memory cache, in-flight coalescing, helpers)
+M  artifacts/qorix-markets/src/lib/auth-fetch.ts             (doFetch helper + one-shot CSRF retry)
+M  artifacts/qorix-markets/src/lib/merchant-auth-fetch.ts    (doMerchantFetch helper + one-shot CSRF retry)
+```
+
+### Web client cache semantics
+- In-memory only (no localStorage — token is short-lived, no need to persist)
+- 60s safety margin before expiry → refetches before server rejects
+- Concurrent callers coalesced onto a single in-flight `GET /api/csrf`
+- Server-reported `enabled:false` cached as a sentinel for 5 min (so flipping
+  the env on takes effect within 5 min without page reload)
+- On 403 with code in `{CSRF_REQUIRED, CSRF_INVALID, CSRF_EXPIRED, CSRF_BAD_SIG, CSRF_UA_MISMATCH, CSRF_MALFORMED}`,
+  `invalidateCsrfToken()` is called and the request is retried exactly once.
+  Two-attempt cap prevents infinite loops if the server keeps rejecting
+  (e.g. transparent proxy rewriting User-Agent).
+
+### Behavior matrix
+| `CSRF_HMAC_SECRET` | Method  | Header                | Result                      |
+|--------------------|---------|-----------------------|-----------------------------|
+| unset (current)    | any     | any                   | passes (CSRF_DISABLED)      |
+| set                | GET     | n/a                   | passes (CSRF only on writes)|
+| set                | POST    | missing               | 403 CSRF_REQUIRED           |
+| set                | POST    | valid token, same UA  | passes                      |
+| set                | POST    | valid token, diff UA  | 403 CSRF_UA_MISMATCH        |
+| set                | POST    | tampered signature    | 403 CSRF_BAD_SIG            |
+| set                | POST    | expired (>1h)         | 403 CSRF_EXPIRED            |
+| set                | POST    | garbage string        | 403 CSRF_MALFORMED          |
+
+### Local unit-test matrix (8/8 pass)
+```
+csrfEnabled() with secret set                -> true
+Issue + verify same UA                       -> { ok: true }
+Verify different UA                          -> CSRF_UA_MISMATCH
+Verify missing token                         -> CSRF_REQUIRED
+Verify garbage token                         -> CSRF_MALFORMED
+Verify tampered signature                    -> CSRF_BAD_SIG
+Verify expired token                         -> CSRF_EXPIRED
+Verify with env unset                        -> { ok: true, reason: "CSRF_DISABLED" }
+```
+
+### Prod verification (env unset)
+```
+GET  https://qorix-api.fly.dev/api/csrf
+     -> {"enabled":false,"token":null,"expiresAt":null}
+     -> Cache-Control: no-store, no-cache, must-revalidate, private
+     -> Vary: User-Agent
+GET  /api/healthz                                                       -> 200
+POST /api/auth/register (with Origin, no X-CSRF-Token)                  -> 400 captcha (CSRF skipped, no-op)
+POST /api/auth/register (without Origin)                                -> 403 ORIGIN_REQUIRED (B28 still active)
+DB:  10 users, max_id=153 (unchanged), all 6 indexes intact (incl. B26 users_email_lower_unique).
+```
+
+### Operator opt-in checklist
+1. **Audit raw fetch usage first** (see "Known limitation" below). Run:
+   ```
+   rg "fetch\(" artifacts/qorix-markets/src --type ts | rg -v "authFetch|merchantAuthFetch|csrf-token.ts|service-worker|sw\.ts"
+   ```
+   Migrate any `POST/PUT/PATCH/DELETE` raw fetches to `authFetch`/`merchantAuthFetch`,
+   or attach `X-CSRF-Token` manually via `getCsrfHeaders()`.
+2. Generate secret: `openssl rand -hex 32`
+3. `flyctl secrets set -a qorix-api CSRF_HMAC_SECRET=<the hex string>`
+4. Verify: `curl https://qorix-api.fly.dev/api/csrf` → `{enabled:true, token:"...", expiresAt:"..."}`
+5. Test web flow: register a new user, login, deposit, withdraw — every state-changing
+   call should still succeed (auto-fetched + auto-attached by the wrappers).
+6. Test bypass attempt: `curl -X POST https://qorix-api.fly.dev/api/auth/register
+   -H "Origin: https://qorixmarkets.com" -d '{...}'` → expect 403 CSRF_REQUIRED.
+
+### Known limitation (operator must address before opt-in)
+A grep of `artifacts/qorix-markets/src` shows several components use raw
+`fetch()` directly instead of `authFetch`/`merchantAuthFetch` — e.g.
+`growth-panel.tsx`, `slider-puzzle-captcha.tsx`, `inr-withdraw-tab.tsx`
+and a handful of admin pages. Those will hit 403 CSRF_REQUIRED if the
+operator enables `CSRF_HMAC_SECRET` without first migrating them.
+
+The two main wrappers (auth-fetch + merchant-auth-fetch) ARE updated,
+which covers the most security-critical surface (auth, login, signup,
+KYC, deposit, withdraw, orders, admin write actions). Raw-fetch
+migration is a separate follow-up task — B30 ships the infrastructure
+and gates it OFF by default so it can land in prod safely without
+breaking anything.
+
+### Architect's deferred B28 finding now addressed
+> Finding 2 (B28): "Origin header can be spoofed by attacker tools.
+> Closing this requires server-issued nonces (HMAC-signed CSRF token
+> bound to session + origin, validated on write routes), which is an
+> order of magnitude bigger change..."
+
+That order-of-magnitude bigger change is exactly what B30 is. The
+infrastructure is now in place; it's a one-secret flip away from
+being live, pending the raw-fetch audit.
+
+---
+
+## B30.1 (commit `8ea2bb8c`, deployed 2026-04-30) — Three architect fixes for B29 + B30
+
+After B30 went live, the architect code review surfaced three correctness
+issues. None of them caused observable damage in current prod (because
+both `CSRF_HMAC_SECRET` and `CLOUDFLARE_ORIGIN_SECRET` are unset, so the
+affected code paths are no-op). But they would have broken correctness
+the moment the operator opted in, so they had to land first.
+
+### FIX 1 (CRITICAL) — `PATH_EXEMPTIONS` matched the wrong path form
+Both middlewares are mounted via `app.use("/api", originGuard)` and
+`app.use("/api", cloudflarePin)`. Inside a sub-mounted middleware,
+Express sets `req.path` to the **mount-relative** subpath (e.g.
+`"/healthz"`), not the absolute URL (`"/api/healthz"`). The exemption
+sets contained only the absolute form, so they would never match.
+
+**Impact (would have manifested when operator opts in):**
+- Enabling `CLOUDFLARE_ORIGIN_SECRET` would 403 every Fly LB health
+  probe (Fly hits `/healthz` directly, NOT through Cloudflare, so cannot
+  supply `X-Origin-Auth`). Fly would mark the instance unhealthy and pull
+  it from rotation — the same "no known healthy instances" cascade that
+  bit us on 2026-04-28.
+- Enabling `CSRF_HMAC_SECRET` would 403 any POST to `/api/healthz`
+  (smoke tests, internal pingers).
+
+**Fix:** list **both** forms in the exemption sets so the lookup matches
+whether the middleware is mounted at `/api` or at the root.
+
+### FIX 2 (HIGH) — CSRF check accidentally gated on `CORS_ORIGIN`
+Original `originGuard` had an early-return path for "no allowlist
+configured", which correctly skipped the **origin check** in dev/test —
+but accidentally also skipped the **CSRF check** that was added at the
+bottom of the function in B30. So enabling `CSRF_HMAC_SECRET` in
+dev/staging where `CORS_ORIGIN` was unset would silently leave CSRF
+disabled — exactly the wrong way to discover whether CSRF works before
+flipping it on in prod.
+
+**In-process simulation (proves the fix):**
+```
+CSRF_HMAC_SECRET=set, CORS_ORIGIN=unset, POST without token
+  BEFORE: HTTP 200 (CSRF silently bypassed)
+  AFTER:  HTTP 403 CSRF_REQUIRED   ✓
+```
+
+**Fix:** replaced the early-return with a wrapping conditional, so the
+CSRF check at the bottom of the function ALWAYS runs for state-changing
+requests, regardless of whether `CORS_ORIGIN` is set. Behavior in prod
+(`CORS_ORIGIN` set) is unchanged.
+
+### FIX 3 (MEDIUM) — `/api/csrf` was registered above `globalApiLimiter`
+Express middleware/route order matters. `/api/csrf` was at line 224 and
+`app.use("/api", globalApiLimiter)` at line 326, so the CSRF endpoint
+terminated the response chain before the rate limiter ever ran. Cheap
+pure-crypto endpoint, so not catastrophic, but a reachable CPU surface
+for spray traffic if edge controls are weak.
+
+**Fix:** moved the `/api/csrf` route registration to immediately AFTER
+`app.use("/api", globalApiLimiter)` so it inherits the same per-IP token
+bucket as every other `/api` endpoint.
+
+### Files in commit `8ea2bb8c`
+```
+M  artifacts/api-server/src/middlewares/origin-guard.ts   (FIX 1 + FIX 2)
+M  artifacts/api-server/src/middlewares/cloudflare-pin.ts (FIX 1)
+M  artifacts/api-server/src/app.ts                         (FIX 3 — /api/csrf moved below globalApiLimiter)
+```
+
+### Prod verification (env vars still unset = no-op preserved)
+```
+GET  https://qorix-api.fly.dev/api/csrf   -> {"enabled":false,"token":null,"expiresAt":null}
+     Cache-Control: no-store, no-cache, must-revalidate, private
+     Vary: User-Agent
+GET  /api/healthz                          -> 200
+POST /api/auth/register without Origin     -> 403 ORIGIN_REQUIRED (B28 still active)
+POST /api/auth/register with Origin        -> 400 captcha (CSRF still no-op as designed)
+DB:  10 users, max_id=153 (unchanged)
+```
+
+### In-process verification of the fixes
+Mounted a test app with `app.use("/api", originGuard)` + `app.use("/api",
+cloudflarePin)` exactly as in `app.ts`, then exercised each fix:
+```
+FIX 1 (PATH_EXEMPTIONS mount-relative match):
+  GET  /api/healthz with CLOUDFLARE_ORIGIN_SECRET set    -> 200 OK
+  POST /api/healthz with CLOUDFLARE_ORIGIN_SECRET set    -> 200 OK
+
+FIX 2 (CSRF runs even when CORS_ORIGIN unset):
+  POST /api/auth/register with CSRF_HMAC_SECRET set,
+       CORS_ORIGIN unset, no X-CSRF-Token              -> 403 CSRF_REQUIRED   (was 200 before)
+  POST /api/auth/register with both envs set, valid Origin,
+       no X-CSRF-Token                                  -> 403 CSRF_REQUIRED
+```
+
+All eight `csrf-token.ts` unit tests still pass. No DB changes.

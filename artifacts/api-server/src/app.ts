@@ -7,8 +7,10 @@ import { logger } from "./lib/logger";
 import { maintenanceMiddleware, peekMaintenanceState } from "./middlewares/maintenance";
 import { globalApiLimiter } from "./middlewares/rate-limit";
 import { originGuard } from "./middlewares/origin-guard";
+import { cloudflarePin } from "./middlewares/cloudflare-pin";
 import { adminIpAllowlist, adminIpAllowlistEnabled } from "./middlewares/admin-ip-allowlist";
 import { getCaptchaProvider } from "./lib/captcha-service";
+import { issueCsrfToken } from "./lib/csrf-token";
 
 const app: Express = express();
 
@@ -142,6 +144,27 @@ if (corsOriginEnv) {
 // rate-limit budget consumption, captcha verification, or DB lookup.
 app.use("/api", originGuard);
 
+// ─── B29 L5: Cloudflare origin pin (opt-in via CLOUDFLARE_ORIGIN_SECRET) ───
+// Mounted on /api ONLY and BEFORE body parsers, same reasoning as
+// originGuard above: reject the request before allocating the body.
+//
+// Behaviour gate:
+//   - CLOUDFLARE_ORIGIN_SECRET unset (current prod state) -> no-op
+//     pass-through. Safe default until the operator has actually
+//     placed Cloudflare in front of qorix-api.fly.dev and added the
+//     matching X-Origin-Auth Transform Rule.
+//   - CLOUDFLARE_ORIGIN_SECRET set -> every /api request must carry
+//     X-Origin-Auth header matching the secret. Cloudflare adds the
+//     header via Transform Rule on every proxied request; direct hits
+//     to fly.dev (bypassing the proxy) cannot add it -> 403
+//     ORIGIN_PIN_REQUIRED.
+//
+// Path exemptions: /api/healthz, /api/version. Fly's load balancer
+// probes these endpoints directly (NOT through Cloudflare) and would
+// otherwise be unable to mark the instance healthy. See cloudflare-pin.ts
+// for the rotation playbook + full rationale.
+app.use("/api", cloudflarePin);
+
 app.use(express.json({ limit: "12mb" }));
 app.use(express.urlencoded({ extended: true }));
 
@@ -173,6 +196,37 @@ app.get("/api/healthz", (_req, res) => {
   // VITE_CAPTCHA_PROVIDER (also surfaced on /version.json).
   res.json({ status: "ok", captchaProvider: getCaptchaProvider() });
 });
+
+// ─── B30 L6: CSRF token issuance endpoint ──────────────────────────────────
+// GET /api/csrf — returns a short-lived HMAC-signed token that the web app
+// must include as X-CSRF-Token on every state-changing request once the
+// originGuard CSRF gate is enabled (CSRF_HMAC_SECRET set).
+//
+// Public, no auth required: registration is anonymous, so an unauthenticated
+// browser must be able to obtain a token before the very first POST.
+//
+// Cheap: pure crypto, no DB hit. Listed in originGuard PATH_EXEMPTIONS so a
+// client that has no token can still call this endpoint to bootstrap.
+//
+// Response shape: { enabled: boolean, token: string|null, expiresAt: string|null }
+//   - enabled=false  -> CSRF feature is currently OFF on the server
+//                       (CSRF_HMAC_SECRET unset). Client may treat as
+//                       "no token needed".
+//   - enabled=true   -> token + ISO 8601 expiresAt populated. Client should
+//                       cache in memory and attach as X-CSRF-Token header.
+//
+// Caching: explicit no-store + Vary on User-Agent. Tokens are bound to UA;
+// a CDN that cached one user's token and served it to a different UA would
+// force every recipient into CSRF_UA_MISMATCH 403s.
+//
+// Rate limiting: this endpoint is registered AFTER `app.use("/api",
+// globalApiLimiter)` below so that it inherits the same per-IP rate limit
+// as every other /api endpoint. Without this ordering, /api/csrf would be
+// effectively unthrottled at the app layer — cheap pure-crypto, but still
+// a reachable CPU surface for spray traffic if edge controls are weak.
+// (B30.1 fix — caught by architect review.)
+//
+// Search marker: APP_TS_CSRF_ENDPOINT_REGISTERED_BELOW_GLOBAL_LIMITER
 
 // ─── Request-level safety-net timeout ──────────────────────────────────────
 // Server-side cap so a single stuck handler (DB pool starvation, runaway
@@ -267,6 +321,34 @@ app.use((_req, res, next) => {
 // and apply stricter caps to sensitive endpoints (login, password reset,
 // 2FA management).
 app.use("/api", globalApiLimiter);
+
+// ─── B30 L6: CSRF token issuance endpoint ──────────────────────────────────
+// Registered HERE — after globalApiLimiter — so spray traffic on /api/csrf
+// is throttled by the same per-IP bucket as every other /api endpoint.
+// (Architect-flagged in B30 review: previously registered above the
+// limiter and was effectively unthrottled.)
+//
+// Public, no auth required: registration is anonymous, so an unauthenticated
+// browser must be able to obtain a token before its very first POST.
+//
+// Cheap: pure crypto, no DB hit. Listed in originGuard PATH_EXEMPTIONS so a
+// client that has no token can still call this endpoint to bootstrap.
+//
+// Caching headers: explicit no-store + Vary: User-Agent. Tokens are bound
+// to UA; a CDN that cached one user's token and served it to a different
+// UA would force every recipient into CSRF_UA_MISMATCH 403s.
+app.get("/api/csrf", (req, res) => {
+  const ua = req.headers["user-agent"] as string | undefined;
+  const issued = issueCsrfToken(ua);
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, private");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Vary", "User-Agent");
+  if (!issued) {
+    res.json({ enabled: false, token: null, expiresAt: null });
+    return;
+  }
+  res.json({ enabled: true, token: issued.token, expiresAt: issued.expiresAt });
+});
 
 // ─── B28 L4: Admin IP allowlist (opt-in via ADMIN_IP_ALLOWLIST env) ───────
 // Mounted BEFORE the per-router authMiddleware in routes/admin*.ts so a
