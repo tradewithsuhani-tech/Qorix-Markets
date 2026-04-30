@@ -18,6 +18,7 @@ import {
 } from "@/lib/merchant-auth-fetch";
 import { useQuery } from "@tanstack/react-query";
 import { MerchantDepositNotifier } from "./merchant-deposit-notifier";
+import { MerchantWithdrawalNotifier } from "./merchant-withdrawal-notifier";
 import { StatusPill } from "./merchant-ui";
 
 interface MeResponse {
@@ -225,6 +226,7 @@ export function MerchantLayout({ children }: { children: ReactNode }) {
       </div>
 
       <MerchantDepositNotifier />
+      <MerchantWithdrawalNotifier />
     </div>
   );
 }
