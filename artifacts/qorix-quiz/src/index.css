@@ -1,0 +1,333 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@plugin "@tailwindcss/typography";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-card-border: hsl(var(--card-border));
+
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+  --color-popover-border: hsl(var(--popover-border));
+
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-primary-border: var(--primary-border);
+
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-secondary-border: var(--secondary-border);
+
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-muted-border: var(--muted-border);
+
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-accent-border: var(--accent-border);
+
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-destructive-border: var(--destructive-border);
+
+  --color-chart-1: hsl(var(--chart-1));
+  --color-chart-2: hsl(var(--chart-2));
+  --color-chart-3: hsl(var(--chart-3));
+  --color-chart-4: hsl(var(--chart-4));
+  --color-chart-5: hsl(var(--chart-5));
+
+  --color-sidebar: hsl(var(--sidebar));
+  --color-sidebar-foreground: hsl(var(--sidebar-foreground));
+  --color-sidebar-border: hsl(var(--sidebar-border));
+  --color-sidebar-primary: hsl(var(--sidebar-primary));
+  --color-sidebar-primary-foreground: hsl(var(--sidebar-primary-foreground));
+  --color-sidebar-primary-border: var(--sidebar-primary-border);
+  --color-sidebar-accent: hsl(var(--sidebar-accent));
+  --color-sidebar-accent-foreground: hsl(var(--sidebar-accent-foreground));
+  --color-sidebar-accent-border: var(--sidebar-accent-border);
+  --color-sidebar-ring: hsl(var(--sidebar-ring));
+
+  --font-sans: var(--app-font-sans);
+  --font-serif: var(--app-font-serif);
+  --font-mono: var(--app-font-mono);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+ * QORIX PLAY — Brand tokens (locked in B32 plan)
+ *   Primary  : Qorix violet   (#7C3AED  → 262 83% 58%)
+ *   Accent   : Qorix yellow   (#FACC15  →  48 96% 53%)
+ *   Surface  : deep violet-tinted slate so the "play" surface is visually
+ *              distinct from qorix-markets' navy-ink finance surface.
+ * Dark mode is the default look — quiz arena reads better with high
+ * contrast over a dark canvas (timer, leaderboard, prize numbers all pop).
+ * Light mode kept for accessibility / system-preference users.
+ * ───────────────────────────────────────────────────────────────────────── */
+
+:root {
+  --button-outline: rgba(0,0,0, .10);
+  --badge-outline: rgba(0,0,0, .05);
+
+  --opaque-button-border-intensity: -8;
+
+  --elevate-1: rgba(0,0,0, .03);
+  --elevate-2: rgba(0,0,0, .08);
+
+  /* Backgrounds */
+  --background: 250 40% 98%;          /* very light violet-tinted */
+  --foreground: 262 47% 11%;          /* near-black violet ink */
+
+  --border: 262 20% 88%;
+  --input:  262 20% 88%;
+  --ring:   262 83% 58%;              /* primary violet */
+
+  --card: 0 0% 100%;
+  --card-foreground: 262 47% 11%;
+  --card-border: 262 20% 90%;
+
+  --popover: 0 0% 100%;
+  --popover-foreground: 262 47% 11%;
+  --popover-border: 262 20% 90%;
+
+  /* Primary — Qorix violet */
+  --primary: 262 83% 58%;             /* #7C3AED */
+  --primary-foreground: 0 0% 100%;
+
+  /* Secondary — soft violet wash for chips/tags */
+  --secondary: 262 35% 94%;
+  --secondary-foreground: 262 47% 22%;
+
+  --muted: 250 30% 95%;
+  --muted-foreground: 262 12% 42%;
+
+  /* Accent — Qorix yellow (CTA highlights, winner badges) */
+  --accent: 48 96% 53%;               /* #FACC15 */
+  --accent-foreground: 262 47% 11%;
+
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 100%;
+
+  /* Chart palette — leaderboard / score curves */
+  --chart-1: 262 83% 58%;             /* violet */
+  --chart-2:  48 96% 53%;             /* yellow */
+  --chart-3: 199 89% 48%;             /* sky */
+  --chart-4: 142 76% 36%;             /* emerald */
+  --chart-5: 340 82% 52%;             /* pink */
+
+  /* Sidebar (admin views inside qorix-quiz, if added later) */
+  --sidebar: 0 0% 100%;
+  --sidebar-foreground: 262 47% 11%;
+  --sidebar-border: 262 20% 90%;
+  --sidebar-primary: 262 83% 58%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 262 35% 94%;
+  --sidebar-accent-foreground: 262 47% 22%;
+  --sidebar-ring: 262 83% 58%;
+
+  --app-font-sans: 'Inter', sans-serif;
+  --app-font-serif: Georgia, serif;
+  --app-font-mono: 'JetBrains Mono', Menlo, monospace;
+  --radius: .75rem; /* 12px — slightly chunkier than markets for "playful" */
+
+  --shadow-2xs: 0px 1px 2px 0px hsl(262 47% 11% / 0.04);
+  --shadow-xs:  0px 1px 2px 0px hsl(262 47% 11% / 0.06);
+  --shadow-sm:  0px 1px 3px 0px hsl(262 47% 11% / 0.08), 0px 1px 2px -1px hsl(262 47% 11% / 0.06);
+  --shadow:     0px 4px 6px -1px hsl(262 47% 11% / 0.10), 0px 2px 4px -2px hsl(262 47% 11% / 0.06);
+  --shadow-md:  0px 10px 15px -3px hsl(262 47% 11% / 0.10), 0px 4px 6px -4px hsl(262 47% 11% / 0.06);
+  --shadow-lg:  0px 20px 25px -5px hsl(262 47% 11% / 0.12), 0px 8px 10px -6px hsl(262 47% 11% / 0.06);
+  --shadow-xl:  0px 25px 50px -12px hsl(262 47% 11% / 0.20);
+  --shadow-2xl: 0px 25px 50px -12px hsl(262 47% 11% / 0.30);
+  --tracking-normal: 0em;
+  --spacing: 0.25rem;
+
+  --sidebar-primary-border: hsl(var(--sidebar-primary));
+  --sidebar-primary-border: hsl(from hsl(var(--sidebar-primary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+
+  --sidebar-accent-border: hsl(var(--sidebar-accent));
+  --sidebar-accent-border: hsl(from hsl(var(--sidebar-accent)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+
+  --primary-border: hsl(var(--primary));
+  --primary-border: hsl(from hsl(var(--primary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+
+  --secondary-border: hsl(var(--secondary));
+  --secondary-border: hsl(from hsl(var(--secondary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+
+  --muted-border: hsl(var(--muted));
+  --muted-border: hsl(from hsl(var(--muted)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+
+  --accent-border: hsl(var(--accent));
+  --accent-border: hsl(from hsl(var(--accent)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+
+  --destructive-border: hsl(var(--destructive));
+  --destructive-border: hsl(from hsl(var(--destructive)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+}
+
+.dark {
+  --button-outline: rgba(255,255,255, .10);
+  --badge-outline: rgba(255,255,255, .05);
+
+  --opaque-button-border-intensity: 9;
+
+  --elevate-1: rgba(255,255,255, .04);
+  --elevate-2: rgba(255,255,255, .09);
+
+  /* Deep violet canvas — quiz arena is most engaging on a dark surface */
+  --background: 262 47% 7%;           /* near-black with violet hue */
+  --foreground: 250 40% 98%;
+
+  --border: 262 30% 18%;
+  --input:  262 30% 18%;
+  --ring:   262 83% 65%;
+
+  --card: 262 40% 11%;
+  --card-foreground: 250 40% 98%;
+  --card-border: 262 30% 20%;
+
+  --popover: 262 40% 11%;
+  --popover-foreground: 250 40% 98%;
+  --popover-border: 262 30% 20%;
+
+  --primary: 262 83% 65%;             /* slightly lifted violet for dark BG */
+  --primary-foreground: 262 47% 7%;
+
+  --secondary: 262 30% 18%;
+  --secondary-foreground: 250 40% 98%;
+
+  --muted: 262 30% 14%;
+  --muted-foreground: 250 20% 70%;
+
+  --accent: 48 96% 58%;               /* slightly lifted yellow */
+  --accent-foreground: 262 47% 7%;
+
+  --destructive: 0 72% 55%;
+  --destructive-foreground: 0 0% 100%;
+
+  --chart-1: 262 83% 65%;
+  --chart-2:  48 96% 58%;
+  --chart-3: 199 89% 58%;
+  --chart-4: 142 70% 50%;
+  --chart-5: 340 82% 60%;
+
+  --sidebar: 262 40% 11%;
+  --sidebar-foreground: 250 40% 98%;
+  --sidebar-border: 262 30% 20%;
+  --sidebar-primary: 262 83% 65%;
+  --sidebar-primary-foreground: 262 47% 7%;
+  --sidebar-accent: 262 30% 18%;
+  --sidebar-accent-foreground: 250 40% 98%;
+  --sidebar-ring: 262 83% 65%;
+
+  --shadow-2xs: 0px 1px 2px 0px hsl(0 0% 0% / 0.20);
+  --shadow-xs:  0px 1px 2px 0px hsl(0 0% 0% / 0.30);
+  --shadow-sm:  0px 1px 3px 0px hsl(0 0% 0% / 0.40), 0px 1px 2px -1px hsl(0 0% 0% / 0.30);
+  --shadow:     0px 4px 6px -1px hsl(0 0% 0% / 0.50), 0px 2px 4px -2px hsl(0 0% 0% / 0.30);
+  --shadow-md:  0px 10px 15px -3px hsl(0 0% 0% / 0.50), 0px 4px 6px -4px hsl(0 0% 0% / 0.30);
+  --shadow-lg:  0px 20px 25px -5px hsl(0 0% 0% / 0.60), 0px 8px 10px -6px hsl(0 0% 0% / 0.30);
+  --shadow-xl:  0px 25px 50px -12px hsl(0 0% 0% / 0.70);
+  --shadow-2xl: 0px 25px 50px -12px hsl(0 0% 0% / 0.80);
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    /* Default to dark mode for the play surface — overridden by the
+     * light-mode media query below if the user's system prefers light
+     * AND no explicit `.dark` class is present. */
+    color-scheme: dark;
+  }
+
+  body {
+    @apply font-sans antialiased bg-background text-foreground;
+    background-image:
+      radial-gradient(circle at 20% 0%, hsl(262 83% 65% / 0.12), transparent 40%),
+      radial-gradient(circle at 80% 100%, hsl(48 96% 58% / 0.08), transparent 40%);
+    background-attachment: fixed;
+  }
+}
+
+@layer utilities {
+  input[type="search"]::-webkit-search-cancel-button {
+    @apply hidden;
+  }
+
+  [contenteditable][data-placeholder]:empty::before {
+    content: attr(data-placeholder);
+    color: hsl(var(--muted-foreground));
+    pointer-events: none;
+  }
+
+  .no-default-hover-elevate {}
+  .no-default-active-elevate {}
+
+  .toggle-elevate::before,
+  .toggle-elevate-2::before {
+    content: "";
+    pointer-events: none;
+    position: absolute;
+    inset: 0px;
+    border-radius: inherit;
+    z-index: -1;
+  }
+
+  .toggle-elevate.toggle-elevated::before {
+    background-color: var(--elevate-2);
+  }
+
+  .border.toggle-elevate::before {
+    inset: -1px;
+  }
+
+  .hover-elevate:not(.no-default-hover-elevate),
+  .active-elevate:not(.no-default-active-elevate),
+  .hover-elevate-2:not(.no-default-hover-elevate),
+  .active-elevate-2:not(.no-default-active-elevate) {
+    position: relative;
+    z-index: 0;
+  }
+
+  .hover-elevate:not(.no-default-hover-elevate)::after,
+  .active-elevate:not(.no-default-active-elevate)::after,
+  .hover-elevate-2:not(.no-default-hover-elevate)::after,
+  .active-elevate-2:not(.no-default-active-elevate)::after {
+    content: "";
+    pointer-events: none;
+    position: absolute;
+    inset: 0px;
+    border-radius: inherit;
+    z-index: 999;
+  }
+
+  .hover-elevate:hover:not(.no-default-hover-elevate)::after,
+  .active-elevate:active:not(.no-default-active-elevate)::after {
+    background-color: var(--elevate-1);
+  }
+
+  .hover-elevate-2:hover:not(.no-default-hover-elevate)::after,
+  .active-elevate-2:active:not(.no-default-active-elevate)::after {
+    background-color: var(--elevate-2);
+  }
+
+  .border.hover-elevate:not(.no-hover-interaction-elevate)::after,
+  .border.active-elevate:not(.no-active-interaction-elevate)::after,
+  .border.hover-elevate-2:not(.no-hover-interaction-elevate)::after,
+  .border.active-elevate-2:not(.no-active-interaction-elevate)::after,
+  .border.hover-elevate:not(.no-hover-interaction-elevate)::after {
+    inset: -1px;
+  }
+}

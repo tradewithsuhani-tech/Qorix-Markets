@@ -4261,3 +4261,63 @@ FIX 2 (CSRF runs even when CORS_ORIGIN unset):
 ```
 
 All eight `csrf-token.ts` unit tests still pass. No DB changes.
+
+## B32 (2026-04-30) — Qorixplay scaffold: artifact + Fly app + CI deploy job
+
+**Goal**: Stand up `qorix-quiz` artifact as a separate web app, deploying to its own Fly app `qorix-quiz.fly.dev` via the existing CI pipeline. NO database work, NO API surface yet, NO auth yet — only a static "coming soon" SPA shell so the domain `qorixplay.com` can be hooked up later (B45). This is step 1 of 14 in task #126.
+
+### Artifact registered
+- `id: artifacts/qorix-quiz, kind: web, title: "Qorix Quiz", dir: artifacts/qorix-quiz`
+- Vite + React 18 + TypeScript + Tailwind + shadcn/ui scaffold (74 source files inc. 60+ ui primitives for B33+)
+- Theme: violet `#7C3AED` primary + yellow `#FACC15` accent, `dark` class forced on `documentElement` in `App.tsx` (dark default, no light toggle yet)
+- Pages: `/` landing only — gradient brand mark "Q", coming-soon CTA disabled, link to qorixmarkets.com, lucide icons (Trophy/Sparkles/Zap/ShieldCheck/Clock)
+- BASE_PATH plumbing: `import.meta.env.BASE_URL` consumed by wouter, `BASE_PATH=/qorix-quiz/` in Replit dev, `BASE_PATH=/` in Fly prod
+- PWA scaffolding: `public/manifest.json` (Qorixplay name + violet theme color), `public/favicon.svg` (gradient Q)
+
+### Fly target: `qorix-quiz.fly.dev`
+- App name: `qorix-quiz` (separate from `qorix-web` and `qorix-api`)
+- Region: `bom` (BOM, single primary)
+- VM: `shared-cpu-1x / 256mb` (smallest — landing only)
+- `min_machines_running = 1`, `auto_stop_machines = "off"` (no cold starts on landing)
+- HTTP service: 80→8080, force_https on, http_checks `/healthz`
+- `Dockerfile` mirrors `qorix-markets` two-stage pattern: `node:24-bookworm-slim` build → `nginx:1.27-alpine` runtime
+  - Build via `pnpm --filter @workspace/qorix-quiz... build`
+  - `ARG VITE_API_URL` plumbed (unused by landing, ready for B36 SSO consumer side)
+- `nginx.conf`:
+  - `/healthz` returns plain "ok"
+  - `/assets/*` → `Cache-Control: max-age=31536000, immutable`
+  - `/index.html` + `/manifest.json` → `Cache-Control: no-cache, no-store, must-revalidate`
+  - SPA fallback: `try_files $uri /index.html;`
+
+### CI changes (`.github/workflows/deploy.yml`)
+1. `changes` job — added `quiz` filter:
+   - paths: `artifacts/qorix-quiz/**`, `lib/**`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `package.json`, `.github/workflows/deploy.yml`
+2. `preflight` job — `if` condition extended to also fire on `quiz` changes (typecheck pre-checks lockfile, etc.)
+3. `typecheck` job — same extension; runs `pnpm --filter @workspace/qorix-quiz run typecheck` alongside existing markets+api typechecks
+4. **NEW** `deploy-quiz` job (4 steps):
+   - `actions/checkout@v4`
+   - `superfly/flyctl-actions/setup-flyctl@master` + `FLY_API_TOKEN`
+   - `flyctl deploy --remote-only --no-cache --config artifacts/qorix-quiz/fly.toml --dockerfile artifacts/qorix-quiz/Dockerfile`
+     - `--no-cache` because Depot cache reuse can stale lib/* changes
+     - `VITE_API_URL` build-arg pulled from repo var `QUIZ_API_URL` (default unset — landing doesn't call API yet)
+   - Smoke gate: curls `/healthz` (200 + "ok"), `/` (200 + `<div id="root">`), `/assets/index-*.js` bundle (200), SPA fallback for `/play` and `/leaderboard` (both 200 with same shell), `/manifest.json` (200 JSON)
+5. `workflow_dispatch.target` choices now: `all/both/api/web/quiz` (default `all`)
+6. `QUIZ_BASE` repo-var reads default `qorix-quiz.fly.dev` for the smoke step
+
+### Validated locally before push
+- `pnpm --filter @workspace/qorix-quiz run typecheck` → clean (no errors)
+- YAML parse of `deploy.yml` → 6 jobs `[changes, preflight, typecheck, deploy-api, deploy-web, deploy-quiz]`, all `if` conditions reference `quiz` correctly, `deploy-quiz.needs = [changes, typecheck]`
+- Manual vite invocation (`PORT=22276 BASE_PATH=/qorix-quiz/ vite`) → SPA shell + `/src/main.tsx` compile + serves cleanly on 0.0.0.0:22276
+- Replit workflow `artifacts/qorix-quiz: web` shows port-detection race on first restart (vite ready in 309 ms, platform proxy registration lags) — non-blocking for B32 since Fly deploy is the target; will be addressed in B33+ as we add real pages
+
+### Out of scope for B32 (intentionally deferred)
+- DB tables for quiz (drafted in `lib/db/src/schema/quizzes.ts` but **NEVER MIGRATED** to prod — will go via hand-written SQL in B40 only)
+- Any API endpoints under `/api/quiz/*` — B36
+- Cross-origin SSO from qorixmarkets.com → qorixplay.com — B36/B37
+- `qorixplay.com` custom domain on Fly — B45 (last step, after everything else green)
+- Geofence / KYC / GST / TDS / 90-10 pool / top-10 split — B37–B43
+
+### Deploy flow next
+- This batch will land via Git Data API push → `deploy-quiz` job will fire on `qorix-quiz/**` change → builds image → deploys to `qorix-quiz.fly.dev` → smoke gate verifies SPA shell + /healthz
+- Domain `qorixplay.com` not yet pointed; users won't see anything until B45
+

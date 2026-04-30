@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no"
+    />
+
+    <!-- Cache busting: never cache index.html so users always get the latest
+         JS/CSS bundle hashes after a deploy. The bundles themselves are
+         content-hashed by Vite and immutable, so only the entry document
+         needs to be no-cached. Mirrors qorix-markets/index.html. -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+
+    <!-- Theme & PWA — Qorix violet for "play" surface, distinct from
+         qorix-markets navy. -->
+    <meta name="theme-color" content="#1a0b2e" />
+    <meta name="application-name" content="Qorix Play" />
+    <meta
+      name="description"
+      content="Skill-based quiz arena from Qorix Markets — 5 questions, top 10 win, real cash payouts."
+    />
+    <link rel="manifest" href="manifest.json" />
+
+    <!-- Favicon: tiny inline-SVG mark so the page works even before icon
+         assets are designed. Replaceable in B45 when polishing brand assets. -->
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+
+    <!-- iOS / Apple PWA -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Qorix Play" />
+
+    <!-- Microsoft / Windows -->
+    <meta name="msapplication-TileColor" content="#1a0b2e" />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://qorixplay.com/" />
+    <meta property="og:title" content="Qorix Play — Play smart. Win real cash." />
+    <meta
+      property="og:description"
+      content="Skill-based quizzes. 5 questions. Top 10 split 90% of the pool. Sign in with your Qorix Markets account."
+    />
+
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Qorix Play — Play smart. Win real cash." />
+    <meta
+      name="twitter:description"
+      content="Skill-based quizzes. 5 questions. Top 10 split 90% of the pool."
+    />
+
+    <title>Qorix Play | Skill-based quiz arena</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
