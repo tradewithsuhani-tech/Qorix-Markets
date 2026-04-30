@@ -131,6 +131,8 @@ SMTP_HOST = "smtp.gmail.com"
 SMTP_PORT = "587"
 SMTP_USER = "no-reply@qorixmarkets.com"
 GOOGLE_CALLBACK_URL = "https://qorixmarkets.com/auth/google/callback"
+CAPTCHA_PROVIDER = "turnstile"
+VITE_CAPTCHA_PROVIDER = "turnstile"
 
 [userenv.development]
 RUN_BACKGROUND_JOBS = "false"
