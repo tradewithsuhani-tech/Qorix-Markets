@@ -2990,3 +2990,87 @@ Both users' ledger_main = wallet_main exactly after backfill.
   abodh3999 (136 — fixed by B20 GL ensure on next transfer; previously
   verified), looxprem (117 — drift $113.27 closed today),
   bimleshgroup (143 — drift $1.02 closed today).
+
+# B22 — Admin Users page pagination (closed 2026-04-30)
+
+User report:
+- Dashboard "Total Users" shows 33 but the admin Users table only
+  rendered the first slice (default API `limit=20`, hardcoded by the
+  frontend) AND the implicit ordering was insertion-order (id ASC)
+  so the admin saw the 6 oldest accounts first (#116, #120, #122,
+  #124, #126, #127) and never reached the most recent sign-ups.
+- Hindi/Hinglish: "list me nahi" + "1st recent 10 user dikhao
+  uske bad next button wala kar dena".
+
+Fix scope (frontend + 1-line API change, ZERO schema):
+- `artifacts/api-server/src/routes/admin.ts` (`GET /admin/users`):
+  added `.orderBy(desc(usersTable.id))` to the user SELECT so page 1
+  is always the most recently registered users. The endpoint already
+  supported `?page=N&limit=N` and returned `{ data, total, page,
+  totalPages }` from Phase 7.3 — no other API change needed.
+- `artifacts/qorix-markets/src/pages/admin-modules.tsx`
+  (`AdminUsersPage`):
+  - PAGE_SIZE constant = 10 (matches the user's "1st recent 10" ask).
+  - Added `page`, `total`, `totalPages` state, send `?page=N` in the
+    request, capture `total` / `totalPages` from the response.
+  - Added a reset-to-page-1 effect on `debouncedQuery` /
+    `showSmokeTest` change so a new search never strands the user
+    on page 3 of the previous result set.
+  - Added a pagination footer (border-t inside the same glass-card,
+    hidden while loading or when total=0) with `Page X of Y · N
+    total users` and Prev / Next buttons (lucide ChevronLeft /
+    ChevronRight). Buttons are disabled at the boundaries instead
+    of wrapping.
+
+Why id DESC (not createdAt DESC):
+- `users.id` is `serial` and strictly monotonic so id DESC is a
+  deterministic "most recently registered first" with no tie-break
+  ambiguity. createdAt would also work but the index on `id` is
+  guaranteed (PK) so the planner has a cheap path even without a
+  dedicated `createdAt` index.
+
+Push (GitHub Git Data API, base `9329b818`):
+- Commit `4bd5024a` — `feat(admin/users): paginate at 10/page,
+  order by id DESC (most recent first), add Prev/Next footer`.
+- Files: `artifacts/api-server/src/routes/admin.ts`,
+  `artifacts/qorix-markets/src/pages/admin-modules.tsx`.
+- CI `Deploy to Fly.io` in_progress at push-time → triggers both
+  the api-server (BOM) and qorix-markets (BOM) Fly deploys.
+
+Verification expected (admin re-loads /admin/users in PROD):
+- Page 1 shows 10 most recent users (highest id first).
+- Footer reads "Page 1 of 4 · 33 total users".
+- Next steps to page 2 (10 more), Prev disabled on page 1, Next
+  disabled on the last page.
+- Search box still works; typing snaps the view back to page 1.
+
+Out of scope (deferred):
+- Per-page size selector (5/10/25/50) — keep PAGE_SIZE fixed at 10
+  unless the admin asks for it.
+- createdAt-based ordering (would require either a new index or a
+  seq-scan on each page; not justified at <10k users).
+- Server-side ordering knob (`?sort=...`) — current behaviour is
+  always id DESC.
+
+# B22.1 — stale-fetch race guard on /admin/users (closed 2026-04-30)
+
+Architect review of B22 flagged 1 MAJOR: when a filter change
+(`debouncedQuery` or `showSmokeTest`) fires, two `useEffect`s run on
+the same render — `setPage(1)` AND `load()` — and an older in-flight
+`/admin/users` request can resolve AFTER the newer one, silently
+overwriting the table with stale data.
+
+Fix:
+- `artifacts/qorix-markets/src/pages/admin-modules.tsx` `AdminUsersPage`:
+  - Added `loadIdRef = useRef(0)` (also added `useRef` to the React
+    import).
+  - `load()` captures `myId = ++loadIdRef.current` at the top, then
+    after the await checks `if (myId !== loadIdRef.current) return;`
+    so stale responses are dropped on the floor.
+  - The `setLoading(false)` flip in the `finally` is also gated on
+    the same check so a stale resolution can't unset the spinner
+    while the live request is still pending.
+
+Push: commit `d581f001` (base `4bd5024a`) — `fix(admin/users): guard
+against stale /admin/users responses with monotonic loadIdRef`. Same
+CI deploy.yml path.
