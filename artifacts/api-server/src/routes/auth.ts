@@ -124,6 +124,25 @@ router.post("/auth/register", async (req, res) => {
   // so all new rows are stored canonical.
   const email = rawEmail.toLowerCase().trim();
 
+  // ─── Disposable / temporary email block (B27) ──────────────────────────
+  // Block signups from known throwaway / public-inbox services
+  // (mailinator, 10minutemail, guerrillamail, yopmail, tempmail, etc).
+  // These bypass our B23 email-verify gate because either anyone can
+  // read the OTP from the public inbox (mailinator) or the inbox
+  // self-destructs in 10-60 minutes (guerrillamail), enabling cheap
+  // sybil / spam signups that survive captcha + IP rate limits because
+  // each new identity is a fresh "real-looking" email. Defense-in-depth
+  // on top of captcha + per-IP rate limit + behaviour timing.
+  // List: artifacts/api-server/src/lib/disposable-email-domains.ts
+  const { isDisposableEmail } = await import("../lib/disposable-email-domains");
+  if (isDisposableEmail(email)) {
+    res.status(400).json({
+      error: "Disposable or temporary email addresses are not allowed. Please use a permanent email like Gmail, Outlook, Yahoo, or your work email.",
+      code: "DISPOSABLE_EMAIL",
+    });
+    return;
+  }
+
   // --- IP rate limit check ---
   const rawIp = getClientIp(req);
   const ip = normalizeIp(rawIp);
