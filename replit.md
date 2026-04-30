@@ -3325,3 +3325,184 @@ Distinct from the deleted Vimlesh1group@gmail.com case-only dup
 human signing up via RAJIV's referral link.
 
 Post-B26 user count: 10 (9 keepers + 1 new real signup).
+
+# B27 — disposable / temp-mail signup block (LIVE 2026-04-30, commit 2cb0f789)
+
+User-flagged gap: B23's email-verify gate assumes the inbox owner is
+a real human who controls a permanent address. Disposable services
+break that assumption two ways:
+
+  1. PUBLIC inbox services (mailinator.com, yopmail.com, getnada.com)
+     — anyone who guesses the local-part can read the OTP and
+     "verify" the account. Email verification becomes meaningless,
+     enabling cheap unlimited account creation.
+
+  2. EPHEMERAL inbox services (10minutemail.com, guerrillamail.com,
+     temp-mail.org) — the inbox self-destructs in 10–60 minutes,
+     so the account becomes orphaned (no recoverable address). Bad
+     for support, KYC, and the natural sybil/abuse pattern bypasses
+     our captcha + IP rate limits + behaviour timing because each
+     signup is a fresh "real-looking" identity.
+
+## Implementation (two files, one commit 2cb0f789)
+
+### artifacts/api-server/src/lib/disposable-email-domains.ts (NEW)
+
+Curated `ReadonlySet<string>` of ~120 most prevalent disposable
+domains organized by service family:
+
+  Mailinator family (12)        : mailinator.com .net .org .2.com,
+                                  mailinater, suremail.info,
+                                  asdasd.ru, sogetthis, binkmail,
+                                  spamhere*, thisisnotmyrealemail
+  10MinuteMail family (9)       : .com .net .org .co.uk .de .us,
+                                  10minemail, 10minutesmail.com .net
+  GuerrillaMail family (10)     : .com .net .org .biz .de + block,
+                                  sharklasers, grr.la, spam4.me,
+                                  pokemail.net
+  Yopmail family (11)           : .com .fr .net .org +
+                                  cool.fr.nf, courriel.fr.nf,
+                                  jetable.fr.nf, nospam.ze.tc,
+                                  nomail.xl.cx, mega.zik.dj,
+                                  speed.1s.fr
+  Temp-mail family (11)         : temp-mail .org .io .ru,
+                                  tempmail .com .net .email .de
+                                          .dev .plus,
+                                  tempmailaddress, tempinbox
+  Throwaway-style (11)          : throwawaymail, throwam, trashmail
+                                  .com .net .de .ws .io,
+                                  wegwerfemail .de + 3 more
+  Maildrop / Getnada / Moakt /
+    Mintemail / FakeMail (14)   : maildrop.cc, getnada, nada.email,
+                                  moakt .com .cc .ws, mailcatch,
+                                  mintemail, emailondeck,
+                                  fakeinbox, fakemail.net,
+                                  fakemailgenerator, spambox .us .me
+  Burner / Disposable (10)      : burnermail.io, dispostable,
+                                  disposable, deadaddress, dropmail,
+                                  mvrht, spamavert, spamgourmet,
+                                  instantemailaddress, instant-mail
+  AirMail / Inbox (7)           : getairmail, airmail.cc, inboxbear,
+                                  inboxalias, incognitomail .com .net
+                                                            .org
+  Mohmal / Linshi / Tmail
+    / Mytemp (11)               : mohmal .com .in .tech, linshiyou,
+                                  linshi-email, tmail .io .ws,
+                                  tmailweb, mytemp.email,
+                                  mytrashmail, mt2014
+  EmailFake / EmailTemporanea
+    / 33mail family (14)        : emailfake, emailtemporanea .com
+                                  .net, 33mail, armyspy, cuvox.de,
+                                  dayrep, einrot, fleckens.hu,
+                                  gustr, jourrapide, rhyta,
+                                  superrito, teleworm.us
+  Cock.li family (5)            : cock .li .lu .email,
+                                  horsefucker.org,
+                                  national.shitposting.agency
+  Misc spam-prone (~20)         : jetable .org .net,
+                                  spamfree24 .com .de .eu .info
+                                            .net .org, byom.de,
+                                  tempemail .com .net,
+                                  tempinbox.co.uk, tempr.email,
+                                  discard.email, discardmail .com .de,
+                                  harakirimail, haltospam, trbvm,
+                                  spamspot, spamstack, thankyou2010,
+                                  trashymail, ubismail, vpn.st,
+                                  vsimcard, wuzup, yapped, zoaxe,
+                                  zoemail
+
+Sources cross-referenced (all public):
+  - github.com/disposable-email-domains/disposable-email-domains
+  - github.com/disposable/disposable-email-domains
+  - github.com/wesbos/burner-email-providers
+
+Exports `isDisposableEmail(email: string): boolean` — O(1) Set
+lookup for the direct domain, then progressive subdomain peeling
+so `user-foo.mailinator.com` still matches `mailinator.com`. Stops
+at 2 labels — never bare-TLD matches (no false positive on
+"foo@bar.com" matching ".com").
+
+### artifacts/api-server/src/routes/auth.ts POST /auth/register
+
+After B24 normalization (line 128) and BEFORE the IP rate-limit
+check, dynamic-import `isDisposableEmail` and short-circuit:
+
+  if (isDisposableEmail(email)) {
+    res.status(400).json({
+      error: "Disposable or temporary email addresses are not
+              allowed. Please use a permanent email like Gmail,
+              Outlook, Yahoo, or your work email.",
+      code: "DISPOSABLE_EMAIL",
+    });
+    return;
+  }
+
+Why before captcha?
+  - B27 is pure CPU (Set.has is O(1)) — fail fast saves a
+    Cloudflare Turnstile round-trip for known-bad domains.
+  - Captcha is per-request siteverify cost; B27 is free.
+  - Order does not change security: every legitimate signup still
+    passes captcha + IP rate-limit + behaviour timing + B26 unique
+    index.
+
+Frontend: ZERO changes. login.tsx already surfaces the API `error`
+field via `toast({description: err.message})` (lines 46, 65, 227,
+246, 441, 479, 897, 929 all use the same pattern), so users see
+"Disposable or temporary email addresses are not allowed. Please
+use a permanent email like Gmail, Outlook, Yahoo, or your work
+email." copy directly in the toast.
+
+## Defense-in-depth stack (post-B27, all gates active)
+
+  Layer  Gate                              Source                 Bypass cost (attacker)
+  -----  --------------------------------  ---------------------  ----------------------
+  1      Honeypot (_hp hidden field)       auth.ts:94             trivial (read source)
+  2      Registration kill-switch          auth.ts:100             admin toggle
+  3      Zod schema validation             RegisterBody             trivial
+  4      B24 email lowercase + trim        auth.ts:128              n/a
+  5      B27 disposable domain block       auth.ts:140 + lib/      need real email
+  6      Captcha (Cloudflare Turnstile)    auth.ts:159              ~$0.10 anti-captcha
+  7      Per-IP daily signup cap           auth.ts:166              VPN rotation
+  8      Behaviour timing 3-sec gate       auth.ts:176              add sleep()
+  9      B24 case-insensitive duplicate    auth.ts:190              n/a (deterministic)
+  10     B24 race-safe try/catch on
+         INSERT (23505 -> 409)             auth.ts:241              n/a (DB enforced)
+  11     B26 partial unique index on
+         LOWER(email)                      psql DDL (B26)           n/a (DB enforced)
+  12     Per-sponsor referral cap          auth.ts:211              orphan signup, no reward
+
+Practical attacker cost to create one fake verified account today:
+  - Need real email (B27 blocks throwaway): ~$0.50 via SMS/email
+    rental services
+  - Need to defeat captcha: ~$0.10 via anti-captcha API
+  - Need fresh IP (per daily cap): residential proxy ~$0.20
+  - Need 3-sec wait (defeats sub-second botting): trivial
+  Total per fake account: ~$0.80 + manual workflow time. Vs
+  pre-B27 state where mailinator etc made it ~$0.001.
+
+## Verification (matrix matched 1:1 local <-> prod)
+
+  Local (http://localhost:5000/api/auth/register, post tsx restart):
+    test@mailinator.com           -> 400 DISPOSABLE_EMAIL OK
+    test@10minutemail.com         -> 400 DISPOSABLE_EMAIL OK
+    test@guerrillamail.com        -> 400 DISPOSABLE_EMAIL OK
+    test@yopmail.com              -> 400 DISPOSABLE_EMAIL OK
+    test@user-foo.mailinator.com  -> 400 DISPOSABLE_EMAIL OK (subdomain)
+    test@temp-mail.org            -> 400 DISPOSABLE_EMAIL OK
+    control@gmail.com             -> 400 Captcha required (passes B27) OK
+    control@outlook.com           -> 400 Captcha required (passes B27) OK
+
+  Prod (https://qorix-api.fly.dev/api/auth/register, after CI deploy):
+    Identical response for every input. ZERO rows leaked into users
+    table during testing — count remained 10, max_id remained 153.
+
+## How to add a new disposable domain (operations runbook)
+
+When a new disposable service appears:
+  1. Edit artifacts/api-server/src/lib/disposable-email-domains.ts
+     — add the lowercase domain string to the appropriate family
+     section (or create a new section).
+  2. Push via the standard Git Data API push pattern.
+  3. CI deploy.yml restarts qorix-api on Fly. New blocklist live
+     within ~3 min of merge.
+  4. NO database change required. The list is in-process state.
