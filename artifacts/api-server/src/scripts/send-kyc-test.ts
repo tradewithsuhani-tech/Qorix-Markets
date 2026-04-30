@@ -1,9 +1,8 @@
-// One-off test send for the new KYC email template (B18).
-// Sends the KYC template's subject + body to a fixed test address,
-// rendered through the EXACT same buildBrandedEmailHtml + sendEmail
-// pipeline that /admin/users/:id/send-email uses in production, so
-// the inbox preview is byte-identical to what real users will receive
-// once the KYC template is live in the picker.
+// One-off test send for the KYC VERIFICATION REQUESTED email template (B18).
+// Renders the email through the EXACT same renderKycVerificationRequestedHtml
+// + sendEmail pipeline that /admin/users/:id/send-email uses in production
+// when templateId === "kyc", so the inbox preview is byte-identical to what
+// real users will receive once the KYC template is live in the picker.
 //
 // Usage (from repo root):
 //   pnpm --filter @workspace/api-server exec tsx src/scripts/send-kyc-test.ts
@@ -15,8 +14,8 @@
 // is never imported by the running server, and ships zero runtime cost.
 // Safe to delete after the live deploy is verified.
 
-import { sendEmail } from "../lib/email-service";
-import { buildBrandedEmailHtml } from "../lib/email-template";
+import { sendEmail, renderKycVerificationRequestedHtml } from "../lib/email-service";
+import { messageToBodyHtml } from "../lib/email-template";
 
 const TO = process.env.KYC_TEST_TO || "looxprem@gmail.com";
 
@@ -25,27 +24,9 @@ const SUBJECT = "🛡 Action Needed — Verify Your KYC to Continue Trading";
 const BODY =
   "Dear Investor,\n\n" +
   "To keep your Qorix Markets account secure and unlock the full trading experience, we need to verify your identity (KYC).\n\n" +
-  "🛡  Why KYC is required\n" +
-  "   • Protects your funds from unauthorized access\n" +
-  "   • Required by global financial compliance standards\n" +
-  "   • Unlocks higher withdrawal limits and faster processing\n\n" +
-  "📋  What you'll need (takes under 3 minutes)\n" +
-  "   • A government-issued photo ID (Passport / Driving Licence / Aadhaar / National ID)\n" +
-  "   • A clear selfie holding the same ID\n" +
-  "   • A recent address proof (utility bill / bank statement)\n\n" +
-  "⚡  How to complete it\n" +
-  "   1. Open the Qorix Markets app or website\n" +
-  "   2. Go to Profile → KYC Verification\n" +
-  "   3. Upload the documents above\n" +
-  "   4. Submit — most reviews complete within 24 hours\n\n" +
-  "🔒  Your data is end-to-end encrypted and used ONLY for identity verification. We never share it with third parties.\n\n" +
-  "Once verified, you'll receive the official ✅ Verified badge on your profile and instant access to:\n" +
-  "   • Higher daily withdrawal limits\n" +
-  "   • Priority support\n" +
-  "   • Exclusive verified-only promotions\n\n" +
-  "Need help? Reply to this email and our compliance team will guide you personally.\n\n" +
-  "Qorix Markets\n" +
-  "AI-Powered Trading System";
+  "KYC verification is required by global financial compliance standards and protects your funds from unauthorised access. Once complete, you'll instantly unlock higher daily withdrawal limits, priority support and the official ✅ Verified badge on your profile.\n\n" +
+  "It only takes 3 minutes — most reviews complete within 24 hours.\n\n" +
+  "Need help at any step? Reply to this email and our compliance team will guide you personally.";
 
 async function main() {
   if (!process.env.SES_FROM_EMAIL || !process.env.SMTP_PASS) {
@@ -53,7 +34,12 @@ async function main() {
     process.exit(1);
   }
   console.log(`[kyc-test] sending KYC template preview to ${TO}…`);
-  const html = buildBrandedEmailHtml(SUBJECT, BODY);
+  const html = renderKycVerificationRequestedHtml({
+    preheader: BODY.replace(/\s+/g, " ").slice(0, 110),
+    title: SUBJECT,
+    bodyHtml: messageToBodyHtml(BODY),
+    ctaUrl: "https://qorixmarkets.com/kyc",
+  });
   await sendEmail(TO, SUBJECT, BODY, html);
   console.log(`[kyc-test] done — check the inbox at ${TO}`);
   process.exit(0);

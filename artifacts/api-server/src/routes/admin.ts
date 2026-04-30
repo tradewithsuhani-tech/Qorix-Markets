@@ -27,7 +27,7 @@ import { sendUsdtFromTreasury, getTreasuryUsdtBalance } from "../lib/crypto-depo
 import { creditUserDeposit } from "../lib/tron-monitor";
 import { emitProfitDistribution } from "../lib/event-bus";
 import { transactionLogger, profitLogger, errorLogger } from "../lib/logger";
-import { sendEmail, sendTxnEmailToUser } from "../lib/email-service";
+import { sendEmail, sendTxnEmailToUser, renderKycVerificationRequestedHtml } from "../lib/email-service";
 import { PROMO_BOUNDS, normalizePromoCodePrefix } from "../lib/promo-bounds";
 import {
   ensureUserAccounts,
@@ -919,9 +919,34 @@ router.post("/admin/broadcast", async (req: AuthRequest, res) => {
   });
 });
 
-import { buildBrandedEmailHtml } from "../lib/email-template";
+import { buildBrandedEmailHtml, messageToBodyHtml } from "../lib/email-template";
 
 const buildBroadcastHtml = buildBrandedEmailHtml;
+
+// Per-template HTML dispatch for /admin/users/:id/send-email. The admin's
+// communication-page picker passes a templateId alongside {subject, message}.
+// For templates with a dedicated unique-design renderer in email-service.ts
+// (e.g. "kyc" → renderKycVerificationRequestedHtml — royal-plum + gold-leaf
+// theme with structured 3-document checklist + premium CTA), we route the
+// admin's free-form copy into that renderer's structured slots so the user
+// receives the bespoke premium design instead of the generic broadcast
+// wrapper. Unknown / un-routed templateIds (and the empty case where the
+// admin sends a hand-typed one-off email) fall back to buildBrandedEmailHtml.
+function buildDirectEmailHtml(
+  templateId: string | null | undefined,
+  subject: string,
+  message: string,
+): string {
+  if (templateId === "kyc") {
+    return renderKycVerificationRequestedHtml({
+      preheader: message.replace(/\s+/g, " ").slice(0, 110),
+      title: subject,
+      bodyHtml: messageToBodyHtml(message),
+      ctaUrl: "https://qorixmarkets.com/kyc",
+    });
+  }
+  return buildBrandedEmailHtml(subject, message);
+}
 
 // ---------------------------------------------------------------------------
 // POST /admin/users/:id/send-email
@@ -1006,7 +1031,7 @@ router.post("/admin/users/:id/send-email", async (req: AuthRequest, res) => {
   }
 
   try {
-    const html = buildBrandedEmailHtml(subject, message);
+    const html = buildDirectEmailHtml(templateId, subject, message);
     await sendEmail(user.email, subject, message, html);
   } catch (err: any) {
     errorLogger.error(
