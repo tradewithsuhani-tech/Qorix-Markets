@@ -7,8 +7,10 @@ import {
   IndianRupee, Building2, Smartphone, AlertCircle, CheckCircle2, Clock, Loader2, ShieldCheck,
   X, Sparkles, Hash, ArrowDownToLine, Copy, Check, Mail,
 } from "lucide-react";
+import { REGEXP_ONLY_DIGITS } from "input-otp";
 
 import { authFetch } from "@/lib/auth-fetch";
+import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
 function apiUrl(path: string) { return `${BASE_URL}/api${path}`; }
@@ -568,22 +570,40 @@ export function InrWithdrawTab({ kycApproved, onKycRequired }: { kycApproved: bo
               <ShieldCheck style={{ width: 13, height: 13 }} />
               Enter the 6-digit code sent to your email
             </div>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                inputMode="numeric"
+            {/* Styled 6-slot OTP entry — replaces the legacy single-input
+                box. Each slot is an individual rounded card on dark bg with
+                an emerald glow on the active slot, matching the green
+                Confirm Withdrawal button below. Digits-only input is
+                enforced by REGEXP_ONLY_DIGITS, paste of a 6-digit code
+                fills all slots, and the cancel (X) sits to the right with
+                matching height/weight so the row stays balanced. */}
+            <div className="flex items-center justify-center gap-2 py-1">
+              <InputOTP
                 maxLength={6}
                 value={withdrawOtp}
-                onChange={(e) => setWithdrawOtp(e.target.value.replace(/\D/g, ""))}
-                placeholder="000000"
-                className="flex-1 field-input text-center font-mono tracking-widest text-lg"
+                onChange={(v) => setWithdrawOtp(v)}
+                pattern={REGEXP_ONLY_DIGITS}
                 autoFocus
-              />
+                inputMode="numeric"
+                containerClassName="gap-2"
+                aria-label="6 digit withdrawal verification code"
+              >
+                <InputOTPGroup className="gap-2">
+                  {[0, 1, 2, 3, 4, 5].map((i) => (
+                    <InputOTPSlot
+                      key={i}
+                      index={i}
+                      className="h-12 w-9 sm:w-11 rounded-lg border border-white/10 bg-white/5 text-xl font-mono font-bold text-white shadow-none transition-colors hover:border-white/20"
+                    />
+                  ))}
+                </InputOTPGroup>
+              </InputOTP>
               <button
                 onClick={cancelOtp}
                 disabled={submitting}
-                className="px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-muted-foreground hover:bg-white/10 transition-colors disabled:opacity-50"
+                className="h-12 w-10 flex items-center justify-center rounded-lg bg-white/5 border border-white/10 text-muted-foreground hover:bg-white/10 hover:text-white transition-colors disabled:opacity-50 shrink-0"
                 title="Cancel and go back"
+                aria-label="Cancel and go back to form"
               >
                 <X style={{ width: 14, height: 14 }} />
               </button>
