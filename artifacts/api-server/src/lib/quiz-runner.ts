@@ -40,6 +40,7 @@ import {
   getTopN,
   type LeaderboardRow,
 } from "./quiz-scoring";
+import { creditQuizWinners } from "./quiz-payout";
 
 // ─── Per-quiz runner state shared with the answer-submit handler ───────────
 // The submit handler in routes/quiz.ts reads `currentQuestionId` and
@@ -311,5 +312,13 @@ async function runQuiz(quizId: number): Promise<void> {
   // Finalize — compute winners, persist, broadcast.
   await finalizeQuiz(quizId, String(quiz.prizePool), quiz.prizeCurrency, quiz.prizeSplit ?? [0.5, 0.3, 0.2]);
   state.status = "ended";
+
+  // Auto-credit is best-effort; failures fall back to manual mark-paid.
+  try {
+    await creditQuizWinners(quizId);
+  } catch (err) {
+    log.error({ err: (err as Error).message }, "auto-credit pass threw — manual fallback available");
+  }
+
   log.info("ended");
 }

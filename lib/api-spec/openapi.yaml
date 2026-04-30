@@ -2821,12 +2821,18 @@ components:
         finalScore: { type: integer }
         prizeAmount: { type: string }
         prizeCurrency: { type: string }
-        paidStatus: { type: string, enum: [unpaid, paid] }
+        paidStatus: { type: string, enum: [pending, paid] }
         paidAt:
           type: string
           nullable: true
         paidNote:
           type: string
+          nullable: true
+        paidTxnId:
+          type: integer
+          nullable: true
+        paidByAdminId:
+          type: integer
           nullable: true
         userId: { type: integer }
         userEmail:

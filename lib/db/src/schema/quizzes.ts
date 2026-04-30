@@ -137,8 +137,9 @@ export const quizAnswersTable = pgTable("quiz_answers", {
 
 // ─── Winners ──────────────────────────────────────────────────────────────
 // Persisted at quiz end from the Redis sorted-set leaderboard. Three rows
-// per ended quiz (rank 1..3). Payout is admin-driven — no automatic wallet
-// credit in v1.
+// per ended quiz (rank 1..3). `paidByAdminId` is null and `paidTxnId` is
+// set when payout came from the auto-credit pipeline; both are reversed
+// for manual mark-paid.
 export const quizWinnersTable = pgTable("quiz_winners", {
   id: serial("id").primaryKey(),
   quizId: integer("quiz_id").notNull().references(() => quizzesTable.id, { onDelete: "cascade" }),
@@ -151,6 +152,7 @@ export const quizWinnersTable = pgTable("quiz_winners", {
   paidAt: timestamp("paid_at"),
   paidByAdminId: integer("paid_by_admin_id").references(() => usersTable.id, { onDelete: "set null" }),
   paidNote: text("paid_note"),
+  paidTxnId: integer("paid_txn_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (t) => [
   uniqueIndex("quiz_winners_quiz_rank_uq").on(t.quizId, t.rank),

@@ -755,6 +755,7 @@ function ResultsView({ id, onBack }: { id: number; onBack: () => void }) {
       <div className="space-y-2">
         {winners.map((w) => {
           const isPaid = w.paidStatus === "paid";
+          const isAutoCredited = isPaid && w.paidTxnId != null;
           return (
             <Card key={w.id} data-testid={`winner-row-${w.id}`} className={cn(isPaid && "bg-emerald-500/5 border-emerald-500/20")}>
               <CardContent className="py-3 space-y-2">
@@ -775,7 +776,15 @@ function ResultsView({ id, onBack }: { id: number; onBack: () => void }) {
                   </div>
                   <div className="text-right">
                     <div className="text-sm font-bold text-amber-300">{w.prizeAmount} {w.prizeCurrency}</div>
-                    {isPaid ? (
+                    {isAutoCredited ? (
+                      <div
+                        data-testid={`winner-credited-${w.id}`}
+                        className="text-xs text-emerald-300 inline-flex items-center gap-1"
+                      >
+                        <Sparkles className="w-3 h-3" /> Credited {w.paidAt ? fmtLocal(w.paidAt) : ""}
+                        <span className="ml-1 text-emerald-200/70">· txn #{w.paidTxnId}</span>
+                      </div>
+                    ) : isPaid ? (
                       <div className="text-xs text-emerald-300 inline-flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Paid {w.paidAt ? fmtLocal(w.paidAt) : ""}</div>
                     ) : (
                       <div className="text-xs text-amber-300 inline-flex items-center gap-1"><AlertTriangle className="w-3 h-3" /> Unpaid</div>

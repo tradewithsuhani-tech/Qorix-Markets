@@ -433,6 +433,8 @@ adminRouter.get("/admin/quizzes/:id/results", async (_req: AuthRequest, res) => 
     paidStatus: quizWinnersTable.paidStatus,
     paidAt: quizWinnersTable.paidAt,
     paidNote: quizWinnersTable.paidNote,
+    paidTxnId: quizWinnersTable.paidTxnId,
+    paidByAdminId: quizWinnersTable.paidByAdminId,
     userId: quizWinnersTable.userId,
     userEmail: usersTable.email,
     userName: usersTable.fullName,
@@ -490,13 +492,24 @@ adminRouter.post("/admin/quizzes/:id/winners/:wid/mark-paid", async (req: AuthRe
   const note = typeof (req.body as { note?: unknown })?.note === "string"
     ? (req.body as { note: string }).note.slice(0, 500)
     : "";
+  // Only update pending rows so a manual mark-paid can never overwrite
+  // metadata (paidTxnId, paidNote) written by the auto-credit pipeline.
   const [updated] = await db.update(quizWinnersTable).set({
     paidStatus: "paid",
     paidAt: new Date(),
     paidByAdminId: req.userId ?? null,
     paidNote: note,
-  }).where(eq(quizWinnersTable.id, wid)).returning();
-  if (!updated) { res.status(404).json({ error: "winner_not_found" }); return; }
+  }).where(and(
+    eq(quizWinnersTable.id, wid),
+    eq(quizWinnersTable.paidStatus, "pending"),
+  )).returning();
+  if (!updated) {
+    const [existing] = await db.select({ id: quizWinnersTable.id, paidStatus: quizWinnersTable.paidStatus })
+      .from(quizWinnersTable).where(eq(quizWinnersTable.id, wid)).limit(1);
+    if (!existing) { res.status(404).json({ error: "winner_not_found" }); return; }
+    res.status(409).json({ error: "already_paid" });
+    return;
+  }
   res.json({
     id: updated.id,
     paidStatus: updated.paidStatus,

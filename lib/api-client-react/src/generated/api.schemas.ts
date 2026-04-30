@@ -765,7 +765,7 @@ export type AdminQuizWinnerPaidStatus =
   (typeof AdminQuizWinnerPaidStatus)[keyof typeof AdminQuizWinnerPaidStatus];
 
 export const AdminQuizWinnerPaidStatus = {
-  unpaid: "unpaid",
+  pending: "pending",
   paid: "paid",
 } as const;
 
@@ -778,6 +778,8 @@ export interface AdminQuizWinner {
   paidStatus: AdminQuizWinnerPaidStatus;
   paidAt?: string | null;
   paidNote?: string | null;
+  paidTxnId?: number | null;
+  paidByAdminId?: number | null;
   userId: number;
   userEmail?: string | null;
   userName?: string | null;
