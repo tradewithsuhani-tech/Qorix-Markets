@@ -41,7 +41,12 @@ import phoneChangeRouter from "./phone-change";
 import merchantRouter from "./merchant";
 import adminMerchantsRouter from "./admin-merchants";
 import adminEscalationRouter from "./admin-escalation";
-import quizRouter from "./quiz";
+// NOTE: quizRouter (./quiz) intentionally NOT imported here. The quiz
+// handler files (routes/quiz.ts + lib/quiz-*.ts) live in a feature
+// branch / local tree only and have not been pushed to the deployed
+// branch. They will be enabled in a later batch (B36+) when the
+// qorixplay frontend lands and the route file is committed alongside
+// it. Until then, importing ./quiz here would break CI typecheck.
 
 const router: IRouter = Router();
 
@@ -110,6 +115,6 @@ router.use(phoneChangeRouter);
 router.use(merchantRouter);
 router.use(adminMerchantsRouter);
 router.use(adminEscalationRouter);
-router.use(quizRouter);
+// router.use(quizRouter); — see note above; will be enabled in B36+
 
 export default router;
