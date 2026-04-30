@@ -128,6 +128,31 @@ export const Turnstile = forwardRef<TurnstileHandle, TurnstileProps>(
               // Lets the widget fill the form column instead of looking like
               // a fixed 300×65 island bolted onto the dark theme.
               size: "flexible",
+              // ─── Invisible-by-default mode ─────────────────────────────
+              // "interaction-only" tells Turnstile to keep the widget
+              // completely hidden for normal traffic and only render it if
+              // Cloudflare's risk engine decides this specific request needs
+              // human interaction (a checkbox tick or a managed challenge).
+              //
+              // Effect on the three signals the user asked for:
+              //   1. Invisible mode: ✓ No widget chrome for clean traffic.
+              //      The "Success!" badge that used to sit between Password
+              //      and Sign-In disappears.
+              //   2. Auto verification: ✓ Cloudflare runs all the passive
+              //      signals (TLS fingerprint, JS challenge, browser
+              //      integrity, IP reputation) in the background and fires
+              //      our `callback` with a token without any UI.
+              //   3. Only challenge suspicious users: ✓ When CF flags the
+              //      request as risky it auto-promotes the same widget to
+              //      a managed challenge — the widget then becomes visible
+              //      just for that user, just for that attempt.
+              //
+              // Server-side verification path is unchanged: the token still
+              // flows through verify-turnstile.ts and the same /siteverify
+              // call. Suspicious tokens still get rejected the same way; the
+              // only thing that changes is whether the user ever sees the
+              // widget DOM.
+              appearance: "interaction-only",
             });
           } catch {
             // Already rendered (StrictMode double-mount) — ignore.
@@ -154,19 +179,17 @@ export const Turnstile = forwardRef<TurnstileHandle, TurnstileProps>(
     return (
       <div className="w-full">
         {/*
-         * NO outer frame. User explicitly asked for the widget to be
-         * indistinguishable from the rest of the form — no border, no
-         * shadow, no gradient bg, nothing that says "this is wrapped".
-         * The Cloudflare iframe is cross-origin and renders its own dark
-         * theme inside; we can't restyle that. So the cleanest thing we
-         * can do is render the widget with ZERO chrome from us. The
-         * descendant iframe selector applies the same dark form-card bg
-         * to the iframe via mix-blend so any seam between iframe and form
-         * is minimised.
+         * NO outer frame, NO reserved height. With
+         * `appearance: "interaction-only"` the widget is hidden for
+         * normal traffic, so a 65px placeholder would just leave an empty
+         * gap between the Password field and the Sign-In button. The
+         * `:has(iframe)` selector restores the 65px reserve only when
+         * Cloudflare actually renders the iframe (i.e. when the risk
+         * engine promoted this user to an interactive challenge), which
+         * minimises the layout jump in that one rare case while keeping
+         * the form tight for everyone else.
          *
-         * The container still gets:
-         *   - `min-h-[65px]` to prevent layout shift between the loading
-         *     placeholder and the rendered widget.
+         * Container styling (when iframe is present):
          *   - `flex items-center justify-center` to centre the iframe on
          *     narrow screens where size:"flexible" can't stretch.
          *   - `[&_iframe]:block` to remove the default inline-element
@@ -178,8 +201,9 @@ export const Turnstile = forwardRef<TurnstileHandle, TurnstileProps>(
         <div
           ref={containerRef}
           className={[
-            "min-h-[65px] flex items-center justify-center",
+            "flex items-center justify-center",
             "max-w-full overflow-hidden",
+            "[&:has(iframe)]:min-h-[65px]",
             "[&_iframe]:block",
             "sm:[&_iframe]:!w-full",
           ].join(" ")}
