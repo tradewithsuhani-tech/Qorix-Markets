@@ -707,7 +707,25 @@ function TwoFactorPromptStep({
 // Main login/register page
 // ────────────────────────────────────────────────────────────────────────────
 export default function LoginPage() {
-  const [isLogin, setIsLogin] = useState(true);
+  // B25 (2026-04-30): default to Sign Up mode when the user lands on
+  // /register or /signup. LoginPage is mounted on /login, /register and
+  // /signup routes (see App.tsx Route definitions), so without this lazy
+  // initializer every path shows the "Welcome back" sign-in form — confusing
+  // for new users who paste or share a /register link expecting the
+  // registration form. Lazy init runs synchronously on first render so the
+  // form starts in the correct mode without a flash of the wrong tab.
+  const [isLogin, setIsLogin] = useState<boolean>(() => {
+    try {
+      const path = window.location.pathname;
+      if (path === "/register" || path === "/signup") return false;
+    } catch {
+      // Defensive: window may be undefined in non-browser contexts (SSR
+      // smoke tests). Default to login mode in that case — the existing
+      // ?ref= effect below still flips to register if a referral is
+      // present, preserving the original B-batch behavior.
+    }
+    return true;
+  });
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
