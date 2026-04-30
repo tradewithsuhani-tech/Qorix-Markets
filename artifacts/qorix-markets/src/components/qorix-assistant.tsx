@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Send, ChevronRight, MessageCircle, Headphones, UserCheck, CheckCheck, SquareX, RotateCcw, MessageSquarePlus, TrendingUp } from "lucide-react";
+import { X, Send, ChevronRight, MessageCircle, Headphones, UserCheck, CheckCheck, SquareX, RotateCcw, MessageSquarePlus, TrendingUp, Languages } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
 import { useLocation } from "wouter";
@@ -33,6 +33,21 @@ interface QuickOption {
 }
 
 type FlowKey = "main" | "how_to_start" | "investment_guide" | "returns" | "risk" | "expert_requested";
+
+// Language pill choices. `null` means the user has not picked one — the LLM
+// then mirrors whatever language the user types in (legacy behaviour).
+type LanguageChoice = "en" | "hi" | "hinglish" | null;
+
+const LANGUAGE_OPTIONS: { value: Exclude<LanguageChoice, null>; short: string; label: string }[] = [
+  { value: "en", short: "EN", label: "English" },
+  { value: "hi", short: "हि", label: "हिंदी" },
+  { value: "hinglish", short: "Hi-EN", label: "Hinglish" },
+];
+
+function languageShortLabel(lang: LanguageChoice): string {
+  if (!lang) return "Auto";
+  return LANGUAGE_OPTIONS.find((o) => o.value === lang)?.short ?? "Auto";
+}
 
 // ─── Bot Flow Definitions ─────────────────────────────────────────────────────
 
@@ -322,6 +337,11 @@ export function QorixAssistant({ guestMode = false }: { guestMode?: boolean } = 
   const [pollTimer, setPollTimer] = useState<ReturnType<typeof setInterval> | null>(null);
   const [showNudge, setShowNudge] = useState(false);
   const [nudgeIndex, setNudgeIndex] = useState(0);
+  // Header language pill state. `null` = no explicit choice (LLM mirrors
+  // whatever the user typed in). When set, persisted to the session row so
+  // the LLM and CTA acknowledgements both honour it.
+  const [language, setLanguage] = useState<LanguageChoice>(null);
+  const [showLangMenu, setShowLangMenu] = useState(false);
   const nudgeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const nudgeHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -397,24 +417,44 @@ export function QorixAssistant({ guestMode = false }: { guestMode?: boolean } = 
     try {
       const { session } = await apiPost("/chat/session", {});
       setSessionId(session.id);
-      if (session.status === "expert_requested") {
-        setExpertMode(true);
-        // Load existing messages
-        const { messages: existing } = await apiGet(`/chat/session/${session.id}/messages`);
-        if (existing.length > 0) {
-          setMessages(existing.map((m: any) => ({
-            id: String(m.id),
-            type: m.senderType as "user" | "bot" | "admin",
-            content: m.content,
-            timestamp: new Date(m.createdAt),
-          })));
-          return;
-        }
+      if (session.status === "expert_requested") setExpertMode(true);
+      // Hydrate the language pill from whatever the server has on the
+      // session row — preserves the user's previous choice across visits.
+      if (session.preferredLanguage) {
+        setLanguage(session.preferredLanguage as LanguageChoice);
+      } else {
+        setLanguage(null);
       }
-      // Show welcome message
+
+      // Resume policy (Task 104): if the resumed session already has
+      // messages, load them all instead of dumping the user back at the
+      // welcome screen. Only sessions with zero history get the welcome
+      // bubble — that covers brand-new sessions and the ambient "I just
+      // signed up" first-time case.
+      const { messages: existing } = await apiGet(`/chat/session/${session.id}/messages`);
+      if (existing.length > 0) {
+        setMessages(existing.map((m: any) => ({
+          id: String(m.id),
+          type: m.senderType as "user" | "bot" | "admin",
+          content: m.content,
+          timestamp: new Date(m.createdAt),
+        })));
+        return;
+      }
       showBotMessage(FLOWS.main.message, FLOWS.main.options);
     } catch (err) {
       // Ignore
+    }
+  }
+
+  async function persistLanguage(next: LanguageChoice) {
+    setLanguage(next);
+    setShowLangMenu(false);
+    if (!sessionId || !token) return;
+    try {
+      await apiPost(`/chat/session/${sessionId}/language`, { language: next });
+    } catch {
+      // Non-fatal: the LLM falls back to mirror mode if persistence fails.
     }
   }
 
@@ -562,6 +602,11 @@ export function QorixAssistant({ guestMode = false }: { guestMode?: boolean } = 
     setExpertMode(false);
     setInputText("");
     setShowEndConfirm(false);
+    // Drop the in-memory language pill back to "Auto" so the new session
+    // starts cleanly. initSession() will rehydrate from the new server-side
+    // session row (which starts with preferredLanguage = null).
+    setLanguage(null);
+    setShowLangMenu(false);
     if (guestMode) {
       setTimeout(() => showBotMessage(FLOWS.main.message, FLOWS.main.options), 100);
     } else if (token) {
@@ -876,6 +921,74 @@ export function QorixAssistant({ guestMode = false }: { guestMode?: boolean } = 
               </div>
 
               <div className="flex items-center gap-1.5">
+                {/* Language pill — flips the LLM's reply language. The
+                    selection is persisted on the session and respected
+                    across visits. Hidden in guest mode (no session to
+                    persist on) and once the chat has ended. */}
+                {!chatEnded && !guestMode && (
+                  <div className="relative">
+                    <button
+                      onClick={() => setShowLangMenu((v) => !v)}
+                      title="Reply language"
+                      className="h-7 px-2 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 flex items-center gap-1 transition-colors"
+                      data-testid="chat-language-pill"
+                    >
+                      <Languages className="w-3 h-3 text-white/60" />
+                      <span className="text-[10px] font-semibold text-white/80 leading-none">
+                        {languageShortLabel(language)}
+                      </span>
+                    </button>
+                    <AnimatePresence>
+                      {showLangMenu && (
+                        <motion.div
+                          initial={{ opacity: 0, y: -6, scale: 0.95 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          exit={{ opacity: 0, y: -4, scale: 0.95 }}
+                          transition={{ duration: 0.15 }}
+                          className="absolute right-0 top-9 w-44 z-20 rounded-xl overflow-hidden"
+                          style={{
+                            background: "#151b2d",
+                            border: "1px solid rgba(99,102,241,0.25)",
+                            boxShadow: "0 10px 30px rgba(0,0,0,0.5)",
+                          }}
+                        >
+                          <div className="px-3 py-2 border-b border-white/[0.06]">
+                            <p className="text-[10px] uppercase tracking-wider text-white/40 font-semibold">Reply Language</p>
+                          </div>
+                          <button
+                            onClick={() => persistLanguage(null)}
+                            className={cn(
+                              "w-full text-left px-3 py-2 text-xs flex items-center justify-between transition-colors",
+                              language === null
+                                ? "bg-blue-500/15 text-blue-300"
+                                : "text-white/70 hover:bg-white/5 hover:text-white",
+                            )}
+                          >
+                            <span>Auto (mirror me)</span>
+                            {language === null && <span className="text-[10px]">✓</span>}
+                          </button>
+                          {LANGUAGE_OPTIONS.map((opt) => (
+                            <button
+                              key={opt.value}
+                              onClick={() => persistLanguage(opt.value)}
+                              className={cn(
+                                "w-full text-left px-3 py-2 text-xs flex items-center justify-between transition-colors",
+                                language === opt.value
+                                  ? "bg-blue-500/15 text-blue-300"
+                                  : "text-white/70 hover:bg-white/5 hover:text-white",
+                              )}
+                              data-testid={`chat-language-option-${opt.value}`}
+                            >
+                              <span>{opt.label}</span>
+                              {language === opt.value && <span className="text-[10px]">✓</span>}
+                            </button>
+                          ))}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                )}
+
                 {/* End Chat button — only if chat is active */}
                 {!chatEnded && messages.length > 0 && (
                   <div className="relative">

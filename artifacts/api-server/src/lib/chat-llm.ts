@@ -228,6 +228,34 @@ function buildUserContextBlock(user: UserContext, profile: SessionProfile): stri
   return lines.join("\n");
 }
 
+// Normalize whatever the client sent into one of the three supported codes
+// the system prompt directive understands. Anything else (or null/empty)
+// returns null, meaning "no override — use natural mirroring".
+export function normalizePreferredLanguage(raw: string | null | undefined): "en" | "hi" | "hinglish" | null {
+  if (!raw) return null;
+  const lc = raw.toLowerCase().trim();
+  if (lc === "en" || lc.startsWith("en-")) return "en";
+  if (lc === "hi" || lc.startsWith("hi-")) return "hi";
+  if (lc === "hinglish" || lc === "hi-en" || lc === "en-hi") return "hinglish";
+  return null;
+}
+
+function buildLanguageOverrideBlock(lang: "en" | "hi" | "hinglish"): string {
+  // We deliberately frame this as overriding the LANGUAGE MIRRORING rule
+  // because the system prompt has a "HARD RULE" telling the model to mirror.
+  // Without an explicit override, the model will keep mirroring the user's
+  // typed-in language even when the user has flipped the chat to a
+  // different language via the header pill.
+  switch (lang) {
+    case "en":
+      return "USER_LANGUAGE_OVERRIDE: The user has explicitly chosen English from the chat header. Reply ENTIRELY in plain English regardless of the script the user typed in. The mirroring rule does NOT apply this turn — the override wins. The 'language' field in your JSON output must be 'en'.";
+    case "hi":
+      return "USER_LANGUAGE_OVERRIDE: The user has explicitly chosen Hindi (हिंदी) from the chat header. Reply ENTIRELY in Hindi using the Devanagari script regardless of what the user typed in. The mirroring rule does NOT apply this turn — the override wins. The 'language' field in your JSON output must be 'hi'.";
+    case "hinglish":
+      return "USER_LANGUAGE_OVERRIDE: The user has explicitly chosen Hinglish from the chat header. Reply in conversational Hinglish (Hindi-English mix written in Roman script) regardless of what the user typed in. The mirroring rule does NOT apply this turn — the override wins. The 'language' field in your JSON output must be 'hinglish'.";
+  }
+}
+
 function mapHistoryToOpenAI(history: ChatHistoryItem[]): ChatCompletionMessageParam[] {
   // Cap to the last N turns to keep prompt cost bounded. We map "bot" and
   // "admin" both to "assistant" so the model sees a single conversational
@@ -318,17 +346,28 @@ export interface GenerateAssistantReplyArgs {
   userContext: UserContext;
   sessionProfile: SessionProfile;
   turnCount: number;
+  // When set (the user picked a language from the chat header pill), the
+  // model is told to ALWAYS reply in this language regardless of what the
+  // user just typed in. Overrides the default mirroring behaviour. Accepts
+  // "en" | "hi" | "hinglish" — anything else falls back to mirror mode.
+  preferredLanguage?: string | null;
 }
 
 export async function generateAssistantReply(args: GenerateAssistantReplyArgs): Promise<LLMReplyResult | null> {
   const client = getOpenAIClient();
   if (!client) return null;
 
+  const preferredLanguage = normalizePreferredLanguage(args.preferredLanguage);
+  const contextBlock = buildUserContextBlock(args.userContext, args.sessionProfile);
+  const languageDirective = preferredLanguage
+    ? buildLanguageOverrideBlock(preferredLanguage)
+    : "";
+
   const messages: ChatCompletionMessageParam[] = [
     { role: "system", content: SYSTEM_PROMPT },
     {
       role: "system",
-      content: `${buildUserContextBlock(args.userContext, args.sessionProfile)}\n\nTURN_INDEX: ${args.turnCount}`,
+      content: `${contextBlock}\n\nTURN_INDEX: ${args.turnCount}${languageDirective ? `\n\n${languageDirective}` : ""}`,
     },
     ...mapHistoryToOpenAI(args.history),
     { role: "user", content: args.userMessage },

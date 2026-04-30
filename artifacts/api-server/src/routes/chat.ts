@@ -9,12 +9,13 @@ import {
   investmentsTable,
   transactionsTable,
 } from "@workspace/db/schema";
-import { eq, desc, and, sql, gte, lt } from "drizzle-orm";
+import { eq, desc, and, sql, gte, lt, ne } from "drizzle-orm";
 import { authMiddleware, adminMiddleware, getParam, type AuthRequest } from "../middlewares/auth";
 import { makeRedisLimiter } from "../middlewares/rate-limit";
 import {
   generateAssistantReply,
   computeEngagementBoost,
+  normalizePreferredLanguage,
   type SessionProfile,
   type UserContext,
   type ChatHistoryItem,
@@ -244,15 +245,23 @@ function buildCtaCard(
 
 // ─── Routes: existing core chat ─────────────────────────────────────────────
 
-// Get or create active session for current user
+// Get or create the resumable session for the current user.
+//
+// Resume policy (Task 104): pick the user's MOST RECENT non-resolved session
+// (status active OR expert_requested), regardless of how long ago it was
+// opened. This is what makes the assistant feel like a continuous
+// conversation across visits — a user who closed the tab mid-chat (or even
+// signed out and came back next week) lands back in the same thread with
+// their full history visible. Only when the user has explicitly hit "End
+// Chat" (status = resolved) do we mint a brand new session.
 router.post("/chat/session", authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.userId!;
     const existing = await db
       .select()
       .from(chatSessionsTable)
-      .where(and(eq(chatSessionsTable.userId, userId), eq(chatSessionsTable.status, "active")))
-      .orderBy(desc(chatSessionsTable.createdAt))
+      .where(and(eq(chatSessionsTable.userId, userId), ne(chatSessionsTable.status, "resolved")))
+      .orderBy(desc(chatSessionsTable.lastMessageAt))
       .limit(1);
 
     if (existing.length > 0) {
@@ -266,6 +275,43 @@ router.post("/chat/session", authMiddleware, async (req: AuthRequest, res: Respo
     res.status(500).json({ error: "Failed to create session" });
   }
 });
+
+// Set the user's preferred reply language for this session. Persisted on
+// the session row so subsequent /chat/llm-reply calls inject the override
+// into the LLM system prompt and the localized CTA acknowledgement helper
+// uses the same language. The body accepts "en" | "hi" | "hinglish";
+// anything else stores NULL (= "let the LLM mirror naturally").
+router.post(
+  "/chat/session/:id/language",
+  authMiddleware,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const userId = req.userId!;
+      const sessionId = parseInt(getParam(req, "id"));
+      const { language } = req.body ?? {};
+
+      const sessionRows = await db
+        .select()
+        .from(chatSessionsTable)
+        .where(eq(chatSessionsTable.id, sessionId))
+        .limit(1);
+      if (!sessionRows.length || sessionRows[0]!.userId !== userId) {
+        res.status(403).json({ error: "Forbidden" });
+        return;
+      }
+
+      const normalized = normalizePreferredLanguage(typeof language === "string" ? language : null);
+      await db
+        .update(chatSessionsTable)
+        .set({ preferredLanguage: normalized })
+        .where(eq(chatSessionsTable.id, sessionId));
+
+      res.json({ success: true, preferredLanguage: normalized });
+    } catch (err) {
+      res.status(500).json({ error: "Failed to update language" });
+    }
+  },
+);
 
 // Get messages for a session
 router.get("/chat/session/:id/messages", authMiddleware, async (req: AuthRequest, res: Response) => {
@@ -490,6 +536,7 @@ router.post(
           userContext,
           sessionProfile,
           turnCount,
+          preferredLanguage: session.preferredLanguage,
         });
       }
 
@@ -523,8 +570,13 @@ router.post(
         Boolean(metadata?.ctaVariant) &&
         (metadata!.engagementSignal === "high" || newEngagementScore >= ENGAGEMENT_CTA_THRESHOLD);
 
+      // CTA acknowledgement copy uses the user's explicit pill choice when
+      // they've made one, otherwise falls back to whatever language the LLM
+      // detected for this turn — keeps the bot voice consistent with the
+      // header pill.
+      const ctaLanguage = session.preferredLanguage ?? metadata?.language ?? null;
       const ctaCard = ctaEligible && metadata?.ctaVariant
-        ? buildCtaCard(metadata.ctaVariant, metadata.language)
+        ? buildCtaCard(metadata.ctaVariant, ctaLanguage)
         : null;
 
       // Per-day token accounting: if the budget date rolled over, restart

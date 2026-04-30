@@ -18,6 +18,11 @@ export const chatSessionsTable = pgTable("chat_sessions", {
   detectedIntent: varchar("detected_intent", { length: 32 }),
   // Detected language ("en" / "hi" / "hinglish" / etc) — drives mirroring.
   language: varchar("language", { length: 16 }),
+  // Explicit user-chosen reply language from the chat header pill. When
+  // non-null this overrides the LLM's auto-detection — the system prompt
+  // is told to ALWAYS reply in this language regardless of what the user
+  // typed in. NULL means "let the LLM mirror naturally" (legacy behaviour).
+  preferredLanguage: varchar("preferred_language", { length: 16 }),
   // Cumulative engagement score — incremented per user turn, with bonus
   // weight for positive-signal keywords (see chat-llm.ts). Used to gate
   // CTA injection.
