@@ -684,7 +684,7 @@ timeout. Fix shipped:
 - Consider HTTP/2 keep-alive between Fly LB and app to reduce per-request connection overhead under sustained load
 - If WebSocket / SSE features are added (live price ticker), revisit sticky-session vs. broadcast strategy
 - Add a regression test that simulates Redis being down and asserts the limiter passes through within the 1.5 s commandTimeout budget (architect MINOR follow-up)
-- Constant-time compare for `LOADTEST_TOKEN` header (architect MINOR follow-up ��� low practical risk, current strict equality is acceptable for a 32-byte hex token)
+- Constant-time compare for `LOADTEST_TOKEN` header (architect MINOR follow-up �� low practical risk, current strict equality is acceptable for a 32-byte hex token)
 
 ## Phase 6 (perf): admin panel <1s — app-layer (Apr 28, 2026)
 
@@ -1381,7 +1381,7 @@ the banner even though the session is genuinely blocked.
 
 - ~~**B6.1**: signup captcha + failed-submit widget reset~~ ✅ LIVE (`d5e1c63`).
 - ~~**B7**: 24h new-device withdraw cooldown.~~ ✅ LIVE (`920cef6`).
-- ~~**B8**: My Devices page.~~ �� LIVE (see below).
+- ~~**B8**: My Devices page.~~ ✅ LIVE (see below).
 - **/auth/forgot-password CAPTCHA enforcement** (architect note 6 from
   B6 review) — deferred; that endpoint is rate-limited today; will
   revisit after B7/B8 land.
@@ -2043,3 +2043,93 @@ verifies token against BOTH verifiers in parallel during a
 cutover-flag-on window, accepts either success. Not built in
 Phase 3; the observability above gives us the visibility to
 decide if it's worth building before the next provider change.
+
+### Merchant withdrawal-claim broadcast popup (2026-04-30)
+
+User asked: "withdrawal pe bhi merchant ko popup bhejo, sab pe
+jayega, jo claim pahle karega process karega — sab kuchh
+already hai, bas design + popup ka kaam." Backend was indeed
+complete: `notifyAllActiveMerchantsOfNewWithdrawal` (in
+`escalation-cron.ts`) is invoked from `inr-withdrawals.ts:396`
+on user submission, and `POST /merchant/inr-withdrawals/:id/claim`
+(`merchant.ts:615`) does an atomic Drizzle update with an
+`isNull(assignedMerchantId)` precondition for first-claim-wins
+(loser → 409 with body "Withdrawal already claimed by another
+merchant"). The pattern in this codebase is POLLING (no SSE);
+the existing `MerchantDepositNotifier` polls
+`/merchant/inr-deposits?status=pending` every 10s and shows a
+glassy modal for new pending items.
+
+**Phase 1 — initial popup, commit `898c77880858`** (web-only
+deploy, api-server SKIPPED). Cloned the deposit-notifier
+pattern into `merchant-withdrawal-notifier.tsx` (~280 LOC, rose
+theme, 660→990Hz chime to differentiate from deposit's
+880→1320Hz), polls `/merchant/inr-withdrawals?status=pending`
+every 10s, filters `assignedMerchantId === null` (the broadcast
+queue — backend list returns BOTH unclaimed and claimed-by-me
+items by design, see `merchant.ts:587-604`), claims via the
+existing atomic endpoint. Mounted in `merchant-layout.tsx`
+right after the deposit notifier.
+
+**Phase 2 — architect-flagged fixes, commit `2c3cf08fddd7`**
+(web-only deploy, api-server SKIPPED). Architect code review
+returned PARTIAL PASS with two findings that **directly**
+violated the "sab pe jayega" requirement:
+
+1. **Queueing bug (high).** The Phase-1 useEffect blindly did
+   `seenIdsRef.current = currentIds` at the end of every poll,
+   marking every brand-new id as seen even when only the first
+   one was actually shown. Result: if 5 withdrawals appeared
+   in the same 10s window, only #1 popped and #2-#5 never
+   popped. Same bug if a new withdrawal arrived while a popup
+   was already open — `fresh` was found but skipped (because
+   `popup` was set), then immediately marked seen.
+
+   Fix: replaced the blanket assignment with a `nextSeenFrom`
+   helper that keeps `prior ∩ current` plus the id we just
+   popped. Items observed but NOT popped remain unseen and
+   become eligible on the next tick (or as soon as the user
+   dismisses the current popup, since the effect's
+   dependency array includes `popup` so it re-runs on
+   dismiss). All four call-sites updated. Snapshot-on-mount
+   (the early-return where `seenIdsRef === null`) is
+   preserved so a freshly-logged-in merchant doesn't get
+   bombarded with backlog popups.
+
+2. **Lost-race UX (medium).** When a merchant clicked Claim a
+   beat after another merchant won the atomic claim, the 409
+   surfaced as a scary destructive toast and the stale popup
+   stayed open. Fix: detect `/already claimed/i` in the error
+   body, swap to a default-variant toast ("Already claimed —
+   Another merchant claimed this withdrawal first."),
+   invalidate the notifier query, and dismiss the popup so
+   the merchant moves on cleanly.
+
+**Architect finding NOT addressed (low severity, deferred):**
+Both `MerchantDepositNotifier` and `MerchantWithdrawalNotifier`
+render full-screen `z-[200]` overlays. If a deposit and a
+withdrawal arrive in the same 10s window, both popups render
+simultaneously and the later-mounted one (withdrawal) likely
+covers the deposit. Not a data-correctness bug — both popups
+remain interactive and either can be dismissed independently
+— but a future refactor could centralize merchant
+notifications behind a shared queue/coordinator. Left as a
+TODO; not worth the refactor cost for current single-digit
+merchant volume.
+
+**Verification.** Both phases CI-green (runs #245's successor
+and the follow-up). Prod `/version.json` builtAt
+`2026-04-30T02:58:11Z`, JS bundle hash `index-BK_dc9Vv.js`,
+contains all six expected user-visible strings ("Withdrawal #",
+"Process within 15 min on the Withdrawals", "Already claimed",
+"Another merchant claimed this withdrawal first", plus the
+"merchant-pending-withdrawals-notify" query key and the regex
+match string "already claimed"). `api-server` image hash on
+all 4 Fly machines remains `deployment-01KQE3DN7PYBN13MWCB7TVADWD`
+(unchanged from B9.6 Phase 3 — no skew, web-only deploy
+correctly observed). `/api/healthz` still returns
+`{status:"ok",captchaProvider:"turnstile"}`. End-to-end claim
+flow not synthetically tested in prod (would require triggering
+a real INR withdrawal request); regression risk is low because
+the claim path itself is unchanged from the existing
+`/merchant/withdrawals` page mutation.
