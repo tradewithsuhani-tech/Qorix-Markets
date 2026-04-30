@@ -10,6 +10,7 @@ import { originGuard } from "./middlewares/origin-guard";
 import { cloudflarePin } from "./middlewares/cloudflare-pin";
 import { adminIpAllowlist, adminIpAllowlistEnabled } from "./middlewares/admin-ip-allowlist";
 import { getCaptchaProvider } from "./lib/captcha-service";
+import { issueCsrfToken } from "./lib/csrf-token";
 
 const app: Express = express();
 
@@ -194,6 +195,40 @@ app.get("/api/healthz", (_req, res) => {
   // detect skew between this server and the served web bundle's baked-in
   // VITE_CAPTCHA_PROVIDER (also surfaced on /version.json).
   res.json({ status: "ok", captchaProvider: getCaptchaProvider() });
+});
+
+// ─── B30 L6: CSRF token issuance endpoint ──────────────────────────────────
+// GET /api/csrf — returns a short-lived HMAC-signed token that the web app
+// must include as X-CSRF-Token on every state-changing request once the
+// originGuard CSRF gate is enabled (CSRF_HMAC_SECRET set).
+//
+// Public, no auth required: registration is anonymous, so an unauthenticated
+// browser must be able to obtain a token before the very first POST.
+//
+// Cheap: pure crypto, no DB hit. Listed in originGuard PATH_EXEMPTIONS so a
+// client that has no token can still call this endpoint to bootstrap.
+//
+// Response shape: { enabled: boolean, token: string|null, expiresAt: string|null }
+//   - enabled=false  -> CSRF feature is currently OFF on the server
+//                       (CSRF_HMAC_SECRET unset). Client may treat as
+//                       "no token needed".
+//   - enabled=true   -> token + ISO 8601 expiresAt populated. Client should
+//                       cache in memory and attach as X-CSRF-Token header.
+//
+// Caching: explicit no-store + Vary on User-Agent. Tokens are bound to UA;
+// a CDN that cached one user's token and served it to a different UA would
+// force every recipient into CSRF_UA_MISMATCH 403s.
+app.get("/api/csrf", (req, res) => {
+  const ua = req.headers["user-agent"] as string | undefined;
+  const issued = issueCsrfToken(ua);
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, private");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Vary", "User-Agent");
+  if (!issued) {
+    res.json({ enabled: false, token: null, expiresAt: null });
+    return;
+  }
+  res.json({ enabled: true, token: issued.token, expiresAt: issued.expiresAt });
 });
 
 // ─── Request-level safety-net timeout ──────────────────────────────────────
