@@ -25,7 +25,7 @@ function buildVersionPlugin(): PluginOption {
         mkdirSync(publicDir, { recursive: true });
         writeFileSync(
           path.resolve(publicDir, "version.json"),
-          JSON.stringify({ version: BUILD_VERSION, builtAt: new Date().toISOString() }),
+          JSON.stringify({ version: BUILD_VERSION, builtAt: new Date().toISOString(), captchaProvider: process.env.VITE_CAPTCHA_PROVIDER ?? "recaptcha" }),
         );
       } catch {
         // Non-fatal: dev server still works, version check just degrades gracefully.
