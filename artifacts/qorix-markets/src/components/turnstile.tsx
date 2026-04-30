@@ -124,6 +124,10 @@ export const Turnstile = forwardRef<TurnstileHandle, TurnstileProps>(
               "expired-callback": () => onExpire?.(),
               "error-callback": () => setError("Captcha failed to load"),
               theme: "dark",
+              // Cloudflare-supported responsive size (≥300px container).
+              // Lets the widget fill the form column instead of looking like
+              // a fixed 300×65 island bolted onto the dark theme.
+              size: "flexible",
             });
           } catch {
             // Already rendered (StrictMode double-mount) — ignore.
@@ -148,9 +152,33 @@ export const Turnstile = forwardRef<TurnstileHandle, TurnstileProps>(
     if (!siteKey) return null;
 
     return (
-      <div className="w-full flex justify-center">
-        <div ref={containerRef} />
-        {error && <p className="text-xs text-red-400 mt-1">{error}</p>}
+      <div className="w-full">
+        {/*
+         * Glassy themed wrapper. The Cloudflare-rendered iframe inside is
+         * cross-origin so we can't restyle its interior — but we can frame
+         * it with the same blue/indigo accent the login + admin-login forms
+         * use, so the widget reads as a deliberate part of the form rather
+         * than a default Cloudflare island bolted on. The inner container
+         * uses `min-h` to absorb the small layout shift between the
+         * "loading" placeholder size and the rendered widget size, and the
+         * iframe gets rounded corners + a soft inner ring via descendant
+         * selectors so it visually merges with the wrapper.
+         */}
+        <div
+          className={[
+            "relative rounded-xl p-2",
+            "border border-blue-500/25",
+            "bg-gradient-to-br from-blue-500/[0.06] via-indigo-500/[0.05] to-purple-500/[0.06]",
+            "shadow-[0_0_28px_-10px_rgba(59,130,246,0.45)]",
+            "transition-all",
+            "[&_iframe]:rounded-lg [&_iframe]:!w-full [&_iframe]:block",
+          ].join(" ")}
+        >
+          <div ref={containerRef} className="min-h-[65px] flex items-center justify-center" />
+        </div>
+        {error && (
+          <p className="text-xs text-red-400 mt-2 text-center">{error}</p>
+        )}
       </div>
     );
   },
