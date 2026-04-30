@@ -120,6 +120,28 @@ if (corsOriginEnv) {
 } else {
   app.use(cors());
 }
+
+// ─── B28 L2: Origin / Referer guard for state-changing requests ────────────
+// Mounted on /api ONLY (so it never touches /healthz at the root) and
+// BEFORE the body parsers so a 12MB no-Origin POST gets rejected with
+// 403 ORIGIN_REQUIRED *without* the server first allocating + parsing a
+// 12MB JSON body. This is the difference between an attacker costing
+// us microseconds vs. tens of milliseconds + 12MB of RAM per blocked
+// request, and matters for sustained scraping/abuse traffic.
+//
+// CORS still runs first because preflight OPTIONS responses must carry
+// Access-Control-* headers regardless of the Origin guard outcome.
+//
+// Idempotent reads (GET/HEAD/OPTIONS) and a small set of path
+// exemptions (healthz, version) pass through untouched. State-changing
+// methods without a recognised Origin/Referer get 403 ORIGIN_REQUIRED.
+// See origin-guard.ts for full rationale.
+//
+// Net effect: a `curl -X POST https://qorix-api.fly.dev/api/auth/register`
+// with no Origin header is rejected at the edge before body parse,
+// rate-limit budget consumption, captcha verification, or DB lookup.
+app.use("/api", originGuard);
+
 app.use(express.json({ limit: "12mb" }));
 app.use(express.urlencoded({ extended: true }));
 
@@ -236,20 +258,6 @@ app.use((_req, res, next) => {
   res.setHeader("Permissions-Policy", PERMISSIONS_POLICY_CH);
   next();
 });
-
-// ─── B28 L2: Origin / Referer guard for state-changing requests ────────────
-// Mounted on /api ONLY (so it never touches /healthz at the root) and
-// BEFORE the global rate limiter so rejected-origin requests don't burn
-// rate-limit budget. Idempotent reads (GET/HEAD/OPTIONS) and a small set
-// of path exemptions (healthz, version) pass through untouched. State-
-// changing methods without a recognised Origin/Referer get 403
-// ORIGIN_REQUIRED. See origin-guard.ts for full rationale.
-//
-// Net effect: a `curl -X POST https://qorix-api.fly.dev/api/auth/register`
-// with no Origin header is rejected at the edge instead of being allowed
-// to chew through captcha + rate-limit + DB lookup before hitting the
-// disposable-email gate.
-app.use("/api", originGuard);
 
 // ─── Global per-IP rate limit (backstop) ──────────────────────────────────
 // Mounted BEFORE the maintenance gate so a runaway client can't burn DB
