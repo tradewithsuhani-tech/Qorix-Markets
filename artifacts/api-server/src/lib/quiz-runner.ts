@@ -41,6 +41,7 @@ import {
   type LeaderboardRow,
 } from "./quiz-scoring";
 import { creditQuizWinners } from "./quiz-payout";
+import { dispatchQuizLivePings } from "./quiz-notifications";
 
 // ─── Per-quiz runner state shared with the answer-submit handler ───────────
 // The submit handler in routes/quiz.ts reads `currentQuestionId` and
@@ -246,6 +247,14 @@ async function runQuiz(quizId: number): Promise<void> {
     .set({ status: "live", startedAt: quiz.startedAt ?? new Date(), updatedAt: new Date() })
     .where(eq(quizzesTable.id, quizId));
   await publishQuizEvent(quizId, { type: "quiz_status_changed", quizId, status: "live" });
+
+  // Fire the "live now" notification fan-out off the critical path. The
+  // dispatcher uses a CAS UPDATE on `notified_live_at` so a runner restart
+  // won't double-send. Errors never block the question loop — notifications
+  // are best-effort.
+  void dispatchQuizLivePings(quizId).catch((err) =>
+    log.warn({ err: (err as Error).message }, "live ping dispatch failed"),
+  );
 
   const state: RunnerState = {
     quizId,

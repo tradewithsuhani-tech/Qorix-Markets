@@ -2546,6 +2546,7 @@ components:
           type: object
           properties:
             requireKyc: { type: boolean }
+        notifyEnabled: { type: boolean }
         createdAt: { type: string }
         updatedAt: { type: string }
       required:
@@ -2558,6 +2559,7 @@ components:
         - prizeCurrency
         - prizeSplit
         - questionTimeMs
+        - notifyEnabled
         - createdAt
         - updatedAt
 
@@ -2672,6 +2674,7 @@ components:
           type: object
           properties:
             requireKyc: { type: boolean }
+        notifyEnabled: { type: boolean }
       required: [title, scheduledStartAt, prizePool]
 
     AdminUpdateQuizRequest:
@@ -2690,6 +2693,7 @@ components:
           type: object
           properties:
             requireKyc: { type: boolean }
+        notifyEnabled: { type: boolean }
 
     AdminForceStartResponse:
       type: object

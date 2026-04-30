@@ -565,6 +565,7 @@ export interface AdminQuiz {
   prizeSplit: number[];
   questionTimeMs: number;
   entryRules?: AdminQuizEntryRules;
+  notifyEnabled: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -644,6 +645,7 @@ export interface AdminCreateQuizRequest {
   prizeSplit?: number[];
   questionTimeMs?: number;
   entryRules?: AdminCreateQuizRequestEntryRules;
+  notifyEnabled?: boolean;
 }
 
 export type AdminUpdateQuizRequestEntryRules = {
@@ -659,6 +661,7 @@ export interface AdminUpdateQuizRequest {
   prizeSplit?: number[];
   questionTimeMs?: number;
   entryRules?: AdminUpdateQuizRequestEntryRules;
+  notifyEnabled?: boolean;
 }
 
 export interface AdminForceStartResponse {

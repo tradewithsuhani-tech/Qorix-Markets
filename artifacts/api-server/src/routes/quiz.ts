@@ -72,6 +72,7 @@ function serializeQuiz(q: typeof quizzesTable.$inferSelect) {
     prizeSplit: q.prizeSplit,
     questionTimeMs: q.questionTimeMs,
     entryRules: q.entryRules,
+    notifyEnabled: q.notifyEnabled,
     createdAt: q.createdAt.toISOString(),
     updatedAt: q.updatedAt.toISOString(),
   };
@@ -143,6 +144,7 @@ adminRouter.post("/admin/quizzes", async (req: AuthRequest, res) => {
     prizeSplit?: number[];
     questionTimeMs?: number;
     entryRules?: { requireKyc?: boolean };
+    notifyEnabled?: boolean;
   };
   const title = (b?.title ?? "").trim();
   if (title.length < 3 || title.length > 200) {
@@ -170,6 +172,7 @@ adminRouter.post("/admin/quizzes", async (req: AuthRequest, res) => {
     return;
   }
   const requireKyc = b?.entryRules?.requireKyc !== false; // default true
+  const notifyEnabled = b?.notifyEnabled !== false; // default true — admins opt-out per quiz
 
   const [created] = await db.insert(quizzesTable).values({
     title,
@@ -180,6 +183,7 @@ adminRouter.post("/admin/quizzes", async (req: AuthRequest, res) => {
     prizeSplit: split,
     questionTimeMs: qTime,
     entryRules: { requireKyc },
+    notifyEnabled,
     createdBy: req.userId ?? null,
   }).returning();
   res.status(201).json(serializeQuiz(created!));
@@ -224,6 +228,7 @@ adminRouter.patch("/admin/quizzes/:id", async (req: AuthRequest, res) => {
   if (b.entryRules && typeof b.entryRules === "object") {
     updates.entryRules = { requireKyc: (b.entryRules as { requireKyc?: boolean }).requireKyc !== false };
   }
+  if (typeof b.notifyEnabled === "boolean") updates.notifyEnabled = b.notifyEnabled;
   const [updated] = await db.update(quizzesTable).set(updates).where(eq(quizzesTable.id, id)).returning();
   res.json(serializeQuiz(updated!));
 });

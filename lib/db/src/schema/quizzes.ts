@@ -69,6 +69,17 @@ export const quizzesTable = pgTable("quizzes", {
   entryRules: jsonb("entry_rules").$type<{ requireKyc: boolean }>().notNull().default({
     requireKyc: true,
   }),
+  // Per-quiz toggle for the "starting in 5 min" + "live now" notifications.
+  // Default-on so admins don't have to remember to flip it for every quiz.
+  // Flipping this OFF on a quiz that was created with it on still suppresses
+  // pings as long as it's done at least one scheduler tick (5s) before the
+  // 5-min mark.
+  notifyEnabled: boolean("notify_enabled").notNull().default(true),
+  // Single-shot dedupe stamps for the two pre-quiz pings. We use a
+  // conditional UPDATE…WHERE … IS NULL …RETURNING in the dispatcher so the
+  // CAS is atomic across Fly machines without needing an extra Redis lock.
+  notifiedFiveMinAt: timestamp("notified_five_min_at"),
+  notifiedLiveAt: timestamp("notified_live_at"),
   // For server-side cache invalidation + audit. Always `usersTable.id` of an admin.
   createdBy: integer("created_by").references(() => usersTable.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),

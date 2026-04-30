@@ -21,6 +21,7 @@ import { and, eq, lte } from "drizzle-orm";
 import { logger } from "./logger";
 import { getRedisConnection } from "./redis";
 import { startQuizRunner } from "./quiz-runner";
+import { dispatchUpcomingFiveMinPings } from "./quiz-notifications";
 
 const SCHEDULER_TICK_MS = 5_000;
 const LOCK_PREFIX = "qz:runner-lock:v1:";
@@ -56,8 +57,17 @@ async function releaseLock(quizId: number): Promise<void> {
 
 async function tick(): Promise<void> {
   if (stopped) return;
-  // Find scheduled quizzes whose start time has arrived. Index
-  // `quizzes_status_start_idx` makes this O(matches).
+
+  // ── 1. Pre-quiz "starting in 5 min" pings ────────────────────────────────
+  // Cheap: a single indexed select bounded by the same status filter as
+  // below. Errors here MUST NOT prevent the runner-spawn step that follows
+  // (notifications are best-effort; quiz execution is core).
+  await dispatchUpcomingFiveMinPings().catch((err) =>
+    logger.warn({ err: (err as Error).message }, "[quiz-scheduler] 5-min ping dispatch error"),
+  );
+
+  // ── 2. Spawn runners for quizzes whose start time has arrived ────────────
+  // Index `quizzes_status_start_idx` makes this O(matches).
   const due = await db
     .select({ id: quizzesTable.id })
     .from(quizzesTable)

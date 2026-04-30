@@ -186,12 +186,14 @@ function CreateQuizDialog({ open, onOpenChange, onCreated }: { open: boolean; on
   const [prizePool, setPrizePool] = useState("100");
   const [prizeCurrency, setPrizeCurrency] = useState("USDT");
   const [questionTimeSec, setQuestionTimeSec] = useState(15);
+  const [notifyEnabled, setNotifyEnabled] = useState(true);
 
   // Reset on open so the form is fresh each time.
   useEffect(() => {
     if (open) {
       setTitle(""); setDescription(""); setScheduledStartAt("");
       setPrizePool("100"); setPrizeCurrency("USDT"); setQuestionTimeSec(15);
+      setNotifyEnabled(true);
     }
   }, [open]);
 
@@ -208,6 +210,7 @@ function CreateQuizDialog({ open, onOpenChange, onCreated }: { open: boolean; on
         prizePool: prizePool || "0",
         prizeCurrency,
         questionTimeMs: questionTimeSec * 1000,
+        notifyEnabled,
       } });
       onCreated(res.id);
       toast({ title: "Quiz scheduled", description: "Now add 5 questions before the start time." });
@@ -230,6 +233,21 @@ function CreateQuizDialog({ open, onOpenChange, onCreated }: { open: boolean; on
             <Field label="Currency"><Input value={prizeCurrency} onChange={(e) => setPrizeCurrency(e.target.value)} /></Field>
             <Field label="Time/Q (s)"><Input type="number" min={5} max={30} value={questionTimeSec} onChange={(e) => setQuestionTimeSec(parseInt(e.target.value || "15", 10))} /></Field>
           </div>
+          <label className="flex items-start gap-2 text-sm pt-1">
+            <input
+              type="checkbox"
+              data-testid="checkbox-quiz-notify"
+              checked={notifyEnabled}
+              onChange={(e) => setNotifyEnabled(e.target.checked)}
+              className="mt-0.5"
+            />
+            <span>
+              Email + push joined players
+              <span className="block text-xs text-muted-foreground">
+                Sends a "starts in 5 min" ping and a "live now" ping to everyone who has joined.
+              </span>
+            </span>
+          </label>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
@@ -267,6 +285,7 @@ function DetailEditor({ id, onBack, onMonitor, onResults }: { id: number; onBack
   const [prizeCurrency, setPrizeCurrency] = useState("");
   const [questionTimeSec, setQuestionTimeSec] = useState(15);
   const [requireKyc, setRequireKyc] = useState(true);
+  const [notifyEnabled, setNotifyEnabled] = useState(true);
 
   useEffect(() => {
     if (!quiz) return;
@@ -277,6 +296,7 @@ function DetailEditor({ id, onBack, onMonitor, onResults }: { id: number; onBack
     setPrizeCurrency(quiz.prizeCurrency);
     setQuestionTimeSec(Math.round((quiz.questionTimeMs ?? 15000) / 1000));
     setRequireKyc(quiz.entryRules?.requireKyc !== false);
+    setNotifyEnabled(quiz.notifyEnabled !== false);
   }, [quiz]);
 
   if (!quiz) {
@@ -301,6 +321,7 @@ function DetailEditor({ id, onBack, onMonitor, onResults }: { id: number; onBack
         prizeCurrency,
         questionTimeMs: questionTimeSec * 1000,
         entryRules: { requireKyc },
+        notifyEnabled,
       } });
       await refetch();
       toast({ title: "Saved" });
@@ -359,6 +380,22 @@ function DetailEditor({ id, onBack, onMonitor, onResults }: { id: number; onBack
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={requireKyc} disabled={!isScheduled} onChange={(e) => setRequireKyc(e.target.checked)} />
             Require KYC to join
+          </label>
+          <label className="flex items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              data-testid="checkbox-quiz-notify-edit"
+              checked={notifyEnabled}
+              disabled={!isScheduled}
+              onChange={(e) => setNotifyEnabled(e.target.checked)}
+              className="mt-0.5"
+            />
+            <span>
+              Email + push joined players
+              <span className="block text-xs text-muted-foreground">
+                Sends a "starts in 5 min" ping and a "live now" ping to everyone who has joined.
+              </span>
+            </span>
           </label>
           {isScheduled && (
             <div className="flex justify-end pt-1">

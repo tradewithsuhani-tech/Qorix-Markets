@@ -978,6 +978,7 @@ export const GetMyPastQuizzesResponse = zod.object({
             requireKyc: zod.boolean().optional(),
           })
           .optional(),
+        notifyEnabled: zod.boolean(),
         createdAt: zod.string(),
         updatedAt: zod.string(),
       })
@@ -1021,6 +1022,7 @@ export const GetQuizDetailResponse = zod.object({
         requireKyc: zod.boolean().optional(),
       })
       .optional(),
+    notifyEnabled: zod.boolean(),
     createdAt: zod.string(),
     updatedAt: zod.string(),
   }),
@@ -1117,6 +1119,7 @@ export const AdminListQuizzesResponse = zod.object({
           requireKyc: zod.boolean().optional(),
         })
         .optional(),
+      notifyEnabled: zod.boolean(),
       createdAt: zod.string(),
       updatedAt: zod.string(),
     }),
@@ -1139,6 +1142,7 @@ export const AdminCreateQuizBody = zod.object({
       requireKyc: zod.boolean().optional(),
     })
     .optional(),
+  notifyEnabled: zod.boolean().optional(),
 });
 
 /**
@@ -1161,6 +1165,7 @@ export const AdminUpdateQuizBody = zod.object({
       requireKyc: zod.boolean().optional(),
     })
     .optional(),
+  notifyEnabled: zod.boolean().optional(),
 });
 
 export const AdminUpdateQuizResponse = zod.object({
@@ -1180,6 +1185,7 @@ export const AdminUpdateQuizResponse = zod.object({
       requireKyc: zod.boolean().optional(),
     })
     .optional(),
+  notifyEnabled: zod.boolean(),
   createdAt: zod.string(),
   updatedAt: zod.string(),
 });
@@ -1390,6 +1396,7 @@ export const AdminMonitorQuizResponse = zod.object({
         requireKyc: zod.boolean().optional(),
       })
       .optional(),
+    notifyEnabled: zod.boolean(),
     createdAt: zod.string(),
     updatedAt: zod.string(),
   }),
@@ -1439,6 +1446,7 @@ export const AdminGetQuizResultsResponse = zod.object({
         requireKyc: zod.boolean().optional(),
       })
       .optional(),
+    notifyEnabled: zod.boolean(),
     createdAt: zod.string(),
     updatedAt: zod.string(),
   }),
