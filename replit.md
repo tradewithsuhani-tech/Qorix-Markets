@@ -2952,3 +2952,41 @@ Both users' ledger_main = wallet_main exactly after backfill.
   hypothesis.
 - Push to GitHub `a6a86325` succeeded, CI `Deploy to Fly.io` triggered
   and in_progress at time of write.
+
+### Closed (2026-04-30 ~15:09 UTC)
+
+- CI `Deploy to Fly.io` for `a6a86325` completed `success` at 15:00:45 UTC.
+  Jobs: `Detect changed paths` ✓, `Verify required secrets are
+  configured` ✓, `Typecheck monorepo` ✓, `Deploy api-server →
+  qorix-api` ✓, `Deploy qorix-markets → qorix-markets-web` skipped
+  (no web changes). Prod `qorix-api.fly.dev/api/health` returns 401
+  (auth required, route exists, service responsive).
+- Operator ran `reconcile-orphan-inr-withdrawals.ts --apply`. Output
+  confirms exactly the 4 orphans were processed in one transaction:
+  ```
+  ✓ WD#1  user=117 (looxprem@gmail.com)     $102.040816 → txn#1282, journal=inr_wd:1:approve
+  ✓ WD#2  user=117 (looxprem@gmail.com)     $10.204082  → txn#1283, journal=inr_wd:2:approve
+  ✓ WD#3  user=117 (looxprem@gmail.com)     $1.020408   → txn#1284, journal=inr_wd:3:approve
+  ✓ WD#4  user=143 (bimleshgroup@gmail.com) $1.020408   → txn#1285, journal=inr_wd:4:approve
+
+  Post-flight verification:
+    ✓ user 117 (looxprem@gmail.com):     wallet=248.877552  ledger=248.877552  diff=0.000000
+    ✓ user 143 (bimleshgroup@gmail.com): wallet=9.285715    ledger=9.285715    diff=0.000000
+
+  ✅ COMMITTED. Reconciliation complete.
+  ```
+- Reconciliation transactions live in prod: `transactions.id` 1282-1285
+  with `idempotency_key=NULL` (legacy backfill — see B22 follow-up
+  candidate to migrate the lookup pattern from description-LIKE to
+  idempotency_key for new submissions). Ledger journals visible at
+  `journal_id IN ('inr_wd:1:approve', 'inr_wd:2:approve',
+  'inr_wd:3:approve', 'inr_wd:4:approve')` with the 2-line direct
+  settlement pattern (debit `user:117:main`/`user:143:main`,
+  credit `platform:usdt_pool`).
+- B21 fully closed. Going forward every INR withdrawal posts proper
+  lock/release/refund journals at submit/approve/reject so this drift
+  class cannot recur. The `/wallet/transfer` race is also closed.
+- All three previously drifted users now match exactly:
+  abodh3999 (136 — fixed by B20 GL ensure on next transfer; previously
+  verified), looxprem (117 — drift $113.27 closed today),
+  bimleshgroup (143 — drift $1.02 closed today).
