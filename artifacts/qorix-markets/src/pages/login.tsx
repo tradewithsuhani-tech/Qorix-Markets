@@ -1073,7 +1073,7 @@ export default function LoginPage() {
           <div className="w-12 h-12 rounded-xl overflow-hidden flex items-center justify-center shadow-[0_0_22px_rgba(59,130,246,0.38)]">
             <QorixLogo size={48} />
           </div>
-          <span className="text-xl font-bold">Qorix<span className="text-primary font-light">Markets</span></span>
+          <span className="text-xl font-bold">Qorix{" "}<span className="text-primary font-light">Markets</span></span>
         </div>
 
         <div className="glass-card rounded-2xl p-7 space-y-6">

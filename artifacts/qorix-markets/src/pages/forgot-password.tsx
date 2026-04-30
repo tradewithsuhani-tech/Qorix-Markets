@@ -96,7 +96,7 @@ export default function ForgotPasswordPage() {
               <QorixLogo size={48} />
             </div>
             <span className="text-2xl font-bold text-white">
-              Qorix<span className="text-blue-400">Markets</span>
+              Qorix{" "}<span className="text-blue-400">Markets</span>
             </span>
           </div>
         </div>

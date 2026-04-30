@@ -58,7 +58,7 @@ export function SplashScreen({ onDone }: { onDone: () => void }) {
             className="text-center"
           >
             <div className="text-3xl font-bold tracking-tight text-white leading-none">
-              Qorix<span className="text-blue-400">Markets</span>
+              Qorix{" "}<span className="text-blue-400">Markets</span>
             </div>
             <div className="text-[11px] font-medium tracking-[0.25em] uppercase text-muted-foreground mt-2">
               Pro Trading Terminal

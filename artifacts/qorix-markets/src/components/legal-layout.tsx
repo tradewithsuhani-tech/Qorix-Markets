@@ -33,7 +33,7 @@ export function LegalLayout({ title, subtitle, effectiveDate, sections }: LegalL
               <div className="w-6 h-6 rounded flex items-center justify-center" style={{ background: "linear-gradient(135deg,#2563eb,#7c3aed)" }}>
                 <TrendingUp size={11} className="text-white" />
               </div>
-              <span className="font-black text-sm text-white">Qorix<span style={{ background: "linear-gradient(90deg,#38bdf8,#818cf8)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>Markets</span></span>
+              <span className="font-black text-sm text-white">Qorix{" "}<span style={{ background: "linear-gradient(90deg,#38bdf8,#818cf8)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>Markets</span></span>
             </div>
           </div>
           <div className="text-xs text-slate-500 hidden sm:block">Effective {effectiveDate}</div>
