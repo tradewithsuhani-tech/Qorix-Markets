@@ -3264,3 +3264,64 @@ Also in this batch — orphan login_events delete:
   Post-delete: `login_events` = 134, orphan_login_evts = 0.
 
 No schema changes. No db:push. Pure frontend tweak + targeted DML.
+
+# B26 — partial unique index on LOWER(email) (closed 2026-04-30)
+
+DB-level hardening for B24's email normalization, applied directly
+on NEON_DATABASE_URL via psql (no schema-file change, no db:push).
+
+Pre-flight check (executed first to ensure no case-only dup would
+block the index creation):
+
+  SELECT LOWER(email), COUNT(*), array_agg(id), array_agg(email)
+  FROM users
+  GROUP BY LOWER(email)
+  HAVING COUNT(*) > 1;
+  -- result: 0 rows ✅
+
+DDL applied (CONCURRENTLY → no table lock, idempotent):
+
+  CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS users_email_lower_unique
+  ON users (LOWER(email));
+
+Verification:
+  - pg_indexes shows BOTH coexist:
+      users_email_unique        (case-sensitive btree on email,
+                                 original from initial schema)
+      users_email_lower_unique  (UNIQUE btree on lower(email),
+                                 NEW B26)
+  - pg_index.indisvalid = t for both.
+
+Functional sanity test (executed inside BEGIN..ROLLBACK so no row
+persisted):
+
+  INSERT INTO users (email, password_hash, full_name, referral_code)
+  VALUES ('LOOXPREM@GMAIL.COM', 'x', '_test_dup', 'TEST_DUP_REF_2026');
+  -- looxprem@gmail.com already exists at id 117
+  -- ✅ unique_violation 23505 caught — index ENFORCING
+
+Why both indexes? users_email_unique stays so existing Drizzle
+generated SQL keeps working. users_email_lower_unique is the
+defense-in-depth: even if a future code path forgets to .toLowerCase()
+before INSERT, Postgres rejects the dup at the DB layer with the
+same 23505 the B24 try/catch already handles.
+
+# Real signup observed during this batch — id 153 (post-B24, pre-B25)
+
+bimleshgroup@gmail.com / Vimlesh kumar registered at
+2026-04-30 17:28:35 UTC, AFTER B24 (16:40 UTC) and BEFORE B25
+(17:38 UTC). End-to-end proof the prod flow works:
+
+  - email_verified = TRUE  → B23 verification gate completed
+  - email stored lowercase → B24 normalization active
+  - sponsor_id = 117 (RAJIV PURI / looxprem@gmail.com)
+  - referral_code = QXD4B56FE3 (auto-generated)
+  - points = 25 (referral bonus credited atomically)
+  - login_events row 232 type='register' from IPv6
+    2409:40d0:e:cc5f:8000:: — audit trail intact
+
+Distinct from the deleted Vimlesh1group@gmail.com case-only dup
+(ids 132 / 142, both gone in mass cleanup) — this is a different
+human signing up via RAJIV's referral link.
+
+Post-B26 user count: 10 (9 keepers + 1 new real signup).
