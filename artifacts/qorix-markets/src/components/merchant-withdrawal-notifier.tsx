@@ -86,22 +86,43 @@ export function MerchantWithdrawalNotifier() {
     );
     const currentIds = new Set(unclaimed.map((w) => w.id));
 
+    // Build the next "seen" set such that:
+    //   - ids that disappeared from current (claimed/processed) are dropped
+    //   - ids that were already seen stay seen
+    //   - brand-new ids are NOT auto-marked seen — they remain eligible to
+    //     pop on a future tick (so a burst of 5 withdrawals all get a popup,
+    //     not just the first one)
+    function nextSeenFrom(prior: Set<number>, popJustShownId?: number) {
+      const next = new Set<number>();
+      for (const id of currentIds) {
+        if (prior.has(id)) next.add(id);
+      }
+      if (popJustShownId !== undefined) next.add(popJustShownId);
+      return next;
+    }
+
+    // First successful response → snapshot everything currently pending so we
+    // don't flood the merchant with backlog popups on tab open.
     if (seenIdsRef.current === null) {
       seenIdsRef.current = currentIds;
       return;
     }
 
+    // If currently shown popup got claimed by someone else → silently dismiss
+    // and re-evaluate (without losing track of other unseen items).
     if (popup && !currentIds.has(popup.id)) {
       setPopup(null);
-      seenIdsRef.current = currentIds;
+      seenIdsRef.current = nextSeenFrom(seenIdsRef.current);
       return;
     }
 
+    // Refresh popup record so latest fields stay in sync.
     if (popup) {
       const latest = unclaimed.find((w) => w.id === popup.id);
       if (latest && latest !== popup) setPopup(latest);
     }
 
+    // Find the freshest unclaimed withdrawal that's brand new and not dismissed.
     const fresh = unclaimed.find(
       (w) =>
         !seenIdsRef.current!.has(w.id) && !dismissedIdsRef.current.has(w.id),
@@ -110,9 +131,12 @@ export function MerchantWithdrawalNotifier() {
     if (fresh && !popup) {
       setPopup(fresh);
       playWithdrawalChime();
+      seenIdsRef.current = nextSeenFrom(seenIdsRef.current, fresh.id);
+    } else {
+      // Either nothing fresh, or popup already shown. Either way, do NOT
+      // auto-mark unseen ids as seen — let them pop on a later tick.
+      seenIdsRef.current = nextSeenFrom(seenIdsRef.current);
     }
-
-    seenIdsRef.current = currentIds;
   }, [data, popup]);
 
   function dismiss() {
@@ -138,12 +162,27 @@ export function MerchantWithdrawalNotifier() {
       });
       dismiss();
     },
-    onError: (e) =>
+    onError: (e) => {
+      const msg = e instanceof Error ? e.message : String(e);
+      // Backend returns 409 with body "Withdrawal already claimed by another
+      // merchant" when we lose the race. That's an expected outcome of the
+      // first-claim-wins broadcast, NOT an error — show a calmer toast and
+      // close the now-stale popup so the merchant can move on.
+      const isLostRace = /already claimed/i.test(msg);
       toast({
-        title: "Claim failed",
-        description: e instanceof Error ? e.message : String(e),
-        variant: "destructive",
-      }),
+        title: isLostRace ? "Already claimed" : "Claim failed",
+        description: isLostRace
+          ? "Another merchant claimed this withdrawal first."
+          : msg,
+        variant: isLostRace ? "default" : "destructive",
+      });
+      if (isLostRace) {
+        qc.invalidateQueries({
+          queryKey: ["merchant-pending-withdrawals-notify"],
+        });
+        dismiss();
+      }
+    },
   });
 
   if (!popup) return null;
