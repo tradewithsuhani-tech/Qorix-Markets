@@ -2578,3 +2578,74 @@ new instant-scroll signature `scrollTo({top:0,left:0,behavior:"auto"})`
 appears 1× as expected. The previous `behavior:"smooth"` shape for
 this useEffect is gone (the only other `scrollTo(0,...)` hit comes
 from wouter's saved-scroll restore, unchanged).
+
+### Phase B17 — admin/users action row collapsed into Freeze + Disable + 3-dot dropdown (2026-04-30, commit `e32b201bc5`)
+
+**Symptom.** The User Management table in `/admin/users` was rendering
+six inline action buttons per row (Freeze, Disable, Force logout,
+Balance, Edit Profile, Send Mail). On 13″ admin laptops and on the
+narrow phone admin view the row overflowed horizontally, hid the
+status badges behind the action column, and made each row visually
+heavy when the user just wanted to scan the list.
+
+**Fix.** Reduced the inline action set to the two highest-frequency
+toggles — Freeze and Disable — and collapsed the rest behind a single
+3-dot menu (`MoreVertical` icon) aligned to the right of those two
+buttons. The dropdown uses the existing shadcn `dropdown-menu`
+primitives that the project already ships, so styling/animation/focus
+trap behaviour matches the rest of the admin shell. Dropdown contents
+(top → bottom): **Devices**, **Send Mail**, **Edit Profile**,
+**Balance**, separator, **Force Logout** (visually grouped at the
+bottom because it is the most destructive item). Each dropdown item
+opens a popup with the relevant details — never a silent inline
+action — which was the explicit user requirement.
+
+**New popups (file-local, no new files).** Two new modal components
+were added to `artifacts/qorix-markets/src/pages/admin-modules.tsx`,
+both following the same `fixed inset-0 z-50 bg-black/70 backdrop-blur-sm`
++ glass-card + `onClick stopPropagation` shell pattern used by
+`BalanceAdjustModal` / `EditProfileModal` / `SendEmailModal`:
+
+* **`DevicesModal`** — read-only list of every device this user has
+  signed in from. Hits the existing
+  `GET /admin/fraud/users/:userId/devices` endpoint
+  (`artifacts/api-server/src/routes/fraud.ts` line 227, already
+  deployed and used by the Fraud module). Each row shows browser
+  label, OS label, first-seen + last-seen timestamps, last IP, last
+  city/country, and an amber "alert sent" line when the new-device
+  email alert was already dispatched. No write operations whatsoever.
+* **`ConfirmForceLogoutModal`** — small confirmation popup wrapping
+  the existing `POST /admin/users/:id/action` `{action:"force_logout"}`
+  call (the same backend endpoint the previous inline button hit). It
+  shows the target user's name + email + ID, explains exactly what
+  will happen ("revoke every active session... user will be signed
+  out immediately... account/balances/KYC NOT affected"), and offers
+  Cancel / Force Logout buttons with a `Loader2` spinner during
+  submit. Toast feedback on both success and error.
+
+**State + wiring.** `AdminUsersPage` got two new `useState<any|null>`
+slots — `devicesUser` and `confirmLogoutUser` — and both modals were
+plugged into the existing `<AnimatePresence>` block right after
+`SendEmailModal`. The dropdown items call `setDevicesUser(u)`,
+`setEmailUser(u)`, `setEditUser(u)`, `setAdjustUser(u)`,
+`setConfirmLogoutUser(u)` respectively (the first four reuse the
+already-existing modal flows, no behaviour change).
+
+**Imports.** Added `MoreVertical`, `Smartphone`, `LogOut` from
+`lucide-react`; added `DropdownMenu`, `DropdownMenuTrigger`,
+`DropdownMenuContent`, `DropdownMenuItem`, `DropdownMenuLabel`,
+`DropdownMenuSeparator` from `@/components/ui/dropdown-menu` (shadcn
+primitives already in the repo).
+
+**Scope discipline.** Frontend only. Zero changes to API routes,
+zero changes to the Drizzle schema, zero SQL, zero migrations. The
+same backend endpoints that powered the previous inline buttons
+power the new dropdown items unchanged.
+
+**Verification.** CI run `25149684714` for commit `e32b201bc5`
+completed success. Prod `/version.json` builtAt
+`2026-04-30T05:51:53Z`, JS bundle hash flipped to
+`index-BkorJT1Z.js`. `tsc --noEmit` clean for `admin-modules.tsx`.
+File size grew from 2308 → 2531 lines (+223 lines for the two new
+modals + dropdown markup; the action-row replacement itself is
+roughly net-flat).
