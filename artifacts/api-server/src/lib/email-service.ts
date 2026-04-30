@@ -7623,6 +7623,215 @@ export async function sendKycRejected(args: {
 }
 
 // ---------------------------------------------------------------------------
+// #27.5 — KYC VERIFICATION REQUESTED — admin nudge / "please verify" email
+// ---------------------------------------------------------------------------
+// ROYAL-PLUM + GOLD-LEAF theme: deep midnight + rich plum-violet card +
+// warm gold-leaf accents. Tone: PRIVATE-BANKING / PREMIUM INVITATION —
+// "we'd like you to complete a one-time verification before we unlock
+// the rest of your account." 36th unique palette. Distinct from teal
+// (kyc-submitted #25), imperial-plum+gold-leaf (kyc-verified #26 —
+// celebratory), and amber-hazard (alert-broadcast — alarming). This is
+// the *invitation* counterpart to those: warm, formal, action-oriented.
+//
+// Layout: pinstripe ribbon top · diagonal-gradient logo bar · hero pill
+// ("KYC Verification · Action Required") + dynamic title · admin-typed
+// body card (premium plum, gold border, violet glow) · structured
+// 3-document checklist card (ID / Selfie / Address Proof) · primary
+// "Verify Now" gradient CTA · "Bank-grade security" reassurance pill ·
+// footer · pinstripe ribbon bottom.
+//
+// Wired from /admin/users/:id/send-email when templateId === "kyc". The
+// admin's free-form {subject, message} flows into the `title` and
+// `bodyHtml` slots so admins can still customise the wording from the
+// communication-page template editor — only the surrounding chrome,
+// document checklist, CTA and reassurance pill are baked into the
+// renderer for visual consistency.
+// ---------------------------------------------------------------------------
+export function renderKycVerificationRequestedHtml(opts: {
+  preheader: string;
+  title: string;
+  bodyHtml: string;
+  ctaUrl?: string;
+}): string {
+  const { preheader, title, bodyHtml, ctaUrl } = opts;
+  const safeTitle = escapeHtml(title);
+  const safeCtaUrl = ctaUrl || "https://qorixmarkets.com/kyc";
+  const year = new Date().getFullYear();
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="x-apple-disable-message-reformatting" />
+<meta name="color-scheme" content="dark light" />
+<meta name="supported-color-schemes" content="dark light" />
+<title>${safeTitle} — Qorix Markets</title>
+<style type="text/css">
+  @media only screen and (max-width:480px) {
+    .qx-outer { padding:20px 10px !important; }
+    .qx-card { border-radius:18px !important; }
+    .qx-hero-pad { padding:6px 18px 24px !important; }
+    .qx-hero-h { font-size:23px !important; line-height:1.22 !important; }
+    .qx-body-pad { padding:24px 18px 4px !important; }
+    .qx-checklist-pad { padding:18px 18px 4px !important; }
+    .qx-check-row td { padding:14px 12px !important; }
+    .qx-check-icon { font-size:20px !important; }
+    .qx-check-title { font-size:13.5px !important; }
+    .qx-check-desc { font-size:11.5px !important; }
+    .qx-cta-pad { padding:20px 18px 4px !important; }
+    .qx-cta { padding:15px 30px !important; font-size:14px !important; }
+    .qx-secure-pad { padding:18px 18px 4px !important; }
+    .qx-foot-pad { padding:24px 18px 22px !important; }
+  }
+</style>
+</head>
+<body style="margin:0;padding:0;background:#0B0814;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;">
+<div style="display:none;max-height:0;overflow:hidden;font-size:1px;line-height:1px;color:#0B0814;opacity:0;">${escapeHtml(preheader)}</div>
+<div style="display:none;max-height:0;overflow:hidden;">&#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847;</div>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="qx-outer" style="background:#0B0814;padding:32px 16px;">
+  <tr><td align="center">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="qx-card" style="max-width:560px;background:#1A0F2E;border:1px solid rgba(168,139,250,0.40);border-radius:22px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,0.75);">
+
+      <!-- Premium pinstripe ribbon top — violet→gold→violet -->
+      <tr>
+        <td style="height:10px;line-height:10px;font-size:1px;background:#0B0814;background-image:linear-gradient(90deg,#8B5CF6 0%,#A78BFA 22%,#FCD34D 50%,#A78BFA 78%,#8B5CF6 100%);">&nbsp;</td>
+      </tr>
+
+      <!-- LOGO BAR — diagonal plum→violet gradient -->
+      <tr>
+        <td align="left" style="padding:20px 24px 0 28px;background:#0B0814;background-image:linear-gradient(135deg,#0B0814 0%,#1A0F2E 38%,#5B21B6 76%,#8B5CF6 100%);">
+          <img src="cid:${BRAND_LOGO_CID}" alt="Qorix Markets" width="320" height="217" style="display:block;width:320px;max-width:90%;height:auto;border:0;outline:none;text-decoration:none;margin:0;" />
+        </td>
+      </tr>
+
+      <!-- HERO — gold "Action Required" pill + dynamic title -->
+      <tr>
+        <td class="qx-hero-pad" align="center" style="padding:8px 32px 30px;background:#0B0814;background-image:linear-gradient(135deg,#0B0814 0%,#1A0F2E 38%,#5B21B6 76%,#8B5CF6 100%);">
+          <div style="display:inline-block;padding:7px 16px;border-radius:999px;background:rgba(252,211,77,0.20);border:1px solid rgba(252,211,77,0.65);font-size:10.5px;letter-spacing:2.4px;color:#FCD34D;font-weight:800;text-transform:uppercase;margin-bottom:18px;">
+            <span style="display:inline-block;width:6px;height:6px;border-radius:999px;background:#FCD34D;box-shadow:0 0 8px rgba(252,211,77,0.85);vertical-align:middle;margin-right:7px;"></span>
+            <span style="vertical-align:middle;">🛡 KYC Verification · Action Required</span>
+          </div>
+          <div class="qx-hero-h" style="font-size:28px;line-height:1.2;font-weight:800;color:#FFFFFF;letter-spacing:-0.5px;max-width:480px;margin:0 auto;">
+            ${safeTitle}
+          </div>
+          <div style="width:48px;height:3px;background:linear-gradient(90deg,#FCD34D 0%,#F59E0B 100%);margin:18px auto 0;border-radius:999px;"></div>
+        </td>
+      </tr>
+
+      <!-- BODY — admin-typed message in a premium plum card -->
+      <tr>
+        <td class="qx-body-pad" style="padding:30px 32px 8px;">
+          <div style="font-size:10.5px;letter-spacing:2.4px;color:#FCD34D;font-weight:700;text-transform:uppercase;text-align:left;padding:0 0 14px 0;">
+            Why we're reaching out
+          </div>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#221636;background-image:linear-gradient(180deg,#241636 0%,#150A26 100%);border:1.5px solid rgba(168,139,250,0.45);border-radius:14px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.04),0 0 28px rgba(139,92,246,0.20);">
+            <tr><td style="padding:22px 22px;font-size:14.5px;color:#E2D8FF;line-height:1.7;font-weight:500;">${bodyHtml}</td></tr>
+          </table>
+        </td>
+      </tr>
+
+      <!-- WHAT YOU NEED — structured 3-document checklist -->
+      <tr>
+        <td class="qx-checklist-pad" style="padding:24px 32px 8px;">
+          <div style="font-size:10.5px;letter-spacing:2.4px;color:#FCD34D;font-weight:700;text-transform:uppercase;text-align:left;padding:0 0 14px 0;">
+            What You'll Need · Takes 3 Minutes
+          </div>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#1A0F2E;background-image:linear-gradient(135deg,#241636 0%,#1A0F2E 100%);border:1.5px solid rgba(252,211,77,0.45);border-radius:14px;box-shadow:0 0 24px rgba(252,211,77,0.10);">
+            <tr class="qx-check-row">
+              <td valign="top" width="44" style="padding:18px 4px 14px 18px;" class="qx-check-icon">
+                <div style="font-size:22px;line-height:1;">📋</div>
+              </td>
+              <td valign="top" style="padding:18px 18px 14px 4px;">
+                <div class="qx-check-title" style="font-size:14.5px;color:#FFFFFF;font-weight:700;line-height:1.35;letter-spacing:-0.1px;">Government-Issued Photo ID</div>
+                <div class="qx-check-desc" style="font-size:12px;color:#A89BCA;font-weight:500;line-height:1.5;margin-top:3px;">Passport · Driving Licence · Aadhaar · National ID</div>
+              </td>
+            </tr>
+            <tr><td colspan="2" style="padding:0 18px;"><div style="height:1px;background:rgba(168,139,250,0.20);font-size:1px;line-height:1px;">&nbsp;</div></td></tr>
+            <tr class="qx-check-row">
+              <td valign="top" width="44" style="padding:14px 4px 14px 18px;" class="qx-check-icon">
+                <div style="font-size:22px;line-height:1;">📸</div>
+              </td>
+              <td valign="top" style="padding:14px 18px 14px 4px;">
+                <div class="qx-check-title" style="font-size:14.5px;color:#FFFFFF;font-weight:700;line-height:1.35;letter-spacing:-0.1px;">Clear Selfie Holding Same ID</div>
+                <div class="qx-check-desc" style="font-size:12px;color:#A89BCA;font-weight:500;line-height:1.5;margin-top:3px;">Face clearly visible · ID readable · taken just now</div>
+              </td>
+            </tr>
+            <tr><td colspan="2" style="padding:0 18px;"><div style="height:1px;background:rgba(168,139,250,0.20);font-size:1px;line-height:1px;">&nbsp;</div></td></tr>
+            <tr class="qx-check-row">
+              <td valign="top" width="44" style="padding:14px 4px 18px 18px;" class="qx-check-icon">
+                <div style="font-size:22px;line-height:1;">🏠</div>
+              </td>
+              <td valign="top" style="padding:14px 18px 18px 4px;">
+                <div class="qx-check-title" style="font-size:14.5px;color:#FFFFFF;font-weight:700;line-height:1.35;letter-spacing:-0.1px;">Recent Address Proof</div>
+                <div class="qx-check-desc" style="font-size:12px;color:#A89BCA;font-weight:500;line-height:1.5;margin-top:3px;">Utility bill · Bank statement · &lt; 3 months old</div>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+
+      <!-- CTA — premium violet→gold gradient button -->
+      <tr>
+        <td align="center" class="qx-cta-pad" style="padding:24px 32px 8px;">
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+            <tr>
+              <td align="center" bgcolor="#8B5CF6" style="border-radius:14px;background:#8B5CF6;background-image:linear-gradient(135deg,#8B5CF6 0%,#A78BFA 45%,#FCD34D 100%);box-shadow:0 14px 32px rgba(139,92,246,0.45),inset 0 1px 0 rgba(255,255,255,0.20);border:1px solid rgba(252,211,77,0.50);">
+                <a href="${safeCtaUrl}" target="_blank" class="qx-cta" style="display:inline-block;padding:17px 40px;font-size:15.5px;font-weight:700;color:#0B0814;text-decoration:none;letter-spacing:0.4px;border-radius:14px;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+                  🚀&nbsp;&nbsp;Verify My KYC Now&nbsp;&nbsp;→
+                </a>
+              </td>
+            </tr>
+          </table>
+          <div style="margin-top:14px;font-size:11.5px;color:#7A6FA0;letter-spacing:0.4px;">
+            Most reviews complete <span style="color:#FCD34D;font-weight:700;">within 24 hours</span>
+          </div>
+        </td>
+      </tr>
+
+      <!-- BANK-GRADE SECURITY reassurance pill -->
+      <tr>
+        <td class="qx-secure-pad" style="padding:24px 32px 8px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:rgba(252,211,77,0.06);background-image:linear-gradient(90deg,rgba(252,211,77,0.10) 0%,rgba(139,92,246,0.08) 100%);border-left:3px solid rgba(252,211,77,0.65);border-radius:8px;">
+            <tr>
+              <td style="padding:16px 18px;">
+                <div style="font-size:10.5px;letter-spacing:2px;color:#FCD34D;font-weight:800;text-transform:uppercase;line-height:1;margin-bottom:8px;">🔒 Bank-Grade Security</div>
+                <div style="font-size:13px;color:#C4B8E8;font-weight:500;line-height:1.65;">
+                  Your documents are end-to-end encrypted in transit and at rest, and used <strong style="color:#E2D8FF;">only</strong> for identity verification. We never share them with third parties.
+                </div>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+
+      <!-- FOOTER -->
+      <tr>
+        <td class="qx-foot-pad" align="center" style="padding:30px 32px 28px;border-top:1px solid rgba(168,139,250,0.10);background:#070411;">
+          <div style="font-size:13px;color:#FCD34D;margin-bottom:6px;font-weight:600;">
+            Trade smart 📈
+          </div>
+          <div style="font-size:11.5px;color:#5A4D7A;line-height:1.7;">
+            © ${year} Qorix Markets · AI-Powered Trading<br/>
+            Need help? <a href="mailto:support@qorixmarkets.com" style="color:#FCD34D;text-decoration:none;">support@qorixmarkets.com</a>
+          </div>
+        </td>
+      </tr>
+
+      <!-- Premium pinstripe ribbon bottom -->
+      <tr>
+        <td style="height:10px;line-height:10px;font-size:1px;background:#0B0814;background-image:linear-gradient(90deg,#8B5CF6 0%,#A78BFA 22%,#FCD34D 50%,#A78BFA 78%,#8B5CF6 100%);">&nbsp;</td>
+      </tr>
+
+    </table>
+    <div style="height:24px;line-height:24px;font-size:1px;">&nbsp;</div>
+  </td></tr>
+</table>
+</body></html>`;
+}
+
+// ---------------------------------------------------------------------------
 // #28 — USDT WITHDRAWAL SENT ON-CHAIN — broadcast confirmation
 // ---------------------------------------------------------------------------
 // HOLOGRAPHIC MIDNIGHT + IRIDESCENT-VIOLET-CYAN theme: deep midnight black +

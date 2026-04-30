@@ -14,6 +14,21 @@ export function escapeHtml(s: string): string {
 // break image rendering in already-queued emails.
 export const BRAND_LOGO_CID = "qorix-logo@brand";
 
+// Convert a plain-text message (admin-typed multi-line body with URLs +
+// newlines) into safe HTML suitable for dropping into a renderer's
+// `bodyHtml` slot — escapes HTML, auto-linkifies http/https URLs, and
+// preserves newlines as <br/>. Identical conversion to the one used
+// inside buildBrandedEmailHtml so output stays consistent across every
+// renderer that accepts a free-form admin body.
+export function messageToBodyHtml(message: string): string {
+  const escaped = escapeHtml(message);
+  const linkified = escaped.replace(/(https?:\/\/[^\s<]+)/g, (full) => {
+    const display = full.replace(/^https?:\/\//, "").replace(/\/$/, "");
+    return `<a href="${full}" style="color:#7DD3FC;text-decoration:none;border-bottom:1px solid rgba(125,211,252,0.4);white-space:nowrap;">${display}</a>`;
+  });
+  return linkified.replace(/\n/g, "<br/>");
+}
+
 // High-end branded email — institutional dark theme, gradient hero,
 // trust badges, stat grid, feature pills, premium CTA, footer.
 // Email-client safe: table-based layout, inline CSS, web-safe fonts,
