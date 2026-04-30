@@ -854,6 +854,19 @@ export default function LoginPage() {
         });
         return;
       }
+      // B23: Backend now blocks login for accounts that registered but
+      // never confirmed their email OTP. Route them to the same OTP
+      // screen we use right after register; backend has already fired a
+      // fresh code so the user can verify and finish signing in.
+      if (data?.requiresVerification && data?.email) {
+        setPendingVerifyEmail(data.email);
+        setShowOtpStep(true);
+        toast({
+          title: "Verify your email first",
+          description: `We sent a 6-digit code to ${data.email}. Enter it to finish signing in.`,
+        });
+        return;
+      }
       if (data?.token && data?.user) {
         setAuthData(data.token, data.user);
         setLocation("/dashboard");
