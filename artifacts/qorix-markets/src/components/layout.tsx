@@ -727,7 +727,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
               <QorixLogo size={32} />
             </div>
             <span className="text-sm font-bold text-white">
-              Qorix<span className="text-blue-400">Markets</span>
+              Qorix{" "}<span className="text-blue-400">Markets</span>
             </span>
             {!isAdminArea && <VipBadge tier={vipTier} size="xs" />}
           </div>
