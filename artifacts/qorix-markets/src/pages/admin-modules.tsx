@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Layout } from "@/components/layout";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -728,7 +728,17 @@ export function AdminUsersPage() {
   // of an old result set when the new query only returns 1 page.
   useEffect(() => { setPage(1); }, [debouncedQuery, showSmokeTest]);
 
+  // B22: monotonically incrementing request id — guards against
+  // stale `load()` responses overwriting newer ones. When a filter
+  // change races a setPage(1) reset (both useEffects can fire on the
+  // same render), the older in-flight `/admin/users` request can
+  // resolve AFTER the newer one and silently corrupt the table. We
+  // capture the id at call-time and ignore the response (and the
+  // setLoading(false) flip) if a newer request has since been issued.
+  const loadIdRef = useRef(0);
+
   async function load() {
+    const myId = ++loadIdRef.current;
     setLoading(true);
     try {
       // B22: paginate at PAGE_SIZE=10 with `?page=N`. The API returns
@@ -741,11 +751,12 @@ export function AdminUsersPage() {
       if (showSmokeTest) params.set("includeSmokeTest", "true");
       if (debouncedQuery) params.set("q", debouncedQuery);
       const data = await adminFetch(`/admin/users?${params.toString()}`);
+      if (myId !== loadIdRef.current) return; // stale — newer load() already in flight
       setUsers(data.data ?? []);
       setTotal(Number(data.total ?? 0));
       setTotalPages(Math.max(1, Number(data.totalPages ?? 1)));
     } finally {
-      setLoading(false);
+      if (myId === loadIdRef.current) setLoading(false);
     }
   }
 
