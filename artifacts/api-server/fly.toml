@@ -10,7 +10,7 @@ primary_region = 'bom'
   dockerfile = 'Dockerfile'
 
 [env]
-  CORS_ORIGIN = 'https://qorixmarkets.com,https://www.qorixmarkets.com,https://qorix-markets-web.fly.dev'
+  CORS_ORIGIN = 'https://qorixmarkets.com,https://www.qorixmarkets.com,https://qorix-markets-web.fly.dev,https://qorixplay.com,https://qorix-quiz.fly.dev'
   NODE_ENV = 'production'
   PORT = '8080'
   # RUN_BACKGROUND_JOBS is intentionally NOT set here. src/index.ts derives
