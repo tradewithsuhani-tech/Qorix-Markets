@@ -218,18 +218,15 @@ app.get("/api/healthz", (_req, res) => {
 // Caching: explicit no-store + Vary on User-Agent. Tokens are bound to UA;
 // a CDN that cached one user's token and served it to a different UA would
 // force every recipient into CSRF_UA_MISMATCH 403s.
-app.get("/api/csrf", (req, res) => {
-  const ua = req.headers["user-agent"] as string | undefined;
-  const issued = issueCsrfToken(ua);
-  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, private");
-  res.setHeader("Pragma", "no-cache");
-  res.setHeader("Vary", "User-Agent");
-  if (!issued) {
-    res.json({ enabled: false, token: null, expiresAt: null });
-    return;
-  }
-  res.json({ enabled: true, token: issued.token, expiresAt: issued.expiresAt });
-});
+//
+// Rate limiting: this endpoint is registered AFTER `app.use("/api",
+// globalApiLimiter)` below so that it inherits the same per-IP rate limit
+// as every other /api endpoint. Without this ordering, /api/csrf would be
+// effectively unthrottled at the app layer — cheap pure-crypto, but still
+// a reachable CPU surface for spray traffic if edge controls are weak.
+// (B30.1 fix — caught by architect review.)
+//
+// Search marker: APP_TS_CSRF_ENDPOINT_REGISTERED_BELOW_GLOBAL_LIMITER
 
 // ─── Request-level safety-net timeout ──────────────────────────────────────
 // Server-side cap so a single stuck handler (DB pool starvation, runaway
@@ -324,6 +321,34 @@ app.use((_req, res, next) => {
 // and apply stricter caps to sensitive endpoints (login, password reset,
 // 2FA management).
 app.use("/api", globalApiLimiter);
+
+// ─── B30 L6: CSRF token issuance endpoint ──────────────────────────────────
+// Registered HERE — after globalApiLimiter — so spray traffic on /api/csrf
+// is throttled by the same per-IP bucket as every other /api endpoint.
+// (Architect-flagged in B30 review: previously registered above the
+// limiter and was effectively unthrottled.)
+//
+// Public, no auth required: registration is anonymous, so an unauthenticated
+// browser must be able to obtain a token before its very first POST.
+//
+// Cheap: pure crypto, no DB hit. Listed in originGuard PATH_EXEMPTIONS so a
+// client that has no token can still call this endpoint to bootstrap.
+//
+// Caching headers: explicit no-store + Vary: User-Agent. Tokens are bound
+// to UA; a CDN that cached one user's token and served it to a different
+// UA would force every recipient into CSRF_UA_MISMATCH 403s.
+app.get("/api/csrf", (req, res) => {
+  const ua = req.headers["user-agent"] as string | undefined;
+  const issued = issueCsrfToken(ua);
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, private");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Vary", "User-Agent");
+  if (!issued) {
+    res.json({ enabled: false, token: null, expiresAt: null });
+    return;
+  }
+  res.json({ enabled: true, token: issued.token, expiresAt: issued.expiresAt });
+});
 
 // ─── B28 L4: Admin IP allowlist (opt-in via ADMIN_IP_ALLOWLIST env) ───────
 // Mounted BEFORE the per-router authMiddleware in routes/admin*.ts so a
