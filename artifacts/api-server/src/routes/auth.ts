@@ -395,6 +395,25 @@ router.post("/auth/login", loginRateLimit, async (req, res) => {
     return;
   }
 
+  // ─── Email verification gate (B23) ─────────────────────────────────────
+  // Block login for accounts that registered but never confirmed their
+  // email OTP. Without this gate, a user could complete /auth/register
+  // (which creates the user with emailVerified=false) and then sign in
+  // with email+password before ever entering the code we mailed them —
+  // bypassing verification entirely. We also fire a fresh OTP so the
+  // frontend can move them straight to the verify-OTP screen.
+  if (!user.emailVerified) {
+    setImmediate(async () => {
+      try { await sendOtp(user.id, user.email, "verify_email"); } catch { /* non-fatal */ }
+    });
+    res.json({
+      requiresVerification: true,
+      email: user.email,
+      message: "Please verify your email first. We've sent a fresh code to your inbox.",
+    });
+    return;
+  }
+
   const ip = getClientIp(req);
   const ua = req.headers["user-agent"];
 
@@ -433,6 +452,19 @@ async function issueSessionAfterAuth(
   req: any,
   res: any,
 ): Promise<void> {
+  // ─── Defense-in-depth: never issue a session for an unverified email
+  // (B23). The /auth/login route already gates this for the password
+  // path, but every code path that ends in a JWT goes through this
+  // helper (2FA verify, login-attempt approval, OTP fallback). Keeping
+  // the check here ensures any future entry point inherits the rule.
+  if (!user.emailVerified) {
+    res.status(403).json({
+      error: "Please verify your email first",
+      requiresVerification: true,
+      email: user.email,
+    });
+    return;
+  }
   const ip = getClientIp(req);
   const ua = req.headers["user-agent"];
   const fingerprint = computeDeviceFingerprint(req);
