@@ -1,6 +1,25 @@
 import { logger } from "./logger";
+import { verifyTurnstileToken, isTurnstileEnabled } from "./turnstile-service";
 
 const RECAPTCHA_VERIFY_URL = "https://www.google.com/recaptcha/api/siteverify";
+
+type CaptchaProvider = "recaptcha" | "turnstile";
+
+/**
+ * Resolve which captcha provider is active. Driven by the `CAPTCHA_PROVIDER`
+ * env var added in B9.6 — defaults to `recaptcha` so a deploy that forgets
+ * to set the var keeps the existing reCAPTCHA behavior. The frontend has a
+ * matching build-time switch (`VITE_CAPTCHA_PROVIDER`); both halves of the
+ * deploy must agree on the same value or the issued widget tokens won't
+ * round-trip through the verifier.
+ *
+ * Centralised in this helper so any future code that needs to know the
+ * active provider (e.g. the B9.3 risk-based escalator deciding when to
+ * fall back to the slider) reads a single source of truth.
+ */
+export function getCaptchaProvider(): CaptchaProvider {
+  return process.env.CAPTCHA_PROVIDER === "turnstile" ? "turnstile" : "recaptcha";
+}
 
 /**
  * Verify a Google reCAPTCHA token (v2 checkbox or v3 invisible).
@@ -13,7 +32,7 @@ const RECAPTCHA_VERIFY_URL = "https://www.google.com/recaptcha/api/siteverify";
  *
  * See: https://developers.google.com/recaptcha/docs/verify
  */
-export async function verifyCaptcha(
+async function verifyRecaptchaToken(
   token: string | undefined | null,
   ip: string | undefined,
 ): Promise<{ ok: boolean; skipped?: boolean; error?: string }> {
@@ -68,6 +87,37 @@ export async function verifyCaptcha(
   }
 }
 
-export function isCaptchaEnabled(): boolean {
+function isRecaptchaEnabled(): boolean {
   return !!process.env.RECAPTCHA_SECRET_KEY;
+}
+
+/**
+ * Provider-agnostic captcha verification. Routes to the active provider
+ * based on `CAPTCHA_PROVIDER` (defaults to `recaptcha`). All callers in
+ * `routes/auth.ts` (and any future risk-aware path) use this single entry
+ * point — the dispatcher hides whether the token came from Google reCAPTCHA
+ * or Cloudflare Turnstile.
+ *
+ * The legacy local/dev bypass (skip when the active provider's secret is
+ * not configured) is preserved per-provider so contributors can still run
+ * the api-server locally without setting up either captcha vendor.
+ */
+export async function verifyCaptcha(
+  token: string | undefined | null,
+  ip: string | undefined,
+): Promise<{ ok: boolean; skipped?: boolean; error?: string }> {
+  const provider = getCaptchaProvider();
+  if (provider === "turnstile") {
+    return verifyTurnstileToken(token, ip);
+  }
+  return verifyRecaptchaToken(token, ip);
+}
+
+/**
+ * `true` iff the active provider has its server-side secret configured.
+ * Used by the startup warning in `index.ts` to log a clear message when
+ * the active provider is mis-configured for production.
+ */
+export function isCaptchaEnabled(): boolean {
+  return getCaptchaProvider() === "turnstile" ? isTurnstileEnabled() : isRecaptchaEnabled();
 }

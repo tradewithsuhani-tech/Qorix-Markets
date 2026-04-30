@@ -27,11 +27,22 @@ RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
 WORKDIR /workspace
 
 # Build-time configuration baked into the static bundle.
+#
+# B9.6: VITE_CAPTCHA_PROVIDER picks which captcha widget the bundle ships
+# with — "recaptcha" (default, current behavior) or "turnstile" (Cloudflare
+# Turnstile, the B9.6 cutover target). Both site keys are accepted as build
+# args so a deploy can swap providers by flipping this one ARG without
+# changing any other build infra. The unused provider's site key may be
+# left empty.
 ARG VITE_API_URL=""
 ARG VITE_RECAPTCHA_SITE_KEY=""
+ARG VITE_TURNSTILE_SITE_KEY=""
+ARG VITE_CAPTCHA_PROVIDER="recaptcha"
 ARG BASE_PATH="/"
 ENV VITE_API_URL=$VITE_API_URL \
     VITE_RECAPTCHA_SITE_KEY=$VITE_RECAPTCHA_SITE_KEY \
+    VITE_TURNSTILE_SITE_KEY=$VITE_TURNSTILE_SITE_KEY \
+    VITE_CAPTCHA_PROVIDER=$VITE_CAPTCHA_PROVIDER \
     BASE_PATH=$BASE_PATH \
     PORT=8080 \
     NODE_ENV=production

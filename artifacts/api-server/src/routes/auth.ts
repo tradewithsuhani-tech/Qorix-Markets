@@ -364,7 +364,13 @@ router.post("/auth/login", loginRateLimit, async (req, res) => {
 
   const { email, password } = result.data;
 
-  // --- Captcha check (skipped if TURNSTILE_SECRET_KEY not configured) ---
+  // --- Captcha check ---
+  // B9.6: verifyCaptcha() is a provider dispatcher (lib/captcha-service.ts);
+  // it routes to either reCAPTCHA or Cloudflare Turnstile based on the
+  // CAPTCHA_PROVIDER env var. Either way the token field on the request
+  // body is `captchaToken` — the dispatcher hides which vendor verifies it.
+  // Auto-skips if the active provider's secret is missing (dev escape
+  // hatch); production always has the active secret set as a Fly app secret.
   const loginIp = normalizeIp(getClientIp(req));
   const captchaResult = await verifyCaptcha(req.body.captchaToken, loginIp);
   if (!captchaResult.ok) {
