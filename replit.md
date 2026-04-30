@@ -2649,3 +2649,147 @@ completed success. Prod `/version.json` builtAt
 File size grew from 2308 → 2531 lines (+223 lines for the two new
 modals + dropdown markup; the action-row replacement itself is
 roughly net-flat).
+
+---
+
+### B19 — Wire all 8 admin email templates to dedicated unique-design renderers
+
+**Date:** 2026-04-30 (commit `9bd67d138ab5d0aa3202f42b804215c6543b7592`)
+
+**Problem.** The admin `/users/:id/send-email` endpoint previously rendered
+every `templateId` (`kyc`, `announcement`, `promotion`, `alert`, `info`,
+`maintenance`, `trade_alert`, `next_trade`) through the same generic
+`buildBrandedEmailHtml` wrapper — so visually they all looked identical.
+The bespoke unique-design renderers existed in `lib/email-service.ts` but
+were only invoked by the broadcast pipelines.
+
+**Fix.** New `buildDirectEmailHtml` switch-dispatcher in
+`artifacts/api-server/src/routes/admin.ts` routes the admin's free-form
+`{subject, message}` into each renderer's structured slots:
+
+| templateId   | renderer                              | theme              |
+|--------------|---------------------------------------|--------------------|
+| kyc          | renderKycVerificationRequestedHtml    | royal-plum + gold  |
+| announcement | renderAnnouncementBroadcastHtml       | steel + silver     |
+| promotion    | renderPromotionBroadcastHtml          | magenta + gold     |
+| alert        | renderAlertBroadcastHtml              | amber-hazard       |
+| info         | renderInfoUpdateBroadcastHtml         | cool-blue          |
+| maintenance  | renderMaintenanceBroadcastHtml        | slate-orange       |
+| trade_alert  | renderTradeAlertFomoBroadcastHtml     | emerald-FOMO       |
+| next_trade   | renderNextTradeFomoBroadcastHtml      | cyan-countdown     |
+
+Plus a **new** `renderKycVerificationRequestedHtml` (#27.5) — royal-plum +
+gold-leaf premium-banking theme with structured 3-document checklist
+(ID / Selfie / Address Proof), gold "Action Required" pill, violet→gold
+CTA, and "Bank-grade security" reassurance pill.
+
+`email-template.ts` exports `escapeHtml` + new `messageToBodyHtml` helper
+that converts admin-typed plain text into safe paragraph + bullet HTML
+for injection into renderer `bodyHtml` slots. Frontend
+`email-templates.ts` got the new KYC entry (cyan icon, ShieldCheck,
+position 6) in the picker dropdown.
+
+**Risk: low.** Generic `buildBrandedEmailHtml` fallback preserved for any
+unmapped `templateId` (forward-compat). All 5 existing callers of the
+generic wrapper unaffected. All 8 preview emails sent + visually approved
+end-to-end before push.
+
+---
+
+### B20 — try/catch on `/wallet/transfer` + auto-reconcile orphan wallets to ledger
+
+**Date:** 2026-04-30 (commit `a64d431e7afd08fe3d8ff4ad65c1c864f68c0ae0`)
+
+**User report.** `abodh3999@gmail.com` (id 136) got "Internal Server Error"
+attempting a $8.70 Main→Trading transfer. Screenshot attached to thread.
+
+**Root cause — data integrity gap from Replit→Neon platform migration.**
+abodh's TRC20 USDT deposit was never picked up by the auto-credit watcher
+during the migration window. Operator manually credited via raw SQL
+`UPDATE wallets SET main_balance = main_balance + 8.70` — txn description
+literally reads *"manually credited"*. The ledger system
+(`gl_accounts` + `ledger_entries`) was bypassed entirely:
+
+- `wallets.main_balance` for user 136 = **$8.70** ✓
+- `gl_accounts` for user 136 = **0 rows** ❌
+- `ledger_entries` for user 136 accounts = **0 entries** ❌
+
+When `/wallet/transfer` ran:
+
+1. zod ✓, balance check ✓ (8.70 ≤ 8.70)
+2. `db.transaction()` begins
+3. `ensureUserAccounts(136)` lazily creates the 4 GL accounts
+4. Wallet update + transactions insert OK
+5. `postJournalEntry` tries `debit user:136:main 8.70` / `credit user:136:trading 8.70`
+6. Negative-balance guard sums `ledger_entries` for `user:136:main` = **0**
+   (deposit never journaled), projects 0 - 8.70 = -8.70, **throws**
+   `insufficient balance on user:136:main`
+7. **No try/catch on the route** → Express default 500 → user sees
+   "Internal Server Error" with **NO log trail anywhere**.
+
+**Production scan (read-only via tsx + pg in api-server context).**
+
+| ID  | Email                  | Wallet (main/trading) | Ledger (main/trading) | Type     |
+|-----|------------------------|-----------------------|-----------------------|----------|
+| 136 | abodh3999@gmail.com    | $8.70 / $0            | **NO ACCOUNTS**       | Orphan   |
+| 117 | looxprem@gmail.com     | $248.87 / $0          | $362.14 / $0          | Mismatch |
+| 143 | bimleshgroup@gmail.com | $9.28 / $5            | $10.30 / $5           | Mismatch |
+
+Mismatch cases (117, 143) addressed in a separate manual-review batch —
+they need case-by-case investigation. This commit only handles the orphan
+case (no `gl_accounts`) which is the safe, deterministic path.
+
+**Layer 1 — Catch-all error handler on `POST /wallet/transfer`** (`wallet.ts`)
+
+Wraps entire route body in try/catch. On any uncaught error (ledger
+imbalance, unknown account code, FK violation, negative-balance trip)
+emits structured `errorLogger.error({ event:"transfer_failed", err,
+userId, amount, direction, message })` and returns a clean 500 JSON
+with a user-safe message ("Transfer could not be completed. Please
+try again or contact support if this keeps happening."). Removes the
+silent black-hole 500.
+
+**Layer 2 — Opening-balance reconciliation in `ensureUserAccounts`** (`ledger-service.ts`)
+
+- Per-account `INSERT ... ON CONFLICT DO NOTHING` switched to use
+  `RETURNING` so we know which codes WE actually inserted (race-safe
+  under concurrent transfer attempts on the same user).
+- When at least one of `user:UID:main` / `user:UID:trading` was newly
+  created in this call, reads the `wallets` row inside the same tx;
+  for every newly-created account that maps to a non-zero wallet
+  balance, posts a single balanced opening-balance journal:
+  - `credit user:UID:main     <wallet.main_balance>`     (if newly created & > 0)
+  - `credit user:UID:trading  <wallet.trading_balance>`  (if newly created & > 0)
+  - `debit  platform:hot_wallet  <total>`                (contra — funds
+    came on-chain into hot wallet)
+
+  Journal id: `sys:opening:u<UID>`.
+- **Idempotent.** Only fires when accounts are first created. Subsequent
+  calls see `existingCodes` already populated, `newlyCreated` stays empty,
+  no journal posted.
+
+**Expected behaviour for abodh (next attempt).** `ensureUserAccounts(136)`
+inside the transfer transaction creates main+trading+profit+locked, posts
+`sys:opening:u136` (credit `user:136:main` 8.70, debit
+`platform:hot_wallet` 8.70), then the transfer's own journal succeeds
+(debit `user:136:main` 8.70, credit `user:136:trading` 8.70) leaving
+ledger in sync with wallet.
+
+**Risk: low.**
+
+- No schema changes, no DB writes from this commit (writes happen at
+  runtime inside the existing `/wallet/transfer` transaction only when
+  a real user calls it, atomic with the transfer itself — if anything
+  fails, the whole tx rolls back leaving DB unchanged).
+- Existing users who already have `gl_accounts` populated are completely
+  unaffected — `newlyCreated` stays empty for them.
+- Contra account `platform:hot_wallet` is debit-normal asset, NOT
+  subject to the negative-balance guard, so reconciliation cannot
+  trip it.
+- Mismatch users (117, 143) are NOT touched by this commit.
+
+**Verified.** Type-check clean for both changed files (other repo errors
+pre-existing in `quiz-*.ts`, unrelated). Brace balance verified (31/31,
+2 try / 1 catch — the second `try` is from an earlier `try { JSON.parse }`
+elsewhere in the file). CI run for commit `a64d431e` completed success at
+2026-04-30 14:29 UTC. Fly deploy confirmed alive.
