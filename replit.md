@@ -2300,3 +2300,45 @@ admin-fraud, growth-panel) using the same Tailwind class for
 their own legitimate UI work — captcha files have ZERO
 border classes. Prod desktop screenshot confirms widget now
 sits inline with the form, no border/glow visible from us.
+
+### B12 (2026-04-30 04:38Z) — Auto-scroll INR deposit wizard to top on each step transition (cded7dab25)
+
+**Bug.** User screenshots showed the INR deposit funnel landing
+mid-screen on the 4th step (Transfer Confirmation) — the user
+sees "Send Payment" instructions / "Payment Method BANK" /
+"Receiving Account Details" instead of the page header
+("Transfer Confirmation / Remaining time to pay 14:07 / ₹100").
+Pages 1–3 (start/list/amount) all rendered with the carousel
++ tabs visible at top because the user was still near the page
+top, but step 3 ("amount") form is long enough that the user
+scrolls down to click the "Pay" CTA at the bottom — and on
+step transition (`AnimatePresence mode="wait"`) the browser
+just keeps the existing scroll offset, so the next step renders
+deep below the fold.
+
+**Fix.** `artifacts/qorix-markets/src/components/inr-deposit-tab.tsx`:
+added a `useEffect` that, on every change of the `step` state
+(`"start" | "list" | "amount" | "transfer" | "success"`), calls
+`window.scrollTo({ top: 0, behavior: "smooth" })`. First-render
+guard via `prevStepRef = useRef<Step>(step)` so the initial
+mount on the `start` step doesn't trigger a phantom scroll.
+Effect is registered in deps `[step]` only.
+
+**Why scroll the window not the wizard.** Existing wizard cards
+already match the visual rhythm of the rest of the deposit
+page (carousel ad → tabs → wizard) — scrolling the page to
+top means every step renders with the same chrome above
+(carousel + tabs + wizard top), matching pages 1–3 from the
+user's screenshots.
+
+**Pure frontend.** 1 file. 0 schema/API/backend changes. CI run
+`25147645180` green. Prod `/version.json` builtAt
+`2026-04-30T04:38:55Z`, JS bundle hash flipped to
+`index-ByFdMNV5.js`. Production-minified bundle marker
+`window.scrollTo({top:0` present (1×) — comment + variable
+names (`prevStepRef`, the comment block) are stripped/renamed
+by Vite's minifier as expected. Existing UI strings preserved
+in bundle (`Transfer Confirmation`, `Remaining time to pay`
+both 1×). Applies to all step transitions: start→list,
+list→amount, amount→transfer, transfer→success, and any
+back-step (e.g. "Back" button on amount→list, list→start).
