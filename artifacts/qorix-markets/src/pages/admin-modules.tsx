@@ -44,12 +44,23 @@ import {
   Loader2,
   Mail,
   FileText,
+  MoreVertical,
+  Smartphone,
+  LogOut,
 } from "lucide-react";
 import { HIDDEN_FEATURES } from "@/lib/hidden-features";
 import { AddressDisplay } from "@/components/address-display";
 import { useToast } from "@/hooks/use-toast";
 import { EMAIL_TEMPLATES } from "@/lib/email-templates";
 import { authFetch } from "@/lib/auth-fetch";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 
 async function adminFetch(path: string, init?: RequestInit) {
   return authFetch(`/api${path}`, init);
@@ -522,6 +533,164 @@ function SendEmailModal({ user, onClose }: { user: any; onClose: () => void }) {
   );
 }
 
+// ---------------------------------------------------------------------------
+// DevicesModal — opened from the per-row 3-dot menu in the User Management
+// table. Hits the existing GET /admin/fraud/users/:userId/devices endpoint
+// (read-only, already used by the Fraud module) and lists every device this
+// user has signed in from. Same fixed-overlay / glass-card / stop-propagation
+// pattern as BalanceAdjustModal / EditProfileModal / SendEmailModal so it
+// behaves identically (tap backdrop to close, X button in the corner).
+// ---------------------------------------------------------------------------
+function DevicesModal({ user, onClose }: { user: any; onClose: () => void }) {
+  const [devices, setDevices] = useState<any[] | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await adminFetch(`/admin/fraud/users/${user.id}/devices`);
+        if (!cancelled) setDevices(Array.isArray(data) ? data : []);
+      } catch (e: any) {
+        if (!cancelled) setError(e?.message ?? "Failed to load devices");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [user.id]);
+
+  function fmtDate(s: string | null | undefined) {
+    if (!s) return "—";
+    try { return new Date(s).toLocaleString(); } catch { return s; }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center p-3" onClick={onClose}>
+      <motion.div
+        initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }}
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-2xl glass-card rounded-2xl p-5 space-y-4 max-h-[90vh] overflow-y-auto"
+      >
+        <div className="flex items-start justify-between">
+          <div>
+            <h3 className="font-semibold text-base flex items-center gap-2">
+              <Smartphone className="w-4 h-4 text-cyan-400" /> Devices
+            </h3>
+            <p className="text-xs text-muted-foreground mt-1">
+              {user.fullName} · <span className="font-mono">{user.email ?? "no email"}</span> · ID #{user.id}
+            </p>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/10 text-muted-foreground"><X className="w-4 h-4" /></button>
+        </div>
+
+        {loading ? (
+          <div className="py-8 text-center text-muted-foreground text-sm flex items-center justify-center gap-2">
+            <Loader2 className="w-4 h-4 animate-spin" /> Loading devices…
+          </div>
+        ) : error ? (
+          <div className="py-6 text-center text-red-300 text-sm">{error}</div>
+        ) : devices && devices.length === 0 ? (
+          <div className="py-8 text-center text-muted-foreground text-sm">No devices on record for this user.</div>
+        ) : (
+          <div className="space-y-2">
+            {devices?.map((d: any) => (
+              <div key={d.id} className="rounded-xl border border-white/10 bg-white/[0.02] p-3 text-xs space-y-1.5">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 font-semibold text-white">
+                    <Smartphone className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>{d.browserLabel ?? "Unknown browser"}</span>
+                    <span className="text-muted-foreground">·</span>
+                    <span>{d.osLabel ?? "Unknown OS"}</span>
+                  </div>
+                  <span className="text-[10px] text-muted-foreground font-mono">#{d.id}</span>
+                </div>
+                <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-muted-foreground">
+                  <div>First seen: <span className="text-white/80">{fmtDate(d.firstSeenAt)}</span></div>
+                  <div>Last seen: <span className="text-white/80">{fmtDate(d.lastSeenAt)}</span></div>
+                  {d.lastSeenIp && <div>IP: <span className="font-mono text-white/80">{d.lastSeenIp}</span></div>}
+                  {(d.lastCity || d.lastCountry) && (
+                    <div>Location: <span className="text-white/80">{[d.lastCity, d.lastCountry].filter(Boolean).join(", ")}</span></div>
+                  )}
+                  {d.alertSentAt && (
+                    <div className="col-span-2 text-amber-300/80">New-device email alert sent at {fmtDate(d.alertSentAt)}</div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="flex gap-3 pt-1">
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-muted-foreground hover:text-white text-sm transition-all">Close</button>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// ConfirmForceLogoutModal — wraps the existing /admin/users/:id/action
+// "force_logout" call in a small confirmation popup so the dropdown menu's
+// Force Logout item also "shows details in a popup" before doing anything
+// destructive (matches the user's request: every dropdown item should open
+// a popup, not fire an instant action).
+// ---------------------------------------------------------------------------
+function ConfirmForceLogoutModal({ user, onClose, onDone }: { user: any; onClose: () => void; onDone: () => void }) {
+  const { toast } = useToast();
+  const [submitting, setSubmitting] = useState(false);
+
+  async function confirm() {
+    setSubmitting(true);
+    try {
+      await adminFetch(`/admin/users/${user.id}/action`, { method: "POST", body: JSON.stringify({ action: "force_logout" }) });
+      toast({ title: "Force logout sent", description: `${user.fullName} will be signed out across all devices.` });
+      onDone();
+      onClose();
+    } catch (e: any) {
+      toast({ title: "Failed to force logout", description: e?.message ?? "Try again", variant: "destructive" });
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center p-3" onClick={onClose}>
+      <motion.div
+        initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }}
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-md glass-card rounded-2xl p-5 space-y-4"
+      >
+        <div className="flex items-start justify-between">
+          <h3 className="font-semibold text-base flex items-center gap-2">
+            <LogOut className="w-4 h-4 text-blue-400" /> Force Logout
+          </h3>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/10 text-muted-foreground"><X className="w-4 h-4" /></button>
+        </div>
+        <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-3 text-xs space-y-1.5">
+          <div className="font-semibold text-white">{user.fullName}</div>
+          <div className="text-muted-foreground font-mono">{user.email ?? "no email"} · ID #{user.id}</div>
+        </div>
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          This will revoke every active session for this user across all devices. The user will be signed out immediately and will need to log in again. Account, balances and KYC are NOT affected.
+        </p>
+        <div className="flex gap-3 pt-1">
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-muted-foreground hover:text-white text-sm transition-all">Cancel</button>
+          <button
+            onClick={confirm}
+            disabled={submitting}
+            className="flex-1 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium transition-all flex items-center justify-center gap-2"
+          >
+            {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <LogOut className="w-4 h-4" />}
+            {submitting ? "Signing out…" : "Force Logout"}
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
 export function AdminUsersPage() {
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -533,6 +702,8 @@ export function AdminUsersPage() {
   const [adjustUser, setAdjustUser] = useState<any | null>(null);
   const [editUser, setEditUser] = useState<any | null>(null);
   const [emailUser, setEmailUser] = useState<any | null>(null);
+  const [devicesUser, setDevicesUser] = useState<any | null>(null);
+  const [confirmLogoutUser, setConfirmLogoutUser] = useState<any | null>(null);
   const [showSmokeTest, setShowSmokeTest] = useState(false);
   const { toast } = useToast();
 
@@ -583,6 +754,16 @@ export function AdminUsersPage() {
         )}
         {emailUser && (
           <SendEmailModal user={emailUser} onClose={() => setEmailUser(null)} />
+        )}
+        {devicesUser && (
+          <DevicesModal user={devicesUser} onClose={() => setDevicesUser(null)} />
+        )}
+        {confirmLogoutUser && (
+          <ConfirmForceLogoutModal
+            user={confirmLogoutUser}
+            onClose={() => setConfirmLogoutUser(null)}
+            onDone={load}
+          />
         )}
       </AnimatePresence>
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
@@ -646,20 +827,74 @@ export function AdminUsersPage() {
                       {!u.isFrozen && !u.isDisabled && !u.isAdmin && <StatusBadge value="active" />}
                     </td>
                     <td className="p-4">
-                      <div className="flex flex-wrap gap-1.5">
+                      {/* Compact action row — Freeze + Disable stay inline as
+                          frequent quick-toggle controls; everything else
+                          (Devices · Send Mail · Edit Profile · Balance ·
+                          Force Logout) is collapsed into the 3-dot menu so
+                          each row no longer takes 6 buttons of horizontal
+                          space. Every dropdown item opens a popup with the
+                          relevant details, never a silent inline action. */}
+                      <div className="flex items-center gap-1.5">
                         <button onClick={() => action(u.id, u.isFrozen ? "unfreeze" : "freeze")} className="px-2 py-1 rounded-lg bg-amber-500/10 text-amber-400 text-xs hover:bg-amber-500/20 transition-colors">{u.isFrozen ? "Unfreeze" : "Freeze"}</button>
                         <button onClick={() => action(u.id, u.isDisabled ? "enable" : "disable")} className="px-2 py-1 rounded-lg bg-red-500/10 text-red-400 text-xs hover:bg-red-500/20 transition-colors">{u.isDisabled ? "Enable" : "Disable"}</button>
-                        <button onClick={() => action(u.id, "force_logout")} className="px-2 py-1 rounded-lg bg-blue-500/10 text-blue-400 text-xs hover:bg-blue-500/20 transition-colors">Force logout</button>
-                        <button onClick={() => setAdjustUser(u)} className="px-2 py-1 rounded-lg bg-emerald-500/10 text-emerald-400 text-xs hover:bg-emerald-500/20 transition-colors flex items-center gap-1"><Wallet className="w-3 h-3" /> Balance</button>
-                        <button onClick={() => setEditUser(u)} className="px-2 py-1 rounded-lg bg-blue-500/10 text-blue-400 text-xs hover:bg-blue-500/20 transition-colors flex items-center gap-1"><Pencil className="w-3 h-3" /> Edit Profile</button>
-                        <button
-                          onClick={() => setEmailUser(u)}
-                          disabled={!u.email}
-                          title={u.email ? "Send email to this user" : "User has no email on file"}
-                          className="px-2 py-1 rounded-lg bg-violet-500/10 text-violet-400 text-xs hover:bg-violet-500/20 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center gap-1"
-                        >
-                          <Mail className="w-3 h-3" /> Send Mail
-                        </button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <button
+                              aria-label="More actions"
+                              title="More actions"
+                              className="ml-0.5 inline-flex items-center justify-center w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 text-muted-foreground hover:text-white transition-colors focus:outline-none focus:ring-1 focus:ring-white/20"
+                            >
+                              <MoreVertical className="w-4 h-4" />
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent
+                            align="end"
+                            sideOffset={4}
+                            className="w-48 bg-slate-900/95 backdrop-blur-md border border-white/10 text-white"
+                          >
+                            <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+                              {u.fullName}
+                            </DropdownMenuLabel>
+                            <DropdownMenuSeparator className="bg-white/10" />
+                            <DropdownMenuItem
+                              onSelect={() => setDevicesUser(u)}
+                              className="cursor-pointer focus:bg-cyan-500/10 focus:text-cyan-300"
+                            >
+                              <Smartphone className="w-3.5 h-3.5 mr-2 text-cyan-400" />
+                              Devices
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onSelect={() => u.email && setEmailUser(u)}
+                              disabled={!u.email}
+                              className="cursor-pointer focus:bg-violet-500/10 focus:text-violet-300"
+                            >
+                              <Mail className="w-3.5 h-3.5 mr-2 text-violet-400" />
+                              Send Mail
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onSelect={() => setEditUser(u)}
+                              className="cursor-pointer focus:bg-blue-500/10 focus:text-blue-300"
+                            >
+                              <Pencil className="w-3.5 h-3.5 mr-2 text-blue-400" />
+                              Edit Profile
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onSelect={() => setAdjustUser(u)}
+                              className="cursor-pointer focus:bg-emerald-500/10 focus:text-emerald-300"
+                            >
+                              <Wallet className="w-3.5 h-3.5 mr-2 text-emerald-400" />
+                              Balance
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator className="bg-white/10" />
+                            <DropdownMenuItem
+                              onSelect={() => setConfirmLogoutUser(u)}
+                              className="cursor-pointer focus:bg-blue-500/10 focus:text-blue-300"
+                            >
+                              <LogOut className="w-3.5 h-3.5 mr-2 text-blue-400" />
+                              Force Logout
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
                     </td>
                   </tr>
@@ -1737,6 +1972,15 @@ export function AdminSystemPage() {
               Optional: also blocks reads for non-admin users. Only enable for full outages — most maintenance windows should use the soft freeze above.
             </p>
             <ToggleRow icon={CheckCircle} label="Registration Enabled" value={settings?.registrationEnabled !== false} onToggle={(v) => save({ registrationEnabled: v })} />
+            <ToggleRow
+              icon={Sparkles}
+              label="Quiz Auto-Credit Prizes"
+              value={settings?.quizAutoCreditEnabled !== false}
+              onToggle={(v) => save({ quizAutoCreditEnabled: v })}
+            />
+            <p className="text-xs text-muted-foreground -mt-2 ml-9">
+              When ON, quiz winners' USDT prizes are auto-credited to their main wallet at quiz end. Turn OFF to fall back to the manual mark-paid flow.
+            </p>
             <div>
               <label className="text-sm text-muted-foreground">Maintenance Message</label>
               <input value={settings?.maintenanceMessage ?? ""} onChange={(e) => setSettings({ ...settings, maintenanceMessage: e.target.value })} onBlur={() => save({ maintenanceMessage: settings?.maintenanceMessage ?? "" })} className="mt-2 w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm" />
