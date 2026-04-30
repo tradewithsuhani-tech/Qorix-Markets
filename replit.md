@@ -3880,3 +3880,115 @@ pre/post deploy.
   set the header). Overkill for the current threat profile.
 - **Auto-update of disposable email blocklist** (B27 Future
   hardening option A): unchanged, still deferred.
+
+────────────────────────────────────────────────────────────────────────
+## B28.1 — code-review follow-up: move originGuard ABOVE body parsers
+────────────────────────────────────────────────────────────────────────
+2026-04-30 — commit `45f3ed97` LIVE on prod via Fly CI/CD
+
+### Trigger
+Code-review architect run on B28 (commit `1f4c5b22`) flagged 4
+findings; the highest-severity actionable one was middleware
+ordering inefficiency.
+
+### Architect's findings + responses
+
+**Finding 1 (HIGH, ACTED ON in this commit) — body-parse amplification:**
+> "originGuard is mounted after express.json/urlencoded. A rejected
+> no-Origin POST can still force body parsing (up to 12MB), so
+> attacker cost remains low relative to server cost. For this
+> specific anti-scraper goal, the guard should run before body
+> parsing."
+
+Confirmed: in B28 `app.use("/api", originGuard)` was at line ~252,
+AFTER `app.use(express.json({limit:"12mb"}))` at line 123. So a
+12MB no-Origin POST got allocated + JSON-parsed BEFORE the cheap
+header check rejected it with 403 — a ~1000x amplification of
+attacker damage per rejected request.
+
+Fix in B28.1: re-mounted originGuard at line 146, immediately after
+the cors() block and before express.json + express.urlencoded.
+CORS still runs first because OPTIONS preflight responses must
+carry Access-Control-* headers regardless of guard outcome.
+
+Final order on /api after this commit:
+```
+pinoHttp logger
+  -> method allowlist (405 on TRACE/CONNECT/etc.)
+  -> helmet headers
+  -> trust proxy + x-replit cleanup
+  -> CORS (preflight + cross-origin headers)
+  -> originGuard               <-- NEW POSITION (B28.1)
+  -> express.json (12mb)       <-- only parses survivors
+  -> express.urlencoded
+  -> root health probe carve-out
+  -> UA-CH headers
+  -> globalApiLimiter
+  -> adminIpAllowlist (on /api/admin only)
+  -> maintenanceMiddleware + router
+```
+
+Prod verification (post-deploy 2026-04-30):
+```
+POST .../api/auth/register (no Origin)         -> 403 ORIGIN_REQUIRED   OK
+POST .../api/auth/register (Origin: ours)      -> 400 captcha           OK
+GET  .../api/healthz                           -> 200                   OK
+GET  https://qorixmarkets.com/api/healthz      -> 200                   OK
+DB users 10 / max_id 153                                                OK
+```
+
+**Finding 2 (MEDIUM, NOT ACTED ON — design choice) — origin guard
+is trivially spoofable:**
+> "Non-browser clients can set `-H 'Origin: https://qorixmarkets.com'`
+> and pass immediately. This blocks 'no-header curl' but not
+> intentional scraping."
+
+Acknowledged and intentional. Closing this requires server-issued
+nonces (HMAC-signed CSRF token bound to session + origin, validated
+on write routes), which is an order of magnitude bigger change in
+both API surface and web-app code. Justification for deferring:
+  - The vast majority of automated abuse traffic is naive scrapers
+    that don't bother to set headers — those are now blocked.
+  - Determined attackers who DO set the header still face captcha,
+    per-IP rate limits, behaviour timing gates, disposable email
+    blocklist, and KYC-at-investment. Origin guard was never
+    intended as the only line of defence.
+  - Documented in B28 docs section "HMAC request signing... would
+    close the last gap... overkill for the current threat profile".
+
+**Finding 3 (LOW, NOT ACTED ON — false positive) — write protection
+misses GET-based mutators:**
+> "There are GET routes with side effects (e.g., /api/deposit/address
+> calls getOrCreateDepositAddress, and OAuth callback flow can
+> create/update users). So 'state-changing requests require Origin'
+> is not fully true in practice."
+
+Verified: `/api/deposit/address` does indeed lazy-create a deposit
+address row on first GET. However:
+  - That endpoint is auth-gated. Attacker must already hold a
+    valid JWT to trigger it — at which point they're a logged-in
+    user creating their OWN deposit address (idempotent, scoped
+    to userId from JWT). No security boundary is crossed.
+  - OAuth callback GETs are inherently browser-redirected from
+    Google's auth server; can't enforce Origin without breaking
+    OAuth.
+
+So this is a REST API design quirk (GETs that aren't strictly
+idempotent), not a B28 hardening concern. No change.
+
+**Finding 4 (LOW, NOT ACTED ON — opt-in, awaiting operator) — admin
+allowlist enabled-path not tested:**
+> "Current tests validate only the no-op path (unset env), not the
+> enabled path behavior."
+
+Correct. `ADMIN_IP_ALLOWLIST` is currently unset in prod (verified
+no-op behavior is exactly what we want for this deploy). Will be
+exercised + tested when the operator opts in via
+`flyctl secrets set ADMIN_IP_ALLOWLIST=...`. At that point a
+follow-up curl test from a non-listed IP will confirm the
+403 ADMIN_IP_BLOCKED path.
+
+### Files in commit `45f3ed97`
+```
+M  artifacts/api-server/src/app.ts   (originGuard moved up; comment expanded)
+```
