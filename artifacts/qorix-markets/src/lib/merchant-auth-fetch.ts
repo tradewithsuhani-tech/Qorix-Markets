@@ -1,5 +1,8 @@
 import { notifyMaintenance } from "./maintenance-state";
 import { DEVICE_ID_HEADER, getOrCreateDeviceId } from "./device-id";
+import { getCsrfHeaders, invalidateCsrfToken, isCsrfError } from "./csrf-token";
+
+const STATE_CHANGING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
 // Separate token storage from user/admin so a merchant signing in on a shared
 // browser doesn't clobber the user's session, and vice versa.
@@ -17,7 +20,7 @@ export function clearMerchantToken(): void {
   localStorage.removeItem(MERCHANT_TOKEN_KEY);
 }
 
-export async function merchantAuthFetch<T = unknown>(url: string, init?: RequestInit): Promise<T> {
+async function doMerchantFetch(url: string, init: RequestInit | undefined, attachCsrf: boolean): Promise<Response> {
   const token = getMerchantToken();
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -29,14 +32,42 @@ export async function merchantAuthFetch<T = unknown>(url: string, init?: Request
     ...((init?.headers as Record<string, string>) ?? {}),
   };
   if (token) headers.Authorization = `Bearer ${token}`;
-  const res = await fetch(url, { ...init, headers });
-  const text = await res.text();
+  // B30: CSRF nonce on state-changing methods. No-op when CSRF is disabled
+  // server-side. See csrf-token.ts for the cache + bootstrap semantics.
+  if (attachCsrf) {
+    const csrfHeaders = await getCsrfHeaders();
+    Object.assign(headers, csrfHeaders);
+  }
+  return fetch(url, { ...init, headers });
+}
+
+export async function merchantAuthFetch<T = unknown>(url: string, init?: RequestInit): Promise<T> {
+  const method = (init?.method || "GET").toUpperCase();
+  const isStateChange = STATE_CHANGING_METHODS.has(method);
+
+  let res = await doMerchantFetch(url, init, isStateChange);
+  let text = await res.text();
   let data: unknown = null;
   try {
     data = text ? JSON.parse(text) : null;
   } catch {
     data = text;
   }
+
+  // B30 CSRF retry: same pattern as authFetch — invalidate + one-shot
+  // retry on CSRF_* 403, then fall through to the rest of the handling
+  // exactly as before.
+  if (isStateChange && isCsrfError(res.status, data)) {
+    invalidateCsrfToken();
+    res = await doMerchantFetch(url, init, true);
+    text = await res.text();
+    try {
+      data = text ? JSON.parse(text) : null;
+    } catch {
+      data = text;
+    }
+  }
+
   const maintenanceHeader = res.headers.get("x-maintenance-mode") === "true";
   const maintenanceBody =
     data && typeof data === "object" && (data as { code?: string }).code === "maintenance_mode";

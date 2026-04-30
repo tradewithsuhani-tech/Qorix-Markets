@@ -38,6 +38,7 @@
 // origin/referer guarding is independent of req.ip.
 
 import type { Request, Response, NextFunction } from "express";
+import { verifyCsrfToken } from "../lib/csrf-token";
 
 const STATE_CHANGING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
@@ -45,6 +46,11 @@ const PATH_EXEMPTIONS = new Set([
   "/api/healthz",
   "/api/version",
   "/api/version.json",
+  // /api/csrf must be exempt because the WHOLE point of that endpoint
+  // is to issue a token to a client that doesn't yet have one. If it
+  // required a token to call it, the client could never bootstrap.
+  // It's a GET anyway so this only matters defensively.
+  "/api/csrf",
 ]);
 
 function parseAllowedOrigins(): readonly string[] | null {
@@ -99,13 +105,37 @@ export function originGuard(req: Request, res: Response, next: NextFunction): vo
   // but preserve Referer. Accept Referer as a fallback if its origin
   // matches the allowlist.
   const refererOrigin = originFromReferer(req.headers["referer"] as string | undefined);
-  if (refererOrigin && allowed.includes(refererOrigin)) {
-    next();
+  const originOk = (origin && allowed.includes(origin)) || (refererOrigin && allowed.includes(refererOrigin));
+  if (!originOk) {
+    res.status(403).json({
+      error: "Direct API access is not allowed. Requests must originate from the official Qorix Markets web app.",
+      code: "ORIGIN_REQUIRED",
+    });
     return;
   }
 
-  res.status(403).json({
-    error: "Direct API access is not allowed. Requests must originate from the official Qorix Markets web app.",
-    code: "ORIGIN_REQUIRED",
-  });
+  // ─── B30 L6: HMAC CSRF nonce check ───────────────────────────────────────
+  // Origin header is set automatically by the browser on cross-origin XHR
+  // and fetch, but a non-browser attacker can trivially set it with
+  // `-H 'Origin: https://qorixmarkets.com'`. The CSRF nonce raises the
+  // bar: the attacker also has to GET /api/csrf, parse the response, and
+  // carry the token on the subsequent POST. Most scripted scrapers don't
+  // bother.
+  //
+  // Gate is OPT-IN via CSRF_HMAC_SECRET. When unset (current prod state)
+  // verifyCsrfToken returns { ok: true, reason: "CSRF_DISABLED" } so this
+  // block is a no-op. Operator opts in via flyctl secrets after the web
+  // client has been deployed to attach the X-CSRF-Token header.
+  const csrfToken = (req.headers["x-csrf-token"] as string | undefined)?.trim();
+  const userAgent = req.headers["user-agent"] as string | undefined;
+  const csrfResult = verifyCsrfToken(csrfToken, userAgent);
+  if (!csrfResult.ok) {
+    res.status(403).json({
+      error: "Anti-replay token missing or invalid. Refresh the page and try again.",
+      code: csrfResult.reason,
+    });
+    return;
+  }
+
+  next();
 }
