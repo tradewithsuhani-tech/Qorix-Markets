@@ -2342,3 +2342,54 @@ in bundle (`Transfer Confirmation`, `Remaining time to pay`
 both 1×). Applies to all step transitions: start→list,
 list→amount, amount→transfer, transfer→success, and any
 back-step (e.g. "Back" button on amount→list, list→start).
+
+### B13 (2026-04-30 04:51Z) — Withdrawal OTP entry → shadcn 6-slot InputOTP (4b786cdd0a)
+
+**Trigger.** User screenshot of `/wallet` → Withdraw → INR step 2
+showed the new email-OTP step rendering as a single plain text
+input with `placeholder="000000"` and `tracking-widest text-lg` —
+"basic lag raha hai". Asked to polish the design.
+
+**What we found.** The repo already had:
+  - `input-otp` v1.4.2 in `artifacts/qorix-markets/package.json`
+  - The shadcn wrapper at `src/components/ui/input-otp.tsx`
+    exporting `InputOTP / InputOTPGroup / InputOTPSlot`
+  - Zero existing call-sites for it (this withdrawal flow is the
+    first real usage)
+
+**Change.** `artifacts/qorix-markets/src/components/inr-withdraw-tab.tsx`
+swapped the legacy single text input for a centred 6-slot
+`InputOTP`. Each `InputOTPSlot` renders as an individually
+rounded card (`h-12 w-9 sm:w-11 rounded-lg border border-white/10
+bg-white/5 text-xl font-mono font-bold text-white`) with the
+default `ring-ring` glow on the active slot. The cancel (X)
+button moved next to the slot group at matching `h-12 w-10` so
+the row stays balanced.
+
+**UX wins from the swap (free with the library):**
+  - Digits-only enforced via `pattern={REGEXP_ONLY_DIGITS}`
+  - Pasting a 6-digit code from the email auto-distributes
+    across all slots
+  - Backspace flows backward through slots naturally
+  - `inputMode="numeric"` still triggers the numeric keypad on
+    mobile
+  - `aria-label` added on both the OTP group and the cancel
+    button for screen readers
+
+**No state-shape changes.** Still feeds the same `withdrawOtp`
+string state, the Confirm Withdrawal button still gates on
+`withdrawOtp.length < 6`, and the existing `requestOtp` /
+`cancelOtp` / `submit` handlers are untouched. Pure visual swap.
+
+**Verification.** CI run `25147994454` green. Prod
+`/version.json` builtAt `2026-04-30T04:51:55Z`, JS bundle hash
+flipped to `index-CPcpOm1N.js`. Bundle markers present:
+`input-otp` (3×, library bundled), `6 digit withdrawal
+verification code` (1×, my new aria-label), preserved strings
+`Confirm Withdrawal`, `Enter the 6-digit code sent to your
+email`, `Didn't receive it` all 1×. Stale `placeholder="000000"`
+gone from bundle. Note: `tracking-widest text-lg` still appears
+1× in the prod bundle but that hit comes from `wallet.tsx`
+(separate USDT-side code, not the withdraw OTP) — confirmed via
+ripgrep on local source. The withdraw tab itself is fully clean
+of the legacy classes.
