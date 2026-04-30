@@ -141,7 +141,8 @@ router.post(
         return;
       }
 
-      const { code, redirect_uri, client_id, client_secret } = req.body ?? {};
+      const { grant_type, code, redirect_uri, client_id, client_secret } =
+        req.body ?? {};
 
       if (
         typeof code !== "string" ||
@@ -153,6 +154,18 @@ router.post(
           error: "invalid_request",
           message:
             "code, redirect_uri, client_id, and client_secret are required.",
+        });
+        return;
+      }
+
+      // OAuth 2.0 protocol contract — we only support the authorization_code
+      // grant on this endpoint. Reject any other grant_type explicitly so
+      // clients can't accidentally drift from the spec.
+      if (grant_type !== "authorization_code") {
+        res.status(400).json({
+          error: "unsupported_grant_type",
+          message:
+            "Only grant_type=authorization_code is supported on this endpoint.",
         });
         return;
       }
