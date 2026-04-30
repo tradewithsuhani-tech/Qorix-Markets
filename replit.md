@@ -2133,3 +2133,113 @@ flow not synthetically tested in prod (would require triggering
 a real INR withdrawal request); regression risk is low because
 the claim path itself is unchanged from the existing
 `/merchant/withdrawals` page mutation.
+
+## B11 (2026-04-30 03:44Z) — Captcha widget theme polish (570b142490)
+
+User reported the Cloudflare Turnstile widget on `/admin-login`
+(and by extension `/login`, `/signup` since they all use the
+shared `<CaptchaWidget>` shim) looked like "a basic default
+Cloudflare island" — generic 300×65 light-bg widget bolted
+onto the dark Qorix glass-card form. We can't restyle the
+widget's *interior* (cross-origin iframe), but we can frame it
+externally so it reads as a deliberate part of the form rather
+than a third-party orphan.
+
+**Files changed (frontend only, no schema/backend):**
+
+1. `artifacts/qorix-markets/src/components/turnstile.tsx`
+   • Added `size: "flexible"` to the
+     `window.turnstile.render()` options. Cloudflare-supported
+     responsive size that lets the widget grow from 300px to
+     fill the parent column (≥300px container required; admin
+     form is `max-w-md` ≈ 360px effective inner = safe).
+   • Replaced the bare `<div className="w-full flex
+     justify-center"><div ref={containerRef}/></div>` return
+     with a glassy themed wrapper:
+       - `rounded-xl p-2`
+       - `border border-blue-500/25`
+       - `bg-gradient-to-br from-blue-500/[0.06]
+         via-indigo-500/[0.05] to-purple-500/[0.06]`
+       - `shadow-[0_0_28px_-10px_rgba(59,130,246,0.45)]`
+         (soft outer glow matching the form card's accent)
+       - `[&_iframe]:rounded-lg [&_iframe]:!w-full
+         [&_iframe]:block` (descendant selector to round the
+         iframe corners + force full width)
+     Inner ref container gets `min-h-[65px]` so the layout
+     doesn't shift between the loading placeholder size and
+     the rendered widget size.
+
+2. `artifacts/qorix-markets/src/components/recaptcha.tsx`
+   • Same wrapper applied for visual parity if a future build
+     flips `VITE_CAPTCHA_PROVIDER=recaptcha`. reCAPTCHA v2's
+     iframe is fixed 304×78 (no flexible mode), so the wrapper
+     centers the iframe inside the frame instead of
+     stretching it. Inner ref container gets `min-h-[78px]`.
+
+**Downstream blast radius.** Both widgets are the only two
+implementations; everything that uses captcha
+(`/login` register tab, `/login` login tab, `/admin-login`,
+`/signup`) goes through `captcha-widget.tsx` which dispatches
+to one of these two — so the new look picks up everywhere
+with **zero touch** at the call sites.
+
+**No behavior change.** Widget config is unchanged except for
+`size: "flexible"` on Turnstile. The token callback,
+expired-callback, error-callback, sitekey, theme, all
+identical. No prop changes, no API changes, no backend
+changes, no env vars added. CaptchaWidget shim, login.tsx,
+admin-login.tsx, signup.tsx — all untouched.
+
+**Verification.** CI run `25146181410` green. Prod
+`/version.json` builtAt `2026-04-30T03:44:35Z`, JS bundle hash
+flipped from `index-DbNGco7N.js` → `index-sifw9dwN.js`,
+contains all expected new theme markers (`"flexible"`,
+`shadow-[0_0_28px_-10px_rgba(59,130,246,0.45)]`,
+`from-blue-500/[0.06]`) and all preserved B10 admin-captcha
+markers (`Please complete the captcha`, `Enter Admin Panel`).
+Visually confirmed on prod via screenshot:
+`/admin-login` widget now sits inside a clean
+blue-tinted glass frame matching the Email/Password input
+fields above it, "Verify you are human" Cloudflare checkbox
+renders inside the frame at full column width.
+
+### B11.1 (2026-04-30 03:57Z) — Captcha wrapper narrow-screen fix (913125d3c4)
+
+Architect review of B11 flagged that Cloudflare's Turnstile
+iframe has an internal ~300px min-width and recommended a
+smoke-test on 320px webviews. The smoke test confirmed the
+issue: at 320px the wrapper extended past the form card's left
+edge (the `[&_iframe]:!w-full` force + `p-2` combined with
+Cloudflare's min-width was breaking out of the card boundary).
+
+**Fix (Tailwind classes only, both files):**
+- `p-2` → `p-1.5 sm:p-2` (4px less padding each side ≤sm)
+- `[&_iframe]:!w-full` → `sm:[&_iframe]:!w-full` (don't fight
+  Cloudflare's min-width on mobile; let the iframe render at
+  its natural ~300px size centered)
+- `+ max-w-full overflow-hidden` (last-resort clip so the form
+  layout never breaks even on very narrow webviews)
+
+On ≥sm screens (≥640px) the wrapper still stretches the widget
+to fill the form column (the desktop look from B11 unchanged,
+re-verified via prod screenshot). On <sm screens the wrapper
+holds its own width and the iframe renders at Cloudflare's
+natural size.
+
+Re-tested at 320px (iPhone SE 1st gen / very narrow webview;
+form card stays intact, slight iframe content clip is
+acceptable tradeoff vs breaking the card) and 375px (iPhone
+SE 2nd gen / common mobile; cleanly fits with both side
+gutters). recaptcha.tsx mirrors the same Tailwind change for
+provider parity.
+
+**Verification.** CI run `25146516372` green. Prod
+`/version.json` builtAt `2026-04-30T03:57:30Z`, JS bundle hash
+flipped from `index-sifw9dwN.js` → `index-0_4GK7P_.js`,
+contains all expected new responsive markers
+(`p-1.5 sm:p-2 max-w-full overflow-hidden`,
+`sm:[&_iframe]:!w-full`) plus all preserved B11 theme markers
+(`"flexible"`, the blue glow shadow class) plus all preserved
+B10 admin-captcha markers (`Please complete the captcha`,
+`Enter Admin Panel`). Desktop prod screenshot confirms widget
+still renders at full column width inside the themed frame.
