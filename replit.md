@@ -2393,3 +2393,77 @@ gone from bundle. Note: `tracking-widest text-lg` still appears
 (separate USDT-side code, not the withdraw OTP) — confirmed via
 ripgrep on local source. The withdraw tab itself is fully clean
 of the legacy classes.
+
+### B14 (2026-04-30 05:06Z) — Settings → Mobile Number card stuck on "Loading…" (4de4bfe632)
+
+**Trigger.** User screenshot of `/settings`: the Mobile Number
+card showed only a `<Loader2 className="animate-spin"/> Loading…`
+spinner that never resolved. User: "yadi ek bar phone
+verification ho chuka hai aur yadi admin ne edit kiya hai to
+bhi yaha dikhna chahie abhi show nahi kar raha hai."
+
+**Root cause — caller/lib API mismatch.** `PhoneChangeCard` was
+written against the old `authFetch(url)` that returned a
+`Response`, so callers did `r.ok` / `r.json()`. The lib was
+refactored some time back to:
+
+```ts
+export async function authFetch<T>(url, init?): Promise<T> {
+  const res = await fetch(...);
+  const text = await res.text();
+  const data = text ? JSON.parse(text) : null;
+  if (!res.ok) throw new Error(data?.message ?? data?.error ?? `Request failed (${res.status})`);
+  return data as T;
+}
+```
+
+i.e. it now returns the parsed body and throws on non-2xx. The
+PhoneChangeCard never got updated, so:
+
+```ts
+const r = await authFetch(api("/phone-change/status"));
+if (!r.ok) throw new Error("status_fetch_failed");
+return r.json();
+```
+
+…always evaluates `r.ok = undefined → !r.ok = true → throw`.
+React Query catches it, retries 3×, all fail. The card gets
+stuck on the initial pending state because every retry takes
+real network time and the error path also re-renders into a
+state with no usable `status`. (And the user's second concern
+falls out as a corollary — the API call literally never resolves
+to data, so admin-edited phones can't render either.)
+
+**Fix.** Updated all 6 callers in
+`artifacts/qorix-markets/src/components/phone-change-card.tsx`
+to the current authFetch signature:
+  - `useQuery` for `/phone-change/status` → returns
+    `authFetch<ChangeStatus>(...)` directly
+  - `startMut` / `verifyOldMut` / `sendNewMut` / `verifyNewMut`
+    / `cancelMut` → return the awaited authFetch call
+  - All `r.ok` checks and `r.json()` calls removed
+  - `handleApiError` unchanged — `e.message` is now already the
+    human string (authFetch extracts it), and the JSON.parse
+    fallback in handleApiError is harmless on plain text
+
+10 lines net removed (346 → 336). No state-shape, no hook
+contracts, no API contracts changed. Server-side
+`/phone-change/status` reads `phoneNumber` + `phoneVerifiedAt`
+straight from `usersTable`, and admin's
+`PUT /admin/users/:id/profile` already sets both fields when
+admin saves a phone (see `admin.ts:498-499`), so the admin-
+edited number now displays correctly the moment the API call
+succeeds.
+
+**Out of scope but flagged.** `pages/admin-subscriptions.tsx`
+has the same Response-style usage of `authFetch` (3 callers).
+That page is admin-only, not part of the user's reported
+symptom — leaving for a future cleanup.
+
+**Verification.** CI run `25148374421` green. Prod
+`/version.json` builtAt `2026-04-30T05:06:13Z`, JS bundle hash
+flipped to `index-Dyn_Cwwb.js`. Bundle markers: `phone-change/
+status` 1×, `phone-change/start` 1×, `phone-change/cancel` 1×,
+`Mobile Number` 1×, `Verified via voice OTP` 1×. The old throw
+literal `status_fetch_failed` is gone from the bundle (0×
+hits) — confirms the broken queryFn is no longer compiled in.
