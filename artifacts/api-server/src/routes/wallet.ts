@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, walletsTable, transactionsTable, investmentsTable, usersTable } from "@workspace/db";
-import { eq, and, gte } from "drizzle-orm";
+import { eq, and, gte, sql } from "drizzle-orm";
 import { authMiddleware, type AuthRequest } from "../middlewares/auth";
 import { DepositBody, WithdrawBody, TransferToTradingBody } from "@workspace/api-zod";
 import { createNotification } from "../lib/notifications";
@@ -628,20 +628,9 @@ router.post("/wallet/transfer", async (req: AuthRequest, res) => {
   // transfers were introduced.
   const direction = result.data.direction ?? "to_trading";
 
-  const wallets = await db.select().from(walletsTable).where(eq(walletsTable.userId, req.userId!)).limit(1);
-  const wallet = wallets[0];
-  if (!wallet) {
-    res.status(404).json({ error: "Wallet not found" });
-    return;
-  }
-
-  const mainBalance = parseFloat(wallet.mainBalance as string);
-  const tradingBalance = parseFloat(wallet.tradingBalance as string);
-
-  // Direction-aware source-balance check + computed new balances. We compute
-  // the deltas once here so the DB transaction below is purely about writes.
-  let newMainBalance: number;
-  let newTradingBalance: number;
+  // Direction-aware metadata. The actual balance check + arithmetic is done
+  // atomically inside the DB transaction below using a conditional UPDATE,
+  // so we no longer need to read the wallet here.
   let txnDescription: string;
   let debitAccountCode: string;
   let creditAccountCode: string;
@@ -651,12 +640,6 @@ router.post("/wallet/transfer", async (req: AuthRequest, res) => {
   let logMessage: string;
 
   if (direction === "to_trading") {
-    if (amount > mainBalance) {
-      res.status(400).json({ error: "Insufficient main balance" });
-      return;
-    }
-    newMainBalance = mainBalance - amount;
-    newTradingBalance = tradingBalance + amount;
     txnDescription = `Transfer $${amount.toFixed(2)} to trading balance`;
     debitAccountCode = `user:${req.userId!}:main`;
     creditAccountCode = `user:${req.userId!}:trading`;
@@ -666,12 +649,6 @@ router.post("/wallet/transfer", async (req: AuthRequest, res) => {
     logMessage = "Transfer to trading balance completed";
   } else {
     // direction === "to_main" — reverse transfer (Trading → Main)
-    if (amount > tradingBalance) {
-      res.status(400).json({ error: "Insufficient trading balance" });
-      return;
-    }
-    newMainBalance = mainBalance + amount;
-    newTradingBalance = tradingBalance - amount;
     txnDescription = `Transfer $${amount.toFixed(2)} to main balance`;
     debitAccountCode = `user:${req.userId!}:trading`;
     creditAccountCode = `user:${req.userId!}:main`;
@@ -681,42 +658,96 @@ router.post("/wallet/transfer", async (req: AuthRequest, res) => {
     logMessage = "Transfer to main balance completed";
   }
 
-  const [updated] = await db.transaction(async (tx) => {
-    await ensureUserAccounts(req.userId!, tx);
+  let updated: typeof walletsTable.$inferSelect | undefined;
+  try {
+    [updated] = await db.transaction(async (tx) => {
+      await ensureUserAccounts(req.userId!, tx);
 
-    const [w] = await tx
-      .update(walletsTable)
-      .set({
-        mainBalance: newMainBalance.toString(),
-        tradingBalance: newTradingBalance.toString(),
-        updatedAt: new Date(),
-      })
-      .where(eq(walletsTable.userId, req.userId!))
-      .returning();
+      // Atomic conditional UPDATE — race-safe under concurrent transfers.
+      //
+      // The previous form read the wallet outside the tx, computed absolute
+      // newMain/newTrading values in JS, then wrote them back. Two concurrent
+      // transfers could each see the same starting balance, both pass the
+      // pre-check, and both write absolute values that overwrite each other —
+      // effectively letting the user double-spend. The ledger negative-balance
+      // guard would catch the second one and roll back, but only after both
+      // wallet writes had been queued.
+      //
+      // Doing the arithmetic in SQL with a `gte` guard in the WHERE clause
+      // makes the whole step row-locked + atomic: only one of the racing
+      // transactions sees the balance high enough to proceed, the other
+      // gets a 0-row return and we throw.
+      const amountStr = amount.toFixed(8);
+      const sourceBalanceCol =
+        direction === "to_trading" ? walletsTable.mainBalance : walletsTable.tradingBalance;
+      const updatedRows = await tx
+        .update(walletsTable)
+        .set(
+          direction === "to_trading"
+            ? {
+                mainBalance: sql`${walletsTable.mainBalance} - ${amountStr}::numeric`,
+                tradingBalance: sql`${walletsTable.tradingBalance} + ${amountStr}::numeric`,
+                updatedAt: new Date(),
+              }
+            : {
+                mainBalance: sql`${walletsTable.mainBalance} + ${amountStr}::numeric`,
+                tradingBalance: sql`${walletsTable.tradingBalance} - ${amountStr}::numeric`,
+                updatedAt: new Date(),
+              },
+        )
+        .where(and(eq(walletsTable.userId, req.userId!), gte(sourceBalanceCol, amountStr)))
+        .returning();
+      if (updatedRows.length === 0) {
+        // Differentiate between "wallet missing" and "insufficient balance"
+        // by doing a follow-up read inside the same tx. Both cases roll back.
+        const [exists] = await tx
+          .select({ id: walletsTable.id })
+          .from(walletsTable)
+          .where(eq(walletsTable.userId, req.userId!))
+          .limit(1);
+        throw new Error(exists ? "INSUFFICIENT_BALANCE" : "WALLET_NOT_FOUND");
+      }
+      const [w] = updatedRows;
 
-    const [txn] = await tx
-      .insert(transactionsTable)
-      .values({
-        userId: req.userId!,
-        type: "transfer",
-        amount: amount.toString(),
-        status: "completed",
-        description: txnDescription,
-      })
-      .returning();
+      const [txn] = await tx
+        .insert(transactionsTable)
+        .values({
+          userId: req.userId!,
+          type: "transfer",
+          amount: amount.toString(),
+          status: "completed",
+          description: txnDescription,
+        })
+        .returning();
 
-    await postJournalEntry(
-      journalForTransaction(txn!.id),
-      [
-        { accountCode: debitAccountCode, entryType: "debit", amount, description: debitDescription },
-        { accountCode: creditAccountCode, entryType: "credit", amount, description: creditDescription },
-      ],
-      txn!.id,
-      tx,
-    );
+      await postJournalEntry(
+        journalForTransaction(txn!.id),
+        [
+          { accountCode: debitAccountCode, entryType: "debit", amount, description: debitDescription },
+          { accountCode: creditAccountCode, entryType: "credit", amount, description: creditDescription },
+        ],
+        txn!.id,
+        tx,
+      );
 
-    return [w] as const;
-  });
+      return [w] as const;
+    });
+  } catch (err: any) {
+    if (err?.message === "INSUFFICIENT_BALANCE") {
+      res.status(400).json({
+        error:
+          direction === "to_trading"
+            ? "Insufficient main balance"
+            : "Insufficient trading balance",
+      });
+      return;
+    }
+    if (err?.message === "WALLET_NOT_FOUND") {
+      res.status(404).json({ error: "Wallet not found" });
+      return;
+    }
+    throw err;
+  }
 
   transactionLogger.info(
     {
@@ -724,8 +755,8 @@ router.post("/wallet/transfer", async (req: AuthRequest, res) => {
       userId: req.userId!,
       amount,
       direction,
-      newMainBalance,
-      newTradingBalance,
+      newMainBalance: parseFloat(updated!.mainBalance as string),
+      newTradingBalance: parseFloat(updated!.tradingBalance as string),
     },
     logMessage,
   );

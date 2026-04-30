@@ -6,13 +6,15 @@ import {
   inrWithdrawalsTable,
   systemSettingsTable,
   merchantsTable,
+  transactionsTable,
 } from "@workspace/db";
-import { eq, and, desc, sql, inArray, gte } from "drizzle-orm";
+import { eq, and, desc, sql, inArray, gte, like } from "drizzle-orm";
 import { authMiddleware, adminMiddleware, type AuthRequest } from "../middlewares/auth";
 import { auditAdminRequest, requireAdminPermission } from "../middlewares/admin-rbac";
 import { createNotification } from "../lib/notifications";
 import { transactionLogger, errorLogger } from "../lib/logger";
 import { sendTxnEmailToUser, verifyOtp } from "../lib/email-service";
+import { ensureUserAccounts, postJournalEntry, journalForTransaction } from "../lib/ledger-service";
 import { isSmokeTestUser } from "../lib/smoke-test-account";
 import { getWithdrawalCaps } from "../lib/withdrawal-caps";
 import { notifyAllActiveMerchantsOfNewWithdrawal } from "../lib/escalation-cron";
@@ -295,6 +297,12 @@ router.post("/inr-withdrawals", authMiddleware, async (req: AuthRequest, res) =>
         throw new Error("WITHDRAWAL_LOCKED_PASSWORD_CHANGE");
       }
 
+      // Ensure user GL accounts exist BEFORE the wallet debit so the
+      // subsequent journal entry can find them. This also triggers the
+      // opening-balance reconciliation (B20) for any orphan wallet whose
+      // ledger trail starts from zero.
+      await ensureUserAccounts(req.userId!, tx);
+
       const debit = await tx
         .update(walletsTable)
         .set({
@@ -349,6 +357,46 @@ router.post("/inr-withdrawals", authMiddleware, async (req: AuthRequest, res) =>
           bankName,
         })
         .returning();
+
+      // Insert a pending `transactions` row so the user sees their pending
+      // withdrawal in their history immediately. The deterministic
+      // `[INR-WD:${id}]` prefix lets the approve/reject handlers find this
+      // row again without needing a FK column on inr_withdrawals.
+      const [txnRow] = await tx
+        .insert(transactionsTable)
+        .values({
+          userId: req.userId!,
+          type: "withdrawal",
+          amount: amountUsdt.toFixed(6),
+          status: "pending",
+          description: `[INR-WD:${row!.id}] INR withdrawal pending — ₹${amountInr.toFixed(2)} (≈$${amountUsdt.toFixed(2)} USDT) via ${payoutMethod.toUpperCase()}`,
+        })
+        .returning();
+
+      // Lock the funds in the ledger: move user:UID:main → platform:pending_withdrawals.
+      // This keeps wallet sum == ledger sum for the user's main account.
+      // Approve will release the funds to platform:usdt_pool. Reject will
+      // restore them to user:UID:main.
+      await postJournalEntry(
+        journalForTransaction(txnRow!.id),
+        [
+          {
+            accountCode: `user:${req.userId!}:main`,
+            entryType: "debit",
+            amount: amountUsdt,
+            description: `INR withdrawal pending — funds locked (WD#${row!.id})`,
+          },
+          {
+            accountCode: "platform:pending_withdrawals",
+            entryType: "credit",
+            amount: amountUsdt,
+            description: `Held for INR withdrawal #${row!.id} (user ${req.userId!})`,
+          },
+        ],
+        txnRow!.id,
+        tx,
+      );
+
       return row!;
     });
   } catch (err: any) {
@@ -470,6 +518,102 @@ router.post("/admin/inr-withdrawals/:id/approve", async (req: AuthRequest, res) 
           throw new Error("INVALID_MERCHANT_ID");
         }
       }
+
+      // Find the pending `transactions` row created at submit time via the
+      // deterministic `[INR-WD:${id}]` description prefix. If the withdrawal
+      // was created by older code (pre-B21) without a txn row, fall through
+      // gracefully: insert a completed txn now and post a direct journal that
+      // bypasses the locked stage (pre-B21 submits never posted the lock
+      // journal either, so going main → usdt_pool keeps things consistent).
+      const wdTag = `[INR-WD:${id}]`;
+      const [pendingTxn] = await tx
+        .select()
+        .from(transactionsTable)
+        .where(
+          and(
+            eq(transactionsTable.userId, claimed.userId),
+            eq(transactionsTable.type, "withdrawal"),
+            eq(transactionsTable.status, "pending"),
+            like(transactionsTable.description, `${wdTag}%`),
+          ),
+        )
+        .limit(1);
+      const amountUsdt = parseFloat(claimed.amountUsdt as string);
+
+      if (pendingTxn) {
+        // B21+ path: pending txn + lock journal exist. Finalize both.
+        await tx
+          .update(transactionsTable)
+          .set({
+            status: "completed",
+            description:
+              `${wdTag} INR withdrawal paid — ₹${parseFloat(claimed.amountInr as string).toFixed(2)} ` +
+              `(≈$${amountUsdt.toFixed(2)} USDT) via ${claimed.payoutMethod.toUpperCase()}` +
+              (payoutReference ? ` — ref ${payoutReference}` : ""),
+          })
+          .where(eq(transactionsTable.id, pendingTxn.id));
+
+        // Release the held funds to the platform usdt pool (asset out).
+        // Contra: platform:pending_withdrawals (liability cleared).
+        await postJournalEntry(
+          `inr_wd:${id}:approve`,
+          [
+            {
+              accountCode: "platform:pending_withdrawals",
+              entryType: "debit",
+              amount: amountUsdt,
+              description: `Release held funds for INR withdrawal #${id}`,
+            },
+            {
+              accountCode: "platform:usdt_pool",
+              entryType: "credit",
+              amount: amountUsdt,
+              description: `INR withdrawal #${id} paid out (user ${claimed.userId})`,
+            },
+          ],
+          pendingTxn.id,
+          tx,
+        );
+      } else {
+        // Pre-B21 path / orphan withdrawal: no pending txn, no lock journal.
+        // Wallet was already debited at submit; we just need to write the
+        // ledger half so wallet sum == ledger sum going forward.
+        await ensureUserAccounts(claimed.userId, tx);
+        const [newTxn] = await tx
+          .insert(transactionsTable)
+          .values({
+            userId: claimed.userId,
+            type: "withdrawal",
+            amount: amountUsdt.toFixed(6),
+            status: "completed",
+            description:
+              `${wdTag} INR withdrawal paid — ₹${parseFloat(claimed.amountInr as string).toFixed(2)} ` +
+              `(≈$${amountUsdt.toFixed(2)} USDT) via ${claimed.payoutMethod.toUpperCase()}` +
+              (payoutReference ? ` — ref ${payoutReference}` : "") +
+              ` (legacy submit — direct settlement)`,
+          })
+          .returning();
+        await postJournalEntry(
+          `inr_wd:${id}:approve`,
+          [
+            {
+              accountCode: `user:${claimed.userId}:main`,
+              entryType: "debit",
+              amount: amountUsdt,
+              description: `INR withdrawal #${id} settled (legacy direct settlement)`,
+            },
+            {
+              accountCode: "platform:usdt_pool",
+              entryType: "credit",
+              amount: amountUsdt,
+              description: `INR withdrawal #${id} paid out (user ${claimed.userId})`,
+            },
+          ],
+          newTxn!.id,
+          tx,
+        );
+      }
+
       return claimed;
     });
   } catch (err: any) {
@@ -540,6 +684,62 @@ router.post("/admin/inr-withdrawals/:id/reject", async (req: AuthRequest, res) =
           updatedAt: new Date(),
         })
         .where(eq(walletsTable.userId, row.userId));
+
+      // Mirror the wallet refund in the ledger: release the held funds back
+      // to user:UID:main and mark the pending txn as rejected. Pre-B21
+      // withdrawals never posted the lock journal, so the refund-side
+      // journal is skipped for them (no pending txn → fall-through path).
+      const wdTag = `[INR-WD:${id}]`;
+      const [pendingTxn] = await tx
+        .select()
+        .from(transactionsTable)
+        .where(
+          and(
+            eq(transactionsTable.userId, row.userId),
+            eq(transactionsTable.type, "withdrawal"),
+            eq(transactionsTable.status, "pending"),
+            like(transactionsTable.description, `${wdTag}%`),
+          ),
+        )
+        .limit(1);
+      const amountUsdt = parseFloat(row.amountUsdt as string);
+
+      if (pendingTxn) {
+        await tx
+          .update(transactionsTable)
+          .set({
+            status: "rejected",
+            description:
+              `${wdTag} INR withdrawal rejected — ₹${parseFloat(row.amountInr as string).toFixed(2)} refunded` +
+              (note ? ` (reason: ${note})` : ""),
+          })
+          .where(eq(transactionsTable.id, pendingTxn.id));
+
+        await postJournalEntry(
+          `inr_wd:${id}:reject`,
+          [
+            {
+              accountCode: "platform:pending_withdrawals",
+              entryType: "debit",
+              amount: amountUsdt,
+              description: `Release held funds — INR withdrawal #${id} rejected`,
+            },
+            {
+              accountCode: `user:${row.userId}:main`,
+              entryType: "credit",
+              amount: amountUsdt,
+              description: `Refund for rejected INR withdrawal #${id}`,
+            },
+          ],
+          pendingTxn.id,
+          tx,
+        );
+      }
+      // else: pre-B21 withdrawal — no lock journal exists, wallet refund
+      // alone is sufficient. The mismatch reconciliation script handles
+      // backfill for any pre-B21 approved withdrawals; rejected ones
+      // never had a journal so they remain consistent.
+
       return row;
     });
   } catch (err: any) {
