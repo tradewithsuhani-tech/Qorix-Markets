@@ -12,7 +12,7 @@ version = "1.0.0"
 [[services]]
 name = "web"
 paths = [ "/qorix-quiz/" ]
-localPort = 22276
+localPort = 21639
 
 [services.development]
 run = "pnpm --filter @workspace/qorix-quiz run dev"
@@ -27,5 +27,5 @@ from = "/*"
 to = "/index.html"
 
 [services.env]
-PORT = "22276"
+PORT = "21639"
 BASE_PATH = "/qorix-quiz/"
