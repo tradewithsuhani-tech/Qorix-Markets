@@ -27,7 +27,18 @@ import { sendUsdtFromTreasury, getTreasuryUsdtBalance } from "../lib/crypto-depo
 import { creditUserDeposit } from "../lib/tron-monitor";
 import { emitProfitDistribution } from "../lib/event-bus";
 import { transactionLogger, profitLogger, errorLogger } from "../lib/logger";
-import { sendEmail, sendTxnEmailToUser, renderKycVerificationRequestedHtml } from "../lib/email-service";
+import {
+  sendEmail,
+  sendTxnEmailToUser,
+  renderKycVerificationRequestedHtml,
+  renderAnnouncementBroadcastHtml,
+  renderPromotionBroadcastHtml,
+  renderAlertBroadcastHtml,
+  renderInfoUpdateBroadcastHtml,
+  renderMaintenanceBroadcastHtml,
+  renderTradeAlertFomoBroadcastHtml,
+  renderNextTradeFomoBroadcastHtml,
+} from "../lib/email-service";
 import { PROMO_BOUNDS, normalizePromoCodePrefix } from "../lib/promo-bounds";
 import {
   ensureUserAccounts,
@@ -919,33 +930,148 @@ router.post("/admin/broadcast", async (req: AuthRequest, res) => {
   });
 });
 
-import { buildBrandedEmailHtml, messageToBodyHtml } from "../lib/email-template";
+import { buildBrandedEmailHtml, messageToBodyHtml, escapeHtml } from "../lib/email-template";
 
 const buildBroadcastHtml = buildBrandedEmailHtml;
 
-// Per-template HTML dispatch for /admin/users/:id/send-email. The admin's
-// communication-page picker passes a templateId alongside {subject, message}.
-// For templates with a dedicated unique-design renderer in email-service.ts
-// (e.g. "kyc" → renderKycVerificationRequestedHtml — royal-plum + gold-leaf
-// theme with structured 3-document checklist + premium CTA), we route the
-// admin's free-form copy into that renderer's structured slots so the user
-// receives the bespoke premium design instead of the generic broadcast
-// wrapper. Unknown / un-routed templateIds (and the empty case where the
-// admin sends a hand-typed one-off email) fall back to buildBrandedEmailHtml.
+// ---------------------------------------------------------------------------
+// Per-template HTML dispatch for /admin/users/:id/send-email
+// ---------------------------------------------------------------------------
+// The admin's communication-page picker (frontend EMAIL_TEMPLATES) passes a
+// templateId alongside the free-form {subject, message}. Each templateId has
+// a dedicated, unique-design renderer in lib/email-service.ts that the
+// transactional / broadcast pipelines also use — so admin-sent direct
+// emails now match the premium look of the auto-sent ones.
+//
+// Mapping:
+//   kyc          → renderKycVerificationRequestedHtml (royal-plum+gold)
+//   announcement → renderAnnouncementBroadcastHtml    (steel+silver)
+//   promotion    → renderPromotionBroadcastHtml       (magenta+gold)
+//   alert        → renderAlertBroadcastHtml           (amber-hazard)
+//   info         → renderInfoUpdateBroadcastHtml      (cool-blue)
+//   maintenance  → renderMaintenanceBroadcastHtml     (slate-orange)
+//   trade_alert  → renderTradeAlertFomoBroadcastHtml  (emerald-FOMO)
+//   next_trade   → renderNextTradeFomoBroadcastHtml   (cyan-countdown)
+//
+// For renderers that need structured fields the admin doesn't provide
+// (publishedAt, recommendedAction, windowStart/End, profit/pair etc) we
+// supply sensible decorative defaults. The admin's free-form `message` is
+// always the primary visible content (rendered via messageToBodyHtml).
+// Renderers without a `title` slot (trade_alert, next_trade) get the
+// admin's `subject` prepended as a bold heading inside bodyHtml so it is
+// not lost. Unknown / null templateIds fall back to buildBrandedEmailHtml.
+// ---------------------------------------------------------------------------
 function buildDirectEmailHtml(
   templateId: string | null | undefined,
   subject: string,
   message: string,
 ): string {
-  if (templateId === "kyc") {
-    return renderKycVerificationRequestedHtml({
-      preheader: message.replace(/\s+/g, " ").slice(0, 110),
-      title: subject,
-      bodyHtml: messageToBodyHtml(message),
-      ctaUrl: "https://qorixmarkets.com/kyc",
-    });
+  const preheader = message.replace(/\s+/g, " ").slice(0, 110);
+  const bodyHtml = messageToBodyHtml(message);
+  const dashboardUrl = "https://qorixmarkets.com/dashboard";
+
+  // Heading prepended for renderers that have no explicit `title` slot
+  // (trade_alert, next_trade). Keeps the admin's subject visible in-body.
+  const subjectHeadingHtml =
+    `<div style="font-size:18px;font-weight:800;color:#FFFFFF;margin:0 0 14px;line-height:1.3;letter-spacing:-0.2px;">` +
+    escapeHtml(subject) +
+    `</div>`;
+
+  switch (templateId) {
+    case "kyc":
+      return renderKycVerificationRequestedHtml({
+        preheader,
+        title: subject,
+        bodyHtml,
+        ctaUrl: "https://qorixmarkets.com/kyc",
+      });
+
+    case "announcement":
+      return renderAnnouncementBroadcastHtml({
+        preheader,
+        title: subject,
+        bodyHtml,
+        publishedAt: new Date(),
+        ctaLabel: "Open Dashboard",
+        ctaUrl: dashboardUrl,
+      });
+
+    case "promotion":
+      return renderPromotionBroadcastHtml({
+        preheader,
+        title: subject,
+        offerHighlight: "Limited-Time Offer · Don't Miss Out",
+        bodyHtml,
+        ctaLabel: "Claim Offer",
+        ctaUrl: dashboardUrl,
+      });
+
+    case "alert":
+      return renderAlertBroadcastHtml({
+        preheader,
+        title: subject,
+        bodyHtml,
+        recommendedAction:
+          "Log in to your dashboard and review your account for any required action.",
+        ctaLabel: "Open Dashboard",
+        ctaUrl: dashboardUrl,
+      });
+
+    case "info":
+      return renderInfoUpdateBroadcastHtml({
+        preheader,
+        title: subject,
+        bodyHtml,
+        ctaLabel: "Open Dashboard",
+        ctaUrl: dashboardUrl,
+      });
+
+    case "maintenance": {
+      // Admin-sent maintenance emails use a generic 1-hour decorative
+      // window starting in ~1h. The exact details belong in the message
+      // body the admin types — these structured fields are decorative
+      // chrome for the design.
+      const now = Date.now();
+      return renderMaintenanceBroadcastHtml({
+        preheader,
+        title: subject,
+        windowStart: new Date(now + 60 * 60 * 1000),
+        windowEnd: new Date(now + 2 * 60 * 60 * 1000),
+        impactedServices: "Trading platform · Withdrawals · API",
+        bodyHtml,
+        statusUrl: dashboardUrl,
+      });
+    }
+
+    case "trade_alert":
+      // No `title` slot — prepend subject inside the body as H1 so it
+      // remains visible. Pair/profit are decorative defaults for direct
+      // admin sends; the actual content is the admin's message body.
+      return renderTradeAlertFomoBroadcastHtml({
+        preheader,
+        profitAmount: "Live",
+        pair: "BTC/USDT",
+        bodyHtml: subjectHeadingHtml + bodyHtml,
+        ctaLabel: "View Live Trades",
+        ctaUrl: dashboardUrl,
+      });
+
+    case "next_trade":
+      // No `title` slot — same H1-prepend treatment as trade_alert. The
+      // 1-hour countdown is a decorative default; admin's body carries
+      // any specific timing the user needs to know.
+      return renderNextTradeFomoBroadcastHtml({
+        preheader,
+        nextTradeAt: new Date(Date.now() + 60 * 60 * 1000),
+        pair: "BTC/USDT",
+        bodyHtml: subjectHeadingHtml + bodyHtml,
+        ctaLabel: "Open Dashboard",
+        ctaUrl: dashboardUrl,
+      });
+
+    default:
+      return buildBrandedEmailHtml(subject, message);
   }
-  return buildBrandedEmailHtml(subject, message);
 }
 
 // ---------------------------------------------------------------------------
