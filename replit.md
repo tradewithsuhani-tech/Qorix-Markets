@@ -684,7 +684,7 @@ timeout. Fix shipped:
 - Consider HTTP/2 keep-alive between Fly LB and app to reduce per-request connection overhead under sustained load
 - If WebSocket / SSE features are added (live price ticker), revisit sticky-session vs. broadcast strategy
 - Add a regression test that simulates Redis being down and asserts the limiter passes through within the 1.5 s commandTimeout budget (architect MINOR follow-up)
-- Constant-time compare for `LOADTEST_TOKEN` header (architect MINOR follow-up �� low practical risk, current strict equality is acceptable for a 32-byte hex token)
+- Constant-time compare for `LOADTEST_TOKEN` header (architect MINOR follow-up ��� low practical risk, current strict equality is acceptable for a 32-byte hex token)
 
 ## Phase 6 (perf): admin panel <1s — app-layer (Apr 28, 2026)
 
@@ -1381,7 +1381,7 @@ the banner even though the session is genuinely blocked.
 
 - ~~**B6.1**: signup captcha + failed-submit widget reset~~ ✅ LIVE (`d5e1c63`).
 - ~~**B7**: 24h new-device withdraw cooldown.~~ ✅ LIVE (`920cef6`).
-- ~~**B8**: My Devices page.~~ ✅ LIVE (see below).
+- ~~**B8**: My Devices page.~~ �� LIVE (see below).
 - **/auth/forgot-password CAPTCHA enforcement** (architect note 6 from
   B6 review) — deferred; that endpoint is rate-limited today; will
   revisit after B7/B8 land.
@@ -1949,3 +1949,97 @@ Turnstile end-to-end on prod (qorixmarkets.com) and dev (Replit
 prod but still present in source for rollback. B9.6 task is
 fully closed — Phase 1 (dispatcher + zero-behavior deploy) and
 Phase 2 (provider flip) both shipped clean.
+
+### Captcha observability + rollback runbook (B9.6 Phase 3, 2026-04-30)
+
+Architect-flagged after Phase 2 review: emergency rollback is
+more nuanced than the original playbook implied, and the
+mismatch failure mode is silent at the user level. Phase 3
+ships the minimum-viable observability + a hardened runbook so
+a future skew event is both visible and reversible.
+
+**Observability — 2 fields added.** No new endpoints, no new
+routes, just two existing JSON responses get one extra string:
+
+- `GET /api/healthz` → now returns
+  `{status:"ok",captchaProvider:"turnstile"|"recaptcha"}`. The
+  field reads `getCaptchaProvider()` at call time (a sync env
+  read — zero cost, zero new deps, won't break Fly's strict
+  zero-dep healthz contract from the 2026-04-28 incident).
+- `GET /version.json` → now returns
+  `{version,builtAt,captchaProvider:"turnstile"|"recaptcha"}`.
+  The field is captured at vite `buildStart()` from
+  `process.env.VITE_CAPTCHA_PROVIDER` (with `"recaptcha"`
+  fallback so a deploy that forgets the build-arg gets a
+  defined value rather than `undefined`).
+
+**Skew detection.** A watcher comparing these two values is the
+cheapest way to catch a future Phase-N cutover going sideways:
+if `/api/healthz.captchaProvider !== /version.json.captchaProvider`
+for more than one poll cycle (call it 60s), the active server
+provider and the bundle provider have drifted and login
+verification will silently fail for a fraction of users.
+
+**Failure Mode A — Turnstile verifier outage on Cloudflare's
+side, but our site key + domain are still valid.** Symptom:
+`verifyTurnstileToken` returns `{ok:false}` for legit tokens;
+api logs show 5xx from `https://challenges.cloudflare.com/turnstile/v0/siteverify`.
+Cloudflare status page confirms incident.
+
+Action: **API-only rollback to reCAPTCHA.** One line:
+`flyctl secrets unset CAPTCHA_PROVIDER TURNSTILE_SECRET_KEY -a qorix-api`.
+This makes `getCaptchaProvider()` fall back to its hard-coded
+recaptcha default (because `RECAPTCHA_SECRET_KEY` was
+deliberately retained on Fly during the Phase 2 cutover).
+**CAVEAT**: any browser still on the post-Phase-2 Turnstile
+bundle is rendering a Turnstile widget — it will produce
+Turnstile tokens that the rolled-back API can no longer verify.
+Result: ALL active web sessions on the new bundle break until
+they refresh and pick up a re-deployed reCAPTCHA bundle. This
+rollback only fully helps once Mode B is also taken; on its
+own it just buys time.
+
+**Failure Mode B — Turnstile site-key revoked / disputed /
+domain misconfigured.** Symptom: `turnstile.render` callback
+fires `error-callback` instead of `callback`; users see the
+captcha frame fail to load with no widget visible. Cloudflare
+Turnstile dashboard shows zero requests landing against the
+affected site key.
+
+Action: **Full provider rollback (API + web).**
+1. **API**: same one-liner as Mode A.
+2. **Web**: revert the 4 `deploy.yml` lines from commit
+   `446633d` (drop `--build-arg VITE_CAPTCHA_PROVIDER=turnstile`
+   + `--build-arg VITE_TURNSTILE_SITE_KEY=…` from the
+   qorix-markets deploy step + the matching env block + the
+   preflight presence check). Push, wait for CI to re-deploy
+   the web bundle (~5–7 min). Once the new `version.json`
+   propagates, the version-check banner prompts open tabs to
+   refresh, and users land on the reCAPTCHA-only bundle.
+
+**Failure Mode C — Skew between web and API providers** (the
+~3-min Phase-2 mismatch window, or a future similar event).
+Symptom: spike in `/api/auth/login` and `/api/auth/register`
+4xx responses with `code:"captcha_invalid"`; the new
+observability fields disagree.
+
+Action: monitor `/api/healthz.captchaProvider` vs
+`/version.json.captchaProvider`. If skew persists > 60s,
+trigger Mode A or Mode B depending on which side needs to
+align with the other. Service-worker / browser cache may
+prolong the skew on the web side; `forceReload()` (in
+`src/lib/version-check.ts`) clears Cache Storage and
+unregisters service workers, which is what the version-check
+banner already does on user gesture — that path remains the
+clean recovery for individual stuck clients.
+
+**Things this runbook deliberately does NOT cover** (yet):
+dual-accept server mode (server accepts EITHER provider's
+token simultaneously during a rolling cutover) is the only way
+to truly eliminate the mismatch window for a future Phase-N
+flip. Architect raised it as a "consider for future migrations"
+item — captured here as a TODO. Cost is roughly: dispatcher
+verifies token against BOTH verifiers in parallel during a
+cutover-flag-on window, accepts either success. Not built in
+Phase 3; the observability above gives us the visibility to
+decide if it's worth building before the next provider change.
