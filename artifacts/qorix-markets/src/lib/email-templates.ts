@@ -5,6 +5,7 @@ import {
   Info,
   Wrench,
   TrendingUp,
+  ShieldCheck,
   type LucideIcon,
 } from "lucide-react";
 
@@ -91,6 +92,37 @@ export const EMAIL_TEMPLATES: EmailTemplate[] = [
       "✔ Fully automated — zero work\n" +
       "✔ Withdraw anytime\n\n" +
       "Don't watch the next profit happen to someone else.\n\n" +
+      "Qorix Markets\n" +
+      "AI-Powered Trading System",
+  },
+  {
+    id: "kyc",
+    icon: ShieldCheck,
+    label: "KYC Verification",
+    color: "text-cyan-400 bg-cyan-500/10",
+    defaultTitle: "🛡 Action Needed — Verify Your KYC to Continue Trading",
+    defaultMessage:
+      "Dear Investor,\n\n" +
+      "To keep your Qorix Markets account secure and unlock the full trading experience, we need to verify your identity (KYC).\n\n" +
+      "🛡  Why KYC is required\n" +
+      "   • Protects your funds from unauthorized access\n" +
+      "   • Required by global financial compliance standards\n" +
+      "   • Unlocks higher withdrawal limits and faster processing\n\n" +
+      "📋  What you'll need (takes under 3 minutes)\n" +
+      "   • A government-issued photo ID (Passport / Driving Licence / Aadhaar / National ID)\n" +
+      "   • A clear selfie holding the same ID\n" +
+      "   • A recent address proof (utility bill / bank statement)\n\n" +
+      "⚡  How to complete it\n" +
+      "   1. Open the Qorix Markets app or website\n" +
+      "   2. Go to Profile → KYC Verification\n" +
+      "   3. Upload the documents above\n" +
+      "   4. Submit — most reviews complete within 24 hours\n\n" +
+      "🔒  Your data is end-to-end encrypted and used ONLY for identity verification. We never share it with third parties.\n\n" +
+      "Once verified, you'll receive the official ✅ Verified badge on your profile and instant access to:\n" +
+      "   • Higher daily withdrawal limits\n" +
+      "   • Priority support\n" +
+      "   • Exclusive verified-only promotions\n\n" +
+      "Need help? Reply to this email and our compliance team will guide you personally.\n\n" +
       "Qorix Markets\n" +
       "AI-Powered Trading System",
   },
