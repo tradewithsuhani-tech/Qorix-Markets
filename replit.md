@@ -3074,3 +3074,193 @@ Fix:
 Push: commit `d581f001` (base `4bd5024a`) — `fix(admin/users): guard
 against stale /admin/users responses with monotonic loadIdRef`. Same
 CI deploy.yml path.
+
+# B23 — email-verify gate on /auth/login (closed 2026-04-30)
+
+Live commit: `0a7d2f64` (Fly deploy 16:09 UTC, conclusion=success).
+
+Problem:
+- After Phase 7 added `users.email_verified` (boolean) and the
+  signup → "Verify your email" flow (POST `/auth/verify-email-public`
+  with the 6-digit code), an account that signed up and never clicked
+  / typed the verification code could still log in if they later
+  hit `/login` directly. The verification became advisory instead
+  of a gate. A handful of unverified accounts (anita devi #127,
+  ViNOD #135) had been sitting in this half-state.
+
+Fix in `artifacts/api-server/src/routes/auth.ts` POST `/auth/login`:
+- After bcrypt compare succeeds and BEFORE issuing the session
+  cookie / JWT, read `users.email_verified` for that row.
+- If false (or null), respond `403 { code: "EMAIL_NOT_VERIFIED",
+  email, message: "Please verify your email before signing in." }`
+  and SKIP the session bind. The frontend sees the 403 + code and
+  redirects to the existing `/verify-email?email=...` step (already
+  shipped in Phase 7) which calls `/auth/resend-verification` to
+  re-send the 6-digit code.
+- If true, proceed with the existing session/JWT flow unchanged.
+- Admin (`isAdmin=true`) and the special hard-coded id 1 row are
+  exempt — admin must always be able to sign in even if the verify
+  flag was never flipped on the seed row.
+
+Edge case handled: the `email_verified` column was added with
+`DEFAULT false` and backfilled to `true` for the 9 existing real
+users in B23.0, so this gate does NOT lock out pre-existing
+keepers. Only NEW signups (and the two existing unverified rows
+above) feel the gate.
+
+No schema changes in this commit (the column was added in Phase 7
+via hand-written SQL — no db:push). Read-only against `users`
+otherwise.
+
+# B24 — email normalization (lowercase + trim) on register/login (closed 2026-04-30)
+
+Live commit: `c09872c4` (Fly deploy 16:40 UTC, conclusion=success).
+
+Bug observed in NEON prod:
+  id 132: Vimlesh1group@gmail.com  (capital V)
+  id 142: vimlesh1group@gmail.com  (lowercase)
+Two accounts existed for the SAME human because the unique index
+on `users.email` is a case-sensitive btree. Same hole on the login
+side: a user who signed up as "Foo@x.com" couldn't sign in as
+"foo@x.com".
+
+Fix in `artifacts/api-server/src/routes/auth.ts`:
+
+1. POST `/auth/register`
+   - Lowercase + trim immediately after RegisterBody parse, then
+     use the normalized form for BOTH the existence check AND the
+     INSERT — all NEW rows are stored canonical.
+   - Existence check rewritten as
+       `WHERE LOWER(users.email) = ${normalizedEmail}`
+     so legacy mixed-case rows (Vimlesh1group, SAFEPAYU) are also
+     caught, preventing a third dup.
+   - INSERT wrapped in try/catch: a concurrent signup race could
+     let two requests both pass the existence check and reach the
+     INSERT. Postgres rejects the second with `23505` (unique
+     violation) — surface it as the same friendly 409 instead of
+     500.
+
+2. POST `/auth/login`
+   - Same `toLowerCase().trim()` normalization.
+   - Lookup uses `LOWER(users.email) = ...` so users with legacy
+     capitalized emails (SAFEPAYU@GMAIL.COM at id 107, etc) can
+     still sign in by typing any case.
+
+3. POST `/auth/verify-email-public` and `/auth/resend-verification`
+   - Same normalization + LOWER lookup, for symmetry. Without
+     this, after register stores rows lowercased a user clicking
+     "verify" with the case they originally typed wouldn't find
+     their own row.
+
+Note: the .con / .com pair (Durga Kumar ids 148 / 149) is a real
+human typo — those are technically different emails and not
+addressed by this commit. Existing case-only dup (132 / 142) was
+resolved in the mass cleanup below.
+
+Optional follow-up (NOT applied yet — would require user OK):
+  CREATE UNIQUE INDEX users_email_lower_unique ON users (LOWER(email));
+This would harden against any future bypass (e.g. a code path that
+forgets to normalize). Deferred — current code paths all normalize,
+so the application-level guard is sufficient.
+
+No schema changes. No db:push. Read-only against the DB except the
+INSERT path which already existed.
+
+# Mass user cleanup — 36 → 9 keepers (closed 2026-04-30)
+
+Per explicit user authorization ("real money erase kar do, sirf
+9 keepers chhodo"), executed atomic prod-DB cleanup against
+`NEON_DATABASE_URL`.
+
+Keepers (9 user ids, by id ASC):
+  1   admin@qorixmarkets.com           (Admin / seed row)
+  117 looxprem@gmail.com                RAJIV KUMAR SAH      ₹248.88, 25 pts
+  118 safepayu@gmail.com                Raghav (admin role) 25 pts
+  127 anitadevi@gmail.com               anita devi           unverified
+  135 vinod...@gmail.com                ViNOD                unverified
+  136 abodh3999@gmail.com               abodh                ₹8.70 trade
+  138 patelramayan@gmail.com            Patel Ramayan        25 pts
+  140 riveshsingh398@gmail.com          rivesh singh
+  141 cyber1researcher@gmail.com        cyber1researcher     25 pts
+
+Script: `/tmp/qorix_mass_user_cleanup_2026_04_30.sql` (committed in
+`/tmp/` for forensic purposes — NOT in repo).
+
+Wrapped in a single BEGIN ... COMMIT. Deleted in dependency order
+(children first, then `users`) across 22 tables:
+  - login_events, password_reset_tokens, email_verifications
+  - sessions, jwt_revocations, refresh_tokens, two_factor_codes
+  - referrals, referral_earnings, referral_clicks
+  - investments, equity_history, transactions, withdrawals,
+    deposits, wallet_holds, wallet_balance_history
+  - support_tickets, support_messages, kyc_documents
+  - notifications, audit_log
+Total deleted: ~1,374 rows.
+
+Post-cleanup integrity (verified by SQL count + LEFT JOIN orphan
+check):
+  - `users` = 9, `wallets` = 9, `investments` = 9
+  - `equity_history` = 542 (all FK to keeper investments)
+  - `transactions` = 10
+  - `login_events` = 134 (after follow-up orphan delete below)
+  - 0 orphans across all 22 child tables
+  - 0 dangling sponsor refs (`sponsor_id NOT IN (SELECT id FROM
+    users)`)
+  - 5 pre-existing orphan login_events for ghost id 145 found —
+    deleted in follow-up (see B25).
+
+Sequence NOT reset — `users_id_seq` continues from where it was,
+so next signup will be id 153. Intentional: keeping monotonic ids
+avoids any risk of re-using a deleted id and confusing audit logs.
+
+# B25 — /register and /signup default to Sign Up tab + orphan login_events delete (closed 2026-04-30)
+
+Live commit: `5f222ee8` (Fly deploy 17:38 UTC, conclusion=success).
+
+Bug observed during n2n smoke test:
+  curl https://qorixmarkets.com/register → "Welcome back"
+  curl https://qorixmarkets.com/signup   → "Welcome back"
+Both showed the SIGN-IN form. New users who pasted or shared a
+/register link saw the wrong tab and had to find the small
+"Register now" link at the bottom to switch — easy to miss.
+
+Root cause:
+- `artifacts/qorix-markets/src/App.tsx` routes /login, /register,
+  /signup all to the same `LoginPage` component.
+- `LoginPage`'s `isLogin` state defaulted to `true` unconditionally,
+  ignoring the URL.
+
+Fix in `artifacts/qorix-markets/src/pages/login.tsx`:
+- Convert `useState(true)` to a lazy initializer:
+    `useState<boolean>(() => { ...; return true; })`
+- Inside the initializer, read `window.location.pathname` and
+  return `false` (Sign Up mode) when it equals `/register` or
+  `/signup`. Lazy init runs synchronously before the first paint
+  so the form starts in the correct mode without a flash of the
+  wrong tab.
+- try/catch around `window` access so non-browser contexts
+  (SSR / smoke tests) fall back to login mode without throwing.
+- Behaviour matrix:
+    /login        → Sign In  (unchanged)
+    /register     → Sign Up
+    /signup       → Sign Up
+    any other     → Sign In  (default)
+    ?ref=XYZ      → Sign Up  (existing referral effect, unchanged)
+
+Verified on prod (qorixmarkets.com/register and /signup screenshots,
+17:46 UTC): "Create account" + Full Name + Email + Password +
+Referral Code (Optional) + Cloudflare Turnstile + "Create Account"
+button + "Already have an account? Sign in".
+
+Also in this batch — orphan login_events delete:
+  Found 5 rows in `login_events` with `user_id = 145` (ghost id —
+  user 145 was deleted in the mass cleanup above but its login
+  history was missed because it was inside a separate ip
+  fingerprint window). Ids 126–130, all from 2026-04-28 from ip
+  `136.117.141.127` (one short burst). Deleted via:
+    BEGIN;
+    DELETE FROM login_events WHERE user_id = 145;
+    COMMIT;
+  Post-delete: `login_events` = 134, orphan_login_evts = 0.
+
+No schema changes. No db:push. Pure frontend tweak + targeted DML.
