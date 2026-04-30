@@ -35,7 +35,7 @@ primary_region = "bom"
     BASE_PATH               = "/"
     VITE_RECAPTCHA_SITE_KEY = ""
     VITE_TURNSTILE_SITE_KEY = ""
-    VITE_CAPTCHA_PROVIDER   = "recaptcha"
+    VITE_CAPTCHA_PROVIDER   = "turnstile"
 
 # ─── Runtime env ────────────────────────────────────────────────────────────
 [env]
