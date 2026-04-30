@@ -3695,3 +3695,188 @@ verbatim, will cause real-user lockout.
 
   None of these are needed today. B27.1 + existing layers are
   more than sufficient for the current launch profile.
+
+────────────────────────────────────────────────────────────────────────
+## B28 — Fintech hardening: helmet + origin guard + method allowlist + admin IP gate
+────────────────────────────────────────────────────────────────────────
+2026-04-30 — commit `1f4c5b22` LIVE on prod via Fly CI/CD
+(workflow run https://github.com/tradewithsuhani-tech/Qorix-Markets/actions/runs/25182896474)
+
+### Trigger
+User-reported worry: an attacker can hit `qorix-api.fly.dev` directly
+with curl and bypass the legitimate web app entirely (no captcha,
+no honeypot, no behaviour-timing gate — just hit the endpoint).
+Pure infra-level IP whitelisting was rejected as a fix because every
+real signup is from a fresh consumer IP, so a static allowlist
+would lock out 100% of new users.
+
+This batch adds 4 layered code-level defenses that are SAFE for
+browser users but make scripted direct-API attacks materially harder.
+
+### Architecture confirmation (pre-build)
+- Web app calls `qorixmarkets.com/api/*` as a relative URL via
+  `${import.meta.env.BASE_URL}/api`. The web Fly server reverse-
+  proxies those to `qorix-api.fly.dev`. End-user browsers therefore
+  always send `Origin: https://qorixmarkets.com` on the cross-origin
+  XHR — which matches the `CORS_ORIGIN` allowlist baked into
+  `fly.toml`.
+- NO mobile app, NO webhook consumers, NO third-party API
+  integrations. Confirmed by grep over routes + integrations skill
+  catalog. So enforcing strict Origin on writes cannot break any
+  legitimate consumer.
+
+### Layers shipped
+
+#### L1 — Helmet security headers (`helmet` ^8.1.0)
+Mounted in `app.ts` immediately after the pino logger and BEFORE
+the cors block, so headers ride on every response (including CORS
+rejections). Prod GET `/api/healthz` now ships:
+  - `strict-transport-security: max-age=31536000; includeSubDomains`
+    (1y HSTS, belt-and-braces over Fly `force_https = true`)
+  - `x-content-type-options: nosniff`
+  - `x-frame-options: SAMEORIGIN` (helmet 8 default; web app never
+    iframes the API anyway, so DENY would be equivalent)
+  - `referrer-policy: strict-origin-when-cross-origin`
+  - `x-dns-prefetch-control: off`
+  - `cross-origin-resource-policy: same-site`
+  - `cross-origin-opener-policy: same-origin`
+  - `x-permitted-cross-domain-policies: none`
+  - `x-download-options: noopen`
+  - `x-xss-protection: 0` (helmet 8 modern recommendation —
+    legacy XSS filter caused real bugs)
+
+Skipped on purpose:
+  - **CSP** — meaningful only for HTML responses; the API ships
+    JSON + a few captcha PNGs. Helmet's default CSP would just
+    interfere without protecting anything real.
+  - **COEP** (`Cross-Origin-Embedder-Policy`) — would block the
+    legitimate cross-origin XHR pattern the web app uses.
+
+#### L2 — Origin / Referer guard for state-changing methods
+New file `artifacts/api-server/src/middlewares/origin-guard.ts`,
+mounted on `/api` BEFORE the global rate limiter so rejected
+requests do not burn rate-limit budget.
+
+Rules:
+  - GET / HEAD / OPTIONS → pass through unchanged (preserves
+    health probes, public read endpoints, CORS preflight).
+  - POST / PUT / PATCH / DELETE → require an `Origin` header that
+    EXACTLY matches one of the `CORS_ORIGIN` allowlist entries
+    (`https://qorixmarkets.com`, `https://www.qorixmarkets.com`,
+    `https://qorix-markets-web.fly.dev`). `Referer`'s parsed
+    origin is accepted as a fallback for the same allowlist (covers
+    rare browser cases where Origin is stripped but Referer is
+    preserved on a redirected POST).
+  - Path exemptions: `/api/healthz`, `/api/version`,
+    `/api/version.json` — Fly load balancer probes and the
+    deployed-version watcher must keep working even on POST.
+  - If `CORS_ORIGIN` env unset (dev / Vitest): NO-OP pass-through.
+    Matches the existing permissive `cors()` default in `app.ts`.
+
+Why this is safe vs. the existing `cors()` block:
+  `cors()` has an explicit `if (!origin) return cb(null, true)`
+  carve-out so naked health probes work. That carve-out lets a
+  curl/script omit `Origin` entirely and slip past CORS. Browsers
+  ALWAYS send `Origin` on cross-origin XHR/fetch — so the
+  legitimate web app is untouched, only header-omitting scripts
+  see the 403.
+
+Net effect, verified on prod (`qorix-api.fly.dev`, 2026-04-30):
+```
+curl -X POST .../api/auth/register
+  → 403 {"code":"ORIGIN_REQUIRED",
+         "error":"Direct API access is not allowed.
+                  Requests must originate from the official
+                  Qorix Markets web app."}
+
+curl -X POST .../api/auth/register -H "Origin: https://qorixmarkets.com"
+  → 400 {"error":"Captcha verification failed"}    (origin guard
+                                                     passes; downstream
+                                                     captcha gate fires)
+
+qorixmarkets.com browser register form
+  → unchanged, works
+```
+
+#### L3 — HTTP method allowlist
+Top-of-chain middleware in `app.ts` rejects any method not in
+`{GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS}` with
+`405 METHOD_NOT_ALLOWED`. Mounted at the very top so a TRACE /
+CONNECT / arbitrary verb burns no rate-limit budget. TRACE in
+particular has historical Cross-Site Tracing XSS implications;
+blocking it removes any chance of a future infra change accidentally
+re-enabling it.
+
+Verified on prod: `curl -X TRACE .../api/healthz → HTTP/2 405`.
+
+#### L4 — Admin IP allowlist (opt-in via `ADMIN_IP_ALLOWLIST`)
+New file `artifacts/api-server/src/middlewares/admin-ip-allowlist.ts`,
+mounted on `/api/admin` (single mount covers `admin`, `admin-rbac`,
+`admin-merchants`, `admin-tasks`, `admin-escalation` because every
+one of those routers prefixes its routes with `/admin/` internally).
+
+Behavior:
+  - With `ADMIN_IP_ALLOWLIST` UNSET (CURRENT PROD STATE): pure
+    no-op pass-through. Admin routes behave EXACTLY as before —
+    gated by `authMiddleware` + `adminMiddleware` +
+    `requireAdminPermission` + `auditAdminRequest`. **ZERO
+    behavior change in this deploy.**
+  - With `ADMIN_IP_ALLOWLIST` set to a comma-separated IP list via
+    `flyctl secrets set ADMIN_IP_ALLOWLIST=...`: every
+    `/api/admin/*` request from a non-listed IP returns
+    `403 ADMIN_IP_BLOCKED` BEFORE the JWT-verify CPU cycle, and
+    logs a warn-level entry for ops alerting.
+
+Rationale: if an admin's password + 2FA TOTP are ever leaked
+(phishing/malware), the attacker also needs network access from a
+trusted operator IP to ever reach the auth check. This is the
+standard "operator console" defense pattern in fintech (stripe-
+dashboard, fly.io flyctl, aws console all support it).
+
+Limitations / future work:
+  - CIDR ranges NOT yet supported (exact IPv4/IPv6 match only).
+    Adding `ipaddr.js` for CIDR is straightforward but deferred
+    until needed.
+  - IPv6 must be passed in the same form Express resolves it
+    (e.g. `::1` not `0:0:0:0:0:0:0:1`). Test with the actual Fly
+    egress IP before locking down.
+
+Startup log surfaces whether the gate is ARMED or UNSET so ops
+can confirm without grepping env vars on the live machine.
+
+### Prod verification matrix (2026-04-30 18:43 UTC)
+```
+TEST 1  GET   /api/healthz                         → 200 + helmet headers       OK
+TEST 2  POST  /api/auth/register (no Origin)       → 403 ORIGIN_REQUIRED        OK
+TEST 3  POST  /api/auth/register (good Origin)     → 400 captcha (passes guard) OK
+TEST 4  TRACE /api/healthz                         → 405                        OK
+TEST 5  GET   /api/admin/stats (no token, no env)  → 401 (allowlist no-op)      OK
+TEST 6  GET   https://qorixmarkets.com/api/healthz → 200 (web frontend OK)      OK
+TEST 7  DB integrity: users 10 / max_id 153                                    OK
+```
+
+### Files in commit `1f4c5b22`
+```
+M  artifacts/api-server/src/app.ts
+A  artifacts/api-server/src/middlewares/origin-guard.ts
+A  artifacts/api-server/src/middlewares/admin-ip-allowlist.ts
+M  artifacts/api-server/package.json   (+ helmet ^8.1.0)
+M  pnpm-lock.yaml                       (+ helmet)
+```
+
+DB safety: ZERO schema changes. ZERO db:push. ZERO DDL. Pure
+middleware additions. `users` row count and `max(id)` unchanged
+pre/post deploy.
+
+### Layers NOT in this batch (deferred / infra-only)
+- **L5 — Cloudflare proxy in front of `qorix-api.fly.dev`**:
+  best-in-class DDoS + WAF + bot detection + country-block.
+  Requires DNS change (CNAME `api` to Cloudflare; orange-cloud
+  proxied) plus Origin-Server pinning so Fly only accepts traffic
+  from CF IPs. Recommended next infra step but NOT a code change —
+  user can enable when ready.
+- **HMAC request signing** between web proxy → api: would close
+  the last gap (an attacker who learns the legit Origin can still
+  set the header). Overkill for the current threat profile.
+- **Auto-update of disposable email blocklist** (B27 Future
+  hardening option A): unchanged, still deferred.
