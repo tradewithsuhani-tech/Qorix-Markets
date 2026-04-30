@@ -32,3 +32,4 @@ export * from "./admin-audit-log";
 export * from "./user-devices";
 export * from "./admin-escalation-contacts";
 export * from "./quizzes";
+export * from "./quiz-oauth-codes";

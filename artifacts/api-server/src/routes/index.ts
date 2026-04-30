@@ -29,6 +29,7 @@ import tasksRouter from "./tasks";
 import adminTasksRouter from "./admin-tasks";
 import signalTradesRouter from "./signal-trades";
 import googleOauthRouter from "./google-oauth";
+import oauthQuizRouter from "./oauth-quiz";
 import kycRouter from "./kyc";
 import promoRouter from "./promo";
 import telegramRouter from "./telegram";
@@ -40,7 +41,12 @@ import phoneChangeRouter from "./phone-change";
 import merchantRouter from "./merchant";
 import adminMerchantsRouter from "./admin-merchants";
 import adminEscalationRouter from "./admin-escalation";
-import quizRouter from "./quiz";
+// NOTE: quizRouter (./quiz) intentionally NOT imported here. The quiz
+// handler files (routes/quiz.ts + lib/quiz-*.ts) live in a feature
+// branch / local tree only and have not been pushed to the deployed
+// branch. They will be enabled in a later batch (B36+) when the
+// qorixplay frontend lands and the route file is committed alongside
+// it. Until then, importing ./quiz here would break CI typecheck.
 
 const router: IRouter = Router();
 
@@ -62,6 +68,12 @@ router.use(captchaRouter);
 // router.use(cryptoDepositRouter); // DISABLED — see import comment above
 router.use(authRouter);
 router.use(googleOauthRouter); // public OAuth — must be before auth-gated routers
+// Qorixplay SSO OAuth (B34): /api/oauth/quiz/authorize uses per-route
+// authMiddleware (Markets user JWT required), /api/oauth/quiz/token is
+// gated by client_secret only (server-to-server, no Origin header — also
+// added to origin-guard PATH_EXEMPTIONS). Must be mounted BEFORE any
+// router-level naked authMiddleware so /token isn't 401'd upstream.
+router.use(oauthQuizRouter);
 router.use(kycRouter); // per-route authMiddleware — must be before router-level auth gates
 // Merchant panel — own JWT (separate from user/admin auth). The login route
 // (POST /merchant/auth/login) is the ONLY public merchant endpoint; every
@@ -103,6 +115,6 @@ router.use(phoneChangeRouter);
 router.use(merchantRouter);
 router.use(adminMerchantsRouter);
 router.use(adminEscalationRouter);
-router.use(quizRouter);
+// router.use(quizRouter); — see note above; will be enabled in B36+
 
 export default router;
