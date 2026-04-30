@@ -4165,3 +4165,99 @@ breaking anything.
 That order-of-magnitude bigger change is exactly what B30 is. The
 infrastructure is now in place; it's a one-secret flip away from
 being live, pending the raw-fetch audit.
+
+---
+
+## B30.1 (commit `8ea2bb8c`, deployed 2026-04-30) — Three architect fixes for B29 + B30
+
+After B30 went live, the architect code review surfaced three correctness
+issues. None of them caused observable damage in current prod (because
+both `CSRF_HMAC_SECRET` and `CLOUDFLARE_ORIGIN_SECRET` are unset, so the
+affected code paths are no-op). But they would have broken correctness
+the moment the operator opted in, so they had to land first.
+
+### FIX 1 (CRITICAL) — `PATH_EXEMPTIONS` matched the wrong path form
+Both middlewares are mounted via `app.use("/api", originGuard)` and
+`app.use("/api", cloudflarePin)`. Inside a sub-mounted middleware,
+Express sets `req.path` to the **mount-relative** subpath (e.g.
+`"/healthz"`), not the absolute URL (`"/api/healthz"`). The exemption
+sets contained only the absolute form, so they would never match.
+
+**Impact (would have manifested when operator opts in):**
+- Enabling `CLOUDFLARE_ORIGIN_SECRET` would 403 every Fly LB health
+  probe (Fly hits `/healthz` directly, NOT through Cloudflare, so cannot
+  supply `X-Origin-Auth`). Fly would mark the instance unhealthy and pull
+  it from rotation — the same "no known healthy instances" cascade that
+  bit us on 2026-04-28.
+- Enabling `CSRF_HMAC_SECRET` would 403 any POST to `/api/healthz`
+  (smoke tests, internal pingers).
+
+**Fix:** list **both** forms in the exemption sets so the lookup matches
+whether the middleware is mounted at `/api` or at the root.
+
+### FIX 2 (HIGH) — CSRF check accidentally gated on `CORS_ORIGIN`
+Original `originGuard` had an early-return path for "no allowlist
+configured", which correctly skipped the **origin check** in dev/test —
+but accidentally also skipped the **CSRF check** that was added at the
+bottom of the function in B30. So enabling `CSRF_HMAC_SECRET` in
+dev/staging where `CORS_ORIGIN` was unset would silently leave CSRF
+disabled — exactly the wrong way to discover whether CSRF works before
+flipping it on in prod.
+
+**In-process simulation (proves the fix):**
+```
+CSRF_HMAC_SECRET=set, CORS_ORIGIN=unset, POST without token
+  BEFORE: HTTP 200 (CSRF silently bypassed)
+  AFTER:  HTTP 403 CSRF_REQUIRED   ✓
+```
+
+**Fix:** replaced the early-return with a wrapping conditional, so the
+CSRF check at the bottom of the function ALWAYS runs for state-changing
+requests, regardless of whether `CORS_ORIGIN` is set. Behavior in prod
+(`CORS_ORIGIN` set) is unchanged.
+
+### FIX 3 (MEDIUM) — `/api/csrf` was registered above `globalApiLimiter`
+Express middleware/route order matters. `/api/csrf` was at line 224 and
+`app.use("/api", globalApiLimiter)` at line 326, so the CSRF endpoint
+terminated the response chain before the rate limiter ever ran. Cheap
+pure-crypto endpoint, so not catastrophic, but a reachable CPU surface
+for spray traffic if edge controls are weak.
+
+**Fix:** moved the `/api/csrf` route registration to immediately AFTER
+`app.use("/api", globalApiLimiter)` so it inherits the same per-IP token
+bucket as every other `/api` endpoint.
+
+### Files in commit `8ea2bb8c`
+```
+M  artifacts/api-server/src/middlewares/origin-guard.ts   (FIX 1 + FIX 2)
+M  artifacts/api-server/src/middlewares/cloudflare-pin.ts (FIX 1)
+M  artifacts/api-server/src/app.ts                         (FIX 3 — /api/csrf moved below globalApiLimiter)
+```
+
+### Prod verification (env vars still unset = no-op preserved)
+```
+GET  https://qorix-api.fly.dev/api/csrf   -> {"enabled":false,"token":null,"expiresAt":null}
+     Cache-Control: no-store, no-cache, must-revalidate, private
+     Vary: User-Agent
+GET  /api/healthz                          -> 200
+POST /api/auth/register without Origin     -> 403 ORIGIN_REQUIRED (B28 still active)
+POST /api/auth/register with Origin        -> 400 captcha (CSRF still no-op as designed)
+DB:  10 users, max_id=153 (unchanged)
+```
+
+### In-process verification of the fixes
+Mounted a test app with `app.use("/api", originGuard)` + `app.use("/api",
+cloudflarePin)` exactly as in `app.ts`, then exercised each fix:
+```
+FIX 1 (PATH_EXEMPTIONS mount-relative match):
+  GET  /api/healthz with CLOUDFLARE_ORIGIN_SECRET set    -> 200 OK
+  POST /api/healthz with CLOUDFLARE_ORIGIN_SECRET set    -> 200 OK
+
+FIX 2 (CSRF runs even when CORS_ORIGIN unset):
+  POST /api/auth/register with CSRF_HMAC_SECRET set,
+       CORS_ORIGIN unset, no X-CSRF-Token              -> 403 CSRF_REQUIRED   (was 200 before)
+  POST /api/auth/register with both envs set, valid Origin,
+       no X-CSRF-Token                                  -> 403 CSRF_REQUIRED
+```
+
+All eight `csrf-token.ts` unit tests still pass. No DB changes.
