@@ -5,6 +5,7 @@ import router from "./routes";
 import { logger } from "./lib/logger";
 import { maintenanceMiddleware, peekMaintenanceState } from "./middlewares/maintenance";
 import { globalApiLimiter } from "./middlewares/rate-limit";
+import { getCaptchaProvider } from "./lib/captcha-service";
 
 const app: Express = express();
 
@@ -85,7 +86,10 @@ app.get("/api/healthz", (_req, res) => {
     res.setHeader("X-Maintenance-Mode", "true");
     if (state.endsAt) res.setHeader("X-Maintenance-Ends-At", state.endsAt);
   }
-  res.json({ status: "ok" });
+  // captchaProvider exposed for B9.6 Phase 3 observability — lets a watcher
+  // detect skew between this server and the served web bundle's baked-in
+  // VITE_CAPTCHA_PROVIDER (also surfaced on /version.json).
+  res.json({ status: "ok", captchaProvider: getCaptchaProvider() });
 });
 
 // ─── Request-level safety-net timeout ──────────────────────────────────────
