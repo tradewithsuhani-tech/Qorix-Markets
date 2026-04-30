@@ -4321,3 +4321,130 @@ All eight `csrf-token.ts` unit tests still pass. No DB changes.
 - This batch will land via Git Data API push → `deploy-quiz` job will fire on `qorix-quiz/**` change → builds image → deploys to `qorix-quiz.fly.dev` → smoke gate verifies SPA shell + /healthz
 - Domain `qorixplay.com` not yet pointed; users won't see anything until B45
 
+
+---
+
+## B33 — Qorixplay schema migration (2026-04-30, applied via psql)
+
+**Goal:** Migrate the Qorixplay-needed DB schema (13 tables + 3 enums + 11 seed rows) into prod via hand-written SQL. ZERO `db:push`, ZERO touches to existing 42 prod tables, ZERO PK type changes. Reversible (no prod data migrated).
+
+### Pre-migration baseline
+
+Discovered prod had ZERO existing quiz tables — the original 5-table Drizzle schema in `lib/db/src/schema/quizzes.ts` had been drafted but never applied. So this batch became greenfield CREATE-only (no risky ALTERs needed).
+
+```
+Existing tables: 42 (none start with quiz_ or oauth_)
+Existing enums: 1 (chat_session_status — no quiz enums)
+USERS row count: 10 / max(id) = 153
+TRANSACTIONS row count: 10
+```
+
+### Migration script
+
+`lib/db/migrations/manual/B33_qorixplay_schema.sql` — single transaction, all CREATEs guarded with `IF NOT EXISTS`, all enum CREATEs wrapped in `DO $$ … EXCEPTION WHEN duplicate_object THEN NULL; END $$;`, all seeds use `ON CONFLICT … DO NOTHING`. Safe to re-run.
+
+### What was created
+
+**3 enums:**
+- `quiz_status` (`scheduled`, `live`, `ended`, `cancelled`)
+- `quiz_question_source` (`manual`, `ai`)
+- `quiz_winner_paid_status` (`pending`, `paid`)
+
+**5 base tables (originally drafted, now created with B33 extension cols built in):**
+- `quizzes` — 24 cols total (17 existing + 7 new B33: `entry_fee NUMERIC(18,2) DEFAULT 0`, `max_players INTEGER NULL`, `platform_fee_pct NUMERIC(5,2) DEFAULT 10.00`, `gst_pct NUMERIC(5,2) DEFAULT 28.00`, `auto_payout BOOLEAN DEFAULT TRUE`, `prize_pool_source VARCHAR(20) DEFAULT 'admin'`, `category_id INTEGER FK→quiz_categories`)
+- `quiz_questions` — unchanged from draft
+- `quiz_participants` — unchanged
+- `quiz_answers` — unchanged
+- `quiz_winners` — unchanged (rank can be 1..10 in v1; existing draft had 1..3 cap in route, no DB constraint)
+
+**8 NEW B33 tables:**
+| Table | Purpose | Key columns |
+|---|---|---|
+| `quiz_categories` | Lookup for category badges | `slug` UNIQUE, `name`, `icon`, `color`, `sort_order` |
+| `quiz_devices` | Anti-cheat v1.5 review queue | `user_id`, `quiz_id` NULL, `device_fingerprint`, `tab_visibility_changes`, `suspicious_flags JSONB` |
+| `quiz_events_log` | Append-only audit log | `quiz_id`, `event_type`, `actor_user_id` NULL, `payload JSONB` |
+| `quiz_user_stats` | Leaderboard aggregates | `user_id PK`, `quizzes_won`, `total_winnings_inr`, `total_winnings_usdt`, `current_streak_days` |
+| `quiz_payouts` | Actual payout ledger w/ TDS | `gross_amount`, `tds_amount`, `net_amount`, `transaction_id FK→transactions`, UNIQUE(quiz_id, user_id) |
+| `quiz_refunds` | Refund-on-cancel ledger | `amount`, `reason`, `transaction_id FK→transactions`, UNIQUE(quiz_id, user_id) |
+| `oauth_authorization_codes` | SSO short-lived codes (60s) | `code` UNIQUE, `user_id`, `client_id`, `redirect_uri`, `expires_at`, `used_at` |
+| `quiz_geo_blocks` | Paid-quiz state allowlist | `state_code` UNIQUE, `blocks_paid`, `blocks_practice`, `reason` |
+
+All FKs reference existing `users.id` and `transactions.id` only — no other prod tables touched.
+
+### Seed data (11 rows)
+
+**5 geo blocks** with statute references:
+- TN — TN Prohibition of Online Gambling and Regulation of Online Games Act, 2022
+- AP — AP Gaming (Amendment) Act, 2020
+- TG — TG Gaming (Amendment) Act, 2017
+- OR — Odisha Prevention of Gambling Act, 1955
+- SK — Sikkim Online Gaming (Regulation) Act, 2008 — license required
+
+**6 quiz categories** with icons + theme colors:
+- crypto (₿ #F7931A, sort 10)
+- markets (📈 #10B981, sort 20)
+- forex (💱 #3B82F6, sort 30)
+- finance (💰 #FACC15, sort 40)
+- trivia (🎲 #A855F7, sort 50)
+- practice (🎯 #6B7280, sort 99)
+
+### Drizzle schema delta
+
+`lib/db/src/schema/quizzes.ts` extended additively from 172 lines → 353 lines:
+- 7 new columns appended to `quizzesTable` declaration
+- 8 new `pgTable(...)` exports for the new tables
+- All matching the SQL exactly (column names in snake_case, TS keys in camelCase)
+
+`lib/db/src/schema/index.ts` already re-exports `quizzes.ts`, so all 13 tables are auto-exported via `@workspace/db/schema`.
+
+### Side benefit — pre-existing TS errors RESOLVED
+
+The plan flagged that `notifyEnabled` / `notifiedFiveMinAt` / `notifiedLiveAt` / `paidTxnId` were "pre-existing TS errors in admin-quizzes.tsx". Root cause turned out to be stale `lib/db/dist/*.d.ts` and `lib/api-zod/dist/*.d.ts` artifacts. Rebuilding both via `tsc --build --force` regenerated them with the current source columns, and all 4 errors disappeared.
+
+**Full `pnpm run typecheck` now PASSES across all 5 workspaces:**
+- artifacts/api-server ✓
+- artifacts/mockup-sandbox ✓
+- artifacts/qorix-markets ✓
+- artifacts/qorix-quiz ✓
+- scripts ✓
+
+### Post-migration verification
+
+```
+13 tables exist (oauth_authorization_codes, quiz_*, quizzes)
+3 enums exist (quiz_status, quiz_question_source, quiz_winner_paid_status)
+5 geo blocks seeded (TN, AP, TG, OR, SK)
+6 categories seeded (crypto, markets, forex, finance, trivia, practice)
+USERS still 10 / max=153 (UNCHANGED)
+TRANSACTIONS still 10 (UNCHANGED)
+```
+
+### Reversibility
+
+If we ever need to roll back B33 (we won't — it's purely additive):
+
+```sql
+DROP TABLE IF EXISTS quiz_geo_blocks, oauth_authorization_codes, quiz_refunds,
+                     quiz_payouts, quiz_user_stats, quiz_events_log,
+                     quiz_devices, quiz_winners, quiz_answers,
+                     quiz_participants, quiz_questions, quizzes,
+                     quiz_categories CASCADE;
+DROP TYPE IF EXISTS quiz_winner_paid_status, quiz_question_source, quiz_status;
+```
+
+This restores prod to the exact pre-B33 state (42 tables, no quiz state). Zero data loss because no application code has written to the new tables yet.
+
+### Files in this batch
+
+- `lib/db/src/schema/quizzes.ts` (modified — 172→353 lines)
+- `lib/db/migrations/manual/B33_qorixplay_schema.sql` (new — 250 lines)
+- `.local/tasks/task-126.md` (step 2 marked DONE)
+- `replit.md` (this section appended)
+
+**ZERO files changed in:** `artifacts/qorix-markets/`, `artifacts/api-server/`, `artifacts/qorix-quiz/`, root config. Strict isolation guarantee held.
+
+### Deploy flow next
+
+- Lib-only changes (`lib/db/**`) trigger BOTH api and web paths-filter, so `deploy-api`, `deploy-web`, `deploy-quiz` will all run on the next push.
+- All three are no-op deploys at the application level (no app code changed); they will pass typecheck (already verified locally) and rebuild/redeploy the same image hash.
+- The actual schema changes are LIVE in prod NOW (applied via psql before the push); CI just needs to typecheck and ship the matching Drizzle types so future batches can use `db.select().from(quizCategoriesTable)` etc. without compile errors.

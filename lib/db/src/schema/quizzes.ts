@@ -84,10 +84,46 @@ export const quizzesTable = pgTable("quizzes", {
   createdBy: integer("created_by").references(() => usersTable.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  // ─── B33 extension columns (additive only, all defaulted/nullable) ──────
+  // Entry fee charged on join (in `prizeCurrency`). 0 means free practice.
+  entryFee: numeric("entry_fee", { precision: 18, scale: 2 }).notNull().default("0"),
+  // Cap on participant count (NULL = unlimited).
+  maxPlayers: integer("max_players"),
+  // Platform's cut of the gross pool when source = 'entry_fees'. Default 10%.
+  platformFeePct: numeric("platform_fee_pct", { precision: 5, scale: 2 }).notNull().default("10.00"),
+  // GST levied on entry fees (paid by user, line-item shown). Default 28%.
+  gstPct: numeric("gst_pct", { precision: 5, scale: 2 }).notNull().default("28.00"),
+  // If true, B37 auto-payout pipeline credits winners on quiz end.
+  autoPayout: boolean("auto_payout").notNull().default(true),
+  // 'admin' = admin-funded prize_pool (legacy). 'entry_fees' = pool computed
+  // from sum(entry_fee) at quiz end with 90/10 split. Default 'admin' so
+  // existing admin-created quizzes keep their behaviour.
+  prizePoolSource: varchar("prize_pool_source", { length: 20 }).notNull().default("admin"),
+  // Optional category badge (FK to quizCategoriesTable below).
+  categoryId: integer("category_id").references(() => quizCategoriesTable.id, { onDelete: "set null" }),
 }, (t) => [
   // Scheduler scans for `scheduled` rows whose start time has passed.
   index("quizzes_status_start_idx").on(t.status, t.scheduledStartAt),
+  index("quizzes_category_idx").on(t.categoryId),
+  index("quizzes_pool_source_idx").on(t.prizePoolSource),
 ]);
+
+// ─── Quiz categories (B33 NEW — lookup) ───────────────────────────────────
+// Used for category badges on quiz cards in the qorixplay Game Hub. Slugs
+// (`crypto`, `markets`, `forex`, `finance`, `trivia`, `practice`) are the
+// stable keys; `name` + `icon` + `color` drive UI rendering. Seeded via
+// `B33_qorixplay_schema.sql`.
+export const quizCategoriesTable = pgTable("quiz_categories", {
+  id: serial("id").primaryKey(),
+  slug: varchar("slug", { length: 50 }).notNull().unique(),
+  name: varchar("name", { length: 100 }).notNull(),
+  description: text("description").notNull().default(""),
+  icon: varchar("icon", { length: 50 }).notNull().default(""),
+  color: varchar("color", { length: 20 }).notNull().default("#7C3AED"),
+  isActive: boolean("is_active").notNull().default(true),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
 
 // ─── Quiz questions ───────────────────────────────────────────────────────
 // 5 per quiz, ordered by `position` (0..4). `correctIndex` is 0..3 into the
@@ -169,3 +205,149 @@ export const quizWinnersTable = pgTable("quiz_winners", {
   uniqueIndex("quiz_winners_quiz_rank_uq").on(t.quizId, t.rank),
   index("quiz_winners_quiz_idx").on(t.quizId),
 ]);
+
+// ─── Quiz devices (B33 NEW — anti-cheat v1.5 review queue) ────────────────
+// Per-session device fingerprint + visibility log. Written by the quiz
+// route on participant join + every visibility change. Used by the v1.5
+// admin review queue (no auto-disqualify in v1).
+export const quizDevicesTable = pgTable("quiz_devices", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
+  // Nullable — can also be used as a generic device log outside a quiz.
+  quizId: integer("quiz_id").references(() => quizzesTable.id, { onDelete: "cascade" }),
+  deviceFingerprint: varchar("device_fingerprint", { length: 128 }).notNull().default(""),
+  userAgent: text("user_agent").notNull().default(""),
+  ipAddress: varchar("ip_address", { length: 45 }).notNull().default(""),
+  tabVisibilityChanges: integer("tab_visibility_changes").notNull().default(0),
+  suspiciousFlags: jsonb("suspicious_flags").$type<string[]>().notNull().default([]),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => [
+  index("quiz_devices_user_quiz_idx").on(t.userId, t.quizId),
+  index("quiz_devices_quiz_idx").on(t.quizId),
+]);
+
+// ─── Quiz events log (B33 NEW — audit trail) ──────────────────────────────
+// Append-only log of every lifecycle event per quiz: started, paused,
+// resumed, cancelled, admin_disqualify, payout_started, payout_completed,
+// refund_issued. `actorUserId` is null for system events (the runner/
+// scheduler), set for admin actions.
+export const quizEventsLogTable = pgTable("quiz_events_log", {
+  id: serial("id").primaryKey(),
+  quizId: integer("quiz_id").notNull().references(() => quizzesTable.id, { onDelete: "cascade" }),
+  eventType: varchar("event_type", { length: 50 }).notNull(),
+  actorUserId: integer("actor_user_id").references(() => usersTable.id, { onDelete: "set null" }),
+  payload: jsonb("payload").$type<Record<string, unknown>>().notNull().default({}),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => [
+  index("quiz_events_log_quiz_time_idx").on(t.quizId, t.createdAt),
+  index("quiz_events_log_type_idx").on(t.eventType),
+]);
+
+// ─── Quiz user stats (B33 NEW — leaderboard aggregates) ───────────────────
+// One row per user, upserted on every quiz end. Powers the daily/weekly/
+// all-time leaderboards on qorixplay (B44). `userId` is the PK so upserts
+// are simple `INSERT … ON CONFLICT (user_id) DO UPDATE`.
+export const quizUserStatsTable = pgTable("quiz_user_stats", {
+  userId: integer("user_id").primaryKey().references(() => usersTable.id, { onDelete: "cascade" }),
+  quizzesPlayed: integer("quizzes_played").notNull().default(0),
+  quizzesWon: integer("quizzes_won").notNull().default(0),
+  top3Finishes: integer("top_3_finishes").notNull().default(0),
+  top10Finishes: integer("top_10_finishes").notNull().default(0),
+  totalCorrectAnswers: integer("total_correct_answers").notNull().default(0),
+  totalQuestionsAnswered: integer("total_questions_answered").notNull().default(0),
+  avgResponseTimeMs: integer("avg_response_time_ms").notNull().default(0),
+  totalWinningsInr: numeric("total_winnings_inr", { precision: 18, scale: 2 }).notNull().default("0"),
+  totalWinningsUsdt: numeric("total_winnings_usdt", { precision: 18, scale: 2 }).notNull().default("0"),
+  currentStreakDays: integer("current_streak_days").notNull().default(0),
+  longestStreakDays: integer("longest_streak_days").notNull().default(0),
+  lastPlayedAt: timestamp("last_played_at"),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (t) => [
+  index("quiz_user_stats_winnings_inr_idx").on(t.totalWinningsInr),
+  index("quiz_user_stats_winnings_usdt_idx").on(t.totalWinningsUsdt),
+]);
+
+// ─── Quiz payouts (B33 NEW — actual payout ledger w/ TDS line) ────────────
+// One row per (quiz, winning user). Distinct from `quiz_winners` (which
+// just records the rank) — this is the financial ledger for the actual
+// transfer, including TDS deduction and a link to the wallet `transactions`
+// row. `(quiz_id, user_id)` UNIQUE so the B37 payout pipeline is idempotent.
+export const quizPayoutsTable = pgTable("quiz_payouts", {
+  id: serial("id").primaryKey(),
+  quizId: integer("quiz_id").notNull().references(() => quizzesTable.id, { onDelete: "cascade" }),
+  userId: integer("user_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
+  // Soft FK to `quiz_winners.id` — set when payout is from auto pipeline,
+  // null if winner row was deleted post-payout.
+  winnerId: integer("winner_id").references(() => quizWinnersTable.id, { onDelete: "set null" }),
+  grossAmount: numeric("gross_amount", { precision: 18, scale: 2 }).notNull(),
+  tdsAmount: numeric("tds_amount", { precision: 18, scale: 2 }).notNull().default("0"),
+  netAmount: numeric("net_amount", { precision: 18, scale: 2 }).notNull(),
+  currency: varchar("currency", { length: 10 }).notNull(),
+  // FK to wallet ledger; nullable so we can insert the payout row before
+  // the wallet credit completes (status = 'pending').
+  transactionId: integer("transaction_id"),
+  status: varchar("status", { length: 20 }).notNull().default("pending"),
+  failureReason: text("failure_reason"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  completedAt: timestamp("completed_at"),
+}, (t) => [
+  uniqueIndex("quiz_payouts_quiz_user_uq").on(t.quizId, t.userId),
+  index("quiz_payouts_status_idx").on(t.status),
+]);
+
+// ─── Quiz refunds (B33 NEW — refund-on-cancel ledger) ─────────────────────
+// One row per (cancelled quiz, participant). Created when an admin cancels
+// a paid quiz — the entry-fee refund pipeline iterates participants and
+// inserts here, then credits the wallet `transactions` row.
+export const quizRefundsTable = pgTable("quiz_refunds", {
+  id: serial("id").primaryKey(),
+  quizId: integer("quiz_id").notNull().references(() => quizzesTable.id, { onDelete: "cascade" }),
+  userId: integer("user_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
+  amount: numeric("amount", { precision: 18, scale: 2 }).notNull(),
+  currency: varchar("currency", { length: 10 }).notNull(),
+  reason: text("reason").notNull().default(""),
+  transactionId: integer("transaction_id"),
+  status: varchar("status", { length: 20 }).notNull().default("pending"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  processedAt: timestamp("processed_at"),
+}, (t) => [
+  uniqueIndex("quiz_refunds_quiz_user_uq").on(t.quizId, t.userId),
+  index("quiz_refunds_status_idx").on(t.status),
+]);
+
+// ─── OAuth authorization codes (B33 NEW — SSO from qorixmarkets) ──────────
+// Short-lived (60s) single-use codes minted by qorixmarkets when a logged-in
+// user clicks "Login with Qorix" on qorixplay. The qorix-quiz backend
+// exchanges the code for a quiz-domain JWT via POST /api/oauth/quiz-token.
+// `usedAt` flips on first exchange (single-use enforcement done in handler
+// + UNIQUE on `code`).
+export const oauthAuthorizationCodesTable = pgTable("oauth_authorization_codes", {
+  id: serial("id").primaryKey(),
+  code: varchar("code", { length: 64 }).notNull().unique(),
+  userId: integer("user_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
+  clientId: varchar("client_id", { length: 64 }).notNull(),
+  redirectUri: text("redirect_uri").notNull(),
+  scope: varchar("scope", { length: 200 }).notNull().default(""),
+  expiresAt: timestamp("expires_at").notNull(),
+  usedAt: timestamp("used_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => [
+  index("oauth_codes_user_exp_idx").on(t.userId, t.expiresAt),
+  index("oauth_codes_client_idx").on(t.clientId),
+]);
+
+// ─── Quiz geo blocks (B33 NEW — paid quiz state allowlist) ────────────────
+// State-level block list. Seeded with TN/AP/TG/OR/SK in B33 migration.
+// Admin can toggle `blocksPaid`/`blocksPractice` per state via the
+// `quiz_geo_blocks` admin tab (B43). Free practice quizzes can be allowed
+// even where paid is blocked.
+export const quizGeoBlocksTable = pgTable("quiz_geo_blocks", {
+  id: serial("id").primaryKey(),
+  stateCode: varchar("state_code", { length: 10 }).notNull().unique(),
+  stateName: varchar("state_name", { length: 100 }).notNull(),
+  blocksPaid: boolean("blocks_paid").notNull().default(true),
+  blocksPractice: boolean("blocks_practice").notNull().default(false),
+  reason: text("reason").notNull().default(""),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
