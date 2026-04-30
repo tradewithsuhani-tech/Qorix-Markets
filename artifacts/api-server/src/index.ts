@@ -107,7 +107,6 @@ async function main() {
     jobs?.tronMonitor.stop();
     jobs?.depositWatcher.stop();
     jobs?.telegramPoller.stop();
-    jobs?.quizScheduler.stop();
     if (jobs) {
       await Promise.all([
         jobs.profitDistributionWorker.close(),
