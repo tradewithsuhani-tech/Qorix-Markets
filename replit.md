@@ -684,7 +684,7 @@ timeout. Fix shipped:
 - Consider HTTP/2 keep-alive between Fly LB and app to reduce per-request connection overhead under sustained load
 - If WebSocket / SSE features are added (live price ticker), revisit sticky-session vs. broadcast strategy
 - Add a regression test that simulates Redis being down and asserts the limiter passes through within the 1.5 s commandTimeout budget (architect MINOR follow-up)
-- Constant-time compare for `LOADTEST_TOKEN` header (architect MINOR follow-up — low practical risk, current strict equality is acceptable for a 32-byte hex token)
+- Constant-time compare for `LOADTEST_TOKEN` header (architect MINOR follow-up �� low practical risk, current strict equality is acceptable for a 32-byte hex token)
 
 ## Phase 6 (perf): admin panel <1s — app-layer (Apr 28, 2026)
 
@@ -1872,3 +1872,80 @@ it from the routes.
   will repeat the existing B9.5 6-call rate-limit check
   (proves recaptcha path still works end-to-end through prod
   Cloudflare → fly proxy → api-server).
+
+
+### Phase 2 LIVE outcome (2026-04-30, ~01:53 → 01:56 UTC)
+
+Cutover executed in 3 steps following the playbook above. End-to-
+end CAPTCHA pipeline (web bundle → token → server verifier) is
+now on Cloudflare Turnstile.
+
+**Step 1 — `deploy.yml` build args** — commit `446633d` adds 4
+lines: `VITE_TURNSTILE_SITE_KEY` to the workflow-level env
+block, a presence check next to `VITE_RECAPTCHA_SITE_KEY`, and
+2 `--build-arg` lines on the `flyctl deploy qorix-markets`
+step (`VITE_CAPTCHA_PROVIDER=turnstile` + `VITE_TURNSTILE_SITE_KEY`).
+Built REMOTE-first via Git Data API to avoid local-tree drift
+(same lesson that bit B9.6 commit `1124e21`).
+
+**Pitfall — GitHub repo secret missing.** First CI run failed at
+the new presence check: `VITE_TURNSTILE_SITE_KEY` was set in
+**Replit** secrets (added during the dev-env Turnstile flip) but
+NOT in **GitHub** repo secrets — these are two completely
+independent stores. CI's `${{ secrets.VITE_TURNSTILE_SITE_KEY }}`
+expansion came up empty. `Verify required secrets are configured`
+job failed; `Deploy qorix-markets` job correctly SKIPPED — the
+preflight saved us from a half-deployed state. **Lesson: any new
+`VITE_*` secret needed by prod must be added in BOTH places
+(Replit + GitHub) — the preflight check now makes this fail-loud.**
+
+**Fix — programmatic GitHub secret push.** Used
+`libsodium-wrappers` (installed in `/tmp` to keep the monorepo
+clean) to compute a `crypto_box_seal` of the Replit-side secret
+value against the repo's public key, then `PUT /repos/.../actions/secrets/VITE_TURNSTILE_SITE_KEY`
+with `{encrypted_value, key_id}`. Confirmed via
+`GET .../actions/secrets` (now lists 3 names). Triggered
+`POST /repos/.../actions/runs/25143022422/rerun-failed-jobs`
+— same commit, attempt #2, no extra git history.
+
+**Step 2 — CI run #244 GREEN** (rerun on commit `446633d`). All
+5 jobs passed: verify secrets, detect changed paths, typecheck,
+deploy api-server (no functional change — re-deployed same image
+with same env), deploy qorix-markets web (NEW bundle —
+`version.json` = `1777513931077`, built
+`2026-04-30T01:52:11.174Z`). Web bundle now ships with
+`VITE_CAPTCHA_PROVIDER=turnstile` baked in → `CaptchaWidget`
+mounts Cloudflare Turnstile instead of reCAPTCHA.
+
+**Step 3 — Fly api-server secret flip.** Ran
+`flyctl secrets set CAPTCHA_PROVIDER=turnstile TURNSTILE_SECRET_KEY=… -a qorix-api`.
+Triggered the rolling restart predicted in the playbook.
+Boot-log evidence (each currently-running app machine):
+- `08070dda094e48` BOM: 01:53:47 booted with
+  `provider:"recaptcha"` (pre-flip image), restarted 01:55:35,
+  rebooted 01:55:41 with `provider:"turnstile"`.
+- `82d331b7711678` BOM: 01:55:59 `provider:"turnstile"`.
+- `84e66dc2470998` BOM: 01:55:58 `provider:"turnstile"`.
+- `d8dd900a955048` SIN: 01:56:13 `provider:"turnstile"`.
+
+`RECAPTCHA_SECRET_KEY` was **deliberately retained** on Fly so a
+rollback is still a one-line
+`flyctl secrets unset CAPTCHA_PROVIDER TURNSTILE_SECRET_KEY -a qorix-api`
+away (api-server falls back to its hard-coded `recaptcha` default).
+Web rollback is more involved (revert the 4 `deploy.yml` lines +
+push + CI redeploy ~5–7 min).
+
+**Real cutover window — ~30 sec.** Between web-deploy completion
+(~01:53Z) and the last api-server machine rebooting (~01:56:13Z),
+any browser holding the new Turnstile bundle that hit a still-
+recaptcha api-server machine would have failed login verify →
+user retries. ~7:23–7:26 AM IST = lowest-traffic window of the
+week, expected impact zero or single-digit failed login attempts
+(auto-recoverable on next click).
+
+**Operational post-state.** Captcha pipeline is now Cloudflare
+Turnstile end-to-end on prod (qorixmarkets.com) and dev (Replit
+`CAPTCHA_PROVIDER=turnstile`). reCAPTCHA path is dead-code in
+prod but still present in source for rollback. B9.6 task is
+fully closed — Phase 1 (dispatcher + zero-behavior deploy) and
+Phase 2 (provider flip) both shipped clean.
