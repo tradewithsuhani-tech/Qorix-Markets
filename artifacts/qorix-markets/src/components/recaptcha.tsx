@@ -136,9 +136,29 @@ export const Recaptcha = forwardRef<RecaptchaHandle, RecaptchaProps>(
   if (!siteKey) return null;
 
   return (
-    <div className="w-full flex justify-center">
-      <div ref={containerRef} />
-      {error && <p className="text-xs text-red-400 mt-1">{error}</p>}
+    <div className="w-full">
+      {/*
+       * Glassy themed wrapper, mirrored from turnstile.tsx so a build that
+       * sets VITE_CAPTCHA_PROVIDER=recaptcha renders into the same blue/
+       * indigo accent frame as the Turnstile path. The reCAPTCHA v2 iframe
+       * is fixed 304×78px (no flexible mode), so we center it inside the
+       * frame instead of stretching it to fill width.
+       */}
+      <div
+        className={[
+          "relative rounded-xl p-2",
+          "border border-blue-500/25",
+          "bg-gradient-to-br from-blue-500/[0.06] via-indigo-500/[0.05] to-purple-500/[0.06]",
+          "shadow-[0_0_28px_-10px_rgba(59,130,246,0.45)]",
+          "transition-all",
+          "[&_iframe]:rounded-lg",
+        ].join(" ")}
+      >
+        <div ref={containerRef} className="min-h-[78px] flex items-center justify-center" />
+      </div>
+      {error && (
+        <p className="text-xs text-red-400 mt-2 text-center">{error}</p>
+      )}
     </div>
   );
 });
