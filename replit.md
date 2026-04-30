@@ -1603,17 +1603,91 @@ already-live verify endpoint without changing its public contract.
   - OOB bot (x = 9999) → `Trajectory out of bounds` ✅ (B9.4 NEW)
 - Production validation pending CI deploy.
 
+## Batch 9.5 — login rate-limit tightened to 5/min/IP (Apr 30, 2026)
+
+A small but high-impact tightening of the unified `loginRateLimit`
+limiter that already gates `POST /auth/login`,
+`POST /auth/2fa/login-verify`, and
+`POST /auth/2fa/email-fallback/request`. Brought in line with
+fintech industry norms (Coinbase / Binance use a similar 5-attempts-
+then-cool-down shape) ahead of B9.6 (Turnstile pivot) and B9.3
+(risk-based escalation).
+
+ZERO schema changes, ZERO DB writes. 1 file edited, 2 changes:
+
+1. `artifacts/api-server/src/routes/auth.ts` (lines 24-46):
+   - `windowMs: 15 * 60 * 1000` → `windowMs: 60 * 1000`
+   - `limit: 20` → `limit: 5`
+   - Added an explanatory comment block above the limiter explaining
+     the new threshold rationale AND why the bucket is intentionally
+     shared across the three login-flow endpoints (counting them
+     separately would let an attacker triple their effective per-IP
+     budget).
+   - Stale doc comment below the email-fallback route updated from
+     `(20/15min per IP)` to `(5/min per IP, B9.5)`.
+
+NET BEHAVIOR
+- Same limiter, same Redis-backed cross-instance store
+  (`makeRedisLimiter` from `middlewares/rate-limit.ts`); same
+  shared bucket name `qorix:ratelimit:login:<ip>`. Only the knobs
+  changed.
+- Real users with a couple of password / 2FA typos still finish in
+  ≤ 4 calls. Brute forcers exhaust their per-IP budget inside ~6
+  seconds (vs 18 attempts spread across 15 min before).
+- 429 response shape is unchanged (default
+  `{ error: "Too many requests" }` body, standard `RateLimit-*` and
+  `Retry-After` headers). The only externally visible delta is
+  `Retry-After: 60` (was 900) and `RateLimit-Limit: 5` (was 20).
+- Test-only `routes/test-mode.ts` constant was deliberately left
+  alone — it's a separate test scenario knob, not the production
+  limiter.
+
+VALIDATION
+- `pnpm --filter @workspace/api-server typecheck` → clean (after
+  rebuilding stale `lib/db` dist; the 3 pre-existing
+  `chat_sessions.preferredLanguage` errors disappeared once dist
+  was regenerated, confirming none were introduced by B9.5).
+- API server restarted, no startup errors, all auth routes still
+  mounted with the new limiter.
+- Local end-to-end smoke (`/tmp/login_ratelimit_smoke_b9_5.mjs`,
+  6× `POST /api/auth/login` from a single IP within < 1 min):
+  - Requests 1-5 → status `< 429` with `RateLimit-Limit: 5` and
+    `RateLimit-Remaining` counting `4 → 3 → 2 → 1 → 0`. ✅
+  - Request 6 → `429` with `Retry-After: 60`. ✅
+  - 6/6 PASS, confirming both the new ceiling AND the new window
+    are active.
+- Production validation pending CI deploy.
+
 ### Roadmap (Phase A continued, B9 series — updated)
+
+After consultation with the user (Apr 30, 2026), the captcha
+strategy for the "low risk" branch was changed from reCAPTCHA to
+**Cloudflare Turnstile** (Option C: Turnstile default + slider for
+high-risk). Sequence now reflects the pivot.
 
 - ~~**B9.1**: hybrid captcha — slider puzzle component + verify
   endpoint~~ ✅ LIVE.
 - ~~**B9.4**: behavior-signal hardening on slider trajectory + per-IP
   rate limit~~ ✅ LIVE.
+- ~~**B9.5**: login rate-limit tightened from 20/15min to 5/min/IP~~
+  ✅ this batch.
 - **B9.2**: risk score engine — SELECT-only signals (failed-attempts
   in last 1 h, IP repetition, device freshness) → `low|medium|high`.
+- **B9.6**: Cloudflare Turnstile integration (replaces reCAPTCHA on
+  /auth/login + /auth/register as the default invisible challenge).
+  Keys (`TURNSTILE_SECRET_KEY`, `VITE_TURNSTILE_SITE_KEY`) already
+  provided; reCAPTCHA service code stays in place behind a feature
+  flag for safe rollback during the cutover window.
 - **B9.3**: risk-based escalation glue — `verifyCaptcha()` extended
-  to accept `slider.v1.*` tokens; signup/login form picks slider vs.
-  reCAPTCHA based on risk tier. Prereqs (from B9.1 architect notes,
-  saved at `/tmp/b9_3_prereqs_from_architect.md`): single-use
-  challenge IDs (Redis SETNX) and centralised consumed-token replay
-  defense across instances.
+  to accept Turnstile (low/medium risk) AND `slider.v1.*` tokens
+  (high risk); signup/login picks the widget based on the risk tier
+  from B9.2. Prereqs (from B9.1 + B9.4 architect notes, saved at
+  `/tmp/b9_3_prereqs_from_architect.md`):
+  1. **CRITICAL**: single-use challenge IDs (Redis SETNX) so a
+     single valid challenge can't be iterated against verify.
+  2. Centralised consumed-token replay defense across instances.
+  3. Degraded-mode policy on Redis outage once slider gates auth
+     (fall back to Turnstile-only rather than fully open the gate).
+  4. Production telemetry on `r²`, `vCoV`, `firstX`, and per-reason
+     reject counts to tune thresholds empirically.
+
