@@ -297,6 +297,21 @@ export function InrDepositTab() {
     }
   }, [step, selectedId, methods, capacityLoading, capacityFetching, toast]);
 
+  // Scroll to the top of the page whenever the wizard advances to a new step.
+  // Without this the browser keeps the previous scroll position, so after the
+  // user has scrolled down through the long "amount" form, the next step
+  // ("transfer" / "success") renders deep below the fold and the user lands on
+  // the middle of the new screen instead of seeing its title at the top.
+  // Skips the initial render so we don't yank the page when first mounting.
+  const prevStepRef = useRef<Step>(step);
+  useEffect(() => {
+    if (prevStepRef.current === step) return;
+    prevStepRef.current = step;
+    if (typeof window !== "undefined") {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  }, [step]);
+
   function resetFlow() {
     setStep("start");
     setSelectedId(null);
@@ -363,6 +378,14 @@ export function InrDepositTab() {
     onSuccess: (resp: any) => {
       setSubmittedDepositId(resp?.deposit?.id ?? null);
       setStep("success");
+      // NOTE: We deliberately do NOT log chat conversion here. INR deposits
+      // are pending until an admin approves them, so there is no completed
+      // deposit transaction at submit time and the server-verified
+      // /chat/deposit-complete check would just return no_deposit_found.
+      // The authoritative chat-conversion stamp happens server-side inside
+      // the admin INR-approve handler (see artifacts/api-server/src/routes/
+      // inr-deposits.ts), which finds the user's recent open chat session
+      // and writes converted_at + a deposit_completed event.
       qc.invalidateQueries({ queryKey: ["inr-deposits-mine"] });
     },
     onError: (e: any) => {
