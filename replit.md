@@ -2519,3 +2519,62 @@ alert sent at first sign-in` 1×. Note: `Location unknown`
 still appears 1× in the prod bundle but that hit comes from
 `admin-fraud.tsx` (separate admin-only page), confirmed via
 ripgrep on local source — devices.tsx itself is clean.
+
+### B16 (2026-04-30 05:31Z) — deposit step-4 lands at top reliably (770584bfe5, fixes B12 regression on mobile)
+
+**Trigger.** User: "4th page jab jaate hain to wo neeche se start hota
+hai. Direct UTR number aur screenshot daalne ka option aata hai. Jabki
+hume upar wala dikhna chahiye jahan account number dikh raha ho. Tabhi
+user account number copy karke payment karega. Aapne pehle bhi fix
+kiya tha lekin hua nahi hai." Screenshot showed the page parked at the
+Payer's Name input on step 4 — Receiving Account Details (the bank A/C
+number + IFSC the user has to copy) was scrolled off-screen above.
+
+**Why B12 (cded7dab25) didn't actually work on mobile.** B12 added a
+`useEffect` on `step` that called
+`window.scrollTo({ top: 0, behavior: "smooth" })`. The wizard's
+`<AnimatePresence mode="wait">` plays the previous step's 200 ms exit
+animation BEFORE the new step mounts, so that smooth-scroll fires
+while the OLD (taller) "amount" step is still in the DOM. On mobile
+Chrome a smooth scroll started in that moment is reliably eaten by
+the document-height shift that happens when the old step finally
+unmounts and the much-shorter "transfer" step mounts in its place —
+the smooth scroll either never starts or finishes pointing at a
+position that no longer corresponds to the top of the new content.
+The user lands somewhere in the middle of step 4 (typically right at
+the Payer's Name / UTR / Upload section), defeating the whole point
+of that screen which is for the user to copy the bank A/C number.
+
+**Fix.** Replace the single smooth-scroll with a triple-instant-scroll
+pattern in the same `useEffect`:
+
+  1. Synchronous scroll inside the useEffect (pins the OLD step's
+     view to the top while it's still animating out).
+  2. `requestAnimationFrame` retry on the very next paint frame.
+  3. `setTimeout` retry at 260 ms — comfortably after framer's 200 ms
+     exit animation completes and the new step has mounted in its
+     final position.
+
+  `behavior: "auto"` (instant) instead of `"smooth"` — smooth
+  scrolling on mobile during a layout shift is unreliable, and after
+  a wizard step transition the user expects to be at the top
+  instantly anyway. Belt-and-suspenders also nudges
+  `document.documentElement.scrollTop` and `document.body.scrollTop`
+  to 0 for older mobile browsers where `window.scrollTo` is sometimes
+  a no-op when called during a layout shift. Cleanup function cancels
+  both the rAF and the setTimeout if step changes again before they
+  fire.
+
+**File.** `artifacts/qorix-markets/src/components/inr-deposit-tab.tsx`
+1391 → 1417 lines (+26, all comments + the timer/raf cleanup logic).
+Only the `useEffect` block at lines 303–342 changed; ZERO behaviour
+change anywhere else, ZERO API changes, ZERO schema/backend changes.
+
+**Verification.** CI run `25149101011` completed success. Prod
+`/version.json` builtAt `2026-04-30T05:31:55Z`, JS bundle hash flipped
+to `index-Ctz8d-er.js`. Bundle markers: `requestAnimationFrame` 7×,
+`cancelAnimationFrame` 4×, `documentElement.scrollTop` 2×, and the
+new instant-scroll signature `scrollTo({top:0,left:0,behavior:"auto"})`
+appears 1× as expected. The previous `behavior:"smooth"` shape for
+this useEffect is gone (the only other `scrollTo(0,...)` hit comes
+from wouter's saved-scroll restore, unchanged).

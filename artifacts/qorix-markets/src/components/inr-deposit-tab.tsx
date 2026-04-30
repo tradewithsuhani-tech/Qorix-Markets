@@ -300,16 +300,42 @@ export function InrDepositTab() {
   // Scroll to the top of the page whenever the wizard advances to a new step.
   // Without this the browser keeps the previous scroll position, so after the
   // user has scrolled down through the long "amount" form, the next step
-  // ("transfer" / "success") renders deep below the fold and the user lands on
-  // the middle of the new screen instead of seeing its title at the top.
-  // Skips the initial render so we don't yank the page when first mounting.
+  // ("transfer" / "success") renders deep below the fold and the user lands
+  // on the middle of the new screen — for the "transfer" step that means
+  // they see the Payer's Name / UTR / Upload section instead of the receiving
+  // account details at the top, which is the whole point of that screen.
+  //
+  // <AnimatePresence mode="wait"> below plays the previous step's 200 ms
+  // exit animation BEFORE the new step mounts, so the very first scrollTo
+  // here happens while the OLD (taller) step is still in the DOM. On mobile
+  // Chrome a single smooth-scroll started in that moment is reliably eaten
+  // by the document-height shift that happens when the old step finally
+  // unmounts and the new step mounts in its place — leaving the page parked
+  // somewhere in the middle of the new step. Fix: use instant scrolls
+  // (behavior:"auto" — smooth is unreliable on mobile during layout shifts)
+  // fired three times — synchronously, on the next paint frame, and again
+  // after framer's 200 ms exit animation has definitely completed — so
+  // whichever frame the new step actually mounts in, the next retry pins
+  // the scroll position to the top.
   const prevStepRef = useRef<Step>(step);
   useEffect(() => {
     if (prevStepRef.current === step) return;
     prevStepRef.current = step;
-    if (typeof window !== "undefined") {
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    }
+    if (typeof window === "undefined") return;
+    const doScroll = () => {
+      window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+      // Belt-and-suspenders for older mobile browsers where window.scrollTo
+      // is occasionally a no-op when called during a layout shift.
+      if (document.documentElement) document.documentElement.scrollTop = 0;
+      if (document.body) document.body.scrollTop = 0;
+    };
+    doScroll();
+    const raf = window.requestAnimationFrame(doScroll);
+    const timer = window.setTimeout(doScroll, 260);
+    return () => {
+      window.cancelAnimationFrame(raf);
+      window.clearTimeout(timer);
+    };
   }, [step]);
 
   function resetFlow() {
