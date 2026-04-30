@@ -7,6 +7,7 @@ import { logger } from "./lib/logger";
 import { maintenanceMiddleware, peekMaintenanceState } from "./middlewares/maintenance";
 import { globalApiLimiter } from "./middlewares/rate-limit";
 import { originGuard } from "./middlewares/origin-guard";
+import { cloudflarePin } from "./middlewares/cloudflare-pin";
 import { adminIpAllowlist, adminIpAllowlistEnabled } from "./middlewares/admin-ip-allowlist";
 import { getCaptchaProvider } from "./lib/captcha-service";
 
@@ -141,6 +142,27 @@ if (corsOriginEnv) {
 // with no Origin header is rejected at the edge before body parse,
 // rate-limit budget consumption, captcha verification, or DB lookup.
 app.use("/api", originGuard);
+
+// ─── B29 L5: Cloudflare origin pin (opt-in via CLOUDFLARE_ORIGIN_SECRET) ───
+// Mounted on /api ONLY and BEFORE body parsers, same reasoning as
+// originGuard above: reject the request before allocating the body.
+//
+// Behaviour gate:
+//   - CLOUDFLARE_ORIGIN_SECRET unset (current prod state) -> no-op
+//     pass-through. Safe default until the operator has actually
+//     placed Cloudflare in front of qorix-api.fly.dev and added the
+//     matching X-Origin-Auth Transform Rule.
+//   - CLOUDFLARE_ORIGIN_SECRET set -> every /api request must carry
+//     X-Origin-Auth header matching the secret. Cloudflare adds the
+//     header via Transform Rule on every proxied request; direct hits
+//     to fly.dev (bypassing the proxy) cannot add it -> 403
+//     ORIGIN_PIN_REQUIRED.
+//
+// Path exemptions: /api/healthz, /api/version. Fly's load balancer
+// probes these endpoints directly (NOT through Cloudflare) and would
+// otherwise be unable to mark the instance healthy. See cloudflare-pin.ts
+// for the rotation playbook + full rationale.
+app.use("/api", cloudflarePin);
 
 app.use(express.json({ limit: "12mb" }));
 app.use(express.urlencoded({ extended: true }));
