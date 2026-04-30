@@ -110,11 +110,13 @@ jobs:
           SMOKE_TEST_EMAIL: ${{ secrets.SMOKE_TEST_EMAIL }}
           SMOKE_TEST_PASSWORD: ${{ secrets.SMOKE_TEST_PASSWORD }}
           VITE_RECAPTCHA_SITE_KEY: ${{ secrets.VITE_RECAPTCHA_SITE_KEY }}
+          VITE_TURNSTILE_SITE_KEY: ${{ secrets.VITE_TURNSTILE_SITE_KEY }}
         run: |
           set -u
           missing=()
           [ -z "${FLY_API_TOKEN:-}" ]            && missing+=("FLY_API_TOKEN")
           [ -z "${VITE_RECAPTCHA_SITE_KEY:-}" ]  && missing+=("VITE_RECAPTCHA_SITE_KEY")
+          [ -z "${VITE_TURNSTILE_SITE_KEY:-}" ]  && missing+=("VITE_TURNSTILE_SITE_KEY")
           # SMOKE_TEST_EMAIL / SMOKE_TEST_PASSWORD are RECOMMENDED but not
           # strictly required — when they are unset the post-deploy auth
           # smoke checks below gracefully skip with a ::warning instead of
@@ -419,6 +421,7 @@ jobs:
             --dockerfile artifacts/qorix-markets/Dockerfile \
             --build-arg VITE_API_URL="${API_BASE}" \
             --build-arg VITE_RECAPTCHA_SITE_KEY="${{ secrets.VITE_RECAPTCHA_SITE_KEY }}" \
+            --build-arg VITE_TURNSTILE_SITE_KEY="${{ secrets.VITE_TURNSTILE_SITE_KEY }}" \
             --wait-timeout 600
           # NOTE: --no-cache is intentional. The vite plugin stamps a fresh
           # BUILD_VERSION (Date.now()) at build time, baked into both
