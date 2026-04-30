@@ -166,12 +166,21 @@ export const Turnstile = forwardRef<TurnstileHandle, TurnstileProps>(
          */}
         <div
           className={[
-            "relative rounded-xl p-2",
+            // Narrow screens (≤sm): minimal padding so the wrapper does not
+            // force the form card to scroll horizontally on 320px webviews.
+            // Cloudflare's iframe has an internal ~300px min-width, so the
+            // wrapper itself stays as small as possible and the iframe is
+            // allowed to render at its natural size (centered + slight
+            // overflow clipped by overflow-hidden as a last resort).
+            "relative rounded-xl p-1.5 sm:p-2 max-w-full overflow-hidden",
             "border border-blue-500/25",
             "bg-gradient-to-br from-blue-500/[0.06] via-indigo-500/[0.05] to-purple-500/[0.06]",
             "shadow-[0_0_28px_-10px_rgba(59,130,246,0.45)]",
             "transition-all",
-            "[&_iframe]:rounded-lg [&_iframe]:!w-full [&_iframe]:block",
+            // Round iframe corners always; only force full-width on ≥sm
+            // screens. On narrow screens, let Cloudflare manage its own
+            // natural ~300px width so we don't fight its min-width.
+            "[&_iframe]:rounded-lg [&_iframe]:block sm:[&_iframe]:!w-full",
           ].join(" ")}
         >
           <div ref={containerRef} className="min-h-[65px] flex items-center justify-center" />
