@@ -19,6 +19,7 @@ import {
   X,
   AlertTriangle,
   BarChart2,
+  BarChart3,
   Bell,
   BellDot,
   TrendingDown,
@@ -43,6 +44,7 @@ import {
   ShieldCheck,
   Store,
   PhoneCall,
+  Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -586,6 +588,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/transactions", label: "History", icon: History },
     { href: "/referral", label: "Referrals", icon: Users },
     { href: "/rewards", label: "Promotions", icon: Trophy },
+    { href: "/quizzes", label: "Quizzes", icon: Sparkles },
     { href: "/tasks", label: "Tasks", icon: ListChecks },
     { href: "/settings", label: "Settings", icon: Settings },
   ];
@@ -609,7 +612,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/admin/logs", label: "Logs", icon: Database },
     { href: "/admin/fraud", label: "Fraud Monitor", icon: Shield },
     { href: "/admin/chats", label: "Support Chats", icon: MessageCircle },
+    { href: "/admin/chat-analytics", label: "Chat Analytics", icon: BarChart3 },
     { href: "/admin/task-proofs", label: "Task Proofs", icon: ClipboardCheck },
+    { href: "/admin/quizzes", label: "Quizzes", icon: Sparkles },
   ];
 
   const allLinks = isAdminArea ? adminLinks : userLinks;
@@ -722,7 +727,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
               <QorixLogo size={32} />
             </div>
             <span className="text-sm font-bold text-white">
-              Qorix<span className="text-blue-400">Markets</span>
+              Qorix{" "}<span className="text-blue-400">Markets</span>
             </span>
             {!isAdminArea && <VipBadge tier={vipTier} size="xs" />}
           </div>
