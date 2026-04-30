@@ -49,9 +49,12 @@ export function PhoneChangeCard() {
   const { data: status, isLoading } = useQuery<ChangeStatus>({
     queryKey: ["phone-change-status"],
     queryFn: async () => {
-      const r = await authFetch(api("/phone-change/status"));
-      if (!r.ok) throw new Error("status_fetch_failed");
-      return r.json();
+      // authFetch already parses JSON and throws on non-2xx — return its
+      // value directly. The previous Response-style usage (r.ok / r.json())
+      // worked against an older authFetch signature; treating the parsed
+      // body as a Response made `r.ok` undefined and threw on every load,
+      // which is why the Mobile Number card was stuck on "Loading…" forever.
+      return await authFetch<ChangeStatus>(api("/phone-change/status"));
     },
     refetchInterval: open ? 5000 : false,
   });
@@ -72,10 +75,7 @@ export function PhoneChangeCard() {
 
   const startMut = useMutation({
     mutationFn: async () => {
-      const r = await authFetch(api("/phone-change/start"), { method: "POST", body: JSON.stringify({}) });
-      const data = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(JSON.stringify(data));
-      return data;
+      return await authFetch<{ sentTo: string }>(api("/phone-change/start"), { method: "POST", body: JSON.stringify({}) });
     },
     onSuccess: (d: any) => {
       toast({ title: "Voice call placed", description: `OTP sent to ${d.sentTo}` });
@@ -86,10 +86,7 @@ export function PhoneChangeCard() {
 
   const verifyOldMut = useMutation({
     mutationFn: async () => {
-      const r = await authFetch(api("/phone-change/verify-old"), { method: "POST", body: JSON.stringify({ otp }) });
-      const data = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(JSON.stringify(data));
-      return data;
+      return await authFetch<unknown>(api("/phone-change/verify-old"), { method: "POST", body: JSON.stringify({ otp }) });
     },
     onSuccess: () => {
       setOtp("");
@@ -101,10 +98,7 @@ export function PhoneChangeCard() {
 
   const sendNewMut = useMutation({
     mutationFn: async () => {
-      const r = await authFetch(api("/phone-change/send-new"), { method: "POST", body: JSON.stringify({ phone: newPhone }) });
-      const data = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(JSON.stringify(data));
-      return data;
+      return await authFetch<{ newPhone: string }>(api("/phone-change/send-new"), { method: "POST", body: JSON.stringify({ phone: newPhone }) });
     },
     onSuccess: (d: any) => {
       toast({ title: "Voice call placed", description: `OTP sent to your new number ${maskPhone(d.newPhone)}` });
@@ -115,10 +109,7 @@ export function PhoneChangeCard() {
 
   const verifyNewMut = useMutation({
     mutationFn: async () => {
-      const r = await authFetch(api("/phone-change/verify-new"), { method: "POST", body: JSON.stringify({ otp }) });
-      const data = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(JSON.stringify(data));
-      return data;
+      return await authFetch<{ newPhone: string }>(api("/phone-change/verify-new"), { method: "POST", body: JSON.stringify({ otp }) });
     },
     onSuccess: (d: any) => {
       resetWizard();
@@ -132,8 +123,7 @@ export function PhoneChangeCard() {
 
   const cancelMut = useMutation({
     mutationFn: async () => {
-      const r = await authFetch(api("/phone-change/cancel"), { method: "POST", body: JSON.stringify({}) });
-      if (!r.ok) throw new Error("cancel_failed");
+      await authFetch<unknown>(api("/phone-change/cancel"), { method: "POST", body: JSON.stringify({}) });
     },
     onSuccess: () => {
       resetWizard();
