@@ -2793,3 +2793,162 @@ pre-existing in `quiz-*.ts`, unrelated). Brace balance verified (31/31,
 2 try / 1 catch — the second `try` is from an earlier `try { JSON.parse }`
 elsewhere in the file). CI run for commit `a64d431e` completed success at
 2026-04-30 14:29 UTC. Fly deploy confirmed alive.
+
+
+---
+
+## 2026-04-30 — B21: INR-withdrawal ledger journaling + transfer race fix + orphan reconciliation script
+
+**Commit `a6a86325`. Three connected fixes for ledger ↔ wallet drift.**
+
+### Why this batch exists
+
+After B20 deployed, I diffed wallets vs ledger across all 33 users and found
+two with persistent drift on `user:UID:main`:
+
+- **looxprem (117):** `wallet_main = $248.88`, `ledger_main = $362.14`,
+  drift = `+$113.27`. Decomposes exactly into 3 approved INR withdrawals:
+  WD#1 ($102.04) + WD#2 ($10.20) + WD#3 ($1.02).
+- **bimleshgroup (143):** `wallet_main = $9.29`, `ledger_main = $10.31`,
+  drift = `+$1.02`. Matches WD#4 ($1.02) exactly.
+
+Drift sign is positive on the credit-normal side ⇒ wallet was debited but
+ledger never was. Tracing the code path:
+
+`artifacts/api-server/src/routes/inr-withdrawals.ts`
+- **SUBMIT** (`POST /inr-withdrawals`): atomic conditional UPDATE on
+  `wallets.main_balance` (correct), insert into `inr_withdrawals` (correct),
+  but **NO `transactions` row, NO `postJournalEntry` call**.
+- **APPROVE** (`POST /inr-withdrawals/:id/approve`): flips status to
+  `approved` and credits `merchants.inr_balance` for the assigned merchant.
+  No ledger entry on the platform side.
+- **REJECT**: flips status, refunds `wallets.main_balance`. No journal
+  needed since none was ever posted.
+
+Result: every approved INR withdrawal left the ledger `user:UID:main`
+exactly `amountUsdt` higher than the wallet. Recurring per approval.
+
+### Fix 1: `inr-withdrawals.ts` — full ledger journaling
+
+Imports added: `transactionsTable`, `like` (drizzle), and `ensureUserAccounts`,
+`postJournalEntry`, `journalForTransaction` from `lib/ledger-service`.
+
+**SUBMIT** — after the wallet debit + the `inr_withdrawals` insert:
+- Insert a pending `transactions` row with deterministic prefix
+  `[INR-WD:${withdrawalId}]` so APPROVE/REJECT can find it later without
+  needing a FK column on `inr_withdrawals` (schema change forbidden).
+- Post the lock journal: `debit user:UID:main`, `credit
+  platform:pending_withdrawals` (system account, liability/credit-normal,
+  pre-existing in prod). Journal id = `journalForTransaction(txnId)`.
+
+**APPROVE** — find the pending txn via the `[INR-WD:${id}]` prefix:
+- If found (B21+ path): mark txn `completed`, post release journal
+  `debit platform:pending_withdrawals`, `credit platform:usdt_pool`.
+  Journal id = `inr_wd:${id}:approve`.
+- If not found (legacy/orphan path): self-heal by inserting a new completed
+  txn AND posting a direct settlement journal `debit user:UID:main`,
+  `credit platform:usdt_pool`. This way any pre-B21 pending withdrawal
+  (none currently exist in prod, but the code path is defensive) gets
+  reconciled on first approval after deploy.
+
+**REJECT** — find the pending txn:
+- If found: mark txn `rejected`, refund wallet (existing), post reverse
+  journal `debit platform:pending_withdrawals`, `credit user:UID:main`.
+  Journal id = `inr_wd:${id}:reject`.
+- If not found: refund wallet only (no journal to reverse).
+
+### Fix 2: `wallet.ts /wallet/transfer` — race condition
+
+Architect's B19/B20 review flagged: the route SELECTed wallet outside the
+tx, computed absolute `newMain`/`newTrading` in JS, wrote them back. Two
+concurrent transfers could both pass the pre-check from the same starting
+balance and overwrite each other. The ledger negative-balance guard in
+`postJournalEntry` would catch the second, but only after the wallet write
+had been queued.
+
+**Fix:** convert to atomic conditional UPDATE — same pattern as
+`inr-deposits.ts` APPROVE and `inr-withdrawals.ts` SUBMIT. SQL arithmetic
+in `.set()` (`mainBalance: sql\`... ± X::numeric\``) with a
+`gte(sourceCol, X)` guard in the WHERE clause makes the whole step
+row-locked + atomic. The returning row count distinguishes success from
+insufficient-balance; a follow-up SELECT inside the same tx separates
+"insufficient balance" (400) from "wallet not found" (404).
+
+### Fix 3: `scripts/reconcile-orphan-inr-withdrawals.ts` — backfill (NEW)
+
+Idempotent script that backfills the `transactions` row + journal entries
+for any approved INR withdrawal that has neither a matching txn (description
+LIKE `[INR-WD:${id}]%`) NOR a matching journal (`journal_id =
+inr_wd:${id}:approve`).
+
+For each orphan: insert completed `transactions` row + 2-line journal
+`debit user:UID:main`, `credit platform:usdt_pool` — the direct settlement
+form, since pre-B21 submits never posted the lock journal.
+
+**Safety:**
+- Dry-run by default, requires `--apply` to commit.
+- Pre-flight projects the new ledger balance per affected user. If any
+  user wouldn't end up matching their wallet exactly (`abs(diff) <
+  0.000001`), the script aborts BEFORE applying — that would mean the
+  drift has additional unaccounted causes (orphan deposits, manual
+  adjustments, missing trade journals).
+- Post-flight re-verifies inside the same DB transaction; mismatch =
+  ROLLBACK.
+- Everything in one transaction: either all orphans get reconciled, or
+  none do.
+
+**Verified on prod via dry-run:**
+
+```
+Found 4 orphan approved INR withdrawal(s):
+  • WD#1  user=117 (looxprem@gmail.com)  ₹10000  $102.040816  via upi
+  • WD#2  user=117 (looxprem@gmail.com)  ₹1000   $10.204082   via upi
+  • WD#3  user=117 (looxprem@gmail.com)  ₹100    $1.020408    via bank
+  • WD#4  user=143 (bimleshgroup@gmail.com) ₹100 $1.020408    via upi
+
+Projected reconciliation:
+  user_id | username             | wallet_main | ledger_main | drift     | backfill   | after_ledger | match
+      117 | looxprem@gmail.com   |  248.877552 |  362.142858 | 113.265306| 113.265306 |   248.877552 | ✓ YES
+      143 | bimleshgroup@gmail.com|   9.285715 |   10.306123 |   1.020408|   1.020408 |     9.285715 | ✓ YES
+```
+
+Both users' ledger_main = wallet_main exactly after backfill.
+
+### Run order (operator)
+
+1. Wait for CI deploy of commit `a6a86325` to land on `qorix-api.fly.dev`.
+   Verify via `/healthz` or by watching the deploy.yml run conclude.
+2. Run the reconciliation script with `--apply`:
+   ```
+   NEON_DATABASE_URL="$NEON_DATABASE_URL" \
+     pnpm --filter @workspace/api-server exec tsx \
+     ../../scripts/reconcile-orphan-inr-withdrawals.ts --apply
+   ```
+   The script's pre-flight + post-flight checks make it safe to re-run if
+   anything goes wrong; the second run will find zero orphans.
+3. Post-reconciliation, looxprem (117), bimleshgroup (143), and abodh
+   (136 — already auto-fixed by B20 on next transfer) are all fully
+   reconciled. Going forward, every INR withdrawal posts the proper
+   lock/release/refund journals at submit/approve/reject so drift cannot
+   recur.
+
+### Risk
+
+- **Code (deployed):** zero schema change. Both modified routes are
+  wrapped in existing `db.transaction` blocks; if any new step fails
+  (missing GL account, ledger imbalance, negative-balance guard trip),
+  the whole tx rolls back leaving DB unchanged. The wallet/transfer
+  conversion to atomic conditional UPDATE strictly improves correctness;
+  no behaviour change for non-racing callers.
+- **Reconciliation script (operator-run):** dry-run by default, atomic,
+  pre+post-flight verified. Worst case: pre-flight aborts before any
+  write; user reports unexpected drift; we investigate further.
+
+### Verified
+
+- Type-check clean for both modified files (other repo errors in
+  `quiz-*.ts` are pre-existing, unrelated).
+- Dry-run on prod NEON identifies exactly 4 orphans matching the drift
+  hypothesis.
+- Push to GitHub `a6a86325` succeeded, CI `Deploy to Fly.io` triggered
+  and in_progress at time of write.
