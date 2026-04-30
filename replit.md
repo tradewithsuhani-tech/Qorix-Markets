@@ -2133,3 +2133,860 @@ flow not synthetically tested in prod (would require triggering
 a real INR withdrawal request); regression risk is low because
 the claim path itself is unchanged from the existing
 `/merchant/withdrawals` page mutation.
+
+## B11 (2026-04-30 03:44Z) — Captcha widget theme polish (570b142490)
+
+User reported the Cloudflare Turnstile widget on `/admin-login`
+(and by extension `/login`, `/signup` since they all use the
+shared `<CaptchaWidget>` shim) looked like "a basic default
+Cloudflare island" — generic 300×65 light-bg widget bolted
+onto the dark Qorix glass-card form. We can't restyle the
+widget's *interior* (cross-origin iframe), but we can frame it
+externally so it reads as a deliberate part of the form rather
+than a third-party orphan.
+
+**Files changed (frontend only, no schema/backend):**
+
+1. `artifacts/qorix-markets/src/components/turnstile.tsx`
+   • Added `size: "flexible"` to the
+     `window.turnstile.render()` options. Cloudflare-supported
+     responsive size that lets the widget grow from 300px to
+     fill the parent column (≥300px container required; admin
+     form is `max-w-md` ≈ 360px effective inner = safe).
+   • Replaced the bare `<div className="w-full flex
+     justify-center"><div ref={containerRef}/></div>` return
+     with a glassy themed wrapper:
+       - `rounded-xl p-2`
+       - `border border-blue-500/25`
+       - `bg-gradient-to-br from-blue-500/[0.06]
+         via-indigo-500/[0.05] to-purple-500/[0.06]`
+       - `shadow-[0_0_28px_-10px_rgba(59,130,246,0.45)]`
+         (soft outer glow matching the form card's accent)
+       - `[&_iframe]:rounded-lg [&_iframe]:!w-full
+         [&_iframe]:block` (descendant selector to round the
+         iframe corners + force full width)
+     Inner ref container gets `min-h-[65px]` so the layout
+     doesn't shift between the loading placeholder size and
+     the rendered widget size.
+
+2. `artifacts/qorix-markets/src/components/recaptcha.tsx`
+   • Same wrapper applied for visual parity if a future build
+     flips `VITE_CAPTCHA_PROVIDER=recaptcha`. reCAPTCHA v2's
+     iframe is fixed 304×78 (no flexible mode), so the wrapper
+     centers the iframe inside the frame instead of
+     stretching it. Inner ref container gets `min-h-[78px]`.
+
+**Downstream blast radius.** Both widgets are the only two
+implementations; everything that uses captcha
+(`/login` register tab, `/login` login tab, `/admin-login`,
+`/signup`) goes through `captcha-widget.tsx` which dispatches
+to one of these two — so the new look picks up everywhere
+with **zero touch** at the call sites.
+
+**No behavior change.** Widget config is unchanged except for
+`size: "flexible"` on Turnstile. The token callback,
+expired-callback, error-callback, sitekey, theme, all
+identical. No prop changes, no API changes, no backend
+changes, no env vars added. CaptchaWidget shim, login.tsx,
+admin-login.tsx, signup.tsx — all untouched.
+
+**Verification.** CI run `25146181410` green. Prod
+`/version.json` builtAt `2026-04-30T03:44:35Z`, JS bundle hash
+flipped from `index-DbNGco7N.js` → `index-sifw9dwN.js`,
+contains all expected new theme markers (`"flexible"`,
+`shadow-[0_0_28px_-10px_rgba(59,130,246,0.45)]`,
+`from-blue-500/[0.06]`) and all preserved B10 admin-captcha
+markers (`Please complete the captcha`, `Enter Admin Panel`).
+Visually confirmed on prod via screenshot:
+`/admin-login` widget now sits inside a clean
+blue-tinted glass frame matching the Email/Password input
+fields above it, "Verify you are human" Cloudflare checkbox
+renders inside the frame at full column width.
+
+### B11.1 (2026-04-30 03:57Z) — Captcha wrapper narrow-screen fix (913125d3c4)
+
+Architect review of B11 flagged that Cloudflare's Turnstile
+iframe has an internal ~300px min-width and recommended a
+smoke-test on 320px webviews. The smoke test confirmed the
+issue: at 320px the wrapper extended past the form card's left
+edge (the `[&_iframe]:!w-full` force + `p-2` combined with
+Cloudflare's min-width was breaking out of the card boundary).
+
+**Fix (Tailwind classes only, both files):**
+- `p-2` → `p-1.5 sm:p-2` (4px less padding each side ≤sm)
+- `[&_iframe]:!w-full` → `sm:[&_iframe]:!w-full` (don't fight
+  Cloudflare's min-width on mobile; let the iframe render at
+  its natural ~300px size centered)
+- `+ max-w-full overflow-hidden` (last-resort clip so the form
+  layout never breaks even on very narrow webviews)
+
+On ≥sm screens (≥640px) the wrapper still stretches the widget
+to fill the form column (the desktop look from B11 unchanged,
+re-verified via prod screenshot). On <sm screens the wrapper
+holds its own width and the iframe renders at Cloudflare's
+natural size.
+
+Re-tested at 320px (iPhone SE 1st gen / very narrow webview;
+form card stays intact, slight iframe content clip is
+acceptable tradeoff vs breaking the card) and 375px (iPhone
+SE 2nd gen / common mobile; cleanly fits with both side
+gutters). recaptcha.tsx mirrors the same Tailwind change for
+provider parity.
+
+**Verification.** CI run `25146516372` green. Prod
+`/version.json` builtAt `2026-04-30T03:57:30Z`, JS bundle hash
+flipped from `index-sifw9dwN.js` → `index-0_4GK7P_.js`,
+contains all expected new responsive markers
+(`p-1.5 sm:p-2 max-w-full overflow-hidden`,
+`sm:[&_iframe]:!w-full`) plus all preserved B11 theme markers
+(`"flexible"`, the blue glow shadow class) plus all preserved
+B10 admin-captcha markers (`Please complete the captcha`,
+`Enter Admin Panel`). Desktop prod screenshot confirms widget
+still renders at full column width inside the themed frame.
+
+### B11.2 (2026-04-30 04:21Z) — Strip captcha wrapper frame entirely (0390d7031d)
+
+User reviewed B11.1 and said the themed glow frame was still
+too visible — captcha should look indistinguishable from the
+rest of the form, not framed in a glow box. So we stripped
+ALL wrapper styling and rendered the widget with zero chrome
+from us:
+
+**Removed (vs B11/B11.1):**
+- `border border-blue-500/25`
+- `bg-gradient-to-br from-blue-500/[0.06] via-indigo-500/[0.05]
+  to-purple-500/[0.06]`
+- `shadow-[0_0_28px_-10px_rgba(59,130,246,0.45)]`
+- `rounded-xl p-1.5 sm:p-2`
+- `transition-all`
+- `[&_iframe]:rounded-lg`
+- The wrapper `<div>` itself (now the ref attaches directly to
+  the centred container)
+
+**Kept (structural only):**
+- `min-h-[65px]` (Turnstile) / `min-h-[78px]` (reCAPTCHA) —
+  prevent layout shift
+- `flex items-center justify-center` — centre iframe
+- `max-w-full overflow-hidden` — prevent narrow-screen overflow
+- `[&_iframe]:block` — drop inline-element baseline gap
+- `sm:[&_iframe]:!w-full` (Turnstile only) — let flexible
+  widget fill column on tablet/desktop
+- `size: "flexible"` Turnstile render config — unchanged
+
+**What's still visually distinct (and we can't fix it):**
+The Cloudflare iframe is cross-origin and renders its own
+dark theme inside (~#1d1d1d gray bg, fixed by Cloudflare).
+That gray rectangle on the form card's near-black bg is the
+only remaining visible "this is a third-party widget" cue.
+We could only fully hide it by switching Turnstile to
+invisible mode (no widget UI at all — backend integration
+change required) or by repainting the form card bg to match
+Cloudflare's gray (bigger redesign).
+
+**Verification.** CI run `25147135139` green. Prod
+`/version.json` builtAt `2026-04-30T04:21:30Z`, JS bundle hash
+flipped to `index-xWOKHKP_.js`, all wrapper-frame markers
+absent (`shadow-[0_0_28px...]` → 0,
+`from-blue-500/[0.06]` → 0, `rounded-xl p-1.5` → 0). All
+preserved structural markers present (`size:"flexible"`,
+`min-h-[65px]`, `min-h-[78px]`, `max-w-full overflow-hidden`,
+`[&_iframe]:block`, `sm:[&_iframe]:!w-full`) and the B10
+admin-captcha integration markers preserved
+(`Please complete the captcha`). Note: `border-blue-500/25`
+still appears 7× in the prod bundle but those are from 10
+unrelated app pages (portfolio, dashboard, tasks,
+trading-desk, landing, deposit, admin-chats, invest,
+admin-fraud, growth-panel) using the same Tailwind class for
+their own legitimate UI work — captcha files have ZERO
+border classes. Prod desktop screenshot confirms widget now
+sits inline with the form, no border/glow visible from us.
+
+### B12 (2026-04-30 04:38Z) — Auto-scroll INR deposit wizard to top on each step transition (cded7dab25)
+
+**Bug.** User screenshots showed the INR deposit funnel landing
+mid-screen on the 4th step (Transfer Confirmation) — the user
+sees "Send Payment" instructions / "Payment Method BANK" /
+"Receiving Account Details" instead of the page header
+("Transfer Confirmation / Remaining time to pay 14:07 / ₹100").
+Pages 1–3 (start/list/amount) all rendered with the carousel
++ tabs visible at top because the user was still near the page
+top, but step 3 ("amount") form is long enough that the user
+scrolls down to click the "Pay" CTA at the bottom — and on
+step transition (`AnimatePresence mode="wait"`) the browser
+just keeps the existing scroll offset, so the next step renders
+deep below the fold.
+
+**Fix.** `artifacts/qorix-markets/src/components/inr-deposit-tab.tsx`:
+added a `useEffect` that, on every change of the `step` state
+(`"start" | "list" | "amount" | "transfer" | "success"`), calls
+`window.scrollTo({ top: 0, behavior: "smooth" })`. First-render
+guard via `prevStepRef = useRef<Step>(step)` so the initial
+mount on the `start` step doesn't trigger a phantom scroll.
+Effect is registered in deps `[step]` only.
+
+**Why scroll the window not the wizard.** Existing wizard cards
+already match the visual rhythm of the rest of the deposit
+page (carousel ad → tabs → wizard) — scrolling the page to
+top means every step renders with the same chrome above
+(carousel + tabs + wizard top), matching pages 1–3 from the
+user's screenshots.
+
+**Pure frontend.** 1 file. 0 schema/API/backend changes. CI run
+`25147645180` green. Prod `/version.json` builtAt
+`2026-04-30T04:38:55Z`, JS bundle hash flipped to
+`index-ByFdMNV5.js`. Production-minified bundle marker
+`window.scrollTo({top:0` present (1×) — comment + variable
+names (`prevStepRef`, the comment block) are stripped/renamed
+by Vite's minifier as expected. Existing UI strings preserved
+in bundle (`Transfer Confirmation`, `Remaining time to pay`
+both 1×). Applies to all step transitions: start→list,
+list→amount, amount→transfer, transfer→success, and any
+back-step (e.g. "Back" button on amount→list, list→start).
+
+### B13 (2026-04-30 04:51Z) — Withdrawal OTP entry → shadcn 6-slot InputOTP (4b786cdd0a)
+
+**Trigger.** User screenshot of `/wallet` → Withdraw → INR step 2
+showed the new email-OTP step rendering as a single plain text
+input with `placeholder="000000"` and `tracking-widest text-lg` —
+"basic lag raha hai". Asked to polish the design.
+
+**What we found.** The repo already had:
+  - `input-otp` v1.4.2 in `artifacts/qorix-markets/package.json`
+  - The shadcn wrapper at `src/components/ui/input-otp.tsx`
+    exporting `InputOTP / InputOTPGroup / InputOTPSlot`
+  - Zero existing call-sites for it (this withdrawal flow is the
+    first real usage)
+
+**Change.** `artifacts/qorix-markets/src/components/inr-withdraw-tab.tsx`
+swapped the legacy single text input for a centred 6-slot
+`InputOTP`. Each `InputOTPSlot` renders as an individually
+rounded card (`h-12 w-9 sm:w-11 rounded-lg border border-white/10
+bg-white/5 text-xl font-mono font-bold text-white`) with the
+default `ring-ring` glow on the active slot. The cancel (X)
+button moved next to the slot group at matching `h-12 w-10` so
+the row stays balanced.
+
+**UX wins from the swap (free with the library):**
+  - Digits-only enforced via `pattern={REGEXP_ONLY_DIGITS}`
+  - Pasting a 6-digit code from the email auto-distributes
+    across all slots
+  - Backspace flows backward through slots naturally
+  - `inputMode="numeric"` still triggers the numeric keypad on
+    mobile
+  - `aria-label` added on both the OTP group and the cancel
+    button for screen readers
+
+**No state-shape changes.** Still feeds the same `withdrawOtp`
+string state, the Confirm Withdrawal button still gates on
+`withdrawOtp.length < 6`, and the existing `requestOtp` /
+`cancelOtp` / `submit` handlers are untouched. Pure visual swap.
+
+**Verification.** CI run `25147994454` green. Prod
+`/version.json` builtAt `2026-04-30T04:51:55Z`, JS bundle hash
+flipped to `index-CPcpOm1N.js`. Bundle markers present:
+`input-otp` (3×, library bundled), `6 digit withdrawal
+verification code` (1×, my new aria-label), preserved strings
+`Confirm Withdrawal`, `Enter the 6-digit code sent to your
+email`, `Didn't receive it` all 1×. Stale `placeholder="000000"`
+gone from bundle. Note: `tracking-widest text-lg` still appears
+1× in the prod bundle but that hit comes from `wallet.tsx`
+(separate USDT-side code, not the withdraw OTP) — confirmed via
+ripgrep on local source. The withdraw tab itself is fully clean
+of the legacy classes.
+
+### B14 (2026-04-30 05:06Z) — Settings → Mobile Number card stuck on "Loading…" (4de4bfe632)
+
+**Trigger.** User screenshot of `/settings`: the Mobile Number
+card showed only a `<Loader2 className="animate-spin"/> Loading…`
+spinner that never resolved. User: "yadi ek bar phone
+verification ho chuka hai aur yadi admin ne edit kiya hai to
+bhi yaha dikhna chahie abhi show nahi kar raha hai."
+
+**Root cause — caller/lib API mismatch.** `PhoneChangeCard` was
+written against the old `authFetch(url)` that returned a
+`Response`, so callers did `r.ok` / `r.json()`. The lib was
+refactored some time back to:
+
+```ts
+export async function authFetch<T>(url, init?): Promise<T> {
+  const res = await fetch(...);
+  const text = await res.text();
+  const data = text ? JSON.parse(text) : null;
+  if (!res.ok) throw new Error(data?.message ?? data?.error ?? `Request failed (${res.status})`);
+  return data as T;
+}
+```
+
+i.e. it now returns the parsed body and throws on non-2xx. The
+PhoneChangeCard never got updated, so:
+
+```ts
+const r = await authFetch(api("/phone-change/status"));
+if (!r.ok) throw new Error("status_fetch_failed");
+return r.json();
+```
+
+…always evaluates `r.ok = undefined → !r.ok = true → throw`.
+React Query catches it, retries 3×, all fail. The card gets
+stuck on the initial pending state because every retry takes
+real network time and the error path also re-renders into a
+state with no usable `status`. (And the user's second concern
+falls out as a corollary — the API call literally never resolves
+to data, so admin-edited phones can't render either.)
+
+**Fix.** Updated all 6 callers in
+`artifacts/qorix-markets/src/components/phone-change-card.tsx`
+to the current authFetch signature:
+  - `useQuery` for `/phone-change/status` → returns
+    `authFetch<ChangeStatus>(...)` directly
+  - `startMut` / `verifyOldMut` / `sendNewMut` / `verifyNewMut`
+    / `cancelMut` → return the awaited authFetch call
+  - All `r.ok` checks and `r.json()` calls removed
+  - `handleApiError` unchanged — `e.message` is now already the
+    human string (authFetch extracts it), and the JSON.parse
+    fallback in handleApiError is harmless on plain text
+
+10 lines net removed (346 → 336). No state-shape, no hook
+contracts, no API contracts changed. Server-side
+`/phone-change/status` reads `phoneNumber` + `phoneVerifiedAt`
+straight from `usersTable`, and admin's
+`PUT /admin/users/:id/profile` already sets both fields when
+admin saves a phone (see `admin.ts:498-499`), so the admin-
+edited number now displays correctly the moment the API call
+succeeds.
+
+**Out of scope but flagged.** `pages/admin-subscriptions.tsx`
+has the same Response-style usage of `authFetch` (3 callers).
+That page is admin-only, not part of the user's reported
+symptom — leaving for a future cleanup.
+
+**Verification.** CI run `25148374421` green. Prod
+`/version.json` builtAt `2026-04-30T05:06:13Z`, JS bundle hash
+flipped to `index-Dyn_Cwwb.js`. Bundle markers: `phone-change/
+status` 1×, `phone-change/start` 1×, `phone-change/cancel` 1×,
+`Mobile Number` 1×, `Verified via voice OTP` 1×. The old throw
+literal `status_fetch_failed` is gone from the bundle (0×
+hits) — confirms the broken queryFn is no longer compiled in.
+
+### B15 (2026-04-30 05:18Z) — /devices: hide withdrawal messages and location (60d29e61d4)
+
+**Trigger.** User screenshot of `/devices` ("My Devices") asked
+to remove the withdrawal-related messaging and location info:
+"Yaha par withdrawal wala message show mat karo loction mat
+dikhao".
+
+**Removed (visual only — no API contract changes).**
+
+  1. Top amber banner "Withdrawals paused on this session"
+     (`{!data.currentSession.withdrawalAllowed}` block, ~22 lines)
+  2. Per-card location row (MapPin icon + city, country e.g.
+     "Noida, India") and the `formatLocation` helper
+  3. Per-card amber box "Withdrawals locked from this device"
+     with the 24-hour cooldown explanation (~32 lines)
+  4. Withdrawal sentence in the page intro paragraph
+  5. Footer line "Cooldown for new devices: Xh"
+  6. Newly-unused imports: `MapPin`, `Lock` from lucide-react
+
+**Kept on each card.** Device icon, browser + OS, "This device"
+badge, "Last seen", "First sign-in", and the new-device email
+alert chip when applicable.
+
+**Server contract intact.** `GET /api/devices` still returns
+`devices[].city / country / withdrawalLocked /
+withdrawalUnlockAt / withdrawalUnlockHoursLeft /
+withdrawalUnlockIst`, `cooldownHours`, and
+`currentSession.withdrawalAllowed` — the page just stops
+rendering them. The `DevicesResponse` / `DeviceRow` /
+`CurrentSession` interfaces also unchanged so the wire shape
+keeps matching the server.
+
+**Backend untouched.** The actual withdrawal cooldown
+enforcement lives at `/wallet/withdraw` (and the helper that
+populates `currentSession.withdrawalAllowed`) — neither was
+touched, so security behaviour is unchanged. The user just
+won't see the explanation on this screen.
+
+**File.** `artifacts/qorix-markets/src/pages/devices.tsx`
+331 → 255 lines (76 removed).
+
+**Verification.** CI run `25148716891` completed success.
+Prod `/version.json` builtAt `2026-04-30T05:18:17Z`, JS bundle
+hash flipped to `index-DvvH4KKg.js`. Bundle markers:
+`Withdrawals paused on this session` 0×, `Withdrawals locked
+from this device` 0×, `Cooldown for new devices` 0×, all gone.
+Kept `My Devices` 1×, `First sign-in` 1×, `New-device email
+alert sent at first sign-in` 1×. Note: `Location unknown`
+still appears 1× in the prod bundle but that hit comes from
+`admin-fraud.tsx` (separate admin-only page), confirmed via
+ripgrep on local source — devices.tsx itself is clean.
+
+### B16 (2026-04-30 05:31Z) — deposit step-4 lands at top reliably (770584bfe5, fixes B12 regression on mobile)
+
+**Trigger.** User: "4th page jab jaate hain to wo neeche se start hota
+hai. Direct UTR number aur screenshot daalne ka option aata hai. Jabki
+hume upar wala dikhna chahiye jahan account number dikh raha ho. Tabhi
+user account number copy karke payment karega. Aapne pehle bhi fix
+kiya tha lekin hua nahi hai." Screenshot showed the page parked at the
+Payer's Name input on step 4 — Receiving Account Details (the bank A/C
+number + IFSC the user has to copy) was scrolled off-screen above.
+
+**Why B12 (cded7dab25) didn't actually work on mobile.** B12 added a
+`useEffect` on `step` that called
+`window.scrollTo({ top: 0, behavior: "smooth" })`. The wizard's
+`<AnimatePresence mode="wait">` plays the previous step's 200 ms exit
+animation BEFORE the new step mounts, so that smooth-scroll fires
+while the OLD (taller) "amount" step is still in the DOM. On mobile
+Chrome a smooth scroll started in that moment is reliably eaten by
+the document-height shift that happens when the old step finally
+unmounts and the much-shorter "transfer" step mounts in its place —
+the smooth scroll either never starts or finishes pointing at a
+position that no longer corresponds to the top of the new content.
+The user lands somewhere in the middle of step 4 (typically right at
+the Payer's Name / UTR / Upload section), defeating the whole point
+of that screen which is for the user to copy the bank A/C number.
+
+**Fix.** Replace the single smooth-scroll with a triple-instant-scroll
+pattern in the same `useEffect`:
+
+  1. Synchronous scroll inside the useEffect (pins the OLD step's
+     view to the top while it's still animating out).
+  2. `requestAnimationFrame` retry on the very next paint frame.
+  3. `setTimeout` retry at 260 ms — comfortably after framer's 200 ms
+     exit animation completes and the new step has mounted in its
+     final position.
+
+  `behavior: "auto"` (instant) instead of `"smooth"` — smooth
+  scrolling on mobile during a layout shift is unreliable, and after
+  a wizard step transition the user expects to be at the top
+  instantly anyway. Belt-and-suspenders also nudges
+  `document.documentElement.scrollTop` and `document.body.scrollTop`
+  to 0 for older mobile browsers where `window.scrollTo` is sometimes
+  a no-op when called during a layout shift. Cleanup function cancels
+  both the rAF and the setTimeout if step changes again before they
+  fire.
+
+**File.** `artifacts/qorix-markets/src/components/inr-deposit-tab.tsx`
+1391 → 1417 lines (+26, all comments + the timer/raf cleanup logic).
+Only the `useEffect` block at lines 303–342 changed; ZERO behaviour
+change anywhere else, ZERO API changes, ZERO schema/backend changes.
+
+**Verification.** CI run `25149101011` completed success. Prod
+`/version.json` builtAt `2026-04-30T05:31:55Z`, JS bundle hash flipped
+to `index-Ctz8d-er.js`. Bundle markers: `requestAnimationFrame` 7×,
+`cancelAnimationFrame` 4×, `documentElement.scrollTop` 2×, and the
+new instant-scroll signature `scrollTo({top:0,left:0,behavior:"auto"})`
+appears 1× as expected. The previous `behavior:"smooth"` shape for
+this useEffect is gone (the only other `scrollTo(0,...)` hit comes
+from wouter's saved-scroll restore, unchanged).
+
+### Phase B17 — admin/users action row collapsed into Freeze + Disable + 3-dot dropdown (2026-04-30, commit `e32b201bc5`)
+
+**Symptom.** The User Management table in `/admin/users` was rendering
+six inline action buttons per row (Freeze, Disable, Force logout,
+Balance, Edit Profile, Send Mail). On 13″ admin laptops and on the
+narrow phone admin view the row overflowed horizontally, hid the
+status badges behind the action column, and made each row visually
+heavy when the user just wanted to scan the list.
+
+**Fix.** Reduced the inline action set to the two highest-frequency
+toggles — Freeze and Disable — and collapsed the rest behind a single
+3-dot menu (`MoreVertical` icon) aligned to the right of those two
+buttons. The dropdown uses the existing shadcn `dropdown-menu`
+primitives that the project already ships, so styling/animation/focus
+trap behaviour matches the rest of the admin shell. Dropdown contents
+(top → bottom): **Devices**, **Send Mail**, **Edit Profile**,
+**Balance**, separator, **Force Logout** (visually grouped at the
+bottom because it is the most destructive item). Each dropdown item
+opens a popup with the relevant details — never a silent inline
+action — which was the explicit user requirement.
+
+**New popups (file-local, no new files).** Two new modal components
+were added to `artifacts/qorix-markets/src/pages/admin-modules.tsx`,
+both following the same `fixed inset-0 z-50 bg-black/70 backdrop-blur-sm`
++ glass-card + `onClick stopPropagation` shell pattern used by
+`BalanceAdjustModal` / `EditProfileModal` / `SendEmailModal`:
+
+* **`DevicesModal`** — read-only list of every device this user has
+  signed in from. Hits the existing
+  `GET /admin/fraud/users/:userId/devices` endpoint
+  (`artifacts/api-server/src/routes/fraud.ts` line 227, already
+  deployed and used by the Fraud module). Each row shows browser
+  label, OS label, first-seen + last-seen timestamps, last IP, last
+  city/country, and an amber "alert sent" line when the new-device
+  email alert was already dispatched. No write operations whatsoever.
+* **`ConfirmForceLogoutModal`** — small confirmation popup wrapping
+  the existing `POST /admin/users/:id/action` `{action:"force_logout"}`
+  call (the same backend endpoint the previous inline button hit). It
+  shows the target user's name + email + ID, explains exactly what
+  will happen ("revoke every active session... user will be signed
+  out immediately... account/balances/KYC NOT affected"), and offers
+  Cancel / Force Logout buttons with a `Loader2` spinner during
+  submit. Toast feedback on both success and error.
+
+**State + wiring.** `AdminUsersPage` got two new `useState<any|null>`
+slots — `devicesUser` and `confirmLogoutUser` — and both modals were
+plugged into the existing `<AnimatePresence>` block right after
+`SendEmailModal`. The dropdown items call `setDevicesUser(u)`,
+`setEmailUser(u)`, `setEditUser(u)`, `setAdjustUser(u)`,
+`setConfirmLogoutUser(u)` respectively (the first four reuse the
+already-existing modal flows, no behaviour change).
+
+**Imports.** Added `MoreVertical`, `Smartphone`, `LogOut` from
+`lucide-react`; added `DropdownMenu`, `DropdownMenuTrigger`,
+`DropdownMenuContent`, `DropdownMenuItem`, `DropdownMenuLabel`,
+`DropdownMenuSeparator` from `@/components/ui/dropdown-menu` (shadcn
+primitives already in the repo).
+
+**Scope discipline.** Frontend only. Zero changes to API routes,
+zero changes to the Drizzle schema, zero SQL, zero migrations. The
+same backend endpoints that powered the previous inline buttons
+power the new dropdown items unchanged.
+
+**Verification.** CI run `25149684714` for commit `e32b201bc5`
+completed success. Prod `/version.json` builtAt
+`2026-04-30T05:51:53Z`, JS bundle hash flipped to
+`index-BkorJT1Z.js`. `tsc --noEmit` clean for `admin-modules.tsx`.
+File size grew from 2308 → 2531 lines (+223 lines for the two new
+modals + dropdown markup; the action-row replacement itself is
+roughly net-flat).
+
+---
+
+### B19 — Wire all 8 admin email templates to dedicated unique-design renderers
+
+**Date:** 2026-04-30 (commit `9bd67d138ab5d0aa3202f42b804215c6543b7592`)
+
+**Problem.** The admin `/users/:id/send-email` endpoint previously rendered
+every `templateId` (`kyc`, `announcement`, `promotion`, `alert`, `info`,
+`maintenance`, `trade_alert`, `next_trade`) through the same generic
+`buildBrandedEmailHtml` wrapper — so visually they all looked identical.
+The bespoke unique-design renderers existed in `lib/email-service.ts` but
+were only invoked by the broadcast pipelines.
+
+**Fix.** New `buildDirectEmailHtml` switch-dispatcher in
+`artifacts/api-server/src/routes/admin.ts` routes the admin's free-form
+`{subject, message}` into each renderer's structured slots:
+
+| templateId   | renderer                              | theme              |
+|--------------|---------------------------------------|--------------------|
+| kyc          | renderKycVerificationRequestedHtml    | royal-plum + gold  |
+| announcement | renderAnnouncementBroadcastHtml       | steel + silver     |
+| promotion    | renderPromotionBroadcastHtml          | magenta + gold     |
+| alert        | renderAlertBroadcastHtml              | amber-hazard       |
+| info         | renderInfoUpdateBroadcastHtml         | cool-blue          |
+| maintenance  | renderMaintenanceBroadcastHtml        | slate-orange       |
+| trade_alert  | renderTradeAlertFomoBroadcastHtml     | emerald-FOMO       |
+| next_trade   | renderNextTradeFomoBroadcastHtml      | cyan-countdown     |
+
+Plus a **new** `renderKycVerificationRequestedHtml` (#27.5) — royal-plum +
+gold-leaf premium-banking theme with structured 3-document checklist
+(ID / Selfie / Address Proof), gold "Action Required" pill, violet→gold
+CTA, and "Bank-grade security" reassurance pill.
+
+`email-template.ts` exports `escapeHtml` + new `messageToBodyHtml` helper
+that converts admin-typed plain text into safe paragraph + bullet HTML
+for injection into renderer `bodyHtml` slots. Frontend
+`email-templates.ts` got the new KYC entry (cyan icon, ShieldCheck,
+position 6) in the picker dropdown.
+
+**Risk: low.** Generic `buildBrandedEmailHtml` fallback preserved for any
+unmapped `templateId` (forward-compat). All 5 existing callers of the
+generic wrapper unaffected. All 8 preview emails sent + visually approved
+end-to-end before push.
+
+---
+
+### B20 — try/catch on `/wallet/transfer` + auto-reconcile orphan wallets to ledger
+
+**Date:** 2026-04-30 (commit `a64d431e7afd08fe3d8ff4ad65c1c864f68c0ae0`)
+
+**User report.** `abodh3999@gmail.com` (id 136) got "Internal Server Error"
+attempting a $8.70 Main→Trading transfer. Screenshot attached to thread.
+
+**Root cause — data integrity gap from Replit→Neon platform migration.**
+abodh's TRC20 USDT deposit was never picked up by the auto-credit watcher
+during the migration window. Operator manually credited via raw SQL
+`UPDATE wallets SET main_balance = main_balance + 8.70` — txn description
+literally reads *"manually credited"*. The ledger system
+(`gl_accounts` + `ledger_entries`) was bypassed entirely:
+
+- `wallets.main_balance` for user 136 = **$8.70** ✓
+- `gl_accounts` for user 136 = **0 rows** ❌
+- `ledger_entries` for user 136 accounts = **0 entries** ❌
+
+When `/wallet/transfer` ran:
+
+1. zod ✓, balance check ✓ (8.70 ≤ 8.70)
+2. `db.transaction()` begins
+3. `ensureUserAccounts(136)` lazily creates the 4 GL accounts
+4. Wallet update + transactions insert OK
+5. `postJournalEntry` tries `debit user:136:main 8.70` / `credit user:136:trading 8.70`
+6. Negative-balance guard sums `ledger_entries` for `user:136:main` = **0**
+   (deposit never journaled), projects 0 - 8.70 = -8.70, **throws**
+   `insufficient balance on user:136:main`
+7. **No try/catch on the route** → Express default 500 → user sees
+   "Internal Server Error" with **NO log trail anywhere**.
+
+**Production scan (read-only via tsx + pg in api-server context).**
+
+| ID  | Email                  | Wallet (main/trading) | Ledger (main/trading) | Type     |
+|-----|------------------------|-----------------------|-----------------------|----------|
+| 136 | abodh3999@gmail.com    | $8.70 / $0            | **NO ACCOUNTS**       | Orphan   |
+| 117 | looxprem@gmail.com     | $248.87 / $0          | $362.14 / $0          | Mismatch |
+| 143 | bimleshgroup@gmail.com | $9.28 / $5            | $10.30 / $5           | Mismatch |
+
+Mismatch cases (117, 143) addressed in a separate manual-review batch —
+they need case-by-case investigation. This commit only handles the orphan
+case (no `gl_accounts`) which is the safe, deterministic path.
+
+**Layer 1 — Catch-all error handler on `POST /wallet/transfer`** (`wallet.ts`)
+
+Wraps entire route body in try/catch. On any uncaught error (ledger
+imbalance, unknown account code, FK violation, negative-balance trip)
+emits structured `errorLogger.error({ event:"transfer_failed", err,
+userId, amount, direction, message })` and returns a clean 500 JSON
+with a user-safe message ("Transfer could not be completed. Please
+try again or contact support if this keeps happening."). Removes the
+silent black-hole 500.
+
+**Layer 2 — Opening-balance reconciliation in `ensureUserAccounts`** (`ledger-service.ts`)
+
+- Per-account `INSERT ... ON CONFLICT DO NOTHING` switched to use
+  `RETURNING` so we know which codes WE actually inserted (race-safe
+  under concurrent transfer attempts on the same user).
+- When at least one of `user:UID:main` / `user:UID:trading` was newly
+  created in this call, reads the `wallets` row inside the same tx;
+  for every newly-created account that maps to a non-zero wallet
+  balance, posts a single balanced opening-balance journal:
+  - `credit user:UID:main     <wallet.main_balance>`     (if newly created & > 0)
+  - `credit user:UID:trading  <wallet.trading_balance>`  (if newly created & > 0)
+  - `debit  platform:hot_wallet  <total>`                (contra — funds
+    came on-chain into hot wallet)
+
+  Journal id: `sys:opening:u<UID>`.
+- **Idempotent.** Only fires when accounts are first created. Subsequent
+  calls see `existingCodes` already populated, `newlyCreated` stays empty,
+  no journal posted.
+
+**Expected behaviour for abodh (next attempt).** `ensureUserAccounts(136)`
+inside the transfer transaction creates main+trading+profit+locked, posts
+`sys:opening:u136` (credit `user:136:main` 8.70, debit
+`platform:hot_wallet` 8.70), then the transfer's own journal succeeds
+(debit `user:136:main` 8.70, credit `user:136:trading` 8.70) leaving
+ledger in sync with wallet.
+
+**Risk: low.**
+
+- No schema changes, no DB writes from this commit (writes happen at
+  runtime inside the existing `/wallet/transfer` transaction only when
+  a real user calls it, atomic with the transfer itself — if anything
+  fails, the whole tx rolls back leaving DB unchanged).
+- Existing users who already have `gl_accounts` populated are completely
+  unaffected — `newlyCreated` stays empty for them.
+- Contra account `platform:hot_wallet` is debit-normal asset, NOT
+  subject to the negative-balance guard, so reconciliation cannot
+  trip it.
+- Mismatch users (117, 143) are NOT touched by this commit.
+
+**Verified.** Type-check clean for both changed files (other repo errors
+pre-existing in `quiz-*.ts`, unrelated). Brace balance verified (31/31,
+2 try / 1 catch — the second `try` is from an earlier `try { JSON.parse }`
+elsewhere in the file). CI run for commit `a64d431e` completed success at
+2026-04-30 14:29 UTC. Fly deploy confirmed alive.
+
+
+---
+
+## 2026-04-30 — B21: INR-withdrawal ledger journaling + transfer race fix + orphan reconciliation script
+
+**Commit `a6a86325`. Three connected fixes for ledger ↔ wallet drift.**
+
+### Why this batch exists
+
+After B20 deployed, I diffed wallets vs ledger across all 33 users and found
+two with persistent drift on `user:UID:main`:
+
+- **looxprem (117):** `wallet_main = $248.88`, `ledger_main = $362.14`,
+  drift = `+$113.27`. Decomposes exactly into 3 approved INR withdrawals:
+  WD#1 ($102.04) + WD#2 ($10.20) + WD#3 ($1.02).
+- **bimleshgroup (143):** `wallet_main = $9.29`, `ledger_main = $10.31`,
+  drift = `+$1.02`. Matches WD#4 ($1.02) exactly.
+
+Drift sign is positive on the credit-normal side ⇒ wallet was debited but
+ledger never was. Tracing the code path:
+
+`artifacts/api-server/src/routes/inr-withdrawals.ts`
+- **SUBMIT** (`POST /inr-withdrawals`): atomic conditional UPDATE on
+  `wallets.main_balance` (correct), insert into `inr_withdrawals` (correct),
+  but **NO `transactions` row, NO `postJournalEntry` call**.
+- **APPROVE** (`POST /inr-withdrawals/:id/approve`): flips status to
+  `approved` and credits `merchants.inr_balance` for the assigned merchant.
+  No ledger entry on the platform side.
+- **REJECT**: flips status, refunds `wallets.main_balance`. No journal
+  needed since none was ever posted.
+
+Result: every approved INR withdrawal left the ledger `user:UID:main`
+exactly `amountUsdt` higher than the wallet. Recurring per approval.
+
+### Fix 1: `inr-withdrawals.ts` — full ledger journaling
+
+Imports added: `transactionsTable`, `like` (drizzle), and `ensureUserAccounts`,
+`postJournalEntry`, `journalForTransaction` from `lib/ledger-service`.
+
+**SUBMIT** — after the wallet debit + the `inr_withdrawals` insert:
+- Insert a pending `transactions` row with deterministic prefix
+  `[INR-WD:${withdrawalId}]` so APPROVE/REJECT can find it later without
+  needing a FK column on `inr_withdrawals` (schema change forbidden).
+- Post the lock journal: `debit user:UID:main`, `credit
+  platform:pending_withdrawals` (system account, liability/credit-normal,
+  pre-existing in prod). Journal id = `journalForTransaction(txnId)`.
+
+**APPROVE** — find the pending txn via the `[INR-WD:${id}]` prefix:
+- If found (B21+ path): mark txn `completed`, post release journal
+  `debit platform:pending_withdrawals`, `credit platform:usdt_pool`.
+  Journal id = `inr_wd:${id}:approve`.
+- If not found (legacy/orphan path): self-heal by inserting a new completed
+  txn AND posting a direct settlement journal `debit user:UID:main`,
+  `credit platform:usdt_pool`. This way any pre-B21 pending withdrawal
+  (none currently exist in prod, but the code path is defensive) gets
+  reconciled on first approval after deploy.
+
+**REJECT** — find the pending txn:
+- If found: mark txn `rejected`, refund wallet (existing), post reverse
+  journal `debit platform:pending_withdrawals`, `credit user:UID:main`.
+  Journal id = `inr_wd:${id}:reject`.
+- If not found: refund wallet only (no journal to reverse).
+
+### Fix 2: `wallet.ts /wallet/transfer` — race condition
+
+Architect's B19/B20 review flagged: the route SELECTed wallet outside the
+tx, computed absolute `newMain`/`newTrading` in JS, wrote them back. Two
+concurrent transfers could both pass the pre-check from the same starting
+balance and overwrite each other. The ledger negative-balance guard in
+`postJournalEntry` would catch the second, but only after the wallet write
+had been queued.
+
+**Fix:** convert to atomic conditional UPDATE — same pattern as
+`inr-deposits.ts` APPROVE and `inr-withdrawals.ts` SUBMIT. SQL arithmetic
+in `.set()` (`mainBalance: sql\`... ± X::numeric\``) with a
+`gte(sourceCol, X)` guard in the WHERE clause makes the whole step
+row-locked + atomic. The returning row count distinguishes success from
+insufficient-balance; a follow-up SELECT inside the same tx separates
+"insufficient balance" (400) from "wallet not found" (404).
+
+### Fix 3: `scripts/reconcile-orphan-inr-withdrawals.ts` — backfill (NEW)
+
+Idempotent script that backfills the `transactions` row + journal entries
+for any approved INR withdrawal that has neither a matching txn (description
+LIKE `[INR-WD:${id}]%`) NOR a matching journal (`journal_id =
+inr_wd:${id}:approve`).
+
+For each orphan: insert completed `transactions` row + 2-line journal
+`debit user:UID:main`, `credit platform:usdt_pool` — the direct settlement
+form, since pre-B21 submits never posted the lock journal.
+
+**Safety:**
+- Dry-run by default, requires `--apply` to commit.
+- Pre-flight projects the new ledger balance per affected user. If any
+  user wouldn't end up matching their wallet exactly (`abs(diff) <
+  0.000001`), the script aborts BEFORE applying — that would mean the
+  drift has additional unaccounted causes (orphan deposits, manual
+  adjustments, missing trade journals).
+- Post-flight re-verifies inside the same DB transaction; mismatch =
+  ROLLBACK.
+- Everything in one transaction: either all orphans get reconciled, or
+  none do.
+
+**Verified on prod via dry-run:**
+
+```
+Found 4 orphan approved INR withdrawal(s):
+  • WD#1  user=117 (looxprem@gmail.com)  ₹10000  $102.040816  via upi
+  • WD#2  user=117 (looxprem@gmail.com)  ₹1000   $10.204082   via upi
+  • WD#3  user=117 (looxprem@gmail.com)  ₹100    $1.020408    via bank
+  • WD#4  user=143 (bimleshgroup@gmail.com) ₹100 $1.020408    via upi
+
+Projected reconciliation:
+  user_id | username             | wallet_main | ledger_main | drift     | backfill   | after_ledger | match
+      117 | looxprem@gmail.com   |  248.877552 |  362.142858 | 113.265306| 113.265306 |   248.877552 | ✓ YES
+      143 | bimleshgroup@gmail.com|   9.285715 |   10.306123 |   1.020408|   1.020408 |     9.285715 | ✓ YES
+```
+
+Both users' ledger_main = wallet_main exactly after backfill.
+
+### Run order (operator)
+
+1. Wait for CI deploy of commit `a6a86325` to land on `qorix-api.fly.dev`.
+   Verify via `/healthz` or by watching the deploy.yml run conclude.
+2. Run the reconciliation script with `--apply`:
+   ```
+   NEON_DATABASE_URL="$NEON_DATABASE_URL" \
+     pnpm --filter @workspace/api-server exec tsx \
+     ../../scripts/reconcile-orphan-inr-withdrawals.ts --apply
+   ```
+   The script's pre-flight + post-flight checks make it safe to re-run if
+   anything goes wrong; the second run will find zero orphans.
+3. Post-reconciliation, looxprem (117), bimleshgroup (143), and abodh
+   (136 — already auto-fixed by B20 on next transfer) are all fully
+   reconciled. Going forward, every INR withdrawal posts the proper
+   lock/release/refund journals at submit/approve/reject so drift cannot
+   recur.
+
+### Risk
+
+- **Code (deployed):** zero schema change. Both modified routes are
+  wrapped in existing `db.transaction` blocks; if any new step fails
+  (missing GL account, ledger imbalance, negative-balance guard trip),
+  the whole tx rolls back leaving DB unchanged. The wallet/transfer
+  conversion to atomic conditional UPDATE strictly improves correctness;
+  no behaviour change for non-racing callers.
+- **Reconciliation script (operator-run):** dry-run by default, atomic,
+  pre+post-flight verified. Worst case: pre-flight aborts before any
+  write; user reports unexpected drift; we investigate further.
+
+### Verified
+
+- Type-check clean for both modified files (other repo errors in
+  `quiz-*.ts` are pre-existing, unrelated).
+- Dry-run on prod NEON identifies exactly 4 orphans matching the drift
+  hypothesis.
+- Push to GitHub `a6a86325` succeeded, CI `Deploy to Fly.io` triggered
+  and in_progress at time of write.
+
+### Closed (2026-04-30 ~15:09 UTC)
+
+- CI `Deploy to Fly.io` for `a6a86325` completed `success` at 15:00:45 UTC.
+  Jobs: `Detect changed paths` ✓, `Verify required secrets are
+  configured` ✓, `Typecheck monorepo` ✓, `Deploy api-server →
+  qorix-api` ✓, `Deploy qorix-markets → qorix-markets-web` skipped
+  (no web changes). Prod `qorix-api.fly.dev/api/health` returns 401
+  (auth required, route exists, service responsive).
+- Operator ran `reconcile-orphan-inr-withdrawals.ts --apply`. Output
+  confirms exactly the 4 orphans were processed in one transaction:
+  ```
+  ✓ WD#1  user=117 (looxprem@gmail.com)     $102.040816 → txn#1282, journal=inr_wd:1:approve
+  ✓ WD#2  user=117 (looxprem@gmail.com)     $10.204082  → txn#1283, journal=inr_wd:2:approve
+  ✓ WD#3  user=117 (looxprem@gmail.com)     $1.020408   → txn#1284, journal=inr_wd:3:approve
+  ✓ WD#4  user=143 (bimleshgroup@gmail.com) $1.020408   → txn#1285, journal=inr_wd:4:approve
+
+  Post-flight verification:
+    ✓ user 117 (looxprem@gmail.com):     wallet=248.877552  ledger=248.877552  diff=0.000000
+    ✓ user 143 (bimleshgroup@gmail.com): wallet=9.285715    ledger=9.285715    diff=0.000000
+
+  ✅ COMMITTED. Reconciliation complete.
+  ```
+- Reconciliation transactions live in prod: `transactions.id` 1282-1285
+  with `idempotency_key=NULL` (legacy backfill — see B22 follow-up
+  candidate to migrate the lookup pattern from description-LIKE to
+  idempotency_key for new submissions). Ledger journals visible at
+  `journal_id IN ('inr_wd:1:approve', 'inr_wd:2:approve',
+  'inr_wd:3:approve', 'inr_wd:4:approve')` with the 2-line direct
+  settlement pattern (debit `user:117:main`/`user:143:main`,
+  credit `platform:usdt_pool`).
+- B21 fully closed. Going forward every INR withdrawal posts proper
+  lock/release/refund journals at submit/approve/reject so this drift
+  class cannot recur. The `/wallet/transfer` race is also closed.
+- All three previously drifted users now match exactly:
+  abodh3999 (136 — fixed by B20 GL ensure on next transfer; previously
+  verified), looxprem (117 — drift $113.27 closed today),
+  bimleshgroup (143 — drift $1.02 closed today).
