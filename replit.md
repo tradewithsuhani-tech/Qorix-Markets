@@ -4569,3 +4569,73 @@ GET `https://qorix-quiz.fly.dev/` → bundled JS contains `button-sign-in`,
 - A `useAuth()` context (only 2 consumers right now — read storage directly).
 - Token refresh (deferred to B36 → `/api/oauth/quiz/refresh`).
 - `qorixplay.com` DNS hookup (deferred to B45 polishing batch).
+
+---
+
+## B36 — Qorixplay refresh-token rotation chain (2026-05-01, SHIPPED)
+
+**Goal**: Replace 1h "log back in every hour" Qorixplay sessions with proper refresh-token rotation so users stay signed in across days.
+
+**Three commits**:
+
+1. **c1 schema** — `4458e50c` — added `quiz_oauth_refresh_tokens` table via hand-written SQL against `$NEON_DATABASE_URL` (NOT db:push). Columns: `id`, `token_hash` (SHA-256), `user_id`, `client_id`, `previous_token_id` (FK self), `created_at`, `used_at`, `expires_at`, `revoked_at`, `user_agent`, `ip`. Indexes on `user_id`, `expires_at`, `previous_token_id`. Drizzle table definition added in `lib/db/src/schema.ts` for type-safe reads only — schema authority remains the hand-applied SQL.
+
+2. **c2 server** — `3c27db7e` — `oauth-quiz.ts`:
+   - `/oauth/quiz/token` and `/oauth/quiz/token-public` now mint a refresh_token alongside the access_token (UA/IP threaded from req).
+   - New `POST /oauth/quiz/refresh` route. Atomic rotation in a Drizzle transaction:
+     - SELECT row by `token_hash`, fail if expired/revoked/already used.
+     - INSERT new row with `previous_token_id` linking the chain.
+     - UPDATE old row SET `used_at = now()` WHERE `used_at IS NULL` — single-row guard catches lost rotation races; throws `rotation_race` so the caller gets a clean `invalid_grant`.
+     - Mints a new access_token + new refresh_token, returns both with `expires_in` / `refresh_expires_in`.
+   - `lib/db` rebuilt (`tsc --build --force`) to refresh declaration files.
+
+3. **c3 client** — `b8ce81c5` — Qorixplay SPA actually USES the rotation:
+   - `auth-storage.ts`: new `REFRESH_TOKEN_KEY` + `storeRefreshToken` / `readRefreshToken` / `clearRefreshToken` / `clearAllAuth`. `clearToken` intentionally still wipes only the access half so refresh can rotate mid-flight.
+   - `refresh-client.ts` (NEW): `getValidAccessToken()` — single seam for all future Qorixplay API calls. Fast-path returns cached token if > 5min left; otherwise rotates via `POST /api/oauth/quiz/refresh`. Includes promise-dedup (one in-flight refresh shared across N concurrent callers — without this, opening 5 quiz cards at once burns 4/5 refresh_tokens). Resolves to `null` on every error path; only server-confirmed `invalid_grant` triggers `clearAllAuth()`.
+   - `start-login.ts`: scope now `"profile offline_access"`.
+   - `auth-callback.tsx`: stores `refresh_token` if present in token response (optional — old server omits it, SPA falls back to 1h sessions).
+
+**Backwards compat (all four matrix corners verified by code review)**:
+- old SPA + new server → server returns refresh_token, old SPA ignores → 1h sessions.
+- new SPA + old server → server omits refresh_token, storeRefreshToken guard skips → 1h sessions.
+
+**No db:push, no PK changes, no schema-via-Drizzle. Hand-SQL only against neondb.**
+
+---
+
+## B37 — Qorixplay "Create account" path (2026-05-01, SHIPPED with B36 c3)
+
+**Gap**: Qorixplay landing had a single "Sign in" button → Markets `/oauth/quiz/authorize` → unauthenticated → Markets `/login`. Brand-new visitors had no surface that said "I don't have an account yet" — they had to find and flip a Sign Up tab on a "Welcome back" form. Conversion-killer.
+
+**Fix** (shipped in `b8ce81c5` alongside B36 c3 — combined to avoid churning `start-login.ts` twice):
+- `qorix-quiz/lib/start-login.ts`: `StartLoginOptions.signup?: boolean` → appends `mode=signup` to authorize URL.
+- `qorix-quiz/pages/landing.tsx`: two-button CTA when signed out — PRIMARY "Create free account" (gradient, `signup: true`), SECONDARY "Sign in" (outlined). Independent error paths. signOut now uses `clearAllAuth` (was `clearToken`) so a sign-out actually wipes the refresh token — without this, next page load would silently re-mint a session.
+- `qorix-markets/pages/oauth-quiz-authorize.tsx`: reads `?mode=signup` from query string (validated to that exact string only — anything else collapses to `/login`, so a malicious authorize URL can't bounce the user anywhere unexpected). Unauthenticated branch: `setLocation(isSignupHint ? "/signup" : "/login")`. The `/signup` route is already mounted as the same LoginPage component pre-flipped to Sign Up mode (B25 lazy initializer).
+
+**Forward compat**:
+- Old Qorixplay (no `mode` param) + new Markets → `isSignupHint = false`, unchanged.
+- New Qorixplay (with `mode=signup`) + old Markets → param ignored, falls back to `/login`. User sees the existing one-extra-tab-click behaviour, no broken flow.
+
+
+---
+
+## B36 follow-up — daily refresh-token cleanup sweep (2026-05-01)
+
+**Goal**: keep the new `quiz_oauth_refresh_tokens` table from growing unbounded over months.
+
+**File**: `artifacts/api-server/src/lib/cron.ts` (joins the existing `node-cron` registry alongside daily profit, monthly sweep, hourly promo expiry, and INR escalation).
+
+**Behaviour**:
+- `cleanupExpiredQuizRefreshTokens()` — `DELETE FROM quiz_oauth_refresh_tokens WHERE expires_at < now() - interval '7 days'`. Returns the count of pruned rows. Idempotent — once the table is clean, subsequent runs are no-ops.
+- Scheduled via `cron.schedule("0 3 * * *", ...)` — daily at 03:00 UTC, off-peak so it doesn't compete with the 00:00 UTC daily-profit distribution job.
+- Also fires once at startup (same pattern as the promo-expiry sweep) so a server that's been down for a while catches up immediately instead of waiting for the next 03:00 UTC tick.
+- Logged only when rows were actually pruned (`{ removed, retentionDays }`) to keep daily logs quiet on small installs. Errors logged via `errorLogger.error` — failure does NOT block boot or affect the rest of the cron registry.
+
+**Why 7-day retention rather than delete-on-expiry**:
+- Forensic window: "did this user's session die at 02:14 last night?" stays answerable for a week.
+- The schema's partial active-rows index (`idx_quiz_oauth_refresh_tokens_active`) only has to skip true ancients, not freshly-expired-but-investigable rows.
+
+**Single-instance safety**: gated upstream by `RUN_BACKGROUND_JOBS` (see `artifacts/api-server/src/index.ts` and `lib/background-jobs.ts`). Only the cron-owning Fly machine ever calls `initCronJobs()`, so even when the API scales horizontally the DELETE never double-fires.
+
+**Reversibility**: pure additive. Removing the schedule + function leaves the table growing again — no migration to undo.
+
