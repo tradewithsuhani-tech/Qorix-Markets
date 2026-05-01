@@ -186,6 +186,13 @@ function StatusBadge({ status }: { status: string }) {
 //   • Big pools   → top-3, slightly flatter so 3rd place is meaningful
 // The "label" + "rationale" are surfaced in the modal so admin understands
 // *why* the AI picked this split — auditable, not magic.
+//
+// REVENUE: Of the *advertised* prize pool, only PAYOUT_PCT (80%) is actually
+// distributed to winners — the remaining PLATFORM_RAKE_PCT (20%) is platform
+// revenue. This breakdown is admin-only; players never see it. Mirror this
+// constant from the api-server `lib/quiz-economics.ts`.
+const PLATFORM_RAKE_PCT = 0.2;
+const PAYOUT_PCT = 1 - PLATFORM_RAKE_PCT;
 interface AiSplitChoice {
   split: [number, number, number];
   winners: 1 | 2 | 3;
@@ -216,11 +223,15 @@ const RANK_STYLES = [
 ] as const;
 
 function PrizeSplitPreview({ poolStr, currency }: { poolStr: string; currency: string }) {
-  const choice = useMemo(() => computeAiSplit(parseFloat(poolStr || "0")), [poolStr]);
   const pool = parseFloat(poolStr || "0") || 0;
+  const distributable = pool * PAYOUT_PCT;
+  const companyCut = pool * PLATFORM_RAKE_PCT;
+  const choice = useMemo(() => computeAiSplit(parseFloat(poolStr || "0")), [poolStr]);
   const cur = (currency || "USDT").toUpperCase();
+  const fmt = (n: number) =>
+    n > 0 ? n.toLocaleString(undefined, { maximumFractionDigits: 2 }) : "0";
   return (
-    <div className="rounded-lg border border-amber-500/20 bg-gradient-to-br from-amber-500/[0.06] via-amber-500/[0.02] to-transparent p-3 space-y-2">
+    <div className="rounded-lg border border-amber-500/20 bg-gradient-to-br from-amber-500/[0.06] via-amber-500/[0.02] to-transparent p-3 space-y-2.5">
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-1.5">
           <Sparkles className="h-3.5 w-3.5 text-amber-300" />
@@ -232,33 +243,68 @@ function PrizeSplitPreview({ poolStr, currency }: { poolStr: string; currency: s
           {choice.winners} winner{choice.winners === 1 ? "" : "s"}
         </span>
       </div>
-      <div className="grid grid-cols-3 gap-1.5">
-        {choice.split.map((frac, i) => {
-          const amt = pool * frac;
-          const style = RANK_STYLES[i];
-          const inactive = frac === 0;
-          return (
-            <div
-              key={i}
-              className={cn(
-                "rounded-md px-2 py-2 text-center ring-1 transition-opacity",
-                inactive ? "ring-white/[0.04] bg-white/[0.01] opacity-40" : `${style.ring} ${style.bg} ${style.glow}`,
-              )}
-            >
-              <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-                <span className="mr-0.5">{style.emoji}</span>
-                {RANK_LABELS[i]}
-              </div>
-              <div className={cn("mt-0.5 text-sm font-bold tabular-nums", inactive ? "text-slate-600" : style.text)}>
-                {amt > 0 ? amt.toLocaleString(undefined, { maximumFractionDigits: 2 }) : "—"}
-              </div>
-              <div className="text-[9px] font-medium uppercase tracking-wider text-slate-500">
-                {inactive ? "no prize" : `${cur} · ${(frac * 100).toFixed(0)}%`}
-              </div>
-            </div>
-          );
-        })}
+
+      {/* Revenue breakdown — admin-only, never shown to players */}
+      <div className="rounded-md border border-emerald-500/20 bg-emerald-500/[0.04] px-2.5 py-2 space-y-1">
+        <div className="flex items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-emerald-300/80">
+          <span>Revenue breakdown</span>
+          <span className="rounded-sm bg-emerald-500/15 px-1.5 py-0.5 text-emerald-200 normal-case tracking-normal text-[9px] font-bold">
+            ADMIN ONLY · hidden from players
+          </span>
+        </div>
+        <div className="grid grid-cols-3 gap-2 pt-0.5">
+          <div>
+            <div className="text-[9px] uppercase tracking-wider text-slate-500">Advertised</div>
+            <div className="text-sm font-bold tabular-nums text-slate-200">{fmt(pool)}</div>
+            <div className="text-[9px] text-slate-500">{cur} · public</div>
+          </div>
+          <div>
+            <div className="text-[9px] uppercase tracking-wider text-emerald-400/70">Distributed</div>
+            <div className="text-sm font-bold tabular-nums text-emerald-300">{fmt(distributable)}</div>
+            <div className="text-[9px] text-emerald-500/70">{cur} · {(PAYOUT_PCT * 100).toFixed(0)}%</div>
+          </div>
+          <div>
+            <div className="text-[9px] uppercase tracking-wider text-amber-400/80">Company cut</div>
+            <div className="text-sm font-bold tabular-nums text-amber-300">{fmt(companyCut)}</div>
+            <div className="text-[9px] text-amber-500/70">{cur} · {(PLATFORM_RAKE_PCT * 100).toFixed(0)}% rake</div>
+          </div>
+        </div>
       </div>
+
+      {/* Per-winner split — applied to the distributable amount, not the gross pool */}
+      <div>
+        <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+          Winner payouts (after rake)
+        </div>
+        <div className="grid grid-cols-3 gap-1.5">
+          {choice.split.map((frac, i) => {
+            const amt = distributable * frac;
+            const style = RANK_STYLES[i];
+            const inactive = frac === 0;
+            return (
+              <div
+                key={i}
+                className={cn(
+                  "rounded-md px-2 py-2 text-center ring-1 transition-opacity",
+                  inactive ? "ring-white/[0.04] bg-white/[0.01] opacity-40" : `${style.ring} ${style.bg} ${style.glow}`,
+                )}
+              >
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                  <span className="mr-0.5">{style.emoji}</span>
+                  {RANK_LABELS[i]}
+                </div>
+                <div className={cn("mt-0.5 text-sm font-bold tabular-nums", inactive ? "text-slate-600" : style.text)}>
+                  {amt > 0 ? fmt(amt) : "—"}
+                </div>
+                <div className="text-[9px] font-medium uppercase tracking-wider text-slate-500">
+                  {inactive ? "no prize" : `${cur} · ${(frac * 100).toFixed(0)}%`}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
       <div className="text-[10px] text-slate-400 leading-snug">{choice.rationale}</div>
     </div>
   );
