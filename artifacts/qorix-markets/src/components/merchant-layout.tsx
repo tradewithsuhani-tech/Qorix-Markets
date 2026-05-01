@@ -19,6 +19,7 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { MerchantDepositNotifier } from "./merchant-deposit-notifier";
 import { MerchantWithdrawalNotifier } from "./merchant-withdrawal-notifier";
+import { MerchantPendingBadge } from "./merchant-pending-beacon";
 import { StatusPill } from "./merchant-ui";
 
 interface MeResponse {
@@ -120,10 +121,11 @@ export function MerchantLayout({ children }: { children: ReactNode }) {
           </div>
 
           {/* Status row */}
-          <div className="px-5 py-3 border-b border-white/[0.06]">
+          <div className="space-y-2 border-b border-white/[0.06] px-5 py-3">
             <StatusPill variant="success" pulse>
               Online · Live sync
             </StatusPill>
+            <MerchantPendingBadge variant="sidebar" />
           </div>
 
           {/* Nav */}
@@ -184,12 +186,15 @@ export function MerchantLayout({ children }: { children: ReactNode }) {
                 </div>
               </div>
             </div>
-            <button
-              onClick={handleLogout}
-              className="flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-slate-400 hover:text-white"
-            >
-              <LogOut className="h-3.5 w-3.5" /> Logout
-            </button>
+            <div className="flex items-center gap-2">
+              <MerchantPendingBadge variant="mobile" />
+              <button
+                onClick={handleLogout}
+                className="flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-slate-400 hover:text-white"
+              >
+                <LogOut className="h-3.5 w-3.5" /> Logout
+              </button>
+            </div>
           </div>
         </header>
 
