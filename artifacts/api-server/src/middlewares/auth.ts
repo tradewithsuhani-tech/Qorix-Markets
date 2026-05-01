@@ -495,7 +495,17 @@ export async function authMiddleware(req: AuthRequest, res: Response, next: Next
 
   const token = authHeader.substring(7);
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as { userId: number; isAdmin: boolean; iat?: number };
+    const decoded = jwt.verify(token, JWT_SECRET) as { userId: number; isAdmin: boolean; iat?: number; aud?: string };
+    // B35-fix: explicitly reject any token issued for an external audience
+    // (currently only Qorixplay). Markets session tokens have no `aud` claim;
+    // qorixplay-issued tokens carry `aud: "qorixplay"`. Without this check a
+    // qorixplay access_token (signed with the same SESSION_SECRET) would
+    // pass jwt.verify and authenticate against any Markets API route — a
+    // privilege escalation across audience boundaries.
+    if (decoded.aud && decoded.aud !== "markets") {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
     const { value: user } = await authUserCache.getOrCompute(`u:${decoded.userId}`, async () => {
       const users = await db.select().from(usersTable).where(eq(usersTable.id, decoded.userId)).limit(1);
       const u = users[0];

@@ -18,7 +18,17 @@ const QUIZ_OAUTH_ALLOWED_REDIRECT_URIS = (
   .map((u) => u.trim())
   .filter(Boolean);
 
+// B35-fix: mirror the hard-fail pattern from middlewares/auth.ts. A token
+// issuer must NEVER silently fall back to a known constant — that would
+// let anyone forge `aud: "qorixplay"` tokens. In dev we still allow the
+// dummy fallback so local servers boot without a secret in .env.
 const SESSION_SECRET_ENV = process.env["SESSION_SECRET"];
+if (!SESSION_SECRET_ENV && process.env.NODE_ENV === "production") {
+  throw new Error(
+    "SESSION_SECRET environment variable is required in production. " +
+      "oauth-quiz.ts refuses to start with a hardcoded fallback secret.",
+  );
+}
 const JWT_SECRET = SESSION_SECRET_ENV || "qorix-markets-secret";
 
 const CODE_TTL_SECONDS = 60;
