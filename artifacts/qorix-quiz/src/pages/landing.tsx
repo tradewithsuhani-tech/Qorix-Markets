@@ -377,7 +377,7 @@ export function LandingPage() {
                 </span>
                 Live · prize pool growing
               </span>
-              <span className="text-fuchsia-300">★ Top 10 · 90% payout</span>
+              <span className="text-fuchsia-300">★ Top 10 · 100% payout</span>
               <span className="text-violet-300">⚡ 5 questions · 1 timer</span>
               <span className="text-cyan-300">🛡 KYC verified play</span>
               <span className="text-fuchsia-300">★ Auto-credit winnings</span>
@@ -462,7 +462,7 @@ export function LandingPage() {
             data-testid="text-subhead"
           >
             Five timed questions. One live leaderboard. The top 10 split{" "}
-            <span className="font-bold text-fuchsia-300">90%</span> of the prize
+            <span className="font-bold text-fuchsia-300">100%</span> of the prize
             pool — paid out automatically. Free to join, pay only when you enter
             a round.
           </p>
@@ -583,7 +583,7 @@ export function LandingPage() {
           <div className="qp-card-border mx-auto grid max-w-3xl grid-cols-3 divide-x divide-white/10 overflow-hidden text-center backdrop-blur">
             <Stat icon={<Zap className="h-4 w-4" />} label="Questions / round" value="5" accent="cyan" />
             <Stat icon={<Users className="h-4 w-4" />} label="Winners / round" value="Top 10" accent="violet" />
-            <Stat icon={<Coins className="h-4 w-4" />} label="Prize payout" value="90%" accent="fuchsia" />
+            <Stat icon={<Coins className="h-4 w-4" />} label="Prize payout" value="100%" accent="fuchsia" />
           </div>
         </section>
 
@@ -598,7 +598,7 @@ export function LandingPage() {
           <FeatureCard
             icon={<Trophy className="h-5 w-5" />}
             title="Top 10 win"
-            body="Prize pool is 90% of entries. Auto-split across the top 10 finishers — credited instantly."
+            body="Prize pool is 100% of entries. Auto-split across the top 10 finishers — credited instantly."
             accent="violet"
           />
           <FeatureCard
