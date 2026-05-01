@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Link, useLocation } from "wouter";
 import {
   LayoutDashboard,
@@ -20,7 +20,7 @@ import { useQuery } from "@tanstack/react-query";
 import { MerchantDepositNotifier } from "./merchant-deposit-notifier";
 import { MerchantWithdrawalNotifier } from "./merchant-withdrawal-notifier";
 import { MerchantPendingBadge } from "./merchant-pending-beacon";
-import { StatusPill } from "./merchant-ui";
+import { StatusPill, timeAgo } from "./merchant-ui";
 
 interface MeResponse {
   merchant: {
@@ -29,8 +29,15 @@ interface MeResponse {
     fullName: string;
     phone: string | null;
     isActive: boolean;
+    lastLoginAt: string | null;
   } | null;
 }
+
+// Must match the heartbeat window used server-side in
+// routes/inr-deposits.ts (`m.last_login_at > now() - interval '5 minutes'`)
+// — that's the same column-derived is_online flag used to sort deposit
+// assignment, so the badge stays consistent with the assignment logic.
+const ONLINE_WINDOW_MS = 5 * 60_000;
 
 const PRIMARY_LINKS = [
   { href: "/merchant", label: "Dashboard", icon: LayoutDashboard },
@@ -57,8 +64,23 @@ export function MerchantLayout({ children }: { children: ReactNode }) {
     queryFn: () => merchantAuthFetch<MeResponse>(merchantApiUrl("/merchant/me")),
     enabled: Boolean(getMerchantToken()),
     retry: false,
+    // Heartbeat is throttled to 60s server-side (merchant-auth.ts), so
+    // refetching /me at the same cadence keeps lastLoginAt fresh enough for
+    // the online/offline badge without burning extra round-trips.
     staleTime: 60_000,
+    refetchInterval: 60_000,
+    refetchOnWindowFocus: true,
   });
+
+  // Local clock so the pill can flip to "Offline" even when no /me refetch
+  // has fired yet (e.g. tab was backgrounded long enough that the heartbeat
+  // expired but the cached MeResponse is still recent). Re-evaluating every
+  // 30s is plenty given the 5-minute window.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), 30_000);
+    return () => window.clearInterval(id);
+  }, []);
 
   useEffect(() => {
     if (isError) {
@@ -81,6 +103,35 @@ export function MerchantLayout({ children }: { children: ReactNode }) {
       .slice(0, 2)
       .join("")
       .toUpperCase() || "M";
+
+  // Real online state: same definition the deposit-assignment query uses
+  // (lastLoginAt within the heartbeat window). Until /me has loaded we treat
+  // status as unknown rather than asserting "Online" so we don't repeat the
+  // bug this badge is meant to fix.
+  const lastLoginMs = merchant?.lastLoginAt
+    ? new Date(merchant.lastLoginAt).getTime()
+    : null;
+  const hasMe = Boolean(merchant);
+  const isOnline =
+    lastLoginMs !== null && now - lastLoginMs < ONLINE_WINDOW_MS;
+  const statusVariant: "success" | "warning" | "neutral" = !hasMe
+    ? "neutral"
+    : isOnline
+      ? "success"
+      : "warning";
+  const statusLabel = !hasMe
+    ? "Connecting…"
+    : isOnline
+      ? "Online · Live sync"
+      : "Offline";
+  const statusTooltip = !hasMe
+    ? "Checking session status"
+    : lastLoginMs
+      ? `Last activity ${timeAgo(merchant!.lastLoginAt!)}` +
+        (isOnline
+          ? ""
+          : " — heartbeat expired, deposits won't be routed to you until you interact with the panel")
+      : "No activity recorded yet";
 
   return (
     <div
@@ -105,9 +156,21 @@ export function MerchantLayout({ children }: { children: ReactNode }) {
           <div className="flex items-center gap-3 border-b border-white/[0.06] px-5 py-5">
             <div className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-yellow-300 to-amber-500 shadow-[0_4px_16px_-2px_rgba(252,213,53,0.5)]">
               <span className="text-base font-black text-slate-950">Q</span>
-              <span className="absolute -right-0.5 -top-0.5 flex h-3 w-3">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                <span className="relative inline-flex h-3 w-3 rounded-full bg-emerald-500 ring-2 ring-slate-950" />
+              {/* Corner dot mirrors heartbeat state — green pulses when online,
+                  amber/static when offline, so it doesn't fight the pill below. */}
+              <span
+                className="absolute -right-0.5 -top-0.5 flex h-3 w-3"
+                title={statusTooltip}
+              >
+                {isOnline && (
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                )}
+                <span
+                  className={cn(
+                    "relative inline-flex h-3 w-3 rounded-full ring-2 ring-slate-950",
+                    isOnline ? "bg-emerald-500" : "bg-amber-500",
+                  )}
+                />
               </span>
             </div>
             <div className="leading-tight">
@@ -122,8 +185,12 @@ export function MerchantLayout({ children }: { children: ReactNode }) {
 
           {/* Status row */}
           <div className="space-y-2 border-b border-white/[0.06] px-5 py-3">
-            <StatusPill variant="success" pulse>
-              Online · Live sync
+            <StatusPill
+              variant={statusVariant}
+              pulse={isOnline}
+              title={statusTooltip}
+            >
+              {statusLabel}
             </StatusPill>
             <MerchantPendingBadge variant="sidebar" />
           </div>
@@ -181,8 +248,18 @@ export function MerchantLayout({ children }: { children: ReactNode }) {
                 <div className="text-[13px] font-bold text-white">
                   Qorix Merchant
                 </div>
-                <div className="text-[9px] font-semibold uppercase tracking-[0.18em] text-emerald-400">
-                  ● Live
+                <div
+                  className={cn(
+                    "text-[9px] font-semibold uppercase tracking-[0.18em]",
+                    !hasMe
+                      ? "text-slate-400"
+                      : isOnline
+                        ? "text-emerald-400"
+                        : "text-amber-400",
+                  )}
+                  title={statusTooltip}
+                >
+                  ● {!hasMe ? "Connecting" : isOnline ? "Live" : "Offline"}
                 </div>
               </div>
             </div>

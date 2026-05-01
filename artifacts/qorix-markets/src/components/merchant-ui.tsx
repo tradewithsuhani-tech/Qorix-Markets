@@ -45,15 +45,21 @@ export function StatusPill({
   children,
   pulse = false,
   className,
+  title,
 }: {
   variant?: Variant;
   children: ReactNode;
   pulse?: boolean;
   className?: string;
+  // Optional native browser tooltip — used by the merchant header pill to
+  // surface the last-activity timestamp so an operator can self-diagnose
+  // why their badge says Offline.
+  title?: string;
 }) {
   const s = PILL_STYLES[variant];
   return (
     <span
+      title={title}
       className={cn(
         "inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em]",
         s.bg,
