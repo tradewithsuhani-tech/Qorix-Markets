@@ -19,6 +19,7 @@ import {
   Banknote,
   Receipt,
   Clock,
+  Pencil,
 } from "lucide-react";
 
 const BASE_URL = import.meta.env.BASE_URL ?? "/";
@@ -68,6 +69,12 @@ export default function AdminMerchantsPage() {
   const [topupDelta, setTopupDelta] = useState("");
   const [topupNote, setTopupNote] = useState("");
   const [activityFor, setActivityFor] = useState<AdminMerchant | null>(null);
+  // Edit-display-name dialog. Held separately from the reset/topup
+  // dialogs because (a) it needs its own draft string and (b) the
+  // existing `patch` mutation already supports `{ fullName }` so we
+  // reuse it — only the modal + state are new.
+  const [editFor, setEditFor] = useState<AdminMerchant | null>(null);
+  const [editName, setEditName] = useState("");
 
   const { data, isLoading, error, isError } = useQuery<{ merchants: AdminMerchant[] }>({
     queryKey: ["admin-merchants"],
@@ -98,6 +105,11 @@ export default function AdminMerchantsPage() {
       qc.invalidateQueries({ queryKey: ["admin-merchants"] });
       setResetFor(null);
       setNewPassword("");
+      // Edit-name modal also rides this mutation; close + clear on
+      // success so a save followed by re-open shows the new value
+      // freshly (not stale draft from the previous edit session).
+      setEditFor(null);
+      setEditName("");
       toast({ title: "Merchant updated" });
     },
     onError: (e) => toast({ title: "Update failed", description: String(e), variant: "destructive" }),
@@ -228,6 +240,21 @@ export default function AdminMerchantsPage() {
                 </div>
                 <div className="flex items-center gap-2 flex-wrap justify-end">
                   <button
+                    onClick={() => {
+                      // Pre-fill with the current display name so admins
+                      // can tweak (e.g. fix typo or casing) rather than
+                      // having to retype the whole thing. Trim only on
+                      // submit — preserve any leading space the admin
+                      // happens to type while editing.
+                      setEditFor(m);
+                      setEditName(m.fullName);
+                    }}
+                    className="rounded-lg border border-amber-500/40 px-3 py-1.5 text-xs text-amber-300 hover:bg-amber-500/10 flex items-center gap-1"
+                    title="Edit display name"
+                  >
+                    <Pencil className="h-3.5 w-3.5" /> Edit name
+                  </button>
+                  <button
                     onClick={() => setActivityFor(m)}
                     className="rounded-lg border border-sky-500/40 px-3 py-1.5 text-xs text-sky-300 hover:bg-sky-500/10 flex items-center gap-1"
                     title="View account details, methods and credit/debit history"
@@ -301,6 +328,66 @@ export default function AdminMerchantsPage() {
               >
                 {create.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
                 Create
+              </button>
+            </div>
+          </Modal>
+        )}
+
+        {/* Edit display-name dialog. Reuses the existing PATCH
+            /admin/merchants/:id route (server already accepts
+            { fullName } in its body — see admin-merchants.ts). The
+            mutation's onSuccess closes this modal and refetches the
+            list, so the new name shows up immediately on the card
+            without an extra round-trip. */}
+        {editFor && (
+          <Modal
+            title={`Edit name — ${editFor.fullName}`}
+            onClose={() => {
+              setEditFor(null);
+              setEditName("");
+            }}
+          >
+            <p className="text-xs text-slate-400 mb-3">
+              This name shows up on the merchant card here, and (in
+              future flows) anywhere else this merchant's display name
+              is surfaced. Email and phone are NOT changed.
+            </p>
+            <InputField
+              label="Display name"
+              value={editName}
+              onChange={setEditName}
+            />
+            <div className="mt-5 flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  setEditFor(null);
+                  setEditName("");
+                }}
+                className="rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-300 hover:bg-slate-800"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  // Trim only on submit so the admin can freely type
+                  // intermediate spaces. Empty / unchanged values are
+                  // gated by the disabled state below — this branch
+                  // only runs once both checks pass.
+                  const next = editName.trim();
+                  patch.mutate({
+                    id: editFor.id,
+                    body: { fullName: next },
+                  });
+                }}
+                disabled={
+                  patch.isPending ||
+                  editName.trim().length === 0 ||
+                  editName.trim() === editFor.fullName
+                }
+                className="rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-medium px-4 py-2 text-sm flex items-center gap-2 disabled:opacity-50"
+              >
+                {patch.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+                Save name
               </button>
             </div>
           </Modal>
