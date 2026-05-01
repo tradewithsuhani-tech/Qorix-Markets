@@ -55,6 +55,16 @@ interface PaymentMethod {
   merchantId?: number | null;
   merchantName?: string | null;
   merchantAvailable?: string | null;
+  // Live "is the merchant currently using the merchant panel?" signal,
+  // computed by the backend as merchants.last_login_at > now() - 5 min.
+  // The merchant-auth middleware bumps last_login_at on every authenticated
+  // merchant API call (throttled to 60s), so any merchant with the panel open
+  // (which polls /merchant/inr-deposits every 10s via merchant-pending-beacon)
+  // will be isOnline=true. Drives the green/red status dot on the card. May
+  // be undefined for the legacy no-amount /payment-methods response — treat
+  // as "online" in that case to avoid a sea of red dots before the user has
+  // entered an amount.
+  isOnline?: boolean;
 }
 
 interface InrDeposit {
@@ -624,21 +634,31 @@ export function InrDepositTab() {
                         <div className="text-sm font-bold text-white truncate">
                           {m.merchantName ?? (m.type === "upi" ? "UPI" : "Bank")}
                         </div>
-                        <span
-                          className="shrink-0 relative flex w-2 h-2"
-                          title={m.isActive ? "Online" : "Offline"}
-                          aria-label={m.isActive ? "Online" : "Offline"}
-                        >
-                          {m.isActive && (
-                            <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75 animate-ping" />
-                          )}
-                          <span
-                            className={cn(
-                              "relative inline-flex w-2 h-2 rounded-full",
-                              m.isActive ? "bg-emerald-400" : "bg-red-500"
-                            )}
-                          />
-                        </span>
+                        {(() => {
+                          // Online status comes from the merchant's live login
+                          // state (last_login_at within 5 min), NOT from the
+                          // admin's isActive toggle. Default to "online" if the
+                          // backend didn't supply isOnline (legacy/no-amount
+                          // response) to avoid a sea of red dots pre-amount.
+                          const online = m.isOnline ?? true;
+                          return (
+                            <span
+                              className="shrink-0 relative flex w-2 h-2"
+                              title={online ? "Online" : "Offline"}
+                              aria-label={online ? "Online" : "Offline"}
+                            >
+                              {online && (
+                                <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75 animate-ping" />
+                              )}
+                              <span
+                                className={cn(
+                                  "relative inline-flex w-2 h-2 rounded-full",
+                                  online ? "bg-emerald-400" : "bg-red-500"
+                                )}
+                              />
+                            </span>
+                          );
+                        })()}
                       </div>
                       <div className="text-[11px] text-muted-foreground mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
                         <span className="uppercase tracking-wider text-[10px] font-semibold text-white/60">
