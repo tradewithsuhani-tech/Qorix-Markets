@@ -10,7 +10,6 @@ import { PWAInstallPrompt } from "@/components/pwa-install-prompt";
 import { SplashScreen, useSplash } from "@/components/splash-screen";
 import { QorixAssistant } from "@/components/qorix-assistant";
 import AdminChatsPage from "@/pages/admin-chats";
-import AdminChatAnalyticsPage from "@/pages/admin-chat-analytics";
 import AdminCommunicationPage from "@/pages/admin-communication";
 import AdminContentPage from "@/pages/admin-content";
 import AdminTestPage from "@/pages/admin-test";
@@ -19,9 +18,9 @@ import { useEffect, useState } from "react";
 
 import Landing from "@/pages/landing";
 import LoginPage from "@/pages/login";
-import OauthQuizAuthorizePage from "@/pages/oauth-quiz-authorize";
 import ForgotPasswordPage from "@/pages/forgot-password";
 import AdminLoginPage from "@/pages/admin-login";
+import OauthQuizAuthorizePage from "@/pages/oauth-quiz-authorize";
 import Dashboard from "@/pages/dashboard";
 import WalletPage from "@/pages/wallet";
 import DepositPage from "@/pages/deposit";
@@ -66,8 +65,6 @@ import AnalyticsPage from "@/pages/analytics";
 import TradingDeskPage from "@/pages/trading-desk";
 import TradeActivityPage from "@/pages/trade-activity";
 import VerifyPage from "@/pages/verify";
-import QuizzesPage from "@/pages/quizzes";
-import AdminQuizzesPage from "@/pages/admin-quizzes";
 import MarketInsightsPage from "@/pages/market-insights";
 import { HighImpactNotificationBanner } from "@/components/economic-news-widget";
 import { UpdateBanner } from "@/components/update-banner";
@@ -209,7 +206,6 @@ function Router() {
       <Route path="/rewards"><ProtectedRoute component={RewardsPage} /></Route>
       <Route path="/tasks"><ProtectedRoute component={TasksPage} /></Route>
       <Route path="/analytics"><ProtectedRoute component={AnalyticsPage} /></Route>
-      <Route path="/quizzes"><ProtectedRoute component={QuizzesPage} /></Route>
       <Route path="/trading-desk"><ProtectedRoute component={TradingDeskPage} /></Route>
       <Route path="/trade-activity"><ProtectedRoute component={TradeActivityPage} /></Route>
       <Route path="/signal-history"><ProtectedRoute component={SignalHistoryPage} /></Route>
@@ -237,9 +233,7 @@ function Router() {
       <Route path="/merchant/withdrawals" component={MerchantWithdrawalsPage} />
       <Route path="/merchant/settings" component={MerchantSettingsPage} />
       <Route path="/admin/task-proofs"><ProtectedRoute component={AdminTaskProofsPage} adminOnly={true} /></Route>
-      <Route path="/admin/quizzes"><ProtectedRoute component={AdminQuizzesPage} adminOnly={true} /></Route>
       <Route path="/admin/chats"><ProtectedRoute component={AdminChatsPage} adminOnly={true} /></Route>
-      <Route path="/admin/chat-analytics"><ProtectedRoute component={AdminChatAnalyticsPage} adminOnly={true} /></Route>
       <Route path="/admin/communication"><ProtectedRoute component={AdminCommunicationPage} adminOnly={true} /></Route>
       <Route path="/admin/content"><ProtectedRoute component={AdminContentPage} adminOnly={true} /></Route>
       <Route path="/admin/test"><ProtectedRoute component={AdminTestPage} adminOnly={true} /></Route>
@@ -362,3 +356,4 @@ function App() {
 }
 
 export default App;
+
