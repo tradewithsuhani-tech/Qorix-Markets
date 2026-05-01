@@ -1,7 +1,10 @@
 import { Router, type Response } from "express";
 import { db, usersTable } from "@workspace/db";
-import { quizOauthCodesTable } from "@workspace/db/schema";
-import { eq, and, isNull, sql } from "drizzle-orm";
+import {
+  quizOauthCodesTable,
+  quizOauthRefreshTokensTable,
+} from "@workspace/db/schema";
+import { eq, and, isNull, sql, gt } from "drizzle-orm";
 import crypto from "crypto";
 import jwt from "jsonwebtoken";
 import { authMiddleware, type AuthRequest } from "../middlewares/auth";
@@ -33,6 +36,10 @@ const JWT_SECRET = SESSION_SECRET_ENV || "qorix-markets-secret";
 
 const CODE_TTL_SECONDS = 60;
 const ACCESS_TOKEN_TTL = "1h";
+const ACCESS_TOKEN_TTL_SECONDS = 3600;
+// 30 days. Long enough to survive most users' weekly play cadence without
+// signing them out, short enough to bound damage if a refresh_token leaks.
+const REFRESH_TOKEN_TTL_SECONDS = 30 * 24 * 60 * 60;
 const ALLOWED_CLIENT_IDS = new Set(["qorixplay"]);
 
 // PKCE (RFC 7636) — only S256 is supported. The "plain" method offers no
@@ -72,15 +79,83 @@ function s256Challenge(verifier: string): string {
     .replace(/=+$/, "");
 }
 
+// ─── Refresh-token helpers (B36) ──────────────────────────────────────────
+
+// SHA-256 hex of a string. Used to fingerprint refresh_tokens so the DB
+// only ever stores hashes — a leaked dump can't be replayed against
+// /refresh.
+function sha256Hex(s: string): string {
+  return crypto.createHash("sha256").update(s).digest("hex");
+}
+
+// Generate a fresh refresh_token: 32 random bytes → base64url (43 chars).
+// Matches the entropy budget of the access_token's signed payload, which
+// is the only thing it gates access to.
+function generateRefreshToken(): string {
+  return crypto
+    .randomBytes(32)
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+}
+
+function signAccessToken(userId: number, scope: string): string {
+  return jwt.sign(
+    {
+      userId,
+      aud: "qorixplay",
+      scope,
+    },
+    JWT_SECRET,
+    { expiresIn: ACCESS_TOKEN_TTL },
+  );
+}
+
+// Atomic helper — INSERT a fresh refresh_token row and return the
+// plaintext (caller MUST send this back to the client; we never persist
+// it). Designed to be called inside a transaction so that on /refresh,
+// burning the old row and minting the new row commit together.
+// Accept either the top-level `db` or a Drizzle transaction handle.
+// Drizzle's `PgTransaction` is structurally close-but-not-equal to
+// `NodePgDatabase` (missing `$client`), and the rest of the codebase
+// already uses `txn?: any` for this same reason (see ledger-service.ts).
+async function insertRefreshToken(
+  tx: any,
+  userId: number,
+  scope: string,
+  ip: string | undefined,
+  ua: string | undefined,
+): Promise<{ plaintext: string; tokenHash: string }> {
+  const plaintext = generateRefreshToken();
+  const tokenHash = sha256Hex(plaintext);
+  const expiresAt = new Date(Date.now() + REFRESH_TOKEN_TTL_SECONDS * 1000);
+  await tx.insert(quizOauthRefreshTokensTable).values({
+    tokenHash,
+    userId,
+    clientId: "qorixplay",
+    scope,
+    expiresAt,
+    issuedIp: ip ? ip.substring(0, 64) : null,
+    issuedUa: ua ?? null,
+  });
+  return { plaintext, tokenHash };
+}
+
 // Shared helper — once a code has been atomically claimed, both the
 // confidential and PKCE flows do the same expiry / redirect / user-lookup
 // checks and issue the same access_token shape. Keeps the two endpoints
 // from drifting apart.
+//
+// B36: also mints a 30-day refresh_token (rotation chain anchored in
+// quiz_oauth_refresh_tokens) so the SPA can stay signed in past the 1h
+// access_token TTL.
 async function issueAccessTokenFromCode(
   row: typeof quizOauthCodesTable.$inferSelect,
   redirect_uri: string,
   res: Response,
   ip: string | undefined,
+  ua: string | undefined,
 ): Promise<void> {
   if (row.expiresAt.getTime() < Date.now()) {
     logger.warn(
@@ -119,25 +194,32 @@ async function issueAccessTokenFromCode(
     return;
   }
 
-  const accessToken = jwt.sign(
-    {
-      userId: user.id,
-      aud: "qorixplay",
-      scope: row.scope,
-    },
-    JWT_SECRET,
-    { expiresIn: ACCESS_TOKEN_TTL },
+  const accessToken = signAccessToken(user.id, row.scope);
+
+  // B36: mint a 30-day refresh_token alongside the 1h access_token.
+  // Single INSERT, atomic by itself — no transaction needed since we're
+  // only writing one row. The plaintext is returned ONCE (here); only
+  // the SHA-256 hash lives in the DB, so a leaked dump can't be used to
+  // forge /refresh requests.
+  const { plaintext: refreshToken } = await insertRefreshToken(
+    db,
+    user.id,
+    row.scope,
+    ip,
+    ua,
   );
 
   logger.info(
     { userId: user.id, clientId: row.clientId },
-    "[oauth-quiz] issued access_token",
+    "[oauth-quiz] issued access_token + refresh_token",
   );
 
   res.json({
     access_token: accessToken,
     token_type: "Bearer",
-    expires_in: 3600,
+    expires_in: ACCESS_TOKEN_TTL_SECONDS,
+    refresh_token: refreshToken,
+    refresh_expires_in: REFRESH_TOKEN_TTL_SECONDS,
     scope: row.scope,
     user: {
       id: user.id,
@@ -377,7 +459,13 @@ router.post(
         return;
       }
 
-      await issueAccessTokenFromCode(updated[0]!, redirect_uri, res, req.ip);
+      await issueAccessTokenFromCode(
+        updated[0]!,
+        redirect_uri,
+        res,
+        req.ip,
+        req.headers["user-agent"],
+      );
     } catch (err) {
       logger.error({ err }, "[oauth-quiz] /token failed");
       res.status(500).json({ error: "internal_error" });
@@ -496,9 +584,236 @@ router.post(
         return;
       }
 
-      await issueAccessTokenFromCode(row, redirect_uri, res, req.ip);
+      await issueAccessTokenFromCode(
+        row,
+        redirect_uri,
+        res,
+        req.ip,
+        req.headers["user-agent"],
+      );
     } catch (err) {
       logger.error({ err }, "[oauth-quiz] /token-public failed");
+      res.status(500).json({ error: "internal_error" });
+    }
+  },
+);
+
+// ─── POST /api/oauth/quiz/refresh ─────────────────────────────────────────
+// Rotate a refresh_token for a fresh (access_token, refresh_token) pair
+// (B36). Called from the qorix-quiz SPA when its access_token is within
+// 5 minutes of expiry, or pre-emptively after any 401 from a Qorixplay
+// API call.
+//
+// Auth: caller proves possession of the original plaintext refresh_token
+//       (issued at /token-public). We hash the presented value and look
+//       up the row by token_hash — never trust the request to send the
+//       hash directly, since that would bypass the secret.
+//
+// Rotation chain semantics:
+//   - Each successful /refresh BURNS the presented row (`used_at`) AND
+//     points it at the new row's hash (`replaced_by_hash`). The next
+//     /refresh MUST come from the new plaintext.
+//   - If the burned row is presented again, the request fails with
+//     `invalid_grant` — that's the token-reuse-attack signal. We log
+//     it loudly so we can wire alerting later.
+//   - The OLD/NEW row mutations run in a single transaction so they
+//     commit together. A network blip mid-rotation can never leave the
+//     user with no working refresh_token (txn rolls back, old still
+//     unused, client retries cleanly).
+//
+// Origin: same as /token-public — gated by CORS to qorixplay.com /
+// qorix-quiz.fly.dev. Not in PATH_EXEMPTIONS because this is a
+// browser-origin call.
+router.post(
+  "/oauth/quiz/refresh",
+  async (req, res) => {
+    try {
+      const { grant_type, refresh_token, client_id } = req.body ?? {};
+
+      if (
+        typeof refresh_token !== "string" ||
+        typeof client_id !== "string"
+      ) {
+        res.status(400).json({
+          error: "invalid_request",
+          message: "refresh_token and client_id are required.",
+        });
+        return;
+      }
+
+      if (grant_type !== "refresh_token") {
+        res.status(400).json({
+          error: "unsupported_grant_type",
+          message:
+            "Only grant_type=refresh_token is supported on this endpoint.",
+        });
+        return;
+      }
+
+      if (!ALLOWED_CLIENT_IDS.has(client_id)) {
+        res.status(401).json({ error: "invalid_client" });
+        return;
+      }
+
+      // Length guard so a hostile caller can't blow up our hash op with
+      // a 1MB body. Real refresh tokens are 43 chars (32 bytes base64url).
+      if (refresh_token.length < 32 || refresh_token.length > 256) {
+        res.status(400).json({ error: "invalid_grant" });
+        return;
+      }
+
+      const presentedHash = sha256Hex(refresh_token);
+
+      // Pre-fetch the row outside the txn so we can detect the
+      // already-used case (token-reuse signal) and log it loudly. The
+      // actual rotation runs inside the txn below with strict guards.
+      const existing = await db
+        .select()
+        .from(quizOauthRefreshTokensTable)
+        .where(eq(quizOauthRefreshTokensTable.tokenHash, presentedHash))
+        .limit(1);
+      const existingRow = existing[0];
+
+      if (!existingRow) {
+        logger.warn(
+          { ip: req.ip, hashPrefix: presentedHash.substring(0, 8) },
+          "[oauth-quiz] /refresh rejected: unknown refresh_token",
+        );
+        res.status(400).json({ error: "invalid_grant" });
+        return;
+      }
+
+      if (existingRow.revokedAt) {
+        logger.warn(
+          {
+            ip: req.ip,
+            userId: existingRow.userId,
+            revokedAt: existingRow.revokedAt,
+          },
+          "[oauth-quiz] /refresh rejected: token revoked",
+        );
+        res.status(400).json({ error: "invalid_grant" });
+        return;
+      }
+
+      if (existingRow.usedAt) {
+        // TOKEN REUSE — the legitimate client has already rotated this
+        // token. Either two SPA tabs raced (rare, harmless) or the
+        // refresh_token was stolen and replayed. Either way: refuse.
+        // Future: revoke the entire chain by chasing replaced_by_hash.
+        logger.error(
+          {
+            ip: req.ip,
+            userId: existingRow.userId,
+            usedAt: existingRow.usedAt,
+            replacedBy: existingRow.replacedByHash?.substring(0, 8) ?? null,
+          },
+          "[oauth-quiz] /refresh rejected: TOKEN REUSE — already rotated",
+        );
+        res.status(400).json({ error: "invalid_grant" });
+        return;
+      }
+
+      if (existingRow.expiresAt.getTime() < Date.now()) {
+        logger.info(
+          { userId: existingRow.userId },
+          "[oauth-quiz] /refresh rejected: refresh_token expired",
+        );
+        res.status(400).json({ error: "invalid_grant" });
+        return;
+      }
+
+      // Verify the user is still allowed to log in (not disabled). We
+      // could skip this and let the user fail on next API call, but
+      // surfacing it here gives a cleaner client UX (forced sign-out).
+      const users = await db
+        .select()
+        .from(usersTable)
+        .where(eq(usersTable.id, existingRow.userId))
+        .limit(1);
+      const user = users[0];
+      if (!user || user.isDisabled) {
+        res.status(400).json({ error: "invalid_grant", reason: "user_disabled" });
+        return;
+      }
+
+      // Rotation transaction — burn old, mint new, atomically.
+      let newRefreshPlaintext: string | null = null;
+      try {
+        await db.transaction(async (tx) => {
+          // Generate the new row's plaintext+hash up front so we can
+          // chain replaced_by_hash on the old row in the same txn.
+          const next = await insertRefreshToken(
+            tx,
+            existingRow.userId,
+            existingRow.scope,
+            req.ip,
+            req.headers["user-agent"],
+          );
+          // Atomic burn — guarded again on used_at IS NULL so a
+          // concurrent /refresh request loses the race deterministically.
+          const burned = await tx
+            .update(quizOauthRefreshTokensTable)
+            .set({
+              usedAt: sql`now()`,
+              replacedByHash: next.tokenHash,
+            })
+            .where(
+              and(
+                eq(quizOauthRefreshTokensTable.tokenHash, presentedHash),
+                isNull(quizOauthRefreshTokensTable.usedAt),
+                isNull(quizOauthRefreshTokensTable.revokedAt),
+                gt(quizOauthRefreshTokensTable.expiresAt, sql`now()`),
+              ),
+            )
+            .returning();
+          if (burned.length === 0) {
+            // Lost the race / something changed under us between the
+            // pre-fetch and now. Throw to roll back the new INSERT.
+            throw new Error("rotation_race");
+          }
+          newRefreshPlaintext = next.plaintext;
+        });
+      } catch (txErr: unknown) {
+        const msg = txErr instanceof Error ? txErr.message : String(txErr);
+        if (msg === "rotation_race") {
+          logger.warn(
+            { userId: existingRow.userId },
+            "[oauth-quiz] /refresh rolled back: lost rotation race",
+          );
+          res.status(400).json({ error: "invalid_grant" });
+          return;
+        }
+        throw txErr;
+      }
+
+      if (!newRefreshPlaintext) {
+        // Defensive — txn succeeded but never assigned. Shouldn't happen.
+        logger.error(
+          { userId: existingRow.userId },
+          "[oauth-quiz] /refresh: txn ok but no plaintext",
+        );
+        res.status(500).json({ error: "internal_error" });
+        return;
+      }
+
+      const accessToken = signAccessToken(existingRow.userId, existingRow.scope);
+
+      logger.info(
+        { userId: existingRow.userId, clientId: existingRow.clientId },
+        "[oauth-quiz] /refresh issued new pair (rotation)",
+      );
+
+      res.json({
+        access_token: accessToken,
+        token_type: "Bearer",
+        expires_in: ACCESS_TOKEN_TTL_SECONDS,
+        refresh_token: newRefreshPlaintext,
+        refresh_expires_in: REFRESH_TOKEN_TTL_SECONDS,
+        scope: existingRow.scope,
+      });
+    } catch (err) {
+      logger.error({ err }, "[oauth-quiz] /refresh failed");
       res.status(500).json({ error: "internal_error" });
     }
   },
