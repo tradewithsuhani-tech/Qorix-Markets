@@ -8,8 +8,6 @@ import {
   inrDepositsTable,
   usersTable,
   merchantsTable,
-  chatSessionsTable,
-  chatConversionEventsTable,
 } from "@workspace/db";
 import { eq, and, desc, sql, gte, inArray } from "drizzle-orm";
 import { authMiddleware, adminMiddleware, type AuthRequest } from "../middlewares/auth";
@@ -623,59 +621,6 @@ router.post("/admin/inr-deposits/:id/approve", async (req: AuthRequest, res) => 
   const dep = approvedDep as typeof depPreview;
   const amountUsdt = creditedUsdt;
   transactionLogger.info({ event: "inr_deposit_approved", id, userId: dep.userId, amountUsdt }, "INR deposit approved");
-
-  // ── Chat-driven conversion attribution (Task #101) ──
-  // INR deposits are admin-verified out-of-band, so the user-side click on
-  // "Submit Deposit" cannot stamp the conversion (the deposit is still
-  // pending at that moment). The authoritative moment is HERE — when an
-  // admin approves the deposit and we credit the wallet. If this user has
-  // any open chat session whose lifetime overlaps the deposit submission,
-  // mark it converted. Best-effort: a failure here must NOT block the
-  // approval response (deposit money has already moved).
-  try {
-    const sessionRows = await db
-      .select({
-        id: chatSessionsTable.id,
-        convertedAt: chatSessionsTable.convertedAt,
-      })
-      .from(chatSessionsTable)
-      .where(
-        and(
-          eq(chatSessionsTable.userId, dep.userId),
-          gte(
-            chatSessionsTable.createdAt,
-            sql`now() - interval '7 days'`,
-          ),
-        ),
-      )
-      .orderBy(desc(chatSessionsTable.lastMessageAt))
-      .limit(1);
-    const sess = sessionRows[0];
-    if (sess) {
-      if (!sess.convertedAt) {
-        await db
-          .update(chatSessionsTable)
-          .set({ convertedAt: new Date() })
-          .where(eq(chatSessionsTable.id, sess.id));
-      }
-      await db.insert(chatConversionEventsTable).values({
-        sessionId: sess.id,
-        userId: dep.userId,
-        eventType: "deposit_completed",
-        metadata: {
-          source: "inr_admin_approve",
-          inrDepositId: dep.id,
-          amountInr: dep.amountInr,
-          amountUsdt: amountUsdt.toString(),
-        },
-      });
-    }
-  } catch (err) {
-    errorLogger.warn(
-      { err: (err as Error).message, userId: dep.userId, inrDepositId: dep.id },
-      "[inr-deposit] chat conversion stamping failed (non-fatal)",
-    );
-  }
 
   await createNotification(
     dep.userId,
