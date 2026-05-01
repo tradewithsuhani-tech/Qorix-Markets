@@ -62,6 +62,29 @@ export async function merchantAuthMiddleware(
     }
     req.merchantId = merchant.id;
     req.merchantEmail = merchant.email;
+
+    // Heartbeat: bump lastLoginAt to mark the merchant "online" while they
+    // are actively using the merchant panel. Throttled to at most one write
+    // per 60s per merchant to avoid hot-row write amplification (the merchant
+    // pending beacon polls every 10s, so without throttling we'd hammer the
+    // row 6x per minute per active merchant). Fire-and-forget so the request
+    // is not blocked on this update — the response is unaffected if it fails.
+    // The /payment-methods endpoint reads this column to compute is_online
+    // (logged in within last 5 min) for the green/red status dot on the user
+    // INR deposit screen.
+    const HEARTBEAT_THROTTLE_MS = 60_000;
+    const nowMs = Date.now();
+    const lastLoginMs = merchant.lastLoginAt ? merchant.lastLoginAt.getTime() : 0;
+    if (nowMs - lastLoginMs > HEARTBEAT_THROTTLE_MS) {
+      void db
+        .update(merchantsTable)
+        .set({ lastLoginAt: new Date(nowMs) })
+        .where(eq(merchantsTable.id, merchant.id))
+        .catch((err) => {
+          console.error("[merchant-auth] heartbeat update failed", err);
+        });
+    }
+
     next();
   } catch {
     res.status(401).json({ error: "Invalid token" });
