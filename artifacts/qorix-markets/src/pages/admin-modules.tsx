@@ -2033,15 +2033,6 @@ export function AdminSystemPage() {
               Optional: also blocks reads for non-admin users. Only enable for full outages — most maintenance windows should use the soft freeze above.
             </p>
             <ToggleRow icon={CheckCircle} label="Registration Enabled" value={settings?.registrationEnabled !== false} onToggle={(v) => save({ registrationEnabled: v })} />
-            <ToggleRow
-              icon={Sparkles}
-              label="Quiz Auto-Credit Prizes"
-              value={settings?.quizAutoCreditEnabled !== false}
-              onToggle={(v) => save({ quizAutoCreditEnabled: v })}
-            />
-            <p className="text-xs text-muted-foreground -mt-2 ml-9">
-              When ON, quiz winners' USDT prizes are auto-credited to their main wallet at quiz end. Turn OFF to fall back to the manual mark-paid flow.
-            </p>
             <div>
               <label className="text-sm text-muted-foreground">Maintenance Message</label>
               <input value={settings?.maintenanceMessage ?? ""} onChange={(e) => setSettings({ ...settings, maintenanceMessage: e.target.value })} onBlur={() => save({ maintenanceMessage: settings?.maintenanceMessage ?? "" })} className="mt-2 w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm" />

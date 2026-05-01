@@ -20,9 +20,6 @@ import Landing from "@/pages/landing";
 import LoginPage from "@/pages/login";
 import ForgotPasswordPage from "@/pages/forgot-password";
 import AdminLoginPage from "@/pages/admin-login";
-import OauthQuizAuthorizePage from "@/pages/oauth-quiz-authorize";
-import QuizzesPage from "@/pages/quizzes";
-import AdminQuizzesPage from "@/pages/admin-quizzes";
 import Dashboard from "@/pages/dashboard";
 import WalletPage from "@/pages/wallet";
 import DepositPage from "@/pages/deposit";
@@ -188,11 +185,6 @@ function Router() {
       <Route path="/signup"><PublicOnlyRoute component={LoginPage} /></Route>
       <Route path="/forgot-password"><PublicOnlyRoute component={ForgotPasswordPage} /></Route>
       <Route path="/admin-login"><PublicOnlyRoute component={AdminLoginPage} adminRedirect={true} /></Route>
-      {/* Qorix Play SSO bounce — handles its own auth state (logged-out users
-          get parked at /login with a sessionStorage resume hook in
-          AuthProvider). Deliberately NOT wrapped in ProtectedRoute so it
-          can read query params and stash the resume URL before redirect. */}
-      <Route path="/oauth/quiz/authorize" component={OauthQuizAuthorizePage} />
       <Route path="/dashboard"><ProtectedRoute component={Dashboard} /></Route>
       {/* Legacy /demo-dashboard URL → redirect to canonical /dashboard.
           The demo dashboard was promoted to be THE user dashboard; the old
@@ -239,11 +231,6 @@ function Router() {
       <Route path="/admin/communication"><ProtectedRoute component={AdminCommunicationPage} adminOnly={true} /></Route>
       <Route path="/admin/content"><ProtectedRoute component={AdminContentPage} adminOnly={true} /></Route>
       <Route path="/admin/test"><ProtectedRoute component={AdminTestPage} adminOnly={true} /></Route>
-      {/* Qorix Play (quizzes) — user-facing lobby + admin CRUD/monitor.
-          Admin page covers create/edit, AI question generation, live SSE
-          leaderboard, results, and mark-winner-paid actions. */}
-      <Route path="/quizzes"><ProtectedRoute component={QuizzesPage} /></Route>
-      <Route path="/admin/quizzes"><ProtectedRoute component={AdminQuizzesPage} adminOnly={true} /></Route>
       <Route path="/admin/hidden-features"><ProtectedRoute component={AdminHiddenFeaturesPage} adminOnly={true} /></Route>
       <Route path="/settings"><ProtectedRoute component={SettingsPage} /></Route>
       <Route path="/devices"><ProtectedRoute component={DevicesPage} /></Route>
