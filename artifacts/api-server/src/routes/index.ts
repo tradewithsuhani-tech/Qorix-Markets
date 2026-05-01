@@ -41,12 +41,12 @@ import phoneChangeRouter from "./phone-change";
 import merchantRouter from "./merchant";
 import adminMerchantsRouter from "./admin-merchants";
 import adminEscalationRouter from "./admin-escalation";
-// NOTE: quizRouter (./quiz) intentionally NOT imported here. The quiz
-// handler files (routes/quiz.ts + lib/quiz-*.ts) live in a feature
-// branch / local tree only and have not been pushed to the deployed
-// branch. They will be enabled in a later batch (B36+) when the
-// qorixplay frontend lands and the route file is committed alongside
-// it. Until then, importing ./quiz here would break CI typecheck.
+// Quiz router (B36): handles /api/quiz/* — admin CRUD on quizzes plus
+// player-facing /quiz/me/dashboard, /quiz/:id, /quiz/:id/join, /answer,
+// /me/past, /:id/me, and SSE /:id/stream. All sub-routes are per-route
+// auth-gated (authMiddleware for Markets-only routes, authQuizCaller
+// for cross-audience routes that accept Qorixplay OAuth tokens).
+import quizRouter from "./quiz";
 
 const router: IRouter = Router();
 
@@ -115,6 +115,6 @@ router.use(phoneChangeRouter);
 router.use(merchantRouter);
 router.use(adminMerchantsRouter);
 router.use(adminEscalationRouter);
-// router.use(quizRouter); — see note above; will be enabled in B36+
+router.use(quizRouter);
 
 export default router;
