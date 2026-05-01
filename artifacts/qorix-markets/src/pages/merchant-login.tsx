@@ -1,6 +1,14 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
-import { Loader2, AlertCircle, ShieldCheck, Lock, Mail } from "lucide-react";
+import {
+  Loader2,
+  AlertCircle,
+  ShieldCheck,
+  Lock,
+  Mail,
+  Eye,
+  EyeOff,
+} from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
   getMerchantToken,
@@ -20,6 +28,9 @@ export default function MerchantLoginPage() {
   const { toast } = useToast();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  // Eye toggle — lets the merchant peek at what they typed without
+  // committing the password to the DOM (state stays local to this page).
+  const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [showDisabledBanner, setShowDisabledBanner] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
@@ -179,13 +190,28 @@ export default function MerchantLoginPage() {
               <div className="relative">
                 <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
                 <input
-                  type="password"
+                  type={showPassword ? "text" : "password"}
                   autoComplete="current-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full rounded-lg border border-white/[0.08] bg-white/[0.02] px-3 py-2.5 pl-10 text-sm text-white placeholder-slate-500 transition focus:border-amber-500/60 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
+                  className="w-full rounded-lg border border-white/[0.08] bg-white/[0.02] px-3 py-2.5 pl-10 pr-10 text-sm text-white placeholder-slate-500 transition focus:border-amber-500/60 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
                   placeholder="••••••••"
                 />
+                {/* Eye toggle. type="button" so it can't accidentally
+                    submit the form. tabIndex=-1 so keyboard users tab
+                    straight from password to Sign In, with the eye as
+                    a click-only convenience. aria-label flips with the
+                    state for screen readers. */}
+                <button
+                  type="button"
+                  tabIndex={-1}
+                  onClick={() => setShowPassword((v) => !v)}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1.5 text-slate-500 hover:text-amber-300 hover:bg-white/[0.04] transition"
+                  data-testid="merchant-login-toggle-password"
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
               </div>
             </div>
             <GoldButton type="submit" disabled={submitting} className="w-full py-2.5">
