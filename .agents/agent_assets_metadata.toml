@@ -53,3 +53,9 @@ id = "6rSZPOBhvb4DcdIIRf7go"
 uri = "file://attached_assets/generated_images/qorix-markets-logo.png"
 type = "image"
 title = "Qorix Markets Logo"
+
+[[outputs]]
+id = "smpkel7BUyLlUc7QvG6Op"
+uri = "file://.local/deliverables/qorix-markets-mobile-app-blueprint.md"
+type = "text"
+title = "Qorix Markets Mobile App — Developer Blueprint v1.0"
