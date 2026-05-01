@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { startLogin } from "@/lib/start-login";
 import { clearAllAuth, readToken } from "@/lib/auth-storage";
+import { DashboardView } from "@/components/dashboard-view";
 import logoUrl from "@/assets/qorix-play-logo.png";
 
 // B35: SSO with Qorix Markets is live, but the actual quiz-play screens
@@ -438,7 +439,25 @@ export function LandingPage() {
 
       {/* ========== MAIN ========== */}
       <main className="relative z-10 mx-auto max-w-6xl px-4 sm:px-6">
-        {/* HERO — logo + glitch tagline + CTAs only, no big heading */}
+        {/* Authenticated branch — when the visitor has a valid Qorix Play
+            token we render the personalised dashboard at the top of
+            main, then hide the rest of the marketing content below.
+            The signed-out marketing tree (everything inside the
+            !isSignedIn block further down) is preserved unchanged. */}
+        {isSignedIn && (
+          <section className="pt-8 pb-12 sm:pt-12 sm:pb-16">
+            <div className="qp-logo-float relative mx-auto mb-6 flex w-full max-w-md items-center justify-center">
+              <img
+                src={logoUrl}
+                alt="Qorix Play"
+                className="relative z-10 h-20 w-auto drop-shadow-[0_0_30px_rgba(168,85,247,0.6)] sm:h-24"
+                draggable={false}
+              />
+            </div>
+            <DashboardView onSignOut={signOut} />
+          </section>
+        )}
+        {!isSignedIn && (<>
         <section className="pt-10 pb-12 text-center sm:pt-16 sm:pb-16">
           <div className="qp-logo-float relative mx-auto mb-6 flex w-full max-w-2xl items-center justify-center">
             <div className="qp-logo-halo relative">
@@ -687,6 +706,7 @@ export function LandingPage() {
             </div>
           </section>
         )}
+        </>)}
 
         <footer className="border-t border-white/10 py-8 text-center text-xs text-white/50">
           <div data-testid="text-build">

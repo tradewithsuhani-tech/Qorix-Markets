@@ -27,6 +27,7 @@ import {
   quizAnswersTable,
   quizWinnersTable,
   usersTable,
+  walletsTable,
 } from "@workspace/db/schema";
 import { eq, and, desc, asc, inArray, sql, gte, or } from "drizzle-orm";
 import jwt from "jsonwebtoken";
@@ -795,6 +796,337 @@ userRouter.get("/quiz/me/past", authMiddleware, async (req: AuthRequest, res) =>
   });
 });
 
+// ── Cross-audience auth helper ─────────────────────────────────────────
+// `authMiddleware` (from middlewares/auth.ts) deliberately rejects any
+// JWT carrying `aud: "qorixplay"` so that an OAuth-issued Qorixplay
+// access_token can't be replayed against Markets-only routes. That's
+// the right policy for /api/wallet, /api/admin, etc.
+//
+// But the Qorixplay SPA is the LEGITIMATE caller for /api/quiz/me/* —
+// it holds a `qorixplay`-aud token from the OAuth handshake and needs
+// to read the player's own quiz history. So we maintain a *narrow*
+// per-route auth helper that accepts the token if `aud` is either:
+//   • "markets" / unset  — Markets PWA caller (own JWT)
+//   • "qorixplay"        — Qorix Play SPA caller (OAuth access token)
+//
+// Audience is the only difference vs authMiddleware; account-status
+// gates (isDisabled / isFrozen / forceLogoutAfter) are still enforced.
+// We deliberately do NOT run the device-fingerprint heartbeat for
+// qorixplay tokens because OAuth access tokens are issued without a
+// fingerprint claim — the fingerprint check belongs to interactive
+// Markets sessions.
+const SESSION_SECRET = process.env["SESSION_SECRET"] ?? "qorix-markets-secret";
+
+type QuizCallerAud = "markets" | "qorixplay";
+
+interface QuizDecoded {
+  userId: number;
+  isAdmin: boolean;
+  iat?: number;
+  aud?: QuizCallerAud;
+}
+
+async function authQuizCaller(
+  req: AuthRequest,
+  res: Response,
+  next: () => void,
+): Promise<void> {
+  const header = req.headers["authorization"];
+  if (!header || !header.startsWith("Bearer ")) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+  const token = header.slice(7);
+  let decoded: QuizDecoded;
+  try {
+    decoded = jwt.verify(token, SESSION_SECRET) as QuizDecoded;
+  } catch {
+    res.status(401).json({ error: "Invalid token" });
+    return;
+  }
+  // Accept Markets-issued tokens (no aud or aud === "markets") and
+  // Qorixplay-issued OAuth access tokens (aud === "qorixplay"). Reject
+  // any future audience we don't explicitly know about.
+  if (decoded.aud && decoded.aud !== "markets" && decoded.aud !== "qorixplay") {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+  // Account-status gate — same as authMiddleware. Cheap PK lookup; we
+  // intentionally don't share the authUserCache here because that cache
+  // is keyed for the Markets fingerprint heartbeat and we don't want to
+  // pollute it with qorixplay-only reads.
+  const [user] = await db
+    .select({
+      id: usersTable.id,
+      isDisabled: usersTable.isDisabled,
+      isFrozen: usersTable.isFrozen,
+      isAdmin: usersTable.isAdmin,
+      forceLogoutAfter: usersTable.forceLogoutAfter,
+    })
+    .from(usersTable)
+    .where(eq(usersTable.id, decoded.userId))
+    .limit(1);
+  if (!user || user.isDisabled || (user.isFrozen && !user.isAdmin)) {
+    res.status(401).json({ error: "Account access is restricted" });
+    return;
+  }
+  if (
+    user.forceLogoutAfter &&
+    decoded.iat &&
+    decoded.iat * 1000 < user.forceLogoutAfter.getTime()
+  ) {
+    res.status(401).json({ error: "Session expired" });
+    return;
+  }
+  req.userId = decoded.userId;
+  req.isAdmin = user.isAdmin;
+  next();
+}
+
+// ── Player dashboard ───────────────────────────────────────────────────
+// Single round-trip endpoint that powers the Qorixplay landing page when
+// the visitor is signed in. Folding everything into one query bundle is
+// deliberate:
+//   • The page is the SPA's entry point — chained REST calls would all
+//     show a spinner cascade on cold-load (auth → wallet → wins → next).
+//   • All five sub-queries share the same `userId`; combining them keeps
+//     the auth/JWT decode cost paid exactly once.
+//   • The total payload is tiny (≤ ~5 KB even for power users) so we
+//     don't trade away any meaningful bandwidth for the round-trip win.
+//
+// Authorisation: `authQuizCaller` (defined above) — accepts Markets
+// session JWTs AND Qorixplay OAuth access tokens. KYC is NOT required
+// to *view* the dashboard; it remains a hard gate inside join/answer.
+//
+// Money fields are returned as fixed-point strings (DECIMAL toString())
+// so the JS Number ≥ 2^53 ceiling never silently truncates a USDT
+// balance with 8 decimal places.
+userRouter.get(
+  "/quiz/me/dashboard",
+  authQuizCaller,
+  async (req: AuthRequest, res) => {
+    const userId = req.userId!;
+    try {
+      // 1. Profile + wallet — cheap point reads, joined client-side
+      //    rather than via SQL JOIN because each row is < 200 B and a
+      //    LEFT JOIN here would prevent the wallet row from being NULL
+      //    (some legacy users may not have a wallets row yet).
+      const [user] = await db
+        .select({
+          id: usersTable.id,
+          email: usersTable.email,
+          fullName: usersTable.fullName,
+          kycStatus: usersTable.kycStatus,
+        })
+        .from(usersTable)
+        .where(eq(usersTable.id, userId))
+        .limit(1);
+
+      if (!user) {
+        // Token verified but user vanished — extremely unlikely (FK to
+        // auth row), but guard anyway so we don't blow up with `null`.
+        res.status(404).json({ error: "User not found" });
+        return;
+      }
+
+      const [wallet] = await db
+        .select({
+          mainBalance: walletsTable.mainBalance,
+        })
+        .from(walletsTable)
+        .where(eq(walletsTable.userId, userId))
+        .limit(1);
+
+      // 2. Lifetime stats — single aggregate per table.
+      //    `quizWinnersTable` is the source of truth for "how much have
+      //    I ever won"; `quizParticipantsTable` for "how many rounds
+      //    have I joined". Best rank uses MIN over winners (1 = first).
+      const [winsAgg] = await db
+        .select({
+          wins: sql<number>`count(*)::int`,
+          totalWon: sql<string>`coalesce(sum(${quizWinnersTable.prizeAmount}), 0)::text`,
+          bestRank: sql<number | null>`min(${quizWinnersTable.rank})`,
+        })
+        .from(quizWinnersTable)
+        .where(eq(quizWinnersTable.userId, userId));
+
+      const [playedAgg] = await db
+        .select({
+          played: sql<number>`count(*)::int`,
+        })
+        .from(quizParticipantsTable)
+        .where(eq(quizParticipantsTable.userId, userId));
+
+      // 3. Recent wins (last 5) — for the "Wins" tile. Joined to the
+      //    quiz row to display title; ordered by most recent finish.
+      const recentWins = await db
+        .select({
+          quizId: quizWinnersTable.quizId,
+          rank: quizWinnersTable.rank,
+          prizeAmount: quizWinnersTable.prizeAmount,
+          prizeCurrency: quizWinnersTable.prizeCurrency,
+          paidAt: quizWinnersTable.paidAt,
+          title: quizzesTable.title,
+          endedAt: quizzesTable.endedAt,
+        })
+        .from(quizWinnersTable)
+        .innerJoin(quizzesTable, eq(quizzesTable.id, quizWinnersTable.quizId))
+        .where(eq(quizWinnersTable.userId, userId))
+        .orderBy(desc(quizWinnersTable.id))
+        .limit(5);
+
+      // 4. Recent participated rounds (last 5, any status). The
+      //    participant row is intentionally minimal (id, quizId,
+      //    userId, joinedAt) — final score is the SUM of scoreAwarded
+      //    across the user's answers in that quiz, and rank+prize live
+      //    on quizWinnersTable iff the user placed top-N. Both joins
+      //    are LEFT so a freshly-joined / non-winning round still
+      //    renders with null score / null prize.
+      const recentRoundsRaw = await db
+        .select({
+          quizId: quizParticipantsTable.quizId,
+          joinedAt: quizParticipantsTable.joinedAt,
+          title: quizzesTable.title,
+          status: quizzesTable.status,
+          scheduledStartAt: quizzesTable.scheduledStartAt,
+          endedAt: quizzesTable.endedAt,
+          rank: quizWinnersTable.rank,
+          prizeAmount: quizWinnersTable.prizeAmount,
+          prizeCurrency: quizWinnersTable.prizeCurrency,
+          // Per-row aggregate of the caller's earned points in that
+          // quiz. Wrapped in coalesce so a join-but-never-answered
+          // round shows 0 instead of null.
+          myScore: sql<number>`coalesce((
+            select sum(${quizAnswersTable.scoreAwarded})::int
+            from ${quizAnswersTable}
+            where ${quizAnswersTable.quizId} = ${quizParticipantsTable.quizId}
+              and ${quizAnswersTable.userId} = ${quizParticipantsTable.userId}
+          ), 0)`,
+        })
+        .from(quizParticipantsTable)
+        .innerJoin(quizzesTable, eq(quizzesTable.id, quizParticipantsTable.quizId))
+        .leftJoin(
+          quizWinnersTable,
+          and(
+            eq(quizWinnersTable.quizId, quizParticipantsTable.quizId),
+            eq(quizWinnersTable.userId, userId),
+          ),
+        )
+        .where(eq(quizParticipantsTable.userId, userId))
+        .orderBy(desc(quizParticipantsTable.joinedAt))
+        .limit(5);
+
+      // 5. Next live-or-upcoming quiz — drives the "Play Now" CTA.
+      //    Prefer "live" over "scheduled"; among scheduled, pick the
+      //    nearest start time. Returns null if nothing is on the
+      //    horizon (player still sees stats; CTA shifts to "Check back
+      //    soon" — handled client-side).
+      const [next] = await db
+        .select({
+          id: quizzesTable.id,
+          title: quizzesTable.title,
+          status: quizzesTable.status,
+          scheduledStartAt: quizzesTable.scheduledStartAt,
+          prizePool: quizzesTable.prizePool,
+          prizeCurrency: quizzesTable.prizeCurrency,
+          entryFee: quizzesTable.entryFee,
+        })
+        .from(quizzesTable)
+        .where(
+          or(
+            eq(quizzesTable.status, "live"),
+            and(
+              eq(quizzesTable.status, "scheduled"),
+              gte(quizzesTable.scheduledStartAt, new Date()),
+            ),
+          ),
+        )
+        // Live quizzes always rank ahead of scheduled ones; within the
+        // same status, the earliest start wins.
+        .orderBy(
+          sql`case when ${quizzesTable.status} = 'live' then 0 else 1 end`,
+          asc(quizzesTable.scheduledStartAt),
+        )
+        .limit(1);
+
+      // Did the caller already join the upcoming/live quiz? Cheap
+      // existence check — saves the client another round-trip to know
+      // whether to render "Join" vs "Resume" on the CTA.
+      let nextJoined = false;
+      if (next) {
+        const [p] = await db
+          .select({ id: quizParticipantsTable.id })
+          .from(quizParticipantsTable)
+          .where(
+            and(
+              eq(quizParticipantsTable.quizId, next.id),
+              eq(quizParticipantsTable.userId, userId),
+            ),
+          )
+          .limit(1);
+        nextJoined = !!p;
+      }
+
+      res.json({
+        profile: {
+          id: user.id,
+          email: user.email,
+          fullName: user.fullName,
+          kycStatus: user.kycStatus,
+        },
+        wallet: {
+          mainBalance: wallet?.mainBalance ?? "0",
+          currency: "USDT",
+        },
+        stats: {
+          quizzesPlayed: playedAgg?.played ?? 0,
+          quizzesWon: winsAgg?.wins ?? 0,
+          totalWinnings: winsAgg?.totalWon ?? "0",
+          bestRank: winsAgg?.bestRank ?? null,
+          currency: "USDT",
+        },
+        recentWins: recentWins.map((w) => ({
+          quizId: w.quizId,
+          title: w.title,
+          rank: w.rank,
+          prizeAmount: w.prizeAmount,
+          prizeCurrency: w.prizeCurrency,
+          endedAt: w.endedAt,
+          paidAt: w.paidAt,
+        })),
+        recentRounds: recentRoundsRaw.map((r) => ({
+          quizId: r.quizId,
+          title: r.title,
+          status: r.status,
+          scheduledStartAt: r.scheduledStartAt,
+          endedAt: r.endedAt,
+          joinedAt: r.joinedAt,
+          myScore: r.myScore ?? 0,
+          myRank: r.rank,
+          myPrize: r.prizeAmount
+            ? { amount: r.prizeAmount, currency: r.prizeCurrency }
+            : null,
+        })),
+        upcoming: next
+          ? {
+              quizId: next.id,
+              title: next.title,
+              status: next.status,
+              scheduledStartAt: next.scheduledStartAt,
+              prizePool: next.prizePool,
+              prizeCurrency: next.prizeCurrency,
+              entryFee: next.entryFee,
+              joined: nextJoined,
+            }
+          : null,
+      });
+    } catch (err) {
+      logger.error({ userId, err }, "quiz.dashboard.failed");
+      res.status(500).json({ error: "Failed to load dashboard" });
+    }
+  },
+);
+
 // ── SSE stream ─────────────────────────────────────────────────────────
 // EventSource cannot send Authorization headers, so we accept either:
 //   1. A normal Bearer token (e.g. when the client uses fetch + ReadableStream).
@@ -802,7 +1134,6 @@ userRouter.get("/quiz/me/past", authMiddleware, async (req: AuthRequest, res) =>
 //
 // JWT validation is done inline rather than via authMiddleware because we
 // also need to set SSE-specific headers and not write a JSON 401.
-const SESSION_SECRET = process.env["SESSION_SECRET"] ?? "qorix-markets-secret";
 
 userRouter.get("/quiz/:id/stream", async (req, res) => {
   const id = parseInt(req.params["id"] ?? "");
