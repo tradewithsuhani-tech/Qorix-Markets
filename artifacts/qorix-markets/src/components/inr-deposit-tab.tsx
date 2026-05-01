@@ -624,12 +624,20 @@ export function InrDepositTab() {
                         <div className="text-sm font-bold text-white truncate">
                           {m.merchantName ?? (m.type === "upi" ? "UPI" : "Bank")}
                         </div>
-                        <span className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[9px] font-bold uppercase tracking-wider text-emerald-300">
-                          <span className="relative flex w-1.5 h-1.5">
+                        <span
+                          className="shrink-0 relative flex w-2 h-2"
+                          title={m.isActive ? "Online" : "Offline"}
+                          aria-label={m.isActive ? "Online" : "Offline"}
+                        >
+                          {m.isActive && (
                             <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75 animate-ping" />
-                            <span className="relative inline-flex w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                          </span>
-                          Online
+                          )}
+                          <span
+                            className={cn(
+                              "relative inline-flex w-2 h-2 rounded-full",
+                              m.isActive ? "bg-emerald-400" : "bg-red-500"
+                            )}
+                          />
                         </span>
                       </div>
                       <div className="text-[11px] text-muted-foreground mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
