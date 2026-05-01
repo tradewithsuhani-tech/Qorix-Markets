@@ -1,6 +1,9 @@
 import cron from "node-cron";
 import { db } from "@workspace/db";
-import { promoRedemptionsTable } from "@workspace/db/schema";
+import {
+  promoRedemptionsTable,
+  quizOauthRefreshTokensTable,
+} from "@workspace/db/schema";
 import { and, eq, isNull, lt, sql } from "drizzle-orm";
 import { logger, profitLogger, errorLogger } from "./logger";
 import { getLastDailyProfitPercent, sweepSignalProfitsToProfitWallet } from "./profit-service";
@@ -11,6 +14,38 @@ import { runEscalationTick } from "./escalation-cron";
 const AUTO_ENGINE_ENABLED = (process.env.AUTO_SIGNAL_ENGINE_ENABLED ?? "1") !== "0";
 
 const PROMO_REDEMPTION_TTL_HOURS = 24;
+
+// ─── B36 follow-up: Qorixplay refresh-token cleanup sweep ─────────────
+//
+// The B36 rotation chain stores one row in `quiz_oauth_refresh_tokens`
+// per refresh — long-lived (30d) but rotated on every use. Even after a
+// row's `expires_at` passes, the row sits around forever; over months
+// this table would grow unbounded with rows that have zero forensic or
+// audit value (any plausible reuse-detection window is well under 7d).
+//
+// Sweep deletes rows whose `expires_at` is more than 7 days in the past.
+// We keep the 7-day buffer (rather than deleting the moment a token
+// expires) so:
+//   • a forensic question like "did this user's session die at 02:14
+//     last night?" is still answerable for a week, and
+//   • the partial active-rows index in the schema only has to skip
+//     true ancients, not freshly-expired-but-investigable rows.
+//
+// Idempotent — DELETE … WHERE expires_at < cutoff is naturally a no-op
+// once the table is clean. Logged only when rows were actually removed
+// to keep the daily logs quiet on small installs.
+const REFRESH_TOKEN_RETENTION_DAYS = 7;
+
+async function cleanupExpiredQuizRefreshTokens(): Promise<number> {
+  const cutoff = new Date(
+    Date.now() - REFRESH_TOKEN_RETENTION_DAYS * 24 * 60 * 60 * 1000,
+  );
+  const result = await db
+    .delete(quizOauthRefreshTokensTable)
+    .where(lt(quizOauthRefreshTokensTable.expiresAt, cutoff))
+    .returning({ tokenHash: quizOauthRefreshTokensTable.tokenHash });
+  return result.length;
+}
 
 async function expireStalePromoRedemptions(): Promise<number> {
   const cutoff = new Date(Date.now() - PROMO_REDEMPTION_TTL_HOURS * 60 * 60 * 1000);
@@ -80,6 +115,47 @@ export async function initCronJobs(): Promise<void> {
     })
     .catch((err) => errorLogger.error({ err }, "Startup: promo expiry sweep failed"));
 
+  // Daily 03:00 UTC: prune Qorixplay refresh-token rows whose `expires_at`
+  // is more than 7 days in the past. Off-peak time chosen so the DELETE
+  // doesn't compete with the 00:00 UTC daily-profit distribution job.
+  // Single-instance gating already happens upstream via RUN_BACKGROUND_JOBS
+  // (see index.ts) — only the cron-owning machine ever calls this.
+  cron.schedule("0 3 * * *", async () => {
+    try {
+      const removed = await cleanupExpiredQuizRefreshTokens();
+      if (removed > 0) {
+        logger.info(
+          { removed, retentionDays: REFRESH_TOKEN_RETENTION_DAYS },
+          "Cron: expired Qorixplay refresh tokens pruned",
+        );
+      }
+    } catch (err) {
+      errorLogger.error(
+        { err },
+        "Cron: failed to prune expired Qorixplay refresh tokens",
+      );
+    }
+  });
+
+  // Run once at startup so a server that has been down for a while
+  // catches up on cleanup immediately instead of waiting for 03:00 UTC.
+  // Failure here must NOT block boot — log and move on.
+  void cleanupExpiredQuizRefreshTokens()
+    .then((n) => {
+      if (n > 0) {
+        logger.info(
+          { removed: n, retentionDays: REFRESH_TOKEN_RETENTION_DAYS },
+          "Startup: expired Qorixplay refresh tokens pruned",
+        );
+      }
+    })
+    .catch((err) =>
+      errorLogger.error(
+        { err },
+        "Startup: Qorixplay refresh-token cleanup sweep failed",
+      ),
+    );
+
   // Auto Signal Engine — daily plan of 25 trades (12:30→20:30 UTC, 8h window)
   // Tick every minute: each tick executes the earliest pending-and-due slot.
   // Legacy closer kept for any v1 running trades.
@@ -124,7 +200,7 @@ export async function initCronJobs(): Promise<void> {
   });
 
   logger.info(
-    "Cron: jobs registered — daily profit (00:00), monthly trading→profit sweep (25th 00:00), hourly promo expiry, INR escalation (every 1min)",
+    "Cron: jobs registered — daily profit (00:00), monthly trading→profit sweep (25th 00:00), hourly promo expiry, daily Qorixplay refresh-token prune (03:00), INR escalation (every 1min)",
   );
   // Touch sql import so it isn't dropped by tooling — kept for future hourly maintenance jobs.
   void sql;
