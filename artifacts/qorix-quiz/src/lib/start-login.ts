@@ -30,6 +30,13 @@ export type StartLoginOptions = {
    * Defaults to "/" — the landing page itself.
    */
   returnTo?: string;
+  /**
+   * B37: when true, hint the Markets bounce page to drop the user on
+   * the Sign Up form instead of the Sign In form. Used by the
+   * "Create account" button on the landing page so brand-new users
+   * aren't asked to log in to an account they don't have yet.
+   */
+  signup?: boolean;
 };
 
 export async function startLogin(opts: StartLoginOptions = {}): Promise<void> {
@@ -64,11 +71,24 @@ export async function startLogin(opts: StartLoginOptions = {}): Promise<void> {
     response_type: "code",
     client_id: CLIENT_ID,
     redirect_uri: getRedirectUri(),
-    scope: "profile",
+    // B36: `offline_access` signals we want a refresh_token back so
+    // the SPA can stay signed in past the 1h access window. The
+    // server's /token-public path treats this as additive — even old
+    // SPAs that don't ask for it get a refresh_token now (additive
+    // contract change), so this is mostly informational on the wire
+    // but keeps us spec-aligned for future enforcement.
+    scope: "profile offline_access",
     state,
     code_challenge: challenge,
     code_challenge_method: "S256",
   });
+  // B37: ask the Markets bounce page to send unauthenticated users
+  // straight to the Sign Up form. Authenticated users follow the
+  // existing fast path (mint code, redirect back) — the param is
+  // ignored once a session exists.
+  if (opts.signup) {
+    params.set("mode", "signup");
+  }
 
   // window.location.assign (not .href) makes the navigation behave
   // identically to a real link click — including pushing a history
