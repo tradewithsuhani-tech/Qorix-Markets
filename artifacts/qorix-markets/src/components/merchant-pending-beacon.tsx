@@ -136,52 +136,50 @@ export function MerchantPendingBadge({
 
   if (variant === "mobile") {
     return (
-      <Link href="/merchant/deposits">
-        <a
-          className={cn(
-            "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold tabular-nums shadow-[0_2px_8px_-2px_rgba(252,213,53,0.5)] transition-transform active:scale-95",
-            overdue
-              ? "bg-rose-500 text-white animate-pulse"
-              : "bg-amber-400 text-slate-950",
-          )}
-          aria-label={`${count} pending deposit${count === 1 ? "" : "s"}`}
-        >
-          <Bell className="h-3 w-3" />
-          {count}
-        </a>
+      <Link
+        href="/merchant/deposits"
+        className={cn(
+          "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold tabular-nums shadow-[0_2px_8px_-2px_rgba(252,213,53,0.5)] transition-transform active:scale-95",
+          overdue
+            ? "bg-rose-500 text-white animate-pulse"
+            : "bg-amber-400 text-slate-950",
+        )}
+        aria-label={`${count} pending deposit${count === 1 ? "" : "s"}`}
+      >
+        <Bell className="h-3 w-3" />
+        {count}
       </Link>
     );
   }
 
   return (
-    <Link href="/merchant/deposits">
-      <a
-        className={cn(
-          "group flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold transition-all",
-          overdue
-            ? "border-rose-500/40 bg-rose-500/10 text-rose-200 hover:border-rose-500/60 hover:bg-rose-500/20 animate-pulse"
-            : "border-amber-500/40 bg-amber-500/10 text-amber-200 hover:border-amber-500/60 hover:bg-amber-500/20",
-        )}
-      >
-        <span className="relative flex h-2 w-2">
-          <span
-            className={cn(
-              "absolute inline-flex h-full w-full animate-ping rounded-full opacity-75",
-              overdue ? "bg-rose-400" : "bg-amber-400",
-            )}
-          />
-          <span
-            className={cn(
-              "relative inline-flex h-2 w-2 rounded-full",
-              overdue ? "bg-rose-500" : "bg-amber-500",
-            )}
-          />
-        </span>
-        <span className="tabular-nums">{count}</span>
-        <span className="text-[10px] font-medium uppercase tracking-wider opacity-80">
-          {overdue ? "Overdue · review" : `Pending`}
-        </span>
-      </a>
+    <Link
+      href="/merchant/deposits"
+      className={cn(
+        "group flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold transition-all",
+        overdue
+          ? "border-rose-500/40 bg-rose-500/10 text-rose-200 hover:border-rose-500/60 hover:bg-rose-500/20 animate-pulse"
+          : "border-amber-500/40 bg-amber-500/10 text-amber-200 hover:border-amber-500/60 hover:bg-amber-500/20",
+      )}
+    >
+      <span className="relative flex h-2 w-2">
+        <span
+          className={cn(
+            "absolute inline-flex h-full w-full animate-ping rounded-full opacity-75",
+            overdue ? "bg-rose-400" : "bg-amber-400",
+          )}
+        />
+        <span
+          className={cn(
+            "relative inline-flex h-2 w-2 rounded-full",
+            overdue ? "bg-rose-500" : "bg-amber-500",
+          )}
+        />
+      </span>
+      <span className="tabular-nums">{count}</span>
+      <span className="text-[10px] font-medium uppercase tracking-wider opacity-80">
+        {overdue ? "Overdue · review" : `Pending`}
+      </span>
     </Link>
   );
 }
