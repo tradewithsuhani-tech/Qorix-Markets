@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { Trophy, Sparkles, Zap, ShieldCheck, Clock, LogIn } from "lucide-react";
+import { Trophy, Sparkles, Zap, ShieldCheck, Clock, LogIn, UserPlus } from "lucide-react";
 import { startLogin } from "@/lib/start-login";
-import { clearToken, readToken } from "@/lib/auth-storage";
+import { clearAllAuth, readToken } from "@/lib/auth-storage";
 
 // B35: SSO with Qorix Markets is live, but the actual quiz-play screens
 // land in B38. Until then "signed in" just means we have a Markets
@@ -35,7 +35,10 @@ function useIsSignedIn(): {
   return {
     isSignedIn,
     signOut: () => {
-      clearToken();
+      // B36: full sign-out — wipe BOTH access and refresh tokens so
+      // the user lands cleanly on /sign-in with no stale credentials
+      // that the refresh helper might try to silently reuse.
+      clearAllAuth();
       setIsSignedIn(false);
     },
   };
@@ -61,6 +64,28 @@ export function LandingPage() {
         err instanceof Error
           ? err.message
           : "Could not start sign-in. Please try again.",
+      );
+      setSignInPending(false);
+    }
+  }
+
+  // B37: brand-new users path. Same PKCE handshake as sign-in, but the
+  // Markets bounce page reads `mode=signup` and drops the user on the
+  // Sign Up form instead of the Sign In form — so they're not asked to
+  // log in to an account they don't have yet. After signup completes,
+  // the existing resume URL flow brings them back to /auth/callback
+  // and on into Qorixplay, exactly like sign-in.
+  async function handleSignUp() {
+    setSignInError(null);
+    setSignInPending(true);
+    try {
+      await startLogin({ returnTo: "/", signup: true });
+      setSignInPending(false);
+    } catch (err) {
+      setSignInError(
+        err instanceof Error
+          ? err.message
+          : "Could not start sign-up. Please try again.",
       );
       setSignInPending(false);
     }
@@ -176,21 +201,39 @@ export function LandingPage() {
                 You&apos;re in — play opens shortly
               </button>
             ) : (
-              <button
-                onClick={handleSignIn}
-                disabled={signInPending}
-                className="inline-flex items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-semibold disabled:opacity-70 disabled:cursor-wait"
-                style={{
-                  background:
-                    "linear-gradient(135deg, hsl(262 83% 65%), hsl(262 83% 55%))",
-                  color: "white",
-                  boxShadow: "0 8px 24px -8px hsl(262 83% 50% / 0.6)",
-                }}
-                data-testid="button-sign-in"
-              >
-                <LogIn className="w-4 h-4" />
-                {signInPending ? "Redirecting…" : "Sign in with Qorix Markets"}
-              </button>
+              <>
+                {/* B37: brand-new users get the primary CTA — most
+                    Qorixplay traffic is fresh-from-ads, so a "Create
+                    account" path that drops them straight on the Sign
+                    Up form (instead of asking them to log in to an
+                    account they don't have) is the conversion-critical
+                    surface here. Existing Markets users still get the
+                    "Sign in" secondary right next to it. */}
+                <button
+                  onClick={handleSignUp}
+                  disabled={signInPending}
+                  className="inline-flex items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-semibold disabled:opacity-70 disabled:cursor-wait"
+                  style={{
+                    background:
+                      "linear-gradient(135deg, hsl(262 83% 65%), hsl(48 96% 58%))",
+                    color: "hsl(262 47% 7%)",
+                    boxShadow: "0 8px 24px -8px hsl(262 83% 50% / 0.6)",
+                  }}
+                  data-testid="button-sign-up"
+                >
+                  <UserPlus className="w-4 h-4" />
+                  {signInPending ? "Redirecting…" : "Create free account"}
+                </button>
+                <button
+                  onClick={handleSignIn}
+                  disabled={signInPending}
+                  className="inline-flex items-center gap-2 rounded-lg border border-border/60 bg-card/60 px-5 py-2.5 text-sm hover-elevate disabled:opacity-70 disabled:cursor-wait"
+                  data-testid="button-sign-in"
+                >
+                  <LogIn className="w-4 h-4" />
+                  {signInPending ? "Redirecting…" : "Sign in"}
+                </button>
+              </>
             )}
             <a
               href="https://qorixmarkets.com"

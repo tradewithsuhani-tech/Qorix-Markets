@@ -64,6 +64,12 @@ export default function OauthQuizAuthorizePage() {
   const codeChallengeMethod = params.get("code_challenge_method") ?? undefined;
   const scope = params.get("scope") ?? undefined;
   const clientId = params.get("client_id") ?? "qorixplay";
+  // B37: optional UX hint from Qorixplay's "Create account" button.
+  // Validated to a tight allow-list so a malicious authorize URL can't
+  // bounce the user anywhere unexpected. Anything other than the
+  // exact strings below collapses to the default `/login` path.
+  const modeRaw = params.get("mode");
+  const isSignupHint = modeRaw === "signup";
 
   useEffect(() => {
     // Wait for AuthProvider to finish hydrating its /me query before
@@ -98,7 +104,13 @@ export default function OauthQuizAuthorizePage() {
         // again on Qorixplay. Acceptable degradation.
       }
       startedRef.current = true;
-      setLocation("/login");
+      // B37: honour `?mode=signup` from Qorixplay's "Create account"
+      // button so a brand-new visitor lands on the registration form
+      // instead of being asked to log in to an account they don't have
+      // yet. The /signup route renders the same LoginPage component
+      // pre-flipped to Sign Up mode (see login.tsx lazy initializer),
+      // so the resume URL flow keeps working unchanged.
+      setLocation(isSignupHint ? "/signup" : "/login");
       return;
     }
 
@@ -168,6 +180,7 @@ export default function OauthQuizAuthorizePage() {
     codeChallengeMethod,
     scope,
     clientId,
+    isSignupHint,
     setLocation,
   ]);
 

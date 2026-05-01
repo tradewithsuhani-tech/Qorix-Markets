@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { API_URL, CLIENT_ID, getRedirectUri } from "@/lib/oauth-config";
-import { storeToken } from "@/lib/auth-storage";
+import { storeRefreshToken, storeToken } from "@/lib/auth-storage";
 import {
   PKCE_RETURN_TO_KEY,
   PKCE_STATE_KEY,
@@ -12,6 +12,12 @@ type ExchangeResponse = {
   access_token: string;
   token_type: string;
   expires_in: number;
+  // B36: refresh-token pair returned alongside the access token. Both
+  // fields are optional in the type because old API responses (pre-B36)
+  // simply omit them — the SPA still works in that case, just without
+  // automatic re-login past 1h.
+  refresh_token?: string;
+  refresh_expires_in?: number;
   scope?: string;
 };
 
@@ -131,6 +137,17 @@ export default function AuthCallbackPage() {
         }
 
         storeToken(body.access_token, body.expires_in);
+        // B36: also persist the refresh_token if the server sent one
+        // (it does, post-B36 server). Stored separately so the access
+        // token's lifecycle stays unchanged and old call sites that
+        // only call `clearToken()` keep working.
+        if (
+          typeof body.refresh_token === "string" &&
+          typeof body.refresh_expires_in === "number" &&
+          body.refresh_expires_in > 0
+        ) {
+          storeRefreshToken(body.refresh_token, body.refresh_expires_in);
+        }
         // Replace (not push) so back-button doesn't return the user
         // to /auth/callback with a now-burned code in the URL.
         const dest = storedReturnTo && storedReturnTo.startsWith("/")
