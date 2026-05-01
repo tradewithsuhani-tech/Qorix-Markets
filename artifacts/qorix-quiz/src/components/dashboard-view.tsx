@@ -191,7 +191,9 @@ export function DashboardView({ onSignOut }: DashboardViewProps) {
         const token = await getValidAccessToken();
         if (!alive) return;
         if (!token) {
-          setError("Your session expired. Please sign in again.");
+          setError(
+            "Session expired (no refresh token). Click Sign out, then sign in again to mint a fresh OAuth pair.",
+          );
           setLoading(false);
           return;
         }
@@ -200,10 +202,19 @@ export function DashboardView({ onSignOut }: DashboardViewProps) {
         });
         if (!alive) return;
         if (resp.status === 401) {
-          // Token was rejected (e.g. user disabled, signed out from
-          // Markets, or backend restart invalidated something) — same
-          // soft-prompt UX as no-token.
-          setError("Your session expired. Please sign in again.");
+          // Token was rejected by the API. Surface the server's reason
+          // string so we can tell `Invalid token` (JWT verify failed)
+          // from `Account access is restricted` (frozen/disabled) from
+          // `Session expired` (forceLogoutAfter > iat) without needing
+          // a server-side debug session.
+          let reason = "rejected by server";
+          try {
+            const body = (await resp.json()) as { error?: string };
+            if (body.error) reason = body.error;
+          } catch {
+            // ignore — keep default reason
+          }
+          setError(`Session expired (401: ${reason}). Click Sign out, then sign in again.`);
           setLoading(false);
           return;
         }
