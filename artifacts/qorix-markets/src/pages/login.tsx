@@ -5,7 +5,6 @@ import { useLocation, Link } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import { TrendingUp, Lock, Mail, User as UserIcon, ArrowLeft, Eye, EyeOff, ShieldCheck, CheckCircle2, Loader2, KeyRound } from "lucide-react";
 import { QorixLogo } from "@/components/qorix-logo";
-import qorixPlayLogo from "@/assets/qorix-play-logo.png";
 import { useToast } from "@/hooks/use-toast";
 import {
   CaptchaWidget,
@@ -728,22 +727,6 @@ export default function LoginPage() {
     return true;
   });
 
-  // When the user landed here via the Qorix Play OAuth bounce
-  // (oauth-quiz-authorize.tsx sets `qorix_play_branding=1` in
-  // sessionStorage right before redirecting to /login or /signup), we
-  // re-skin the page with the Qorix Play logo + copy so the user
-  // doesn't get a jarring "wait, why am I on Qorix Markets?" moment.
-  // Same backend, same account — just visually consistent. The flag
-  // lives for the rest of the tab session; the bounce page resets it
-  // on every visit so it can't go stale across normal Play flows.
-  const [isPlayBranding] = useState<boolean>(() => {
-    try {
-      return sessionStorage.getItem("qorix_play_branding") === "1";
-    } catch {
-      return false;
-    }
-  });
-
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
@@ -1064,73 +1047,22 @@ export default function LoginPage() {
 
   return (
     <div
-      className={`min-h-screen w-full flex flex-col items-center px-4 pt-20 pb-8 relative overflow-hidden ${
-        isPlayBranding ? "bg-[#05010f]" : "bg-background"
-      }`}
+      className="min-h-screen w-full flex flex-col items-center px-4 pt-20 pb-8 relative overflow-hidden bg-background"
     >
-      {/* Background — gaming neon vibe when arriving from Qorix Play,
-          otherwise the calm Markets blobs. */}
-      {isPlayBranding ? (
-        <>
-          {/* Tron grid */}
-          <div
-            className="absolute inset-0 pointer-events-none opacity-[0.18]"
-            style={{
-              backgroundImage:
-                "linear-gradient(rgba(168,85,247,0.6) 1px, transparent 1px), linear-gradient(90deg, rgba(34,211,238,0.5) 1px, transparent 1px)",
-              backgroundSize: "44px 44px",
-              maskImage:
-                "radial-gradient(ellipse 80% 60% at 50% 35%, black 40%, transparent 85%)",
-              WebkitMaskImage:
-                "radial-gradient(ellipse 80% 60% at 50% 35%, black 40%, transparent 85%)",
-            }}
-          />
-          {/* Neon blobs */}
-          <div className="absolute -top-24 left-1/2 -translate-x-1/2 w-[680px] h-[520px] bg-fuchsia-600/25 rounded-full blur-[140px] pointer-events-none animate-pulse" />
-          <div className="absolute top-1/3 -left-32 w-[420px] h-[420px] bg-purple-700/30 rounded-full blur-[120px] pointer-events-none" />
-          <div className="absolute bottom-0 -right-24 w-[460px] h-[460px] bg-cyan-500/20 rounded-full blur-[130px] pointer-events-none" />
-          {/* Conic spinning halo behind the logo column */}
-          <div className="absolute top-12 left-1/2 -translate-x-1/2 w-[260px] h-[260px] rounded-full pointer-events-none opacity-50 mix-blend-screen" style={{ background: "conic-gradient(from 0deg, rgba(168,85,247,0.0), rgba(168,85,247,0.55), rgba(34,211,238,0.55), rgba(236,72,153,0.55), rgba(168,85,247,0.0))", animation: "qp-spin 11s linear infinite", filter: "blur(28px)" }} />
-          {/* Soft scanline overlay for that "arcade screen" feel */}
-          <div
-            className="absolute inset-0 pointer-events-none opacity-[0.06] mix-blend-overlay"
-            style={{
-              backgroundImage:
-                "repeating-linear-gradient(0deg, rgba(255,255,255,0.6) 0px, rgba(255,255,255,0.6) 1px, transparent 1px, transparent 3px)",
-            }}
-          />
-          {/* Vignette */}
-          <div className="absolute inset-0 pointer-events-none" style={{ background: "radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.65) 100%)" }} />
-          <style>{`@keyframes qp-spin { from { transform: translate(-50%, 0) rotate(0deg); } to { transform: translate(-50%, 0) rotate(360deg); } } @keyframes qp-pulse-ring { 0%, 100% { box-shadow: 0 0 0 1px rgba(168,85,247,0.45), 0 0 32px rgba(168,85,247,0.25); } 50% { box-shadow: 0 0 0 1px rgba(34,211,238,0.55), 0 0 44px rgba(236,72,153,0.35); } }`}</style>
-        </>
-      ) : (
-        <>
-          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[700px] h-[500px] bg-primary/8 rounded-full blur-[120px] pointer-events-none" />
-          <div className="absolute bottom-0 left-1/4 w-[400px] h-[400px] bg-indigo-600/6 rounded-full blur-[100px] pointer-events-none" />
-        </>
-      )}
+      {/* Background — calm Markets blobs. */}
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[700px] h-[500px] bg-primary/8 rounded-full blur-[120px] pointer-events-none" />
+      <div className="absolute bottom-0 left-1/4 w-[400px] h-[400px] bg-indigo-600/6 rounded-full blur-[100px] pointer-events-none" />
 
       {/* Back link — sits in the safe top-left zone above the form column.
           The parent now uses `flex-col` + `pt-20` so the form starts at y≈80
           and never collides with this absolutely-positioned button (which
           ends around y≈46). The button text stays readable down to 320px. */}
       <button
-        onClick={() => {
-          if (isPlayBranding) {
-            // Send the user back to the Play landing they came from.
-            window.location.href = "https://qorixplay.com";
-          } else {
-            setLocation("/");
-          }
-        }}
-        className={`absolute top-6 left-4 sm:left-6 flex items-center gap-1.5 text-sm transition-colors z-10 ${
-          isPlayBranding
-            ? "text-purple-200/80 hover:text-fuchsia-300"
-            : "text-muted-foreground hover:text-white"
-        }`}
+        onClick={() => setLocation("/")}
+        className="absolute top-6 left-4 sm:left-6 flex items-center gap-1.5 text-sm transition-colors z-10 text-muted-foreground hover:text-white"
       >
         <ArrowLeft style={{ width: 15, height: 15 }} />
-        {isPlayBranding ? "Back to Qorix Play" : "Back to home"}
+        Back to home
       </button>
 
       <motion.div
@@ -1139,34 +1071,14 @@ export default function LoginPage() {
         transition={{ duration: 0.45, ease: "easeOut" }}
         className="w-full max-w-md"
       >
-        {/* Logo — Qorix Play skin when the user came via Qorixplay's
-            OAuth bounce, otherwise the default Qorix Markets wordmark. */}
-        {isPlayBranding ? (
-          <div className="flex items-center justify-center mb-8">
-            <img
-              src={qorixPlayLogo}
-              alt="Qorix Play"
-              draggable={false}
-              className="h-12 w-auto drop-shadow-[0_0_24px_rgba(168,85,247,0.6)]"
-            />
+        <div className="flex items-center gap-3 mb-8 justify-center">
+          <div className="w-12 h-12 rounded-xl overflow-hidden flex items-center justify-center shadow-[0_0_22px_rgba(59,130,246,0.38)]">
+            <QorixLogo size={48} />
           </div>
-        ) : (
-          <div className="flex items-center gap-3 mb-8 justify-center">
-            <div className="w-12 h-12 rounded-xl overflow-hidden flex items-center justify-center shadow-[0_0_22px_rgba(59,130,246,0.38)]">
-              <QorixLogo size={48} />
-            </div>
-            <span className="text-xl font-bold">Qorix{" "}<span className="text-primary font-light">Markets</span></span>
-          </div>
-        )}
+          <span className="text-xl font-bold">Qorix{" "}<span className="text-primary font-light">Markets</span></span>
+        </div>
 
-        <div
-          className={
-            isPlayBranding
-              ? "relative rounded-2xl p-7 space-y-6 bg-[#0a0418]/80 backdrop-blur-xl border border-purple-500/30"
-              : "glass-card rounded-2xl p-7 space-y-6"
-          }
-          style={isPlayBranding ? { animation: "qp-pulse-ring 3.4s ease-in-out infinite" } : undefined}
-        >
+        <div className="glass-card rounded-2xl p-7 space-y-6">
           {/* Heading */}
           <div className="text-center space-y-1">
             <AnimatePresence mode="wait">
@@ -1178,23 +1090,13 @@ export default function LoginPage() {
                 transition={{ duration: 0.18 }}
                 className="text-2xl font-bold tracking-tight"
               >
-                {isLogin
-                  ? isPlayBranding
-                    ? "Sign in to play"
-                    : "Welcome back"
-                  : isPlayBranding
-                    ? "Create your Qorix Play account"
-                    : "Create account"}
+                {isLogin ? "Welcome back" : "Create account"}
               </motion.h1>
             </AnimatePresence>
             <p className="text-sm text-muted-foreground">
               {isLogin
-                ? isPlayBranding
-                  ? "Sign in to join live quiz rounds and win real cash."
-                  : "Sign in to access your trading terminal."
-                : isPlayBranding
-                  ? "Free account · play live quiz rounds · win real cash."
-                  : "Start automated USD trading today."}
+                ? "Sign in to access your trading terminal."
+                : "Start automated USD trading today."}
             </p>
           </div>
 
