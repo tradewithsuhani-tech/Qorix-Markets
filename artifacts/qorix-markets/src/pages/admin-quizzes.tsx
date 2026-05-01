@@ -176,6 +176,94 @@ function StatusBadge({ status }: { status: string }) {
   return <Badge className={cn("border", cls)}>{status}</Badge>;
 }
 
+// ── AI prize-split heuristic ───────────────────────────────────────────
+// The backend's `prize_split` column is locked to a length-3 fraction array
+// summing to 1, and the runner only persists top-3 winners — so this helper
+// always returns a 3-tuple. The split tier is chosen from the prize pool:
+//   • Tiny pools  → winner-takes-all (avoids dust prizes < $1)
+//   • Small pools → top-2 (60/40)
+//   • Mid pools   → top-3, classic 50/30/20
+//   • Big pools   → top-3, slightly flatter so 3rd place is meaningful
+// The "label" + "rationale" are surfaced in the modal so admin understands
+// *why* the AI picked this split — auditable, not magic.
+interface AiSplitChoice {
+  split: [number, number, number];
+  winners: 1 | 2 | 3;
+  tier: "tiny" | "small" | "mid" | "big";
+  rationale: string;
+}
+function computeAiSplit(poolNum: number): AiSplitChoice {
+  if (!Number.isFinite(poolNum) || poolNum <= 0) {
+    return { split: [1, 0, 0], winners: 1, tier: "tiny", rationale: "Pool is zero — no prizes to distribute." };
+  }
+  if (poolNum < 30) {
+    return { split: [1, 0, 0], winners: 1, tier: "tiny", rationale: "Pool < $30: winner-takes-all (avoids dust prizes)." };
+  }
+  if (poolNum < 100) {
+    return { split: [0.6, 0.4, 0], winners: 2, tier: "small", rationale: "Pool $30–$100: top-2 split (60/40) keeps prizes meaningful." };
+  }
+  if (poolNum < 500) {
+    return { split: [0.5, 0.3, 0.2], winners: 3, tier: "mid", rationale: "Pool $100–$500: classic top-3 split (50/30/20)." };
+  }
+  return { split: [0.45, 0.3, 0.25], winners: 3, tier: "big", rationale: "Pool ≥ $500: flatter top-3 (45/30/25) so 3rd place still rewards effort." };
+}
+
+const RANK_LABELS = ["1st", "2nd", "3rd"] as const;
+const RANK_STYLES = [
+  { ring: "ring-amber-400/40", text: "text-amber-300", bg: "bg-amber-500/10", glow: "shadow-[0_0_20px_-5px_rgba(252,213,53,0.6)]", emoji: "🥇" },
+  { ring: "ring-slate-300/40", text: "text-slate-200", bg: "bg-slate-400/10", glow: "shadow-[0_0_18px_-6px_rgba(203,213,225,0.5)]", emoji: "🥈" },
+  { ring: "ring-orange-500/40", text: "text-orange-300", bg: "bg-orange-500/10", glow: "shadow-[0_0_18px_-6px_rgba(249,115,22,0.5)]", emoji: "🥉" },
+] as const;
+
+function PrizeSplitPreview({ poolStr, currency }: { poolStr: string; currency: string }) {
+  const choice = useMemo(() => computeAiSplit(parseFloat(poolStr || "0")), [poolStr]);
+  const pool = parseFloat(poolStr || "0") || 0;
+  const cur = (currency || "USDT").toUpperCase();
+  return (
+    <div className="rounded-lg border border-amber-500/20 bg-gradient-to-br from-amber-500/[0.06] via-amber-500/[0.02] to-transparent p-3 space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5">
+          <Sparkles className="h-3.5 w-3.5 text-amber-300" />
+          <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-amber-200">
+            AI prize plan
+          </span>
+        </div>
+        <span className="text-[10px] font-medium uppercase tracking-wider text-amber-300/70">
+          {choice.winners} winner{choice.winners === 1 ? "" : "s"}
+        </span>
+      </div>
+      <div className="grid grid-cols-3 gap-1.5">
+        {choice.split.map((frac, i) => {
+          const amt = pool * frac;
+          const style = RANK_STYLES[i];
+          const inactive = frac === 0;
+          return (
+            <div
+              key={i}
+              className={cn(
+                "rounded-md px-2 py-2 text-center ring-1 transition-opacity",
+                inactive ? "ring-white/[0.04] bg-white/[0.01] opacity-40" : `${style.ring} ${style.bg} ${style.glow}`,
+              )}
+            >
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                <span className="mr-0.5">{style.emoji}</span>
+                {RANK_LABELS[i]}
+              </div>
+              <div className={cn("mt-0.5 text-sm font-bold tabular-nums", inactive ? "text-slate-600" : style.text)}>
+                {amt > 0 ? amt.toLocaleString(undefined, { maximumFractionDigits: 2 }) : "—"}
+              </div>
+              <div className="text-[9px] font-medium uppercase tracking-wider text-slate-500">
+                {inactive ? "no prize" : `${cur} · ${(frac * 100).toFixed(0)}%`}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div className="text-[10px] text-slate-400 leading-snug">{choice.rationale}</div>
+    </div>
+  );
+}
+
 // ── Create ─────────────────────────────────────────────────────────────
 function CreateQuizDialog({ open, onOpenChange, onCreated }: { open: boolean; onOpenChange: (v: boolean) => void; onCreated: (id: number) => void }) {
   const create = useAdminCreateQuiz();
@@ -203,12 +291,14 @@ function CreateQuizDialog({ open, onOpenChange, onCreated }: { open: boolean; on
       return;
     }
     try {
+      const aiSplit = computeAiSplit(parseFloat(prizePool || "0"));
       const res = await create.mutateAsync({ data: {
         title: title.trim(),
         description: description.trim() || undefined,
         scheduledStartAt: localInputToIso(scheduledStartAt),
         prizePool: prizePool || "0",
         prizeCurrency,
+        prizeSplit: aiSplit.split,
         questionTimeMs: questionTimeSec * 1000,
         notifyEnabled,
       } });
@@ -229,10 +319,18 @@ function CreateQuizDialog({ open, onOpenChange, onCreated }: { open: boolean; on
           <Field label="Description"><Textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Optional — shown to players." rows={2} /></Field>
           <Field label="Start time"><Input data-testid="input-quiz-start" type="datetime-local" value={scheduledStartAt} onChange={(e) => setScheduledStartAt(e.target.value)} /></Field>
           <div className="grid grid-cols-3 gap-2">
-            <Field label="Prize pool"><Input value={prizePool} onChange={(e) => setPrizePool(e.target.value)} /></Field>
+            <Field label="Prize pool">
+              <Input
+                inputMode="decimal"
+                value={prizePool}
+                onChange={(e) => setPrizePool(e.target.value)}
+                placeholder="100"
+              />
+            </Field>
             <Field label="Currency"><Input value={prizeCurrency} onChange={(e) => setPrizeCurrency(e.target.value)} /></Field>
             <Field label="Time/Q (s)"><Input type="number" min={5} max={30} value={questionTimeSec} onChange={(e) => setQuestionTimeSec(parseInt(e.target.value || "15", 10))} /></Field>
           </div>
+          <PrizeSplitPreview poolStr={prizePool} currency={prizeCurrency} />
           <label className="flex items-start gap-2 text-sm pt-1">
             <input
               type="checkbox"
@@ -313,12 +411,14 @@ function DetailEditor({ id, onBack, onMonitor, onResults }: { id: number; onBack
 
   const onSave = async () => {
     try {
+      const aiSplit = computeAiSplit(parseFloat(prizePool || "0"));
       await update.mutateAsync({ id, data: {
         title: title.trim(),
         description: description.trim(),
         scheduledStartAt: scheduledStartAt ? localInputToIso(scheduledStartAt) : undefined,
         prizePool,
         prizeCurrency,
+        prizeSplit: aiSplit.split,
         questionTimeMs: questionTimeSec * 1000,
         entryRules: { requireKyc },
         notifyEnabled,
@@ -373,10 +473,11 @@ function DetailEditor({ id, onBack, onMonitor, onResults }: { id: number; onBack
           <Field label="Description"><Textarea rows={2} value={description} onChange={(e) => setDescription(e.target.value)} disabled={!isScheduled} /></Field>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
             <Field label="Start time"><Input type="datetime-local" value={scheduledStartAt} onChange={(e) => setScheduledStartAt(e.target.value)} disabled={!isScheduled} /></Field>
-            <Field label="Prize pool"><Input value={prizePool} onChange={(e) => setPrizePool(e.target.value)} disabled={!isScheduled} /></Field>
+            <Field label="Prize pool"><Input inputMode="decimal" value={prizePool} onChange={(e) => setPrizePool(e.target.value)} disabled={!isScheduled} /></Field>
             <Field label="Currency"><Input value={prizeCurrency} onChange={(e) => setPrizeCurrency(e.target.value)} disabled={!isScheduled} /></Field>
             <Field label="Time/Q (s)"><Input type="number" min={5} max={30} value={questionTimeSec} onChange={(e) => setQuestionTimeSec(parseInt(e.target.value || "15", 10))} disabled={!isScheduled} /></Field>
           </div>
+          <PrizeSplitPreview poolStr={prizePool} currency={prizeCurrency} />
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={requireKyc} disabled={!isScheduled} onChange={(e) => setRequireKyc(e.target.checked)} />
             Require KYC to join
