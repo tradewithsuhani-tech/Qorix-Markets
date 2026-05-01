@@ -8,6 +8,9 @@ import {
   LogIn,
   UserPlus,
   ArrowRight,
+  Flame,
+  Users,
+  Coins,
 } from "lucide-react";
 import { startLogin } from "@/lib/start-login";
 import { clearAllAuth, readToken } from "@/lib/auth-storage";
@@ -16,8 +19,7 @@ import logoUrl from "@/assets/qorix-play-logo.png";
 // B35: SSO with Qorix Markets is live, but the actual quiz-play screens
 // land in B38. Until then "signed in" just means we have a Markets
 // access token in localStorage and we replace the "Launching soon" CTA
-// with a personalized "You're in — play coming soon" pill so users get
-// some feedback that the round-trip worked.
+// with a personalized "You're in — play coming soon" pill.
 function useIsSignedIn(): {
   isSignedIn: boolean;
   signOut: () => void;
@@ -89,39 +91,224 @@ export function LandingPage() {
   }
 
   return (
-    <div className="relative min-h-screen w-full overflow-x-hidden bg-[#06030f] text-white">
-      {/* Decorative background glow — fixed, behind everything. Two soft
-          radial blooms (cyan + magenta) match the logo's neon palette and
-          give the page that "arcade prize box" feel without needing any
-          JS animation cost. */}
-      <div
-        aria-hidden
-        className="pointer-events-none fixed inset-0 -z-10"
-        style={{
+    <div className="relative min-h-screen w-full overflow-x-hidden text-white">
+      {/* All page-scoped keyframes live here so the file stays self-contained
+          and we don't have to teach the global tailwind config new utilities
+          for what is essentially landing-page eye-candy. */}
+      <style>{`
+        @keyframes qp-bgpan {
+          0% { background-position: 0% 0%, 100% 0%, 50% 100%; }
+          50% { background-position: 30% 20%, 70% 30%, 50% 80%; }
+          100% { background-position: 0% 0%, 100% 0%, 50% 100%; }
+        }
+        @keyframes qp-grid {
+          0% { transform: perspective(900px) rotateX(60deg) translateY(0); }
+          100% { transform: perspective(900px) rotateX(60deg) translateY(120px); }
+        }
+        @keyframes qp-spin-slow {
+          to { transform: rotate(360deg); }
+        }
+        @keyframes qp-float {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-8px); }
+        }
+        @keyframes qp-pulse-glow {
+          0%, 100% {
+            box-shadow:
+              0 0 0 0 rgba(168,85,247,0.45),
+              0 16px 50px -10px rgba(168,85,247,0.7),
+              inset 0 0 0 1px rgba(255,255,255,0.18);
+          }
+          50% {
+            box-shadow:
+              0 0 0 18px rgba(168,85,247,0),
+              0 18px 60px -10px rgba(217,70,239,0.85),
+              inset 0 0 0 1px rgba(255,255,255,0.25);
+          }
+        }
+        @keyframes qp-shine {
+          0% { background-position: -200% 0; }
+          100% { background-position: 200% 0; }
+        }
+        @keyframes qp-ticker {
+          0% { transform: translateX(0); }
+          100% { transform: translateX(-50%); }
+        }
+        @keyframes qp-scan {
+          0% { transform: translateY(-100vh); }
+          100% { transform: translateY(100vh); }
+        }
+        @keyframes qp-twinkle {
+          0%, 100% { opacity: 0.15; }
+          50% { opacity: 1; }
+        }
+        @keyframes qp-borderspin {
+          to { transform: rotate(360deg); }
+        }
+        .qp-bg {
           background:
-            "radial-gradient(900px 600px at 15% -10%, rgba(34,211,238,0.18), transparent 60%), radial-gradient(900px 600px at 100% 0%, rgba(168,85,247,0.20), transparent 60%), radial-gradient(700px 500px at 50% 100%, rgba(217,70,239,0.12), transparent 60%)",
-        }}
-      />
-      {/* Subtle grid overlay for the cyber/arcade vibe */}
+            radial-gradient(900px 600px at 15% -10%, rgba(34,211,238,0.28), transparent 60%),
+            radial-gradient(900px 600px at 100% 0%, rgba(168,85,247,0.32), transparent 60%),
+            radial-gradient(700px 500px at 50% 100%, rgba(217,70,239,0.22), transparent 60%),
+            linear-gradient(180deg, #0a0420 0%, #0c0428 35%, #0a0224 70%, #07021a 100%);
+          background-size: 200% 200%, 200% 200%, 200% 200%, 100% 100%;
+          animation: qp-bgpan 18s ease-in-out infinite;
+        }
+        .qp-grid-floor {
+          background-image:
+            linear-gradient(rgba(34,211,238,0.35) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(168,85,247,0.35) 1px, transparent 1px);
+          background-size: 60px 60px, 60px 60px;
+          animation: qp-grid 6s linear infinite;
+          mask-image: linear-gradient(to top, black 0%, black 30%, transparent 80%);
+        }
+        .qp-scanline {
+          background: linear-gradient(180deg,
+            transparent 0%,
+            rgba(34,211,238,0.08) 45%,
+            rgba(168,85,247,0.18) 50%,
+            rgba(34,211,238,0.08) 55%,
+            transparent 100%);
+          height: 240px;
+          animation: qp-scan 9s linear infinite;
+        }
+        .qp-headline-shine {
+          background-image: linear-gradient(
+            90deg,
+            #22d3ee 0%, #a855f7 25%, #d946ef 50%, #a855f7 75%, #22d3ee 100%);
+          background-size: 200% 100%;
+          background-clip: text;
+          -webkit-background-clip: text;
+          color: transparent;
+          animation: qp-shine 6s linear infinite;
+        }
+        .qp-cta {
+          background: linear-gradient(135deg, #22d3ee 0%, #a855f7 60%, #d946ef 100%);
+          color: #06030f;
+          animation: qp-pulse-glow 2.6s ease-in-out infinite;
+        }
+        .qp-logo-halo::before {
+          content: "";
+          position: absolute;
+          inset: -20%;
+          background: conic-gradient(from 0deg,
+            rgba(34,211,238,0.0),
+            rgba(34,211,238,0.5),
+            rgba(168,85,247,0.6),
+            rgba(217,70,239,0.5),
+            rgba(34,211,238,0.0));
+          filter: blur(40px);
+          opacity: 0.7;
+          animation: qp-spin-slow 14s linear infinite;
+          z-index: -1;
+        }
+        .qp-logo-float { animation: qp-float 4s ease-in-out infinite; }
+        .qp-ticker {
+          display: inline-flex;
+          gap: 2.5rem;
+          padding-right: 2.5rem;
+          animation: qp-ticker 28s linear infinite;
+          white-space: nowrap;
+        }
+        .qp-twinkle { animation: qp-twinkle 3s ease-in-out infinite; }
+        .qp-card-border {
+          position: relative;
+          background: rgba(255,255,255,0.03);
+          border-radius: 1rem;
+        }
+        .qp-card-border::before {
+          content: "";
+          position: absolute;
+          inset: 0;
+          border-radius: inherit;
+          padding: 1px;
+          background: linear-gradient(135deg,
+            rgba(34,211,238,0.45),
+            rgba(168,85,247,0.45),
+            rgba(217,70,239,0.45));
+          -webkit-mask:
+            linear-gradient(#000 0 0) content-box,
+            linear-gradient(#000 0 0);
+          -webkit-mask-composite: xor;
+          mask-composite: exclude;
+          pointer-events: none;
+          opacity: 0.7;
+        }
+      `}</style>
+
+      {/* ========== BACKGROUND LAYERS (fixed) ========== */}
+      <div aria-hidden className="qp-bg pointer-events-none fixed inset-0 -z-30" />
+
+      {/* Tron-style perspective grid floor — sits at the bottom and
+          recedes into the horizon. This is the single biggest "gaming"
+          tell on the page; without it the surface reads as a generic
+          dark dashboard. */}
       <div
         aria-hidden
-        className="pointer-events-none fixed inset-0 -z-10 opacity-[0.06]"
-        style={{
-          backgroundImage:
-            "linear-gradient(rgba(255,255,255,0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.5) 1px, transparent 1px)",
-          backgroundSize: "48px 48px",
-          maskImage:
-            "radial-gradient(ellipse at center, black 30%, transparent 75%)",
-        }}
+        className="pointer-events-none fixed inset-x-0 bottom-0 -z-20 h-[60vh] origin-bottom"
+      >
+        <div className="qp-grid-floor h-full w-full" />
+      </div>
+
+      {/* Slow scanline sweep */}
+      <div
+        aria-hidden
+        className="qp-scanline pointer-events-none fixed inset-x-0 top-0 -z-10"
       />
 
-      <header className="sticky top-0 z-30 border-b border-white/10 bg-[#06030f]/70 backdrop-blur-md">
+      {/* Twinkling stars */}
+      <div aria-hidden className="pointer-events-none fixed inset-0 -z-10">
+        {Array.from({ length: 32 }).map((_, i) => {
+          const left = (i * 53) % 100;
+          const top = (i * 31) % 100;
+          const size = (i % 3) + 1;
+          const delay = (i * 0.27) % 4;
+          const palette = ["#22d3ee", "#a855f7", "#d946ef", "#ffffff"];
+          const color = palette[i % palette.length];
+          return (
+            <span
+              key={i}
+              className="qp-twinkle absolute rounded-full"
+              style={{
+                left: `${left}%`,
+                top: `${top}%`,
+                width: size,
+                height: size,
+                background: color,
+                boxShadow: `0 0 ${size * 4}px ${color}`,
+                animationDelay: `${delay}s`,
+              }}
+            />
+          );
+        })}
+      </div>
+
+      {/* ========== LIVE TICKER (top edge) ========== */}
+      <div className="relative z-20 overflow-hidden border-b border-cyan-400/20 bg-black/40 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-cyan-200 backdrop-blur">
+        <div className="qp-ticker">
+          {Array.from({ length: 2 }).map((_, dup) => (
+            <div key={dup} className="flex items-center gap-10">
+              <span className="inline-flex items-center gap-2">
+                <span className="relative flex h-2 w-2">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
+                </span>
+                Live · prize pool growing
+              </span>
+              <span className="text-fuchsia-300">★ Top 10 · 90% payout</span>
+              <span className="text-violet-300">⚡ 5 questions · 1 timer</span>
+              <span className="text-cyan-300">🛡 KYC verified play</span>
+              <span className="text-fuchsia-300">★ Auto-credit winnings</span>
+              <span className="text-violet-300">⚡ Rounds every few mins</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ========== HEADER ========== */}
+      <header className="sticky top-0 z-30 border-b border-white/10 bg-[#08031a]/70 backdrop-blur-md">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 sm:px-6 sm:py-4">
-          <a
-            href="/"
-            className="flex items-center gap-2"
-            data-testid="logo-mark"
-          >
+          <a href="/" className="flex items-center gap-2" data-testid="logo-mark">
             <img
               src={logoUrl}
               alt="Qorix Play"
@@ -162,48 +349,33 @@ export function LandingPage() {
         </div>
       </header>
 
-      <main className="relative mx-auto max-w-6xl px-4 sm:px-6">
+      {/* ========== MAIN ========== */}
+      <main className="relative z-10 mx-auto max-w-6xl px-4 sm:px-6">
         {/* HERO */}
         <section className="pt-12 pb-16 text-center sm:pt-20 sm:pb-24">
-          {/* Hero logo with neon halo */}
-          <div className="relative mx-auto mb-8 flex w-full max-w-2xl items-center justify-center">
-            <div
-              aria-hidden
-              className="absolute inset-0 -z-10 blur-3xl"
-              style={{
-                background:
-                  "radial-gradient(closest-side, rgba(168,85,247,0.45), rgba(34,211,238,0.25), transparent 70%)",
-              }}
-            />
-            <img
-              src={logoUrl}
-              alt="Qorix Play"
-              className="h-28 w-auto sm:h-40 md:h-48"
-              draggable={false}
-            />
+          {/* Hero logo with conic-spinning halo */}
+          <div className="qp-logo-float relative mx-auto mb-8 flex w-full max-w-2xl items-center justify-center">
+            <div className="qp-logo-halo relative">
+              <img
+                src={logoUrl}
+                alt="Qorix Play"
+                className="relative z-10 h-32 w-auto drop-shadow-[0_0_40px_rgba(168,85,247,0.6)] sm:h-44 md:h-56"
+                draggable={false}
+              />
+            </div>
           </div>
 
-          <div className="mx-auto mb-5 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-cyan-200 backdrop-blur">
+          <div className="mx-auto mb-5 inline-flex items-center gap-2 rounded-full border border-cyan-400/30 bg-cyan-400/5 px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.22em] text-cyan-200 shadow-[0_0_20px_rgba(34,211,238,0.25)] backdrop-blur">
             <Sparkles className="h-3.5 w-3.5 text-fuchsia-400" />
             Play · Compete · Win
           </div>
 
           <h1
-            className="mx-auto max-w-3xl text-4xl font-bold leading-[1.05] tracking-tight sm:text-6xl"
+            className="mx-auto max-w-3xl text-4xl font-black leading-[1.05] tracking-tight sm:text-6xl md:text-7xl"
             data-testid="text-headline"
           >
-            Play smart.{" "}
-            <span
-              style={{
-                backgroundImage:
-                  "linear-gradient(90deg, #22d3ee 0%, #a855f7 55%, #d946ef 100%)",
-                WebkitBackgroundClip: "text",
-                backgroundClip: "text",
-                color: "transparent",
-              }}
-            >
-              Win real cash.
-            </span>
+            <span className="block">Play smart.</span>
+            <span className="qp-headline-shine block">Win real cash.</span>
           </h1>
 
           <p
@@ -219,14 +391,7 @@ export function LandingPage() {
             {isSignedIn ? (
               <button
                 disabled
-                className="group relative inline-flex items-center gap-2 rounded-xl px-6 py-3 text-sm font-bold opacity-90"
-                style={{
-                  background:
-                    "linear-gradient(135deg, #22d3ee 0%, #a855f7 60%, #d946ef 100%)",
-                  color: "#06030f",
-                  boxShadow:
-                    "0 12px 40px -10px rgba(168,85,247,0.7), 0 0 0 1px rgba(255,255,255,0.15) inset",
-                }}
+                className="qp-cta group relative inline-flex items-center gap-2 rounded-xl px-7 py-3.5 text-sm font-bold opacity-95"
                 data-testid="button-play"
                 title="Quiz play opens shortly"
               >
@@ -238,14 +403,7 @@ export function LandingPage() {
                 <button
                   onClick={handleSignUp}
                   disabled={signInPending}
-                  className="group relative inline-flex items-center gap-2 rounded-xl px-6 py-3 text-sm font-bold transition-transform hover:scale-[1.02] active:scale-[0.98] disabled:cursor-wait disabled:opacity-70"
-                  style={{
-                    background:
-                      "linear-gradient(135deg, #22d3ee 0%, #a855f7 60%, #d946ef 100%)",
-                    color: "#06030f",
-                    boxShadow:
-                      "0 16px 50px -10px rgba(168,85,247,0.7), 0 0 0 1px rgba(255,255,255,0.18) inset",
-                  }}
+                  className="qp-cta group relative inline-flex items-center gap-2 rounded-xl px-7 py-3.5 text-sm font-bold transition-transform hover:scale-[1.03] active:scale-[0.98] disabled:cursor-wait disabled:opacity-70"
                   data-testid="button-sign-up"
                 >
                   <UserPlus className="h-4 w-4" />
@@ -255,7 +413,7 @@ export function LandingPage() {
                 <button
                   onClick={handleSignIn}
                   disabled={signInPending}
-                  className="inline-flex items-center gap-2 rounded-xl border border-white/15 bg-white/5 px-6 py-3 text-sm font-semibold text-white/90 backdrop-blur transition hover:border-cyan-400/40 hover:bg-white/10 hover:text-white disabled:cursor-wait disabled:opacity-70"
+                  className="inline-flex items-center gap-2 rounded-xl border border-white/15 bg-white/5 px-7 py-3.5 text-sm font-semibold text-white/90 backdrop-blur transition hover:border-cyan-400/50 hover:bg-white/10 hover:text-white hover:shadow-[0_0_30px_rgba(34,211,238,0.25)] disabled:cursor-wait disabled:opacity-70"
                   data-testid="button-sign-in"
                 >
                   <LogIn className="h-4 w-4" />
@@ -274,13 +432,26 @@ export function LandingPage() {
             </p>
           )}
 
-          {/* Quick stat strip — high-trust social-proof bar right under
-              the CTA. Inline numbers convert better than feature words
-              alone for skill-gaming traffic. */}
-          <div className="mx-auto mt-10 grid max-w-2xl grid-cols-3 divide-x divide-white/10 overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] text-center backdrop-blur">
-            <Stat label="Questions / round" value="5" accent="cyan" />
-            <Stat label="Winners / round" value="Top 10" accent="violet" />
-            <Stat label="Prize pool payout" value="90%" accent="fuchsia" />
+          {/* Quick stat strip */}
+          <div className="qp-card-border mx-auto mt-12 grid max-w-3xl grid-cols-3 divide-x divide-white/10 overflow-hidden text-center backdrop-blur">
+            <Stat
+              icon={<Zap className="h-4 w-4" />}
+              label="Questions / round"
+              value="5"
+              accent="cyan"
+            />
+            <Stat
+              icon={<Users className="h-4 w-4" />}
+              label="Winners / round"
+              value="Top 10"
+              accent="violet"
+            />
+            <Stat
+              icon={<Coins className="h-4 w-4" />}
+              label="Prize payout"
+              value="90%"
+              accent="fuchsia"
+            />
           </div>
         </section>
 
@@ -314,16 +485,14 @@ export function LandingPage() {
 
         {/* HOW IT WORKS */}
         <section className="pb-16">
-          <div className="mb-6 flex items-end justify-between">
-            <div>
-              <div className="mb-2 inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-fuchsia-300">
-                <span className="h-1.5 w-1.5 rounded-full bg-fuchsia-400" />
-                How it works
-              </div>
-              <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">
-                Three steps. Real money.
-              </h2>
+          <div className="mb-6 text-center">
+            <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-fuchsia-400/30 bg-fuchsia-500/5 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-fuchsia-300">
+              <Flame className="h-3 w-3" />
+              How it works
             </div>
+            <h2 className="text-3xl font-black tracking-tight sm:text-4xl">
+              Three steps. <span className="qp-headline-shine">Real money.</span>
+            </h2>
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <Step
@@ -341,7 +510,7 @@ export function LandingPage() {
             <Step
               n="03"
               title="Top 10 get paid"
-              body="Winnings are auto-credited to your wallet the moment the round ends. No claims, no waiting."
+              body="Winnings auto-credited to your wallet the moment the round ends. No claims, no waiting."
               accent="fuchsia"
             />
           </div>
@@ -350,23 +519,18 @@ export function LandingPage() {
         {/* BOTTOM CTA */}
         {!isSignedIn && (
           <section className="mb-12">
-            <div
-              className="relative overflow-hidden rounded-3xl border border-white/10 p-8 text-center sm:p-12"
-              style={{
-                background:
-                  "linear-gradient(135deg, rgba(34,211,238,0.12) 0%, rgba(168,85,247,0.18) 50%, rgba(217,70,239,0.14) 100%)",
-              }}
-            >
+            <div className="qp-card-border relative overflow-hidden p-8 text-center sm:p-12">
               <div
                 aria-hidden
                 className="absolute -top-32 left-1/2 -z-10 h-64 w-[120%] -translate-x-1/2 blur-3xl"
                 style={{
                   background:
-                    "radial-gradient(closest-side, rgba(168,85,247,0.4), transparent 70%)",
+                    "radial-gradient(closest-side, rgba(168,85,247,0.45), rgba(34,211,238,0.25), transparent 70%)",
                 }}
               />
-              <h3 className="text-2xl font-bold tracking-tight sm:text-3xl">
-                Ready to play your first round?
+              <h3 className="text-3xl font-black tracking-tight sm:text-4xl">
+                Ready to play your{" "}
+                <span className="qp-headline-shine">first round?</span>
               </h3>
               <p className="mx-auto mt-3 max-w-xl text-sm text-white/70 sm:text-base">
                 Free to join. Pay only when you enter a round. Withdraw anytime.
@@ -374,14 +538,7 @@ export function LandingPage() {
               <button
                 onClick={handleSignUp}
                 disabled={signInPending}
-                className="mt-6 inline-flex items-center gap-2 rounded-xl px-7 py-3 text-sm font-bold transition-transform hover:scale-[1.02] active:scale-[0.98] disabled:cursor-wait disabled:opacity-70"
-                style={{
-                  background:
-                    "linear-gradient(135deg, #22d3ee 0%, #a855f7 60%, #d946ef 100%)",
-                  color: "#06030f",
-                  boxShadow:
-                    "0 16px 50px -10px rgba(168,85,247,0.7), 0 0 0 1px rgba(255,255,255,0.18) inset",
-                }}
+                className="qp-cta mt-6 inline-flex items-center gap-2 rounded-xl px-8 py-3.5 text-sm font-bold transition-transform hover:scale-[1.03] active:scale-[0.98] disabled:cursor-wait disabled:opacity-70"
                 data-testid="button-cta-bottom-sign-up"
               >
                 <UserPlus className="h-4 w-4" />
@@ -403,10 +560,12 @@ export function LandingPage() {
 }
 
 function Stat({
+  icon,
   label,
   value,
   accent,
 }: {
+  icon: React.ReactNode;
   label: string;
   value: string;
   accent: "cyan" | "violet" | "fuchsia";
@@ -418,9 +577,12 @@ function Stat({
         ? "text-violet-300"
         : "text-fuchsia-300";
   return (
-    <div className="px-3 py-4">
-      <div className={`text-2xl font-bold ${color}`}>{value}</div>
-      <div className="mt-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/50">
+    <div className="px-3 py-5">
+      <div className={`mb-1 flex items-center justify-center gap-1.5 ${color}`}>
+        {icon}
+      </div>
+      <div className={`text-2xl font-black sm:text-3xl ${color}`}>{value}</div>
+      <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.16em] text-white/50">
         {label}
       </div>
     </div>
@@ -438,30 +600,20 @@ function FeatureCard({
   body: string;
   accent: "cyan" | "violet" | "fuchsia";
 }) {
-  const ring =
-    accent === "cyan"
-      ? "from-cyan-400/30 to-cyan-400/0"
-      : accent === "violet"
-        ? "from-violet-400/30 to-violet-400/0"
-        : "from-fuchsia-400/30 to-fuchsia-400/0";
   const iconBg =
     accent === "cyan"
-      ? "bg-cyan-400/10 text-cyan-300 border-cyan-400/30"
+      ? "bg-cyan-400/10 text-cyan-300 border-cyan-400/40 shadow-[0_0_20px_rgba(34,211,238,0.3)]"
       : accent === "violet"
-        ? "bg-violet-400/10 text-violet-300 border-violet-400/30"
-        : "bg-fuchsia-400/10 text-fuchsia-300 border-fuchsia-400/30";
+        ? "bg-violet-400/10 text-violet-300 border-violet-400/40 shadow-[0_0_20px_rgba(168,85,247,0.3)]"
+        : "bg-fuchsia-400/10 text-fuchsia-300 border-fuchsia-400/40 shadow-[0_0_20px_rgba(217,70,239,0.3)]";
   return (
-    <div className="group relative rounded-2xl border border-white/10 bg-white/[0.03] p-5 backdrop-blur transition hover:-translate-y-0.5 hover:border-white/20 hover:bg-white/[0.05]">
+    <div className="qp-card-border group relative p-5 backdrop-blur transition hover:-translate-y-1">
       <div
-        aria-hidden
-        className={`pointer-events-none absolute inset-x-0 -top-px mx-auto h-px w-2/3 bg-gradient-to-r ${ring}`}
-      />
-      <div
-        className={`mb-3 inline-flex h-10 w-10 items-center justify-center rounded-xl border ${iconBg}`}
+        className={`mb-3 inline-flex h-11 w-11 items-center justify-center rounded-xl border ${iconBg}`}
       >
         {icon}
       </div>
-      <div className="text-base font-semibold text-white">{title}</div>
+      <div className="text-base font-bold text-white">{title}</div>
       <div className="mt-1.5 text-sm leading-relaxed text-white/60">{body}</div>
     </div>
   );
@@ -484,15 +636,23 @@ function Step({
       : accent === "violet"
         ? "text-violet-300"
         : "text-fuchsia-300";
+  const ringColor =
+    accent === "cyan"
+      ? "shadow-[0_0_30px_rgba(34,211,238,0.4)]"
+      : accent === "violet"
+        ? "shadow-[0_0_30px_rgba(168,85,247,0.4)]"
+        : "shadow-[0_0_30px_rgba(217,70,239,0.4)]";
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-6 backdrop-blur">
+    <div
+      className={`qp-card-border relative p-6 backdrop-blur ${ringColor}`}
+    >
       <div
-        className={`text-3xl font-black tracking-tighter ${numColor}`}
+        className={`text-4xl font-black tracking-tighter ${numColor}`}
         style={{ fontVariantNumeric: "tabular-nums" }}
       >
         {n}
       </div>
-      <div className="mt-3 text-base font-semibold text-white">{title}</div>
+      <div className="mt-3 text-base font-bold text-white">{title}</div>
       <div className="mt-1.5 text-sm leading-relaxed text-white/60">{body}</div>
     </div>
   );
