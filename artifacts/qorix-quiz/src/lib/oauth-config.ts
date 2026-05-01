@@ -22,14 +22,28 @@ function trimTrailingSlash(s: string): string {
 
 const env = import.meta.env;
 
+// In DEV we *cannot* hard-code `http://localhost:5000` — when the SPA is
+// served through the Replit preview proxy the user's browser is on a
+// `*.replit.dev` origin and `localhost` resolves to the user's own
+// machine, not the dev container. We resolve to the current origin
+// instead (Markets is mounted at `/` by the same path-based proxy that
+// serves Quiz at `/qorix-quiz/`), which Just Works in both local-pnpm
+// and Replit-preview setups.
+function devDefault(fallback: string): string {
+  if (typeof window !== "undefined" && window.location.origin) {
+    return window.location.origin;
+  }
+  return fallback;
+}
+
 export const MARKETS_URL: string = trimTrailingSlash(
   (env.VITE_MARKETS_URL as string | undefined) ??
-    (env.DEV ? "http://localhost:5000" : "https://qorixmarkets.com"),
+    (env.DEV ? devDefault("http://localhost:5000") : "https://qorixmarkets.com"),
 );
 
 export const API_URL: string = trimTrailingSlash(
   (env.VITE_API_URL as string | undefined) ??
-    (env.DEV ? "http://localhost:8080" : "https://qorix-api.fly.dev"),
+    (env.DEV ? devDefault("http://localhost:8080") : "https://qorix-api.fly.dev"),
 );
 
 // The OAuth client_id this SPA identifies itself as to the Markets
