@@ -15,7 +15,6 @@ on:
           - both
           - api
           - web
-          - quiz
 
 concurrency:
   group: fly-deploy-${{ github.ref }}
@@ -48,7 +47,6 @@ jobs:
     outputs:
       api: ${{ steps.filter.outputs.api }}
       web: ${{ steps.filter.outputs.web }}
-      quiz: ${{ steps.filter.outputs.quiz }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -75,16 +73,6 @@ jobs:
               - 'tsconfig.json'
               - '.dockerignore'
               - '.github/workflows/deploy.yml'
-            quiz:
-              - 'artifacts/qorix-quiz/**'
-              - 'lib/**'
-              - 'pnpm-workspace.yaml'
-              - 'pnpm-lock.yaml'
-              - 'package.json'
-              - 'tsconfig.base.json'
-              - 'tsconfig.json'
-              - '.dockerignore'
-              - '.github/workflows/deploy.yml'
 
   # Fail fast if any required secret is missing, BEFORE we spend 3-5 minutes
   # building Docker images only to have flyctl reject auth at the very end.
@@ -97,7 +85,7 @@ jobs:
     needs: changes
     if: |
       (github.event_name == 'workflow_dispatch') ||
-      (github.event_name == 'push' && (needs.changes.outputs.api == 'true' || needs.changes.outputs.web == 'true' || needs.changes.outputs.quiz == 'true'))
+      (github.event_name == 'push' && (needs.changes.outputs.api == 'true' || needs.changes.outputs.web == 'true'))
     runs-on: ubuntu-latest
     steps:
       - name: Check required GitHub secrets
@@ -147,7 +135,7 @@ jobs:
     needs: [changes, preflight]
     if: |
       (github.event_name == 'workflow_dispatch') ||
-      (github.event_name == 'push' && (needs.changes.outputs.api == 'true' || needs.changes.outputs.web == 'true' || needs.changes.outputs.quiz == 'true'))
+      (github.event_name == 'push' && (needs.changes.outputs.api == 'true' || needs.changes.outputs.web == 'true'))
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -2116,98 +2104,3 @@ jobs:
           JS
           node smoke.mjs
 
-  # ─── Qorix Play (qorix-quiz artifact → qorix-quiz.fly.dev → qorixplay.com)
-  #
-  # B32: first deploy is just the landing page — no SSO, no quiz play, no
-  # auth smoke. We deliberately keep this job minimal so the very first deploy
-  # has the smallest possible failure surface. As Qorixplay grows (B36 SSO,
-  # B38 quiz-play screens, B45 cutover), more smoke steps land here mirroring
-  # deploy-web's structure (CORS preflight, browser smoke, version-banner
-  # checks, automatic rollback). Until then: deploy + healthz + SPA shell is
-  # the right level of coverage.
-  deploy-quiz:
-    name: Deploy qorix-quiz → qorix-quiz
-    needs: [changes, typecheck]
-    if: |
-      (github.event_name == 'workflow_dispatch' && (inputs.target == 'all' || inputs.target == 'quiz')) ||
-      (github.event_name == 'push' && needs.changes.outputs.quiz == 'true')
-    runs-on: ubuntu-latest
-    concurrency:
-      group: fly-deploy-quiz
-      cancel-in-progress: false
-    steps:
-      - uses: actions/checkout@v4
-      - uses: superfly/flyctl-actions/setup-flyctl@master
-      - name: Deploy qorix-quiz web
-        env:
-          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
-        run: |
-          # VITE_API_URL = ${API_BASE}: the Vite bundle calls the same API
-          # host that qorix-markets does. Currently unused by the landing
-          # page; SSO + quiz-play screens (B36+) will start exercising it.
-          # Passing it explicitly keeps the bundle aligned with the repo
-          # variable so DNS cutover is a one-line variable flip, not a
-          # Dockerfile / fly.toml edit.
-          #
-          # --no-cache mirrors deploy-web for the same reason: Depot's
-          # remote-builder cache has been observed to reuse the prior
-          # build's COPY + RUN layers even when source changed, which
-          # would silently re-ship the previous bundle. The build is
-          # fast (~90s) and SPA correctness here is safety-critical.
-          flyctl deploy \
-            --remote-only \
-            --no-cache \
-            --config artifacts/qorix-quiz/fly.toml \
-            --dockerfile artifacts/qorix-quiz/Dockerfile \
-            --build-arg VITE_API_URL="${API_BASE}" \
-            --wait-timeout 600
-      # Static / network-level smoke check. Confirms nginx is serving the
-      # new build and the SPA shell is healthy. No auth check yet — the
-      # landing page is fully public until SSO lands in B36+.
-      - name: Smoke test qorix-quiz web
-        env:
-          QUIZ_BASE: ${{ vars.QUIZ_BASE || 'https://qorix-quiz.fly.dev' }}
-        run: |
-          set -euo pipefail
-          echo "→ GET ${QUIZ_BASE}/healthz"
-          body=$(curl -fsS --retry 5 --retry-delay 5 --retry-all-errors \
-            --max-time 10 "${QUIZ_BASE}/healthz")
-          echo "${body}"
-          test "${body}" = "ok"
-          echo
-
-          # ── 1. Fetch the SPA shell and pull out the main JS bundle URL ──
-          echo "→ GET ${QUIZ_BASE}/ (SPA shell)"
-          curl -fsS --retry 5 --retry-delay 5 --retry-all-errors \
-            --max-time 15 "${QUIZ_BASE}/" -o /tmp/quiz-index.html
-          grep -q '<div id="root">' /tmp/quiz-index.html \
-            || { echo "::error::/ did not return the SPA shell (no #root div)"; head -c 2000 /tmp/quiz-index.html; exit 1; }
-          BUNDLE_PATH=$(grep -oE '/assets/index-[A-Za-z0-9_-]+\.js' /tmp/quiz-index.html | head -n1 || true)
-          if [ -z "${BUNDLE_PATH}" ]; then
-            echo "::error::Could not find /assets/index-*.js bundle in SPA shell — Vite build output looks wrong."
-            head -c 2000 /tmp/quiz-index.html
-            exit 1
-          fi
-          echo "✓ SPA shell served, main bundle = ${BUNDLE_PATH}"
-          echo
-
-          # ── 2. SPA fallback works for client-side routes ──
-          # Landing page only has "/" today, but nginx try_files must still
-          # serve index.html for any unknown path so future wouter routes
-          # (e.g. /play, /leaderboard) don't 404 on hard-refresh.
-          for route in /play /leaderboard; do
-            echo "→ GET ${QUIZ_BASE}${route} (nginx SPA fallback → index.html)"
-            curl -fsS --retry 3 --retry-delay 3 --retry-all-errors \
-              --max-time 15 "${QUIZ_BASE}${route}" -o /tmp/quiz-route.html
-            grep -q '<div id="root">' /tmp/quiz-route.html \
-              || { echo "::error::${route} did not fall back to the SPA shell — nginx try_files broken?"; head -c 1500 /tmp/quiz-route.html; exit 1; }
-          done
-          echo "✓ SPA fallback healthy for /play and /leaderboard"
-
-          # ── 3. PWA manifest is reachable ──
-          echo "→ GET ${QUIZ_BASE}/manifest.json"
-          curl -fsS --retry 3 --retry-delay 3 --retry-all-errors \
-            --max-time 10 "${QUIZ_BASE}/manifest.json" -o /tmp/quiz-manifest.json
-          grep -q '"name"' /tmp/quiz-manifest.json \
-            || { echo "::error::manifest.json missing or malformed"; cat /tmp/quiz-manifest.json; exit 1; }
-          echo "✓ PWA manifest served"
