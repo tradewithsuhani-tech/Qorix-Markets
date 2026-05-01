@@ -21,6 +21,8 @@ import LoginPage from "@/pages/login";
 import ForgotPasswordPage from "@/pages/forgot-password";
 import AdminLoginPage from "@/pages/admin-login";
 import OauthQuizAuthorizePage from "@/pages/oauth-quiz-authorize";
+import QuizzesPage from "@/pages/quizzes";
+import AdminQuizzesPage from "@/pages/admin-quizzes";
 import Dashboard from "@/pages/dashboard";
 import WalletPage from "@/pages/wallet";
 import DepositPage from "@/pages/deposit";
@@ -237,6 +239,11 @@ function Router() {
       <Route path="/admin/communication"><ProtectedRoute component={AdminCommunicationPage} adminOnly={true} /></Route>
       <Route path="/admin/content"><ProtectedRoute component={AdminContentPage} adminOnly={true} /></Route>
       <Route path="/admin/test"><ProtectedRoute component={AdminTestPage} adminOnly={true} /></Route>
+      {/* Qorix Play (quizzes) — user-facing lobby + admin CRUD/monitor.
+          Admin page covers create/edit, AI question generation, live SSE
+          leaderboard, results, and mark-winner-paid actions. */}
+      <Route path="/quizzes"><ProtectedRoute component={QuizzesPage} /></Route>
+      <Route path="/admin/quizzes"><ProtectedRoute component={AdminQuizzesPage} adminOnly={true} /></Route>
       <Route path="/admin/hidden-features"><ProtectedRoute component={AdminHiddenFeaturesPage} adminOnly={true} /></Route>
       <Route path="/settings"><ProtectedRoute component={SettingsPage} /></Route>
       <Route path="/devices"><ProtectedRoute component={DevicesPage} /></Route>
