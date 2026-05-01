@@ -123,22 +123,28 @@ async function main() {
   process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
   process.on("SIGINT", () => gracefulShutdown("SIGINT"));
 
-  // Defense-in-depth: log unhandled promise rejections instead of crashing the
-  // worker. Node v15+ defaults to terminating the process on unhandled
-  // rejection, which means a single timed-out Redis command (shared client
-  // has commandTimeout: 1500ms) from a fire-and-forget Lua script load or
-  // background helper takes the entire worker down — and once worker is
-  // dead, cron stops firing → INR escalations stall → user deposits get
-  // stuck. The shared Redis client already has a `client.on("error")`
-  // listener that logs failures; the catch-all here only covers Promise
-  // chains that bypassed it. Same treatment for uncaughtException so a
-  // bad chain doesn't leave the worker zombied either.
-  process.on("unhandledRejection", (reason) => {
-    errorLogger.error({ reason }, "Unhandled promise rejection — keeping process alive");
-  });
-  process.on("uncaughtException", (err) => {
-    errorLogger.error({ err }, "Uncaught exception — keeping process alive");
-  });
+  // Defense-in-depth, WORKER-ONLY: log unhandled promise rejections instead of
+  // crashing the worker. Node v15+ defaults to terminating the process on
+  // unhandled rejection, which means a single timed-out Redis command (shared
+  // client has commandTimeout: 1500ms) from a fire-and-forget Lua script load
+  // or background helper takes the entire worker down — and once worker is
+  // dead, cron stops firing → INR escalations stall → user deposits get stuck.
+  //
+  // Critically narrowed to FLY_PROCESS_GROUP === "worker" only. The `app`
+  // process group keeps standard fail-fast semantics so a programmer bug or
+  // corrupted state on a web replica still terminates the process and lets
+  // Fly route traffic to a healthy peer — masking exceptions there could
+  // hide a 500-class regression behind silent "request completed" logs.
+  // Outside Fly (Replit dev / local), FLY_PROCESS_GROUP is unset and we leave
+  // Node's default behaviour intact so dev surfaces real bugs loudly.
+  if (flyProcessGroup === "worker") {
+    process.on("unhandledRejection", (reason) => {
+      errorLogger.error({ reason }, "Unhandled promise rejection — keeping worker alive");
+    });
+    process.on("uncaughtException", (err) => {
+      errorLogger.error({ err }, "Uncaught exception — keeping worker alive");
+    });
+  }
 
   app.listen(port, (err?: Error) => {
     if (err) {
