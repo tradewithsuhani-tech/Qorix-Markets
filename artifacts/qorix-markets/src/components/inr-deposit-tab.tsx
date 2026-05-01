@@ -307,44 +307,80 @@ export function InrDepositTab() {
     }
   }, [step, selectedId, methods, capacityLoading, capacityFetching, toast]);
 
-  // Scroll to the top of the page whenever the wizard advances to a new step.
-  // Without this the browser keeps the previous scroll position, so after the
-  // user has scrolled down through the long "amount" form, the next step
-  // ("transfer" / "success") renders deep below the fold and the user lands
-  // on the middle of the new screen — for the "transfer" step that means
-  // they see the Payer's Name / UTR / Upload section instead of the receiving
-  // account details at the top, which is the whole point of that screen.
+  // Scroll to the top of the wizard whenever the user advances to a new step.
   //
-  // <AnimatePresence mode="wait"> below plays the previous step's 200 ms
-  // exit animation BEFORE the new step mounts, so the very first scrollTo
-  // here happens while the OLD (taller) step is still in the DOM. On mobile
-  // Chrome a single smooth-scroll started in that moment is reliably eaten
-  // by the document-height shift that happens when the old step finally
-  // unmounts and the new step mounts in its place — leaving the page parked
-  // somewhere in the middle of the new step. Fix: use instant scrolls
-  // (behavior:"auto" — smooth is unreliable on mobile during layout shifts)
-  // fired three times — synchronously, on the next paint frame, and again
-  // after framer's 200 ms exit animation has definitely completed — so
-  // whichever frame the new step actually mounts in, the next retry pins
-  // the scroll position to the top.
+  // ROOT CAUSE OF THE 3-TIMES-REPORTED BUG: in PWA standalone mode (Add to
+  // Home Screen), index.css applies `html, body, #root { overflow: hidden }`
+  // so the document itself is non-scrollable. The actual scroller is an
+  // inner Layout div (`flex-1 overflow-y-auto scroll-smooth-ios`). Calling
+  // `window.scrollTo(0, 0)` is therefore a complete no-op for any user who
+  // installed Qorix as a PWA — which is exactly the surface the user keeps
+  // landing on. The previous fix (sync + RAF + 260 ms timeout window.scrollTo)
+  // looked correct but couldn't possibly work in standalone mode.
+  //
+  // FIX: walk up from this component's wrapper div to find the closest
+  // ancestor whose computed overflow-y is auto/scroll AND that actually
+  // scrolls (scrollHeight > clientHeight), then reset its scrollTop. Belt-
+  // and-suspenders: also reset window/documentElement/body scroll for
+  // browser-tab (non-standalone) mode, and call scrollIntoView on the
+  // wrapper itself. Run the whole thing in a requestAnimationFrame loop
+  // for ~600 ms so any layout shift caused by AnimatePresence's 200 ms exit
+  // animation + step-height swap can't leave the scroll parked midway —
+  // every subsequent frame yanks it back to top until things settle.
+  const containerRef = useRef<HTMLDivElement>(null);
   const prevStepRef = useRef<Step>(step);
   useEffect(() => {
     if (prevStepRef.current === step) return;
     prevStepRef.current = step;
     if (typeof window === "undefined") return;
+
+    function findScrollableAncestor(el: HTMLElement | null): HTMLElement | null {
+      let node: HTMLElement | null = el?.parentElement ?? null;
+      while (node && node !== document.body) {
+        const cs = window.getComputedStyle(node);
+        const oy = cs.overflowY;
+        if (
+          (oy === "auto" || oy === "scroll" || oy === "overlay") &&
+          node.scrollHeight > node.clientHeight
+        ) {
+          return node;
+        }
+        node = node.parentElement;
+      }
+      return null;
+    }
+
     const doScroll = () => {
+      // 1. Inner scroll container (PWA standalone — the real scroller).
+      const inner = findScrollableAncestor(containerRef.current);
+      if (inner) inner.scrollTop = 0;
+      // 2. Window / document scroll (browser-tab mode).
       window.scrollTo({ top: 0, left: 0, behavior: "auto" });
-      // Belt-and-suspenders for older mobile browsers where window.scrollTo
-      // is occasionally a no-op when called during a layout shift.
       if (document.documentElement) document.documentElement.scrollTop = 0;
       if (document.body) document.body.scrollTop = 0;
+      // 3. Last-resort: anchor the wrapper itself at the top of its scroller.
+      if (containerRef.current) {
+        containerRef.current.scrollIntoView({ block: "start", behavior: "auto" });
+      }
+    };
+
+    let cancelled = false;
+    let raf = 0;
+    const startedAt = performance.now();
+    const MAX_DURATION_MS = 600; // covers AnimatePresence exit (200) + buffer
+    const tick = () => {
+      if (cancelled) return;
+      doScroll();
+      if (performance.now() - startedAt < MAX_DURATION_MS) {
+        raf = window.requestAnimationFrame(tick);
+      }
     };
     doScroll();
-    const raf = window.requestAnimationFrame(doScroll);
-    const timer = window.setTimeout(doScroll, 260);
+    raf = window.requestAnimationFrame(tick);
+
     return () => {
-      window.cancelAnimationFrame(raf);
-      window.clearTimeout(timer);
+      cancelled = true;
+      if (raf) window.cancelAnimationFrame(raf);
     };
   }, [step]);
 
@@ -487,7 +523,7 @@ export function InrDepositTab() {
 
   // —— Step renderers ——
   return (
-    <div className="space-y-5">
+    <div ref={containerRef} className="space-y-5">
       <AnimatePresence mode="wait">
         {step === "start" && (
           <motion.div
