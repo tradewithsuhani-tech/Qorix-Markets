@@ -4616,3 +4616,26 @@ GET `https://qorix-quiz.fly.dev/` → bundled JS contains `button-sign-in`,
 - Old Qorixplay (no `mode` param) + new Markets → `isSignupHint = false`, unchanged.
 - New Qorixplay (with `mode=signup`) + old Markets → param ignored, falls back to `/login`. User sees the existing one-extra-tab-click behaviour, no broken flow.
 
+
+---
+
+## B36 follow-up — daily refresh-token cleanup sweep (2026-05-01)
+
+**Goal**: keep the new `quiz_oauth_refresh_tokens` table from growing unbounded over months.
+
+**File**: `artifacts/api-server/src/lib/cron.ts` (joins the existing `node-cron` registry alongside daily profit, monthly sweep, hourly promo expiry, and INR escalation).
+
+**Behaviour**:
+- `cleanupExpiredQuizRefreshTokens()` — `DELETE FROM quiz_oauth_refresh_tokens WHERE expires_at < now() - interval '7 days'`. Returns the count of pruned rows. Idempotent — once the table is clean, subsequent runs are no-ops.
+- Scheduled via `cron.schedule("0 3 * * *", ...)` — daily at 03:00 UTC, off-peak so it doesn't compete with the 00:00 UTC daily-profit distribution job.
+- Also fires once at startup (same pattern as the promo-expiry sweep) so a server that's been down for a while catches up immediately instead of waiting for the next 03:00 UTC tick.
+- Logged only when rows were actually pruned (`{ removed, retentionDays }`) to keep daily logs quiet on small installs. Errors logged via `errorLogger.error` — failure does NOT block boot or affect the rest of the cron registry.
+
+**Why 7-day retention rather than delete-on-expiry**:
+- Forensic window: "did this user's session die at 02:14 last night?" stays answerable for a week.
+- The schema's partial active-rows index (`idx_quiz_oauth_refresh_tokens_active`) only has to skip true ancients, not freshly-expired-but-investigable rows.
+
+**Single-instance safety**: gated upstream by `RUN_BACKGROUND_JOBS` (see `artifacts/api-server/src/index.ts` and `lib/background-jobs.ts`). Only the cron-owning Fly machine ever calls `initCronJobs()`, so even when the API scales horizontally the DELETE never double-fires.
+
+**Reversibility**: pure additive. Removing the schedule + function leaves the table growing again — no migration to undo.
+
