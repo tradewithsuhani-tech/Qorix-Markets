@@ -43,6 +43,7 @@ import { getRunnerState, ANSWER_GRACE_MS } from "../lib/quiz-runner";
 import { forceStartQuiz } from "../lib/quiz-scheduler";
 import { subscribeToQuiz, type QuizSseEnvelope } from "../lib/quiz-event-bus";
 import { addScore, claimAnswerSlot, computeScore, getTopN, getUserRank, getUserScore, getParticipantCount } from "../lib/quiz-scoring";
+import { PLATFORM_RAKE_PCT, computeCompanyCut, computeDistributable } from "../lib/quiz-economics";
 import { generateQuizQuestions } from "../lib/quiz-ai";
 
 const router = Router();
@@ -455,6 +456,8 @@ adminRouter.get("/admin/quizzes/:id/results", async (_req: AuthRequest, res) => 
     .from(quizParticipantsTable)
     .where(eq(quizParticipantsTable.quizId, id));
 
+  // Admin-only revenue breakdown. Public endpoints never surface these.
+  const poolNum = parseFloat(String(quiz.prizePool)) || 0;
   res.json({
     quiz: serializeQuiz(quiz),
     participants: parseInt(participants, 10) || 0,
@@ -463,6 +466,13 @@ adminRouter.get("/admin/quizzes/:id/results", async (_req: AuthRequest, res) => 
       prizeAmount: String(w.prizeAmount),
       paidAt: w.paidAt?.toISOString() ?? null,
     })),
+    revenue: {
+      advertisedPool: poolNum.toFixed(2),
+      distributable: computeDistributable(poolNum).toFixed(2),
+      companyCut: computeCompanyCut(poolNum).toFixed(2),
+      rakePct: PLATFORM_RAKE_PCT,
+      currency: quiz.prizeCurrency,
+    },
   });
 });
 

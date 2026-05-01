@@ -33,6 +33,7 @@ import {
 } from "@workspace/db/schema";
 import { eq, asc, sql } from "drizzle-orm";
 import { logger } from "./logger";
+import { PAYOUT_PCT } from "./quiz-economics";
 import { publishQuizEvent } from "./quiz-event-bus";
 import {
   clearLeaderboard,
@@ -141,7 +142,13 @@ async function finalizeQuiz(quizId: number, prizePool: string, prizeCurrency: st
   const top = await getTopN(quizId, 3);
   const names = await namesFor(top.map((r) => r.userId));
 
+  // The advertised prize_pool is the *gross* pot. We retain PLATFORM_RAKE_PCT
+  // (currently 20%) as platform revenue and only distribute the remaining
+  // PAYOUT_PCT among winners, scaled by the per-rank split fractions.
+  // This is intentionally invisible to players — leaderboards & "you won X"
+  // toasts surface the post-rake amount which is the real credit they get.
   const pool = parseFloat(prizePool) || 0;
+  const distributable = pool * PAYOUT_PCT;
   const splitNorm = (prizeSplit ?? [0.5, 0.3, 0.2]).slice(0, 3);
   while (splitNorm.length < 3) splitNorm.push(0);
 
@@ -158,7 +165,7 @@ async function finalizeQuiz(quizId: number, prizePool: string, prizeCurrency: st
         userId: row.userId,
         rank: i + 1,
         finalScore: row.score,
-        prizeAmount: ((pool * (splitNorm[i] ?? 0)).toFixed(2)),
+        prizeAmount: ((distributable * (splitNorm[i] ?? 0)).toFixed(2)),
         prizeCurrency,
       }));
       await tx.insert(quizWinnersTable).values(values);
@@ -183,7 +190,7 @@ async function finalizeQuiz(quizId: number, prizePool: string, prizeCurrency: st
       displayName: names.get(row.userId) ?? "Anonymous",
       score: row.score,
       rank: i + 1,
-      prizeAmount: (pool * (splitNorm[i] ?? 0)).toFixed(2),
+      prizeAmount: (distributable * (splitNorm[i] ?? 0)).toFixed(2),
       prizeCurrency,
     })),
   });
