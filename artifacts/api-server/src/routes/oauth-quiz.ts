@@ -489,7 +489,21 @@ router.post(
       await issueAccessTokenFromCode(row, redirect_uri, res, req.ip);
     } catch (err) {
       logger.error({ err }, "[oauth-quiz] /token-public failed");
-      res.status(500).json({ error: "internal_error" });
+      // B35.diag: temporarily echo first 200 chars of error message + name +
+      // pg error code (if any) so we can diagnose the production-only
+      // internal_error without Fly log access. Drizzle/pg error messages
+      // contain SQL-shape info, not user secrets — safe to surface for the
+      // ~5 minute debug window. REMOVE in next commit once root cause is
+      // identified.
+      const e = err as { message?: string; name?: string; code?: string };
+      res.status(500).json({
+        error: "internal_error",
+        _diag: {
+          name: e?.name?.substring(0, 50),
+          message: e?.message?.substring(0, 200),
+          code: e?.code?.substring(0, 30),
+        },
+      });
     }
   },
 );
