@@ -119,7 +119,19 @@ export function LandingPage() {
               </div>
             </div>
           </div>
-          <div className="hidden sm:flex items-center gap-2 text-xs text-muted-foreground">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            {/* Header-mounted Markets link — moved here from the CTA row so
+                the hero stays focused on the primary "Create account / Sign in"
+                conversion choice. Visible on every breakpoint, while the
+                signed-in / coming-soon badge remains sm+ only. */}
+            <a
+              href="https://qorixmarkets.com"
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-border/60 bg-card/60 hover-elevate"
+              data-testid="link-markets-header"
+            >
+              Visit Qorix Markets →
+            </a>
+            <div className="hidden sm:flex items-center gap-2">
             {isSignedIn ? (
               <>
                 <span
@@ -148,6 +160,7 @@ export function LandingPage() {
                 Quiz play coming soon
               </span>
             )}
+            </div>
           </div>
         </div>
       </header>
@@ -235,13 +248,6 @@ export function LandingPage() {
                 </button>
               </>
             )}
-            <a
-              href="https://qorixmarkets.com"
-              className="inline-flex items-center gap-2 rounded-lg border border-border/60 bg-card/60 px-5 py-2.5 text-sm hover-elevate"
-              data-testid="link-markets"
-            >
-              Visit Qorix Markets →
-            </a>
           </div>
           {signInError && (
             <p
