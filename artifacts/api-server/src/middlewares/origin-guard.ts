@@ -53,16 +53,11 @@ const PATH_EXEMPTIONS = new Set([
   "/version",
   "/version.json",
   "/csrf",
-  // Qorixplay SSO token endpoint (B34) — server-to-server call from
-  // qorixplay backend. No browser involved → no Origin header. Auth is
-  // enforced inside the handler via constant-time client_secret check.
-  "/oauth/quiz/token",
   // Absolute (matches req.path if remounted at root):
   "/api/healthz",
   "/api/version",
   "/api/version.json",
   "/api/csrf",
-  "/api/oauth/quiz/token",
 ]);
 
 function parseAllowedOrigins(): readonly string[] | null {

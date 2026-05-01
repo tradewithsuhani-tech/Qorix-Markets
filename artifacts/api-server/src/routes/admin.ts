@@ -682,7 +682,6 @@ router.get("/admin/settings", async (_req: AuthRequest, res) => {
     promoMaxPct: Number(settings["promo_max_pct"] ?? "10") || 10,
     promoStepPct: Number(settings["promo_step_pct"] ?? "0.5") || 0.5,
     promoCodePrefix: settings["promo_code_prefix"] ?? "QRX",
-    quizAutoCreditEnabled: settings["quiz_auto_credit_enabled"] !== "false",
   });
 });
 
@@ -759,7 +758,6 @@ router.post("/admin/settings", async (req: AuthRequest, res) => {
     promoMaxPct: "promo_max_pct",
     promoStepPct: "promo_step_pct",
     promoCodePrefix: "promo_code_prefix",
-    quizAutoCreditEnabled: "quiz_auto_credit_enabled",
   };
 
   // Promo settings: validate ranges + cross-field constraints (min < max)

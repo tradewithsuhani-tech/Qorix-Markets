@@ -29,7 +29,6 @@ import tasksRouter from "./tasks";
 import adminTasksRouter from "./admin-tasks";
 import signalTradesRouter from "./signal-trades";
 import googleOauthRouter from "./google-oauth";
-import oauthQuizRouter from "./oauth-quiz";
 import kycRouter from "./kyc";
 import promoRouter from "./promo";
 import telegramRouter from "./telegram";
@@ -41,12 +40,6 @@ import phoneChangeRouter from "./phone-change";
 import merchantRouter from "./merchant";
 import adminMerchantsRouter from "./admin-merchants";
 import adminEscalationRouter from "./admin-escalation";
-// Quiz router (B36): handles /api/quiz/* — admin CRUD on quizzes plus
-// player-facing /quiz/me/dashboard, /quiz/:id, /quiz/:id/join, /answer,
-// /me/past, /:id/me, and SSE /:id/stream. All sub-routes are per-route
-// auth-gated (authMiddleware for Markets-only routes, authQuizCaller
-// for cross-audience routes that accept Qorixplay OAuth tokens).
-import quizRouter from "./quiz";
 
 const router: IRouter = Router();
 
@@ -68,12 +61,6 @@ router.use(captchaRouter);
 // router.use(cryptoDepositRouter); // DISABLED — see import comment above
 router.use(authRouter);
 router.use(googleOauthRouter); // public OAuth — must be before auth-gated routers
-// Qorixplay SSO OAuth (B34): /api/oauth/quiz/authorize uses per-route
-// authMiddleware (Markets user JWT required), /api/oauth/quiz/token is
-// gated by client_secret only (server-to-server, no Origin header — also
-// added to origin-guard PATH_EXEMPTIONS). Must be mounted BEFORE any
-// router-level naked authMiddleware so /token isn't 401'd upstream.
-router.use(oauthQuizRouter);
 router.use(kycRouter); // per-route authMiddleware — must be before router-level auth gates
 // Merchant panel — own JWT (separate from user/admin auth). The login route
 // (POST /merchant/auth/login) is the ONLY public merchant endpoint; every
@@ -115,6 +102,5 @@ router.use(phoneChangeRouter);
 router.use(merchantRouter);
 router.use(adminMerchantsRouter);
 router.use(adminEscalationRouter);
-router.use(quizRouter);
 
 export default router;
