@@ -1,3 +1,4 @@
+// inr-deposit-tab — user-side INR deposit flow (merchant pick → transfer → submit)
 import { useState, useRef, useEffect, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
