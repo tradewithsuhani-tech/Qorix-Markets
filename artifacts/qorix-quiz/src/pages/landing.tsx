@@ -119,19 +119,7 @@ export function LandingPage() {
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            {/* Header-mounted Markets link — moved here from the CTA row so
-                the hero stays focused on the primary "Create account / Sign in"
-                conversion choice. Visible on every breakpoint, while the
-                signed-in / coming-soon badge remains sm+ only. */}
-            <a
-              href="https://qorixmarkets.com"
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-border/60 bg-card/60 hover-elevate"
-              data-testid="link-markets-header"
-            >
-              Visit Qorix Markets →
-            </a>
-            <div className="hidden sm:flex items-center gap-2">
+          <div className="hidden sm:flex items-center gap-2 text-xs text-muted-foreground">
             {isSignedIn ? (
               <>
                 <span
@@ -141,7 +129,7 @@ export function LandingPage() {
                   <span className="relative flex h-2 w-2">
                     <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                   </span>
-                  Signed in with Markets
+                  Signed in
                 </span>
                 <button
                   onClick={signOut}
@@ -160,7 +148,6 @@ export function LandingPage() {
                 Quiz play coming soon
               </span>
             )}
-            </div>
           </div>
         </div>
       </header>
@@ -193,8 +180,8 @@ export function LandingPage() {
             data-testid="text-subhead"
           >
             Five timed questions. One live leaderboard. The top 10 split 90% of
-            the prize pool — paid out automatically. Sign in once with your
-            Qorix Markets account, no separate signup needed.
+            the prize pool — paid out automatically. Create your free account
+            in seconds and start playing.
           </p>
           <div className="mt-8 flex items-center justify-center gap-3 flex-wrap">
             {isSignedIn ? (
@@ -286,25 +273,9 @@ export function LandingPage() {
           />
         </section>
 
-        <section className="mt-16 rounded-2xl border border-border/60 bg-card/40 p-6 sm:p-8">
-          <div className="flex items-center gap-2 text-xs uppercase tracking-widest text-muted-foreground mb-3">
-            <span className="w-1.5 h-1.5 rounded-full bg-accent"></span>
-            Single sign-on
-          </div>
-          <h2 className="text-xl sm:text-2xl font-semibold tracking-tight">
-            One Qorix account. Two products.
-          </h2>
-          <p className="mt-2 text-sm sm:text-base text-muted-foreground max-w-2xl">
-            Sign in with your existing Qorix Markets account — no separate
-            password, no separate KYC. Your USDT and INR wallets stay where
-            they are; entry fees and winnings move directly between Markets and
-            Play.
-          </p>
-        </section>
-
         <footer className="mt-16 pt-6 border-t border-border/40 text-center text-xs text-muted-foreground">
           <div data-testid="text-build">
-            B32 · qorix-quiz scaffold · {new Date().getFullYear()} Qorix Markets
+            Qorix Play · {new Date().getFullYear()}
           </div>
         </footer>
       </main>
