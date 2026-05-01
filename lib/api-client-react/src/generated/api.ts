@@ -17,7 +17,25 @@ import type {
 } from "@tanstack/react-query";
 
 import type {
+  AdminAddQuizQuestionsRequest,
+  AdminAddQuizQuestionsResponse,
+  AdminCreateQuizRequest,
+  AdminForceStartResponse,
+  AdminGenerateQuizAiRequest,
+  AdminGenerateQuizAiResponse,
+  AdminListQuizzesParams,
+  AdminMarkQuizWinnerPaidRequest,
+  AdminQuiz,
+  AdminQuizListResponse,
+  AdminQuizMonitorResponse,
+  AdminQuizQuestion,
+  AdminQuizQuestionListResponse,
+  AdminQuizQuestionPayload,
+  AdminQuizResultsResponse,
+  AdminQuizWinnerPaidResult,
+  AdminReorderQuizQuestionsRequest,
   AdminStats,
+  AdminUpdateQuizRequest,
   AdminUserList,
   AuthResponse,
   BlockchainDepositHistory,
@@ -36,6 +54,7 @@ import type {
   GetEquityChartParams,
   GetLedgerJournalParams,
   GetMonthlyPerformanceParams,
+  GetMyPastQuizzesParams,
   GetNotificationsParams,
   GetProfitHistoryParams,
   GetTradesParams,
@@ -48,10 +67,16 @@ import type {
   LoginBody,
   MarketIndicators,
   MonthlyPerformanceList,
+  MyPastQuizListResponse,
   NotificationItem,
   NotificationList,
   PerformanceMetrics,
   ProtectionBody,
+  QuizAnswerSubmitRequest,
+  QuizAnswerSubmitResponse,
+  QuizDetailResponse,
+  QuizListResponse,
+  QuizMyStandingResponse,
   ReconciliationResult,
   Referral,
   ReferredUser,
@@ -3746,3 +3771,1765 @@ export function useGetBlockchainDepositHistory<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary List scheduled / live / recently-ended quizzes
+ */
+export const getListVisibleQuizzesUrl = () => {
+  return `/api/quiz`;
+};
+
+export const listVisibleQuizzes = async (
+  options?: RequestInit,
+): Promise<QuizListResponse> => {
+  return customFetch<QuizListResponse>(getListVisibleQuizzesUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListVisibleQuizzesQueryKey = () => {
+  return [`/api/quiz`] as const;
+};
+
+export const getListVisibleQuizzesQueryOptions = <
+  TData = Awaited<ReturnType<typeof listVisibleQuizzes>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: Partial<UseQueryOptions<
+    Awaited<ReturnType<typeof listVisibleQuizzes>>,
+    TError,
+    TData
+  >>;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListVisibleQuizzesQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listVisibleQuizzes>>
+  > = ({ signal }) => listVisibleQuizzes({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listVisibleQuizzes>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListVisibleQuizzesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listVisibleQuizzes>>
+>;
+export type ListVisibleQuizzesQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List scheduled / live / recently-ended quizzes
+ */
+
+export function useListVisibleQuizzes<
+  TData = Awaited<ReturnType<typeof listVisibleQuizzes>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: Partial<UseQueryOptions<
+    Awaited<ReturnType<typeof listVisibleQuizzes>>,
+    TError,
+    TData
+  >>;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListVisibleQuizzesQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Past quizzes the user joined
+ */
+export const getGetMyPastQuizzesUrl = (params?: GetMyPastQuizzesParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/quiz/me/past?${stringifiedParams}`
+    : `/api/quiz/me/past`;
+};
+
+export const getMyPastQuizzes = async (
+  params?: GetMyPastQuizzesParams,
+  options?: RequestInit,
+): Promise<MyPastQuizListResponse> => {
+  return customFetch<MyPastQuizListResponse>(getGetMyPastQuizzesUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetMyPastQuizzesQueryKey = (
+  params?: GetMyPastQuizzesParams,
+) => {
+  return [`/api/quiz/me/past`, ...(params ? [params] : [])] as const;
+};
+
+export const getGetMyPastQuizzesQueryOptions = <
+  TData = Awaited<ReturnType<typeof getMyPastQuizzes>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetMyPastQuizzesParams,
+  options?: {
+    query?: Partial<UseQueryOptions<
+      Awaited<ReturnType<typeof getMyPastQuizzes>>,
+      TError,
+      TData
+    >>;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetMyPastQuizzesQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getMyPastQuizzes>>
+  > = ({ signal }) => getMyPastQuizzes(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getMyPastQuizzes>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetMyPastQuizzesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getMyPastQuizzes>>
+>;
+export type GetMyPastQuizzesQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Past quizzes the user joined
+ */
+
+export function useGetMyPastQuizzes<
+  TData = Awaited<ReturnType<typeof getMyPastQuizzes>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: GetMyPastQuizzesParams,
+  options?: {
+    query?: Partial<UseQueryOptions<
+      Awaited<ReturnType<typeof getMyPastQuizzes>>,
+      TError,
+      TData
+    >>;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetMyPastQuizzesQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Quiz detail (no answers)
+ */
+export const getGetQuizDetailUrl = (id: number) => {
+  return `/api/quiz/${id}`;
+};
+
+export const getQuizDetail = async (
+  id: number,
+  options?: RequestInit,
+): Promise<QuizDetailResponse> => {
+  return customFetch<QuizDetailResponse>(getGetQuizDetailUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetQuizDetailQueryKey = (id: number) => {
+  return [`/api/quiz/${id}`] as const;
+};
+
+export const getGetQuizDetailQueryOptions = <
+  TData = Awaited<ReturnType<typeof getQuizDetail>>,
+  TError = ErrorType<unknown>,
+>(
+  id: number,
+  options?: {
+    query?: Partial<UseQueryOptions<
+      Awaited<ReturnType<typeof getQuizDetail>>,
+      TError,
+      TData
+    >>;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetQuizDetailQueryKey(id);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getQuizDetail>>> = ({
+    signal,
+  }) => getQuizDetail(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getQuizDetail>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetQuizDetailQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getQuizDetail>>
+>;
+export type GetQuizDetailQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Quiz detail (no answers)
+ */
+
+export function useGetQuizDetail<
+  TData = Awaited<ReturnType<typeof getQuizDetail>>,
+  TError = ErrorType<unknown>,
+>(
+  id: number,
+  options?: {
+    query?: Partial<UseQueryOptions<
+      Awaited<ReturnType<typeof getQuizDetail>>,
+      TError,
+      TData
+    >>;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetQuizDetailQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Join a quiz (KYC required)
+ */
+export const getJoinQuizUrl = (id: number) => {
+  return `/api/quiz/${id}/join`;
+};
+
+export const joinQuiz = async (
+  id: number,
+  options?: RequestInit,
+): Promise<SuccessResponse> => {
+  return customFetch<SuccessResponse>(getJoinQuizUrl(id), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getJoinQuizMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof joinQuiz>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof joinQuiz>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["joinQuiz"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof joinQuiz>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return joinQuiz(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type JoinQuizMutationResult = NonNullable<
+  Awaited<ReturnType<typeof joinQuiz>>
+>;
+
+export type JoinQuizMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Join a quiz (KYC required)
+ */
+export const useJoinQuiz = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof joinQuiz>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof joinQuiz>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getJoinQuizMutationOptions(options));
+};
+
+/**
+ * @summary Submit an answer for the live question
+ */
+export const getSubmitQuizAnswerUrl = (id: number) => {
+  return `/api/quiz/${id}/answer`;
+};
+
+export const submitQuizAnswer = async (
+  id: number,
+  quizAnswerSubmitRequest: QuizAnswerSubmitRequest,
+  options?: RequestInit,
+): Promise<QuizAnswerSubmitResponse> => {
+  return customFetch<QuizAnswerSubmitResponse>(getSubmitQuizAnswerUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(quizAnswerSubmitRequest),
+  });
+};
+
+export const getSubmitQuizAnswerMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof submitQuizAnswer>>,
+    TError,
+    { id: number; data: BodyType<QuizAnswerSubmitRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof submitQuizAnswer>>,
+  TError,
+  { id: number; data: BodyType<QuizAnswerSubmitRequest> },
+  TContext
+> => {
+  const mutationKey = ["submitQuizAnswer"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof submitQuizAnswer>>,
+    { id: number; data: BodyType<QuizAnswerSubmitRequest> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return submitQuizAnswer(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SubmitQuizAnswerMutationResult = NonNullable<
+  Awaited<ReturnType<typeof submitQuizAnswer>>
+>;
+export type SubmitQuizAnswerMutationBody = BodyType<QuizAnswerSubmitRequest>;
+export type SubmitQuizAnswerMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Submit an answer for the live question
+ */
+export const useSubmitQuizAnswer = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof submitQuizAnswer>>,
+    TError,
+    { id: number; data: BodyType<QuizAnswerSubmitRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof submitQuizAnswer>>,
+  TError,
+  { id: number; data: BodyType<QuizAnswerSubmitRequest> },
+  TContext
+> => {
+  return useMutation(getSubmitQuizAnswerMutationOptions(options));
+};
+
+/**
+ * @summary Current rank/score on the live quiz
+ */
+export const getGetMyQuizStandingUrl = (id: number) => {
+  return `/api/quiz/${id}/me`;
+};
+
+export const getMyQuizStanding = async (
+  id: number,
+  options?: RequestInit,
+): Promise<QuizMyStandingResponse> => {
+  return customFetch<QuizMyStandingResponse>(getGetMyQuizStandingUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetMyQuizStandingQueryKey = (id: number) => {
+  return [`/api/quiz/${id}/me`] as const;
+};
+
+export const getGetMyQuizStandingQueryOptions = <
+  TData = Awaited<ReturnType<typeof getMyQuizStanding>>,
+  TError = ErrorType<unknown>,
+>(
+  id: number,
+  options?: {
+    query?: Partial<UseQueryOptions<
+      Awaited<ReturnType<typeof getMyQuizStanding>>,
+      TError,
+      TData
+    >>;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetMyQuizStandingQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getMyQuizStanding>>
+  > = ({ signal }) => getMyQuizStanding(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getMyQuizStanding>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetMyQuizStandingQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getMyQuizStanding>>
+>;
+export type GetMyQuizStandingQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Current rank/score on the live quiz
+ */
+
+export function useGetMyQuizStanding<
+  TData = Awaited<ReturnType<typeof getMyQuizStanding>>,
+  TError = ErrorType<unknown>,
+>(
+  id: number,
+  options?: {
+    query?: Partial<UseQueryOptions<
+      Awaited<ReturnType<typeof getMyQuizStanding>>,
+      TError,
+      TData
+    >>;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetMyQuizStandingQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary List quizzes (admin)
+ */
+export const getAdminListQuizzesUrl = (params?: AdminListQuizzesParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/admin/quizzes?${stringifiedParams}`
+    : `/api/admin/quizzes`;
+};
+
+export const adminListQuizzes = async (
+  params?: AdminListQuizzesParams,
+  options?: RequestInit,
+): Promise<AdminQuizListResponse> => {
+  return customFetch<AdminQuizListResponse>(getAdminListQuizzesUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getAdminListQuizzesQueryKey = (
+  params?: AdminListQuizzesParams,
+) => {
+  return [`/api/admin/quizzes`, ...(params ? [params] : [])] as const;
+};
+
+export const getAdminListQuizzesQueryOptions = <
+  TData = Awaited<ReturnType<typeof adminListQuizzes>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: AdminListQuizzesParams,
+  options?: {
+    query?: Partial<UseQueryOptions<
+      Awaited<ReturnType<typeof adminListQuizzes>>,
+      TError,
+      TData
+    >>;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getAdminListQuizzesQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof adminListQuizzes>>
+  > = ({ signal }) => adminListQuizzes(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof adminListQuizzes>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type AdminListQuizzesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof adminListQuizzes>>
+>;
+export type AdminListQuizzesQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List quizzes (admin)
+ */
+
+export function useAdminListQuizzes<
+  TData = Awaited<ReturnType<typeof adminListQuizzes>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: AdminListQuizzesParams,
+  options?: {
+    query?: Partial<UseQueryOptions<
+      Awaited<ReturnType<typeof adminListQuizzes>>,
+      TError,
+      TData
+    >>;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getAdminListQuizzesQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Schedule a new quiz
+ */
+export const getAdminCreateQuizUrl = () => {
+  return `/api/admin/quizzes`;
+};
+
+export const adminCreateQuiz = async (
+  adminCreateQuizRequest: AdminCreateQuizRequest,
+  options?: RequestInit,
+): Promise<AdminQuiz> => {
+  return customFetch<AdminQuiz>(getAdminCreateQuizUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(adminCreateQuizRequest),
+  });
+};
+
+export const getAdminCreateQuizMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof adminCreateQuiz>>,
+    TError,
+    { data: BodyType<AdminCreateQuizRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof adminCreateQuiz>>,
+  TError,
+  { data: BodyType<AdminCreateQuizRequest> },
+  TContext
+> => {
+  const mutationKey = ["adminCreateQuiz"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof adminCreateQuiz>>,
+    { data: BodyType<AdminCreateQuizRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return adminCreateQuiz(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type AdminCreateQuizMutationResult = NonNullable<
+  Awaited<ReturnType<typeof adminCreateQuiz>>
+>;
+export type AdminCreateQuizMutationBody = BodyType<AdminCreateQuizRequest>;
+export type AdminCreateQuizMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Schedule a new quiz
+ */
+export const useAdminCreateQuiz = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof adminCreateQuiz>>,
+    TError,
+    { data: BodyType<AdminCreateQuizRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof adminCreateQuiz>>,
+  TError,
+  { data: BodyType<AdminCreateQuizRequest> },
+  TContext
+> => {
+  return useMutation(getAdminCreateQuizMutationOptions(options));
+};
+
+/**
+ * @summary Update a scheduled quiz
+ */
+export const getAdminUpdateQuizUrl = (id: number) => {
+  return `/api/admin/quizzes/${id}`;
+};
+
+export const adminUpdateQuiz = async (
+  id: number,
+  adminUpdateQuizRequest: AdminUpdateQuizRequest,
+  options?: RequestInit,
+): Promise<AdminQuiz> => {
+  return customFetch<AdminQuiz>(getAdminUpdateQuizUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(adminUpdateQuizRequest),
+  });
+};
+
+export const getAdminUpdateQuizMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof adminUpdateQuiz>>,
+    TError,
+    { id: number; data: BodyType<AdminUpdateQuizRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof adminUpdateQuiz>>,
+  TError,
+  { id: number; data: BodyType<AdminUpdateQuizRequest> },
+  TContext
+> => {
+  const mutationKey = ["adminUpdateQuiz"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof adminUpdateQuiz>>,
+    { id: number; data: BodyType<AdminUpdateQuizRequest> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return adminUpdateQuiz(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type AdminUpdateQuizMutationResult = NonNullable<
+  Awaited<ReturnType<typeof adminUpdateQuiz>>
+>;
+export type AdminUpdateQuizMutationBody = BodyType<AdminUpdateQuizRequest>;
+export type AdminUpdateQuizMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Update a scheduled quiz
+ */
+export const useAdminUpdateQuiz = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof adminUpdateQuiz>>,
+    TError,
+    { id: number; data: BodyType<AdminUpdateQuizRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof adminUpdateQuiz>>,
+  TError,
+  { id: number; data: BodyType<AdminUpdateQuizRequest> },
+  TContext
+> => {
+  return useMutation(getAdminUpdateQuizMutationOptions(options));
+};
+
+/**
+ * @summary Cancel a scheduled quiz
+ */
+export const getAdminCancelQuizUrl = (id: number) => {
+  return `/api/admin/quizzes/${id}/cancel`;
+};
+
+export const adminCancelQuiz = async (
+  id: number,
+  options?: RequestInit,
+): Promise<SuccessResponse> => {
+  return customFetch<SuccessResponse>(getAdminCancelQuizUrl(id), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getAdminCancelQuizMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof adminCancelQuiz>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof adminCancelQuiz>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["adminCancelQuiz"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof adminCancelQuiz>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return adminCancelQuiz(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type AdminCancelQuizMutationResult = NonNullable<
+  Awaited<ReturnType<typeof adminCancelQuiz>>
+>;
+
+export type AdminCancelQuizMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Cancel a scheduled quiz
+ */
+export const useAdminCancelQuiz = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof adminCancelQuiz>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof adminCancelQuiz>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getAdminCancelQuizMutationOptions(options));
+};
+
+/**
+ * @summary Force-start a scheduled quiz now
+ */
+export const getAdminForceStartQuizUrl = (id: number) => {
+  return `/api/admin/quizzes/${id}/force-start`;
+};
+
+export const adminForceStartQuiz = async (
+  id: number,
+  options?: RequestInit,
+): Promise<AdminForceStartResponse> => {
+  return customFetch<AdminForceStartResponse>(getAdminForceStartQuizUrl(id), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getAdminForceStartQuizMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof adminForceStartQuiz>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof adminForceStartQuiz>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["adminForceStartQuiz"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof adminForceStartQuiz>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return adminForceStartQuiz(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type AdminForceStartQuizMutationResult = NonNullable<
+  Awaited<ReturnType<typeof adminForceStartQuiz>>
+>;
+
+export type AdminForceStartQuizMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Force-start a scheduled quiz now
+ */
+export const useAdminForceStartQuiz = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof adminForceStartQuiz>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof adminForceStartQuiz>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getAdminForceStartQuizMutationOptions(options));
+};
+
+/**
+ * @summary List quiz questions (with answers)
+ */
+export const getAdminListQuizQuestionsUrl = (id: number) => {
+  return `/api/admin/quizzes/${id}/questions`;
+};
+
+export const adminListQuizQuestions = async (
+  id: number,
+  options?: RequestInit,
+): Promise<AdminQuizQuestionListResponse> => {
+  return customFetch<AdminQuizQuestionListResponse>(
+    getAdminListQuizQuestionsUrl(id),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getAdminListQuizQuestionsQueryKey = (id: number) => {
+  return [`/api/admin/quizzes/${id}/questions`] as const;
+};
+
+export const getAdminListQuizQuestionsQueryOptions = <
+  TData = Awaited<ReturnType<typeof adminListQuizQuestions>>,
+  TError = ErrorType<unknown>,
+>(
+  id: number,
+  options?: {
+    query?: Partial<UseQueryOptions<
+      Awaited<ReturnType<typeof adminListQuizQuestions>>,
+      TError,
+      TData
+    >>;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getAdminListQuizQuestionsQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof adminListQuizQuestions>>
+  > = ({ signal }) => adminListQuizQuestions(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof adminListQuizQuestions>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type AdminListQuizQuestionsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof adminListQuizQuestions>>
+>;
+export type AdminListQuizQuestionsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List quiz questions (with answers)
+ */
+
+export function useAdminListQuizQuestions<
+  TData = Awaited<ReturnType<typeof adminListQuizQuestions>>,
+  TError = ErrorType<unknown>,
+>(
+  id: number,
+  options?: {
+    query?: Partial<UseQueryOptions<
+      Awaited<ReturnType<typeof adminListQuizQuestions>>,
+      TError,
+      TData
+    >>;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getAdminListQuizQuestionsQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Add a single question or bulk-replace all questions
+ */
+export const getAdminAddQuizQuestionsUrl = (id: number) => {
+  return `/api/admin/quizzes/${id}/questions`;
+};
+
+export const adminAddQuizQuestions = async (
+  id: number,
+  adminAddQuizQuestionsRequest: AdminAddQuizQuestionsRequest,
+  options?: RequestInit,
+): Promise<AdminAddQuizQuestionsResponse> => {
+  return customFetch<AdminAddQuizQuestionsResponse>(
+    getAdminAddQuizQuestionsUrl(id),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(adminAddQuizQuestionsRequest),
+    },
+  );
+};
+
+export const getAdminAddQuizQuestionsMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof adminAddQuizQuestions>>,
+    TError,
+    { id: number; data: BodyType<AdminAddQuizQuestionsRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof adminAddQuizQuestions>>,
+  TError,
+  { id: number; data: BodyType<AdminAddQuizQuestionsRequest> },
+  TContext
+> => {
+  const mutationKey = ["adminAddQuizQuestions"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof adminAddQuizQuestions>>,
+    { id: number; data: BodyType<AdminAddQuizQuestionsRequest> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return adminAddQuizQuestions(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type AdminAddQuizQuestionsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof adminAddQuizQuestions>>
+>;
+export type AdminAddQuizQuestionsMutationBody =
+  BodyType<AdminAddQuizQuestionsRequest>;
+export type AdminAddQuizQuestionsMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Add a single question or bulk-replace all questions
+ */
+export const useAdminAddQuizQuestions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof adminAddQuizQuestions>>,
+    TError,
+    { id: number; data: BodyType<AdminAddQuizQuestionsRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof adminAddQuizQuestions>>,
+  TError,
+  { id: number; data: BodyType<AdminAddQuizQuestionsRequest> },
+  TContext
+> => {
+  return useMutation(getAdminAddQuizQuestionsMutationOptions(options));
+};
+
+/**
+ * @summary Update a single question
+ */
+export const getAdminUpdateQuizQuestionUrl = (id: number, qid: number) => {
+  return `/api/admin/quizzes/${id}/questions/${qid}`;
+};
+
+export const adminUpdateQuizQuestion = async (
+  id: number,
+  qid: number,
+  adminQuizQuestionPayload: AdminQuizQuestionPayload,
+  options?: RequestInit,
+): Promise<AdminQuizQuestion> => {
+  return customFetch<AdminQuizQuestion>(
+    getAdminUpdateQuizQuestionUrl(id, qid),
+    {
+      ...options,
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(adminQuizQuestionPayload),
+    },
+  );
+};
+
+export const getAdminUpdateQuizQuestionMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof adminUpdateQuizQuestion>>,
+    TError,
+    { id: number; qid: number; data: BodyType<AdminQuizQuestionPayload> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof adminUpdateQuizQuestion>>,
+  TError,
+  { id: number; qid: number; data: BodyType<AdminQuizQuestionPayload> },
+  TContext
+> => {
+  const mutationKey = ["adminUpdateQuizQuestion"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof adminUpdateQuizQuestion>>,
+    { id: number; qid: number; data: BodyType<AdminQuizQuestionPayload> }
+  > = (props) => {
+    const { id, qid, data } = props ?? {};
+
+    return adminUpdateQuizQuestion(id, qid, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type AdminUpdateQuizQuestionMutationResult = NonNullable<
+  Awaited<ReturnType<typeof adminUpdateQuizQuestion>>
+>;
+export type AdminUpdateQuizQuestionMutationBody =
+  BodyType<AdminQuizQuestionPayload>;
+export type AdminUpdateQuizQuestionMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Update a single question
+ */
+export const useAdminUpdateQuizQuestion = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof adminUpdateQuizQuestion>>,
+    TError,
+    { id: number; qid: number; data: BodyType<AdminQuizQuestionPayload> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof adminUpdateQuizQuestion>>,
+  TError,
+  { id: number; qid: number; data: BodyType<AdminQuizQuestionPayload> },
+  TContext
+> => {
+  return useMutation(getAdminUpdateQuizQuestionMutationOptions(options));
+};
+
+/**
+ * @summary Delete a question
+ */
+export const getAdminDeleteQuizQuestionUrl = (id: number, qid: number) => {
+  return `/api/admin/quizzes/${id}/questions/${qid}`;
+};
+
+export const adminDeleteQuizQuestion = async (
+  id: number,
+  qid: number,
+  options?: RequestInit,
+): Promise<SuccessResponse> => {
+  return customFetch<SuccessResponse>(getAdminDeleteQuizQuestionUrl(id, qid), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getAdminDeleteQuizQuestionMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof adminDeleteQuizQuestion>>,
+    TError,
+    { id: number; qid: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof adminDeleteQuizQuestion>>,
+  TError,
+  { id: number; qid: number },
+  TContext
+> => {
+  const mutationKey = ["adminDeleteQuizQuestion"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof adminDeleteQuizQuestion>>,
+    { id: number; qid: number }
+  > = (props) => {
+    const { id, qid } = props ?? {};
+
+    return adminDeleteQuizQuestion(id, qid, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type AdminDeleteQuizQuestionMutationResult = NonNullable<
+  Awaited<ReturnType<typeof adminDeleteQuizQuestion>>
+>;
+
+export type AdminDeleteQuizQuestionMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Delete a question
+ */
+export const useAdminDeleteQuizQuestion = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof adminDeleteQuizQuestion>>,
+    TError,
+    { id: number; qid: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof adminDeleteQuizQuestion>>,
+  TError,
+  { id: number; qid: number },
+  TContext
+> => {
+  return useMutation(getAdminDeleteQuizQuestionMutationOptions(options));
+};
+
+/**
+ * @summary Reorder questions
+ */
+export const getAdminReorderQuizQuestionsUrl = (id: number) => {
+  return `/api/admin/quizzes/${id}/questions/reorder`;
+};
+
+export const adminReorderQuizQuestions = async (
+  id: number,
+  adminReorderQuizQuestionsRequest: AdminReorderQuizQuestionsRequest,
+  options?: RequestInit,
+): Promise<AdminQuizQuestionListResponse> => {
+  return customFetch<AdminQuizQuestionListResponse>(
+    getAdminReorderQuizQuestionsUrl(id),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(adminReorderQuizQuestionsRequest),
+    },
+  );
+};
+
+export const getAdminReorderQuizQuestionsMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof adminReorderQuizQuestions>>,
+    TError,
+    { id: number; data: BodyType<AdminReorderQuizQuestionsRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof adminReorderQuizQuestions>>,
+  TError,
+  { id: number; data: BodyType<AdminReorderQuizQuestionsRequest> },
+  TContext
+> => {
+  const mutationKey = ["adminReorderQuizQuestions"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof adminReorderQuizQuestions>>,
+    { id: number; data: BodyType<AdminReorderQuizQuestionsRequest> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return adminReorderQuizQuestions(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type AdminReorderQuizQuestionsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof adminReorderQuizQuestions>>
+>;
+export type AdminReorderQuizQuestionsMutationBody =
+  BodyType<AdminReorderQuizQuestionsRequest>;
+export type AdminReorderQuizQuestionsMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Reorder questions
+ */
+export const useAdminReorderQuizQuestions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof adminReorderQuizQuestions>>,
+    TError,
+    { id: number; data: BodyType<AdminReorderQuizQuestionsRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof adminReorderQuizQuestions>>,
+  TError,
+  { id: number; data: BodyType<AdminReorderQuizQuestionsRequest> },
+  TContext
+> => {
+  return useMutation(getAdminReorderQuizQuestionsMutationOptions(options));
+};
+
+/**
+ * @summary AI-generate 5 question drafts
+ */
+export const getAdminGenerateQuizQuestionsAiUrl = (id: number) => {
+  return `/api/admin/quizzes/${id}/questions/generate-ai`;
+};
+
+export const adminGenerateQuizQuestionsAi = async (
+  id: number,
+  adminGenerateQuizAiRequest?: AdminGenerateQuizAiRequest,
+  options?: RequestInit,
+): Promise<AdminGenerateQuizAiResponse> => {
+  return customFetch<AdminGenerateQuizAiResponse>(
+    getAdminGenerateQuizQuestionsAiUrl(id),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(adminGenerateQuizAiRequest),
+    },
+  );
+};
+
+export const getAdminGenerateQuizQuestionsAiMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof adminGenerateQuizQuestionsAi>>,
+    TError,
+    { id: number; data: BodyType<AdminGenerateQuizAiRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof adminGenerateQuizQuestionsAi>>,
+  TError,
+  { id: number; data: BodyType<AdminGenerateQuizAiRequest> },
+  TContext
+> => {
+  const mutationKey = ["adminGenerateQuizQuestionsAi"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof adminGenerateQuizQuestionsAi>>,
+    { id: number; data: BodyType<AdminGenerateQuizAiRequest> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return adminGenerateQuizQuestionsAi(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type AdminGenerateQuizQuestionsAiMutationResult = NonNullable<
+  Awaited<ReturnType<typeof adminGenerateQuizQuestionsAi>>
+>;
+export type AdminGenerateQuizQuestionsAiMutationBody =
+  BodyType<AdminGenerateQuizAiRequest>;
+export type AdminGenerateQuizQuestionsAiMutationError = ErrorType<unknown>;
+
+/**
+ * @summary AI-generate 5 question drafts
+ */
+export const useAdminGenerateQuizQuestionsAi = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof adminGenerateQuizQuestionsAi>>,
+    TError,
+    { id: number; data: BodyType<AdminGenerateQuizAiRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof adminGenerateQuizQuestionsAi>>,
+  TError,
+  { id: number; data: BodyType<AdminGenerateQuizAiRequest> },
+  TContext
+> => {
+  return useMutation(getAdminGenerateQuizQuestionsAiMutationOptions(options));
+};
+
+/**
+ * @summary Live monitor snapshot
+ */
+export const getAdminMonitorQuizUrl = (id: number) => {
+  return `/api/admin/quizzes/${id}/monitor`;
+};
+
+export const adminMonitorQuiz = async (
+  id: number,
+  options?: RequestInit,
+): Promise<AdminQuizMonitorResponse> => {
+  return customFetch<AdminQuizMonitorResponse>(getAdminMonitorQuizUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getAdminMonitorQuizQueryKey = (id: number) => {
+  return [`/api/admin/quizzes/${id}/monitor`] as const;
+};
+
+export const getAdminMonitorQuizQueryOptions = <
+  TData = Awaited<ReturnType<typeof adminMonitorQuiz>>,
+  TError = ErrorType<unknown>,
+>(
+  id: number,
+  options?: {
+    query?: Partial<UseQueryOptions<
+      Awaited<ReturnType<typeof adminMonitorQuiz>>,
+      TError,
+      TData
+    >>;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getAdminMonitorQuizQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof adminMonitorQuiz>>
+  > = ({ signal }) => adminMonitorQuiz(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof adminMonitorQuiz>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type AdminMonitorQuizQueryResult = NonNullable<
+  Awaited<ReturnType<typeof adminMonitorQuiz>>
+>;
+export type AdminMonitorQuizQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Live monitor snapshot
+ */
+
+export function useAdminMonitorQuiz<
+  TData = Awaited<ReturnType<typeof adminMonitorQuiz>>,
+  TError = ErrorType<unknown>,
+>(
+  id: number,
+  options?: {
+    query?: Partial<UseQueryOptions<
+      Awaited<ReturnType<typeof adminMonitorQuiz>>,
+      TError,
+      TData
+    >>;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getAdminMonitorQuizQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Final results with PII for payout
+ */
+export const getAdminGetQuizResultsUrl = (id: number) => {
+  return `/api/admin/quizzes/${id}/results`;
+};
+
+export const adminGetQuizResults = async (
+  id: number,
+  options?: RequestInit,
+): Promise<AdminQuizResultsResponse> => {
+  return customFetch<AdminQuizResultsResponse>(getAdminGetQuizResultsUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getAdminGetQuizResultsQueryKey = (id: number) => {
+  return [`/api/admin/quizzes/${id}/results`] as const;
+};
+
+export const getAdminGetQuizResultsQueryOptions = <
+  TData = Awaited<ReturnType<typeof adminGetQuizResults>>,
+  TError = ErrorType<unknown>,
+>(
+  id: number,
+  options?: {
+    query?: Partial<UseQueryOptions<
+      Awaited<ReturnType<typeof adminGetQuizResults>>,
+      TError,
+      TData
+    >>;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getAdminGetQuizResultsQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof adminGetQuizResults>>
+  > = ({ signal }) => adminGetQuizResults(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof adminGetQuizResults>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type AdminGetQuizResultsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof adminGetQuizResults>>
+>;
+export type AdminGetQuizResultsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Final results with PII for payout
+ */
+
+export function useAdminGetQuizResults<
+  TData = Awaited<ReturnType<typeof adminGetQuizResults>>,
+  TError = ErrorType<unknown>,
+>(
+  id: number,
+  options?: {
+    query?: Partial<UseQueryOptions<
+      Awaited<ReturnType<typeof adminGetQuizResults>>,
+      TError,
+      TData
+    >>;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getAdminGetQuizResultsQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Mark a winner as paid (manual settlement)
+ */
+export const getAdminMarkQuizWinnerPaidUrl = (id: number, wid: number) => {
+  return `/api/admin/quizzes/${id}/winners/${wid}/mark-paid`;
+};
+
+export const adminMarkQuizWinnerPaid = async (
+  id: number,
+  wid: number,
+  adminMarkQuizWinnerPaidRequest?: AdminMarkQuizWinnerPaidRequest,
+  options?: RequestInit,
+): Promise<AdminQuizWinnerPaidResult> => {
+  return customFetch<AdminQuizWinnerPaidResult>(
+    getAdminMarkQuizWinnerPaidUrl(id, wid),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(adminMarkQuizWinnerPaidRequest),
+    },
+  );
+};
+
+export const getAdminMarkQuizWinnerPaidMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof adminMarkQuizWinnerPaid>>,
+    TError,
+    { id: number; wid: number; data: BodyType<AdminMarkQuizWinnerPaidRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof adminMarkQuizWinnerPaid>>,
+  TError,
+  { id: number; wid: number; data: BodyType<AdminMarkQuizWinnerPaidRequest> },
+  TContext
+> => {
+  const mutationKey = ["adminMarkQuizWinnerPaid"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof adminMarkQuizWinnerPaid>>,
+    { id: number; wid: number; data: BodyType<AdminMarkQuizWinnerPaidRequest> }
+  > = (props) => {
+    const { id, wid, data } = props ?? {};
+
+    return adminMarkQuizWinnerPaid(id, wid, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type AdminMarkQuizWinnerPaidMutationResult = NonNullable<
+  Awaited<ReturnType<typeof adminMarkQuizWinnerPaid>>
+>;
+export type AdminMarkQuizWinnerPaidMutationBody =
+  BodyType<AdminMarkQuizWinnerPaidRequest>;
+export type AdminMarkQuizWinnerPaidMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Mark a winner as paid (manual settlement)
+ */
+export const useAdminMarkQuizWinnerPaid = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof adminMarkQuizWinnerPaid>>,
+    TError,
+    { id: number; wid: number; data: BodyType<AdminMarkQuizWinnerPaidRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof adminMarkQuizWinnerPaid>>,
+  TError,
+  { id: number; wid: number; data: BodyType<AdminMarkQuizWinnerPaidRequest> },
+  TContext
+> => {
+  return useMutation(getAdminMarkQuizWinnerPaidMutationOptions(options));
+};

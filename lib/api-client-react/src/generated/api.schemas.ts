@@ -507,6 +507,305 @@ export interface BlockchainDepositHistory {
   deposits: BlockchainDepositItem[];
 }
 
+export type QuizStatus = (typeof QuizStatus)[keyof typeof QuizStatus];
+
+export const QuizStatus = {
+  scheduled: "scheduled",
+  live: "live",
+  ended: "ended",
+  cancelled: "cancelled",
+} as const;
+
+export type QuizEntryRules = {
+  requireKyc?: boolean;
+};
+
+export interface Quiz {
+  id: number;
+  title: string;
+  description: string;
+  status: QuizStatus;
+  scheduledStartAt: string;
+  startedAt?: string | null;
+  endedAt?: string | null;
+  prizePool: string;
+  prizeCurrency: string;
+  prizeSplit: number[];
+  questionTimeMs: number;
+  entryRules?: QuizEntryRules;
+  createdAt: string;
+  updatedAt: string;
+  joined?: boolean;
+}
+
+export type AdminQuizStatus =
+  (typeof AdminQuizStatus)[keyof typeof AdminQuizStatus];
+
+export const AdminQuizStatus = {
+  scheduled: "scheduled",
+  live: "live",
+  ended: "ended",
+  cancelled: "cancelled",
+} as const;
+
+export type AdminQuizEntryRules = {
+  requireKyc?: boolean;
+};
+
+export interface AdminQuiz {
+  id: number;
+  title: string;
+  description: string;
+  status: AdminQuizStatus;
+  scheduledStartAt: string;
+  startedAt?: string | null;
+  endedAt?: string | null;
+  prizePool: string;
+  prizeCurrency: string;
+  prizeSplit: number[];
+  questionTimeMs: number;
+  entryRules?: AdminQuizEntryRules;
+  notifyEnabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface QuizListResponse {
+  data: Quiz[];
+}
+
+export interface AdminQuizListResponse {
+  data: AdminQuiz[];
+}
+
+export interface QuizPublicWinner {
+  rank: number;
+  displayName: string;
+  finalScore: number;
+  prizeAmount: string;
+  prizeCurrency: string;
+  userId: number;
+}
+
+export interface QuizDetailResponse {
+  quiz: AdminQuiz;
+  joined: boolean;
+  participants: number;
+  winners: QuizPublicWinner[];
+}
+
+export interface MyPastQuizPrize {
+  amount: string;
+  currency: string;
+}
+
+export type MyPastQuiz = AdminQuiz & {
+  myScore: number;
+  myRank?: number | null;
+  myPrize?: MyPastQuizPrize;
+};
+
+export interface MyPastQuizListResponse {
+  data: MyPastQuiz[];
+}
+
+export interface QuizAnswerSubmitRequest {
+  questionId: number;
+  /**
+   * @minimum 0
+   * @maximum 3
+   */
+  selectedOption: number;
+}
+
+export interface QuizAnswerSubmitResponse {
+  accepted: boolean;
+  scoreAwarded: number;
+  totalScore: number;
+  rank?: number | null;
+  locked: boolean;
+}
+
+export interface QuizMyStandingResponse {
+  score: number;
+  rank?: number | null;
+  participants: number;
+}
+
+export type AdminCreateQuizRequestEntryRules = {
+  requireKyc?: boolean;
+};
+
+export interface AdminCreateQuizRequest {
+  title: string;
+  description?: string;
+  scheduledStartAt: string;
+  prizePool: string;
+  prizeCurrency?: string;
+  prizeSplit?: number[];
+  questionTimeMs?: number;
+  entryRules?: AdminCreateQuizRequestEntryRules;
+  notifyEnabled?: boolean;
+}
+
+export type AdminUpdateQuizRequestEntryRules = {
+  requireKyc?: boolean;
+};
+
+export interface AdminUpdateQuizRequest {
+  title?: string;
+  description?: string;
+  scheduledStartAt?: string;
+  prizePool?: string;
+  prizeCurrency?: string;
+  prizeSplit?: number[];
+  questionTimeMs?: number;
+  entryRules?: AdminUpdateQuizRequestEntryRules;
+  notifyEnabled?: boolean;
+}
+
+export interface AdminForceStartResponse {
+  success: boolean;
+  startedHere: boolean;
+}
+
+export type AdminQuizQuestionSource =
+  (typeof AdminQuizQuestionSource)[keyof typeof AdminQuizQuestionSource];
+
+export const AdminQuizQuestionSource = {
+  manual: "manual",
+  ai: "ai",
+} as const;
+
+export interface AdminQuizQuestion {
+  id: number;
+  quizId: number;
+  position: number;
+  prompt: string;
+  options: string[];
+  correctIndex: number;
+  explanation?: string;
+  source: AdminQuizQuestionSource;
+}
+
+export interface AdminQuizQuestionListResponse {
+  data: AdminQuizQuestion[];
+}
+
+export type AdminQuizQuestionPayloadSource =
+  (typeof AdminQuizQuestionPayloadSource)[keyof typeof AdminQuizQuestionPayloadSource];
+
+export const AdminQuizQuestionPayloadSource = {
+  manual: "manual",
+  ai: "ai",
+} as const;
+
+export interface AdminQuizQuestionPayload {
+  prompt: string;
+  options: string[];
+  /**
+   * @minimum 0
+   * @maximum 3
+   */
+  correctIndex: number;
+  explanation?: string;
+  source?: AdminQuizQuestionPayloadSource;
+}
+
+export interface AdminAddQuizQuestionsRequest {
+  question?: AdminQuizQuestionPayload;
+  questions?: AdminQuizQuestionPayload[];
+  replace?: boolean;
+}
+
+export type AdminAddQuizQuestionsResponse =
+  | AdminQuizQuestion
+  | AdminQuizQuestionListResponse;
+
+export interface AdminReorderQuizQuestionsRequest {
+  order: number[];
+}
+
+export interface AdminGenerateQuizAiRequest {
+  topicHint?: string;
+}
+
+export interface AdminGenerateQuizAiDraft {
+  prompt: string;
+  options: string[];
+  correctIndex: number;
+  explanation: string;
+}
+
+export interface AdminGenerateQuizAiResponse {
+  data: AdminGenerateQuizAiDraft[];
+}
+
+export interface AdminQuizMonitorLeaderboardRow {
+  userId: number;
+  score: number;
+  rank: number;
+  displayName: string;
+}
+
+export interface AdminQuizMonitorRunner {
+  currentQuestionIndex?: number | null;
+  currentQuestionId?: number | null;
+  questionStartedAtMs?: number | null;
+  questionDeadlineMs?: number | null;
+  windowMs?: number;
+  phase?: string;
+}
+
+export interface AdminQuizMonitorResponse {
+  quiz: AdminQuiz;
+  runner?: AdminQuizMonitorRunner;
+  leaderboard: AdminQuizMonitorLeaderboardRow[];
+  participants: number;
+}
+
+export type AdminQuizWinnerPaidStatus =
+  (typeof AdminQuizWinnerPaidStatus)[keyof typeof AdminQuizWinnerPaidStatus];
+
+export const AdminQuizWinnerPaidStatus = {
+  pending: "pending",
+  paid: "paid",
+} as const;
+
+export interface AdminQuizWinner {
+  id: number;
+  rank: number;
+  finalScore: number;
+  prizeAmount: string;
+  prizeCurrency: string;
+  paidStatus: AdminQuizWinnerPaidStatus;
+  paidAt?: string | null;
+  paidNote?: string | null;
+  paidTxnId?: number | null;
+  paidByAdminId?: number | null;
+  userId: number;
+  userEmail?: string | null;
+  userName?: string | null;
+  userPhone?: string | null;
+}
+
+export interface AdminQuizResultsResponse {
+  quiz: AdminQuiz;
+  participants: number;
+  winners: AdminQuizWinner[];
+}
+
+export interface AdminMarkQuizWinnerPaidRequest {
+  note?: string;
+}
+
+export interface AdminQuizWinnerPaidResult {
+  id: number;
+  paidStatus: string;
+  paidAt?: string | null;
+  paidNote?: string | null;
+}
+
 export type GetTransactionsParams = {
   page?: number;
   limit?: number;
@@ -556,3 +855,22 @@ export type GetLedgerJournalParams = {
 export type GetBlockchainDepositHistoryParams = {
   limit?: number;
 };
+
+export type GetMyPastQuizzesParams = {
+  limit?: number;
+};
+
+export type AdminListQuizzesParams = {
+  status?: AdminListQuizzesStatus;
+  limit?: number;
+};
+
+export type AdminListQuizzesStatus =
+  (typeof AdminListQuizzesStatus)[keyof typeof AdminListQuizzesStatus];
+
+export const AdminListQuizzesStatus = {
+  scheduled: "scheduled",
+  live: "live",
+  ended: "ended",
+  cancelled: "cancelled",
+} as const;
