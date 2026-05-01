@@ -620,8 +620,17 @@ export function InrDepositTab() {
                   >
                     <MethodIcon type={m.type} />
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm font-bold text-white truncate">
-                        {m.merchantName ?? (m.type === "upi" ? "UPI" : "Bank")}
+                      <div className="flex items-center gap-2">
+                        <div className="text-sm font-bold text-white truncate">
+                          {m.merchantName ?? (m.type === "upi" ? "UPI" : "Bank")}
+                        </div>
+                        <span className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[9px] font-bold uppercase tracking-wider text-emerald-300">
+                          <span className="relative flex w-1.5 h-1.5">
+                            <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75 animate-ping" />
+                            <span className="relative inline-flex w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                          </span>
+                          Online
+                        </span>
                       </div>
                       <div className="text-[11px] text-muted-foreground mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
                         <span className="uppercase tracking-wider text-[10px] font-semibold text-white/60">
@@ -631,6 +640,9 @@ export function InrDepositTab() {
                         <span className="text-emerald-400 font-semibold">No Fees</span>
                         <span className="text-white/20">|</span>
                         <span>1-3 Hours</span>
+                      </div>
+                      <div className="text-[10px] text-muted-foreground/80 mt-1 font-medium">
+                        Limit: ₹{Number(m.minAmount).toLocaleString("en-IN")} – ₹{Number(m.maxAmount).toLocaleString("en-IN")}
                       </div>
                     </div>
                     <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-white transition-colors" />
