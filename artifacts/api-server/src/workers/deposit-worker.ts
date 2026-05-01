@@ -1,5 +1,5 @@
 import { Worker } from "bullmq";
-import { getRedisConnection } from "../lib/redis";
+import { newBullMQConnection } from "../lib/redis";
 import { transactionLogger, errorLogger } from "../lib/logger";
 import type { DepositEventJobData } from "../lib/queues";
 
@@ -22,7 +22,7 @@ export function startDepositWorker(): Worker {
       );
     },
     {
-      connection: getRedisConnection(),
+      connection: newBullMQConnection(),
       concurrency: 10,
     },
   );

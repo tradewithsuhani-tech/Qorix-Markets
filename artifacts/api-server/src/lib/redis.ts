@@ -59,3 +59,27 @@ export function getRedisConnection(): IORedis {
   connection = client;
   return client;
 }
+
+// Dedicated IORedis factory for BullMQ Workers. BullMQ refuses to start a
+// Worker unless `maxRetriesPerRequest` is `null` because workers use blocking
+// commands (BRPOPLPUSH) that must not error out mid-wait — see BullMQ source
+// `RedisConnection.checkBlockingOptions`. The shared `getRedisConnection()`
+// keeps `maxRetriesPerRequest: 1` for app traffic (Upstash incident
+// protection), so workers need their own connection with the BullMQ-required
+// settings. Returns a fresh IORedis per call: each Worker should own its
+// own socket so a long BLPOP on one doesn't serialize the others, and so
+// `worker.close()` can shut its connection down without affecting peers.
+export function newBullMQConnection(): IORedis {
+  return new IORedis(REDIS_URL, {
+    // BullMQ requirement — null disables per-request retry cap because
+    // blocking commands have no natural deadline.
+    maxRetriesPerRequest: null,
+    // Match the shared client: BullMQ doesn't need the ioredis ready handshake.
+    enableReadyCheck: false,
+    // Same fail-fast connect timeout as the shared client — Upstash from
+    // BOM/SIN is sub-50ms so 5s is generous.
+    connectTimeout: 5_000,
+    // No commandTimeout: BullMQ blocking pulls are designed to wait until a
+    // job arrives, and a low timeout would just churn the worker loop.
+  });
+}

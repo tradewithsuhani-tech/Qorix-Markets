@@ -1,5 +1,5 @@
 import { Worker } from "bullmq";
-import { getRedisConnection } from "../lib/redis";
+import { newBullMQConnection } from "../lib/redis";
 import { distributeDailyProfit } from "../lib/profit-service";
 import { profitLogger, errorLogger } from "../lib/logger";
 import { emitProfitDistributionEvent } from "../lib/event-bus";
@@ -47,7 +47,7 @@ export function startProfitDistributionWorker(): Worker {
       return result;
     },
     {
-      connection: getRedisConnection(),
+      connection: newBullMQConnection(),
       concurrency: 1,
     },
   );
