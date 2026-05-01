@@ -1,6 +1,71 @@
-import { Trophy, Sparkles, Zap, ShieldCheck, Clock } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Trophy, Sparkles, Zap, ShieldCheck, Clock, LogIn } from "lucide-react";
+import { startLogin } from "@/lib/start-login";
+import { clearToken, readToken } from "@/lib/auth-storage";
+
+// B35: SSO with Qorix Markets is live, but the actual quiz-play screens
+// land in B38. Until then "signed in" just means we have a Markets
+// access token in localStorage and we replace the "Launching soon" CTA
+// with a personalized "You're in — play coming soon" pill so users get
+// some feedback that the round-trip worked.
+function useIsSignedIn(): {
+  isSignedIn: boolean;
+  signOut: () => void;
+} {
+  const [isSignedIn, setIsSignedIn] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return readToken() !== null;
+  });
+
+  // Re-check on focus / visibilitychange so a sign-in completed in
+  // another tab gets reflected here without a hard reload. The cost is
+  // ~1 localStorage read per focus event — negligible.
+  useEffect(() => {
+    function refresh() {
+      setIsSignedIn(readToken() !== null);
+    }
+    window.addEventListener("focus", refresh);
+    window.addEventListener("storage", refresh);
+    return () => {
+      window.removeEventListener("focus", refresh);
+      window.removeEventListener("storage", refresh);
+    };
+  }, []);
+
+  return {
+    isSignedIn,
+    signOut: () => {
+      clearToken();
+      setIsSignedIn(false);
+    },
+  };
+}
 
 export function LandingPage() {
+  const { isSignedIn, signOut } = useIsSignedIn();
+  const [signInPending, setSignInPending] = useState(false);
+  const [signInError, setSignInError] = useState<string | null>(null);
+
+  async function handleSignIn() {
+    setSignInError(null);
+    setSignInPending(true);
+    try {
+      await startLogin({ returnTo: "/" });
+      // window.location.assign inside startLogin replaces the page —
+      // we won't get here unless the navigation was blocked. If we
+      // do, surface a generic error so the user isn't stuck on a
+      // spinner forever.
+      setSignInPending(false);
+    } catch (err) {
+      setSignInError(
+        err instanceof Error
+          ? err.message
+          : "Could not start sign-in. Please try again.",
+      );
+      setSignInPending(false);
+    }
+  }
+
   return (
     <div className="min-h-screen w-full">
       <header className="border-b border-border/50 backdrop-blur-sm sticky top-0 z-30 bg-background/70">
@@ -30,13 +95,34 @@ export function LandingPage() {
             </div>
           </div>
           <div className="hidden sm:flex items-center gap-2 text-xs text-muted-foreground">
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-border/60 bg-card/60">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-accent"></span>
+            {isSignedIn ? (
+              <>
+                <span
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-border/60 bg-card/60"
+                  data-testid="badge-signed-in"
+                >
+                  <span className="relative flex h-2 w-2">
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                  </span>
+                  Signed in with Markets
+                </span>
+                <button
+                  onClick={signOut}
+                  className="px-2.5 py-1 rounded-full border border-border/60 bg-card/60 hover-elevate"
+                  data-testid="button-sign-out"
+                >
+                  Sign out
+                </button>
+              </>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-border/60 bg-card/60">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-accent"></span>
+                </span>
+                Quiz play coming soon
               </span>
-              Coming soon
-            </span>
+            )}
           </div>
         </div>
       </header>
@@ -72,22 +158,40 @@ export function LandingPage() {
             the prize pool — paid out automatically. Sign in once with your
             Qorix Markets account, no separate signup needed.
           </p>
-          <div className="mt-8 flex items-center justify-center gap-3">
-            <button
-              disabled
-              className="inline-flex items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-semibold opacity-70 cursor-not-allowed"
-              style={{
-                background:
-                  "linear-gradient(135deg, hsl(262 83% 65%), hsl(262 83% 55%))",
-                color: "white",
-                boxShadow: "0 8px 24px -8px hsl(262 83% 50% / 0.6)",
-              }}
-              data-testid="button-launch"
-              title="Launching soon"
-            >
-              <Trophy className="w-4 h-4" />
-              Launching soon
-            </button>
+          <div className="mt-8 flex items-center justify-center gap-3 flex-wrap">
+            {isSignedIn ? (
+              <button
+                disabled
+                className="inline-flex items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-semibold opacity-70 cursor-not-allowed"
+                style={{
+                  background:
+                    "linear-gradient(135deg, hsl(262 83% 65%), hsl(262 83% 55%))",
+                  color: "white",
+                  boxShadow: "0 8px 24px -8px hsl(262 83% 50% / 0.6)",
+                }}
+                data-testid="button-play"
+                title="Quiz play opens shortly"
+              >
+                <Trophy className="w-4 h-4" />
+                You&apos;re in — play opens shortly
+              </button>
+            ) : (
+              <button
+                onClick={handleSignIn}
+                disabled={signInPending}
+                className="inline-flex items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-semibold disabled:opacity-70 disabled:cursor-wait"
+                style={{
+                  background:
+                    "linear-gradient(135deg, hsl(262 83% 65%), hsl(262 83% 55%))",
+                  color: "white",
+                  boxShadow: "0 8px 24px -8px hsl(262 83% 50% / 0.6)",
+                }}
+                data-testid="button-sign-in"
+              >
+                <LogIn className="w-4 h-4" />
+                {signInPending ? "Redirecting…" : "Sign in with Qorix Markets"}
+              </button>
+            )}
             <a
               href="https://qorixmarkets.com"
               className="inline-flex items-center gap-2 rounded-lg border border-border/60 bg-card/60 px-5 py-2.5 text-sm hover-elevate"
@@ -96,6 +200,14 @@ export function LandingPage() {
               Visit Qorix Markets →
             </a>
           </div>
+          {signInError && (
+            <p
+              className="mt-3 text-xs text-red-400"
+              data-testid="text-sign-in-error"
+            >
+              {signInError}
+            </p>
+          )}
         </section>
 
         <section className="mt-16 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
