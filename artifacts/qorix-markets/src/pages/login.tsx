@@ -5,6 +5,7 @@ import { useLocation, Link } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import { TrendingUp, Lock, Mail, User as UserIcon, ArrowLeft, Eye, EyeOff, ShieldCheck, CheckCircle2, Loader2, KeyRound } from "lucide-react";
 import { QorixLogo } from "@/components/qorix-logo";
+import qorixPlayLogo from "@/assets/qorix-play-logo.png";
 import { useToast } from "@/hooks/use-toast";
 import {
   CaptchaWidget,
@@ -726,6 +727,23 @@ export default function LoginPage() {
     }
     return true;
   });
+
+  // When the user landed here via the Qorix Play OAuth bounce
+  // (oauth-quiz-authorize.tsx sets `qorix_play_branding=1` in
+  // sessionStorage right before redirecting to /login or /signup), we
+  // re-skin the page with the Qorix Play logo + copy so the user
+  // doesn't get a jarring "wait, why am I on Qorix Markets?" moment.
+  // Same backend, same account — just visually consistent. The flag
+  // lives for the rest of the tab session; the bounce page resets it
+  // on every visit so it can't go stale across normal Play flows.
+  const [isPlayBranding] = useState<boolean>(() => {
+    try {
+      return sessionStorage.getItem("qorix_play_branding") === "1";
+    } catch {
+      return false;
+    }
+  });
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
@@ -1068,13 +1086,25 @@ export default function LoginPage() {
         transition={{ duration: 0.45, ease: "easeOut" }}
         className="w-full max-w-md"
       >
-        {/* Logo */}
-        <div className="flex items-center gap-3 mb-8 justify-center">
-          <div className="w-12 h-12 rounded-xl overflow-hidden flex items-center justify-center shadow-[0_0_22px_rgba(59,130,246,0.38)]">
-            <QorixLogo size={48} />
+        {/* Logo — Qorix Play skin when the user came via Qorixplay's
+            OAuth bounce, otherwise the default Qorix Markets wordmark. */}
+        {isPlayBranding ? (
+          <div className="flex items-center justify-center mb-8">
+            <img
+              src={qorixPlayLogo}
+              alt="Qorix Play"
+              draggable={false}
+              className="h-12 w-auto drop-shadow-[0_0_24px_rgba(168,85,247,0.6)]"
+            />
           </div>
-          <span className="text-xl font-bold">Qorix{" "}<span className="text-primary font-light">Markets</span></span>
-        </div>
+        ) : (
+          <div className="flex items-center gap-3 mb-8 justify-center">
+            <div className="w-12 h-12 rounded-xl overflow-hidden flex items-center justify-center shadow-[0_0_22px_rgba(59,130,246,0.38)]">
+              <QorixLogo size={48} />
+            </div>
+            <span className="text-xl font-bold">Qorix{" "}<span className="text-primary font-light">Markets</span></span>
+          </div>
+        )}
 
         <div className="glass-card rounded-2xl p-7 space-y-6">
           {/* Heading */}
@@ -1088,11 +1118,23 @@ export default function LoginPage() {
                 transition={{ duration: 0.18 }}
                 className="text-2xl font-bold tracking-tight"
               >
-                {isLogin ? "Welcome back" : "Create account"}
+                {isLogin
+                  ? isPlayBranding
+                    ? "Sign in to play"
+                    : "Welcome back"
+                  : isPlayBranding
+                    ? "Create your Qorix Play account"
+                    : "Create account"}
               </motion.h1>
             </AnimatePresence>
             <p className="text-sm text-muted-foreground">
-              {isLogin ? "Sign in to access your trading terminal." : "Start automated USD trading today."}
+              {isLogin
+                ? isPlayBranding
+                  ? "Sign in to join live quiz rounds and win real cash."
+                  : "Sign in to access your trading terminal."
+                : isPlayBranding
+                  ? "One free account works for Qorix Play and Qorix Markets."
+                  : "Start automated USD trading today."}
             </p>
           </div>
 

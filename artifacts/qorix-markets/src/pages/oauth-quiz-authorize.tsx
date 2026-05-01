@@ -110,6 +110,21 @@ export default function OauthQuizAuthorizePage() {
       // yet. The /signup route renders the same LoginPage component
       // pre-flipped to Sign Up mode (see login.tsx lazy initializer),
       // so the resume URL flow keeps working unchanged.
+      //
+      // Drop a sessionStorage breadcrumb so the login/signup page can
+      // render its Qorix Play skin (neon QorixPlay logo + "Qorix Play
+      // account" copy) instead of the default "Qorix Markets" chrome.
+      // The page reads + clears this flag on mount; the OAuth resume
+      // hook re-sets it on every authorize visit, so it never goes
+      // stale across normal user flows.
+      try {
+        if (clientId === "qorixplay") {
+          sessionStorage.setItem("qorix_play_branding", "1");
+        }
+      } catch {
+        // sessionStorage disabled → branding falls back to Markets default,
+        // which still works correctly. Not worth blocking the redirect.
+      }
       setLocation(isSignupHint ? "/signup" : "/login");
       return;
     }
