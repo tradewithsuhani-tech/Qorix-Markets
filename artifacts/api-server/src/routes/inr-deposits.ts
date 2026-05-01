@@ -106,16 +106,25 @@ router.get("/payment-methods", authMiddleware, async (req: AuthRequest, res) => 
   // qualifying methods of those merchants.
   const amountStr = amount.toFixed(2);
 
+  // is_online: merchant is "online" if they hit any merchant-auth API in the
+  // last 5 minutes. The merchant-auth middleware bumps last_login_at as a
+  // throttled (60s) heartbeat on every authenticated merchant request, so a
+  // merchant who has the merchant panel open will be is_online=true (the panel
+  // polls /merchant/inr-deposits every 10s). A merchant who logged out or
+  // closed the panel will fall to is_online=false after ~5 min, and the
+  // user-side INR deposit screen will show their dot as red.
   const candidates = await db.execute<{
     method_id: number;
     merchant_id: number;
     merchant_name: string;
+    is_online: boolean;
     available: string;
   }>(sql`
     select
       pm.id as method_id,
       m.id as merchant_id,
       m.full_name as merchant_name,
+      (m.last_login_at is not null and m.last_login_at > now() - interval '5 minutes') as is_online,
       (m.inr_balance - coalesce((
         select sum(d.amount_inr)
         from inr_deposits d
@@ -141,16 +150,28 @@ router.get("/payment-methods", authMiddleware, async (req: AuthRequest, res) => 
     return;
   }
 
-  // Pick top 5 merchants by available capacity DESC (more headroom first).
-  const byMerchant = new Map<number, { name: string; available: number }>();
+  // Pick top 5 merchants. Sort key: ONLINE first, then available capacity DESC
+  // within each tier. Rationale: an online merchant with less capacity is a
+  // better choice for the user than an offline merchant with more capacity,
+  // because the offline merchant may not see/process the deposit promptly
+  // (the merchant-call escalation eventually fires after 10 min, but that's a
+  // worse UX than just routing to someone actually staffing the panel).
+  const byMerchant = new Map<number, { name: string; isOnline: boolean; available: number }>();
   for (const c of candidates.rows) {
     const av = parseFloat(c.available);
     if (!byMerchant.has(c.merchant_id)) {
-      byMerchant.set(c.merchant_id, { name: c.merchant_name, available: av });
+      byMerchant.set(c.merchant_id, {
+        name: c.merchant_name,
+        isOnline: !!c.is_online,
+        available: av,
+      });
     }
   }
   const top5 = [...byMerchant.entries()]
-    .sort((a, b) => b[1].available - a[1].available)
+    .sort((a, b) => {
+      if (a[1].isOnline !== b[1].isOnline) return a[1].isOnline ? -1 : 1;
+      return b[1].available - a[1].available;
+    })
     .slice(0, 5)
     .map(([id]) => id);
 
@@ -180,11 +201,18 @@ router.get("/payment-methods", authMiddleware, async (req: AuthRequest, res) => 
         merchantId: m.merchantId,
         merchantName: merchantInfo.name,
         merchantAvailable: merchantInfo.available,
+        isOnline: merchantInfo.isOnline,
       };
     })
-    // Order by merchant available desc so the UI naturally shows best-capacity
-    // merchants first.
-    .sort((a, b) => (b.merchantAvailable ?? 0) - (a.merchantAvailable ?? 0));
+    // Order: online merchants first, then by available capacity desc within
+    // each tier. Mirrors the top-5 selection sort above so the user-side
+    // listing leads with merchants who are actually staffing the panel right
+    // now (green dot), with offline merchants (red dot) shown at the bottom
+    // for completeness.
+    .sort((a, b) => {
+      if (a.isOnline !== b.isOnline) return a.isOnline ? -1 : 1;
+      return (b.merchantAvailable ?? 0) - (a.merchantAvailable ?? 0);
+    });
 
   res.json({ methods: enriched, rate });
 });
