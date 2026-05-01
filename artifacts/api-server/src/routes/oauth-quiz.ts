@@ -489,58 +489,7 @@ router.post(
       await issueAccessTokenFromCode(row, redirect_uri, res, req.ip);
     } catch (err) {
       logger.error({ err }, "[oauth-quiz] /token-public failed");
-      // B35.diag3: pg cause = 42P01 "relation quiz_oauth_codes does not
-      // exist" but psql against PROD_DATABASE_URL clearly shows the table
-      // in public schema in heliumdb. Conclusion: api-server is connected
-      // to a DIFFERENT database than the one I migrated. Probe DB identity
-      // (current_database, current_user, search_path, server addr, and the
-      // list of tables matching quiz%) so we can confirm which DB needs
-      // the migration. REMOVE in next commit.
-      const e = err as {
-        message?: string;
-        name?: string;
-        code?: string;
-        cause?: { message?: string; name?: string; code?: string; detail?: string; hint?: string; position?: string };
-      };
-      let dbProbe: unknown = null;
-      try {
-        const probe = await db.execute(sql`
-          SELECT current_database() AS db,
-                 current_user AS usr,
-                 current_schema() AS schema,
-                 (SELECT setting FROM pg_settings WHERE name='search_path') AS search_path,
-                 inet_server_addr()::text AS server_addr,
-                 (SELECT array_agg(tablename ORDER BY tablename)
-                    FROM pg_tables
-                   WHERE tablename LIKE 'quiz%') AS quiz_tables,
-                 (SELECT array_agg(tablename ORDER BY tablename)
-                    FROM pg_tables
-                   WHERE tablename = 'quiz_oauth_codes') AS quiz_oauth_codes_match,
-                 (SELECT count(*) FROM pg_tables WHERE schemaname='public') AS public_table_count
-        `);
-        dbProbe = (probe as { rows?: unknown[] }).rows?.[0] ?? probe;
-      } catch (probeErr) {
-        dbProbe = { probe_failed: (probeErr as Error)?.message?.substring(0, 300) };
-      }
-      res.status(500).json({
-        error: "internal_error",
-        _diag: {
-          name: e?.name?.substring(0, 50),
-          message: e?.message?.substring(0, 1500),
-          code: e?.code?.substring(0, 30),
-          cause: e?.cause
-            ? {
-                name: e.cause.name?.substring(0, 50),
-                message: e.cause.message?.substring(0, 1500),
-                code: e.cause.code?.substring(0, 30),
-                detail: e.cause.detail?.substring(0, 500),
-                hint: e.cause.hint?.substring(0, 500),
-                position: e.cause.position?.substring(0, 30),
-              }
-            : null,
-          db_identity: dbProbe,
-        },
-      });
+      res.status(500).json({ error: "internal_error" });
     }
   },
 );
