@@ -46,6 +46,18 @@ export const quizOauthCodesTable = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .default(sql`now()`),
+    /** PKCE (RFC 7636) — BASE64URL(SHA256(code_verifier)) supplied by the
+     *  client at /authorize. NULL means the caller did not opt into PKCE
+     *  and must redeem the code via the confidential-client /token flow
+     *  (server-to-server with client_secret). When non-NULL, the code can
+     *  ONLY be redeemed via /token-public by presenting the matching
+     *  code_verifier — which lets a browser SPA complete the flow without
+     *  ever holding a long-lived client_secret. (B35) */
+    codeChallenge: varchar("code_challenge", { length: 128 }),
+    /** Always "S256" today — we deliberately do NOT support the "plain"
+     *  PKCE method because it provides no protection against an attacker
+     *  who can read the verifier in transit. (B35) */
+    codeChallengeMethod: varchar("code_challenge_method", { length: 10 }),
   },
   (t) => ({
     userIdIdx: index("idx_quiz_oauth_codes_user_id").on(t.userId),
