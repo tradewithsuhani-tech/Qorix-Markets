@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Plus,
@@ -9,6 +9,8 @@ import {
   Smartphone,
   X,
   QrCode,
+  CheckCircle2,
+  AlertCircle,
 } from "lucide-react";
 import { MerchantLayout } from "@/components/merchant-layout";
 import { merchantApiUrl, merchantAuthFetch } from "@/lib/merchant-auth-fetch";
@@ -263,6 +265,79 @@ function MethodFormModal({
   saving: boolean;
   onQrFile: (f: File | null) => void;
 }) {
+  // IFSC auto-verification — mirrors the user-side INR withdraw tab so the
+  // merchant gets the same "type IFSC → branch + bank name auto-fill" UX
+  // when adding/editing a Bank payment method. Only runs when type === "bank".
+  const [ifscStatus, setIfscStatus] = useState<
+    "idle" | "loading" | "verified" | "error"
+  >("idle");
+  const [ifscBranchInfo, setIfscBranchInfo] = useState<string>("");
+
+  useEffect(() => {
+    if (editing.type !== "bank") {
+      setIfscStatus("idle");
+      setIfscBranchInfo("");
+      return;
+    }
+    const code = (editing.ifsc ?? "").trim().toUpperCase();
+    if (code.length === 0) {
+      setIfscStatus("idle");
+      setIfscBranchInfo("");
+      return;
+    }
+    if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(code)) {
+      setIfscStatus("error");
+      setIfscBranchInfo(
+        code.length !== 11
+          ? `IFSC must be exactly 11 characters (you typed ${code.length}). Format: 4 letters + 0 + 6 alphanumeric, e.g. HDFC0001234.`
+          : "IFSC format wrong. Must be 4 letters + 0 + 6 alphanumeric. Example: HDFC0001234, ICIC0000123, PYTM0123456 (Paytm).",
+      );
+      return;
+    }
+    setIfscStatus("loading");
+    const ctrl = new AbortController();
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`https://ifsc.razorpay.com/${code}`, {
+          signal: ctrl.signal,
+        });
+        if (!res.ok) {
+          setIfscStatus("error");
+          setIfscBranchInfo("IFSC code not found in Razorpay registry");
+          return;
+        }
+        const data = await res.json();
+        const bank = String(data?.BANK ?? "").trim();
+        const branch = String(data?.BRANCH ?? "").trim();
+        const city = String(data?.CITY ?? data?.DISTRICT ?? "").trim();
+        const state = String(data?.STATE ?? "").trim();
+        if (bank) {
+          // Auto-fill bank name only if blank or different — never silently
+          // clobber a value the merchant has explicitly customised once
+          // verified, but on first lookup we always overwrite so the field
+          // matches the official Razorpay registry name.
+          setEditing({ ...editing, bankName: bank });
+          setIfscBranchInfo(
+            [branch, city, state].filter(Boolean).join(", "),
+          );
+          setIfscStatus("verified");
+        } else {
+          setIfscStatus("error");
+          setIfscBranchInfo("Could not read bank info");
+        }
+      } catch (err: any) {
+        if (err?.name === "AbortError") return;
+        setIfscStatus("error");
+        setIfscBranchInfo("Could not verify IFSC (network error)");
+      }
+    }, 400);
+    return () => {
+      clearTimeout(timer);
+      ctrl.abort();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editing.ifsc, editing.type]);
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 px-4 backdrop-blur-md">
       <div className="relative w-full max-w-lg overflow-hidden rounded-2xl border border-white/[0.08] bg-gradient-to-br from-slate-900 to-slate-950 shadow-[0_30px_80px_-20px_rgba(0,0,0,0.8)]">
@@ -363,13 +438,64 @@ function MethodFormModal({
                     setEditing({ ...editing, accountNumber: v })
                   }
                 />
-                <InputField
-                  label="IFSC"
-                  value={editing.ifsc ?? ""}
-                  onChange={(v) =>
-                    setEditing({ ...editing, ifsc: v.toUpperCase() })
-                  }
-                />
+                <div>
+                  <label className="mb-1 flex items-center gap-2 text-xs uppercase tracking-wide text-slate-400">
+                    <span>IFSC</span>
+                    {ifscStatus === "loading" && (
+                      <Loader2 className="h-3 w-3 animate-spin text-amber-300" />
+                    )}
+                    {ifscStatus === "verified" && (
+                      <span className="flex items-center gap-1 text-[10px] font-semibold text-emerald-400">
+                        <CheckCircle2 className="h-3 w-3" /> Verified
+                      </span>
+                    )}
+                    {ifscStatus === "error" && (
+                      <span className="flex items-center gap-1 text-[10px] font-semibold text-rose-400">
+                        <AlertCircle className="h-3 w-3" /> Invalid
+                      </span>
+                    )}
+                  </label>
+                  <input
+                    type="text"
+                    value={editing.ifsc ?? ""}
+                    onChange={(e) =>
+                      setEditing({
+                        ...editing,
+                        ifsc: e.target.value.toUpperCase(),
+                      })
+                    }
+                    placeholder="HDFC0001234"
+                    className={cn(
+                      "w-full rounded-lg bg-slate-800 border px-3 py-2 text-sm font-mono uppercase tracking-wider focus:outline-none focus:border-amber-500",
+                      ifscStatus === "verified"
+                        ? "border-emerald-500/50"
+                        : ifscStatus === "error"
+                          ? "border-rose-500/50"
+                          : "border-slate-700",
+                    )}
+                    data-testid="input-merchant-method-ifsc"
+                  />
+                  {ifscBranchInfo && (
+                    <div
+                      className={cn(
+                        "mt-1.5 rounded-md px-2.5 py-1.5 text-[11px] leading-snug",
+                        ifscStatus === "verified"
+                          ? "bg-emerald-500/5 text-emerald-300 border border-emerald-500/20"
+                          : "bg-rose-500/5 text-rose-300 border border-rose-500/20",
+                      )}
+                      data-testid="text-merchant-method-ifsc-branch"
+                    >
+                      {ifscStatus === "verified" ? (
+                        <>
+                          <span className="font-semibold">Branch:</span>{" "}
+                          {ifscBranchInfo}
+                        </>
+                      ) : (
+                        ifscBranchInfo
+                      )}
+                    </div>
+                  )}
+                </div>
                 <InputField
                   label="Bank name"
                   value={editing.bankName ?? ""}
