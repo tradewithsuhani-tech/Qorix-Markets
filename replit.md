@@ -4448,3 +4448,124 @@ This restores prod to the exact pre-B33 state (42 tables, no quiz state). Zero d
 - Lib-only changes (`lib/db/**`) trigger BOTH api and web paths-filter, so `deploy-api`, `deploy-web`, `deploy-quiz` will all run on the next push.
 - All three are no-op deploys at the application level (no app code changed); they will pass typecheck (already verified locally) and rebuild/redeploy the same image hash.
 - The actual schema changes are LIVE in prod NOW (applied via psql before the push); CI just needs to typecheck and ship the matching Drizzle types so future batches can use `db.select().from(quizCategoriesTable)` etc. without compile errors.
+
+---
+
+## B35 (2026-05-01) — Qorixplay SSO public-client PKCE flow (LIVE)
+
+**Goal:** Wire the qorix-quiz SPA into the OAuth Authorization Code + PKCE
+flow against qorix-markets, so that clicking "Sign in with Qorix Markets"
+on `qorix-quiz.fly.dev` (and later qorixplay.com) bounces to Markets,
+authenticates against the existing user session, and returns a short-lived
+JWT scoped to qorixplay — without ever needing a long-lived `client_secret`
+to live in the browser.
+
+### Changes (3 commits + 1 hand-SQL migration)
+
+**B35 commit-1 (`2b956233`)** — api-server schema + /token-public route
+- `lib/db/src/schema/quiz-oauth-codes.ts`: added `code_challenge varchar(128)`
+  and `code_challenge_method varchar(10)` to existing `quiz_oauth_codes`.
+- `artifacts/api-server/src/routes/oauth-quiz.ts`: new POST
+  `/api/oauth/quiz/token-public` — same atomic UPDATE-on-redeem pattern as
+  `/token` but gated on `code_challenge IS NOT NULL` and re-derives
+  `BASE64URL(SHA256(code_verifier))` for constant-time compare against the
+  stored challenge (RFC 7636 §4.6). originGuard PATH_EXEMPTIONS lets it
+  through (browser-origin call, not server-to-server).
+- `/authorize` now persists `code_challenge` + `code_challenge_method` when
+  the SPA opts into PKCE.
+
+**B35 commit-2 (`beb2ac36`)** — diag block removal (kept production-safe
+`{ error: 'internal_error' }` body).
+
+**B35 commit-3 (`7f8c6b6e`)** — qorix-quiz client wiring (7 files):
+- `src/lib/oauth-config.ts` — MARKETS_URL / API_URL / CLIENT_ID /
+  `getRedirectUri()` (window.location.origin based, so the same bundle
+  works on qorix-quiz.fly.dev and qorixplay.com).
+- `src/lib/pkce.ts` — Web Crypto only (no dep). 32-byte verifier →
+  43-char base64url; SHA-256 challenge; 16-byte CSRF state.
+- `src/lib/auth-storage.ts` — localStorage `qorixplay_access_token` +
+  absolute-ms expiry; auto-clears expired; tolerates quota / private mode.
+- `src/lib/start-login.ts` — mints verifier+state+challenge, sessionStorage,
+  `window.location.assign()` to `${MARKETS_URL}/oauth/quiz/authorize?...`.
+  Throws if sessionStorage blocked.
+- `src/pages/auth-callback.tsx` — wired at `/auth/callback`. useRef one-shot
+  guard for React 18 strict-mode double-mount. Atomic verifier clear before
+  POST so retry can't reuse a one-shot. State mismatch → security-failed
+  screen. POST `/api/oauth/quiz/token-public` → storeToken → setLocation.
+- `src/pages/landing.tsx` — `useIsSignedIn()` (focus/storage event aware).
+  CTA toggles "Sign in with Qorix Markets" ↔ "You're in — play opens
+  shortly". Header pill toggles "Quiz play coming soon" ↔ "Signed in
+  with Markets • Sign out".
+- `src/App.tsx` — `<Route path="/auth/callback" component={AuthCallbackPage} />`.
+
+### The `neondb` vs `heliumdb` post-mortem
+
+The B35 commit-1 schema change applied cleanly via psql against
+`PROD_DATABASE_URL` (which points to `heliumdb`) and `\d quiz_oauth_codes`
+showed all 10 columns. But every prod request to `/token-public` returned
+`500 internal_error`. Three diag commits (be80819b → 5dd701ba → 724a1dde)
+progressively widened the catch block to surface:
+
+1. The raw thrown error — same generic Drizzle wrapper.
+2. `err.cause` — pg `42P01 "relation \"quiz_oauth_codes\" does not exist"`.
+3. `db.execute(SELECT current_database(), ...)` from inside the same pool
+   — confirmed the api-server is connected to **`neondb`** (user
+   `neondb_owner`, 55 public tables, has `quiz_categories` etc), NOT
+   `heliumdb` (user `postgres`, 49 public tables) where I had migrated.
+
+**The Replit env var `PROD_DATABASE_URL` does not equal the Fly api-server's
+`DATABASE_URL` secret.** The api-server uses `NEON_DATABASE_URL` →
+`neondb`. Re-applied the IDENTICAL hand-written CREATE TABLE +
+2 CREATE INDEX SQL against `NEON_DATABASE_URL` via psql:
+
+```sql
+BEGIN;
+CREATE TABLE IF NOT EXISTS public.quiz_oauth_codes (
+  code                  varchar(64)  PRIMARY KEY,
+  user_id               integer      NOT NULL
+                          REFERENCES public.users(id) ON DELETE CASCADE,
+  redirect_uri          text         NOT NULL,
+  client_id             varchar(64)  NOT NULL DEFAULT 'qorixplay',
+  scope                 text         NOT NULL DEFAULT 'profile email kyc',
+  expires_at            timestamptz  NOT NULL,
+  used_at               timestamptz,
+  created_at            timestamptz  NOT NULL DEFAULT now(),
+  code_challenge        varchar(128),
+  code_challenge_method varchar(10)
+);
+CREATE INDEX IF NOT EXISTS idx_quiz_oauth_codes_user_id
+  ON public.quiz_oauth_codes (user_id);
+CREATE INDEX IF NOT EXISTS idx_quiz_oauth_codes_expires_at
+  ON public.quiz_oauth_codes (expires_at)
+  WHERE used_at IS NULL;
+COMMIT;
+```
+
+**Going forward:** prefer `NEON_DATABASE_URL` for any prod hand-SQL until we
+unify the two URLs. `PROD_DATABASE_URL` is still useful for `heliumdb`
+inspection but is NOT the api-server's runtime DB.
+
+### Smoke verification (POST-merge, against live prod)
+
+```
+GET  https://qorixmarkets.com/oauth/quiz/authorize?...     → 200 (SPA loads)
+POST https://qorix-api.fly.dev/api/oauth/quiz/authorize     → 401 Unauthorized
+                                                              (no session — expected)
+POST https://qorix-api.fly.dev/api/oauth/quiz/token-public  → 400 invalid_grant
+                                                              (table reachable, no
+                                                              500 anymore)
+OPTIONS … /token-public  Origin: qorix-quiz.fly.dev          → 204 with
+                                                              Access-Control-Allow-
+                                                              Origin set
+```
+
+GET `https://qorix-quiz.fly.dev/` → bundled JS contains `button-sign-in`,
+`Sign in with Qorix Markets`, `qorixplay_pkce_verifier`,
+`/oauth/quiz/authorize` — all expected strings shipped.
+
+### What B35 deliberately does NOT do
+
+- The actual quiz-play screens (deferred to B38).
+- A `useAuth()` context (only 2 consumers right now — read storage directly).
+- Token refresh (deferred to B36 → `/api/oauth/quiz/refresh`).
+- `qorixplay.com` DNS hookup (deferred to B45 polishing batch).
