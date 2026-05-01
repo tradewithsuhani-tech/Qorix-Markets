@@ -123,6 +123,23 @@ async function main() {
   process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
   process.on("SIGINT", () => gracefulShutdown("SIGINT"));
 
+  // Defense-in-depth: log unhandled promise rejections instead of crashing the
+  // worker. Node v15+ defaults to terminating the process on unhandled
+  // rejection, which means a single timed-out Redis command (shared client
+  // has commandTimeout: 1500ms) from a fire-and-forget Lua script load or
+  // background helper takes the entire worker down — and once worker is
+  // dead, cron stops firing → INR escalations stall → user deposits get
+  // stuck. The shared Redis client already has a `client.on("error")`
+  // listener that logs failures; the catch-all here only covers Promise
+  // chains that bypassed it. Same treatment for uncaughtException so a
+  // bad chain doesn't leave the worker zombied either.
+  process.on("unhandledRejection", (reason) => {
+    errorLogger.error({ reason }, "Unhandled promise rejection — keeping process alive");
+  });
+  process.on("uncaughtException", (err) => {
+    errorLogger.error({ err }, "Uncaught exception — keeping process alive");
+  });
+
   app.listen(port, (err?: Error) => {
     if (err) {
       errorLogger.error({ err }, "Error listening on port");

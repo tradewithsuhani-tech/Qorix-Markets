@@ -1,5 +1,5 @@
 import { Queue } from "bullmq";
-import { getRedisConnection } from "./redis";
+import { newBullMQConnection } from "./redis";
 
 export interface ProfitDistributionJobData {
   profitPercent: number;
@@ -44,7 +44,7 @@ export function getProfitDistributionQueue(): Queue<ProfitDistributionJobData> {
   if (!_profitDistributionQueue) {
     _profitDistributionQueue = new Queue<ProfitDistributionJobData>(
       "profit-distribution",
-      { connection: getRedisConnection() },
+      { connection: newBullMQConnection() },
     );
   }
   return _profitDistributionQueue;
@@ -54,7 +54,7 @@ export function getDepositEventQueue(): Queue<DepositEventJobData> {
   if (!_depositEventQueue) {
     _depositEventQueue = new Queue<DepositEventJobData>(
       "deposit-event",
-      { connection: getRedisConnection() },
+      { connection: newBullMQConnection() },
     );
   }
   return _depositEventQueue;
@@ -64,7 +64,7 @@ export function getProfitDistributionEventQueue(): Queue<ProfitDistributionEvent
   if (!_profitDistributionEventQueue) {
     _profitDistributionEventQueue = new Queue<ProfitDistributionEventJobData>(
       "profit-distribution-event",
-      { connection: getRedisConnection() },
+      { connection: newBullMQConnection() },
     );
   }
   return _profitDistributionEventQueue;
