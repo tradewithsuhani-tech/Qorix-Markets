@@ -67,3 +67,66 @@ primary_region = 'bom'
   size = 'shared-cpu-1x'
   memory = '1gb'
   processes = ['worker']
+
+# ─── Restart policy (Task #135) ───────────────────────────────────────────
+# Make the restart-on-crash semantics explicit in fly.toml rather than
+# relying on Fly's default per-process behaviour. `policy = 'always'` means
+# Fly will restart the machine even after a clean exit (exit code 0) — we
+# want this for the worker because background-jobs.ts wires `process.exit(0)`
+# into graceful shutdown, and a SIGTERM-driven exit on a single deploy
+# rollback should NOT permanently take the worker offline.
+#
+# `max_restarts` is a soft cap that resets after the machine has stayed
+# up for 30s. With the heartbeat self-check below, a wedged worker that
+# Fly restarts will write a fresh heartbeat within ~60s of coming back —
+# pushing the counter back to 0 and avoiding the "auto-stopped after 5
+# crashes" cliff that triggered the 2026-05-01 incident.
+[[restart]]
+  policy = 'always'
+  max_restarts = 10
+  processes = ['worker']
+
+# ─── Worker heartbeat health check (Task #135) ────────────────────────────
+# Fly probes /api/worker-healthz on the worker VM's internal port (8080)
+# every 30s. The endpoint reads an in-process timestamp updated by the
+# every-minute heartbeat loop in lib/worker-heartbeat-service.ts and
+# returns 503 once the loop has stalled. Fly then restarts the failing
+# machine, and the [[restart]] block above re-runs the boot sequence.
+#
+# `grace_period = '2m'` covers the boot window before the first heartbeat
+# write completes (the in-process check has its own boot grace, but the
+# Fly probe needs to wait too — otherwise a slow-booting worker with a
+# 30s DB-pool warmup would 503 once and Fly would yank it).
+#
+# This health check ALSO enables the secondary detection layer: the web
+# process group runs a watchdog that polls the heartbeat row and pages
+# admin via the existing voice-call cascade (same channel as INR
+# escalation) if no beat lands in 5+ minutes. Fly's auto-restart catches
+# transient wedging; the admin page catches the rare case where Fly itself
+# fails to restart the machine.
+[[checks]]
+  name = 'worker_heartbeat'
+  type = 'http'
+  port = 8080
+  interval = '30s'
+  timeout = '5s'
+  grace_period = '2m'
+  method = 'get'
+  path = '/api/worker-healthz'
+  protocol = 'http'
+  processes = ['worker']
+
+# ─── Worker count (Task #135) ─────────────────────────────────────────────
+# Fly does not currently let us declare `min_machines_running` for non-HTTP
+# process groups in fly.toml — the property is part of the [http_service]
+# block which only applies to web traffic. The worker count is therefore
+# set once via `flyctl scale count worker=1 --region bom` and persists in
+# Fly's machine state across deploys. The [[restart]] policy above ensures
+# a crashed worker comes back, and the [[checks]] block ensures a wedged
+# one is recycled — between the two, the only failure mode left where the
+# count can drift to zero is an explicit `flyctl scale count worker=0`,
+# which is now mirrored by an alert via the web watchdog within 5 min.
+#
+# Cutover note for ops: after applying this fly.toml, run
+#   flyctl checks list -a qorix-api
+# and confirm a `worker_heartbeat` check appears for each worker machine.

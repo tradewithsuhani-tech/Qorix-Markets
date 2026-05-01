@@ -50,11 +50,13 @@ const STATE_CHANGING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 const PATH_EXEMPTIONS = new Set([
   // Mount-relative (matches req.path under app.use("/api", ...)):
   "/healthz",
+  "/worker-healthz",
   "/version",
   "/version.json",
   "/csrf",
   // Absolute (matches req.path if remounted at root):
   "/api/healthz",
+  "/api/worker-healthz",
   "/api/version",
   "/api/version.json",
   "/api/csrf",

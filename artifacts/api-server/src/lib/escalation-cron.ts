@@ -74,7 +74,7 @@ async function getAdminContacts(): Promise<AdminContactTarget[]> {
 // If no provider is configured (email-fallback path) we cannot detect
 // "answered", so the loop will email every contact in turn — that matches
 // the user expectation of "make sure SOMEONE gets it".
-async function runAdminCascade(
+export async function runAdminCascade(
   buildMessage: (contactName: string) => { ssmlBody: string; plainText: string },
 ): Promise<void> {
   const contacts = await getAdminContacts();

@@ -144,7 +144,12 @@ export const globalApiLimiter = makeRedisLimiter({
   limit: 600,
   message: { error: "Too many requests, slow down.", code: "rate_limited" },
   skip: (req) => {
-    if (req.path === "/healthz" || req.path === "/api/healthz") return true;
+    if (
+      req.path === "/healthz" ||
+      req.path === "/api/healthz" ||
+      req.path === "/worker-healthz" ||
+      req.path === "/api/worker-healthz"
+    ) return true;
     const expected = process.env.LOADTEST_TOKEN;
     if (expected && expected.length >= 16) {
       const header = req.header("x-loadtest-token");

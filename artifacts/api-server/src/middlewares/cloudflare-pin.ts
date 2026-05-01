@@ -74,9 +74,11 @@ import type { Request, Response, NextFunction } from "express";
 // instance out of rotation. (B30.1 — caught by architect review.)
 const PATH_EXEMPTIONS = new Set<string>([
   "/healthz",
+  "/worker-healthz",
   "/version",
   "/version.json",
   "/api/healthz",
+  "/api/worker-healthz",
   "/api/version",
   "/api/version.json",
 ]);

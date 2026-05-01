@@ -12,6 +12,8 @@ import {
   registerBackgroundJobs,
   realBackgroundJobFactories,
 } from "./lib/background-jobs";
+import { startWorkerHeartbeatLoop } from "./lib/worker-heartbeat-service";
+import { startWorkerWatchdog } from "./lib/worker-watchdog";
 
 // Gate single-instance background work (cron, Telegram poller, on-chain
 // watchers, BullMQ workers) behind a single env flag so we can flip it off in
@@ -102,6 +104,39 @@ async function main() {
     logger.warn("RUN_BACKGROUND_JOBS=false — cron, Telegram poller, watchers, and workers are DISABLED on this instance");
   }
 
+  // ─── Health surface for the worker process group (Task #135) ────────────
+  // The worker has no Fly [http_service] in front of it, but it still binds
+  // PORT 8080 inside the VM (app.listen below). Fly's per-process [[checks]]
+  // probe /api/worker-healthz directly on that internal port; the endpoint
+  // returns 503 once the local heartbeat loop has stalled, prompting Fly to
+  // restart the machine. The DB-backed heartbeat row written here is also
+  // the signal the web-side watchdog reads cross-instance, so a fully-dead
+  // worker (machine gone, not just a wedged loop) still pages admin.
+  //
+  // Heartbeats are written ONLY when background jobs are actually enabled
+  // on this process (i.e. this is the worker, or Replit dev with the gate
+  // open). If maintenance is on / this is the `app` group, there is no
+  // worker work to monitor — writing a heartbeat from the web group would
+  // make the watchdog falsely think the worker is alive.
+  let stopHeartbeat: (() => void) | null = null;
+  if (jobs) {
+    const loop = await startWorkerHeartbeatLoop();
+    stopHeartbeat = loop.stop;
+  }
+
+  // ─── Worker watchdog (web process group only) ───────────────────────────
+  // The web group polls the heartbeat table every minute and pages admin
+  // via the existing voice-call cascade if no beat has been written in 5+
+  // minutes. Gated to the Fly `app` group so a single-process Replit dev
+  // run doesn't page admin against itself, and so two web replicas don't
+  // race to be the pager (the cascade handles its own dedup, but quieter
+  // logs are nicer).
+  let stopWatchdog: (() => void) | null = null;
+  if (flyProcessGroup === "app") {
+    const wd = startWorkerWatchdog();
+    stopWatchdog = wd.stop;
+  }
+
   const gracefulShutdown = async (signal: string) => {
     logger.info({ signal }, "Received shutdown signal — closing workers and server");
     jobs?.tronMonitor.stop();
@@ -114,6 +149,8 @@ async function main() {
         jobs.profitEventWorker.close(),
       ]);
     }
+    stopHeartbeat?.();
+    stopWatchdog?.();
     // Close the LISTEN connection cleanly so we don't leave a zombie
     // backend connection on the Postgres side during a rolling deploy.
     await stopMaintenanceListener();
