@@ -636,9 +636,9 @@ function ChartHeader({ quote }: { quote: BotQuote | undefined }) {
   const isUp = change > 0;
   const isFlat = change === 0;
   return (
-    <div className="flex items-center justify-between gap-3 px-4 py-2 border-b">
-      <div className="flex items-center gap-2 min-w-0">
-        <span className="text-[12px] font-bold tracking-wider">
+    <div className="flex items-center justify-between gap-2 sm:gap-3 px-3 sm:px-4 py-2 border-b">
+      <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+        <span className="text-[11px] sm:text-[12px] font-bold tracking-wider">
           {quote.display}
         </span>
         {quote.marketOpen ? (
@@ -661,10 +661,10 @@ function ChartHeader({ quote }: { quote: BotQuote | undefined }) {
           5s candles
         </span>
       </div>
-      <div className="flex items-center gap-3 text-[11px] tabular-nums">
+      <div className="flex items-center gap-2 sm:gap-3 text-[11px] tabular-nums">
         <span
           className={cn(
-            "font-mono text-base font-semibold transition-colors duration-300",
+            "font-mono text-sm sm:text-base font-semibold transition-colors duration-300",
             flash === "up" && "text-emerald-400",
             flash === "down" && "text-rose-400",
           )}
@@ -775,11 +775,14 @@ function PositionsStrip({
   if (positions.length === 0) return null;
 
   return (
-    <div className="border-t bg-background/30 px-3 py-2">
+    <div className="border-t bg-background/30 px-2.5 sm:px-3 py-2">
       <div className="flex items-center gap-2 mb-1.5 text-[10px] font-semibold tracking-wider text-muted-foreground">
-        <Zap className="size-3 text-amber-400" />
-        <span>{positions.length} OPEN POSITIONS</span>
-        <span className="ml-auto text-muted-foreground/50 italic font-normal normal-case tracking-normal">
+        <Zap className="size-3 text-amber-400 shrink-0" />
+        <span className="truncate">
+          {positions.length} OPEN
+          <span className="hidden sm:inline"> POSITIONS</span>
+        </span>
+        <span className="ml-auto shrink-0 text-muted-foreground/50 italic font-normal normal-case tracking-normal">
           live P/L
         </span>
       </div>
@@ -885,7 +888,7 @@ function LiveTapeStrip({ quote }: { quote: BotQuote | undefined }) {
         <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
         <span>LIVE TAPE</span>
         <span className="text-foreground/70 font-mono">{pairLabel}</span>
-        <span className="text-muted-foreground/40 normal-case font-normal tracking-normal italic">
+        <span className="hidden sm:inline text-muted-foreground/40 normal-case font-normal tracking-normal italic">
           indicative · feed only
         </span>
         <span className="ml-auto font-mono text-muted-foreground/40 normal-case font-normal tracking-normal">
@@ -905,20 +908,20 @@ function LiveTapeStrip({ quote }: { quote: BotQuote | undefined }) {
               exit={{ opacity: 0 }}
               transition={{ duration: 0.18, ease: "easeOut" }}
               layout
-              className="flex items-center gap-3 tabular-nums leading-4 h-4"
+              className="flex items-center gap-2 sm:gap-3 tabular-nums leading-4 h-4"
             >
-              <span className="text-muted-foreground/60 w-16 shrink-0">
+              <span className="text-muted-foreground/60 w-[52px] sm:w-16 shrink-0">
                 {new Date(p.at).toLocaleTimeString("en-US", { hour12: false })}
               </span>
               <span
                 className={cn(
-                  "w-10 font-bold shrink-0",
+                  "w-9 sm:w-10 font-bold shrink-0",
                   p.side === "BUY" ? "text-emerald-400" : "text-rose-400",
                 )}
               >
                 {p.side}
               </span>
-              <span className="w-14 text-foreground/80 shrink-0">
+              <span className="w-12 sm:w-14 text-foreground/80 shrink-0">
                 {quote ? formatTapeSize(quote.code, p.size) : p.size}
               </span>
               <span
@@ -1041,10 +1044,10 @@ export function BotTerminalCard() {
       <JustFilledToast fill={fillToast} />
 
       {/* Header */}
-      <div className="flex items-center justify-between gap-3 px-4 py-3 border-b bg-gradient-to-r from-emerald-500/5 via-transparent to-transparent">
-        <div className="flex items-center gap-2 min-w-0">
+      <div className="flex items-center justify-between gap-2 sm:gap-3 px-3 sm:px-4 py-2.5 sm:py-3 border-b bg-gradient-to-r from-emerald-500/5 via-transparent to-transparent">
+        <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
           <Activity className="size-4 text-emerald-400 shrink-0" />
-          <span className="text-sm font-semibold tracking-wider truncate">
+          <span className="text-[13px] sm:text-sm font-semibold tracking-wider truncate">
             BOT TERMINAL
           </span>
           <Badge
@@ -1055,7 +1058,7 @@ export function BotTerminalCard() {
             LIVE
           </Badge>
         </div>
-        <div className="text-[11px] text-muted-foreground tabular-nums flex items-center gap-2 shrink-0">
+        <div className="text-[10px] sm:text-[11px] text-muted-foreground tabular-nums flex items-center gap-1.5 sm:gap-2 shrink-0">
           {summary ? (
             <>
               <span>{summary.openCount} open</span>
@@ -1081,11 +1084,11 @@ export function BotTerminalCard() {
 
       {/* Live candlestick chart for the featured pair */}
       <ChartHeader quote={featured} />
-      <div className="p-3">
+      <div className="p-2 sm:p-3">
         <LiveCandleChart
           quote={featured}
           persistKey={featuredCode}
-          height={280}
+          height={260}
         />
       </div>
 
@@ -1096,8 +1099,8 @@ export function BotTerminalCard() {
       <PositionsStrip positions={positions} quotes={quotes} />
 
       {/* Bot plan + user share strip */}
-      <div className="px-4 py-2.5 border-t bg-background/40 text-[11px] flex items-center justify-between gap-3 flex-wrap">
-        <div className="flex items-center gap-2 text-muted-foreground flex-wrap">
+      <div className="px-3 sm:px-4 py-2.5 border-t bg-background/40 text-[10px] sm:text-[11px] flex items-center justify-between gap-2 sm:gap-3 flex-wrap">
+        <div className="flex items-center gap-1.5 sm:gap-2 text-muted-foreground flex-wrap">
           <TrendingUp className="size-3 text-emerald-400 shrink-0" />
           <span>Plan</span>
           {plan ? (
