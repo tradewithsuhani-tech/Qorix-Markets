@@ -1545,6 +1545,20 @@ export function BotTerminalCard() {
     if (typeof window === "undefined") return;
     window.localStorage.setItem(SCALP_PNL_KEY, String(scalpTotalPnl));
   }, [scalpTotalPnl]);
+  // Daily/session target — default $100, override via
+  // localStorage.setItem("qorix.scalp.target.v1", "250") + reload.
+  const SCALP_TARGET_KEY = "qorix.scalp.target.v1";
+  const SCALP_DEFAULT_TARGET = 100;
+  const scalpTarget = useMemo(() => {
+    if (typeof window === "undefined") return SCALP_DEFAULT_TARGET;
+    const raw = window.localStorage.getItem(SCALP_TARGET_KEY);
+    const n = raw ? Number(raw) : SCALP_DEFAULT_TARGET;
+    return Number.isFinite(n) && n > 0 ? n : SCALP_DEFAULT_TARGET;
+  }, []);
+  const scalpTargetPct = Math.max(
+    0,
+    Math.min(100, (scalpTotalPnl / scalpTarget) * 100),
+  );
   const lastMidRef = useRef<number | null>(null);
   const scalpIdRef = useRef(-1);
 
@@ -1760,24 +1774,37 @@ export function BotTerminalCard() {
             <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
             LIVE
           </Badge>
-          <Badge
-            variant="outline"
+          <div
             className={cn(
-              "h-6 shrink-0 text-[11px] sm:text-xs font-bold tabular-nums px-2 gap-1 transition-colors",
+              "relative h-6 shrink-0 rounded-md border overflow-hidden flex items-center gap-1.5 px-2 text-[11px] sm:text-xs font-bold tabular-nums transition-colors",
               scalpTotalPnl >= 0
-                ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-300"
+                ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-300"
                 : "border-rose-500/40 bg-rose-500/15 text-rose-300",
             )}
-            title="Cumulative scalp bot P&L (persisted across reloads)"
+            title={`Scalp bot P&L $${scalpTotalPnl.toFixed(2)} of $${scalpTarget.toFixed(0)} target (${scalpTargetPct.toFixed(1)}%) — override via localStorage qorix.scalp.target.v1`}
           >
-            <span className="opacity-60 text-[9px] tracking-wider hidden sm:inline">
+            {/* Progress fill bar (only when positive, shows journey to target) */}
+            {scalpTotalPnl > 0 && (
+              <span
+                aria-hidden
+                className="absolute inset-y-0 left-0 bg-emerald-500/15 transition-[width] duration-500 ease-out"
+                style={{ width: `${scalpTargetPct}%` }}
+              />
+            )}
+            <span className="relative opacity-60 text-[9px] tracking-wider hidden sm:inline">
               P&L
             </span>
-            <span>
+            <span className="relative">
               {scalpTotalPnl >= 0 ? "+" : "−"}$
               {Math.abs(scalpTotalPnl).toFixed(2)}
             </span>
-          </Badge>
+            <span className="relative opacity-50 text-[10px] hidden sm:inline">
+              / ${scalpTarget.toFixed(0)}
+            </span>
+            <span className="relative opacity-70 text-[9px] tabular-nums">
+              {scalpTargetPct.toFixed(0)}%
+            </span>
+          </div>
         </div>
         <div className="text-[10px] sm:text-[11px] text-muted-foreground tabular-nums flex items-center gap-1.5 sm:gap-2 shrink-0">
           <span className="hidden sm:inline-flex items-center gap-1">
