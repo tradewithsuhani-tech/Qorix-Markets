@@ -283,10 +283,38 @@ jobs:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
         run: |
           set -euo pipefail
-          echo "::warning::Smoke test failed for qorix-api — rolling back to previous release."
-          flyctl releases rollback \
+          echo "::warning::Smoke test failed for qorix-api — rolling back via image-based redeploy."
+          # Batch O fix: `flyctl releases rollback --yes` is broken — the `--yes`
+          # flag was removed from modern flyctl and the command itself prompts
+          # interactively, so it can't be used non-interactively in CI. Image-
+          # based redeploy is the stable, documented path: pull the JSON
+          # release list, locate the second-most-recent SUCCESSFUL release
+          # (index 0 is the broken release we just shipped), and re-deploy
+          # that image. Identical code path to a normal deploy, fully non-
+          # interactive, idempotent.
+          flyctl releases list -a qorix-api --json > /tmp/releases-api.json
+          # Field names differ across flyctl versions (status/Status,
+          # image_ref/ImageRef/imageRef) so accept any case + either form.
+          PREV_IMAGE=$(jq -r '
+            [
+              .[] | select(
+                ((.status // .Status // "") | ascii_downcase) | test("complete|succeed")
+              )
+            ]
+            | .[1]
+            | (.image_ref // .ImageRef // .imageRef // empty)
+          ' /tmp/releases-api.json)
+          if [ -z "${PREV_IMAGE}" ] || [ "${PREV_IMAGE}" = "null" ]; then
+            echo "::error::Could not determine previous successful release image for qorix-api."
+            jq '.[0:3]' /tmp/releases-api.json || cat /tmp/releases-api.json
+            exit 1
+          fi
+          echo "Rolling back qorix-api → ${PREV_IMAGE}"
+          flyctl deploy \
             --app qorix-api \
-            --yes
+            --image "${PREV_IMAGE}" \
+            --strategy immediate \
+            --wait-timeout 300
       # Smoke-test the rolled-back release so we don't silently fall back to a
       # version that's also broken. If this fails the job still ends red (the
       # original smoke step already failed), but the log will make it obvious
@@ -681,6 +709,44 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
+      # Batch O fix: post-deploy 502 stabilization gate. Fly's blue-green
+      # rollout warms machines one at a time; the earlier curl smokes may
+      # land on the already-warm instance while a parallel playwright launch
+      # hits a still-cold one and gets a 502. Playwright's `page.goto` does
+      # NOT retry, so a single 502 fails the whole smoke run (this has bit
+      # us at least twice — see Batches K + L deploy logs).
+      #
+      # Fix: require N consecutive successful 200s from /version.json before
+      # any browser smoke runs. Using /version.json (not /healthz) because
+      # it's the path the bundle itself polls — if it's flaky for us it'll
+      # be flaky for users. Cheap (single small JSON file, no DB hits) and
+      # the no-store header guarantees we hit the origin every time, not a
+      # CDN cache.
+      - name: Wait for web origin to stabilize (Batch O)
+        run: |
+          set -euo pipefail
+          REQUIRED_OK=5
+          MAX_ATTEMPTS=60
+          DELAY=2
+          ok_streak=0
+          for attempt in $(seq 1 ${MAX_ATTEMPTS}); do
+            code=$(curl -fsS -o /dev/null -w "%{http_code}" \
+              --max-time 10 "${WEB_BASE}/version.json" || echo "000")
+            if [ "${code}" = "200" ]; then
+              ok_streak=$((ok_streak + 1))
+              echo "  attempt ${attempt}: 200 OK (streak ${ok_streak}/${REQUIRED_OK})"
+              if [ "${ok_streak}" -ge "${REQUIRED_OK}" ]; then
+                echo "✓ web origin stable after ${attempt} attempts"
+                exit 0
+              fi
+            else
+              ok_streak=0
+              echo "  attempt ${attempt}: ${code} — resetting streak"
+            fi
+            sleep ${DELAY}
+          done
+          echo "::error::Web origin never produced ${REQUIRED_OK} consecutive 200s in ${MAX_ATTEMPTS} attempts."
+          exit 1
       - name: Browser smoke test — login + protected route
         id: smoke_web_browser
         env:
@@ -1792,10 +1858,32 @@ jobs:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
         run: |
           set -euo pipefail
-          echo "::warning::Smoke test failed for qorix-markets-web — rolling back to previous release."
-          flyctl releases rollback \
+          echo "::warning::Smoke test failed for qorix-markets-web — rolling back via image-based redeploy."
+          # Batch O fix: see comment in rollback_api above. Same image-based
+          # redeploy pattern — `flyctl releases rollback --yes` is broken in
+          # modern flyctl, so we re-deploy the previous successful image
+          # directly via the stable `flyctl deploy --image` path.
+          flyctl releases list -a qorix-markets-web --json > /tmp/releases-web.json
+          PREV_IMAGE=$(jq -r '
+            [
+              .[] | select(
+                ((.status // .Status // "") | ascii_downcase) | test("complete|succeed")
+              )
+            ]
+            | .[1]
+            | (.image_ref // .ImageRef // .imageRef // empty)
+          ' /tmp/releases-web.json)
+          if [ -z "${PREV_IMAGE}" ] || [ "${PREV_IMAGE}" = "null" ]; then
+            echo "::error::Could not determine previous successful release image for qorix-markets-web."
+            jq '.[0:3]' /tmp/releases-web.json || cat /tmp/releases-web.json
+            exit 1
+          fi
+          echo "Rolling back qorix-markets-web → ${PREV_IMAGE}"
+          flyctl deploy \
             --app qorix-markets-web \
-            --yes
+            --image "${PREV_IMAGE}" \
+            --strategy immediate \
+            --wait-timeout 300
       # Smoke-test the rolled-back release so we don't silently fall back to a
       # version that's also broken. If this fails the job still ends red (the
       # original smoke step already failed), but the log will make it obvious
