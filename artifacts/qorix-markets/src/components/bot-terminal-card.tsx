@@ -463,32 +463,46 @@ function LiveCandleChart({
   const ema = useMemo(() => computeEma(candles, EMA_PERIOD), [candles]);
   const flash = useFlash(quote?.mid ?? 0, 350);
 
-  // Auto-scaled price range with 8% padding so candles don't kiss
-  // the top/bottom edges. Positions are NOT folded into the range
-  // so a far-from-current entry doesn't squash the live candles
-  // into a 1-2px sliver — out-of-range entries are simply hidden
-  // (the parent already trims to the closest 4 by price distance).
+  // Auto-scaled price range with 8% padding. Featured positions ARE
+  // folded into the range so entries render at their TRUE y position
+  // (chips + dashed lines + right tags spread across the chart like
+  // MT5), instead of being clamped to the chart edge. To prevent a
+  // single far-away entry from squashing candles into a sliver, the
+  // position-driven extension is capped at 2.5× the raw candle range.
   const range = useMemo(() => {
     if (candles.length === 0) {
       return { min: (quote?.mid ?? 0) - 1, max: (quote?.mid ?? 0) + 1 };
     }
-    let min = Infinity;
-    let max = -Infinity;
+    let cMin = Infinity;
+    let cMax = -Infinity;
     for (const c of candles) {
-      if (c.low < min) min = c.low;
-      if (c.high > max) max = c.high;
+      if (c.low < cMin) cMin = c.low;
+      if (c.high > cMax) cMax = c.high;
     }
     if (quote?.mid && Number.isFinite(quote.mid)) {
-      if (quote.mid < min) min = quote.mid;
-      if (quote.mid > max) max = quote.mid;
+      if (quote.mid < cMin) cMin = quote.mid;
+      if (quote.mid > cMax) cMax = quote.mid;
     }
-    if (!Number.isFinite(min) || !Number.isFinite(max) || min === max) {
-      const center = Number.isFinite(min) ? min : (quote?.mid ?? 0);
+    if (!Number.isFinite(cMin) || !Number.isFinite(cMax) || cMin === cMax) {
+      const center = Number.isFinite(cMin) ? cMin : (quote?.mid ?? 0);
       return { min: center - 1, max: center + 1 };
+    }
+    const candleSpan = cMax - cMin;
+    // Cap position extension so candles never shrink below ~28% of
+    // the visible price area: max total span = candleSpan × 3.5
+    // (i.e. positions can extend up to 1.25× candleSpan on each side).
+    const maxExt = candleSpan * 1.25;
+    let min = cMin;
+    let max = cMax;
+    for (const p of positions) {
+      if (!Number.isFinite(p.entryPrice)) continue;
+      const ePrice = p.entryPrice as number;
+      if (ePrice < min) min = Math.max(ePrice, cMin - maxExt);
+      if (ePrice > max) max = Math.min(ePrice, cMax + maxExt);
     }
     const pad = (max - min) * 0.08;
     return { min: min - pad, max: max + pad };
-  }, [candles, quote?.mid]);
+  }, [candles, quote?.mid, positions]);
 
   // Volume scale — uses live tick count per candle as a proxy for
   // activity. Feels organic because busy candles (lots of synth
