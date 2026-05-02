@@ -24,6 +24,8 @@ import {
   CheckSquare,
   Check,
   X,
+  Bookmark,
+  Plus,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -130,6 +132,58 @@ interface AnalyticsResponse {
   temperature30d?: { hot: number; warm: number; cold: number };
 }
 
+// Task #145 Batch K — saved views. A view is a named (status,
+// temperature) tuple that operators can pin to one click. Presets are
+// built-in and undeletable; user views are persisted in localStorage
+// so they survive across sessions on the same device. Storage is
+// per-admin-per-browser by design — we don't want one operator's
+// "Cold > 30d, ready to delete" view leaking onto another operator's
+// dashboard. Server-side persistence would need a new table; leaving
+// that for if/when ops actually ask for cross-device sync.
+interface SavedView {
+  id: string;
+  name: string;
+  status: LeadStatus;
+  temperature: TemperatureFilter;
+  preset?: boolean;
+}
+
+const VIEWS_STORAGE_KEY = "qorix.chat-leads.views";
+
+const PRESET_VIEWS: SavedView[] = [
+  { id: "preset:hot-pending", name: "Hot · pending", status: "pending", temperature: "hot", preset: true },
+  { id: "preset:warm-sent", name: "Warm · sent", status: "sent", temperature: "warm", preset: true },
+  { id: "preset:cold-pending", name: "Cold · pending", status: "pending", temperature: "cold", preset: true },
+  { id: "preset:hot-converted", name: "Won (hot)", status: "converted", temperature: "hot", preset: true },
+];
+
+// URL-state helpers. Mount reads ?status= and ?temperature= so views
+// are linkable/bookmarkable; subsequent changes write back via
+// replaceState (no history pollution — this is a filter not a nav).
+function readUrlFilters(): { status: LeadStatus; temperature: TemperatureFilter } {
+  if (typeof window === "undefined") return { status: "all", temperature: "all" };
+  const params = new URLSearchParams(window.location.search);
+  const s = params.get("status");
+  const t = params.get("temperature");
+  const validStatus: LeadStatus[] = ["all", "pending", "sent", "converted", "unsubscribed"];
+  const validTemp: TemperatureFilter[] = ["all", "hot", "warm", "cold"];
+  return {
+    status: validStatus.includes(s as LeadStatus) ? (s as LeadStatus) : "all",
+    temperature: validTemp.includes(t as TemperatureFilter) ? (t as TemperatureFilter) : "all",
+  };
+}
+function writeUrlFilters(status: LeadStatus, temperature: TemperatureFilter) {
+  if (typeof window === "undefined") return;
+  const params = new URLSearchParams(window.location.search);
+  if (status === "all") params.delete("status");
+  else params.set("status", status);
+  if (temperature === "all") params.delete("temperature");
+  else params.set("temperature", temperature);
+  const qs = params.toString();
+  const url = qs ? `${window.location.pathname}?${qs}` : window.location.pathname;
+  window.history.replaceState(null, "", url);
+}
+
 const TEMPERATURE_BADGE: Record<
   LeadTemperature,
   { label: string; tone: string; dot: string }
@@ -182,8 +236,13 @@ const CHANNEL_OPTIONS: Array<{ key: ContactChannel; label: string; icon: React.C
 ];
 
 export default function AdminChatLeads() {
-  const [status, setStatus] = useState<LeadStatus>("all");
-  const [temperature, setTemperature] = useState<TemperatureFilter>("all");
+  // Batch K — initial state restored from the URL so links/bookmarks
+  // (e.g. /admin/chats?status=pending&temperature=hot) load straight
+  // into the right view.
+  const [status, setStatus] = useState<LeadStatus>(() => readUrlFilters().status);
+  const [temperature, setTemperature] = useState<TemperatureFilter>(
+    () => readUrlFilters().temperature,
+  );
   const [leads, setLeads] = useState<ChatLead[]>([]);
   const [totals, setTotals] = useState<LeadTotals>({
     all: 0,
@@ -212,6 +271,74 @@ export default function AdminChatLeads() {
   const [bulkNote, setBulkNote] = useState("");
   const [bulkSubmitting, setBulkSubmitting] = useState(false);
   const [bulkError, setBulkError] = useState<string | null>(null);
+  // Batch K — saved views (localStorage) + inline rename state.
+  const [savedViews, setSavedViews] = useState<SavedView[]>([]);
+  const [savingViewName, setSavingViewName] = useState<string | null>(null);
+
+  // Load saved views once on mount. Wrapped in try/catch in case the
+  // user blocked localStorage (private mode, some Safari setups) — we
+  // simply degrade to "presets only".
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(VIEWS_STORAGE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        setSavedViews(
+          parsed.filter(
+            (v: any): v is SavedView =>
+              v && typeof v.id === "string" && typeof v.name === "string",
+          ),
+        );
+      }
+    } catch {
+      /* ignore — degrade gracefully */
+    }
+  }, []);
+
+  // Push filter changes back into the URL so the current view is
+  // shareable. Runs after every filter mutation.
+  useEffect(() => {
+    writeUrlFilters(status, temperature);
+  }, [status, temperature]);
+
+  function persistViews(next: SavedView[]) {
+    setSavedViews(next);
+    try {
+      localStorage.setItem(VIEWS_STORAGE_KEY, JSON.stringify(next));
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function applyView(v: SavedView) {
+    setStatus(v.status);
+    setTemperature(v.temperature);
+    setExpandedId(null);
+  }
+  function deleteView(id: string) {
+    persistViews(savedViews.filter((v) => v.id !== id));
+  }
+  function commitNewView() {
+    const name = (savingViewName ?? "").trim().slice(0, 60);
+    if (!name) {
+      setSavingViewName(null);
+      return;
+    }
+    // Don't allow duplicate names.
+    const exists = [...PRESET_VIEWS, ...savedViews].some(
+      (v) => v.name.toLowerCase() === name.toLowerCase(),
+    );
+    if (exists) {
+      setSavingViewName(null);
+      return;
+    }
+    persistViews([
+      ...savedViews,
+      { id: `user:${Date.now()}`, name, status, temperature, preset: false },
+    ]);
+    setSavingViewName(null);
+  }
 
   async function load(opts: { showSpinner?: boolean } = {}) {
     if (opts.showSpinner) setRefreshing(true);
@@ -512,6 +639,129 @@ export default function AdminChatLeads() {
           </button>
         </div>
       </div>
+
+      {/* Batch K — saved views row. Sits between the filter toolbar
+          and the bulk action bar / leads list. Active view auto-
+          highlights when current (status, temperature) matches.
+          Presets are pinned first; user views follow with a delete
+          button on hover. "+ Save current" inline-renames into a
+          tiny input. */}
+      {(() => {
+        const allViews = [...PRESET_VIEWS, ...savedViews];
+        const activeView = allViews.find(
+          (v) => v.status === status && v.temperature === temperature,
+        );
+        const canSave = !activeView; // no point saving a duplicate of an existing view
+        return (
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-white/35 mr-1">
+              <Bookmark className="w-3 h-3" />
+              Views
+            </div>
+            {allViews.map((v) => {
+              const active = activeView?.id === v.id;
+              return (
+                <div
+                  key={v.id}
+                  className={cn(
+                    "group relative flex items-center gap-1 rounded-md text-[11px] border transition",
+                    active
+                      ? "bg-blue-500/20 border-blue-500/40 text-blue-100"
+                      : "bg-white/5 border-white/10 text-white/55 hover:bg-white/10",
+                  )}
+                >
+                  <button
+                    onClick={() => applyView(v)}
+                    className="flex items-center gap-1 px-2 py-1"
+                    title={`Apply: status=${v.status}, temp=${v.temperature}`}
+                  >
+                    {v.preset ? (
+                      <Bookmark className="w-3 h-3 opacity-60" />
+                    ) : (
+                      <Bookmark className="w-3 h-3 text-amber-300/80" />
+                    )}
+                    {v.name}
+                  </button>
+                  {!v.preset && (
+                    <button
+                      onClick={() => deleteView(v.id)}
+                      className="pr-1.5 pl-0.5 py-1 text-white/30 hover:text-rose-300 transition opacity-0 group-hover:opacity-100"
+                      title="Delete view"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+
+            {/* Save / cancel inline rename */}
+            {savingViewName === null ? (
+              <button
+                onClick={() => setSavingViewName("")}
+                disabled={!canSave}
+                className={cn(
+                  "flex items-center gap-1 px-2 py-1 rounded-md text-[11px] border transition",
+                  canSave
+                    ? "bg-emerald-500/10 border-emerald-500/25 text-emerald-200 hover:bg-emerald-500/20"
+                    : "bg-white/5 border-white/10 text-white/30 cursor-not-allowed",
+                )}
+                title={
+                  canSave
+                    ? "Save the current filter combo as a named view"
+                    : "Already saved as: " + (activeView?.name ?? "")
+                }
+              >
+                <Plus className="w-3 h-3" />
+                Save current
+              </button>
+            ) : (
+              <div className="flex items-center gap-1">
+                <input
+                  autoFocus
+                  type="text"
+                  value={savingViewName}
+                  onChange={(e) => setSavingViewName(e.target.value.slice(0, 60))}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") commitNewView();
+                    if (e.key === "Escape") setSavingViewName(null);
+                  }}
+                  placeholder="Name this view"
+                  className="px-2 py-1 rounded-md text-[11px] bg-white/5 border border-emerald-500/30 text-white/85 placeholder:text-white/25 focus:outline-none focus:border-emerald-500/50"
+                  style={{ width: 140 }}
+                />
+                <button
+                  onClick={commitNewView}
+                  className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] text-emerald-200 bg-emerald-500/15 border border-emerald-500/30 hover:bg-emerald-500/25 transition"
+                >
+                  <Check className="w-3 h-3" />
+                  Save
+                </button>
+                <button
+                  onClick={() => setSavingViewName(null)}
+                  className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] text-white/55 bg-white/5 border border-white/10 hover:bg-white/10 transition"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            )}
+
+            {(status !== "all" || temperature !== "all") && (
+              <button
+                onClick={() => {
+                  setStatus("all");
+                  setTemperature("all");
+                  setExpandedId(null);
+                }}
+                className="ml-1 px-2 py-1 rounded-md text-[11px] text-white/40 hover:text-white/70 hover:bg-white/5 transition"
+                title="Clear all filters"
+              >
+                Reset filters
+              </button>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Error banner */}
       {error && (
