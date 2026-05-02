@@ -1,10 +1,17 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Send, ChevronRight, MessageCircle, Headphones, UserCheck, CheckCheck, SquareX, RotateCcw, MessageSquarePlus, TrendingUp } from "lucide-react";
+import { X, Send, ChevronRight, MessageCircle, Headphones, UserCheck, CheckCheck, SquareX, RotateCcw, MessageSquarePlus, TrendingUp, Languages, Mail, Loader2, Shield } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
 import { useLocation } from "wouter";
 import { authFetch } from "@/lib/auth-fetch";
+import { getOrCreateVisitorId } from "@/lib/visitor-id";
+
+// Lead-capture trigger: show the email form after this many user-typed
+// messages in guest mode. 3 turns is enough that the visitor is engaged
+// (not a one-bounce passerby) but early enough that we still catch them
+// before they drift off the page.
+const GUEST_LEAD_TRIGGER_TURNS = 3;
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -15,6 +22,15 @@ interface Message {
   timestamp: Date;
   options?: QuickOption[];
   showInsights?: boolean;
+  cta?: CtaCard | null;
+}
+
+interface CtaCard {
+  variant: string;       // "small_deposit" | "view_dashboard" | "talk_to_expert"
+  label: string;
+  href?: string;
+  action?: string;       // "request_expert"
+  ackText?: string;      // language-aware "let me take you there" reply shown before navigation
 }
 
 interface QuickOption {
@@ -24,6 +40,21 @@ interface QuickOption {
 }
 
 type FlowKey = "main" | "how_to_start" | "investment_guide" | "returns" | "risk" | "expert_requested";
+
+// Language pill choices. `null` means the user has not picked one — the LLM
+// then mirrors whatever language the user types in (legacy behaviour).
+type LanguageChoice = "en" | "hi" | "hinglish" | null;
+
+const LANGUAGE_OPTIONS: { value: Exclude<LanguageChoice, null>; short: string; label: string }[] = [
+  { value: "en", short: "EN", label: "English" },
+  { value: "hi", short: "हि", label: "हिंदी" },
+  { value: "hinglish", short: "Hi-EN", label: "Hinglish" },
+];
+
+function languageShortLabel(lang: LanguageChoice): string {
+  if (!lang) return "Auto";
+  return LANGUAGE_OPTIONS.find((o) => o.value === lang)?.short ?? "Auto";
+}
 
 // ─── Bot Flow Definitions ─────────────────────────────────────────────────────
 
@@ -88,6 +119,26 @@ async function apiPost(path: string, body: object) {
 
 async function apiGet(path: string) {
   return authFetch(`/api${path}`);
+}
+
+// Guest variants. Identical wire format but every call carries the
+// `x-visitor-id` header — that's how the API server scopes the
+// unauthenticated session to *this* browser. authFetch picks up the
+// custom header from `init.headers` and merges it with its own (CSRF,
+// device-id), so all the protections that apply to authed endpoints also
+// apply here.
+async function guestPost(path: string, body: object) {
+  return authFetch(`/api${path}`, {
+    method: "POST",
+    headers: { "x-visitor-id": getOrCreateVisitorId() },
+    body: JSON.stringify(body),
+  });
+}
+
+async function guestGet(path: string) {
+  return authFetch(`/api${path}`, {
+    headers: { "x-visitor-id": getOrCreateVisitorId() },
+  });
 }
 
 // ─── Typing Indicator ─────────────────────────────────────────────────────────
@@ -160,10 +211,64 @@ function LiveInsightsCard() {
   );
 }
 
+// ─── CTA Card (LLM-driven persuasive next step) ──────────────────────────────
+
+function ctaIconForVariant(variant: string) {
+  if (variant === "view_dashboard") return <TrendingUp className="w-4 h-4" />;
+  if (variant === "talk_to_expert") return <UserCheck className="w-4 h-4" />;
+  return <ChevronRight className="w-4 h-4" />;
+}
+
+function CtaCardButton({ cta, onClick }: { cta: CtaCard; onClick: (cta: CtaCard) => void }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.15, duration: 0.25 }}
+      className="ml-9 mb-3"
+    >
+      <motion.button
+        onClick={() => onClick(cta)}
+        whileHover={{ scale: 1.01 }}
+        whileTap={{ scale: 0.98 }}
+        className="w-full max-w-[260px] flex items-center justify-between gap-2 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all"
+        style={{
+          background: "linear-gradient(135deg, rgba(37,99,235,0.18) 0%, rgba(124,58,237,0.18) 100%)",
+          border: "1px solid rgba(99,102,241,0.35)",
+          color: "rgb(199,210,254)",
+          boxShadow: "0 4px 14px rgba(99,102,241,0.18)",
+        }}
+        data-cta-variant={cta.variant}
+      >
+        <span className="flex items-center gap-2">
+          {ctaIconForVariant(cta.variant)}
+          <span>{cta.label}</span>
+        </span>
+        <ChevronRight className="w-4 h-4 opacity-60" />
+      </motion.button>
+    </motion.div>
+  );
+}
+
 // ─── Message Bubble ───────────────────────────────────────────────────────────
 
-function parseMarkdown(text: string) {
+// XSS hardening: bot replies originate from the LLM and the LLM's input is
+// (transitively) attacker-controlled (the user types whatever they want).
+// We escape every HTML-significant character FIRST, then run the small
+// markdown substitution set against the escaped string — so any raw HTML
+// the model is coerced into emitting becomes inert text, while our own
+// `<strong>`, `<em>`, and `<br />` tags remain the only live HTML.
+function escapeHtml(text: string) {
   return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function parseMarkdown(text: string) {
+  return escapeHtml(text)
     .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
     .replace(/\*(.*?)\*/g, '<em>$1</em>')
     .replace(/\n/g, '<br />');
@@ -259,6 +364,23 @@ export function QorixAssistant({ guestMode = false }: { guestMode?: boolean } = 
   const [pollTimer, setPollTimer] = useState<ReturnType<typeof setInterval> | null>(null);
   const [showNudge, setShowNudge] = useState(false);
   const [nudgeIndex, setNudgeIndex] = useState(0);
+  // Header language pill state. `null` = no explicit choice (LLM mirrors
+  // whatever the user typed in). When set, persisted to the session row so
+  // the LLM and CTA acknowledgements both honour it.
+  const [language, setLanguage] = useState<LanguageChoice>(null);
+  const [showLangMenu, setShowLangMenu] = useState(false);
+  // ── Guest lead-capture state (Batch D). Triggered after the visitor has
+  // sent ≥ GUEST_LEAD_TRIGGER_TURNS messages without having signed up. The
+  // form lives inline above the message input so it's not a hard modal that
+  // breaks reading flow. Once submitted (or skipped) we never show it again
+  // for this session.
+  const [showLeadForm, setShowLeadForm] = useState(false);
+  const [leadCaptured, setLeadCaptured] = useState(false);
+  const [leadDismissed, setLeadDismissed] = useState(false);
+  const [leadEmail, setLeadEmail] = useState("");
+  const [leadName, setLeadName] = useState("");
+  const [leadSubmitting, setLeadSubmitting] = useState(false);
+  const [leadError, setLeadError] = useState<string | null>(null);
   const nudgeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const nudgeHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -311,8 +433,12 @@ export function QorixAssistant({ guestMode = false }: { guestMode?: boolean } = 
     if (isOpen) {
       setHasUnread(false);
       setTimeout(() => inputRef.current?.focus(), 300);
-      if (guestMode && messages.length === 0) {
-        showBotMessage(FLOWS.main.message, FLOWS.main.options);
+      if (guestMode && !sessionId) {
+        // Server-backed guest session — visitor's chat survives reload and
+        // shows up in /admin/chats. initGuestSession() also rehydrates any
+        // prior history from a previous tab/session (Resume policy). The
+        // welcome bubble is only shown for *brand-new* sessions.
+        initGuestSession();
       } else if (!sessionId && token) {
         initSession();
       }
@@ -329,29 +455,97 @@ export function QorixAssistant({ guestMode = false }: { guestMode?: boolean } = 
     return undefined;
   }, [expertMode, sessionId, isOpen]);
 
+  // Guest counterpart of initSession() — same resume policy, but every call
+  // is keyed on the visitor's localStorage UUID instead of a JWT.
+  async function initGuestSession() {
+    try {
+      const { session } = await guestPost("/chat/guest-session", {
+        visitorId: getOrCreateVisitorId(),
+      });
+      setSessionId(session.id);
+      if (session.preferredLanguage) {
+        setLanguage(session.preferredLanguage as LanguageChoice);
+      } else {
+        setLanguage(null);
+      }
+      const { messages: existing } = await guestGet(
+        `/chat/guest-session/${session.id}/messages`,
+      );
+      if (Array.isArray(existing) && existing.length > 0) {
+        setMessages(existing.map((m: any) => ({
+          id: String(m.id),
+          type: m.senderType as "user" | "bot" | "admin",
+          content: m.content,
+          timestamp: new Date(m.createdAt),
+        })));
+        return;
+      }
+      // Fresh session — show the canned welcome and DO persist the bot
+      // message server-side so the admin panel sees the same opening
+      // line that the visitor saw.
+      showBotMessage(FLOWS.main.message, FLOWS.main.options);
+      void guestPost("/chat/guest-bot-message", {
+        sessionId: session.id,
+        content: FLOWS.main.message,
+        visitorId: getOrCreateVisitorId(),
+      }).catch(() => {});
+    } catch {
+      // Network down / API misconfigured — degrade to a purely client-side
+      // welcome so the visitor still sees a chat experience.
+      showBotMessage(FLOWS.main.message, FLOWS.main.options);
+    }
+  }
+
   async function initSession() {
     if (!token) return;
     try {
       const { session } = await apiPost("/chat/session", {});
       setSessionId(session.id);
-      if (session.status === "expert_requested") {
-        setExpertMode(true);
-        // Load existing messages
-        const { messages: existing } = await apiGet(`/chat/session/${session.id}/messages`);
-        if (existing.length > 0) {
-          setMessages(existing.map((m: any) => ({
-            id: String(m.id),
-            type: m.senderType as "user" | "bot" | "admin",
-            content: m.content,
-            timestamp: new Date(m.createdAt),
-          })));
-          return;
-        }
+      if (session.status === "expert_requested") setExpertMode(true);
+      // Hydrate the language pill from whatever the server has on the
+      // session row — preserves the user's previous choice across visits.
+      if (session.preferredLanguage) {
+        setLanguage(session.preferredLanguage as LanguageChoice);
+      } else {
+        setLanguage(null);
       }
-      // Show welcome message
+
+      // Resume policy (Task 104): if the resumed session already has
+      // messages, load them all instead of dumping the user back at the
+      // welcome screen. Only sessions with zero history get the welcome
+      // bubble — that covers brand-new sessions and the ambient "I just
+      // signed up" first-time case.
+      const { messages: existing } = await apiGet(`/chat/session/${session.id}/messages`);
+      if (existing.length > 0) {
+        setMessages(existing.map((m: any) => ({
+          id: String(m.id),
+          type: m.senderType as "user" | "bot" | "admin",
+          content: m.content,
+          timestamp: new Date(m.createdAt),
+        })));
+        return;
+      }
       showBotMessage(FLOWS.main.message, FLOWS.main.options);
     } catch (err) {
       // Ignore
+    }
+  }
+
+  async function persistLanguage(next: LanguageChoice) {
+    setLanguage(next);
+    setShowLangMenu(false);
+    if (!sessionId) return;
+    try {
+      if (guestMode) {
+        await guestPost(`/chat/guest-session/${sessionId}/language`, {
+          language: next,
+          visitorId: getOrCreateVisitorId(),
+        });
+      } else if (token) {
+        await apiPost(`/chat/session/${sessionId}/language`, { language: next });
+      }
+    } catch {
+      // Non-fatal: the LLM falls back to mirror mode if persistence fails.
     }
   }
 
@@ -463,13 +657,33 @@ export function QorixAssistant({ guestMode = false }: { guestMode?: boolean } = 
   }
 
   async function saveUserMessage(content: string) {
-    if (!sessionId || !token) return;
-    try { await apiPost("/chat/message", { sessionId, content }); } catch { }
+    if (!sessionId) return;
+    try {
+      if (guestMode) {
+        await guestPost("/chat/guest-message", {
+          sessionId,
+          content,
+          visitorId: getOrCreateVisitorId(),
+        });
+      } else if (token) {
+        await apiPost("/chat/message", { sessionId, content });
+      }
+    } catch { }
   }
 
   async function saveBotMessage(content: string) {
-    if (!sessionId || !token) return;
-    try { await apiPost("/chat/bot-message", { sessionId, content }); } catch { }
+    if (!sessionId) return;
+    try {
+      if (guestMode) {
+        await guestPost("/chat/guest-bot-message", {
+          sessionId,
+          content,
+          visitorId: getOrCreateVisitorId(),
+        });
+      } else if (token) {
+        await apiPost("/chat/bot-message", { sessionId, content });
+      }
+    } catch { }
   }
 
   async function handleExpertRequest() {
@@ -485,8 +699,16 @@ export function QorixAssistant({ guestMode = false }: { guestMode?: boolean } = 
 
   async function handleEndChat() {
     setShowEndConfirm(false);
-    if (sessionId && token) {
-      try { await apiPost(`/chat/session/${sessionId}/end`, {}); } catch { }
+    if (sessionId) {
+      try {
+        if (guestMode) {
+          await guestPost(`/chat/guest-session/${sessionId}/end`, {
+            visitorId: getOrCreateVisitorId(),
+          });
+        } else if (token) {
+          await apiPost(`/chat/session/${sessionId}/end`, {});
+        }
+      } catch { }
     }
     setChatEnded(true);
     setExpertMode(false);
@@ -499,11 +721,76 @@ export function QorixAssistant({ guestMode = false }: { guestMode?: boolean } = 
     setExpertMode(false);
     setInputText("");
     setShowEndConfirm(false);
+    // Drop the in-memory language pill back to "Auto" so the new session
+    // starts cleanly. initSession() will rehydrate from the new server-side
+    // session row (which starts with preferredLanguage = null).
+    setLanguage(null);
+    setShowLangMenu(false);
+    // Reset the lead-capture surface too — a brand-new conversation should
+    // get a fresh chance at capturing the visitor's email if they engage.
+    // `leadCaptured` is intentionally NOT reset: once we have the address
+    // we don't ask a second time in the same browser.
+    setShowLeadForm(false);
+    setLeadDismissed(false);
+    setLeadEmail("");
+    setLeadName("");
+    setLeadError(null);
     if (guestMode) {
-      setTimeout(() => showBotMessage(FLOWS.main.message, FLOWS.main.options), 100);
+      setTimeout(() => initGuestSession(), 100);
     } else if (token) {
       setTimeout(() => initSession(), 100);
     }
+  }
+
+  async function handleLeadSubmit() {
+    if (leadSubmitting) return;
+    const email = leadEmail.trim();
+    const name = leadName.trim();
+    // Cheap client-side validation. The API also validates with zod, but a
+    // local check stops the obvious typos from causing a network round-trip.
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setLeadError("Please enter a valid email address.");
+      return;
+    }
+    if (!sessionId) {
+      setLeadError("Hold on a second — still connecting.");
+      return;
+    }
+    setLeadSubmitting(true);
+    setLeadError(null);
+    try {
+      await guestPost("/chat/guest-lead", {
+        sessionId,
+        email,
+        name: name || undefined,
+        visitorId: getOrCreateVisitorId(),
+      });
+      setLeadCaptured(true);
+      setShowLeadForm(false);
+      // Drop a confirmation bubble into the chat so the visitor sees a
+      // tangible response to handing over their address — feels like a
+      // human acknowledgement rather than a silent form submit.
+      showBotMessage(
+        name
+          ? `Thanks ${name}! I've got your details. Whenever you're ready, sign up and I'll have full context — wallet, KYC, the works.`
+          : "Got it — thanks! Whenever you're ready, sign up and I'll have full context to help you start.",
+        [
+          { label: "🔐 Sign Up Now", value: "go_login" },
+          { label: "🏠 Keep Browsing", value: "main_menu" },
+        ],
+      );
+    } catch (err: any) {
+      const msg = typeof err?.message === "string" && err.message.length < 200 ? err.message : null;
+      setLeadError(msg ?? "Couldn't save your details. Please try again.");
+    } finally {
+      setLeadSubmitting(false);
+    }
+  }
+
+  function handleLeadDismiss() {
+    setShowLeadForm(false);
+    setLeadDismissed(true);
+    setLeadError(null);
   }
 
   async function handleSendMessage() {
@@ -515,22 +802,208 @@ export function QorixAssistant({ guestMode = false }: { guestMode?: boolean } = 
     setIsSending(true);
 
     try {
-      await saveUserMessage(content);
-      if (!expertMode) {
-        // Auto-reply for free-text in bot mode
+      // ── Guest mode: route through the dedicated guest LLM endpoint.
+      // Server-side it talks to the same model as the authed path but with a
+      // tighter system prompt (no wallet/KYC context, focused on landing-page
+      // questions) and rate-limited per visitor-id. After the visitor has
+      // typed `GUEST_LEAD_TRIGGER_TURNS` messages we surface the email form
+      // so we can follow up by email if they bounce off the page.
+      if (guestMode) {
+        if (!sessionId) {
+          // Session creation lost a race — kick it off and skip this turn.
+          // The text the user typed is preserved in `content` and they can
+          // re-send. In practice this only fires if they type before the
+          // initial fetch settles (sub-second window).
+          await initGuestSession();
+          showBotMessage(
+            "Sorry, just getting set up — please try sending that again.",
+          );
+          return;
+        }
+
+        setIsTyping(true);
+        try {
+          const data = await guestPost("/chat/guest-llm-reply", {
+            sessionId,
+            content,
+            visitorId: getOrCreateVisitorId(),
+          });
+          setIsTyping(false);
+          if (data?.reply?.content) {
+            if (Array.isArray(data.quickOptions) && data.quickOptions.length) {
+              showBotMessage(data.reply.content, data.quickOptions);
+            } else {
+              const botMsg: Message = {
+                id: `bot-${data.reply.id ?? Date.now()}`,
+                type: "bot",
+                content: data.reply.content,
+                timestamp: new Date(data.reply.createdAt ?? Date.now()),
+                cta: data.cta ?? null,
+              };
+              setMessages((prev) => [...prev, botMsg]);
+            }
+          }
+        } catch (err: any) {
+          setIsTyping(false);
+          const msg = typeof err?.message === "string" && err.message.length < 240 ? err.message : null;
+          showBotMessage(
+            msg ??
+              "I'm having trouble responding right now. You can try again, or sign up to keep chatting with full context.",
+            [
+              { label: "🔐 Sign In / Register", value: "go_login" },
+              { label: "🏠 Back to Menu", value: "main_menu" },
+            ],
+          );
+        }
+
+        // Lead capture trigger. Counts the user message we *just* added to
+        // local state — `messages` snapshot here predates the addUserMessage
+        // call, so we add 1 to bring it level with the actually-rendered
+        // count. We only show the form once per session; once dismissed or
+        // submitted we never bring it back.
+        const userTurnsAfter = messages.filter((m) => m.type === "user").length + 1;
+        if (
+          !leadCaptured &&
+          !leadDismissed &&
+          !showLeadForm &&
+          userTurnsAfter >= GUEST_LEAD_TRIGGER_TURNS
+        ) {
+          setShowLeadForm(true);
+        }
+
+        return;
+      }
+
+      if (!sessionId || !token) {
+        await saveUserMessage(content);
         setTimeout(() => {
           showBotMessage(
-            "I understand your query! For the best help, please select one of the options below, or connect with our expert team for personalized assistance.",
+            "I understand your query! Please pick an option below or talk to our expert team.",
             [
               { label: "🚀 How to Start", value: "how_to_start" },
-              { label: "📊 Investment Guide", value: "investment_guide" },
               { label: "💬 Talk to Expert", value: "expert" },
-            ]
+            ],
           );
         }, 300);
+        return;
+      }
+
+      // ── Expert mode: humans handle the conversation. The LLM endpoint
+      // server-side detects this and only persists the user message
+      // without generating a reply — but we still call it so the
+      // message lands on the admin panel via the same code path.
+      //
+      // We briefly flash the typing indicator so the user gets the same
+      // "your message was received and someone's reading it" feedback
+      // they get on the LLM path. Without this the message just sits
+      // there with no acknowledgement and the chat feels broken.
+      // 1.8s matches the natural rhythm of "person opens chat, glances at
+      // message" — long enough to read as a real beat, short enough that
+      // it doesn't pretend an instant human reply is coming.
+      if (expertMode) {
+        setIsTyping(true);
+        try {
+          await saveUserMessage(content);
+        } finally {
+          setTimeout(() => setIsTyping(false), 1800);
+        }
+        return;
+      }
+
+      // ── LLM-driven reply.
+      setIsTyping(true);
+      try {
+        const data = await apiPost("/chat/llm-reply", { sessionId, content });
+        setIsTyping(false);
+
+        if (data?.expertMode) {
+          // Server flipped us into expert mode mid-stream — sync up.
+          setExpertMode(true);
+          return;
+        }
+
+        if (data?.reply?.content) {
+          // When the server supplies `quickOptions` (LLM bypassed because of
+          // budget/availability), render them as buttons via the same
+          // showBotMessage path the rule-tree uses. This keeps the chat
+          // navigable instead of degrading to a dead-end fallback string.
+          if (Array.isArray(data.quickOptions) && data.quickOptions.length) {
+            showBotMessage(data.reply.content, data.quickOptions);
+          } else {
+            const botMsg: Message = {
+              id: `bot-${data.reply.id ?? Date.now()}`,
+              type: "bot",
+              content: data.reply.content,
+              timestamp: new Date(data.reply.createdAt ?? Date.now()),
+              cta: data.cta ?? null,
+            };
+            setMessages((prev) => [...prev, botMsg]);
+          }
+        }
+      } catch (err: any) {
+        setIsTyping(false);
+        // Rate-limit messages and other 4xx errors come through `err.message`
+        // (authFetch flattens the body's `error`/`message` field there). For
+        // anything else we fall back to a gentle generic message — the user
+        // should never see a stack trace.
+        const msg = typeof err?.message === "string" && err.message.length < 240 ? err.message : null;
+        showBotMessage(
+          msg ??
+            "I'm having trouble pulling that up right now. You can try again or tap **Talk to Expert** for a human advisor.",
+          [
+            { label: "🚀 How to Start", value: "how_to_start" },
+            { label: "📊 Investment Plans", value: "investment_guide" },
+            { label: "💬 Talk to Expert", value: "expert" },
+            { label: "🏠 Back to Menu", value: "main_menu" },
+          ],
+        );
       }
     } finally {
       setIsSending(false);
+    }
+  }
+
+  async function handleCtaClick(cta: CtaCard) {
+    if (!sessionId || !token) return;
+    // Fire-and-forget audit log; do NOT block the navigation on the network.
+    apiPost("/chat/cta-click", { sessionId, variant: cta.variant }).catch(() => {});
+
+    if (cta.action === "request_expert") {
+      addUserMessage(cta.label);
+      // Server-provided ackText keeps the bot's voice consistent across
+      // languages; fall back to a sensible English line if the server didn't
+      // ship one (older payloads).
+      if (cta.ackText) {
+        showBotMessage(cta.ackText);
+      }
+      await handleExpertRequest();
+      return;
+    }
+
+    if (cta.href) {
+      // Append attribution params so the deposit page (and dashboard) can
+      // detect the chat-driven funnel and POST conversion events back.
+      const url = new URL(cta.href, window.location.origin);
+      url.searchParams.set("src", "chat");
+      url.searchParams.set("sid", String(sessionId));
+
+      // Echo the user's tap as a chat message so the conversation reads like
+      // a real exchange ("I'll show you the dashboard" → user clicks → user
+      // line "Show me the dashboard" → bot's warm acknowledgement → navigate).
+      // This is the difference between feeling like a bot redirect and
+      // feeling like a human concierge actually walking you over.
+      addUserMessage(cta.label);
+      const ack = cta.ackText
+        ?? "On it — taking you there now. Ping me back here whenever you'd like to chat.";
+      showBotMessage(ack);
+
+      // Brief pause so the user actually reads the acknowledgement before
+      // the page transitions. 900ms matches the "typing" rhythm elsewhere
+      // in the chat — long enough to register, short enough to not feel slow.
+      await new Promise((resolve) => setTimeout(resolve, 900));
+
+      setIsOpen(false);
+      navigate(url.pathname + url.search);
     }
   }
 
@@ -541,9 +1014,15 @@ export function QorixAssistant({ guestMode = false }: { guestMode?: boolean } = 
     }
   }
 
-  // Get current quick options from last bot message
+  // Get current quick options from last bot message.
+  // UX rule: quick-reply buttons appear ONLY on the initial welcome state —
+  // once the user has typed anything (or tapped a quick-reply), the chat is
+  // a real conversation and the persistent button rail starts feeling like
+  // a menu the bot keeps shoving back. After the very first user message we
+  // suppress quick replies for the rest of the session.
+  const hasUserMessage = messages.some(m => m.type === "user");
   const lastBotMessage = [...messages].reverse().find(m => m.type === "bot" && m.options && m.options.length > 0);
-  const showOptions = lastBotMessage?.options && lastBotMessage.options.length > 0;
+  const showOptions = !hasUserMessage && Boolean(lastBotMessage?.options && lastBotMessage.options.length > 0);
 
   if (!token && !guestMode) return null;
 
@@ -686,6 +1165,74 @@ export function QorixAssistant({ guestMode = false }: { guestMode?: boolean } = 
               </div>
 
               <div className="flex items-center gap-1.5">
+                {/* Language pill — flips the LLM's reply language. The
+                    selection is persisted on the session and respected
+                    across visits. Hidden in guest mode (no session to
+                    persist on) and once the chat has ended. */}
+                {!chatEnded && !guestMode && (
+                  <div className="relative">
+                    <button
+                      onClick={() => setShowLangMenu((v) => !v)}
+                      title="Reply language"
+                      className="h-7 px-2 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 flex items-center gap-1 transition-colors"
+                      data-testid="chat-language-pill"
+                    >
+                      <Languages className="w-3 h-3 text-white/60" />
+                      <span className="text-[10px] font-semibold text-white/80 leading-none">
+                        {languageShortLabel(language)}
+                      </span>
+                    </button>
+                    <AnimatePresence>
+                      {showLangMenu && (
+                        <motion.div
+                          initial={{ opacity: 0, y: -6, scale: 0.95 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          exit={{ opacity: 0, y: -4, scale: 0.95 }}
+                          transition={{ duration: 0.15 }}
+                          className="absolute right-0 top-9 w-44 z-20 rounded-xl overflow-hidden"
+                          style={{
+                            background: "#151b2d",
+                            border: "1px solid rgba(99,102,241,0.25)",
+                            boxShadow: "0 10px 30px rgba(0,0,0,0.5)",
+                          }}
+                        >
+                          <div className="px-3 py-2 border-b border-white/[0.06]">
+                            <p className="text-[10px] uppercase tracking-wider text-white/40 font-semibold">Reply Language</p>
+                          </div>
+                          <button
+                            onClick={() => persistLanguage(null)}
+                            className={cn(
+                              "w-full text-left px-3 py-2 text-xs flex items-center justify-between transition-colors",
+                              language === null
+                                ? "bg-blue-500/15 text-blue-300"
+                                : "text-white/70 hover:bg-white/5 hover:text-white",
+                            )}
+                          >
+                            <span>Auto (mirror me)</span>
+                            {language === null && <span className="text-[10px]">✓</span>}
+                          </button>
+                          {LANGUAGE_OPTIONS.map((opt) => (
+                            <button
+                              key={opt.value}
+                              onClick={() => persistLanguage(opt.value)}
+                              className={cn(
+                                "w-full text-left px-3 py-2 text-xs flex items-center justify-between transition-colors",
+                                language === opt.value
+                                  ? "bg-blue-500/15 text-blue-300"
+                                  : "text-white/70 hover:bg-white/5 hover:text-white",
+                              )}
+                              data-testid={`chat-language-option-${opt.value}`}
+                            >
+                              <span>{opt.label}</span>
+                              {language === opt.value && <span className="text-[10px]">✓</span>}
+                            </button>
+                          ))}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                )}
+
                 {/* End Chat button — only if chat is active */}
                 {!chatEnded && messages.length > 0 && (
                   <div className="relative">
@@ -793,6 +1340,7 @@ export function QorixAssistant({ guestMode = false }: { guestMode?: boolean } = 
                   <React.Fragment key={msg.id}>
                     <MessageBubble msg={msg} />
                     {msg.showInsights && <LiveInsightsCard />}
+                    {msg.cta && <CtaCardButton cta={msg.cta} onClick={handleCtaClick} />}
                   </React.Fragment>
                 ))}
               </AnimatePresence>
@@ -854,6 +1402,96 @@ export function QorixAssistant({ guestMode = false }: { guestMode?: boolean } = 
                   <ChevronRight className="w-4 h-4" />
                 </motion.button>
               </div>
+            )}
+
+            {/* Lead capture form (guest mode only). Surfaced inline above
+                the input rather than as a hard modal so it doesn't break the
+                conversational flow — visitor can see the chat continuing
+                behind it and feel free to dismiss. */}
+            {!chatEnded && guestMode && showLeadForm && (
+              <motion.div
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 8 }}
+                className="px-3 pt-3 pb-2 flex-shrink-0"
+                style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}
+              >
+                <div
+                  className="rounded-xl p-3"
+                  style={{
+                    background: "linear-gradient(135deg, rgba(37,99,235,0.12) 0%, rgba(124,58,237,0.12) 100%)",
+                    border: "1px solid rgba(96,165,250,0.25)",
+                  }}
+                >
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <div className="flex items-center gap-2">
+                      <Mail className="w-4 h-4 text-blue-300" />
+                      <p className="text-xs font-medium text-white/90">Stay in the loop</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleLeadDismiss}
+                      aria-label="Dismiss"
+                      className="text-white/40 hover:text-white/70 transition"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-white/60 mb-2.5 leading-snug">
+                    Drop your email and we'll send a quick recap so you can pick up where you left off.
+                  </p>
+                  <div className="flex flex-col gap-2">
+                    <input
+                      type="text"
+                      value={leadName}
+                      onChange={(e) => setLeadName(e.target.value)}
+                      placeholder="Your name (optional)"
+                      maxLength={80}
+                      className="w-full rounded-md px-2.5 py-1.5 text-xs text-white/85 placeholder:text-white/30 outline-none"
+                      style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)" }}
+                    />
+                    <input
+                      type="email"
+                      value={leadEmail}
+                      onChange={(e) => setLeadEmail(e.target.value)}
+                      placeholder="you@example.com"
+                      maxLength={120}
+                      className="w-full rounded-md px-2.5 py-1.5 text-xs text-white/85 placeholder:text-white/30 outline-none"
+                      style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)" }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault();
+                          handleLeadSubmit();
+                        }
+                      }}
+                    />
+                    {leadError && (
+                      <p className="text-[11px] text-rose-300/90">{leadError}</p>
+                    )}
+                    <div className="flex items-center justify-between gap-2 mt-0.5">
+                      <p className="flex items-center gap-1 text-[10px] text-white/40">
+                        <Shield className="w-3 h-3" />
+                        We never share your email.
+                      </p>
+                      <motion.button
+                        type="button"
+                        onClick={handleLeadSubmit}
+                        disabled={leadSubmitting || !leadEmail.trim()}
+                        whileTap={{ scale: 0.96 }}
+                        className={cn(
+                          "px-3 py-1.5 rounded-md text-[11px] font-medium transition-all flex items-center gap-1.5",
+                          leadEmail.trim() && !leadSubmitting
+                            ? "bg-gradient-to-br from-blue-600 to-blue-700 text-white shadow-md shadow-blue-500/20"
+                            : "bg-white/5 text-white/30 cursor-not-allowed",
+                        )}
+                      >
+                        {leadSubmitting ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+                        {leadSubmitting ? "Saving…" : "Send recap"}
+                      </motion.button>
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
             )}
 
             {/* Input */}
