@@ -20,27 +20,44 @@ import {
  * (`VITE_RECAPTCHA_SITE_KEY` or `VITE_TURNSTILE_SITE_KEY`) baked into the
  * bundle.
  *
+ * Set `VITE_CAPTCHA_PROVIDER=none` to fully disable the captcha widget —
+ * intended for local/dev environments where the captcha vendor's domain
+ * allowlist (e.g. Turnstile site key bound to qorixmarkets.com) blocks the
+ * widget from rendering on Replit `.replit.dev` previews. The server has a
+ * matching `CAPTCHA_PROVIDER=none` that skips verification, so login/signup
+ * works end-to-end without any captcha round-trip. NEVER set this in prod.
+ *
  * The server has the matching switch (`CAPTCHA_PROVIDER`) and verifies
  * tokens against the same provider — so as long as both halves of the
  * deploy use the same value, the widget shipped to the browser and the
  * verifier on the API server agree.
  */
-const PROVIDER =
-  (import.meta.env.VITE_CAPTCHA_PROVIDER as string | undefined) === "turnstile"
+const RAW_PROVIDER = import.meta.env.VITE_CAPTCHA_PROVIDER as string | undefined;
+const PROVIDER: "recaptcha" | "turnstile" | "none" =
+  RAW_PROVIDER === "turnstile"
     ? "turnstile"
-    : "recaptcha";
+    : RAW_PROVIDER === "none"
+      ? "none"
+      : "recaptcha";
 
-export type CaptchaProvider = "recaptcha" | "turnstile";
+export type CaptchaProvider = "recaptcha" | "turnstile" | "none";
 
 export const CAPTCHA_PROVIDER: CaptchaProvider = PROVIDER;
 
 /**
  * `true` iff the active provider has its site key configured. Mirrors the
  * pre-existing `CAPTCHA_ENABLED` so the form's existing render gate still
- * works without per-provider awareness.
+ * works without per-provider awareness. When PROVIDER==="none" this is
+ * forced false so every `CAPTCHA_ENABLED && ...` gate in callers (login
+ * button enable, render of widget, server token requirement) becomes a
+ * no-op.
  */
 export const CAPTCHA_ENABLED =
-  PROVIDER === "turnstile" ? TURNSTILE_ENABLED : RECAPTCHA_ENABLED;
+  PROVIDER === "none"
+    ? false
+    : PROVIDER === "turnstile"
+      ? TURNSTILE_ENABLED
+      : RECAPTCHA_ENABLED;
 
 interface CaptchaWidgetProps {
   onVerify: (token: string) => void;
@@ -72,6 +89,9 @@ export const CaptchaWidget = forwardRef<CaptchaWidgetHandle, CaptchaWidgetProps>
       ref,
       () => ({
         reset: () => {
+          if (PROVIDER === "none") {
+            return;
+          }
           if (PROVIDER === "turnstile") {
             turnstileRef.current?.reset();
           } else {
@@ -82,6 +102,9 @@ export const CaptchaWidget = forwardRef<CaptchaWidgetHandle, CaptchaWidgetProps>
       [],
     );
 
+    if (PROVIDER === "none") {
+      return null;
+    }
     if (PROVIDER === "turnstile") {
       return (
         <Turnstile ref={turnstileRef} onVerify={onVerify} onExpire={onExpire} />

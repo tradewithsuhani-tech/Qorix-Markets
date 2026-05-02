@@ -192,15 +192,29 @@ async function main() {
     // B9.6: which captcha provider is active is decided by CAPTCHA_PROVIDER
     // (defaults to "recaptcha"). The matching secret for the active provider
     // must be set, or all captcha-gated routes auto-skip captcha — fine in
-    // dev, dangerous in prod.
-    const captchaProvider = process.env.CAPTCHA_PROVIDER === "turnstile" ? "turnstile" : "recaptcha";
-    const requiredSecretEnv = captchaProvider === "turnstile" ? "TURNSTILE_SECRET_KEY" : "RECAPTCHA_SECRET_KEY";
-    if (!process.env[requiredSecretEnv]) {
-      const msg = `${requiredSecretEnv} not set (CAPTCHA_PROVIDER=${captchaProvider}) — captcha is DISABLED on /auth routes`;
+    // dev, dangerous in prod. `none` is the explicit dev-only opt-out
+    // (mirrors VITE_CAPTCHA_PROVIDER=none on the web side) — log loud in
+    // prod, info in dev.
+    const captchaProviderRaw = process.env.CAPTCHA_PROVIDER;
+    const captchaProvider =
+      captchaProviderRaw === "none"
+        ? "none"
+        : captchaProviderRaw === "turnstile"
+          ? "turnstile"
+          : "recaptcha";
+    if (captchaProvider === "none") {
+      const msg = "CAPTCHA_PROVIDER=none — captcha is DISABLED on /auth routes (dev-only opt-out)";
       if (process.env.NODE_ENV === "production") errorLogger.error(msg);
       else logger.warn(msg);
     } else {
-      logger.info({ provider: captchaProvider }, "Captcha provider active");
+      const requiredSecretEnv = captchaProvider === "turnstile" ? "TURNSTILE_SECRET_KEY" : "RECAPTCHA_SECRET_KEY";
+      if (!process.env[requiredSecretEnv]) {
+        const msg = `${requiredSecretEnv} not set (CAPTCHA_PROVIDER=${captchaProvider}) — captcha is DISABLED on /auth routes`;
+        if (process.env.NODE_ENV === "production") errorLogger.error(msg);
+        else logger.warn(msg);
+      } else {
+        logger.info({ provider: captchaProvider }, "Captcha provider active");
+      }
     }
     if (!process.env.SES_FROM_EMAIL || !process.env.SMTP_PASS) {
       const msg = "SMTP not fully configured (need SES_FROM_EMAIL + SMTP_PASS) — emails will NOT be delivered";

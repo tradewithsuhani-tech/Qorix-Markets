@@ -3,7 +3,7 @@ import { verifyTurnstileToken, isTurnstileEnabled } from "./turnstile-service";
 
 const RECAPTCHA_VERIFY_URL = "https://www.google.com/recaptcha/api/siteverify";
 
-type CaptchaProvider = "recaptcha" | "turnstile";
+type CaptchaProvider = "recaptcha" | "turnstile" | "none";
 
 /**
  * Resolve which captcha provider is active. Driven by the `CAPTCHA_PROVIDER`
@@ -13,11 +13,17 @@ type CaptchaProvider = "recaptcha" | "turnstile";
  * deploy must agree on the same value or the issued widget tokens won't
  * round-trip through the verifier.
  *
+ * `none` fully disables verification — used in local/dev where the captcha
+ * vendor's domain allowlist (e.g. Turnstile site-key bound to qorixmarkets.com)
+ * blocks the widget on Replit `.replit.dev` previews. The frontend mirrors
+ * this with `VITE_CAPTCHA_PROVIDER=none`. NEVER set on prod.
+ *
  * Centralised in this helper so any future code that needs to know the
  * active provider (e.g. the B9.3 risk-based escalator deciding when to
  * fall back to the slider) reads a single source of truth.
  */
 export function getCaptchaProvider(): CaptchaProvider {
+  if (process.env.CAPTCHA_PROVIDER === "none") return "none";
   return process.env.CAPTCHA_PROVIDER === "turnstile" ? "turnstile" : "recaptcha";
 }
 
@@ -107,6 +113,12 @@ export async function verifyCaptcha(
   ip: string | undefined,
 ): Promise<{ ok: boolean; skipped?: boolean; error?: string }> {
   const provider = getCaptchaProvider();
+  // `none` is the explicit dev/local opt-out — no token check, no upstream
+  // round-trip, just pass through. Mirrors the `skipped: true` shape every
+  // caller already handles for the "secret not configured" auto-skip path.
+  if (provider === "none") {
+    return { ok: true, skipped: true };
+  }
   if (provider === "turnstile") {
     return verifyTurnstileToken(token, ip);
   }
@@ -116,8 +128,13 @@ export async function verifyCaptcha(
 /**
  * `true` iff the active provider has its server-side secret configured.
  * Used by the startup warning in `index.ts` to log a clear message when
- * the active provider is mis-configured for production.
+ * the active provider is mis-configured for production. The `none`
+ * provider is intentionally treated as "disabled" here so the startup
+ * banner can warn loudly if it ever leaks into a NODE_ENV=production
+ * deploy.
  */
 export function isCaptchaEnabled(): boolean {
-  return getCaptchaProvider() === "turnstile" ? isTurnstileEnabled() : isRecaptchaEnabled();
+  const provider = getCaptchaProvider();
+  if (provider === "none") return false;
+  return provider === "turnstile" ? isTurnstileEnabled() : isRecaptchaEnabled();
 }
