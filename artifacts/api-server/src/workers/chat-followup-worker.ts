@@ -17,7 +17,7 @@
 // TTL). The worker calls getChatSettings() so it picks up the latest
 // values automatically.
 
-import { db, chatLeadsTable } from "@workspace/db";
+import { db, chatLeadsTable, chatMessagesTable } from "@workspace/db";
 import { and, isNull, lt, sql } from "drizzle-orm";
 import { logger, errorLogger } from "../lib/logger";
 import { getChatSettings } from "../lib/chat-settings-cache";
@@ -108,6 +108,25 @@ export async function chatFollowupTick(): Promise<{ sent: number; skipped: numbe
       : DEFAULT_DELAY_MINUTES;
   const cutoff = new Date(Date.now() - delayMinutes * 60 * 1000);
 
+  // Batch P suppression: skip leads whose visitor came back and chatted
+  // AFTER handing over their email. The email-capture flow already
+  // recorded their address — if they're still active in the session
+  // (e.g. asked a follow-up question, opened a deposit CTA), a nudge
+  // email risks duplicating what the bot already said and reads as
+  // spam. NOT EXISTS keeps it as a single SQL round-trip; the
+  // candidate cohort is already bounded by isNull(followUpSentAt) so
+  // the correlated subquery only fires for unprocessed leads. No
+  // index on chat_messages.session_id today — at current chat
+  // volumes Postgres handles this with a hash anti-join over the
+  // small candidate set, so it's fine; revisit if MAX_PER_TICK ever
+  // grows or chat traffic spikes 10x.
+  const reEngaged = sql`EXISTS (
+    SELECT 1 FROM ${chatMessagesTable} cm
+    WHERE cm.session_id = ${chatLeadsTable.sessionId}
+      AND cm.sender_type = 'user'
+      AND cm.created_at > ${chatLeadsTable.createdAt}
+  )`;
+
   // Find candidate leads. Order by oldest-first so a backlog drains FIFO
   // instead of starving the earliest opt-ins.
   const candidates = await db
@@ -119,6 +138,7 @@ export async function chatFollowupTick(): Promise<{ sent: number; skipped: numbe
         isNull(chatLeadsTable.unsubscribedAt),
         isNull(chatLeadsTable.convertedAt),
         lt(chatLeadsTable.createdAt, cutoff),
+        sql`NOT ${reEngaged}`,
       ),
     )
     .orderBy(chatLeadsTable.createdAt)
