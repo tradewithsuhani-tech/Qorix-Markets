@@ -44,6 +44,7 @@ import {
 
 import { BannerCarousel } from "@/components/banner-carousel";
 import { DrawdownChartCard } from "@/components/drawdown-chart-card";
+import { BotTerminalCard } from "@/components/bot-terminal-card";
 
 const DASHBOARD_BANNERS = [
   { src: `${import.meta.env.BASE_URL}promo/banner-1-manual-trading.png`, alt: "Manual Trading Is Breaking You — Trade Smart with Qorix" },
@@ -1177,6 +1178,9 @@ export function DemoDashboardBody({
           </div>
         </div>
         )}
+
+        {/* Bot Trading Terminal — Batch T */}
+        <BotTerminalCard />
 
         {/* Promo Banners — hidden per request */}
         {false && (
