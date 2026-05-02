@@ -4,15 +4,16 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   MessageCircle, Send, CheckCircle, Clock, User, Sparkles,
   RefreshCw, UserCheck, X, Circle, TrendingUp, Target, Filter, Zap, DollarSign,
-  Settings as SettingsIcon, MessagesSquare,
+  Settings as SettingsIcon, MessagesSquare, Mail,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
 import { format } from "date-fns";
 import { authFetch } from "@/lib/auth-fetch";
 import AdminChatSettings from "@/components/admin-chat-settings";
+import AdminChatLeads from "@/components/admin-chat-leads";
 
-type AdminChatsTab = "conversations" | "settings";
+type AdminChatsTab = "conversations" | "settings" | "leads";
 
 async function apiGet(path: string) {
   return authFetch(`/api${path}`);
@@ -58,6 +59,22 @@ interface ConversionEvent {
   createdAt: string;
 }
 
+// Captured lead row attached to a session (Task #145 Batch E). Most
+// authed sessions have `null` here; only guest sessions that hit the
+// inline lead form populate it. When present, the responder gets to
+// see the visitor's email/name so they can address them by name.
+interface SessionLead {
+  id: number;
+  email: string;
+  name: string | null;
+  phone: string | null;
+  followUpSentAt: string | null;
+  followUpAttempts: number;
+  unsubscribedAt: string | null;
+  convertedAt: string | null;
+  createdAt: string;
+}
+
 const INTENT_BADGE: Record<string, { label: string; color: string; bg: string }> = {
   beginner:        { label: "Beginner",        color: "text-sky-300",     bg: "bg-sky-500/15 border-sky-500/30" },
   advanced:        { label: "Advanced",        color: "text-violet-300",  bg: "bg-violet-500/15 border-violet-500/30" },
@@ -81,9 +98,11 @@ const FILTERS: Array<{ key: FilterKey; label: string; icon: React.ComponentType<
 function SessionInsightStrip({
   session,
   events,
+  lead,
 }: {
   session: Session;
   events: ConversionEvent[];
+  lead: SessionLead | null;
 }) {
   const intent = session.detectedIntent ?? "other";
   const intentBadge = INTENT_BADGE[intent] ?? INTENT_BADGE.other!;
@@ -133,6 +152,30 @@ function SessionInsightStrip({
         </span>
       ) : (
         <span className="text-white/30">Not yet converted</span>
+      )}
+      {/* Captured lead pill — visible only when a guest visitor handed
+          over their email via the in-chat form. Includes followup state
+          so the human responder knows whether the SES nudge already went
+          out before they pick up the conversation. */}
+      {lead && (
+        <span
+          className="px-2 py-0.5 rounded border font-medium flex items-center gap-1 max-w-[260px]"
+          title={lead.email + (lead.name ? ` · ${lead.name}` : "")}
+          style={{
+            background: "rgba(56,189,248,0.10)",
+            borderColor: "rgba(56,189,248,0.30)",
+            color: "rgb(125,211,252)",
+          }}
+        >
+          <span aria-hidden>✉</span>
+          <span className="truncate">{lead.email}</span>
+          {lead.name && <span className="text-sky-200/60 truncate">· {lead.name}</span>}
+          {lead.followUpSentAt ? (
+            <span className="text-[10px] text-sky-200/60 shrink-0">· sent</span>
+          ) : (
+            <span className="text-[10px] text-amber-300/80 shrink-0">· pending</span>
+          )}
+        </span>
       )}
 
       {profileEntries.length > 0 && (
@@ -204,6 +247,7 @@ export default function AdminChatsPage() {
   const [selectedSession, setSelectedSession] = useState<Session | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [events, setEvents] = useState<ConversionEvent[]>([]);
+  const [lead, setLead] = useState<SessionLead | null>(null);
   const [reply, setReply] = useState("");
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
@@ -232,11 +276,12 @@ export default function AdminChatsPage() {
 
   async function loadMessages(sessionId: number) {
     try {
-      const { messages: data, events: eventList, session } = await apiGet(
+      const { messages: data, events: eventList, session, lead: leadRow } = await apiGet(
         `/admin/chats/${sessionId}/messages`,
       );
       setMessages(data);
       setEvents(eventList ?? []);
+      setLead(leadRow ?? null);
       // Refresh the selected session with the latest server-side enrichments
       // (intent, engagement, conversion stamp) so the detail-panel header
       // doesn't go stale during a long support reply.
@@ -264,6 +309,7 @@ export default function AdminChatsPage() {
   async function handleSelectSession(session: Session) {
     setSelectedSession(session);
     setMessages([]);
+    setLead(null);
     await loadMessages(session.id);
     setTimeout(() => inputRef.current?.focus(), 200);
   }
@@ -361,6 +407,18 @@ export default function AdminChatsPage() {
                   Conversations
                 </button>
                 <button
+                  onClick={() => setTab("leads")}
+                  className={cn(
+                    "flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors",
+                    tab === "leads"
+                      ? "bg-blue-600/25 text-blue-200"
+                      : "text-white/50 hover:text-white/80",
+                  )}
+                >
+                  <Mail className="w-3.5 h-3.5" />
+                  Leads
+                </button>
+                <button
                   onClick={() => setTab("settings")}
                   className={cn(
                     "flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors",
@@ -393,6 +451,10 @@ export default function AdminChatsPage() {
 
         {tab === "settings" ? (
           <AdminChatSettings />
+        ) : tab === "leads" ? (
+          <div className="px-4 pb-4">
+            <AdminChatLeads />
+          </div>
         ) : (
         <>
         {/* Main content */}
@@ -566,7 +628,7 @@ export default function AdminChatsPage() {
                 {/* Session insight strip — intent, language, engagement, CTA stats,
                     conversion stamp, latent profile + recent conversion events. Gives
                     the human responder full context at a glance before replying. */}
-                <SessionInsightStrip session={selectedSession} events={events} />
+                <SessionInsightStrip session={selectedSession} events={events} lead={lead} />
 
                 {/* Messages */}
                 <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
