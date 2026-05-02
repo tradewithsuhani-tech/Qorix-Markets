@@ -209,8 +209,8 @@ function useSynthQuotes(realQuotes: BotQuote[]): BotQuote[] {
 // Live candlestick chart (Batch V)
 // ---------------------------------------------------------------------------
 
-const CANDLE_SECONDS = 5;
-const MAX_CANDLES = 60; // 60 × 5s = 5 minutes rolling window
+const CANDLE_SECONDS = 1; // 1-second scalp candles
+const MAX_CANDLES = 90; // 90 × 1s = 90s rolling window
 const EMA_PERIOD = 20;
 
 type Candle = {
@@ -1479,6 +1479,169 @@ export function BotTerminalCard() {
 
   const fillToast = useFillToast(state?.closedToday);
 
+  // -------------------------------------------------------------------------
+  // Dual scalp-bot simulator (frontend-only, no DB writes)
+  // -------------------------------------------------------------------------
+  // Two virtual bots watch the live featured-pair quote:
+  //   • LONG  bot opens a BUY  on every up-tick (when no open BUY)
+  //   • SHORT bot opens a SELL on every down-tick (when no open SELL)
+  // Per-trade lifecycle:
+  //   • SL = entry ± SL_PCT (0.05% scalp stop) for the first 3 s
+  //   • At 3 s mark → SL trails to BREAKEVEN (entry) — risk-free
+  //   • TP = open (let it run); closes only on SL/BE touch or 30 s timeout
+  // Win/loss accounting:
+  //   • Closed at sl < entry (BUY) / sl > entry (SELL) → LOSS
+  //   • Closed at BE (sl == entry) → WIN (zero-risk scalp)
+  // -------------------------------------------------------------------------
+  const SCALP_SL_PCT = 0.0005;
+  const SCALP_BE_DELAY_MS = 3000;
+  const SCALP_MAX_LIFETIME_MS = 30000;
+  const SCALP_CLOSED_FADE_MS = 4000;
+
+  type Scalp = {
+    id: number;
+    bot: "LONG" | "SHORT";
+    direction: "BUY" | "SELL";
+    entry: number;
+    sl: number;
+    openedAt: number;
+    status: "open" | "won" | "lost";
+    closedAt?: number;
+  };
+
+  const [scalps, setScalps] = useState<Scalp[]>([]);
+  const [scalpStats, setScalpStats] = useState({
+    longWins: 0,
+    longLosses: 0,
+    shortWins: 0,
+    shortLosses: 0,
+  });
+  const lastMidRef = useRef<number | null>(null);
+  const scalpIdRef = useRef(-1);
+
+  useEffect(() => {
+    const mid = featuredMid;
+    if (!Number.isFinite(mid)) return;
+    const m = mid as number;
+    const now = Date.now();
+    const prev = lastMidRef.current;
+    lastMidRef.current = m;
+
+    setScalps((curr) => {
+      const closedThisTick: Scalp[] = [];
+      let next: Scalp[] = curr.map((s) => {
+        if (s.status !== "open") return s;
+        const age = now - s.openedAt;
+        let sl = s.sl;
+        // Move SL → BE at 3 s
+        if (age >= SCALP_BE_DELAY_MS && sl !== s.entry) sl = s.entry;
+        // Check SL hit
+        const slHit = s.direction === "BUY" ? m <= sl : m >= sl;
+        if (slHit) {
+          const lost =
+            (s.direction === "BUY" && sl < s.entry) ||
+            (s.direction === "SELL" && sl > s.entry);
+          const closed: Scalp = {
+            ...s,
+            sl,
+            status: lost ? "lost" : "won",
+            closedAt: now,
+          };
+          closedThisTick.push(closed);
+          return closed;
+        }
+        // 30 s lifetime → close as WIN (BE-protected, market never came back)
+        if (age >= SCALP_MAX_LIFETIME_MS) {
+          const closed: Scalp = {
+            ...s,
+            sl: s.entry,
+            status: "won",
+            closedAt: now,
+          };
+          closedThisTick.push(closed);
+          return closed;
+        }
+        return { ...s, sl };
+      });
+
+      // Open new trades on direction change
+      const dir = prev == null ? 0 : Math.sign(m - prev);
+      if (dir !== 0) {
+        const bot: "LONG" | "SHORT" = dir > 0 ? "LONG" : "SHORT";
+        const direction: "BUY" | "SELL" = dir > 0 ? "BUY" : "SELL";
+        const hasOpen = next.some(
+          (s) => s.bot === bot && s.status === "open",
+        );
+        if (!hasOpen) {
+          const sl =
+            direction === "BUY"
+              ? m * (1 - SCALP_SL_PCT)
+              : m * (1 + SCALP_SL_PCT);
+          const id = scalpIdRef.current--;
+          next.push({
+            id,
+            bot,
+            direction,
+            entry: m,
+            sl,
+            openedAt: now,
+            status: "open",
+          });
+        }
+      }
+
+      // Update stats counters from this tick's closures
+      if (closedThisTick.length > 0) {
+        setScalpStats((s) => {
+          const ns = { ...s };
+          for (const c of closedThisTick) {
+            if (c.bot === "LONG") {
+              if (c.status === "won") ns.longWins++;
+              else ns.longLosses++;
+            } else {
+              if (c.status === "won") ns.shortWins++;
+              else ns.shortLosses++;
+            }
+          }
+          return ns;
+        });
+      }
+
+      // Cleanup: drop closed trades after fade window
+      next = next.filter((s) => {
+        if (s.status === "open") return true;
+        return now - (s.closedAt ?? 0) < SCALP_CLOSED_FADE_MS;
+      });
+
+      return next;
+    });
+  }, [featuredMid]);
+
+  // Convert open scalps into BotStateOpenPosition shape so the chart
+  // can render them with the existing chip/tag/dashed-line code path.
+  const virtualScalpPositions = useMemo<BotStateOpenPosition[]>(() => {
+    return scalps
+      .filter((s) => s.status === "open")
+      .map((s) => ({
+        id: s.id,
+        pair: featuredCode,
+        direction: s.direction,
+        entryPrice: s.entry,
+        tpPrice: null,
+        slPrice: s.sl,
+        expectedProfitPercent: 0,
+        openedAt: new Date(s.openedAt).toISOString(),
+        livePnlPct: null,
+      }));
+  }, [scalps, featuredCode]);
+
+  // Scalps render FIRST (most recent at top of chip stack), then
+  // real platform positions fill remaining slots up to 4.
+  const chartPositions = useMemo(
+    () => [...virtualScalpPositions, ...featuredPositions].slice(0, 4),
+    [virtualScalpPositions, featuredPositions],
+  );
+
   return (
     <Card className="overflow-hidden relative">
       <JustFilledToast fill={fillToast} />
@@ -1499,9 +1662,20 @@ export function BotTerminalCard() {
           </Badge>
         </div>
         <div className="text-[10px] sm:text-[11px] text-muted-foreground tabular-nums flex items-center gap-1.5 sm:gap-2 shrink-0">
+          <span className="hidden xs:inline-flex items-center gap-1">
+            <span className="text-emerald-400 font-semibold">L</span>
+            <span className="text-emerald-400/80">{scalpStats.longWins}W</span>
+            <span className="text-rose-400/80">{scalpStats.longLosses}L</span>
+          </span>
+          <span className="hidden xs:inline-flex items-center gap-1">
+            <span className="text-rose-400 font-semibold">S</span>
+            <span className="text-emerald-400/80">{scalpStats.shortWins}W</span>
+            <span className="text-rose-400/80">{scalpStats.shortLosses}L</span>
+          </span>
           {summary ? (
             <>
-              <span>{summary.openCount} open</span>
+              <span className="text-muted-foreground/50 hidden sm:inline">•</span>
+              <span className="hidden sm:inline">{summary.openCount} open</span>
               <span className="text-muted-foreground/50">•</span>
               <span
                 className={cn(
@@ -1529,7 +1703,7 @@ export function BotTerminalCard() {
         <LiveCandleChart
           quote={featured}
           persistKey={featuredCode}
-          positions={featuredPositions}
+          positions={chartPositions}
           height={260}
         />
       </div>
