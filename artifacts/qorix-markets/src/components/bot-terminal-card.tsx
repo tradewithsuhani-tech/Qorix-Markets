@@ -1088,18 +1088,22 @@ function PositionPill({
       >
         {dirUpper}
       </span>
-      <span className="text-muted-foreground font-mono tabular-nums hidden sm:inline">
-        {pos.entryPrice.toFixed(precision)}
+      <span className="text-muted-foreground font-mono tabular-nums hidden sm:inline-flex items-baseline justify-end min-w-[140px]">
+        <span className="inline-block text-right">
+          {pos.entryPrice.toFixed(precision)}
+        </span>
         {quote ? (
           <>
             <span className="text-muted-foreground/50 px-1">→</span>
-            {quote.mid.toFixed(precision)}
+            <span className="inline-block text-right">
+              {quote.mid.toFixed(precision)}
+            </span>
           </>
         ) : null}
       </span>
       <span
         className={cn(
-          "font-mono tabular-nums font-semibold rounded px-1.5 py-0.5",
+          "font-mono tabular-nums font-semibold rounded px-1.5 py-0.5 inline-block text-right min-w-[68px]",
           profit
             ? "bg-emerald-500/15 text-emerald-400"
             : "bg-rose-500/15 text-rose-400",
