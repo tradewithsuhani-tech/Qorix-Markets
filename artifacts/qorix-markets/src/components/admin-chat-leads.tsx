@@ -35,6 +35,11 @@ import { authFetch } from "@/lib/auth-fetch";
 
 type LeadStatus = "all" | "pending" | "sent" | "converted" | "unsubscribed";
 type ContactChannel = "email" | "phone" | "whatsapp" | "telegram" | "other";
+// Task #145 Batch I — server-derived auto-tag. Temperature is computed
+// server-side via shared SQL CASE expression (see chat.ts
+// temperatureSql). The frontend treats it as opaque.
+type LeadTemperature = "hot" | "warm" | "cold";
+type TemperatureFilter = "all" | LeadTemperature;
 
 interface ChatLead {
   id: number;
@@ -58,6 +63,9 @@ interface ChatLead {
   // Batch G additions — derived from admin_audit_log so no schema bump:
   lastContactedAt: string | null;
   noteCount: number;
+  // Batch I auto-tag — server-derived from intent + engagement +
+  // recency + conversion state. Filter via ?temperature query param.
+  temperature: LeadTemperature;
 }
 
 interface LeadAuditEvent {
@@ -75,6 +83,9 @@ interface LeadTotals {
   sent: number;
   converted: number;
   unsubscribed: number;
+  hot: number;
+  warm: number;
+  cold: number;
 }
 
 // Task #145 Batch H — analytics strip. Returned by GET
@@ -111,7 +122,31 @@ interface AnalyticsResponse {
     conversionPct: number;
     avgHoursToConvert: number | null;
   };
+  // Batch I — pipeline composition over the last 30 days using the
+  // same hot/warm/cold heuristic as the listing.
+  temperature30d?: { hot: number; warm: number; cold: number };
 }
+
+const TEMPERATURE_BADGE: Record<
+  LeadTemperature,
+  { label: string; tone: string; dot: string }
+> = {
+  hot: {
+    label: "Hot",
+    tone: "text-rose-300 bg-rose-500/15 border-rose-500/30",
+    dot: "bg-rose-400",
+  },
+  warm: {
+    label: "Warm",
+    tone: "text-amber-300 bg-amber-500/15 border-amber-500/30",
+    dot: "bg-amber-400",
+  },
+  cold: {
+    label: "Cold",
+    tone: "text-sky-300 bg-sky-500/15 border-sky-500/30",
+    dot: "bg-sky-400",
+  },
+};
 
 const STATUS_FILTERS: Array<{
   key: LeadStatus;
@@ -145,6 +180,7 @@ const CHANNEL_OPTIONS: Array<{ key: ContactChannel; label: string; icon: React.C
 
 export default function AdminChatLeads() {
   const [status, setStatus] = useState<LeadStatus>("all");
+  const [temperature, setTemperature] = useState<TemperatureFilter>("all");
   const [leads, setLeads] = useState<ChatLead[]>([]);
   const [totals, setTotals] = useState<LeadTotals>({
     all: 0,
@@ -152,6 +188,9 @@ export default function AdminChatLeads() {
     sent: 0,
     converted: 0,
     unsubscribed: 0,
+    hot: 0,
+    warm: 0,
+    cold: 0,
   });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -165,10 +204,21 @@ export default function AdminChatLeads() {
   async function load(opts: { showSpinner?: boolean } = {}) {
     if (opts.showSpinner) setRefreshing(true);
     try {
-      const data = await authFetch(`/api/admin/chat-leads?status=${status}`);
+      const params = new URLSearchParams({ status });
+      if (temperature !== "all") params.set("temperature", temperature);
+      const data = await authFetch(`/api/admin/chat-leads?${params.toString()}`);
       setLeads(data.leads ?? []);
       setTotals(
-        data.totals ?? { all: 0, pending: 0, sent: 0, converted: 0, unsubscribed: 0 },
+        data.totals ?? {
+          all: 0,
+          pending: 0,
+          sent: 0,
+          converted: 0,
+          unsubscribed: 0,
+          hot: 0,
+          warm: 0,
+          cold: 0,
+        },
       );
       setError(null);
     } catch (err: any) {
@@ -184,11 +234,11 @@ export default function AdminChatLeads() {
     load();
     // 15s poll keeps the dashboard fresh without hammering the API; the
     // followup worker only runs once a minute so faster polling buys us
-    // nothing visible. Re-armed whenever the status filter changes.
+    // nothing visible. Re-armed whenever a filter changes.
     const t = setInterval(() => load(), 15000);
     return () => clearInterval(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status]);
+  }, [status, temperature]);
 
   // Analytics is independent of the status filter — it always covers
   // the same trailing windows (7d daily / 30d aggregates). Polled at
@@ -316,6 +366,42 @@ export default function AdminChatLeads() {
           );
         })}
         <div className="ml-auto flex items-center gap-2">
+          {/* Temperature filter — separate visual lane (dot prefix) so
+              it doesn't compete with the status chips above for
+              attention. Combined with status filter on the server. */}
+          <div className="flex items-center gap-1 mr-1">
+            {(["all", "hot", "warm", "cold"] as const).map((k) => {
+              const active = temperature === k;
+              const badge = k === "all" ? null : TEMPERATURE_BADGE[k];
+              const count = k === "all" ? totals.all : totals[k];
+              return (
+                <button
+                  key={k}
+                  onClick={() => {
+                    setTemperature(k);
+                    setExpandedId(null);
+                  }}
+                  className={cn(
+                    "flex items-center gap-1 px-2 py-1.5 rounded-lg text-[11px] font-medium transition-all border",
+                    active
+                      ? badge
+                        ? badge.tone
+                        : "bg-white/10 border-white/20 text-white/85"
+                      : "bg-white/5 border-white/10 text-white/45 hover:bg-white/10",
+                  )}
+                  title={k === "all" ? "All leads (any temperature)" : `${badge!.label} leads`}
+                >
+                  {badge ? (
+                    <span className={cn("w-1.5 h-1.5 rounded-full", badge.dot)} />
+                  ) : (
+                    <Activity className="w-3 h-3" />
+                  )}
+                  {k === "all" ? "Any" : badge!.label}
+                  <span className="text-[10px] opacity-60">· {count}</span>
+                </button>
+              );
+            })}
+          </div>
           <button
             onClick={handleExportCsv}
             disabled={exportingCsv || !leads.length}
@@ -363,7 +449,8 @@ export default function AdminChatLeads() {
           <div className="col-span-2">Captured</div>
           <div className="col-span-2">Followup</div>
           <div className="col-span-2">Outreach</div>
-          <div className="col-span-2">Intent</div>
+          <div className="col-span-1">Intent</div>
+          <div className="col-span-1">Temp</div>
           <div className="col-span-1 text-right">Status</div>
         </div>
 
@@ -387,6 +474,7 @@ export default function AdminChatLeads() {
               const intent = lead.sessionDetectedIntent ?? "other";
               const intentBadge = INTENT_BADGE[intent] ?? INTENT_BADGE.other!;
               const isExpanded = expandedId === lead.id;
+              const tempBadge = TEMPERATURE_BADGE[lead.temperature] ?? TEMPERATURE_BADGE.cold;
 
               const statusBadge = lead.unsubscribedAt
                 ? { label: "Unsubscribed", tone: "text-white/45 bg-white/5 border-white/10" }
@@ -476,7 +564,7 @@ export default function AdminChatLeads() {
                       )}
                     </div>
 
-                    <div className="col-span-2">
+                    <div className="col-span-1">
                       <span
                         className={cn(
                           "inline-block px-2 py-0.5 rounded border text-[10px] font-medium",
@@ -484,6 +572,18 @@ export default function AdminChatLeads() {
                         )}
                       >
                         {intentBadge.label}
+                      </span>
+                    </div>
+
+                    <div className="col-span-1">
+                      <span
+                        className={cn(
+                          "inline-flex items-center gap-1 px-2 py-0.5 rounded border text-[10px] font-medium",
+                          tempBadge.tone,
+                        )}
+                      >
+                        <span className={cn("w-1.5 h-1.5 rounded-full", tempBadge.dot)} />
+                        {tempBadge.label}
                       </span>
                     </div>
 
@@ -812,7 +912,7 @@ function AnalyticsStrip({
     );
   }
 
-  const { totals30d, daily, perIntent, channels } = analytics;
+  const { totals30d, daily, perIntent, channels, temperature30d } = analytics;
   const avgHrs = totals30d.avgHoursToConvert;
   const avgLabel =
     avgHrs === null
@@ -947,6 +1047,31 @@ function AnalyticsStrip({
               </div>
 
               <div className="md:col-span-1 flex flex-col gap-3">
+                {temperature30d && (
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wider text-white/40 mb-2">
+                      Pipeline · 30d
+                    </p>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {(["hot", "warm", "cold"] as const).map((k) => {
+                        const b = TEMPERATURE_BADGE[k];
+                        return (
+                          <span
+                            key={k}
+                            className={cn(
+                              "inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] border font-medium",
+                              b.tone,
+                            )}
+                          >
+                            <span className={cn("w-1.5 h-1.5 rounded-full", b.dot)} />
+                            {b.label}
+                            <span className="opacity-60">· {temperature30d[k]}</span>
+                          </span>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
                 <div>
                   <p className="text-[10px] uppercase tracking-wider text-white/40 mb-2">
                     Outreach channels · 30d

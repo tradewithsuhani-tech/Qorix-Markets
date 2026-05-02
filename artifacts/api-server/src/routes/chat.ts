@@ -1017,9 +1017,42 @@ router.get("/admin/chats/:id/messages", authMiddleware, adminMiddleware, async (
 // Capped at 200 rows to keep the admin panel snappy. The schema already
 // indexes session_id + created_at; this query plan is a single seq scan
 // on the (small) chat_leads table joined to chat_sessions PK.
+// Task #145 Batch I — single source of truth for the lead "temperature"
+// auto-tag (hot/warm/cold). Reused by the listing SELECT, the listing
+// WHERE filter, the totals aggregator, and the analytics endpoint so
+// the heuristic stays consistent across every read path.
+//
+// Heuristic ladder (first match wins):
+//   1. unsubscribed -> cold (explicit opt-out always trumps signal)
+//   2. lead converted OR session converted -> hot (existing customer)
+//   3. last activity > 14 days ago -> cold (gone stale)
+//   4. detected intent = ready_to_invest -> hot
+//   5. engagement_score >= 70 -> hot
+//   6. detected intent = skeptic AND engagement_score < 40 -> cold
+//   7. detected intent in (advanced, price_sensitive, beginner) -> warm
+//   8. engagement_score >= 40 -> warm
+//   9. fallback -> cold
+//
+// Inputs are all already on chat_leads + chat_sessions; the join is
+// already present in every query that needs this. No schema change.
+const temperatureSql = () => sql`CASE
+  WHEN ${chatLeadsTable.unsubscribedAt} IS NOT NULL THEN 'cold'
+  WHEN ${chatLeadsTable.convertedAt} IS NOT NULL OR ${chatSessionsTable.convertedAt} IS NOT NULL THEN 'hot'
+  WHEN COALESCE(${chatSessionsTable.lastMessageAt}, ${chatLeadsTable.createdAt}) < NOW() - INTERVAL '14 days' THEN 'cold'
+  WHEN ${chatSessionsTable.detectedIntent} = 'ready_to_invest' THEN 'hot'
+  WHEN COALESCE(${chatSessionsTable.engagementScore}, 0) >= 70 THEN 'hot'
+  WHEN ${chatSessionsTable.detectedIntent} = 'skeptic' AND COALESCE(${chatSessionsTable.engagementScore}, 0) < 40 THEN 'cold'
+  WHEN ${chatSessionsTable.detectedIntent} IN ('advanced', 'price_sensitive', 'beginner') THEN 'warm'
+  WHEN COALESCE(${chatSessionsTable.engagementScore}, 0) >= 40 THEN 'warm'
+  ELSE 'cold'
+END`;
+
 router.get("/admin/chat-leads", authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const status = String(req.query.status ?? "all");
+    const tempParam = String(req.query.temperature ?? "");
+    const temperature: "hot" | "warm" | "cold" | null =
+      tempParam === "hot" || tempParam === "warm" || tempParam === "cold" ? tempParam : null;
 
     // Build the WHERE filter from the status param. We compose with `and(...)`
     // and feed an always-true clause when no filter is requested so the
@@ -1046,6 +1079,12 @@ router.get("/admin/chat-leads", authMiddleware, adminMiddleware, async (req: Aut
         where = sql`TRUE`;
     }
 
+    // Compose status filter with optional temperature filter. Temperature
+    // is a SQL CASE so we wrap it in an equality predicate.
+    const finalWhere = temperature
+      ? and(where, sql`(${temperatureSql()}) = ${temperature}`)
+      : where;
+
     const leadsRaw = await db
       .select({
         id: chatLeadsTable.id,
@@ -1070,10 +1109,13 @@ router.get("/admin/chat-leads", authMiddleware, adminMiddleware, async (req: Aut
         sessionEngagementScore: chatSessionsTable.engagementScore,
         sessionConvertedAt: chatSessionsTable.convertedAt,
         sessionLastMessageAt: chatSessionsTable.lastMessageAt,
+        // Auto-tag (Batch I): the temperature CASE evaluated server-side
+        // so the UI doesn't have to re-derive it.
+        temperature: sql<string>`(${temperatureSql()})`,
       })
       .from(chatLeadsTable)
       .leftJoin(chatSessionsTable, eq(chatLeadsTable.sessionId, chatSessionsTable.id))
-      .where(where)
+      .where(finalWhere)
       .orderBy(desc(chatLeadsTable.createdAt))
       .limit(200);
 
@@ -1134,7 +1176,10 @@ router.get("/admin/chat-leads", authMiddleware, adminMiddleware, async (req: Aut
 
     // Aggregate counts so the UI can render the filter chips with badges
     // ("Pending · 12 / Sent · 34 / Converted · 5") without a second
-    // round-trip per filter switch.
+    // round-trip per filter switch. Joined to chat_sessions so the
+    // temperature CASE has access to detected_intent + engagement_score
+    // + last_message_at + session-level converted_at — same join the
+    // listing uses, kept in sync via the shared temperatureSql() helper.
     const [totals] = await db
       .select({
         all: sql<string>`COUNT(*)::text`,
@@ -1142,8 +1187,12 @@ router.get("/admin/chat-leads", authMiddleware, adminMiddleware, async (req: Aut
         sent: sql<string>`COUNT(*) FILTER (WHERE ${chatLeadsTable.followUpSentAt} IS NOT NULL)::text`,
         converted: sql<string>`COUNT(*) FILTER (WHERE ${chatLeadsTable.convertedAt} IS NOT NULL)::text`,
         unsubscribed: sql<string>`COUNT(*) FILTER (WHERE ${chatLeadsTable.unsubscribedAt} IS NOT NULL)::text`,
+        hot: sql<string>`COUNT(*) FILTER (WHERE (${temperatureSql()}) = 'hot')::text`,
+        warm: sql<string>`COUNT(*) FILTER (WHERE (${temperatureSql()}) = 'warm')::text`,
+        cold: sql<string>`COUNT(*) FILTER (WHERE (${temperatureSql()}) = 'cold')::text`,
       })
-      .from(chatLeadsTable);
+      .from(chatLeadsTable)
+      .leftJoin(chatSessionsTable, eq(chatLeadsTable.sessionId, chatSessionsTable.id));
 
     res.json({
       leads,
@@ -1153,6 +1202,9 @@ router.get("/admin/chat-leads", authMiddleware, adminMiddleware, async (req: Aut
         sent: Number(totals?.sent ?? 0),
         converted: Number(totals?.converted ?? 0),
         unsubscribed: Number(totals?.unsubscribed ?? 0),
+        hot: Number(totals?.hot ?? 0),
+        warm: Number(totals?.warm ?? 0),
+        cold: Number(totals?.cold ?? 0),
       },
     });
   } catch (err) {
@@ -1553,7 +1605,56 @@ router.get("/admin/chat-leads/analytics", authMiddleware, adminMiddleware, async
           : Math.round(avgHoursRaw * 10) / 10,
     };
 
-    res.json({ daily, perIntent, channels, totals30d });
+    // 5. Temperature pipeline (last 30d). Same heuristic as the listing,
+    //    aggregated over the trailing window. Lets the analytics strip
+    //    show "Hot N · Warm M · Cold K" so operators see how the
+    //    pipeline composition shifts day to day.
+    const tempRes = await db.execute(sql`
+      SELECT
+        SUM(CASE WHEN
+          l.unsubscribed_at IS NOT NULL THEN 0
+          WHEN l.converted_at IS NOT NULL OR s.converted_at IS NOT NULL THEN 1
+          WHEN COALESCE(s.last_message_at, l.created_at) < NOW() - INTERVAL '14 days' THEN 0
+          WHEN s.detected_intent = 'ready_to_invest' THEN 1
+          WHEN COALESCE(s.engagement_score, 0) >= 70 THEN 1
+          ELSE 0
+        END)::int AS hot,
+        SUM(CASE WHEN
+          l.unsubscribed_at IS NULL
+          AND l.converted_at IS NULL
+          AND s.converted_at IS NULL
+          AND COALESCE(s.last_message_at, l.created_at) >= NOW() - INTERVAL '14 days'
+          AND s.detected_intent IS DISTINCT FROM 'ready_to_invest'
+          AND COALESCE(s.engagement_score, 0) < 70
+          AND NOT (s.detected_intent = 'skeptic' AND COALESCE(s.engagement_score, 0) < 40)
+          AND (s.detected_intent IN ('advanced', 'price_sensitive', 'beginner') OR COALESCE(s.engagement_score, 0) >= 40)
+          THEN 1 ELSE 0
+        END)::int AS warm,
+        SUM(CASE WHEN
+          l.unsubscribed_at IS NOT NULL THEN 1
+          WHEN l.converted_at IS NULL AND s.converted_at IS NULL
+            AND COALESCE(s.last_message_at, l.created_at) < NOW() - INTERVAL '14 days' THEN 1
+          WHEN l.converted_at IS NULL AND s.converted_at IS NULL
+            AND s.detected_intent = 'skeptic' AND COALESCE(s.engagement_score, 0) < 40 THEN 1
+          WHEN l.converted_at IS NULL AND s.converted_at IS NULL
+            AND s.detected_intent IS DISTINCT FROM 'ready_to_invest'
+            AND COALESCE(s.engagement_score, 0) < 40
+            AND s.detected_intent NOT IN ('advanced', 'price_sensitive', 'beginner') THEN 1
+          ELSE 0
+        END)::int AS cold
+      FROM chat_leads l
+      LEFT JOIN chat_sessions s ON s.id = l.session_id
+      WHERE l.created_at >= NOW() - INTERVAL '30 days'
+    `);
+    type TempRow = { hot: number | null; warm: number | null; cold: number | null };
+    const tempRow = ((tempRes.rows ?? []) as TempRow[])[0] ?? { hot: 0, warm: 0, cold: 0 };
+    const temperature30d = {
+      hot: tempRow.hot ?? 0,
+      warm: tempRow.warm ?? 0,
+      cold: tempRow.cold ?? 0,
+    };
+
+    res.json({ daily, perIntent, channels, totals30d, temperature30d });
   } catch (err) {
     logger.warn({ err: (err as Error).message }, "[chat] /admin/chat-leads/analytics failed");
     res.status(500).json({ error: "Failed to fetch analytics" });
