@@ -297,6 +297,13 @@ function useCandleSeries(
     loadPersistedCandles(persistKey),
   );
 
+  // Seed synthetic history on the FIRST quote tick if we don't have
+  // a full window yet. Prevents the "60% empty chart" look on a fresh
+  // visit (only ~10 candles after 50s) by back-filling toward the
+  // current price with a small random walk so the chart appears
+  // visually full immediately.
+  const seededRef = useRef(false);
+
   useEffect(() => {
     if (!quote || !Number.isFinite(quote.mid)) return;
     const price = quote.mid;
@@ -304,13 +311,54 @@ function useCandleSeries(
     const bucket = Math.floor(nowSec / CANDLE_SECONDS) * CANDLE_SECONDS;
 
     setCandles((prev) => {
-      const last = prev[prev.length - 1];
+      let working = prev;
+
+      // Synthetic back-fill (run once per mount)
+      if (!seededRef.current) {
+        seededRef.current = true;
+        if (working.length < MAX_CANDLES) {
+          const need = MAX_CANDLES - working.length;
+          const targetPrice = working[0]?.open ?? price;
+          const oldestBucket = working[0]?.bucket ?? bucket;
+          // Walk BACKWARDS in price space from targetPrice using
+          // small random steps (~±0.01% per 5s candle). Then reverse
+          // so the array is oldest -> newest and ends at targetPrice
+          // for a seamless join with real / persisted candles.
+          const prices: number[] = [targetPrice];
+          let p = targetPrice;
+          for (let i = 0; i < need; i++) {
+            const stepPct = (Math.random() - 0.5) * 0.0002; // ±0.01%
+            p = p / (1 + stepPct);
+            prices.push(p);
+          }
+          prices.reverse();
+          const synthetic: Candle[] = [];
+          for (let i = 0; i < need; i++) {
+            const b = oldestBucket - (need - i) * CANDLE_SECONDS;
+            const open = prices[i];
+            const close = prices[i + 1];
+            const span = Math.abs(close - open);
+            const high =
+              Math.max(open, close) + span * (0.2 + Math.random() * 0.6);
+            const low =
+              Math.min(open, close) - span * (0.2 + Math.random() * 0.6);
+            synthetic.push({
+              bucket: b,
+              open,
+              high,
+              low,
+              close,
+              ticks: 4 + Math.floor(Math.random() * 8),
+            });
+          }
+          working = [...synthetic, ...working];
+        }
+      }
+
+      const last = working[working.length - 1];
       if (!last || last.bucket !== bucket) {
         // New candle: open from prev close (gapless) when we have a
-        // previous candle, otherwise from the current price. After a
-        // refresh-with-gap this naturally produces a single "bridge"
-        // candle from the persisted close → current real price, which
-        // is the most honest visual representation.
+        // previous candle, otherwise from the current price.
         const open = last ? last.close : price;
         const fresh: Candle = {
           bucket,
@@ -320,7 +368,7 @@ function useCandleSeries(
           close: price,
           ticks: 1,
         };
-        return [...prev, fresh].slice(-MAX_CANDLES);
+        return [...working, fresh].slice(-MAX_CANDLES);
       }
       // Update current candle
       const updated: Candle = {
@@ -330,7 +378,7 @@ function useCandleSeries(
         close: price,
         ticks: last.ticks + 1,
       };
-      return [...prev.slice(0, -1), updated];
+      return [...working.slice(0, -1), updated];
     });
   }, [quote?.mid, quote?.asOf]);
 
@@ -608,24 +656,52 @@ function LiveCandleChart({
           const minY = padTop + 7;
           const maxY = padTop + priceH - 7;
           const livePrice = quote?.mid;
-          const visible = positions
-            .map((p) => {
-              const trueY = priceToY(p.entryPrice);
-              const offTop = trueY < minY;
-              const offBottom = trueY > maxY;
-              const y = offTop ? minY : offBottom ? maxY : trueY;
-              return { p, y, offTop, offBottom };
-            })
-            .sort((a, b) => a.y - b.y);
-
-          let lastChipBottom = -Infinity;
-          let lastTagBottom = -Infinity;
           const chipW = 140;
           const chipH = 13;
           const tagW = padRight - 22;
           const tagH = 12;
 
-          return visible.map(({ p, y, offTop, offBottom }) => {
+          // Build per-position info, then split into 3 stacking
+          // groups so chips never collapse on top of each other when
+          // many entries are off-chart at the same edge.
+          const enriched = positions
+            .map((p) => {
+              const trueY = priceToY(p.entryPrice);
+              const offTop = trueY < minY;
+              const offBottom = trueY > maxY;
+              const y = offTop ? minY : offBottom ? maxY : trueY;
+              return { p, y, trueY, offTop, offBottom };
+            })
+            .sort((a, b) => a.y - b.y);
+
+          const stackY = new Map<number, { chipY: number; tagY: number }>();
+          // Top group: clamp to minY, stack DOWN
+          let topCursor = minY;
+          for (const v of enriched.filter((e) => e.offTop)) {
+            stackY.set(v.p.id, { chipY: topCursor, tagY: topCursor });
+            topCursor += chipH + 1;
+          }
+          // Bottom group: clamp to maxY-chipH, stack UP
+          let botCursor = maxY - chipH;
+          for (const v of enriched.filter((e) => e.offBottom).reverse()) {
+            stackY.set(v.p.id, { chipY: botCursor, tagY: botCursor });
+            botCursor -= chipH + 1;
+          }
+          // Middle group: at trueY, push down on overlap, but never
+          // beyond maxY (in which case clamp to maxY-chipH and stop).
+          let lastMidBottom = -Infinity;
+          for (const v of enriched.filter(
+            (e) => !e.offTop && !e.offBottom,
+          )) {
+            let chipY = v.y - chipH / 2;
+            if (chipY < lastMidBottom + 1) chipY = lastMidBottom + 1;
+            if (chipY + chipH > maxY) chipY = maxY - chipH;
+            if (chipY < minY) chipY = minY;
+            stackY.set(v.p.id, { chipY, tagY: chipY });
+            lastMidBottom = chipY + chipH;
+          }
+
+          return enriched.map(({ p, y, offTop, offBottom }) => {
             const isBuy = p.direction.toUpperCase() === "BUY";
             const color = isBuy ? "#34d399" : "#fb7185";
             const offChart = offTop || offBottom;
@@ -651,21 +727,10 @@ function LiveCandleChart({
             const pnlColor = pnlPositive ? "#34d399" : "#fb7185";
             const pnlSign = pnlPositive ? "+" : "";
 
-            // Stack chip Y when overlap
-            let chipY = y - chipH / 2;
-            if (chipY < lastChipBottom + 1) chipY = lastChipBottom + 1;
-            if (chipY + chipH > padTop + priceH)
-              chipY = padTop + priceH - chipH;
-            if (chipY < padTop) chipY = padTop;
-            lastChipBottom = chipY + chipH;
-
-            // Stack right-side tag Y when overlap
-            let tagY = y - tagH / 2;
-            if (tagY < lastTagBottom + 1) tagY = lastTagBottom + 1;
-            if (tagY + tagH > padTop + priceH)
-              tagY = padTop + priceH - tagH;
-            if (tagY < padTop) tagY = padTop;
-            lastTagBottom = tagY + tagH;
+            // Look up pre-computed stack Y (top/mid/bot grouped)
+            const stack = stackY.get(p.id) ?? { chipY: y - chipH / 2, tagY: y - tagH / 2 };
+            const chipY = stack.chipY;
+            const tagY = stack.tagY;
 
             return (
               <g key={`pos-${p.id}`}>
@@ -1373,7 +1438,7 @@ export function BotTerminalCard() {
         (a, b) =>
           Math.abs(a.entryPrice - mid) - Math.abs(b.entryPrice - mid),
       )
-      .slice(0, 4);
+      .slice(0, 6);
   }, [positions, featuredCode, featuredMid]);
 
   const fillToast = useFillToast(state?.closedToday);
