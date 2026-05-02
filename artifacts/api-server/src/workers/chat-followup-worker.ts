@@ -22,6 +22,7 @@ import { and, isNull, lt, sql } from "drizzle-orm";
 import { logger, errorLogger } from "../lib/logger";
 import { getChatSettings } from "../lib/chat-settings-cache";
 import { sendEmail } from "../lib/email-service";
+import { buildUnsubscribeUrl } from "../lib/chat-unsubscribe-token";
 
 const DEFAULT_DELAY_MINUTES = 60;
 const DEFAULT_SUBJECT = "Following up from Qorix Markets";
@@ -50,7 +51,7 @@ function applyPlaceholders(
     .replace(/\{\{\s*cta_url\s*\}\}/g, safeCta);
 }
 
-function bodyToHtml(body: string): string {
+function bodyToHtml(body: string, unsubscribeUrl: string): string {
   // The admin types plain text — render it as basic HTML with line breaks
   // and clickable URLs. Escape HTML-meaningful chars first so a user-typed
   // angle bracket can't break out of the wrapping container.
@@ -63,7 +64,22 @@ function bodyToHtml(body: string): string {
     /(https?:\/\/[^\s<>"]+)/g,
     (m) => `<a href="${m}" style="color:#3b82f6;">${m}</a>`,
   );
-  return `<div style="font-family:system-ui,-apple-system,sans-serif;color:#0f172a;line-height:1.6;font-size:15px;">${linkified.replace(/\n/g, "<br/>")}</div>`;
+  // Compliance footer (Task #145 Batch F). Required by CAN-SPAM / SES
+  // best-practice — every unsolicited follow-up must offer a one-click
+  // opt-out. The URL is HMAC-signed (lib/chat-unsubscribe-token.ts) so
+  // unsubscribe state survives without a token column on chat_leads.
+  const footer =
+    `<div style="margin-top:24px;padding-top:14px;border-top:1px solid #e2e8f0;font-family:system-ui,-apple-system,sans-serif;color:#64748b;font-size:12px;line-height:1.5;">` +
+    `You're receiving this because you chatted with us at Qorix Markets and asked to be reminded.` +
+    ` <a href="${unsubscribeUrl}" style="color:#64748b;text-decoration:underline;">Unsubscribe</a>` +
+    ` from these reminders any time.` +
+    `</div>`;
+  return (
+    `<div style="font-family:system-ui,-apple-system,sans-serif;color:#0f172a;line-height:1.6;font-size:15px;">` +
+    linkified.replace(/\n/g, "<br/>") +
+    footer +
+    `</div>`
+  );
 }
 
 // One sweep — exported so the cron module can call us on its own schedule
@@ -123,9 +139,16 @@ export async function chatFollowupTick(): Promise<{ sent: number; skipped: numbe
 
   for (const lead of candidates) {
     try {
+      const unsubscribeUrl = buildUnsubscribeUrl(lead.id, lead.createdAt);
       const subject = applyPlaceholders(subjectTpl, { name: lead.name, ctaUrl });
-      const body = applyPlaceholders(bodyTpl, { name: lead.name, ctaUrl });
-      const html = bodyToHtml(body);
+      const renderedBody = applyPlaceholders(bodyTpl, { name: lead.name, ctaUrl });
+      // Plain-text body still gets a line about unsubscribing — many
+      // mail clients render only the text/plain part on small screens.
+      const body =
+        renderedBody +
+        `\n\n— — —\nYou received this because you chatted with us at Qorix Markets.\n` +
+        `Unsubscribe: ${unsubscribeUrl}`;
+      const html = bodyToHtml(renderedBody, unsubscribeUrl);
 
       // Optimistic claim: bump attempts + stamp follow_up_sent_at BEFORE
       // sending so a second worker instance (or a retry of this same tick

@@ -31,6 +31,7 @@ import {
   type ResolvedChatSettings,
 } from "../lib/chat-settings-cache";
 import { logger } from "../lib/logger";
+import { verifyUnsubscribeToken } from "../lib/chat-unsubscribe-token";
 import { z } from "zod";
 import type { Request, Response } from "express";
 
@@ -840,6 +841,93 @@ router.post("/chat/deposit-complete", authMiddleware, async (req: AuthRequest, r
     res.status(500).json({ error: "Failed to log deposit completion" });
   }
 });
+
+// One-click unsubscribe (Task #145 Batch F). The follow-up email embeds
+// an HMAC-signed token (lib/chat-unsubscribe-token.ts) so we can verify
+// the request without a server-side token column on chat_leads — the
+// codebase's standing rule is ZERO schema changes. We accept BOTH GET
+// (link click in the email) and POST (RFC 8058 one-click List-Unsubscribe
+// header — Gmail/Yahoo bulk-sender requirement). Both paths are
+// idempotent: re-hitting the link after opt-out renders the same
+// confirmation page without flipping unsubscribed_at again.
+const unsubscribeHandler = async (req: Request, res: Response) => {
+  const tokenRaw = getParam(req, "token");
+  const parts = verifyUnsubscribeToken(tokenRaw);
+  if (!parts) {
+    res.status(404).type("html").send(renderUnsubscribePage({ ok: false }));
+    return;
+  }
+  try {
+    const rows = await db
+      .select()
+      .from(chatLeadsTable)
+      .where(eq(chatLeadsTable.id, parts.leadId))
+      .limit(1);
+    const lead = rows[0];
+    // Bind the token to the row's createdAt — defends against id reuse
+    // even if a row were ever recreated. If the timestamps don't line
+    // up, treat it as a stale link rather than 200-OK.
+    if (!lead || lead.createdAt.getTime() !== parts.createdAtMs) {
+      res.status(404).type("html").send(renderUnsubscribePage({ ok: false }));
+      return;
+    }
+    if (!lead.unsubscribedAt) {
+      await db
+        .update(chatLeadsTable)
+        .set({ unsubscribedAt: new Date() })
+        .where(
+          and(
+            eq(chatLeadsTable.id, parts.leadId),
+            isNull(chatLeadsTable.unsubscribedAt),
+          ),
+        );
+    }
+    res
+      .status(200)
+      .type("html")
+      .send(renderUnsubscribePage({ ok: true, email: lead.email }));
+  } catch (err) {
+    logger.warn(
+      { err: (err as Error).message, leadId: parts.leadId },
+      "[chat] unsubscribe handler failed",
+    );
+    res.status(500).type("html").send(renderUnsubscribePage({ ok: false }));
+  }
+};
+router.get("/chat/unsubscribe/:token", unsubscribeHandler);
+router.post("/chat/unsubscribe/:token", unsubscribeHandler);
+
+// Tiny inline confirmation page — keeps the unsubscribe flow self-contained
+// on the API origin so we don't need a matching frontend route on
+// qorixmarkets.com. Brand-consistent dark gradient, no JS, no external
+// assets. Returns valid HTML5.
+function renderUnsubscribePage(opts: { ok: boolean; email?: string }): string {
+  const title = opts.ok ? "You're unsubscribed" : "Link expired";
+  const heading = opts.ok ? "You're unsubscribed" : "This link can't be used";
+  const body = opts.ok
+    ? `<p>We won't send any more chat follow-up emails${opts.email ? ` to <strong>${escapeHtmlForPage(opts.email)}</strong>` : ""}.</p>` +
+      `<p style="color:#94a3b8;">If this was a mistake, just reach out and we'll re-enable reminders for you.</p>`
+    : `<p>This unsubscribe link is invalid or has expired.</p>` +
+      `<p style="color:#94a3b8;">If you're still receiving emails you didn't ask for, reply to one and we'll handle it directly.</p>`;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>${title} · Qorix Markets</title>` +
+    `<style>html,body{margin:0;padding:0;background:#0a0d18;color:#e2e8f0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;line-height:1.6;}` +
+    `.wrap{max-width:520px;margin:0 auto;padding:64px 24px;}` +
+    `.card{background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:32px;}` +
+    `h1{font-size:22px;margin:0 0 16px;color:#fff;}` +
+    `p{margin:0 0 12px;font-size:15px;}` +
+    `.brand{font-size:12px;letter-spacing:0.08em;text-transform:uppercase;color:#60a5fa;margin-bottom:24px;}` +
+    `a{color:#60a5fa;}` +
+    `</style></head><body><div class="wrap"><div class="brand">Qorix Markets</div><div class="card"><h1>${heading}</h1>${body}</div></div></body></html>`;
+}
+
+function escapeHtmlForPage(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
 
 // ─── ADMIN ROUTES ───────────────────────────────────────────
 
