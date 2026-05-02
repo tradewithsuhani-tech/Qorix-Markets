@@ -18,6 +18,9 @@ import {
   MessageSquare,
   StickyNote,
   UserCheck,
+  Activity,
+  TrendingUp,
+  Timer,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -74,6 +77,42 @@ interface LeadTotals {
   unsubscribed: number;
 }
 
+// Task #145 Batch H — analytics strip. Returned by GET
+// /admin/chat-leads/analytics. Cohort view (last 7 days, bucketed by
+// capture date) + per-intent + channel breakdown + 30d totals.
+interface DailyRow {
+  date: string;
+  captured: number;
+  sent: number;
+  converted: number;
+  unsubscribed: number;
+}
+interface IntentRow {
+  intent: string;
+  total: number;
+  sent: number;
+  converted: number;
+  unsubscribed: number;
+  conversionPct: number;
+}
+interface ChannelRow {
+  channel: string;
+  count: number;
+}
+interface AnalyticsResponse {
+  daily: DailyRow[];
+  perIntent: IntentRow[];
+  channels: ChannelRow[];
+  totals30d: {
+    captured: number;
+    sent: number;
+    converted: number;
+    unsubscribed: number;
+    conversionPct: number;
+    avgHoursToConvert: number | null;
+  };
+}
+
 const STATUS_FILTERS: Array<{
   key: LeadStatus;
   label: string;
@@ -120,6 +159,8 @@ export default function AdminChatLeads() {
   const [copiedId, setCopiedId] = useState<number | null>(null);
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [exportingCsv, setExportingCsv] = useState(false);
+  const [analytics, setAnalytics] = useState<AnalyticsResponse | null>(null);
+  const [analyticsOpen, setAnalyticsOpen] = useState(false);
 
   async function load(opts: { showSpinner?: boolean } = {}) {
     if (opts.showSpinner) setRefreshing(true);
@@ -148,6 +189,25 @@ export default function AdminChatLeads() {
     return () => clearInterval(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status]);
+
+  // Analytics is independent of the status filter — it always covers
+  // the same trailing windows (7d daily / 30d aggregates). Polled at
+  // 60s instead of 15s because the underlying numbers change much
+  // more slowly than the live leads list.
+  async function loadAnalytics() {
+    try {
+      const data = await authFetch(`/api/admin/chat-leads/analytics`);
+      setAnalytics(data);
+    } catch {
+      // Soft-fail: leaving the strip collapsed/blank is fine, the rest
+      // of the page still works without analytics.
+    }
+  }
+  useEffect(() => {
+    loadAnalytics();
+    const t = setInterval(loadAnalytics, 60000);
+    return () => clearInterval(t);
+  }, []);
 
   function handleCopyEmail(lead: ChatLead) {
     void navigator.clipboard
@@ -200,6 +260,13 @@ export default function AdminChatLeads() {
 
   return (
     <div className="flex flex-col gap-4">
+      {/* Analytics strip (Batch H) */}
+      <AnalyticsStrip
+        analytics={analytics}
+        open={analyticsOpen}
+        onToggle={() => setAnalyticsOpen((v) => !v)}
+      />
+
       {/* Funnel headline */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
         {[
@@ -715,5 +782,325 @@ function LeadOutreachPanel({
         )}
       </div>
     </div>
+  );
+}
+
+// Task #145 Batch H — collapsible analytics strip rendered above the
+// funnel cards on the Leads tab. Header is always visible and shows
+// the headline conversion% + avg-time-to-convert; the expanded body
+// reveals an inline 7-day sparkline, per-intent breakdown cards, and
+// channel-pill chips. Pure presentational — driven entirely by the
+// `analytics` prop fetched once a minute by the parent.
+function AnalyticsStrip({
+  analytics,
+  open,
+  onToggle,
+}: {
+  analytics: AnalyticsResponse | null;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  if (!analytics) {
+    return (
+      <div
+        className="rounded-2xl px-4 py-3 flex items-center gap-2 text-xs text-white/40"
+        style={{ background: "#0a0d18", border: "1px solid rgba(255,255,255,0.06)" }}
+      >
+        <Activity className="w-3.5 h-3.5" />
+        Loading analytics…
+      </div>
+    );
+  }
+
+  const { totals30d, daily, perIntent, channels } = analytics;
+  const avgHrs = totals30d.avgHoursToConvert;
+  const avgLabel =
+    avgHrs === null
+      ? "—"
+      : avgHrs < 1
+        ? `${Math.round(avgHrs * 60)}m`
+        : avgHrs < 48
+          ? `${avgHrs.toFixed(1)}h`
+          : `${Math.round(avgHrs / 24)}d`;
+
+  return (
+    <div
+      className="rounded-2xl overflow-hidden"
+      style={{ background: "#0a0d18", border: "1px solid rgba(255,255,255,0.06)" }}
+    >
+      <button
+        onClick={onToggle}
+        className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-white/[0.02] transition"
+      >
+        <div className="w-8 h-8 rounded-xl bg-violet-500/15 border border-violet-500/25 flex items-center justify-center shrink-0">
+          <Activity className="w-4 h-4 text-violet-300" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-[10px] uppercase tracking-wider text-white/40">
+            Analytics · last 30 days
+          </p>
+          <div className="flex items-center gap-3 mt-0.5 flex-wrap">
+            <span className="text-sm text-white/85">
+              <span className="font-semibold text-emerald-300">
+                {totals30d.conversionPct}%
+              </span>
+              <span className="text-white/40"> conversion</span>
+            </span>
+            <span className="text-white/15">·</span>
+            <span className="text-sm text-white/55 flex items-center gap-1">
+              <Timer className="w-3 h-3" />
+              avg <span className="text-white/85 font-medium">{avgLabel}</span> to convert
+            </span>
+            <span className="text-white/15">·</span>
+            <span className="text-sm text-white/55">
+              {totals30d.captured} captured · {totals30d.converted} won
+            </span>
+          </div>
+        </div>
+        <div className="hidden md:block shrink-0 mr-2">
+          <Sparkline daily={daily} />
+        </div>
+        <ChevronDown
+          className={cn(
+            "w-4 h-4 text-white/40 transition-transform shrink-0",
+            open && "rotate-180",
+          )}
+        />
+      </button>
+
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.18 }}
+            className="overflow-hidden"
+            style={{ borderTop: "1px solid rgba(255,255,255,0.04)" }}
+          >
+            <div className="px-4 py-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="md:col-span-1">
+                <p className="text-[10px] uppercase tracking-wider text-white/40 mb-2">
+                  Last 7 days · capture cohort
+                </p>
+                <SparklineLarge daily={daily} />
+                <div className="flex items-center gap-3 mt-2 text-[10px] text-white/45">
+                  <span className="flex items-center gap-1">
+                    <span className="inline-block w-2 h-2 rounded-sm bg-white/40" />
+                    Captured
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <span className="inline-block w-2 h-2 rounded-sm bg-emerald-400" />
+                    Converted
+                  </span>
+                </div>
+              </div>
+
+              <div className="md:col-span-1">
+                <p className="text-[10px] uppercase tracking-wider text-white/40 mb-2 flex items-center gap-1">
+                  <TrendingUp className="w-3 h-3" />
+                  Conversion by intent
+                </p>
+                {perIntent.length === 0 ? (
+                  <p className="text-xs text-white/30">No leads in window.</p>
+                ) : (
+                  <div className="flex flex-col gap-1.5">
+                    {perIntent.slice(0, 6).map((row) => {
+                      const badge = INTENT_BADGE[row.intent] ?? INTENT_BADGE.other!;
+                      const maxPct = Math.max(
+                        1,
+                        ...perIntent.map((r) => r.conversionPct),
+                      );
+                      const barPct = (row.conversionPct / maxPct) * 100;
+                      return (
+                        <div key={row.intent} className="text-xs">
+                          <div className="flex items-center justify-between mb-0.5">
+                            <span
+                              className={cn(
+                                "px-1.5 py-0.5 rounded border text-[10px] font-medium",
+                                badge.tone,
+                              )}
+                            >
+                              {badge.label}
+                            </span>
+                            <span className="text-white/55">
+                              <span className="text-white/80 font-medium">
+                                {row.conversionPct}%
+                              </span>
+                              <span className="text-white/30">
+                                {" "}
+                                · {row.converted}/{row.total}
+                              </span>
+                            </span>
+                          </div>
+                          <div className="h-1 rounded-full bg-white/[0.04] overflow-hidden">
+                            <div
+                              className="h-full bg-emerald-400/70"
+                              style={{ width: `${barPct}%` }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              <div className="md:col-span-1 flex flex-col gap-3">
+                <div>
+                  <p className="text-[10px] uppercase tracking-wider text-white/40 mb-2">
+                    Outreach channels · 30d
+                  </p>
+                  {channels.length === 0 ? (
+                    <p className="text-xs text-white/30">
+                      No "Mark contacted" actions logged yet.
+                    </p>
+                  ) : (
+                    <div className="flex flex-wrap gap-1.5">
+                      {channels.map((c) => (
+                        <span
+                          key={c.channel}
+                          className="px-2 py-0.5 rounded-md text-[11px] bg-white/5 border border-white/10 text-white/65"
+                        >
+                          <span className="capitalize">{c.channel}</span>
+                          <span className="text-white/35"> · {c.count}</span>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="rounded-md px-2.5 py-1.5 bg-white/[0.03] border border-white/[0.06]">
+                    <p className="text-[10px] uppercase tracking-wider text-white/40">
+                      Followup sent
+                    </p>
+                    <p className="text-sm font-medium text-sky-300 mt-0.5">
+                      {totals30d.sent}
+                      <span className="text-white/30 text-[10px] font-normal">
+                        {" "}
+                        / {totals30d.captured}
+                      </span>
+                    </p>
+                  </div>
+                  <div className="rounded-md px-2.5 py-1.5 bg-white/[0.03] border border-white/[0.06]">
+                    <p className="text-[10px] uppercase tracking-wider text-white/40">
+                      Unsubscribed
+                    </p>
+                    <p className="text-sm font-medium text-white/70 mt-0.5">
+                      {totals30d.unsubscribed}
+                      <span className="text-white/30 text-[10px] font-normal">
+                        {" "}
+                        / {totals30d.captured}
+                      </span>
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+// Inline header sparkline — captured (white/35) + converted (emerald)
+// drawn as two polylines on a 7-point grid. Self-scaling on max value.
+// Used in the always-visible header bar so the trend is glance-able.
+function Sparkline({ daily }: { daily: DailyRow[] }) {
+  const w = 96;
+  const h = 28;
+  const pad = 2;
+  const max = Math.max(1, ...daily.map((d) => d.captured));
+  const stepX = daily.length > 1 ? (w - pad * 2) / (daily.length - 1) : 0;
+  const toY = (v: number) => h - pad - (v / max) * (h - pad * 2);
+  const linePath = (key: keyof Pick<DailyRow, "captured" | "converted">) =>
+    daily
+      .map((d, i) => `${i === 0 ? "M" : "L"} ${pad + i * stepX} ${toY(d[key])}`)
+      .join(" ");
+  return (
+    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} className="overflow-visible">
+      <path
+        d={linePath("captured")}
+        fill="none"
+        stroke="rgba(255,255,255,0.35)"
+        strokeWidth={1.25}
+      />
+      <path
+        d={linePath("converted")}
+        fill="none"
+        stroke="rgb(52,211,153)"
+        strokeWidth={1.5}
+      />
+    </svg>
+  );
+}
+
+// Larger version of the same sparkline used inside the expanded panel.
+// Adds dotted baseline + per-point hover titles. Lightweight: no
+// chart lib pulled in for one widget.
+function SparklineLarge({ daily }: { daily: DailyRow[] }) {
+  const w = 280;
+  const h = 80;
+  const pad = 6;
+  const max = Math.max(1, ...daily.map((d) => Math.max(d.captured, d.converted)));
+  const stepX = daily.length > 1 ? (w - pad * 2) / (daily.length - 1) : 0;
+  const toY = (v: number) => h - pad - (v / max) * (h - pad * 2);
+  const linePath = (key: keyof Pick<DailyRow, "captured" | "converted">) =>
+    daily
+      .map((d, i) => `${i === 0 ? "M" : "L"} ${pad + i * stepX} ${toY(d[key])}`)
+      .join(" ");
+  return (
+    <svg width="100%" height={h} viewBox={`0 0 ${w} ${h}`} className="overflow-visible">
+      <line
+        x1={pad}
+        y1={h - pad}
+        x2={w - pad}
+        y2={h - pad}
+        stroke="rgba(255,255,255,0.05)"
+        strokeDasharray="2 3"
+      />
+      <path
+        d={linePath("captured")}
+        fill="none"
+        stroke="rgba(255,255,255,0.45)"
+        strokeWidth={1.5}
+      />
+      <path
+        d={linePath("converted")}
+        fill="none"
+        stroke="rgb(52,211,153)"
+        strokeWidth={2}
+      />
+      {daily.map((d, i) => {
+        const x = pad + i * stepX;
+        return (
+          <g key={d.date}>
+            <circle cx={x} cy={toY(d.captured)} r={2} fill="rgba(255,255,255,0.55)">
+              <title>{`${d.date} · ${d.captured} captured`}</title>
+            </circle>
+            <circle cx={x} cy={toY(d.converted)} r={2.5} fill="rgb(52,211,153)">
+              <title>{`${d.date} · ${d.converted} converted`}</title>
+            </circle>
+          </g>
+        );
+      })}
+      {[0, Math.floor(daily.length / 2), daily.length - 1].map((i) => {
+        if (!daily[i]) return null;
+        const x = pad + i * stepX;
+        return (
+          <text
+            key={`lbl-${i}`}
+            x={x}
+            y={h - 0.5}
+            fontSize={8}
+            fill="rgba(255,255,255,0.3)"
+            textAnchor={i === 0 ? "start" : i === daily.length - 1 ? "end" : "middle"}
+          >
+            {daily[i]!.date.slice(5)}
+          </text>
+        );
+      })}
+    </svg>
   );
 }

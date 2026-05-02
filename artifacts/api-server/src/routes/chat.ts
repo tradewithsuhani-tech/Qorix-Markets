@@ -1414,6 +1414,152 @@ router.post("/admin/chat-leads/:id/notes", authMiddleware, adminMiddleware, asyn
   }
 });
 
+// Lead analytics (Task #145 Batch H). Powers the analytics strip on
+// the admin Leads tab. Returns four bundled views in one round-trip:
+//   1. daily      — last 7 days cohort (bucketed by capture date)
+//                   sparkline-friendly: { date, captured, sent,
+//                   converted, unsubscribed }
+//   2. perIntent  — last 30d, grouped by chat_session.detected_intent,
+//                   with conversionPct precomputed.
+//   3. channels   — last 30d count of "Mark Contacted" actions
+//                   grouped by audit-log metadata.channel.
+//                   Channel is extracted via POSIX substring regex
+//                   on the metadata text so a malformed legacy row
+//                   cannot 500 the whole endpoint (mirrors the
+//                   defensive pattern documented in admin-merchants).
+//   4. totals30d  — captured/sent/converted/unsubscribed/conversionPct
+//                   plus avgHoursToConvert (Math.round to 1 decimal).
+// All read-only; no schema change.
+router.get("/admin/chat-leads/analytics", authMiddleware, adminMiddleware, async (_req: AuthRequest, res: Response) => {
+  try {
+    // 1. Daily cohort — bucketed in UTC so dates are stable across
+    //    Fly machines wherever the underlying TZ landed.
+    const dailyRes = await db.execute(sql`
+      SELECT
+        to_char(date_trunc('day', created_at AT TIME ZONE 'UTC'), 'YYYY-MM-DD') AS date,
+        COUNT(*)::int AS captured,
+        COUNT(*) FILTER (WHERE follow_up_sent_at IS NOT NULL)::int AS sent,
+        COUNT(*) FILTER (WHERE converted_at IS NOT NULL)::int AS converted,
+        COUNT(*) FILTER (WHERE unsubscribed_at IS NOT NULL)::int AS unsubscribed
+      FROM chat_leads
+      WHERE created_at >= NOW() - INTERVAL '7 days'
+      GROUP BY 1
+      ORDER BY 1 ASC
+    `);
+    type DailyRow = { date: string; captured: number; sent: number; converted: number; unsubscribed: number };
+    const dailyMap = new Map<string, DailyRow>();
+    for (const r of (dailyRes.rows ?? []) as DailyRow[]) dailyMap.set(r.date, r);
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0);
+    const daily: DailyRow[] = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(today);
+      d.setUTCDate(d.getUTCDate() - i);
+      const key = d.toISOString().slice(0, 10);
+      const row = dailyMap.get(key);
+      daily.push({
+        date: key,
+        captured: row?.captured ?? 0,
+        sent: row?.sent ?? 0,
+        converted: row?.converted ?? 0,
+        unsubscribed: row?.unsubscribed ?? 0,
+      });
+    }
+
+    // 2. Per-intent breakdown over the last 30 days. detected_intent
+    //    lives on chat_sessions, so left-join from leads. NULLs become
+    //    "other" to keep the table flat.
+    const intentRes = await db.execute(sql`
+      SELECT
+        COALESCE(s.detected_intent, 'other') AS intent,
+        COUNT(*)::int AS total,
+        COUNT(*) FILTER (WHERE l.follow_up_sent_at IS NOT NULL)::int AS sent,
+        COUNT(*) FILTER (WHERE l.converted_at IS NOT NULL)::int AS converted,
+        COUNT(*) FILTER (WHERE l.unsubscribed_at IS NOT NULL)::int AS unsubscribed
+      FROM chat_leads l
+      LEFT JOIN chat_sessions s ON s.id = l.session_id
+      WHERE l.created_at >= NOW() - INTERVAL '30 days'
+      GROUP BY 1
+      ORDER BY total DESC
+    `);
+    type IntentRow = { intent: string; total: number; sent: number; converted: number; unsubscribed: number };
+    const perIntent = ((intentRes.rows ?? []) as IntentRow[]).map((r) => ({
+      ...r,
+      conversionPct: r.total > 0 ? Math.round((r.converted / r.total) * 100) : 0,
+    }));
+
+    // 3. Channel breakdown (last 30d). substring() with POSIX regex
+    //    extracts the channel value from the metadata text WITHOUT
+    //    casting to jsonb — same defensive approach as
+    //    admin-merchants/topup audit rollup. Returns NULL on no match,
+    //    which COALESCEs to 'unknown'.
+    const channelRes = await db.execute(sql`
+      SELECT
+        COALESCE(
+          substring(metadata FROM '"channel"\s*:\s*"([a-z_]+)"'),
+          'unknown'
+        ) AS channel,
+        COUNT(*)::int AS count
+      FROM admin_audit_log
+      WHERE module = 'chat'
+        AND action = 'chat_lead_contacted'
+        AND created_at >= NOW() - INTERVAL '30 days'
+      GROUP BY 1
+      ORDER BY count DESC
+    `);
+    type ChannelRow = { channel: string; count: number };
+    const channels = ((channelRes.rows ?? []) as ChannelRow[]);
+
+    // 4. 30d totals + average hours to conversion (only across leads
+    //    that did convert — otherwise the AVG is meaningless).
+    const totalsRes = await db.execute(sql`
+      SELECT
+        COUNT(*)::int AS captured,
+        COUNT(*) FILTER (WHERE follow_up_sent_at IS NOT NULL)::int AS sent,
+        COUNT(*) FILTER (WHERE converted_at IS NOT NULL)::int AS converted,
+        COUNT(*) FILTER (WHERE unsubscribed_at IS NOT NULL)::int AS unsubscribed,
+        AVG(EXTRACT(EPOCH FROM (converted_at - created_at)) / 3600.0)
+          FILTER (WHERE converted_at IS NOT NULL) AS avg_hours_to_convert
+      FROM chat_leads
+      WHERE created_at >= NOW() - INTERVAL '30 days'
+    `);
+    type TotalsRow = {
+      captured: number;
+      sent: number;
+      converted: number;
+      unsubscribed: number;
+      avg_hours_to_convert: string | number | null;
+    };
+    const t = ((totalsRes.rows ?? []) as TotalsRow[])[0] ?? {
+      captured: 0,
+      sent: 0,
+      converted: 0,
+      unsubscribed: 0,
+      avg_hours_to_convert: null,
+    };
+    const avgHoursRaw =
+      t.avg_hours_to_convert === null || t.avg_hours_to_convert === undefined
+        ? null
+        : Number(t.avg_hours_to_convert);
+    const totals30d = {
+      captured: t.captured,
+      sent: t.sent,
+      converted: t.converted,
+      unsubscribed: t.unsubscribed,
+      conversionPct: t.captured > 0 ? Math.round((t.converted / t.captured) * 100) : 0,
+      avgHoursToConvert:
+        avgHoursRaw === null || !Number.isFinite(avgHoursRaw)
+          ? null
+          : Math.round(avgHoursRaw * 10) / 10,
+    };
+
+    res.json({ daily, perIntent, channels, totals30d });
+  } catch (err) {
+    logger.warn({ err: (err as Error).message }, "[chat] /admin/chat-leads/analytics failed");
+    res.status(500).json({ error: "Failed to fetch analytics" });
+  }
+});
+
 // Admin reply to a session
 router.post("/admin/chats/:id/reply", authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
   try {
