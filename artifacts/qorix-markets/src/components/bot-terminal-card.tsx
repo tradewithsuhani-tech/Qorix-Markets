@@ -793,6 +793,153 @@ function PositionsStrip({
 }
 
 // ---------------------------------------------------------------------------
+// Live tape — phantom-fill stream (Batch Z)
+// ---------------------------------------------------------------------------
+//
+// To make the terminal feel like an actual trading desk where the
+// bot is constantly working, we generate a stream of "fake fills"
+// tied to the live synth quote. Every ~380ms one to three small
+// prints pop at random sides/sizes around the current mid, with
+// prices jittered by ±6 pips. The strip then renders the last 6
+// prints with a slide-in animation per row, giving the dashboard
+// a scrolling Time-&-Sales feed that visually moves 24/7.
+//
+// These prints are PURELY visual — they are NOT signals, NOT real
+// orders, and do not affect any persisted state or backend. The
+// header keeps a small "feed only" disclaimer for transparency.
+
+type TapePrint = {
+  id: number;
+  side: "BUY" | "SELL";
+  size: number;
+  price: number;
+  at: number;
+};
+
+const TAPE_INTERVAL_MS = 380;
+const TAPE_MAX = 24;
+const TAPE_VISIBLE = 6;
+
+function randomTapeSize(code: string): number {
+  if (code === "BTCUSD") {
+    return Math.round((0.003 + Math.random() * 0.097) * 1000) / 1000;
+  }
+  if (code === "EURUSD") return Math.round(2 + Math.random() * 48);
+  if (code === "XAUUSD") {
+    return Math.round((0.1 + Math.random() * 1.9) * 100) / 100;
+  }
+  return Math.round(1 + Math.random() * 49);
+}
+
+function formatTapeSize(code: string, size: number): string {
+  if (code === "BTCUSD") return size.toFixed(3);
+  if (code === "XAUUSD") return size.toFixed(2);
+  return String(size);
+}
+
+function usePrintTape(quote: BotQuote | undefined): TapePrint[] {
+  const [prints, setPrints] = useState<TapePrint[]>([]);
+  const idRef = useRef(0);
+  const quoteRef = useRef(quote);
+
+  useEffect(() => {
+    quoteRef.current = quote;
+  }, [quote]);
+
+  // Stable interval — reads latest quote via ref so the timer never
+  // restarts on synth ticks (200ms cadence).
+  useEffect(() => {
+    const id = setInterval(() => {
+      const q = quoteRef.current;
+      if (!q || !Number.isFinite(q.mid)) return;
+      const n = 1 + Math.floor(Math.random() * 3); // 1-3 prints / interval
+      const fresh: TapePrint[] = [];
+      for (let i = 0; i < n; i++) {
+        const side: "BUY" | "SELL" = Math.random() > 0.5 ? "BUY" : "SELL";
+        const jitter = (Math.random() - 0.5) * 2 * q.pipSize * 6;
+        fresh.push({
+          id: idRef.current++,
+          side,
+          size: randomTapeSize(q.code),
+          price: q.mid + jitter,
+          at: Date.now() + i,
+        });
+      }
+      setPrints((prev) => [...fresh, ...prev].slice(0, TAPE_MAX));
+    }, TAPE_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, []);
+
+  return prints;
+}
+
+function LiveTapeStrip({ quote }: { quote: BotQuote | undefined }) {
+  const prints = usePrintTape(quote);
+  const visible = prints.slice(0, TAPE_VISIBLE);
+  const precision = quote?.precision ?? 2;
+  const pairLabel = quote?.display ?? "—";
+
+  return (
+    <div className="border-t bg-background/30 px-3 py-2">
+      <div className="text-[10px] font-semibold tracking-wider text-muted-foreground mb-1.5 flex items-center gap-2">
+        <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
+        <span>LIVE TAPE</span>
+        <span className="text-foreground/70 font-mono">{pairLabel}</span>
+        <span className="text-muted-foreground/40 normal-case font-normal tracking-normal italic">
+          indicative · feed only
+        </span>
+        <span className="ml-auto font-mono text-muted-foreground/40 normal-case font-normal tracking-normal">
+          {prints.length}
+        </span>
+      </div>
+      <div
+        className="font-mono text-[10px] relative"
+        style={{ minHeight: TAPE_VISIBLE * 16 }}
+      >
+        <AnimatePresence initial={false}>
+          {visible.map((p, idx) => (
+            <motion.div
+              key={p.id}
+              initial={{ opacity: 0, x: -6 }}
+              animate={{ opacity: 1 - idx * 0.13, x: 0 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.18, ease: "easeOut" }}
+              layout
+              className="flex items-center gap-3 tabular-nums leading-4 h-4"
+            >
+              <span className="text-muted-foreground/60 w-16 shrink-0">
+                {new Date(p.at).toLocaleTimeString("en-US", { hour12: false })}
+              </span>
+              <span
+                className={cn(
+                  "w-10 font-bold shrink-0",
+                  p.side === "BUY" ? "text-emerald-400" : "text-rose-400",
+                )}
+              >
+                {p.side}
+              </span>
+              <span className="w-14 text-foreground/80 shrink-0">
+                {quote ? formatTapeSize(quote.code, p.size) : p.size}
+              </span>
+              <span
+                className={cn(
+                  "tabular-nums shrink-0",
+                  p.side === "BUY"
+                    ? "text-emerald-400/85"
+                    : "text-rose-400/85",
+                )}
+              >
+                {p.price.toFixed(precision)}
+              </span>
+            </motion.div>
+          ))}
+        </AnimatePresence>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // "JUST FILLED" toast
 // ---------------------------------------------------------------------------
 
@@ -941,6 +1088,9 @@ export function BotTerminalCard() {
           height={280}
         />
       </div>
+
+      {/* Live tape (synthetic Time & Sales for the featured pair) */}
+      <LiveTapeStrip quote={featured} />
 
       {/* Open positions strip */}
       <PositionsStrip positions={positions} quotes={quotes} />
