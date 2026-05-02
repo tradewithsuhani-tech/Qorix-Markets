@@ -56,6 +56,14 @@ const router: IRouter = Router();
 // with 401 Unauthorized before ever reaching the intended handler.
 router.use(healthRouter);
 router.use(publicRouter);
+// Batch R — public Bot Trading Terminal quotes feed
+// (GET /bot-trading/quotes). MUST be mounted in the public block
+// alongside healthRouter / publicRouter — otherwise upstream
+// auth-gated routers (wallet, transactions, dashboard, ...) will
+// 401 the request before it can reach this handler. Future
+// per-user endpoints on the same router will gate auth at the
+// route level so /quotes stays publicly reachable.
+router.use(botTradingRouter);
 // Slider captcha (B9.1) — fully public; both endpoints
 // (POST /captcha/slider/challenge, /verify) need to be reachable
 // PRE-auth so signup/login forms can solve the puzzle before they
@@ -107,9 +115,5 @@ router.use(phoneChangeRouter);
 router.use(merchantRouter);
 router.use(adminMerchantsRouter);
 router.use(adminEscalationRouter);
-// Batch R — public quotes feed for the dashboard Bot Trading Terminal
-// widget. /bot-trading/quotes is fully public (no auth); future
-// per-user endpoints on this router will gate auth per-route.
-router.use(botTradingRouter);
 
 export default router;
