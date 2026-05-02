@@ -1455,8 +1455,20 @@ export function BotTerminalCard() {
   const featuredPositions = useMemo(() => {
     if (!Number.isFinite(featuredMid)) return [];
     const mid = featuredMid as number;
+    // Only show positions whose entry is within ±1% of current price
+    // so the chart looks like real MT5 — chips + dashed lines + right
+    // tags all fit naturally in the visible candle range. Stale,
+    // far-away positions (e.g. opened hours ago when BTC was $1800
+    // below current) are hidden from the chart but remain in the
+    // open-positions count above the chart.
+    const band = mid * 0.01;
     return positions
       .filter((p) => p.pair === featuredCode)
+      .filter(
+        (p) =>
+          Number.isFinite(p.entryPrice) &&
+          Math.abs((p.entryPrice as number) - mid) <= band,
+      )
       .slice()
       .sort(
         (a, b) =>
