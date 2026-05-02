@@ -9,6 +9,7 @@ import { getLastDailyProfitPercent, sweepSignalProfitsToProfitWallet } from "./p
 import { emitProfitDistribution } from "./event-bus";
 import { tickAutoSignalEngine, closeMaturedAutoTrades, rehydrateAutoEngineState } from "./auto-signal-engine";
 import { runEscalationTick } from "./escalation-cron";
+import { chatFollowupTick } from "../workers/chat-followup-worker";
 
 const AUTO_ENGINE_ENABLED = (process.env.AUTO_SIGNAL_ENGINE_ENABLED ?? "1") !== "0";
 
@@ -125,8 +126,20 @@ export async function initCronJobs(): Promise<void> {
     }
   });
 
+  // Every minute: scan chat_leads for unsent follow-ups whose delay window
+  // has elapsed. Idempotent at the row level — chatFollowupTick stamps
+  // follow_up_sent_at BEFORE sending so a second instance can't double-deliver.
+  // No-ops fast when chat_settings.email_followup.enabled = false (default).
+  cron.schedule("* * * * *", async () => {
+    try {
+      await chatFollowupTick();
+    } catch (err) {
+      errorLogger.error({ err }, "Cron: chat follow-up tick failed");
+    }
+  });
+
   logger.info(
-    "Cron: jobs registered — daily profit (00:00), monthly trading→profit sweep (25th 00:00), hourly promo expiry, INR escalation (every 1min)",
+    "Cron: jobs registered — daily profit (00:00), monthly trading→profit sweep (25th 00:00), hourly promo expiry, INR escalation (every 1min), chat lead follow-up (every 1min)",
   );
   // Touch sql import so it isn't dropped by tooling — kept for future hourly maintenance jobs.
   void sql;

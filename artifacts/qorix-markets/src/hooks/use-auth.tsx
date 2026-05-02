@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState } from "react";
 import { useGetMe } from "@workspace/api-client-react";
 import type { User } from "@workspace/api-client-react";
 import { useLocation } from "wouter";
+import { getOrCreateVisitorId } from "@/lib/visitor-id";
 
 type AuthContextType = {
   user: User | null;
@@ -44,6 +45,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // ignore
     }
     setToken(newToken);
+
+    // Task #145 Batch D: claim the visitor's anonymous chat session so the
+    // history they built up before signing in follows them into their
+    // authenticated account. Fire-and-forget — auth flow MUST NOT block on
+    // this network call. A failed claim leaves the guest session orphaned
+    // (still scannable by support via visitor_id) but does not break login.
+    try {
+      const visitorId = getOrCreateVisitorId();
+      void fetch("/api/chat/guest-session/claim", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${newToken}`,
+          "x-visitor-id": visitorId,
+        },
+        body: JSON.stringify({ visitorId }),
+      }).catch(() => {
+        // Non-fatal: orphaned guest session, no user-visible impact.
+      });
+    } catch {
+      // localStorage / crypto unavailable — visitor was never identified, no
+      // session to claim. Silently skip.
+    }
   };
 
   const logout = () => {

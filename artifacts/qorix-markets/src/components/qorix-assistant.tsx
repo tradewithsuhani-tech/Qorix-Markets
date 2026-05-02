@@ -1,10 +1,17 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Send, ChevronRight, MessageCircle, Headphones, UserCheck, CheckCheck, SquareX, RotateCcw, MessageSquarePlus, TrendingUp, Languages } from "lucide-react";
+import { X, Send, ChevronRight, MessageCircle, Headphones, UserCheck, CheckCheck, SquareX, RotateCcw, MessageSquarePlus, TrendingUp, Languages, Mail, Loader2, Shield } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
 import { useLocation } from "wouter";
 import { authFetch } from "@/lib/auth-fetch";
+import { getOrCreateVisitorId } from "@/lib/visitor-id";
+
+// Lead-capture trigger: show the email form after this many user-typed
+// messages in guest mode. 3 turns is enough that the visitor is engaged
+// (not a one-bounce passerby) but early enough that we still catch them
+// before they drift off the page.
+const GUEST_LEAD_TRIGGER_TURNS = 3;
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -112,6 +119,26 @@ async function apiPost(path: string, body: object) {
 
 async function apiGet(path: string) {
   return authFetch(`/api${path}`);
+}
+
+// Guest variants. Identical wire format but every call carries the
+// `x-visitor-id` header — that's how the API server scopes the
+// unauthenticated session to *this* browser. authFetch picks up the
+// custom header from `init.headers` and merges it with its own (CSRF,
+// device-id), so all the protections that apply to authed endpoints also
+// apply here.
+async function guestPost(path: string, body: object) {
+  return authFetch(`/api${path}`, {
+    method: "POST",
+    headers: { "x-visitor-id": getOrCreateVisitorId() },
+    body: JSON.stringify(body),
+  });
+}
+
+async function guestGet(path: string) {
+  return authFetch(`/api${path}`, {
+    headers: { "x-visitor-id": getOrCreateVisitorId() },
+  });
 }
 
 // ─── Typing Indicator ─────────────────────────────────────────────────────────
@@ -342,6 +369,18 @@ export function QorixAssistant({ guestMode = false }: { guestMode?: boolean } = 
   // the LLM and CTA acknowledgements both honour it.
   const [language, setLanguage] = useState<LanguageChoice>(null);
   const [showLangMenu, setShowLangMenu] = useState(false);
+  // ── Guest lead-capture state (Batch D). Triggered after the visitor has
+  // sent ≥ GUEST_LEAD_TRIGGER_TURNS messages without having signed up. The
+  // form lives inline above the message input so it's not a hard modal that
+  // breaks reading flow. Once submitted (or skipped) we never show it again
+  // for this session.
+  const [showLeadForm, setShowLeadForm] = useState(false);
+  const [leadCaptured, setLeadCaptured] = useState(false);
+  const [leadDismissed, setLeadDismissed] = useState(false);
+  const [leadEmail, setLeadEmail] = useState("");
+  const [leadName, setLeadName] = useState("");
+  const [leadSubmitting, setLeadSubmitting] = useState(false);
+  const [leadError, setLeadError] = useState<string | null>(null);
   const nudgeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const nudgeHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -394,8 +433,12 @@ export function QorixAssistant({ guestMode = false }: { guestMode?: boolean } = 
     if (isOpen) {
       setHasUnread(false);
       setTimeout(() => inputRef.current?.focus(), 300);
-      if (guestMode && messages.length === 0) {
-        showBotMessage(FLOWS.main.message, FLOWS.main.options);
+      if (guestMode && !sessionId) {
+        // Server-backed guest session — visitor's chat survives reload and
+        // shows up in /admin/chats. initGuestSession() also rehydrates any
+        // prior history from a previous tab/session (Resume policy). The
+        // welcome bubble is only shown for *brand-new* sessions.
+        initGuestSession();
       } else if (!sessionId && token) {
         initSession();
       }
@@ -411,6 +454,47 @@ export function QorixAssistant({ guestMode = false }: { guestMode?: boolean } = 
     }
     return undefined;
   }, [expertMode, sessionId, isOpen]);
+
+  // Guest counterpart of initSession() — same resume policy, but every call
+  // is keyed on the visitor's localStorage UUID instead of a JWT.
+  async function initGuestSession() {
+    try {
+      const { session } = await guestPost("/chat/guest-session", {
+        visitorId: getOrCreateVisitorId(),
+      });
+      setSessionId(session.id);
+      if (session.preferredLanguage) {
+        setLanguage(session.preferredLanguage as LanguageChoice);
+      } else {
+        setLanguage(null);
+      }
+      const { messages: existing } = await guestGet(
+        `/chat/guest-session/${session.id}/messages`,
+      );
+      if (Array.isArray(existing) && existing.length > 0) {
+        setMessages(existing.map((m: any) => ({
+          id: String(m.id),
+          type: m.senderType as "user" | "bot" | "admin",
+          content: m.content,
+          timestamp: new Date(m.createdAt),
+        })));
+        return;
+      }
+      // Fresh session — show the canned welcome and DO persist the bot
+      // message server-side so the admin panel sees the same opening
+      // line that the visitor saw.
+      showBotMessage(FLOWS.main.message, FLOWS.main.options);
+      void guestPost("/chat/guest-bot-message", {
+        sessionId: session.id,
+        content: FLOWS.main.message,
+        visitorId: getOrCreateVisitorId(),
+      }).catch(() => {});
+    } catch {
+      // Network down / API misconfigured — degrade to a purely client-side
+      // welcome so the visitor still sees a chat experience.
+      showBotMessage(FLOWS.main.message, FLOWS.main.options);
+    }
+  }
 
   async function initSession() {
     if (!token) return;
@@ -450,9 +534,16 @@ export function QorixAssistant({ guestMode = false }: { guestMode?: boolean } = 
   async function persistLanguage(next: LanguageChoice) {
     setLanguage(next);
     setShowLangMenu(false);
-    if (!sessionId || !token) return;
+    if (!sessionId) return;
     try {
-      await apiPost(`/chat/session/${sessionId}/language`, { language: next });
+      if (guestMode) {
+        await guestPost(`/chat/guest-session/${sessionId}/language`, {
+          language: next,
+          visitorId: getOrCreateVisitorId(),
+        });
+      } else if (token) {
+        await apiPost(`/chat/session/${sessionId}/language`, { language: next });
+      }
     } catch {
       // Non-fatal: the LLM falls back to mirror mode if persistence fails.
     }
@@ -566,13 +657,33 @@ export function QorixAssistant({ guestMode = false }: { guestMode?: boolean } = 
   }
 
   async function saveUserMessage(content: string) {
-    if (!sessionId || !token) return;
-    try { await apiPost("/chat/message", { sessionId, content }); } catch { }
+    if (!sessionId) return;
+    try {
+      if (guestMode) {
+        await guestPost("/chat/guest-message", {
+          sessionId,
+          content,
+          visitorId: getOrCreateVisitorId(),
+        });
+      } else if (token) {
+        await apiPost("/chat/message", { sessionId, content });
+      }
+    } catch { }
   }
 
   async function saveBotMessage(content: string) {
-    if (!sessionId || !token) return;
-    try { await apiPost("/chat/bot-message", { sessionId, content }); } catch { }
+    if (!sessionId) return;
+    try {
+      if (guestMode) {
+        await guestPost("/chat/guest-bot-message", {
+          sessionId,
+          content,
+          visitorId: getOrCreateVisitorId(),
+        });
+      } else if (token) {
+        await apiPost("/chat/bot-message", { sessionId, content });
+      }
+    } catch { }
   }
 
   async function handleExpertRequest() {
@@ -588,8 +699,16 @@ export function QorixAssistant({ guestMode = false }: { guestMode?: boolean } = 
 
   async function handleEndChat() {
     setShowEndConfirm(false);
-    if (sessionId && token) {
-      try { await apiPost(`/chat/session/${sessionId}/end`, {}); } catch { }
+    if (sessionId) {
+      try {
+        if (guestMode) {
+          await guestPost(`/chat/guest-session/${sessionId}/end`, {
+            visitorId: getOrCreateVisitorId(),
+          });
+        } else if (token) {
+          await apiPost(`/chat/session/${sessionId}/end`, {});
+        }
+      } catch { }
     }
     setChatEnded(true);
     setExpertMode(false);
@@ -607,11 +726,71 @@ export function QorixAssistant({ guestMode = false }: { guestMode?: boolean } = 
     // session row (which starts with preferredLanguage = null).
     setLanguage(null);
     setShowLangMenu(false);
+    // Reset the lead-capture surface too — a brand-new conversation should
+    // get a fresh chance at capturing the visitor's email if they engage.
+    // `leadCaptured` is intentionally NOT reset: once we have the address
+    // we don't ask a second time in the same browser.
+    setShowLeadForm(false);
+    setLeadDismissed(false);
+    setLeadEmail("");
+    setLeadName("");
+    setLeadError(null);
     if (guestMode) {
-      setTimeout(() => showBotMessage(FLOWS.main.message, FLOWS.main.options), 100);
+      setTimeout(() => initGuestSession(), 100);
     } else if (token) {
       setTimeout(() => initSession(), 100);
     }
+  }
+
+  async function handleLeadSubmit() {
+    if (leadSubmitting) return;
+    const email = leadEmail.trim();
+    const name = leadName.trim();
+    // Cheap client-side validation. The API also validates with zod, but a
+    // local check stops the obvious typos from causing a network round-trip.
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setLeadError("Please enter a valid email address.");
+      return;
+    }
+    if (!sessionId) {
+      setLeadError("Hold on a second — still connecting.");
+      return;
+    }
+    setLeadSubmitting(true);
+    setLeadError(null);
+    try {
+      await guestPost("/chat/guest-lead", {
+        sessionId,
+        email,
+        name: name || undefined,
+        visitorId: getOrCreateVisitorId(),
+      });
+      setLeadCaptured(true);
+      setShowLeadForm(false);
+      // Drop a confirmation bubble into the chat so the visitor sees a
+      // tangible response to handing over their address — feels like a
+      // human acknowledgement rather than a silent form submit.
+      showBotMessage(
+        name
+          ? `Thanks ${name}! I've got your details. Whenever you're ready, sign up and I'll have full context — wallet, KYC, the works.`
+          : "Got it — thanks! Whenever you're ready, sign up and I'll have full context to help you start.",
+        [
+          { label: "🔐 Sign Up Now", value: "go_login" },
+          { label: "🏠 Keep Browsing", value: "main_menu" },
+        ],
+      );
+    } catch (err: any) {
+      const msg = typeof err?.message === "string" && err.message.length < 200 ? err.message : null;
+      setLeadError(msg ?? "Couldn't save your details. Please try again.");
+    } finally {
+      setLeadSubmitting(false);
+    }
+  }
+
+  function handleLeadDismiss() {
+    setShowLeadForm(false);
+    setLeadDismissed(true);
+    setLeadError(null);
   }
 
   async function handleSendMessage() {
@@ -623,22 +802,87 @@ export function QorixAssistant({ guestMode = false }: { guestMode?: boolean } = 
     setIsSending(true);
 
     try {
-      // ── Guest mode: no auth → no LLM call possible. Keep the original
-      // gentle nudge to sign in. We deliberately don't try to call the
-      // LLM endpoint without a token.
-      if (guestMode || !sessionId || !token) {
+      // ── Guest mode: route through the dedicated guest LLM endpoint.
+      // Server-side it talks to the same model as the authed path but with a
+      // tighter system prompt (no wallet/KYC context, focused on landing-page
+      // questions) and rate-limited per visitor-id. After the visitor has
+      // typed `GUEST_LEAD_TRIGGER_TURNS` messages we surface the email form
+      // so we can follow up by email if they bounce off the page.
+      if (guestMode) {
+        if (!sessionId) {
+          // Session creation lost a race — kick it off and skip this turn.
+          // The text the user typed is preserved in `content` and they can
+          // re-send. In practice this only fires if they type before the
+          // initial fetch settles (sub-second window).
+          await initGuestSession();
+          showBotMessage(
+            "Sorry, just getting set up — please try sending that again.",
+          );
+          return;
+        }
+
+        setIsTyping(true);
+        try {
+          const data = await guestPost("/chat/guest-llm-reply", {
+            sessionId,
+            content,
+            visitorId: getOrCreateVisitorId(),
+          });
+          setIsTyping(false);
+          if (data?.reply?.content) {
+            if (Array.isArray(data.quickOptions) && data.quickOptions.length) {
+              showBotMessage(data.reply.content, data.quickOptions);
+            } else {
+              const botMsg: Message = {
+                id: `bot-${data.reply.id ?? Date.now()}`,
+                type: "bot",
+                content: data.reply.content,
+                timestamp: new Date(data.reply.createdAt ?? Date.now()),
+                cta: data.cta ?? null,
+              };
+              setMessages((prev) => [...prev, botMsg]);
+            }
+          }
+        } catch (err: any) {
+          setIsTyping(false);
+          const msg = typeof err?.message === "string" && err.message.length < 240 ? err.message : null;
+          showBotMessage(
+            msg ??
+              "I'm having trouble responding right now. You can try again, or sign up to keep chatting with full context.",
+            [
+              { label: "🔐 Sign In / Register", value: "go_login" },
+              { label: "🏠 Back to Menu", value: "main_menu" },
+            ],
+          );
+        }
+
+        // Lead capture trigger. Counts the user message we *just* added to
+        // local state — `messages` snapshot here predates the addUserMessage
+        // call, so we add 1 to bring it level with the actually-rendered
+        // count. We only show the form once per session; once dismissed or
+        // submitted we never bring it back.
+        const userTurnsAfter = messages.filter((m) => m.type === "user").length + 1;
+        if (
+          !leadCaptured &&
+          !leadDismissed &&
+          !showLeadForm &&
+          userTurnsAfter >= GUEST_LEAD_TRIGGER_TURNS
+        ) {
+          setShowLeadForm(true);
+        }
+
+        return;
+      }
+
+      if (!sessionId || !token) {
         await saveUserMessage(content);
         setTimeout(() => {
           showBotMessage(
-            guestMode
-              ? "Happy to help! For a personalized answer, sign in (it's free, takes 2 minutes) and I'll have full context — wallet, KYC, the works."
-              : "I understand your query! Please pick an option below or talk to our expert team.",
-            guestMode
-              ? [{ label: "🔐 Sign In / Register", value: "go_login" }, { label: "🏠 Back to Menu", value: "main_menu" }]
-              : [
-                  { label: "🚀 How to Start", value: "how_to_start" },
-                  { label: "💬 Talk to Expert", value: "expert" },
-                ]
+            "I understand your query! Please pick an option below or talk to our expert team.",
+            [
+              { label: "🚀 How to Start", value: "how_to_start" },
+              { label: "💬 Talk to Expert", value: "expert" },
+            ],
           );
         }, 300);
         return;
@@ -1158,6 +1402,96 @@ export function QorixAssistant({ guestMode = false }: { guestMode?: boolean } = 
                   <ChevronRight className="w-4 h-4" />
                 </motion.button>
               </div>
+            )}
+
+            {/* Lead capture form (guest mode only). Surfaced inline above
+                the input rather than as a hard modal so it doesn't break the
+                conversational flow — visitor can see the chat continuing
+                behind it and feel free to dismiss. */}
+            {!chatEnded && guestMode && showLeadForm && (
+              <motion.div
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 8 }}
+                className="px-3 pt-3 pb-2 flex-shrink-0"
+                style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}
+              >
+                <div
+                  className="rounded-xl p-3"
+                  style={{
+                    background: "linear-gradient(135deg, rgba(37,99,235,0.12) 0%, rgba(124,58,237,0.12) 100%)",
+                    border: "1px solid rgba(96,165,250,0.25)",
+                  }}
+                >
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <div className="flex items-center gap-2">
+                      <Mail className="w-4 h-4 text-blue-300" />
+                      <p className="text-xs font-medium text-white/90">Stay in the loop</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleLeadDismiss}
+                      aria-label="Dismiss"
+                      className="text-white/40 hover:text-white/70 transition"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-white/60 mb-2.5 leading-snug">
+                    Drop your email and we'll send a quick recap so you can pick up where you left off.
+                  </p>
+                  <div className="flex flex-col gap-2">
+                    <input
+                      type="text"
+                      value={leadName}
+                      onChange={(e) => setLeadName(e.target.value)}
+                      placeholder="Your name (optional)"
+                      maxLength={80}
+                      className="w-full rounded-md px-2.5 py-1.5 text-xs text-white/85 placeholder:text-white/30 outline-none"
+                      style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)" }}
+                    />
+                    <input
+                      type="email"
+                      value={leadEmail}
+                      onChange={(e) => setLeadEmail(e.target.value)}
+                      placeholder="you@example.com"
+                      maxLength={120}
+                      className="w-full rounded-md px-2.5 py-1.5 text-xs text-white/85 placeholder:text-white/30 outline-none"
+                      style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)" }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault();
+                          handleLeadSubmit();
+                        }
+                      }}
+                    />
+                    {leadError && (
+                      <p className="text-[11px] text-rose-300/90">{leadError}</p>
+                    )}
+                    <div className="flex items-center justify-between gap-2 mt-0.5">
+                      <p className="flex items-center gap-1 text-[10px] text-white/40">
+                        <Shield className="w-3 h-3" />
+                        We never share your email.
+                      </p>
+                      <motion.button
+                        type="button"
+                        onClick={handleLeadSubmit}
+                        disabled={leadSubmitting || !leadEmail.trim()}
+                        whileTap={{ scale: 0.96 }}
+                        className={cn(
+                          "px-3 py-1.5 rounded-md text-[11px] font-medium transition-all flex items-center gap-1.5",
+                          leadEmail.trim() && !leadSubmitting
+                            ? "bg-gradient-to-br from-blue-600 to-blue-700 text-white shadow-md shadow-blue-500/20"
+                            : "bg-white/5 text-white/30 cursor-not-allowed",
+                        )}
+                      >
+                        {leadSubmitting ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+                        {leadSubmitting ? "Saving…" : "Send recap"}
+                      </motion.button>
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
             )}
 
             {/* Input */}
