@@ -225,16 +225,77 @@ type Candle = {
 /**
  * Aggregates the live quote stream into 5-second OHLC candles
  * client-side. Returns a rolling buffer of the last MAX_CANDLES
- * buckets. Each tick (every ~2s from the quotes poll) updates
- * the current bucket's high/low/close; a new bucket starts when
- * the wall clock crosses a CANDLE_SECONDS boundary.
+ * buckets. Each tick (every ~200ms via the synth-quote market-maker)
+ * updates the current bucket's high/low/close; a new bucket starts
+ * when the wall clock crosses a CANDLE_SECONDS boundary.
  *
- * Uses BOTH quote.mid AND quote.asOf as deps so the effect fires
- * on every poll — even when mid happens to be unchanged we still
- * want the bucket-roll machinery to advance.
+ * When `persistKey` is provided, the rolling buffer is saved to
+ * localStorage on a 2s heartbeat (and on tab unload) and loaded
+ * back synchronously on mount, so the chart survives full-page
+ * refreshes instead of restarting from "Waiting for first tick…".
  */
-function useCandleSeries(quote: BotQuote | undefined): Candle[] {
-  const [candles, setCandles] = useState<Candle[]>([]);
+
+/**
+ * Build a localStorage key that encodes BOTH the pair and the
+ * candle period. If the period is ever changed (CANDLE_SECONDS),
+ * old persisted buckets are auto-ignored on next load instead of
+ * being treated as same-period buckets.
+ */
+function persistedKey(persistKey: string): string {
+  return `qorix:candles:${persistKey}:${CANDLE_SECONDS}s`;
+}
+
+/**
+ * Synchronously load candles from localStorage on mount. Filters
+ * out malformed entries and anything older than the rolling
+ * window. Safe in SSR / private-mode (returns []).
+ */
+function loadPersistedCandles(persistKey: string | undefined): Candle[] {
+  if (!persistKey || typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(persistedKey(persistKey));
+    if (!raw) return [];
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    const cutoff =
+      Math.floor(Date.now() / 1000) - MAX_CANDLES * CANDLE_SECONDS;
+    const valid: Candle[] = [];
+    for (const entry of parsed) {
+      if (!entry || typeof entry !== "object") continue;
+      const c = entry as Partial<Candle>;
+      if (
+        Number.isFinite(c.bucket) &&
+        Number.isFinite(c.open) &&
+        Number.isFinite(c.high) &&
+        Number.isFinite(c.low) &&
+        Number.isFinite(c.close) &&
+        (c.bucket as number) >= cutoff
+      ) {
+        valid.push({
+          bucket: c.bucket as number,
+          open: c.open as number,
+          high: c.high as number,
+          low: c.low as number,
+          close: c.close as number,
+          ticks: Number.isFinite(c.ticks) ? (c.ticks as number) : 1,
+        });
+      }
+    }
+    return valid.slice(-MAX_CANDLES);
+  } catch {
+    return [];
+  }
+}
+
+function useCandleSeries(
+  quote: BotQuote | undefined,
+  persistKey?: string,
+): Candle[] {
+  // Lazy init from localStorage so the chart shows yesterday's
+  // tail immediately on refresh instead of "Waiting for first tick…".
+  const [candles, setCandles] = useState<Candle[]>(() =>
+    loadPersistedCandles(persistKey),
+  );
 
   useEffect(() => {
     if (!quote || !Number.isFinite(quote.mid)) return;
@@ -246,7 +307,10 @@ function useCandleSeries(quote: BotQuote | undefined): Candle[] {
       const last = prev[prev.length - 1];
       if (!last || last.bucket !== bucket) {
         // New candle: open from prev close (gapless) when we have a
-        // previous candle, otherwise from the current price.
+        // previous candle, otherwise from the current price. After a
+        // refresh-with-gap this naturally produces a single "bridge"
+        // candle from the persisted close → current real price, which
+        // is the most honest visual representation.
         const open = last ? last.close : price;
         const fresh: Candle = {
           bucket,
@@ -269,6 +333,37 @@ function useCandleSeries(quote: BotQuote | undefined): Candle[] {
       return [...prev.slice(0, -1), updated];
     });
   }, [quote?.mid, quote?.asOf]);
+
+  // Persist on a 2s heartbeat + on tab unload + on cleanup. Reading
+  // through a ref avoids restarting the heartbeat every time the
+  // candles array changes (which is every ~200ms with the synth).
+  const candlesRef = useRef(candles);
+  useEffect(() => {
+    candlesRef.current = candles;
+  }, [candles]);
+
+  useEffect(() => {
+    if (!persistKey || typeof window === "undefined") return;
+    const key = persistedKey(persistKey);
+    const save = () => {
+      try {
+        const arr = candlesRef.current;
+        if (!arr || arr.length === 0) return;
+        window.localStorage.setItem(key, JSON.stringify(arr));
+      } catch {
+        // quota / private-mode — silently ignore
+      }
+    };
+    const id = window.setInterval(save, 2000);
+    window.addEventListener("beforeunload", save);
+    window.addEventListener("pagehide", save);
+    return () => {
+      window.clearInterval(id);
+      window.removeEventListener("beforeunload", save);
+      window.removeEventListener("pagehide", save);
+      save();
+    };
+  }, [persistKey]);
 
   return candles;
 }
@@ -307,7 +402,10 @@ function LiveCandleChart({
   quote: BotQuote | undefined;
   height?: number;
 }) {
-  const candles = useCandleSeries(quote);
+  // Persist key locks to "XAUUSD" since the chart is dedicated to
+  // that pair. Including the candle period in the storage key (done
+  // inside useCandleSeries) makes period changes self-invalidating.
+  const candles = useCandleSeries(quote, "XAUUSD");
   const ema = useMemo(() => computeEma(candles, EMA_PERIOD), [candles]);
   const flash = useFlash(quote?.mid ?? 0, 350);
 
