@@ -21,6 +21,9 @@ import {
   Activity,
   TrendingUp,
   Timer,
+  CheckSquare,
+  Check,
+  X,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -200,6 +203,15 @@ export default function AdminChatLeads() {
   const [exportingCsv, setExportingCsv] = useState(false);
   const [analytics, setAnalytics] = useState<AnalyticsResponse | null>(null);
   const [analyticsOpen, setAnalyticsOpen] = useState(false);
+  // Batch J — bulk select. Selection is keyed by lead id and survives
+  // refetch (set is filtered to currently-visible ids on render so
+  // stale ids drop out automatically without breaking 'select all').
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [bulkPickerOpen, setBulkPickerOpen] = useState(false);
+  const [bulkChannel, setBulkChannel] = useState<ContactChannel>("email");
+  const [bulkNote, setBulkNote] = useState("");
+  const [bulkSubmitting, setBulkSubmitting] = useState(false);
+  const [bulkError, setBulkError] = useState<string | null>(null);
 
   async function load(opts: { showSpinner?: boolean } = {}) {
     if (opts.showSpinner) setRefreshing(true);
@@ -275,11 +287,15 @@ export default function AdminChatLeads() {
   // CSV export uses fetch with credentials so the same auth cookie /
   // header pipeline as authFetch applies; we then download the blob via
   // an in-memory anchor click. Honours the current filter so "Export
-  // CSV" while on Pending downloads only pending leads.
-  async function handleExportCsv() {
+  // CSV" while on Pending downloads only pending leads. When `ids` is
+  // provided (Batch J bulk-export), selection takes priority over the
+  // status filter and the server uses ?ids= to scope the output.
+  async function handleExportCsv(ids?: number[]) {
     setExportingCsv(true);
     try {
-      const res = await fetch(`/api/admin/chat-leads/export.csv?status=${status}`, {
+      const params = new URLSearchParams({ status });
+      if (ids && ids.length > 0) params.set("ids", ids.join(","));
+      const res = await fetch(`/api/admin/chat-leads/export.csv?${params.toString()}`, {
         credentials: "include",
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -287,7 +303,10 @@ export default function AdminChatLeads() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `qorix-chat-leads-${status}-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.download =
+        ids && ids.length > 0
+          ? `qorix-chat-leads-selection-${new Date().toISOString().slice(0, 10)}.csv`
+          : `qorix-chat-leads-${status}-${new Date().toISOString().slice(0, 10)}.csv`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -296,6 +315,71 @@ export default function AdminChatLeads() {
       setError(typeof err?.message === "string" ? err.message : "CSV export failed");
     } finally {
       setExportingCsv(false);
+    }
+  }
+
+  // Batch J helpers — selection toggles + bulk submit.
+  const visibleIds = useMemo(() => leads.map((l) => l.id), [leads]);
+  const selectedVisibleIds = useMemo(
+    () => visibleIds.filter((id) => selectedIds.has(id)),
+    [visibleIds, selectedIds],
+  );
+  const allVisibleSelected =
+    visibleIds.length > 0 && selectedVisibleIds.length === visibleIds.length;
+  const someVisibleSelected =
+    selectedVisibleIds.length > 0 && !allVisibleSelected;
+
+  function toggleOne(id: number) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+  function toggleAllVisible() {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (allVisibleSelected) {
+        for (const id of visibleIds) next.delete(id);
+      } else {
+        for (const id of visibleIds) next.add(id);
+      }
+      return next;
+    });
+  }
+  function clearSelection() {
+    setSelectedIds(new Set());
+    setBulkPickerOpen(false);
+    setBulkNote("");
+    setBulkError(null);
+  }
+
+  async function handleBulkMarkContacted() {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    setBulkSubmitting(true);
+    setBulkError(null);
+    try {
+      const res = await authFetch(`/api/admin/chat-leads/bulk/contacted`, {
+        method: "POST",
+        body: JSON.stringify({
+          ids,
+          channel: bulkChannel,
+          note: bulkNote.trim() || undefined,
+        }),
+      });
+      // Server returns { count, requested } — surface partial-success
+      // (stale ids dropped) as a soft warning rather than an error.
+      if (typeof res?.count === "number" && typeof res?.requested === "number" && res.count < res.requested) {
+        setBulkError(`Logged ${res.count} of ${res.requested} (others may have been deleted).`);
+      }
+      clearSelection();
+      void load();
+    } catch (err: any) {
+      setBulkError(typeof err?.message === "string" ? err.message : "Bulk mark-contacted failed");
+    } finally {
+      setBulkSubmitting(false);
     }
   }
 
@@ -403,7 +487,7 @@ export default function AdminChatLeads() {
             })}
           </div>
           <button
-            onClick={handleExportCsv}
+            onClick={() => handleExportCsv()}
             disabled={exportingCsv || !leads.length}
             className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs text-emerald-200 bg-emerald-500/10 border border-emerald-500/20 hover:bg-emerald-500/20 transition disabled:opacity-40 disabled:cursor-not-allowed"
           >
@@ -436,6 +520,121 @@ export default function AdminChatLeads() {
         </div>
       )}
 
+      {/* Batch J — bulk action bar. Mounts when ≥1 lead selected.
+          Renders inline (not floating) so it pushes the leads list
+          down rather than overlapping rows; collapsed by default and
+          expands a channel picker + note input when "Mark contacted"
+          is tapped (two-stage confirm to avoid accidental bulk audits). */}
+      {selectedIds.size > 0 && (
+        <div
+          className="rounded-2xl px-4 py-3 flex flex-col gap-3"
+          style={{
+            background: "rgba(56,132,255,0.06)",
+            border: "1px solid rgba(56,132,255,0.25)",
+          }}
+        >
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-1.5 text-sm text-blue-100">
+              <CheckSquare className="w-4 h-4 text-blue-300" />
+              <span className="font-medium">{selectedIds.size}</span>
+              <span className="text-blue-100/65">selected</span>
+              {selectedIds.size > 200 && (
+                <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-200 border border-amber-500/30">
+                  Capped at 200 per action
+                </span>
+              )}
+            </div>
+
+            <div className="ml-auto flex items-center gap-2 flex-wrap">
+              <button
+                onClick={() => setBulkPickerOpen((v) => !v)}
+                disabled={bulkSubmitting}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-blue-100 bg-blue-500/15 border border-blue-500/30 hover:bg-blue-500/25 transition disabled:opacity-40"
+              >
+                <UserCheck className="w-3.5 h-3.5" />
+                Mark contacted
+              </button>
+              <button
+                onClick={() => handleExportCsv(Array.from(selectedIds))}
+                disabled={exportingCsv}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-emerald-200 bg-emerald-500/10 border border-emerald-500/25 hover:bg-emerald-500/20 transition disabled:opacity-40"
+              >
+                {exportingCsv ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Download className="w-3.5 h-3.5" />
+                )}
+                Export selected
+              </button>
+              <button
+                onClick={clearSelection}
+                disabled={bulkSubmitting}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs text-white/55 bg-white/5 border border-white/10 hover:bg-white/10 transition disabled:opacity-40"
+              >
+                <X className="w-3.5 h-3.5" />
+                Clear
+              </button>
+            </div>
+          </div>
+
+          {bulkPickerOpen && (
+            <div className="flex flex-col gap-2 pt-1" style={{ borderTop: "1px solid rgba(56,132,255,0.18)" }}>
+              <div className="flex items-center gap-1.5 flex-wrap pt-2">
+                <span className="text-[11px] text-white/45 mr-1">Channel:</span>
+                {CHANNEL_OPTIONS.map((c) => {
+                  const Icon = c.icon;
+                  const active = bulkChannel === c.key;
+                  return (
+                    <button
+                      key={c.key}
+                      onClick={() => setBulkChannel(c.key)}
+                      disabled={bulkSubmitting}
+                      className={cn(
+                        "flex items-center gap-1 px-2 py-1 rounded-md text-[11px] border transition",
+                        active
+                          ? "bg-blue-500/20 border-blue-500/40 text-blue-100"
+                          : "bg-white/5 border-white/10 text-white/55 hover:bg-white/10",
+                      )}
+                    >
+                      <Icon className="w-3 h-3" />
+                      {c.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <textarea
+                value={bulkNote}
+                onChange={(e) => setBulkNote(e.target.value.slice(0, 1000))}
+                placeholder="Optional note attached to every audit entry (1000 chars)"
+                rows={2}
+                disabled={bulkSubmitting}
+                className="w-full rounded-lg px-3 py-2 text-xs text-white/85 bg-white/5 border border-white/10 placeholder:text-white/25 focus:outline-none focus:border-blue-500/40 resize-none disabled:opacity-40"
+              />
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  onClick={handleBulkMarkContacted}
+                  disabled={bulkSubmitting || selectedIds.size === 0}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-blue-100 bg-blue-500/25 border border-blue-500/45 hover:bg-blue-500/35 transition disabled:opacity-40"
+                >
+                  {bulkSubmitting ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Check className="w-3.5 h-3.5" />
+                  )}
+                  Confirm — log {Math.min(selectedIds.size, 200)} audit{selectedIds.size === 1 ? "" : "s"}
+                </button>
+                <span className="text-[11px] text-white/35">
+                  Writes one audit row per lead via {bulkChannel}.
+                </span>
+              </div>
+              {bulkError && (
+                <p className="text-[11px] text-rose-300/85">{bulkError}</p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Leads list */}
       <div
         className="rounded-2xl overflow-hidden"
@@ -445,7 +644,26 @@ export default function AdminChatLeads() {
           className="grid grid-cols-12 gap-3 px-4 py-2.5 text-[10px] uppercase tracking-wider text-white/40"
           style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}
         >
-          <div className="col-span-3">Email · name</div>
+          <div className="col-span-3 flex items-center gap-2">
+            {/* Batch J — select-all-visible. Indeterminate when partial.
+                Click is contained here (no row expand to dodge). */}
+            <input
+              type="checkbox"
+              checked={allVisibleSelected}
+              ref={(el) => {
+                if (el) el.indeterminate = someVisibleSelected;
+              }}
+              onChange={toggleAllVisible}
+              disabled={visibleIds.length === 0}
+              className="w-3.5 h-3.5 rounded border-white/20 bg-white/5 accent-blue-500 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+              title={
+                allVisibleSelected
+                  ? "Clear selection on this page"
+                  : `Select all ${visibleIds.length} visible leads`
+              }
+            />
+            <span>Email · name</span>
+          </div>
           <div className="col-span-2">Captured</div>
           <div className="col-span-2">Followup</div>
           <div className="col-span-2">Outreach</div>
@@ -491,6 +709,17 @@ export default function AdminChatLeads() {
                     className="grid grid-cols-12 gap-3 px-4 py-3 items-center text-xs w-full text-left hover:bg-white/[0.02] transition"
                   >
                     <div className="col-span-3 min-w-0 flex items-center gap-1.5">
+                      {/* Batch J — per-row selection. stopPropagation
+                          so the checkbox click doesn't bubble up and
+                          toggle the row's expand state. */}
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(lead.id)}
+                        onChange={() => toggleOne(lead.id)}
+                        onClick={(e) => e.stopPropagation()}
+                        className="w-3.5 h-3.5 rounded border-white/20 bg-white/5 accent-blue-500 cursor-pointer shrink-0"
+                        title={selectedIds.has(lead.id) ? "Deselect" : "Select"}
+                      />
                       <span className="text-white/30 shrink-0">
                         {isExpanded ? (
                           <ChevronDown className="w-3.5 h-3.5" />

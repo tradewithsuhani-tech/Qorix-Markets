@@ -1220,8 +1220,24 @@ router.get("/admin/chat-leads", authMiddleware, adminMiddleware, async (req: Aut
 router.get("/admin/chat-leads/export.csv", authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const status = String(req.query.status ?? "all");
+    // Batch J — optional ?ids=1,2,3 to export only the operator's
+    // current selection. Capped at 200 ids (matches the listing page
+    // cap and keeps URL length under typical 8K limits). When ids are
+    // supplied they take priority over status (selection is explicit).
+    const idsParam = String(req.query.ids ?? "").trim();
+    const idsArr = idsParam
+      ? idsParam
+          .split(",")
+          .map((s) => parseInt(s, 10))
+          .filter((n) => Number.isFinite(n) && n > 0)
+          .slice(0, 200)
+      : [];
+
     let where;
-    switch (status) {
+    if (idsArr.length > 0) {
+      where = inArray(chatLeadsTable.id, idsArr);
+    } else {
+      switch (status) {
       case "pending":
         where = and(
           isNull(chatLeadsTable.followUpSentAt),
@@ -1240,6 +1256,7 @@ router.get("/admin/chat-leads/export.csv", authMiddleware, adminMiddleware, asyn
         break;
       default:
         where = sql`TRUE`;
+      }
     }
 
     const rows = await db
@@ -1312,7 +1329,9 @@ router.get("/admin/chat-leads/export.csv", authMiddleware, adminMiddleware, asyn
         .join(","),
     );
 
-    const filename = `qorix-chat-leads-${status}-${new Date().toISOString().slice(0, 10)}.csv`;
+    const filename = idsArr.length > 0
+      ? `qorix-chat-leads-selection-${new Date().toISOString().slice(0, 10)}.csv`
+      : `qorix-chat-leads-${status}-${new Date().toISOString().slice(0, 10)}.csv`;
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
     res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
     // BOM so Excel/Numbers auto-detect UTF-8 (without it, accented names
@@ -1375,6 +1394,68 @@ const markContactedSchema = z.object({
   channel: z.enum(["email", "phone", "whatsapp", "telegram", "other"]).optional(),
   note: z.string().max(500).optional(),
 });
+// Bulk mark-as-contacted (Task #145 Batch J). Accepts up to 200 lead
+// ids in one shot and inserts an audit-log row per lead with the same
+// shape used by the per-lead endpoint, so the UI's existing audit
+// thread renders bulk and single-row actions identically. Skips ids
+// that don't exist instead of erroring — the caller's selection may
+// have gone stale between fetch and submit, and partial success is
+// preferable to all-or-nothing on a 50-row batch.
+const bulkContactedSchema = z.object({
+  ids: z.array(z.number().int().positive()).min(1).max(200),
+  channel: z.enum(["email", "phone", "whatsapp", "telegram", "other"]).optional(),
+  note: z.string().max(1000).optional(),
+});
+router.post("/admin/chat-leads/bulk/contacted", authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const parsed = bulkContactedSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      res.status(400).json({ error: "Invalid payload" });
+      return;
+    }
+    const { ids } = parsed.data;
+    const channel = parsed.data.channel ?? "other";
+    const note = parsed.data.note?.trim() || null;
+
+    // Filter to ids that actually exist so we don't write phantom audit
+    // rows for stale selections.
+    const existing = await db
+      .select({ id: chatLeadsTable.id })
+      .from(chatLeadsTable)
+      .where(inArray(chatLeadsTable.id, ids));
+    const validIds = existing.map((r) => r.id);
+    if (validIds.length === 0) {
+      res.json({ success: true, count: 0, requested: ids.length });
+      return;
+    }
+
+    // Single bulk insert — much cheaper than N round-trips for a 200-row
+    // batch, and the audit table has no per-row constraints that require
+    // individual error handling.
+    const metadata = JSON.stringify({ channel, note, bulk: true, batchSize: validIds.length });
+    await db.insert(adminAuditLogTable).values(
+      validIds.map((leadId) => ({
+        adminId: req.userId ?? null,
+        adminEmail: req.adminEmail ?? null,
+        adminRole: req.adminRole ?? null,
+        module: "chat",
+        action: "chat_lead_contacted",
+        method: "POST",
+        path: `/admin/chat-leads/${leadId}/contacted`,
+        targetType: "chat_lead",
+        targetId: String(leadId),
+        summary: `Bulk-contacted via ${channel} (batch of ${validIds.length})`,
+        metadata,
+      })),
+    );
+
+    res.json({ success: true, count: validIds.length, requested: ids.length });
+  } catch (err) {
+    logger.warn({ err: (err as Error).message }, "[chat] /admin/chat-leads/bulk/contacted failed");
+    res.status(500).json({ error: "Failed to bulk-mark contacted" });
+  }
+});
+
 router.post("/admin/chat-leads/:id/contacted", authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const leadId = parseInt(getParam(req, "id"));
