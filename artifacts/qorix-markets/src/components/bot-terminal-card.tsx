@@ -416,8 +416,10 @@ function LiveCandleChart({
   const flash = useFlash(quote?.mid ?? 0, 350);
 
   // Auto-scaled price range with 8% padding so candles don't kiss
-  // the top/bottom edges. Position entry prices are folded in too,
-  // so an out-of-range entry line is always visible.
+  // the top/bottom edges. Positions are NOT folded into the range
+  // so a far-from-current entry doesn't squash the live candles
+  // into a 1-2px sliver — out-of-range entries are simply hidden
+  // (the parent already trims to the closest 4 by price distance).
   const range = useMemo(() => {
     if (candles.length === 0) {
       return { min: (quote?.mid ?? 0) - 1, max: (quote?.mid ?? 0) + 1 };
@@ -432,19 +434,13 @@ function LiveCandleChart({
       if (quote.mid < min) min = quote.mid;
       if (quote.mid > max) max = quote.mid;
     }
-    for (const p of positions) {
-      if (Number.isFinite(p.entryPrice)) {
-        if (p.entryPrice < min) min = p.entryPrice;
-        if (p.entryPrice > max) max = p.entryPrice;
-      }
-    }
     if (!Number.isFinite(min) || !Number.isFinite(max) || min === max) {
       const center = Number.isFinite(min) ? min : (quote?.mid ?? 0);
       return { min: center - 1, max: center + 1 };
     }
     const pad = (max - min) * 0.08;
     return { min: min - pad, max: max + pad };
-  }, [candles, quote?.mid, positions]);
+  }, [candles, quote?.mid]);
 
   // Volume scale — uses live tick count per candle as a proxy for
   // activity. Feels organic because busy candles (lots of synth
@@ -596,49 +592,77 @@ function LiveCandleChart({
         ) : null}
 
         {/* Bot position entry lines (BUY/SELL dashed h-lines on the
-            featured pair, with a small chip on the left). Capped to
-            avoid clutter; the parent passes a pre-trimmed list. */}
-        {positions.map((p) => {
-          const y = priceToY(p.entryPrice);
-          if (y < padTop || y > padTop + priceH) return null;
-          const isBuy = p.direction.toUpperCase() === "BUY";
-          const color = isBuy ? "#34d399" : "#fb7185";
-          const label = `${isBuy ? "▲ BUY" : "▼ SELL"} ${p.entryPrice.toFixed(precision)}`;
-          return (
-            <g key={`pos-${p.id}`}>
-              <line
-                x1={padLeft}
-                x2={padLeft + chartW}
-                y1={y}
-                y2={y}
-                stroke={color}
-                strokeOpacity="0.4"
-                strokeWidth="0.6"
-                strokeDasharray="2 5"
-              />
-              <rect
-                x={padLeft + 2}
-                y={y - 7}
-                width={78}
-                height={11}
-                rx={2}
-                fill={color}
-                opacity="0.18"
-              />
-              <text
-                x={padLeft + 5}
-                y={y + 1}
-                fill={color}
-                fontSize="8"
-                fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
-                fontWeight="700"
-                opacity="0.95"
-              >
-                {label}
-              </text>
-            </g>
-          );
-        })}
+            featured pair, with a small chip on the left). Out-of-range
+            entries are skipped. Visible chips are stacked so two
+            entries near the same price don't overlap on top of each
+            other — each subsequent chip slides down 12px from the
+            previous one when their natural y is within 12px. */}
+        {(() => {
+          const visible = positions
+            .map((p) => ({ p, y: priceToY(p.entryPrice) }))
+            .filter(({ y }) => y >= padTop + 6 && y <= padTop + priceH - 6)
+            .sort((a, b) => a.y - b.y);
+          let lastChipBottom = -Infinity;
+          return visible.map(({ p, y }) => {
+            const isBuy = p.direction.toUpperCase() === "BUY";
+            const color = isBuy ? "#34d399" : "#fb7185";
+            const label = `${isBuy ? "▲ BUY" : "▼ SELL"} ${p.entryPrice.toFixed(precision)}`;
+            // chip vertical placement — push down to avoid overlapping
+            // the previous chip, but keep the dashed line at the true
+            // entry y so users can still read the actual price location.
+            let chipY = y - 7;
+            if (chipY < lastChipBottom + 1) chipY = lastChipBottom + 1;
+            const chipBottom = chipY + 11;
+            lastChipBottom = chipBottom;
+            return (
+              <g key={`pos-${p.id}`}>
+                <line
+                  x1={padLeft}
+                  x2={padLeft + chartW}
+                  y1={y}
+                  y2={y}
+                  stroke={color}
+                  strokeOpacity="0.4"
+                  strokeWidth="0.6"
+                  strokeDasharray="2 5"
+                />
+                {/* tiny leader from chip back to the actual price line
+                    when chip has been pushed away from y */}
+                {Math.abs(chipY + 5.5 - y) > 2 ? (
+                  <line
+                    x1={padLeft + 80}
+                    x2={padLeft + 88}
+                    y1={chipY + 5.5}
+                    y2={y}
+                    stroke={color}
+                    strokeOpacity="0.4"
+                    strokeWidth="0.5"
+                  />
+                ) : null}
+                <rect
+                  x={padLeft + 2}
+                  y={chipY}
+                  width={78}
+                  height={11}
+                  rx={2}
+                  fill={color}
+                  opacity="0.18"
+                />
+                <text
+                  x={padLeft + 5}
+                  y={chipY + 8}
+                  fill={color}
+                  fontSize="8"
+                  fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
+                  fontWeight="700"
+                  opacity="0.95"
+                >
+                  {label}
+                </text>
+              </g>
+            );
+          });
+        })()}
 
         {/* Right-side y-axis price ticks (price area only) */}
         <g
@@ -1204,15 +1228,24 @@ export function BotTerminalCard() {
   const userToday = state?.userToday;
   const positions = state?.openPositions ?? [];
 
-  // Featured-pair entry lines (capped at 4 most-recent so the chart
-  // doesn't get cluttered when many BTC positions are open).
+  // Featured-pair entry lines — pick the 4 positions whose entry
+  // price is closest to the current market price, so chips are
+  // always within the chart's visible range. (Filtering by recency
+  // could include trades opened hours ago at very different prices,
+  // which would all fall off-chart.)
+  const featuredMid = featured?.mid;
   const featuredPositions = useMemo(() => {
+    if (!Number.isFinite(featuredMid)) return [];
+    const mid = featuredMid as number;
     return positions
       .filter((p) => p.pair === featuredCode)
       .slice()
-      .sort((a, b) => b.openedAt.localeCompare(a.openedAt))
+      .sort(
+        (a, b) =>
+          Math.abs(a.entryPrice - mid) - Math.abs(b.entryPrice - mid),
+      )
       .slice(0, 4);
-  }, [positions, featuredCode]);
+  }, [positions, featuredCode, featuredMid]);
 
   const fillToast = useFillToast(state?.closedToday);
 
