@@ -1,30 +1,54 @@
 /**
- * BotTerminalCard — Batch T
+ * BotTerminalCard — Batch T + Batch U (trading-feel upgrade)
  *
- * Dashboard widget for the Bot Trading Terminal. Renders:
- *   - 4 ticker tiles (XAU/USD, EUR/USD, BTC/USD, USOIL) driven by
- *     /api/bot-trading/quotes (2s poll)
- *   - a header strip with platform open-position count + today's
- *     realized %, driven by /api/bot-trading/state (5s poll, auth)
- *   - a footer strip with bot plan progress + next signal ETA +
- *     the calling user's distribution share for the day
+ * Dashboard widget for the Bot Trading Terminal. Layers:
  *
- * The card stays useful for logged-out visitors too: the quotes
- * hook is public, so the 4 ticker tiles always render. The state
- * hook silently fails 401 in that case and the bot/share strip
- * shows a graceful "—" placeholder.
+ *   1. Header strip       — LIVE pulse + open count + today realized %
+ *   2. 4 ticker tiles     — XAU/EUR/BTC/OIL with tick-flash + sparkline
+ *   3. Open positions     — horizontal scroller of bot's 25 active trades
+ *                           with client-side live P/L
+ *   4. Plan / share strip — slot progress + next-slot countdown +
+ *                           the calling user's distribution share
+ *   5. JUST-FILLED toast  — top-right banner whenever closedToday[]
+ *                           grows (4s auto-dismiss, FOMO trigger)
+ *
+ * Data sources:
+ *   - useBotQuotes()  -> public, 2s poll, drives tickers + live P/L
+ *   - useBotState()   -> auth, 5s poll, drives positions/plan/share/toast
+ *
+ * The card stays useful for logged-out visitors: quotes are public so
+ * the 4 tiles always render. State silently 401s and the bot strips
+ * show graceful "—" placeholders.
+ *
+ * All animations are pure-frontend, derived from existing data — no
+ * extra backend calls.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Activity, ArrowDown, ArrowUp, Sparkles, TrendingUp } from "lucide-react";
+import {
+  Activity,
+  ArrowDown,
+  ArrowUp,
+  Sparkles,
+  Target,
+  TrendingUp,
+  Zap,
+} from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import {
   useBotQuotes,
   useBotState,
   type BotQuote,
+  type BotStateClosedTrade,
+  type BotStateOpenPosition,
 } from "@/hooks/use-bot-terminal";
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
 function formatPrice(value: number, precision: number) {
   return value.toFixed(Math.max(0, Math.min(8, precision)));
@@ -35,12 +59,35 @@ function formatPct(value: number) {
   return value >= 0 ? `+${s}%` : `${s}%`;
 }
 
+function usePrevious<T>(value: T): T | undefined {
+  const ref = useRef<T | undefined>(undefined);
+  useEffect(() => {
+    ref.current = value;
+  }, [value]);
+  return ref.current;
+}
+
+/**
+ * Brief "tick-flash" hint: returns "up"/"down" for ~400ms after the
+ * passed numeric value changes. Used to flash the ticker tile
+ * background green/red on every quote tick — the signature
+ * Bloomberg/MT5 visual cue.
+ */
+function useFlash(value: number, durationMs = 400): "up" | "down" | null {
+  const prev = usePrevious(value);
+  const [flash, setFlash] = useState<"up" | "down" | null>(null);
+  useEffect(() => {
+    if (prev === undefined || prev === value || !Number.isFinite(value)) return;
+    setFlash(value > prev ? "up" : "down");
+    const t = setTimeout(() => setFlash(null), durationMs);
+    return () => clearTimeout(t);
+  }, [value, prev, durationMs]);
+  return flash;
+}
+
 /**
  * Counts down to a future ISO timestamp ("in 2m 22s" / "in 14s" /
  * "now"). Updates once per second via a single tab-scoped interval.
- * If `to` is null the component renders nothing — callers pass
- * null when there's no upcoming slot, and the parent strip hides
- * the surrounding "next ... in X" line.
  */
 function CountdownLabel({ to }: { to: string | null | undefined }) {
   const [now, setNow] = useState(() => Date.now());
@@ -58,12 +105,89 @@ function CountdownLabel({ to }: { to: string | null | undefined }) {
   return <span className="font-mono">{m > 0 ? `${m}m ${s}s` : `${s}s`}</span>;
 }
 
-function TickerTile({ q }: { q: BotQuote }) {
+// ---------------------------------------------------------------------------
+// Sparkline
+// ---------------------------------------------------------------------------
+
+const HISTORY_LEN = 30;
+const SPARK_W = 60;
+const SPARK_H = 18;
+
+/**
+ * Per-pair circular buffer of recent mid prices, fed from the live
+ * quote stream. Yields {pair -> number[]} ready to drop into a
+ * Sparkline. Skips no-op ticks where mid is unchanged so the
+ * sparkline doesn't flatten artificially during low-volatility
+ * windows.
+ */
+function usePriceHistory(quotes: BotQuote[] | undefined) {
+  const [hist, setHist] = useState<Record<string, number[]>>({});
+  useEffect(() => {
+    if (!quotes || quotes.length === 0) return;
+    setHist((prev) => {
+      const next = { ...prev };
+      let dirty = false;
+      for (const q of quotes) {
+        const arr = next[q.code] ?? [];
+        if (arr.length === 0 || arr[arr.length - 1] !== q.mid) {
+          next[q.code] = [...arr, q.mid].slice(-HISTORY_LEN);
+          dirty = true;
+        }
+      }
+      return dirty ? next : prev;
+    });
+  }, [quotes]);
+  return hist;
+}
+
+function Sparkline({ values, color }: { values: number[]; color: string }) {
+  if (values.length < 2) {
+    return <svg width={SPARK_W} height={SPARK_H} className="opacity-40" />;
+  }
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = max - min || 1;
+  const stepX = SPARK_W / (values.length - 1);
+  const points = values
+    .map((v, i) => {
+      const x = i * stepX;
+      const y = SPARK_H - 1 - ((v - min) / range) * (SPARK_H - 2);
+      return `${x.toFixed(2)},${y.toFixed(2)}`;
+    })
+    .join(" ");
+  return (
+    <svg width={SPARK_W} height={SPARK_H} className="opacity-80 shrink-0">
+      <polyline
+        points={points}
+        fill="none"
+        stroke={color}
+        strokeWidth={1.25}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Ticker tile (with flash + sparkline)
+// ---------------------------------------------------------------------------
+
+function TickerTile({ q, history }: { q: BotQuote; history: number[] }) {
+  const flash = useFlash(q.mid);
   const change = q.change24h;
   const isUp = change > 0;
   const isFlat = change === 0;
+  const sparkColor = isUp ? "#34d399" : isFlat ? "#94a3b8" : "#fb7185";
+
   return (
-    <div className="rounded-lg border bg-background/50 p-3 flex flex-col gap-1.5 min-w-0">
+    <div
+      className={cn(
+        "rounded-lg border bg-background/50 p-3 flex flex-col gap-1.5 min-w-0 transition-colors duration-300",
+        flash === "up" && "bg-emerald-500/15 border-emerald-500/40",
+        flash === "down" && "bg-rose-500/15 border-rose-500/40",
+      )}
+    >
       <div className="flex items-center justify-between gap-2 min-w-0">
         <span className="text-[11px] font-semibold tracking-wider text-muted-foreground truncate">
           {q.display}
@@ -85,8 +209,11 @@ function TickerTile({ q }: { q: BotQuote }) {
           </Badge>
         )}
       </div>
-      <div className="font-mono text-base font-semibold tabular-nums truncate">
-        {formatPrice(q.mid, q.precision)}
+      <div className="flex items-center justify-between gap-2 min-w-0">
+        <div className="font-mono text-base font-semibold tabular-nums truncate">
+          {formatPrice(q.mid, q.precision)}
+        </div>
+        <Sparkline values={history} color={sparkColor} />
       </div>
       <div className="flex items-center justify-between text-[11px] gap-2">
         <span
@@ -114,6 +241,189 @@ function TickerTile({ q }: { q: BotQuote }) {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Open positions strip (live P/L)
+// ---------------------------------------------------------------------------
+
+function PositionPill({
+  pos,
+  quote,
+}: {
+  pos: BotStateOpenPosition;
+  quote: BotQuote | undefined;
+}) {
+  // Live P/L computed client-side from the quote stream so the pill
+  // ticks at 2s cadence rather than the 5s state-poll cadence — it's
+  // the single biggest contributor to the "trading terminal feel"
+  // because user sees the number wiggle on every quote refresh.
+  const livePct = useMemo(() => {
+    if (!quote || !pos.entryPrice) return 0;
+    const sign = pos.direction.toUpperCase() === "BUY" ? 1 : -1;
+    return ((quote.mid - pos.entryPrice) / pos.entryPrice) * 100 * sign;
+  }, [quote?.mid, pos.entryPrice, pos.direction]);
+
+  const flash = useFlash(livePct, 350);
+  const profit = livePct >= 0;
+  const precision = quote?.precision ?? 2;
+  const dirUpper = pos.direction.toUpperCase();
+
+  return (
+    <div
+      className={cn(
+        "inline-flex items-center gap-2 rounded-md border bg-background/60 px-2.5 py-1.5 text-[11px] whitespace-nowrap shrink-0 transition-colors duration-200",
+        flash === "up" && "border-emerald-500/40",
+        flash === "down" && "border-rose-500/40",
+      )}
+    >
+      <span className="font-semibold">{pos.pair}</span>
+      <span
+        className={cn(
+          "font-bold",
+          dirUpper === "BUY" ? "text-emerald-400" : "text-rose-400",
+        )}
+      >
+        {dirUpper}
+      </span>
+      <span className="text-muted-foreground font-mono tabular-nums hidden sm:inline">
+        {pos.entryPrice.toFixed(precision)}
+        {quote ? (
+          <>
+            <span className="text-muted-foreground/50 px-1">→</span>
+            {quote.mid.toFixed(precision)}
+          </>
+        ) : null}
+      </span>
+      <span
+        className={cn(
+          "font-mono tabular-nums font-semibold rounded px-1.5 py-0.5",
+          profit
+            ? "bg-emerald-500/15 text-emerald-400"
+            : "bg-rose-500/15 text-rose-400",
+        )}
+      >
+        {profit ? "+" : ""}
+        {livePct.toFixed(3)}%
+      </span>
+    </div>
+  );
+}
+
+function PositionsStrip({
+  positions,
+  quotes,
+}: {
+  positions: BotStateOpenPosition[];
+  quotes: BotQuote[];
+}) {
+  const quotesByPair = useMemo(() => {
+    const m = new Map<string, BotQuote>();
+    for (const q of quotes) m.set(q.code, q);
+    return m;
+  }, [quotes]);
+
+  if (positions.length === 0) return null;
+
+  return (
+    <div className="border-t bg-background/30 px-3 py-2">
+      <div className="flex items-center gap-2 mb-1.5 text-[10px] font-semibold tracking-wider text-muted-foreground">
+        <Zap className="size-3 text-amber-400" />
+        <span>{positions.length} OPEN POSITIONS</span>
+        <span className="ml-auto text-muted-foreground/50 italic font-normal normal-case tracking-normal">
+          live P/L
+        </span>
+      </div>
+      <div className="flex gap-1.5 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        {positions.map((p) => (
+          <PositionPill key={p.id} pos={p} quote={quotesByPair.get(p.pair)} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// "JUST FILLED" toast
+// ---------------------------------------------------------------------------
+
+/**
+ * Watches closedToday[] and emits a 4-second toast every time a new
+ * trade ID appears. Skips the initial load (we don't want to spam
+ * 25 toasts on first render). Only the latest unseen fill is shown
+ * — if multiple trades close in the same 5s window, the rest are
+ * silently marked as seen.
+ */
+function useFillToast(closedToday: BotStateClosedTrade[] | undefined) {
+  const [toast, setToast] = useState<BotStateClosedTrade | null>(null);
+  const seenIdsRef = useRef<Set<number>>(new Set());
+  const initialRef = useRef(true);
+
+  useEffect(() => {
+    if (!closedToday) return;
+    if (initialRef.current) {
+      closedToday.forEach((c) => seenIdsRef.current.add(c.id));
+      initialRef.current = false;
+      return;
+    }
+    let newest: BotStateClosedTrade | null = null;
+    for (const c of closedToday) {
+      if (!seenIdsRef.current.has(c.id)) {
+        seenIdsRef.current.add(c.id);
+        // Last-wins: if backend ordering puts most recent at the
+        // start of the array we still pick the right one because we
+        // overwrite on each unseen-id sighting.
+        newest = c;
+      }
+    }
+    if (!newest) return;
+    setToast(newest);
+    const fillId = newest.id;
+    const t = setTimeout(() => {
+      setToast((prev) => (prev?.id === fillId ? null : prev));
+    }, 4000);
+    return () => clearTimeout(t);
+  }, [closedToday]);
+
+  return toast;
+}
+
+function JustFilledToast({ fill }: { fill: BotStateClosedTrade | null }) {
+  return (
+    <AnimatePresence>
+      {fill ? (
+        <motion.div
+          key={fill.id}
+          initial={{ opacity: 0, y: -10, scale: 0.96 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: -10, scale: 0.96 }}
+          transition={{ duration: 0.25, ease: "easeOut" }}
+          className={cn(
+            "absolute top-2 right-2 z-20 rounded-md border px-3 py-2 text-[11px] shadow-lg backdrop-blur-sm pointer-events-none",
+            (fill.realizedProfitPercent ?? 0) >= 0
+              ? "bg-emerald-500/25 border-emerald-500/50 text-emerald-100"
+              : "bg-rose-500/25 border-rose-500/50 text-rose-100",
+          )}
+        >
+          <div className="font-semibold flex items-center gap-1.5 text-[10px] tracking-wider">
+            <Target className="size-3" />
+            JUST FILLED
+          </div>
+          <div className="mt-0.5 font-mono tabular-nums">
+            {fill.pair} {fill.direction.toUpperCase()}{" "}
+            <span className="font-semibold">
+              {(fill.realizedProfitPercent ?? 0) >= 0 ? "+" : ""}
+              {(fill.realizedProfitPercent ?? 0).toFixed(2)}%
+            </span>
+          </div>
+        </motion.div>
+      ) : null}
+    </AnimatePresence>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Main card
+// ---------------------------------------------------------------------------
+
 export function BotTerminalCard() {
   const { data: quotesData, isLoading: quotesLoading } = useBotQuotes();
   const { data: state } = useBotState();
@@ -122,9 +432,15 @@ export function BotTerminalCard() {
   const summary = state?.summary;
   const plan = state?.bot.plan;
   const userToday = state?.userToday;
+  const positions = state?.openPositions ?? [];
+
+  const history = usePriceHistory(quotes);
+  const fillToast = useFillToast(state?.closedToday);
 
   return (
-    <Card className="overflow-hidden">
+    <Card className="overflow-hidden relative">
+      <JustFilledToast fill={fillToast} />
+
       {/* Header */}
       <div className="flex items-center justify-between gap-3 px-4 py-3 border-b bg-gradient-to-r from-emerald-500/5 via-transparent to-transparent">
         <div className="flex items-center gap-2 min-w-0">
@@ -173,8 +489,13 @@ export function BotTerminalCard() {
                 className="rounded-lg border bg-background/50 p-3 h-[88px] animate-pulse"
               />
             ))
-          : quotes.map((q) => <TickerTile key={q.code} q={q} />)}
+          : quotes.map((q) => (
+              <TickerTile key={q.code} q={q} history={history[q.code] ?? []} />
+            ))}
       </div>
+
+      {/* Open positions strip */}
+      <PositionsStrip positions={positions} quotes={quotes} />
 
       {/* Bot plan + user share strip */}
       <div className="px-4 py-2.5 border-t bg-background/40 text-[11px] flex items-center justify-between gap-3 flex-wrap">
