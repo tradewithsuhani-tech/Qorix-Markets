@@ -40,6 +40,11 @@ import phoneChangeRouter from "./phone-change";
 import merchantRouter from "./merchant";
 import adminMerchantsRouter from "./admin-merchants";
 import adminEscalationRouter from "./admin-escalation";
+// Batch R — Bot Trading Terminal. Currently exposes only the public
+// /bot-trading/quotes feed used by the dashboard widget. Future
+// batches will add user-gated endpoints (state, account, orders) on
+// the same router; mounting once here keeps wiring stable.
+import botTradingRouter from "./bot-trading";
 
 const router: IRouter = Router();
 
@@ -102,5 +107,9 @@ router.use(phoneChangeRouter);
 router.use(merchantRouter);
 router.use(adminMerchantsRouter);
 router.use(adminEscalationRouter);
+// Batch R — public quotes feed for the dashboard Bot Trading Terminal
+// widget. /bot-trading/quotes is fully public (no auth); future
+// per-user endpoints on this router will gate auth per-route.
+router.use(botTradingRouter);
 
 export default router;
