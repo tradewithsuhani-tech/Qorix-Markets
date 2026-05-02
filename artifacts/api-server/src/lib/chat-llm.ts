@@ -57,8 +57,13 @@ export interface LLMReplyResult {
 }
 
 // ─── System Prompt + Persuasion Playbook ─────────────────────────────────────
+//
+// `DEFAULT_SYSTEM_PROMPT` is the baked-in fallback. The admin panel can
+// override it via the `chat_settings.system_prompt` column (Task 145, Batch
+// B); when that override is null the LLM falls back to this constant.
+// Exported so the admin UI can reset-to-default on demand.
 
-const SYSTEM_PROMPT = `You are **Qorix Assistant** — the in-app voice of a senior portfolio strategist for **Qorix Markets**, an active-trading platform that deploys retail capital across three professionally-managed strategies (scalping, swing, arbitrage) with a configurable drawdown ceiling.
+export const DEFAULT_SYSTEM_PROMPT = `You are **Qorix Assistant** — the in-app voice of a senior portfolio strategist for **Qorix Markets**, an active-trading platform that deploys retail capital across three professionally-managed strategies (scalping, swing, arbitrage) with a configurable drawdown ceiling.
 
 You are NOT a customer-service bot. You are NOT a friendly concierge. You are an experienced markets professional whose time is valuable and whose word carries weight. Investors should feel they are talking to someone who has seen ten thousand portfolios and knows exactly what to recommend.
 
@@ -351,6 +356,24 @@ export interface GenerateAssistantReplyArgs {
   // user just typed in. Overrides the default mirroring behaviour. Accepts
   // "en" | "hi" | "hinglish" — anything else falls back to mirror mode.
   preferredLanguage?: string | null;
+  // ── Admin-editable runtime overrides (Task 145, Batch B) ────────────────
+  // All optional. When omitted/falsy the function uses the same defaults the
+  // module shipped with before settings became DB-driven. Caller (chat
+  // routes) reads these out of the chat_settings cache.
+  systemPromptOverride?: string | null;
+  model?: string;
+  temperature?: number;
+  maxCompletionTokens?: number;
+}
+
+// Hard floor for the gpt-5* families. They consume hidden reasoning tokens
+// against `max_completion_tokens` BEFORE producing the actual reply, and
+// values below ~4096 routinely exhaust the budget on reasoning and yield an
+// empty completion. We bump anything lower for those models so an admin who
+// drops the cap to "save cost" doesn't accidentally break replies.
+function effectiveMaxCompletionTokens(model: string, requested: number): number {
+  if (/^gpt-5/i.test(model)) return Math.max(requested, 8192);
+  return requested;
 }
 
 export async function generateAssistantReply(args: GenerateAssistantReplyArgs): Promise<LLMReplyResult | null> {
@@ -363,8 +386,16 @@ export async function generateAssistantReply(args: GenerateAssistantReplyArgs): 
     ? buildLanguageOverrideBlock(preferredLanguage)
     : "";
 
+  const systemPromptText = (typeof args.systemPromptOverride === "string" && args.systemPromptOverride.trim().length > 0)
+    ? args.systemPromptOverride
+    : DEFAULT_SYSTEM_PROMPT;
+
+  const model = args.model ?? "gpt-5-mini";
+  const requestedMaxTokens = args.maxCompletionTokens ?? 8192;
+  const maxCompletionTokens = effectiveMaxCompletionTokens(model, requestedMaxTokens);
+
   const messages: ChatCompletionMessageParam[] = [
-    { role: "system", content: SYSTEM_PROMPT },
+    { role: "system", content: systemPromptText },
     {
       role: "system",
       content: `${contextBlock}\n\nTURN_INDEX: ${args.turnCount}${languageDirective ? `\n\n${languageDirective}` : ""}`,
@@ -377,17 +408,19 @@ export async function generateAssistantReply(args: GenerateAssistantReplyArgs): 
   let tokensUsed = 0;
 
   try {
+    // gpt-5 family does NOT accept a custom `temperature` value (only the
+    // default). Sending it triggers an OpenAI 400. Ship the parameter only
+    // when the active model honours it — i.e. the gpt-4* / gpt-3.5 / o-mini
+    // families whose admins might want to dial creativity up or down.
+    const supportsTemperature = !/^gpt-5/i.test(model);
     const completion = await client.chat.completions.create({
-      model: "gpt-5-mini",
-      // gpt-5 series consume hidden reasoning tokens against this budget
-      // BEFORE producing the actual reply. With the previous 1200 cap the
-      // model frequently exhausted the budget on reasoning and returned an
-      // empty/invalid JSON, dumping every user into the "I'm having trouble
-      // pulling that up..." last-ditch fallback. 8192 is the AI Integrations
-      // skill's stated minimum for this model family.
-      max_completion_tokens: 8192,
+      model,
+      max_completion_tokens: maxCompletionTokens,
       response_format: { type: "json_object" },
       messages,
+      ...(supportsTemperature && typeof args.temperature === "number"
+        ? { temperature: args.temperature }
+        : {}),
     });
     raw = completion.choices[0]?.message?.content?.trim() ?? "";
     tokensUsed = completion.usage?.total_tokens ?? 0;
