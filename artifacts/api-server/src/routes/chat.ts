@@ -811,6 +811,29 @@ router.post("/chat/deposit-complete", authMiddleware, async (req: AuthRequest, r
         depositCreatedAt: deposit.createdAt,
       },
     });
+
+    // Close the loop on chat_leads (Task #145 Batch E). If this session
+    // started as a guest and the visitor handed over their email via the
+    // inline lead form, stamp `convertedAt` on the lead too so the sales
+    // funnel reports show the full visitor → lead → user → deposit chain
+    // attributed back to the original anonymous capture. Idempotent on
+    // re-fire because we only update rows where convertedAt IS NULL.
+    try {
+      await db
+        .update(chatLeadsTable)
+        .set({ convertedAt: new Date() })
+        .where(
+          and(
+            eq(chatLeadsTable.sessionId, sessionId),
+            isNull(chatLeadsTable.convertedAt),
+          ),
+        );
+    } catch (err) {
+      // Non-fatal — primary conversion record on chat_sessions is already
+      // committed. A failed lead stamp leaves the row scannable manually.
+      logger.warn({ err: (err as Error).message, sessionId }, "[chat] failed to stamp chat_leads.convertedAt");
+    }
+
     res.json({ success: true, alreadyConverted: Boolean(sess.convertedAt) });
   } catch (err) {
     logger.warn({ err: (err as Error).message }, "[chat] /chat/deposit-complete failed");
@@ -871,9 +894,127 @@ router.get("/admin/chats/:id/messages", authMiddleware, adminMiddleware, async (
       .orderBy(desc(chatConversionEventsTable.createdAt))
       .limit(50);
 
-    res.json({ messages, session: session[0] || null, events });
+    // Attached chat_lead (Task #145 Batch E). Most sessions won't have
+    // one — only guest sessions that hit the inline lead form do. Surface
+    // it on the session detail panel so the human responder can address
+    // the visitor by name and see whether the follow-up email already
+    // went out.
+    const leadRows = await db
+      .select()
+      .from(chatLeadsTable)
+      .where(eq(chatLeadsTable.sessionId, sessionId))
+      .orderBy(desc(chatLeadsTable.createdAt))
+      .limit(1);
+
+    res.json({
+      messages,
+      session: session[0] || null,
+      events,
+      lead: leadRows[0] || null,
+    });
   } catch (err) {
     res.status(500).json({ error: "Failed to fetch messages" });
+  }
+});
+
+// Admin chat-leads list (Task #145 Batch E). Returns every captured lead
+// across guest sessions, joined to its session for context (intent,
+// converted timestamp, last activity). Optional `status` query filter:
+//   - all          (default)  every lead
+//   - pending      followUpSentAt IS NULL AND unsubscribedAt IS NULL
+//                  AND convertedAt IS NULL — sales-actionable
+//   - sent         followUpSentAt IS NOT NULL — followup landed
+//   - converted    convertedAt IS NOT NULL — won
+//   - unsubscribed unsubscribedAt IS NOT NULL — opted out
+// Capped at 200 rows to keep the admin panel snappy. The schema already
+// indexes session_id + created_at; this query plan is a single seq scan
+// on the (small) chat_leads table joined to chat_sessions PK.
+router.get("/admin/chat-leads", authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const status = String(req.query.status ?? "all");
+
+    // Build the WHERE filter from the status param. We compose with `and(...)`
+    // and feed an always-true clause when no filter is requested so the
+    // single .where() call below stays simple.
+    let where;
+    switch (status) {
+      case "pending":
+        where = and(
+          isNull(chatLeadsTable.followUpSentAt),
+          isNull(chatLeadsTable.unsubscribedAt),
+          isNull(chatLeadsTable.convertedAt),
+        );
+        break;
+      case "sent":
+        where = sql`${chatLeadsTable.followUpSentAt} IS NOT NULL`;
+        break;
+      case "converted":
+        where = sql`${chatLeadsTable.convertedAt} IS NOT NULL`;
+        break;
+      case "unsubscribed":
+        where = sql`${chatLeadsTable.unsubscribedAt} IS NOT NULL`;
+        break;
+      default:
+        where = sql`TRUE`;
+    }
+
+    const leads = await db
+      .select({
+        id: chatLeadsTable.id,
+        sessionId: chatLeadsTable.sessionId,
+        visitorId: chatLeadsTable.visitorId,
+        email: chatLeadsTable.email,
+        name: chatLeadsTable.name,
+        phone: chatLeadsTable.phone,
+        consent: chatLeadsTable.consent,
+        followUpSentAt: chatLeadsTable.followUpSentAt,
+        followUpAttempts: chatLeadsTable.followUpAttempts,
+        unsubscribedAt: chatLeadsTable.unsubscribedAt,
+        convertedAt: chatLeadsTable.convertedAt,
+        createdAt: chatLeadsTable.createdAt,
+        // Session-level context: what the visitor was talking about and
+        // whether the underlying session converted (different signal than
+        // the lead-level convertedAt — a session can convert without a
+        // lead being captured).
+        sessionStatus: chatSessionsTable.status,
+        sessionUserId: chatSessionsTable.userId,
+        sessionDetectedIntent: chatSessionsTable.detectedIntent,
+        sessionEngagementScore: chatSessionsTable.engagementScore,
+        sessionConvertedAt: chatSessionsTable.convertedAt,
+        sessionLastMessageAt: chatSessionsTable.lastMessageAt,
+      })
+      .from(chatLeadsTable)
+      .leftJoin(chatSessionsTable, eq(chatLeadsTable.sessionId, chatSessionsTable.id))
+      .where(where)
+      .orderBy(desc(chatLeadsTable.createdAt))
+      .limit(200);
+
+    // Aggregate counts so the UI can render the filter chips with badges
+    // ("Pending · 12 / Sent · 34 / Converted · 5") without a second
+    // round-trip per filter switch.
+    const [totals] = await db
+      .select({
+        all: sql<string>`COUNT(*)::text`,
+        pending: sql<string>`COUNT(*) FILTER (WHERE ${chatLeadsTable.followUpSentAt} IS NULL AND ${chatLeadsTable.unsubscribedAt} IS NULL AND ${chatLeadsTable.convertedAt} IS NULL)::text`,
+        sent: sql<string>`COUNT(*) FILTER (WHERE ${chatLeadsTable.followUpSentAt} IS NOT NULL)::text`,
+        converted: sql<string>`COUNT(*) FILTER (WHERE ${chatLeadsTable.convertedAt} IS NOT NULL)::text`,
+        unsubscribed: sql<string>`COUNT(*) FILTER (WHERE ${chatLeadsTable.unsubscribedAt} IS NOT NULL)::text`,
+      })
+      .from(chatLeadsTable);
+
+    res.json({
+      leads,
+      totals: {
+        all: Number(totals?.all ?? 0),
+        pending: Number(totals?.pending ?? 0),
+        sent: Number(totals?.sent ?? 0),
+        converted: Number(totals?.converted ?? 0),
+        unsubscribed: Number(totals?.unsubscribed ?? 0),
+      },
+    });
+  } catch (err) {
+    logger.warn({ err: (err as Error).message }, "[chat] /admin/chat-leads failed");
+    res.status(500).json({ error: "Failed to fetch chat leads" });
   }
 });
 
