@@ -3,12 +3,16 @@ import { Layout } from "@/components/layout";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   MessageCircle, Send, CheckCircle, Clock, User, Sparkles,
-  RefreshCw, UserCheck, X, Circle, TrendingUp, Target, Filter, Zap, DollarSign
+  RefreshCw, UserCheck, X, Circle, TrendingUp, Target, Filter, Zap, DollarSign,
+  Settings as SettingsIcon, MessagesSquare,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
 import { format } from "date-fns";
 import { authFetch } from "@/lib/auth-fetch";
+import AdminChatSettings from "@/components/admin-chat-settings";
+
+type AdminChatsTab = "conversations" | "settings";
 
 async function apiGet(path: string) {
   return authFetch(`/api${path}`);
@@ -205,6 +209,9 @@ export default function AdminChatsPage() {
   const [sending, setSending] = useState(false);
   const [resolving, setResolving] = useState(false);
   const [filter, setFilter] = useState<FilterKey>("all");
+  // Top-level tab: "conversations" (default — existing list/detail UI) or
+  // "settings" (Task 145 Batch C — AI prompt + model + CTA copy editor).
+  const [tab, setTab] = useState<AdminChatsTab>("conversations");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -339,22 +346,55 @@ export default function AdminChatsPage() {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              {expertSessions.length > 0 && (
+              {/* Tab toggle: conversations vs settings */}
+              <div className="flex items-center bg-white/[0.03] border border-white/[0.06] rounded-lg p-0.5">
+                <button
+                  onClick={() => setTab("conversations")}
+                  className={cn(
+                    "flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors",
+                    tab === "conversations"
+                      ? "bg-blue-600/25 text-blue-200"
+                      : "text-white/50 hover:text-white/80",
+                  )}
+                >
+                  <MessagesSquare className="w-3.5 h-3.5" />
+                  Conversations
+                </button>
+                <button
+                  onClick={() => setTab("settings")}
+                  className={cn(
+                    "flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors",
+                    tab === "settings"
+                      ? "bg-blue-600/25 text-blue-200"
+                      : "text-white/50 hover:text-white/80",
+                  )}
+                >
+                  <SettingsIcon className="w-3.5 h-3.5" />
+                  AI Settings
+                </button>
+              </div>
+              {tab === "conversations" && expertSessions.length > 0 && (
                 <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20">
                   <div className="w-2 h-2 bg-amber-400 rounded-full animate-pulse" />
                   <span className="text-xs text-amber-400 font-medium">{expertSessions.length} need expert</span>
                 </div>
               )}
-              <button
-                onClick={loadSessions}
-                className="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 border border-white/5 flex items-center justify-center transition-colors"
-              >
-                <RefreshCw className="w-3.5 h-3.5 text-white/50" />
-              </button>
+              {tab === "conversations" && (
+                <button
+                  onClick={loadSessions}
+                  className="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 border border-white/5 flex items-center justify-center transition-colors"
+                >
+                  <RefreshCw className="w-3.5 h-3.5 text-white/50" />
+                </button>
+              )}
             </div>
           </div>
         </div>
 
+        {tab === "settings" ? (
+          <AdminChatSettings />
+        ) : (
+        <>
         {/* Main content */}
         <div className="flex-1 flex gap-3 px-4 pb-4 min-h-0">
           {/* Sessions List */}
@@ -652,6 +692,8 @@ export default function AdminChatsPage() {
             )}
           </div>
         </div>
+        </>
+        )}
       </div>
     </Layout>
   );
