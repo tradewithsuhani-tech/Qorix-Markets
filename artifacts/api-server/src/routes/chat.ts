@@ -12,7 +12,7 @@ import {
   investmentsTable,
   transactionsTable,
 } from "@workspace/db/schema";
-import { eq, desc, and, sql, gte, lt, ne, isNull } from "drizzle-orm";
+import { eq, desc, and, sql, gte, lt, ne, isNull, inArray } from "drizzle-orm";
 import { authMiddleware, adminMiddleware, getParam, type AuthRequest } from "../middlewares/auth";
 import { makeRedisLimiter } from "../middlewares/rate-limit";
 import {
@@ -1046,7 +1046,7 @@ router.get("/admin/chat-leads", authMiddleware, adminMiddleware, async (req: Aut
         where = sql`TRUE`;
     }
 
-    const leads = await db
+    const leadsRaw = await db
       .select({
         id: chatLeadsTable.id,
         sessionId: chatLeadsTable.sessionId,
@@ -1077,6 +1077,61 @@ router.get("/admin/chat-leads", authMiddleware, adminMiddleware, async (req: Aut
       .orderBy(desc(chatLeadsTable.createdAt))
       .limit(200);
 
+    // Manual outreach state (Task #145 Batch G) — derived from the audit
+    // log so we don't add new columns on chat_leads (codebase rule:
+    // ZERO db:push). For each lead currently in the page we count the
+    // sales notes the team has logged and stamp the most-recent
+    // "contacted" action. One round-trip across all leads keeps the
+    // listing fast even at the 200-row cap.
+    const leadIdStrings = leadsRaw.map((l) => String(l.id));
+    const auditMap = new Map<
+      string,
+      { lastContactedAt: Date | null; noteCount: number }
+    >();
+    if (leadIdStrings.length > 0) {
+      const auditRows = await db
+        .select({
+          targetId: adminAuditLogTable.targetId,
+          action: adminAuditLogTable.action,
+          createdAt: adminAuditLogTable.createdAt,
+        })
+        .from(adminAuditLogTable)
+        .where(
+          and(
+            eq(adminAuditLogTable.module, "chat"),
+            eq(adminAuditLogTable.targetType, "chat_lead"),
+            inArray(adminAuditLogTable.targetId, leadIdStrings),
+            inArray(adminAuditLogTable.action, [
+              "chat_lead_contacted",
+              "chat_lead_note",
+            ]),
+          ),
+        );
+      for (const row of auditRows) {
+        if (!row.targetId) continue;
+        const entry = auditMap.get(row.targetId) ?? {
+          lastContactedAt: null as Date | null,
+          noteCount: 0,
+        };
+        if (row.action === "chat_lead_contacted") {
+          if (!entry.lastContactedAt || row.createdAt > entry.lastContactedAt) {
+            entry.lastContactedAt = row.createdAt;
+          }
+        } else if (row.action === "chat_lead_note") {
+          entry.noteCount += 1;
+        }
+        auditMap.set(row.targetId, entry);
+      }
+    }
+    const leads = leadsRaw.map((l) => {
+      const ext = auditMap.get(String(l.id));
+      return {
+        ...l,
+        lastContactedAt: ext?.lastContactedAt ?? null,
+        noteCount: ext?.noteCount ?? 0,
+      };
+    });
+
     // Aggregate counts so the UI can render the filter chips with badges
     // ("Pending · 12 / Sent · 34 / Converted · 5") without a second
     // round-trip per filter switch.
@@ -1103,6 +1158,259 @@ router.get("/admin/chat-leads", authMiddleware, adminMiddleware, async (req: Aut
   } catch (err) {
     logger.warn({ err: (err as Error).message }, "[chat] /admin/chat-leads failed");
     res.status(500).json({ error: "Failed to fetch chat leads" });
+  }
+});
+
+// CSV export of leads (Task #145 Batch G). Honours the same `status`
+// filter as the JSON list endpoint so the operator can export e.g. just
+// the pending bucket for an outreach campaign. We stream directly into
+// the response; no temp file. UTF-8 BOM keeps Excel happy.
+router.get("/admin/chat-leads/export.csv", authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const status = String(req.query.status ?? "all");
+    let where;
+    switch (status) {
+      case "pending":
+        where = and(
+          isNull(chatLeadsTable.followUpSentAt),
+          isNull(chatLeadsTable.unsubscribedAt),
+          isNull(chatLeadsTable.convertedAt),
+        );
+        break;
+      case "sent":
+        where = sql`${chatLeadsTable.followUpSentAt} IS NOT NULL`;
+        break;
+      case "converted":
+        where = sql`${chatLeadsTable.convertedAt} IS NOT NULL`;
+        break;
+      case "unsubscribed":
+        where = sql`${chatLeadsTable.unsubscribedAt} IS NOT NULL`;
+        break;
+      default:
+        where = sql`TRUE`;
+    }
+
+    const rows = await db
+      .select({
+        id: chatLeadsTable.id,
+        sessionId: chatLeadsTable.sessionId,
+        email: chatLeadsTable.email,
+        name: chatLeadsTable.name,
+        phone: chatLeadsTable.phone,
+        consent: chatLeadsTable.consent,
+        followUpSentAt: chatLeadsTable.followUpSentAt,
+        followUpAttempts: chatLeadsTable.followUpAttempts,
+        unsubscribedAt: chatLeadsTable.unsubscribedAt,
+        convertedAt: chatLeadsTable.convertedAt,
+        createdAt: chatLeadsTable.createdAt,
+        intent: chatSessionsTable.detectedIntent,
+        engagement: chatSessionsTable.engagementScore,
+        sessionConvertedAt: chatSessionsTable.convertedAt,
+      })
+      .from(chatLeadsTable)
+      .leftJoin(chatSessionsTable, eq(chatLeadsTable.sessionId, chatSessionsTable.id))
+      .where(where)
+      .orderBy(desc(chatLeadsTable.createdAt))
+      .limit(5000);
+
+    const esc = (v: unknown): string => {
+      if (v === null || v === undefined) return "";
+      const s = v instanceof Date ? v.toISOString() : String(v);
+      // Quote anything containing a comma, quote, or newline; double up
+      // embedded quotes per RFC 4180.
+      if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+      return s;
+    };
+
+    const header = [
+      "id",
+      "session_id",
+      "email",
+      "name",
+      "phone",
+      "consent",
+      "intent",
+      "engagement",
+      "follow_up_sent_at",
+      "follow_up_attempts",
+      "unsubscribed_at",
+      "converted_at",
+      "session_converted_at",
+      "created_at",
+    ].join(",");
+
+    const lines = rows.map((r) =>
+      [
+        r.id,
+        r.sessionId,
+        r.email,
+        r.name,
+        r.phone,
+        r.consent,
+        r.intent,
+        r.engagement,
+        r.followUpSentAt,
+        r.followUpAttempts,
+        r.unsubscribedAt,
+        r.convertedAt,
+        r.sessionConvertedAt,
+        r.createdAt,
+      ]
+        .map(esc)
+        .join(","),
+    );
+
+    const filename = `qorix-chat-leads-${status}-${new Date().toISOString().slice(0, 10)}.csv`;
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    // BOM so Excel/Numbers auto-detect UTF-8 (without it, accented names
+    // come through mojibake-style on Windows).
+    res.send("\uFEFF" + header + "\n" + lines.join("\n") + "\n");
+  } catch (err) {
+    logger.warn({ err: (err as Error).message }, "[chat] /admin/chat-leads/export.csv failed");
+    res.status(500).json({ error: "Failed to export leads" });
+  }
+});
+
+// Audit thread for one lead (Task #145 Batch G). Returns every
+// admin-side action recorded against this lead — notes added,
+// "marked contacted" stamps, etc. Used by the row-expand panel on
+// the frontend so the sales team can see who reached out and when.
+router.get("/admin/chat-leads/:id/audit", authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const leadId = parseInt(getParam(req, "id"));
+    if (!Number.isFinite(leadId) || leadId <= 0) {
+      res.status(400).json({ error: "Invalid lead id" });
+      return;
+    }
+    const rows = await db
+      .select({
+        id: adminAuditLogTable.id,
+        adminEmail: adminAuditLogTable.adminEmail,
+        action: adminAuditLogTable.action,
+        summary: adminAuditLogTable.summary,
+        metadata: adminAuditLogTable.metadata,
+        createdAt: adminAuditLogTable.createdAt,
+      })
+      .from(adminAuditLogTable)
+      .where(
+        and(
+          eq(adminAuditLogTable.module, "chat"),
+          eq(adminAuditLogTable.targetType, "chat_lead"),
+          eq(adminAuditLogTable.targetId, String(leadId)),
+          inArray(adminAuditLogTable.action, [
+            "chat_lead_contacted",
+            "chat_lead_note",
+          ]),
+        ),
+      )
+      .orderBy(desc(adminAuditLogTable.createdAt))
+      .limit(100);
+    res.json({ events: rows });
+  } catch (err) {
+    logger.warn({ err: (err as Error).message }, "[chat] /admin/chat-leads/:id/audit failed");
+    res.status(500).json({ error: "Failed to fetch audit thread" });
+  }
+});
+
+// "Mark contacted" toggle (Task #145 Batch G). Pure audit-log insert —
+// no schema change. Idempotent on re-fire only in the sense that we
+// always log a fresh row with the latest timestamp; the listing query
+// then surfaces MAX(created_at) as `lastContactedAt`. The optional
+// `channel` field lets the operator note whether they reached out
+// over email / phone / WhatsApp etc.
+const markContactedSchema = z.object({
+  channel: z.enum(["email", "phone", "whatsapp", "telegram", "other"]).optional(),
+  note: z.string().max(500).optional(),
+});
+router.post("/admin/chat-leads/:id/contacted", authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const leadId = parseInt(getParam(req, "id"));
+    if (!Number.isFinite(leadId) || leadId <= 0) {
+      res.status(400).json({ error: "Invalid lead id" });
+      return;
+    }
+    const parsed = markContactedSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      res.status(400).json({ error: "Invalid payload" });
+      return;
+    }
+    const exists = await db
+      .select({ id: chatLeadsTable.id })
+      .from(chatLeadsTable)
+      .where(eq(chatLeadsTable.id, leadId))
+      .limit(1);
+    if (!exists.length) {
+      res.status(404).json({ error: "Lead not found" });
+      return;
+    }
+    const channel = parsed.data.channel ?? "other";
+    const note = parsed.data.note?.trim() || null;
+    await db.insert(adminAuditLogTable).values({
+      adminId: req.userId ?? null,
+      adminEmail: req.adminEmail ?? null,
+      adminRole: req.adminRole ?? null,
+      module: "chat",
+      action: "chat_lead_contacted",
+      method: "POST",
+      path: `/admin/chat-leads/${leadId}/contacted`,
+      targetType: "chat_lead",
+      targetId: String(leadId),
+      summary: `Contacted via ${channel}`,
+      metadata: JSON.stringify({ channel, note }),
+    });
+    res.json({ success: true });
+  } catch (err) {
+    logger.warn({ err: (err as Error).message }, "[chat] /admin/chat-leads/:id/contacted failed");
+    res.status(500).json({ error: "Failed to mark as contacted" });
+  }
+});
+
+// Add a sales note to a lead (Task #145 Batch G). Stored as audit-log
+// entry with action='chat_lead_note' so the same listing/expand UI
+// surfaces it. 1000 char cap — anything longer belongs in a CRM proper.
+const addNoteSchema = z.object({
+  note: z.string().min(1).max(1000),
+});
+router.post("/admin/chat-leads/:id/notes", authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const leadId = parseInt(getParam(req, "id"));
+    if (!Number.isFinite(leadId) || leadId <= 0) {
+      res.status(400).json({ error: "Invalid lead id" });
+      return;
+    }
+    const parsed = addNoteSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      res.status(400).json({ error: "Note required (1-1000 chars)" });
+      return;
+    }
+    const exists = await db
+      .select({ id: chatLeadsTable.id })
+      .from(chatLeadsTable)
+      .where(eq(chatLeadsTable.id, leadId))
+      .limit(1);
+    if (!exists.length) {
+      res.status(404).json({ error: "Lead not found" });
+      return;
+    }
+    const note = parsed.data.note.trim();
+    await db.insert(adminAuditLogTable).values({
+      adminId: req.userId ?? null,
+      adminEmail: req.adminEmail ?? null,
+      adminRole: req.adminRole ?? null,
+      module: "chat",
+      action: "chat_lead_note",
+      method: "POST",
+      path: `/admin/chat-leads/${leadId}/notes`,
+      targetType: "chat_lead",
+      targetId: String(leadId),
+      summary: note.slice(0, 200),
+      metadata: JSON.stringify({ note }),
+    });
+    res.json({ success: true });
+  } catch (err) {
+    logger.warn({ err: (err as Error).message }, "[chat] /admin/chat-leads/:id/notes failed");
+    res.status(500).json({ error: "Failed to add note" });
   }
 });
 
