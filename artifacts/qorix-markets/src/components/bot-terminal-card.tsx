@@ -398,10 +398,12 @@ function computeEma(candles: Candle[], period: number): Array<number | null> {
 function LiveCandleChart({
   quote,
   persistKey,
+  positions = [],
   height = 280,
 }: {
   quote: BotQuote | undefined;
   persistKey: string;
+  positions?: BotStateOpenPosition[];
   height?: number;
 }) {
   // Persist key is driven by the parent's `featuredCode` so that
@@ -414,7 +416,8 @@ function LiveCandleChart({
   const flash = useFlash(quote?.mid ?? 0, 350);
 
   // Auto-scaled price range with 8% padding so candles don't kiss
-  // the top/bottom edges.
+  // the top/bottom edges. Position entry prices are folded in too,
+  // so an out-of-range entry line is always visible.
   const range = useMemo(() => {
     if (candles.length === 0) {
       return { min: (quote?.mid ?? 0) - 1, max: (quote?.mid ?? 0) + 1 };
@@ -429,15 +432,32 @@ function LiveCandleChart({
       if (quote.mid < min) min = quote.mid;
       if (quote.mid > max) max = quote.mid;
     }
+    for (const p of positions) {
+      if (Number.isFinite(p.entryPrice)) {
+        if (p.entryPrice < min) min = p.entryPrice;
+        if (p.entryPrice > max) max = p.entryPrice;
+      }
+    }
     if (!Number.isFinite(min) || !Number.isFinite(max) || min === max) {
       const center = Number.isFinite(min) ? min : (quote?.mid ?? 0);
       return { min: center - 1, max: center + 1 };
     }
     const pad = (max - min) * 0.08;
     return { min: min - pad, max: max + pad };
-  }, [candles, quote?.mid]);
+  }, [candles, quote?.mid, positions]);
 
-  // SVG geometry — fixed viewBox, scales responsively via class
+  // Volume scale — uses live tick count per candle as a proxy for
+  // activity. Feels organic because busy candles (lots of synth
+  // ticks) get tall bars and quiet ones get short bars.
+  const maxTicks = useMemo(() => {
+    let m = 1;
+    for (const c of candles) if ((c.ticks ?? 1) > m) m = c.ticks ?? 1;
+    return m;
+  }, [candles]);
+
+  // SVG geometry — fixed viewBox, scales responsively via class.
+  // Bottom 18% reserved for the volume strip; the price area uses
+  // priceH and the volume area sits below with a 4px gap.
   const W = 800;
   const H = height;
   const padTop = 12;
@@ -446,12 +466,17 @@ function LiveCandleChart({
   const padLeft = 8;
   const chartW = W - padLeft - padRight;
   const chartH = H - padTop - padBottom;
+  const VOL_GAP = 4;
+  const volH = chartH * 0.18;
+  const priceH = chartH - volH - VOL_GAP;
+  const volTop = padTop + priceH + VOL_GAP;
+  const volBottom = padTop + chartH;
   const slotW = chartW / MAX_CANDLES;
   const bodyW = Math.max(2, slotW * 0.65);
 
   const priceToY = (p: number) => {
-    if (range.max === range.min) return padTop + chartH / 2;
-    return padTop + ((range.max - p) / (range.max - range.min)) * chartH;
+    if (range.max === range.min) return padTop + priceH / 2;
+    return padTop + ((range.max - p) / (range.max - range.min)) * priceH;
   };
 
   // Right-anchored: most recent candle sits at chartW edge
@@ -474,10 +499,10 @@ function LiveCandleChart({
         preserveAspectRatio="none"
         style={{ minHeight: 200 }}
       >
-        {/* Grid lines */}
+        {/* Grid lines (price area only) */}
         <g stroke="currentColor" strokeOpacity="0.07" strokeWidth="0.5">
           {[0.2, 0.4, 0.6, 0.8].map((f) => {
-            const y = padTop + chartH * f;
+            const y = padTop + priceH * f;
             return (
               <line key={f} x1={padLeft} x2={padLeft + chartW} y1={y} y2={y} />
             );
@@ -485,10 +510,39 @@ function LiveCandleChart({
           {[0.25, 0.5, 0.75].map((f) => {
             const x = padLeft + chartW * f;
             return (
-              <line key={f} x1={x} x2={x} y1={padTop} y2={padTop + chartH} />
+              <line key={f} x1={x} x2={x} y1={padTop} y2={padTop + priceH} />
             );
           })}
         </g>
+
+        {/* Volume baseline + bars */}
+        <line
+          x1={padLeft}
+          x2={padLeft + chartW}
+          y1={volBottom}
+          y2={volBottom}
+          stroke="currentColor"
+          strokeOpacity="0.12"
+          strokeWidth="0.5"
+        />
+        {candles.map((c, i) => {
+          const cx = padLeft + offsetX + i * slotW + slotW / 2;
+          const ratio = (c.ticks ?? 1) / maxTicks;
+          const barH = Math.max(1, ratio * (volH - 2));
+          const isUp = c.close >= c.open;
+          const color = isUp ? "#34d399" : "#fb7185";
+          return (
+            <rect
+              key={`v-${c.bucket}`}
+              x={cx - bodyW / 2}
+              y={volBottom - barH}
+              width={bodyW}
+              height={barH}
+              fill={color}
+              opacity={0.32}
+            />
+          );
+        })}
 
         {/* Candles */}
         {candles.map((c, i) => {
@@ -541,7 +595,52 @@ function LiveCandleChart({
           />
         ) : null}
 
-        {/* Right-side y-axis price ticks */}
+        {/* Bot position entry lines (BUY/SELL dashed h-lines on the
+            featured pair, with a small chip on the left). Capped to
+            avoid clutter; the parent passes a pre-trimmed list. */}
+        {positions.map((p) => {
+          const y = priceToY(p.entryPrice);
+          if (y < padTop || y > padTop + priceH) return null;
+          const isBuy = p.direction.toUpperCase() === "BUY";
+          const color = isBuy ? "#34d399" : "#fb7185";
+          const label = `${isBuy ? "▲ BUY" : "▼ SELL"} ${p.entryPrice.toFixed(precision)}`;
+          return (
+            <g key={`pos-${p.id}`}>
+              <line
+                x1={padLeft}
+                x2={padLeft + chartW}
+                y1={y}
+                y2={y}
+                stroke={color}
+                strokeOpacity="0.4"
+                strokeWidth="0.6"
+                strokeDasharray="2 5"
+              />
+              <rect
+                x={padLeft + 2}
+                y={y - 7}
+                width={78}
+                height={11}
+                rx={2}
+                fill={color}
+                opacity="0.18"
+              />
+              <text
+                x={padLeft + 5}
+                y={y + 1}
+                fill={color}
+                fontSize="8"
+                fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
+                fontWeight="700"
+                opacity="0.95"
+              >
+                {label}
+              </text>
+            </g>
+          );
+        })}
+
+        {/* Right-side y-axis price ticks (price area only) */}
         <g
           fill="currentColor"
           fillOpacity="0.5"
@@ -550,7 +649,7 @@ function LiveCandleChart({
         >
           {[0, 0.25, 0.5, 0.75, 1].map((f, i) => {
             const p = range.max - (range.max - range.min) * f;
-            const y = padTop + chartH * f;
+            const y = padTop + priceH * f;
             return (
               <text key={i} x={padLeft + chartW + 4} y={y + 3}>
                 {p.toFixed(precision)}
@@ -558,6 +657,18 @@ function LiveCandleChart({
             );
           })}
         </g>
+
+        {/* "VOL" label at top of volume strip */}
+        <text
+          x={padLeft + chartW + 4}
+          y={volTop + 8}
+          fill="currentColor"
+          fillOpacity="0.4"
+          fontSize="8"
+          fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
+        >
+          VOL
+        </text>
 
         {/* Live price horizontal line + tag */}
         {liveY !== null && quote ? (
@@ -1015,6 +1126,62 @@ function JustFilledToast({ fill }: { fill: BotStateClosedTrade | null }) {
 // Main card
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Bot-thinking ticker (Batch AB)
+// ---------------------------------------------------------------------------
+//
+// A slim status row mounted between the chart header and the chart
+// itself, cycling through short bot-state phrases every ~2.8s with a
+// crossfade. Adds an "always working" presence without being noisy.
+
+const BOT_STATUS_PHRASES = [
+  "Scanning markets…",
+  "Computing risk…",
+  "Watching liquidity…",
+  "Probing depth…",
+  "Reading order flow…",
+  "Calibrating signals…",
+  "Sizing positions…",
+  "Modeling volatility…",
+  "Polling liquidity venues…",
+];
+
+function BotThinkingTicker() {
+  const [idx, setIdx] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => {
+      setIdx((i) => (i + 1) % BOT_STATUS_PHRASES.length);
+    }, 2800);
+    return () => clearInterval(id);
+  }, []);
+  const phrase = BOT_STATUS_PHRASES[idx];
+  return (
+    <div className="px-3 sm:px-4 py-1.5 border-b bg-background/20 flex items-center gap-2 text-[10px] text-muted-foreground overflow-hidden">
+      <span className="size-1.5 rounded-full bg-amber-400 animate-pulse shrink-0" />
+      <span className="font-mono text-foreground/60 shrink-0 tracking-wider">
+        BOT
+      </span>
+      <div className="relative flex-1 min-w-0 h-3.5">
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.span
+            key={phrase}
+            initial={{ opacity: 0, y: 5 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -5 }}
+            transition={{ duration: 0.28, ease: "easeOut" }}
+            className="absolute inset-0 italic truncate"
+          >
+            {phrase}
+          </motion.span>
+        </AnimatePresence>
+      </div>
+      <span className="hidden sm:inline shrink-0 font-mono text-muted-foreground/40 text-[9px] tracking-wider">
+        AUTOPILOT
+      </span>
+    </div>
+  );
+}
+
 export function BotTerminalCard() {
   const { data: quotesData } = useBotQuotes();
   const { data: state } = useBotState();
@@ -1036,6 +1203,16 @@ export function BotTerminalCard() {
   const plan = state?.bot.plan;
   const userToday = state?.userToday;
   const positions = state?.openPositions ?? [];
+
+  // Featured-pair entry lines (capped at 4 most-recent so the chart
+  // doesn't get cluttered when many BTC positions are open).
+  const featuredPositions = useMemo(() => {
+    return positions
+      .filter((p) => p.pair === featuredCode)
+      .slice()
+      .sort((a, b) => b.openedAt.localeCompare(a.openedAt))
+      .slice(0, 4);
+  }, [positions, featuredCode]);
 
   const fillToast = useFillToast(state?.closedToday);
 
@@ -1084,10 +1261,12 @@ export function BotTerminalCard() {
 
       {/* Live candlestick chart for the featured pair */}
       <ChartHeader quote={featured} />
+      <BotThinkingTicker />
       <div className="p-2 sm:p-3">
         <LiveCandleChart
           quote={featured}
           persistKey={featuredCode}
+          positions={featuredPositions}
           height={260}
         />
       </div>
