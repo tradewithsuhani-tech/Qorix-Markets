@@ -3,12 +3,16 @@ import { Layout } from "@/components/layout";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   MessageCircle, Send, CheckCircle, Clock, User, Sparkles,
-  RefreshCw, UserCheck, X, Circle
+  RefreshCw, UserCheck, X, Circle, TrendingUp, Target, Filter, Zap, DollarSign,
+  Settings as SettingsIcon, MessagesSquare,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
 import { format } from "date-fns";
 import { authFetch } from "@/lib/auth-fetch";
+import AdminChatSettings from "@/components/admin-chat-settings";
+
+type AdminChatsTab = "conversations" | "settings";
 
 async function apiGet(path: string) {
   return authFetch(`/api${path}`);
@@ -27,6 +31,14 @@ interface Session {
   createdAt: string;
   userName: string | null;
   userEmail: string | null;
+  detectedIntent: string | null;
+  language: string | null;
+  engagementScore: number;
+  profile: Record<string, unknown> | null;
+  ctaShownCount: number;
+  ctaClickedCount: number;
+  convertedAt: string | null;
+  llmReplyCount: number;
 }
 
 interface Message {
@@ -38,7 +50,142 @@ interface Message {
   createdAt: string;
 }
 
+interface ConversionEvent {
+  id: number;
+  sessionId: number;
+  eventType: "cta_shown" | "cta_clicked" | "deposit_page_visited" | "deposit_completed";
+  metadata: Record<string, unknown> | null;
+  createdAt: string;
+}
+
+const INTENT_BADGE: Record<string, { label: string; color: string; bg: string }> = {
+  beginner:        { label: "Beginner",        color: "text-sky-300",     bg: "bg-sky-500/15 border-sky-500/30" },
+  advanced:        { label: "Advanced",        color: "text-violet-300",  bg: "bg-violet-500/15 border-violet-500/30" },
+  skeptic:         { label: "Skeptic",         color: "text-amber-300",   bg: "bg-amber-500/15 border-amber-500/30" },
+  price_sensitive: { label: "Price-sensitive", color: "text-yellow-300",  bg: "bg-yellow-500/15 border-yellow-500/30" },
+  ready_to_invest: { label: "Ready to invest", color: "text-emerald-300", bg: "bg-emerald-500/15 border-emerald-500/30" },
+  support:         { label: "Support",         color: "text-slate-300",   bg: "bg-slate-500/15 border-slate-500/30" },
+  other:           { label: "Other",           color: "text-white/50",    bg: "bg-white/5 border-white/10" },
+};
+
+type FilterKey = "all" | "converted" | "engaged_no_click" | "skeptic" | "needs_expert";
+
+const FILTERS: Array<{ key: FilterKey; label: string; icon: React.ComponentType<{ className?: string }> }> = [
+  { key: "all",              label: "All",                       icon: Filter },
+  { key: "needs_expert",     label: "Needs Expert",              icon: UserCheck },
+  { key: "converted",        label: "Converted",                 icon: DollarSign },
+  { key: "engaged_no_click", label: "High engagement, no click", icon: Zap },
+  { key: "skeptic",          label: "Skeptics",                  icon: Target },
+];
+
+function SessionInsightStrip({
+  session,
+  events,
+}: {
+  session: Session;
+  events: ConversionEvent[];
+}) {
+  const intent = session.detectedIntent ?? "other";
+  const intentBadge = INTENT_BADGE[intent] ?? INTENT_BADGE.other!;
+  const profile = session.profile ?? {};
+  const profileEntries = Object.entries(profile).filter(([, v]) => {
+    if (v === null || v === undefined) return false;
+    if (Array.isArray(v) && v.length === 0) return false;
+    return true;
+  });
+  const recentEvents = events.slice(0, 6);
+
+  return (
+    <div
+      className="px-4 py-2.5 border-b border-white/[0.05] flex items-center gap-3 flex-wrap text-[11px]"
+      style={{ background: "rgba(255,255,255,0.015)" }}
+    >
+      <span
+        className={cn(
+          "px-2 py-0.5 rounded border font-medium",
+          intentBadge.color,
+          intentBadge.bg,
+        )}
+      >
+        {intentBadge.label}
+      </span>
+      {session.language && (
+        <span className="text-white/40">
+          <span className="text-white/25">lang:</span> {session.language}
+        </span>
+      )}
+      <span className="text-white/40 flex items-center gap-1">
+        <Zap className="w-3 h-3" />
+        engagement <span className="text-white/70 font-medium">{session.engagementScore}</span>
+      </span>
+      <span className="text-white/40">
+        AI replies <span className="text-white/70 font-medium">{session.llmReplyCount}</span>
+      </span>
+      <span className="text-white/40">
+        CTA <span className="text-white/70 font-medium">{session.ctaShownCount}</span>
+        {" / clicked "}
+        <span className="text-white/70 font-medium">{session.ctaClickedCount}</span>
+      </span>
+      {session.convertedAt ? (
+        <span className="px-2 py-0.5 rounded border border-emerald-500/30 bg-emerald-500/15 text-emerald-300 font-medium flex items-center gap-1">
+          <DollarSign className="w-3 h-3" />
+          Converted {format(new Date(session.convertedAt), "MMM d")}
+        </span>
+      ) : (
+        <span className="text-white/30">Not yet converted</span>
+      )}
+
+      {profileEntries.length > 0 && (
+        <details className="ml-auto group">
+          <summary className="text-[10px] text-white/40 hover:text-white/70 cursor-pointer list-none">
+            Profile · {profileEntries.length}
+          </summary>
+          <div className="mt-2 w-full text-[10px] text-white/60 space-y-0.5 max-w-[260px]">
+            {profileEntries.map(([k, v]) => (
+              <div key={k} className="flex gap-1.5">
+                <span className="text-white/35 shrink-0">{k}:</span>
+                <span className="truncate">{Array.isArray(v) ? v.join(", ") : String(v)}</span>
+              </div>
+            ))}
+          </div>
+        </details>
+      )}
+      {recentEvents.length > 0 && (
+        <details className="group">
+          <summary className="text-[10px] text-white/40 hover:text-white/70 cursor-pointer list-none">
+            Events · {events.length}
+          </summary>
+          <div className="mt-2 w-full text-[10px] text-white/55 space-y-0.5 max-w-[260px]">
+            {recentEvents.map((e) => (
+              <div key={e.id} className="flex items-center gap-1.5">
+                <span className="text-white/30 shrink-0">
+                  {format(new Date(e.createdAt), "MMM d, h:mm a")}
+                </span>
+                <span className="truncate">{e.eventType}</span>
+              </div>
+            ))}
+          </div>
+        </details>
+      )}
+    </div>
+  );
+}
+
+// XSS hardening: chat messages on the admin surface include LLM output and
+// raw end-user input — both attacker-controlled. Escape HTML-significant
+// characters before applying the markdown substitutions so any injected
+// `<script>`/event-handler/iframe payloads render as inert text.
+function escapeHtml(text: string) {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 function parseMarkdown(text: string) {
+  text = escapeHtml(text);
   return text
     .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
     .replace(/\*(.*?)\*/g, '<em>$1</em>')
@@ -56,10 +203,15 @@ export default function AdminChatsPage() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [selectedSession, setSelectedSession] = useState<Session | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [events, setEvents] = useState<ConversionEvent[]>([]);
   const [reply, setReply] = useState("");
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [resolving, setResolving] = useState(false);
+  const [filter, setFilter] = useState<FilterKey>("all");
+  // Top-level tab: "conversations" (default — existing list/detail UI) or
+  // "settings" (Task 145 Batch C — AI prompt + model + CTA copy editor).
+  const [tab, setTab] = useState<AdminChatsTab>("conversations");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -80,8 +232,17 @@ export default function AdminChatsPage() {
 
   async function loadMessages(sessionId: number) {
     try {
-      const { messages: data } = await apiGet(`/admin/chats/${sessionId}/messages`);
+      const { messages: data, events: eventList, session } = await apiGet(
+        `/admin/chats/${sessionId}/messages`,
+      );
       setMessages(data);
+      setEvents(eventList ?? []);
+      // Refresh the selected session with the latest server-side enrichments
+      // (intent, engagement, conversion stamp) so the detail-panel header
+      // doesn't go stale during a long support reply.
+      if (session) {
+        setSelectedSession((prev) => (prev && prev.id === session.id ? { ...prev, ...session } : prev));
+      }
     } catch { }
   }
 
@@ -136,7 +297,38 @@ export default function AdminChatsPage() {
   const expertSessions = sessions.filter(s => s.status === "expert_requested");
   const activeSessions = sessions.filter(s => s.status === "active");
   const resolvedSessions = sessions.filter(s => s.status === "resolved");
-  const orderedSessions = [...expertSessions, ...activeSessions, ...resolvedSessions];
+  const baseOrderedSessions = [...expertSessions, ...activeSessions, ...resolvedSessions];
+
+  // Filter view — supports the four operationally-useful audience cuts the
+  // human team asks for ("who needs me?", "who converted?", "who almost
+  // did?", "who's pushing back?"). The "all" key skips filtering entirely.
+  const orderedSessions = baseOrderedSessions.filter((s) => {
+    switch (filter) {
+      case "needs_expert":
+        return s.status === "expert_requested";
+      case "converted":
+        return Boolean(s.convertedAt);
+      case "engaged_no_click":
+        // High intent / engagement but never clicked the CTA — these are the
+        // hand-off candidates: warm leads who need a human nudge.
+        return s.engagementScore >= 4 && s.ctaShownCount > 0 && s.ctaClickedCount === 0 && !s.convertedAt;
+      case "skeptic":
+        return s.detectedIntent === "skeptic";
+      case "all":
+      default:
+        return true;
+    }
+  });
+
+  const filterCounts: Record<FilterKey, number> = {
+    all: baseOrderedSessions.length,
+    needs_expert: baseOrderedSessions.filter((s) => s.status === "expert_requested").length,
+    converted: baseOrderedSessions.filter((s) => Boolean(s.convertedAt)).length,
+    engaged_no_click: baseOrderedSessions.filter(
+      (s) => s.engagementScore >= 4 && s.ctaShownCount > 0 && s.ctaClickedCount === 0 && !s.convertedAt,
+    ).length,
+    skeptic: baseOrderedSessions.filter((s) => s.detectedIntent === "skeptic").length,
+  };
 
   return (
     <Layout>
@@ -154,22 +346,55 @@ export default function AdminChatsPage() {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              {expertSessions.length > 0 && (
+              {/* Tab toggle: conversations vs settings */}
+              <div className="flex items-center bg-white/[0.03] border border-white/[0.06] rounded-lg p-0.5">
+                <button
+                  onClick={() => setTab("conversations")}
+                  className={cn(
+                    "flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors",
+                    tab === "conversations"
+                      ? "bg-blue-600/25 text-blue-200"
+                      : "text-white/50 hover:text-white/80",
+                  )}
+                >
+                  <MessagesSquare className="w-3.5 h-3.5" />
+                  Conversations
+                </button>
+                <button
+                  onClick={() => setTab("settings")}
+                  className={cn(
+                    "flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors",
+                    tab === "settings"
+                      ? "bg-blue-600/25 text-blue-200"
+                      : "text-white/50 hover:text-white/80",
+                  )}
+                >
+                  <SettingsIcon className="w-3.5 h-3.5" />
+                  AI Settings
+                </button>
+              </div>
+              {tab === "conversations" && expertSessions.length > 0 && (
                 <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20">
                   <div className="w-2 h-2 bg-amber-400 rounded-full animate-pulse" />
                   <span className="text-xs text-amber-400 font-medium">{expertSessions.length} need expert</span>
                 </div>
               )}
-              <button
-                onClick={loadSessions}
-                className="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 border border-white/5 flex items-center justify-center transition-colors"
-              >
-                <RefreshCw className="w-3.5 h-3.5 text-white/50" />
-              </button>
+              {tab === "conversations" && (
+                <button
+                  onClick={loadSessions}
+                  className="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 border border-white/5 flex items-center justify-center transition-colors"
+                >
+                  <RefreshCw className="w-3.5 h-3.5 text-white/50" />
+                </button>
+              )}
             </div>
           </div>
         </div>
 
+        {tab === "settings" ? (
+          <AdminChatSettings />
+        ) : (
+        <>
         {/* Main content */}
         <div className="flex-1 flex gap-3 px-4 pb-4 min-h-0">
           {/* Sessions List */}
@@ -179,6 +404,32 @@ export default function AdminChatsPage() {
           >
             <div className="px-3 py-2.5 border-b border-white/[0.05]">
               <p className="text-xs font-medium text-white/40 uppercase tracking-wider">Conversations</p>
+            </div>
+            {/* Filter chips */}
+            <div className="px-2 py-2 border-b border-white/[0.05] flex flex-wrap gap-1">
+              {FILTERS.map(({ key, label, icon: Icon }) => {
+                const active = filter === key;
+                const count = filterCounts[key];
+                return (
+                  <button
+                    key={key}
+                    onClick={() => setFilter(key)}
+                    className={cn(
+                      "flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium border transition-colors",
+                      active
+                        ? "bg-blue-500/20 border-blue-500/40 text-blue-200"
+                        : "bg-white/[0.03] border-white/[0.06] text-white/40 hover:text-white/70",
+                    )}
+                    title={label}
+                  >
+                    <Icon className="w-3 h-3" />
+                    <span>{label}</span>
+                    <span className={cn("ml-0.5", active ? "text-blue-300" : "text-white/30")}>
+                      {count}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
             <div className="flex-1 overflow-y-auto">
               {loading ? (
@@ -216,11 +467,33 @@ export default function AdminChatsPage() {
                               <p className="text-xs font-semibold text-white truncate">
                                 {session.userName || `User #${session.userId}`}
                               </p>
-                              <div className={cn("w-1.5 h-1.5 rounded-full flex-shrink-0", cfg.dot)} />
+                              <div className="flex items-center gap-1 flex-shrink-0">
+                                {session.convertedAt && (
+                                  <DollarSign className="w-3 h-3 text-emerald-400" aria-label="Converted" />
+                                )}
+                                <div className={cn("w-1.5 h-1.5 rounded-full", cfg.dot)} />
+                              </div>
                             </div>
                             <p className="text-[10px] text-white/40 truncate">{session.userEmail || "—"}</p>
-                            <div className="flex items-center gap-1 mt-0.5">
+                            <div className="flex items-center gap-1 mt-0.5 flex-wrap">
                               <span className={cn("text-[9px] font-medium", cfg.color)}>{cfg.label}</span>
+                              {session.detectedIntent && INTENT_BADGE[session.detectedIntent] && (
+                                <span
+                                  className={cn(
+                                    "text-[9px] font-medium px-1.5 py-px rounded border",
+                                    INTENT_BADGE[session.detectedIntent]!.color,
+                                    INTENT_BADGE[session.detectedIntent]!.bg,
+                                  )}
+                                >
+                                  {INTENT_BADGE[session.detectedIntent]!.label}
+                                </span>
+                              )}
+                              {session.engagementScore > 0 && (
+                                <span className="text-[9px] text-white/40 flex items-center gap-0.5">
+                                  <Zap className="w-2.5 h-2.5" />
+                                  {session.engagementScore}
+                                </span>
+                              )}
                               <span className="text-[9px] text-white/20">·</span>
                               <span className="text-[9px] text-white/30">
                                 {format(new Date(session.lastMessageAt), "MMM d, h:mm a")}
@@ -289,6 +562,11 @@ export default function AdminChatsPage() {
                     )}
                   </div>
                 </div>
+
+                {/* Session insight strip — intent, language, engagement, CTA stats,
+                    conversion stamp, latent profile + recent conversion events. Gives
+                    the human responder full context at a glance before replying. */}
+                <SessionInsightStrip session={selectedSession} events={events} />
 
                 {/* Messages */}
                 <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
@@ -414,6 +692,8 @@ export default function AdminChatsPage() {
             )}
           </div>
         </div>
+        </>
+        )}
       </div>
     </Layout>
   );
