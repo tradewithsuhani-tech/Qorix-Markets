@@ -96,6 +96,116 @@ function CountdownLabel({ to }: { to: string | null | undefined }) {
 }
 
 // ---------------------------------------------------------------------------
+// Client-side market-maker (Batch W)
+// ---------------------------------------------------------------------------
+//
+// The /api/bot-trading/quotes feed updates only every ~2s and the
+// per-poll jitter is intentionally tiny (sine-noise around an
+// anchor). At 5s candle resolution that produces near-flat candles —
+// users see "0.02 of variation on a $4610 price" and the chart looks
+// dead.
+//
+// useSynthQuotes() is a pure-frontend market-maker simulator. For
+// each pair it:
+//   - Tracks a "real anchor" target (latest API mid).
+//   - Linearly interpolates a smooth path from the previous synthetic
+//     value to the new anchor over the 2s poll window.
+//   - At ~5 ticks/sec, advances a synthetic price = path + drift +
+//     gaussian-ish noise (uniform-pair, scaled by mid * 0.0025%).
+//   - Hard-caps deviation at 0.1% of mid so the synth never wanders
+//     visibly off the real anchor.
+//
+// Net effect: ~25 synth ticks per 5s candle → real-looking OHLC
+// variation. The bot's open-position P/L pills also benefit because
+// they read mid from the same synth stream.
+
+const SYNTH_TICK_MS = 200; // 5 ticks/sec
+const SYNTH_WINDOW_MS = 2000; // poll cadence
+const SYNTH_DRIFT = 0.3; // 30% pull toward path per tick
+const SYNTH_NOISE_REL = 0.000025; // 0.0025% of mid per tick
+const SYNTH_CAP_REL = 0.001; // 0.1% max deviation from path
+
+type SynthState = {
+  base: number; // synth value at last anchor change
+  target: number; // current real-API mid
+  targetAt: number; // ms timestamp of last anchor change
+  current: number; // current synth value
+};
+
+function useSynthQuotes(realQuotes: BotQuote[]): BotQuote[] {
+  const stateRef = useRef<Map<string, SynthState>>(new Map());
+  const realQuotesRef = useRef<BotQuote[]>(realQuotes);
+  const [, setTick] = useState(0);
+
+  // Sync targets whenever a fresh API poll lands.
+  useEffect(() => {
+    realQuotesRef.current = realQuotes;
+    const now = Date.now();
+    for (const q of realQuotes) {
+      if (!Number.isFinite(q.mid)) continue;
+      const existing = stateRef.current.get(q.code);
+      if (!existing) {
+        stateRef.current.set(q.code, {
+          base: q.mid,
+          target: q.mid,
+          targetAt: now,
+          current: q.mid,
+        });
+      } else {
+        existing.base = existing.current;
+        existing.target = q.mid;
+        existing.targetAt = now;
+      }
+    }
+  }, [realQuotes]);
+
+  // Single stable interval, started once on mount.
+  useEffect(() => {
+    const id = setInterval(() => {
+      const reals = realQuotesRef.current;
+      if (reals.length === 0) return;
+      const now = Date.now();
+      let dirty = false;
+      stateRef.current.forEach((s, code) => {
+        const ref = reals.find((q) => q.code === code);
+        if (!ref || !Number.isFinite(ref.mid) || ref.mid <= 0) return;
+        const elapsed = now - s.targetAt;
+        const progress = Math.min(1, elapsed / SYNTH_WINDOW_MS);
+        const path = s.base + (s.target - s.base) * progress;
+        const noiseAmp = ref.mid * SYNTH_NOISE_REL;
+        const noise = (Math.random() - 0.5) * 2 * noiseAmp;
+        const drift = (path - s.current) * SYNTH_DRIFT;
+        let next = s.current + drift + noise;
+        const cap = ref.mid * SYNTH_CAP_REL;
+        const dev = next - path;
+        if (Math.abs(dev) > cap) {
+          next = path + Math.sign(dev) * cap;
+        }
+        s.current = next;
+        dirty = true;
+      });
+      if (dirty) setTick((t) => (t + 1) & 0xffff);
+    }, SYNTH_TICK_MS);
+    return () => clearInterval(id);
+  }, []);
+
+  // Build the synth view. New objects every render (intentional —
+  // the candle aggregator's useEffect deps fire on each tick).
+  return realQuotes.map((q) => {
+    const s = stateRef.current.get(q.code);
+    const synthMid = s?.current ?? q.mid;
+    const halfSpread = Math.abs(q.ask - q.bid) / 2;
+    return {
+      ...q,
+      mid: synthMid,
+      bid: synthMid - halfSpread,
+      ask: synthMid + halfSpread,
+      asOf: new Date().toISOString(),
+    };
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Live candlestick chart (Batch V)
 // ---------------------------------------------------------------------------
 
@@ -657,7 +767,13 @@ export function BotTerminalCard() {
   const { data: quotesData } = useBotQuotes();
   const { data: state } = useBotState();
 
-  const quotes = quotesData?.quotes ?? [];
+  // The market-maker hook turns each pair's 2s real-API tick into a
+  // smooth ~5 ticks/sec synthetic stream. Everything downstream — the
+  // candle aggregator, the live price tag, the open-position P/L
+  // pills — reads from these synth quotes for proper trading-feel
+  // volatility without touching the backend.
+  const realQuotes = quotesData?.quotes ?? [];
+  const quotes = useSynthQuotes(realQuotes);
   const xau = quotes.find((q) => q.code === "XAUUSD");
   const summary = state?.summary;
   const plan = state?.bot.plan;
