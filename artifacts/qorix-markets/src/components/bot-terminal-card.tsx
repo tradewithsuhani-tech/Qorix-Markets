@@ -1520,8 +1520,26 @@ export function BotTerminalCard() {
     shortWins: 0,
     shortLosses: 0,
   });
+  type ScalpEvent = {
+    id: number;
+    bot: "LONG" | "SHORT";
+    outcome: "SL" | "BE";
+    pnlUsd: number;
+    at: number;
+  };
+  const [scalpEvents, setScalpEvents] = useState<ScalpEvent[]>([]);
+  const scalpEventIdRef = useRef(0);
   const lastMidRef = useRef<number | null>(null);
   const scalpIdRef = useRef(-1);
+
+  // Drop scalp events older than 5 s so the ticker stays clean.
+  useEffect(() => {
+    const id = setInterval(() => {
+      const now = Date.now();
+      setScalpEvents((evts) => evts.filter((e) => now - e.at < 5000));
+    }, 1000);
+    return () => clearInterval(id);
+  }, []);
 
   useEffect(() => {
     const mid = featuredMid;
@@ -1608,6 +1626,23 @@ export function BotTerminalCard() {
             }
           }
           return ns;
+        });
+        setScalpEvents((evts) => {
+          const fresh: ScalpEvent[] = closedThisTick.map((c) => {
+            // Synthetic notional ($5k–$8k, deterministic by id) → ~$2.50–$4.00
+            // SL loss when SL hit, $0.00 when BE-protected exit.
+            const notional = 5000 + (Math.abs(c.id) % 7) * 500;
+            const pnlUsd =
+              c.status === "lost" ? -SCALP_SL_PCT * notional : 0;
+            return {
+              id: scalpEventIdRef.current++,
+              bot: c.bot,
+              outcome: c.status === "lost" ? "SL" : "BE",
+              pnlUsd,
+              at: now,
+            };
+          });
+          return [...fresh, ...evts].slice(0, 8);
         });
       }
 
@@ -1703,6 +1738,33 @@ export function BotTerminalCard() {
       {/* Live candlestick chart for the featured pair */}
       <ChartHeader quote={featured} />
       <BotThinkingTicker />
+      {scalpEvents.length > 0 && (
+        <div className="px-3 py-1 flex items-center gap-1.5 text-[10px] font-mono border-t bg-background/30 overflow-hidden">
+          <span className="text-muted-foreground/60 shrink-0 tracking-wider font-semibold">
+            SCALP
+          </span>
+          <div className="flex items-center gap-1.5 overflow-hidden">
+            {scalpEvents.slice(0, 6).map((e) => (
+              <span
+                key={e.id}
+                className={cn(
+                  "px-1.5 py-0.5 rounded shrink-0 tabular-nums transition-opacity duration-300",
+                  e.outcome === "SL"
+                    ? "bg-rose-500/15 text-rose-400"
+                    : "bg-emerald-500/15 text-emerald-400",
+                )}
+              >
+                <span className="font-bold">{e.outcome}</span>
+                <span className="opacity-70 mx-1">{e.bot}</span>
+                <span className="font-semibold">
+                  {e.pnlUsd >= 0 ? "+" : "−"}$
+                  {Math.abs(e.pnlUsd).toFixed(2)}
+                </span>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
       <div className="p-2 sm:p-3">
         <LiveCandleChart
           quote={featured}
