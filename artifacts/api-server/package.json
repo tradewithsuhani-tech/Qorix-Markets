@@ -37,7 +37,8 @@
     "qrcode": "^1.5.4",
     "rate-limit-redis": "^4.3.1",
     "tronweb": "^6.2.2",
-    "ua-parser-js": "^1.0.41"
+    "ua-parser-js": "^1.0.41",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@types/bcryptjs": "^3.0.0",

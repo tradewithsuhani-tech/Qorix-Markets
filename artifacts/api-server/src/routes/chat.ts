@@ -5,6 +5,8 @@ import {
   chatMessagesTable,
   chatConversionEventsTable,
   chatLeadsTable,
+  chatSettingsTable,
+  adminAuditLogTable,
   usersTable,
   walletsTable,
   investmentsTable,
@@ -17,12 +19,19 @@ import {
   generateAssistantReply,
   computeEngagementBoost,
   normalizePreferredLanguage,
+  DEFAULT_SYSTEM_PROMPT,
   type SessionProfile,
   type UserContext,
   type ChatHistoryItem,
 } from "../lib/chat-llm";
 import { isLLMAvailable } from "../lib/openai-client";
+import {
+  getChatSettings,
+  invalidateChatSettings,
+  type ResolvedChatSettings,
+} from "../lib/chat-settings-cache";
 import { logger } from "../lib/logger";
+import { z } from "zod";
 import type { Request, Response } from "express";
 
 const router = Router();
@@ -215,32 +224,39 @@ function ctaAckText(variant: string, language: string | null | undefined): strin
 function buildCtaCard(
   variant: string,
   language?: string | null,
+  overrides?: ResolvedChatSettings["depositCta"],
 ): { variant: string; label: string; href?: string; action?: string; ackText: string } {
-  const ackText = ctaAckText(variant, language);
+  const override = overrides?.[variant];
+  const ackText = override?.ackText ?? ctaAckText(variant, language);
   switch (variant) {
     case "small_deposit":
       return {
         variant,
-        label: "Start with a small deposit",
-        href: "/deposit",
+        label: override?.label ?? "Start with a small deposit",
+        href: override?.href ?? "/deposit",
         ackText,
       };
     case "view_dashboard":
       return {
         variant,
-        label: "Show me the dashboard",
-        href: "/dashboard",
+        label: override?.label ?? "Show me the dashboard",
+        href: override?.href ?? "/dashboard",
         ackText,
       };
     case "talk_to_expert":
       return {
         variant,
-        label: "Talk to a human advisor",
+        label: override?.label ?? "Talk to a human advisor",
         action: "request_expert",
         ackText,
       };
     default:
-      return { variant, label: "Continue", href: "/dashboard", ackText };
+      return {
+        variant,
+        label: override?.label ?? "Continue",
+        href: override?.href ?? "/dashboard",
+        ackText,
+      };
   }
 }
 
@@ -528,7 +544,13 @@ router.post(
       const now = new Date();
       const budgetIsStale = isStaleBudgetDate(session.llmBudgetDate ?? null, now);
       const tokensUsedToday = budgetIsStale ? 0 : session.llmTokensUsed;
-      const llmDisabled = !isLLMAvailable() || tokensUsedToday >= SESSION_DAILY_TOKEN_BUDGET;
+      // Pull admin-editable runtime config (model, prompt override, kill
+      // switch, etc.) from the cached chat_settings singleton.
+      const settings = await getChatSettings();
+      const llmDisabled =
+        !isLLMAvailable() ||
+        settings.enabled === false ||
+        tokensUsedToday >= SESSION_DAILY_TOKEN_BUDGET;
       let llmResult = null as Awaited<ReturnType<typeof generateAssistantReply>>;
       if (!llmDisabled) {
         llmResult = await generateAssistantReply({
@@ -538,6 +560,10 @@ router.post(
           sessionProfile,
           turnCount,
           preferredLanguage: session.preferredLanguage,
+          systemPromptOverride: settings.systemPrompt,
+          model: settings.model,
+          temperature: settings.temperature,
+          maxCompletionTokens: settings.maxTokens,
         });
       }
 
@@ -577,7 +603,7 @@ router.post(
       // header pill.
       const ctaLanguage = session.preferredLanguage ?? metadata?.language ?? null;
       const ctaCard = ctaEligible && metadata?.ctaVariant
-        ? buildCtaCard(metadata.ctaVariant, ctaLanguage)
+        ? buildCtaCard(metadata.ctaVariant, ctaLanguage, settings.depositCta)
         : null;
 
       // Per-day token accounting: if the budget date rolled over, restart
@@ -1584,7 +1610,11 @@ router.post(
       const now = new Date();
       const budgetIsStale = isStaleBudgetDate(session.llmBudgetDate ?? null, now);
       const tokensUsedToday = budgetIsStale ? 0 : session.llmTokensUsed;
-      const llmDisabled = !isLLMAvailable() || tokensUsedToday >= SESSION_DAILY_TOKEN_BUDGET;
+      const settings = await getChatSettings();
+      const llmDisabled =
+        !isLLMAvailable() ||
+        settings.enabled === false ||
+        tokensUsedToday >= SESSION_DAILY_TOKEN_BUDGET;
 
       let llmResult = null as Awaited<ReturnType<typeof generateAssistantReply>>;
       if (!llmDisabled) {
@@ -1595,6 +1625,10 @@ router.post(
           sessionProfile,
           turnCount,
           preferredLanguage: session.preferredLanguage,
+          systemPromptOverride: settings.systemPrompt,
+          model: settings.model,
+          temperature: settings.temperature,
+          maxCompletionTokens: settings.maxTokens,
         });
       }
 
@@ -1620,7 +1654,7 @@ router.post(
 
       const ctaLanguage = session.preferredLanguage ?? metadata?.language ?? null;
       const ctaCard = ctaEligible && metadata?.ctaVariant
-        ? buildCtaCard(metadata.ctaVariant, ctaLanguage)
+        ? buildCtaCard(metadata.ctaVariant, ctaLanguage, settings.depositCta)
         : null;
 
       const tokensThisCall = llmResult?.tokensUsed ?? 0;
@@ -1793,6 +1827,166 @@ router.post(
     } catch (err) {
       logger.warn({ err: (err as Error).message }, "[chat] /chat/guest-session/claim failed");
       res.status(500).json({ error: "Failed to claim guest session" });
+    }
+  },
+);
+
+// ─── Admin: chat settings (Task 145, Batch B) ───────────────────────────────
+//
+// Singleton row in chat_settings (id=1, enforced by CHECK). The admin UI
+// reads/writes the active LLM persona, model, temperature, max-tokens, kill
+// switch, quick-replies, deposit-CTA copy overrides and email-followup
+// config from here. Caller scope is super admin only — same `adminMiddleware`
+// the rest of the /admin/* surface uses.
+
+const settingsUpdateSchema = z.object({
+  systemPrompt: z.string().max(40_000).nullable().optional(),
+  model: z.string().min(2).max(80).optional(),
+  temperature: z.number().min(0).max(2).optional(),
+  maxTokens: z.number().int().min(256).max(32_768).optional(),
+  enabled: z.boolean().optional(),
+  quickReplies: z
+    .array(
+      z.object({
+        id: z.string().min(1).max(80),
+        label: z.string().min(1).max(120),
+        value: z.string().min(1).max(500),
+        lang: z.string().max(20).optional(),
+      }),
+    )
+    .max(20)
+    .optional(),
+  depositCta: z.record(
+    z.string().min(1).max(60),
+    z.object({
+      label: z.string().max(120).optional(),
+      ackText: z.string().max(500).optional(),
+      href: z.string().max(500).optional(),
+    }),
+  ).optional(),
+  emailFollowup: z
+    .object({
+      enabled: z.boolean().optional(),
+      delayMinutes: z.number().int().min(1).max(10_080).optional(), // up to 1 week
+      subject: z.string().max(255).optional(),
+      body: z.string().max(20_000).optional(),
+      fromName: z.string().max(120).optional(),
+      ctaUrl: z.string().max(500).optional(),
+    })
+    .optional(),
+});
+
+router.get(
+  "/admin/chat/settings",
+  authMiddleware,
+  adminMiddleware,
+  async (_req: AuthRequest, res: Response) => {
+    try {
+      const settings = await getChatSettings();
+      // Surface the baked-in default so the UI can render a "Reset to default"
+      // button and so admins can preview the canonical prompt before clearing
+      // their override.
+      res.json({
+        settings,
+        defaults: {
+          systemPrompt: DEFAULT_SYSTEM_PROMPT,
+          model: "gpt-5-mini",
+          temperature: 0.7,
+          maxTokens: 8192,
+        },
+      });
+    } catch (err) {
+      logger.error({ err: (err as Error).message }, "[chat] GET /admin/chat/settings failed");
+      res.status(500).json({ error: "Failed to load chat settings" });
+    }
+  },
+);
+
+router.put(
+  "/admin/chat/settings",
+  authMiddleware,
+  adminMiddleware,
+  async (req: AuthRequest, res: Response) => {
+    const parsed = settingsUpdateSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({
+        error: "Invalid settings payload",
+        details: parsed.error.issues,
+      });
+      return;
+    }
+
+    try {
+      // Capture the previous shape for the audit-log diff. Reading from cache
+      // is fine — even if the cache is slightly stale the diff is purely
+      // informational and the new write is what matters.
+      const before = await getChatSettings();
+
+      const patch: Record<string, unknown> = { updatedAt: new Date() };
+      // adminId comes from authMiddleware; record it so we know who edited.
+      if (req.userId) patch.updatedBy = req.userId;
+      if (parsed.data.systemPrompt !== undefined) patch.systemPrompt = parsed.data.systemPrompt;
+      if (parsed.data.model !== undefined) patch.model = parsed.data.model;
+      if (parsed.data.temperature !== undefined) patch.temperature = String(parsed.data.temperature);
+      if (parsed.data.maxTokens !== undefined) patch.maxTokens = parsed.data.maxTokens;
+      if (parsed.data.enabled !== undefined) patch.enabled = parsed.data.enabled;
+      if (parsed.data.quickReplies !== undefined) patch.quickReplies = parsed.data.quickReplies;
+      if (parsed.data.depositCta !== undefined) patch.depositCta = parsed.data.depositCta;
+      if (parsed.data.emailFollowup !== undefined) patch.emailFollowup = parsed.data.emailFollowup;
+
+      await db
+        .update(chatSettingsTable)
+        .set(patch)
+        .where(eq(chatSettingsTable.id, 1));
+
+      // Bust the in-process cache so THIS instance reflects immediately.
+      // Other Fly machines pick up the change within the 60 s TTL.
+      invalidateChatSettings();
+      const after = await getChatSettings();
+
+      // Audit-log the change. Fire-and-forget; never let a logging failure
+      // block the admin response.
+      db.insert(adminAuditLogTable)
+        .values({
+          adminId: req.userId ?? null,
+          adminEmail: req.adminEmail ?? null,
+          adminRole: req.adminRole ?? null,
+          module: "chat",
+          action: "update",
+          method: "PUT",
+          path: "/admin/chat/settings",
+          targetType: "chat_settings",
+          targetId: "1",
+          summary: "Updated chat AI settings",
+          metadata: JSON.stringify({
+            keys: Object.keys(parsed.data),
+            // Don't log the entire prompt body (can be 10KB+) — just whether
+            // it changed and the new length, to keep audit rows compact.
+            promptChanged:
+              parsed.data.systemPrompt !== undefined &&
+              before.systemPrompt !== parsed.data.systemPrompt,
+            promptLength:
+              typeof parsed.data.systemPrompt === "string"
+                ? parsed.data.systemPrompt.length
+                : null,
+            model: parsed.data.model ?? null,
+            enabled: parsed.data.enabled ?? null,
+          }),
+          ipAddress: req.ip ?? null,
+          userAgent: req.headers["user-agent"] ?? null,
+          statusCode: 200,
+        })
+        .catch((err) => {
+          logger.warn(
+            { err: (err as Error).message },
+            "[chat] failed to write audit log for settings update",
+          );
+        });
+
+      res.json({ success: true, settings: after });
+    } catch (err) {
+      logger.error({ err: (err as Error).message }, "[chat] PUT /admin/chat/settings failed");
+      res.status(500).json({ error: "Failed to update chat settings" });
     }
   },
 );
