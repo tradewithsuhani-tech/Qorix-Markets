@@ -2737,6 +2737,17 @@ const settingsUpdateSchema = z.object({
       body: z.string().max(20_000).optional(),
       fromName: z.string().max(120).optional(),
       ctaUrl: z.string().max(500).optional(),
+      // Batch L: optional second nudge — capped at 2 total attempts by the worker.
+      // Disabled by default; admin opts in. CTA URL reuses the parent ctaUrl.
+      followup2: z
+        .object({
+          enabled: z.boolean().optional(),
+          // Hours AFTER the first nudge. 4380 = ~6 months upper bound.
+          delayHours: z.number().int().min(1).max(4_380).optional(),
+          subject: z.string().max(255).optional(),
+          body: z.string().max(20_000).optional(),
+        })
+        .optional(),
     })
     .optional(),
 });
