@@ -43,6 +43,13 @@ interface DepositCtaOverrides {
   [variant: string]: { label?: string; ackText?: string; href?: string };
 }
 
+interface EmailFollowup2Config {
+  enabled?: boolean;
+  delayHours?: number;
+  subject?: string;
+  body?: string;
+}
+
 interface EmailFollowupConfig {
   enabled?: boolean;
   delayMinutes?: number;
@@ -50,6 +57,7 @@ interface EmailFollowupConfig {
   body?: string;
   fromName?: string;
   ctaUrl?: string;
+  followup2?: EmailFollowup2Config;
 }
 
 interface ResolvedChatSettings {
@@ -216,6 +224,29 @@ export default function AdminChatSettings() {
         delete next[field];
       } else {
         next[field] = value;
+      }
+      return next;
+    });
+  }
+
+  // Batch M: nested followup2 setter — keeps top-level emailFollowup keys
+  // untouched and prunes empty values so the saved JSONB stays minimal.
+  function updateFollowup2Field<K extends keyof EmailFollowup2Config>(
+    field: K,
+    value: EmailFollowup2Config[K] | undefined,
+  ) {
+    setEmailFollowup((prev) => {
+      const nested: EmailFollowup2Config = { ...(prev.followup2 ?? {}) };
+      if (value === undefined || value === "" || value === null) {
+        delete nested[field];
+      } else {
+        nested[field] = value;
+      }
+      const next = { ...prev };
+      if (Object.keys(nested).length === 0) {
+        delete next.followup2;
+      } else {
+        next.followup2 = nested;
       }
       return next;
     });
@@ -538,6 +569,64 @@ export default function AdminChatSettings() {
               placeholder="Hi {{name}}, thanks for chatting with Qorix Markets..."
               className="mt-1.5 min-h-[160px] text-xs bg-white/[0.03] border-white/[0.08] resize-y"
             />
+          </div>
+
+          {/*
+            Batch M: 2nd-nudge sub-section. Lives inside the same card to make
+            the chain (1st → 2nd → manual) visually obvious. Hard-capped at 2
+            total attempts by the worker; CTA URL is reused from the parent.
+            Disabled by default — admin must opt in.
+          */}
+          <div className="mt-6 pt-5 border-t border-white/[0.06]">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <div className="text-xs font-medium text-pink-300/90">Second nudge</div>
+                <div className="text-[10px] text-white/40 mt-0.5">
+                  Sent after the first nudge if the lead hasn't converted or unsubscribed. Hard-capped at 2 total attempts.
+                </div>
+              </div>
+              <Switch
+                checked={emailFollowup.followup2?.enabled === true}
+                onCheckedChange={(v) => updateFollowup2Field("enabled", v)}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 mb-3">
+              <FieldRow
+                label="Delay after 1st (hours)"
+                value={
+                  emailFollowup.followup2?.delayHours != null
+                    ? String(emailFollowup.followup2.delayHours)
+                    : ""
+                }
+                placeholder="72"
+                type="number"
+                onChange={(v) => {
+                  const n = parseInt(v, 10);
+                  updateFollowup2Field("delayHours", Number.isFinite(n) && n > 0 ? n : undefined);
+                }}
+              />
+              <div className="text-[10px] text-white/30 self-end pb-2">
+                Reuses CTA URL & From-name from above.
+              </div>
+            </div>
+
+            <FieldRow
+              label="Subject"
+              value={emailFollowup.followup2?.subject ?? ""}
+              placeholder="Still here when you're ready"
+              onChange={(v) => updateFollowup2Field("subject", v || undefined)}
+            />
+
+            <div className="mt-3">
+              <label className="text-xs text-white/50">Body (supports {"{{name}}"} {"{{cta_url}}"})</label>
+              <Textarea
+                value={emailFollowup.followup2?.body ?? ""}
+                onChange={(e) => updateFollowup2Field("body", e.target.value || undefined)}
+                placeholder="Hi {{name}}, just circling back one more time..."
+                className="mt-1.5 min-h-[140px] text-xs bg-white/[0.03] border-white/[0.08] resize-y"
+              />
+            </div>
           </div>
         </SettingsCard>
 
