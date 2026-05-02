@@ -1529,6 +1529,19 @@ export function BotTerminalCard() {
   };
   const [scalpEvents, setScalpEvents] = useState<ScalpEvent[]>([]);
   const scalpEventIdRef = useRef(0);
+  // Cumulative scalp P&L — persisted to localStorage so it accumulates
+  // across reloads and we can see how much the virtual desk grinds out.
+  const SCALP_PNL_KEY = "qorix.scalp.totalPnl.v1";
+  const [scalpTotalPnl, setScalpTotalPnl] = useState<number>(() => {
+    if (typeof window === "undefined") return 0;
+    const raw = window.localStorage.getItem(SCALP_PNL_KEY);
+    const n = raw ? Number(raw) : 0;
+    return Number.isFinite(n) ? n : 0;
+  });
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(SCALP_PNL_KEY, String(scalpTotalPnl));
+  }, [scalpTotalPnl]);
   const lastMidRef = useRef<number | null>(null);
   const scalpIdRef = useRef(-1);
 
@@ -1627,13 +1640,19 @@ export function BotTerminalCard() {
           }
           return ns;
         });
+        let tickPnlSum = 0;
         setScalpEvents((evts) => {
           const fresh: ScalpEvent[] = closedThisTick.map((c) => {
             // Synthetic notional ($5k–$8k, deterministic by id) → ~$2.50–$4.00
-            // SL loss when SL hit, $0.00 when BE-protected exit.
+            // SL loss when SL hit; small positive vig ($0.10–$0.40) when
+            // BE-protected exit (TP-side breakeven survived 30 s, treat as
+            // a tiny grind-out so the cumulative P&L can actually move).
             const notional = 5000 + (Math.abs(c.id) % 7) * 500;
             const pnlUsd =
-              c.status === "lost" ? -SCALP_SL_PCT * notional : 0;
+              c.status === "lost"
+                ? -SCALP_SL_PCT * notional
+                : 0.05 * (1 + (Math.abs(c.id) % 7));
+            tickPnlSum += pnlUsd;
             return {
               id: scalpEventIdRef.current++,
               bot: c.bot,
@@ -1644,6 +1663,9 @@ export function BotTerminalCard() {
           });
           return [...fresh, ...evts].slice(0, 8);
         });
+        if (tickPnlSum !== 0) {
+          setScalpTotalPnl((p) => p + tickPnlSum);
+        }
       }
 
       // Cleanup: drop closed trades after fade window
@@ -1710,6 +1732,18 @@ export function BotTerminalCard() {
             <span className="text-rose-400 font-semibold">S</span>
             <span className="text-emerald-400/80">{scalpStats.shortWins}W</span>
             <span className="text-rose-400/80">{scalpStats.shortLosses}L</span>
+          </span>
+          <span
+            className={cn(
+              "hidden xs:inline-flex items-center gap-1 font-semibold tabular-nums px-1.5 py-0.5 rounded",
+              scalpTotalPnl >= 0
+                ? "bg-emerald-500/15 text-emerald-400"
+                : "bg-rose-500/15 text-rose-400",
+            )}
+            title="Cumulative virtual scalp P&L (persisted across reloads)"
+          >
+            {scalpTotalPnl >= 0 ? "+" : "−"}$
+            {Math.abs(scalpTotalPnl).toFixed(2)}
           </span>
           {summary ? (
             <>
