@@ -136,6 +136,7 @@ GOOGLE_CALLBACK_URL = "https://qorixmarkets.com/auth/google/callback"
 RUN_BACKGROUND_JOBS = "false"
 CAPTCHA_PROVIDER = "none"
 VITE_CAPTCHA_PROVIDER = "none"
+LOGIN_DEVICE_GATE_DISABLED = "true"
 
 [userenv.production]
 CAPTCHA_PROVIDER = "turnstile"

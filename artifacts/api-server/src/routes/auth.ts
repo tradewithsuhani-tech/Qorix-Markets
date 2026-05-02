@@ -536,7 +536,17 @@ async function issueSessionAfterAuth(
   const ip = getClientIp(req);
   const ua = req.headers["user-agent"];
   const fingerprint = computeDeviceFingerprint(req);
-  const skipDeviceGate = user.isAdmin || user.isSmokeTest;
+  // Dev-only opt-out for the single-active-device gate. Set
+  // `LOGIN_DEVICE_GATE_DISABLED=true` in the Replit `development` env so the
+  // approval-modal flow doesn't block test-preview demos (the existing user
+  // session on the other device would otherwise force a poll-and-approve
+  // round-trip that no second browser is around to satisfy). Not allowed in
+  // prod — Fly secrets must NEVER set this; the existing
+  // `user.isAdmin || user.isSmokeTest` skip remains the only prod bypass.
+  const devGateDisabled =
+    process.env.NODE_ENV !== "production" &&
+    process.env.LOGIN_DEVICE_GATE_DISABLED === "true";
+  const skipDeviceGate = user.isAdmin || user.isSmokeTest || devGateDisabled;
   if (
     !skipDeviceGate &&
     user.activeSessionFingerprint &&
