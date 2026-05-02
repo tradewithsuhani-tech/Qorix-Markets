@@ -591,101 +591,115 @@ function LiveCandleChart({
           />
         ) : null}
 
-        {/* Bot position entry lines (BUY/SELL dashed h-lines on the
-            featured pair, with a chip on the left). Entries that fall
-            within the visible price range get a true dashed h-line.
-            Entries outside the range are CLAMPED to the top or bottom
-            edge with a ↑ / ↓ arrow on the chip, so the user always
-            sees "where the bot opened, even if it's far from the
-            current candle window." Chips stack vertically with leader
-            lines so multiple chips at the same price don't overlap. */}
-        {(() => {
-          const minY = padTop + 6;
-          const maxY = padTop + priceH - 6;
-          const visible = positions
-            .map((p) => {
+        {/* Bot position entry markers — TradingView-style:
+            - A small filled triangle AT the entry's (x = openedAt time
+              on chart, y = entryPrice on price axis). BUY ▲, SELL ▼.
+            - A dashed h-line from the marker to the right edge,
+              showing the live P&L distance against the current price
+              (the gap between the entry line and the live-price line
+              IS the P&L visually).
+            - A small chip sitting next to the marker with side+price.
+            - For off-chart entries (price outside visible range) the
+              marker+chip clamps to the top or bottom edge with a
+              ↑ / ↓ arrow on the chip and no h-line.
+            - For entries opened before the chart's leftmost candle
+              (older than the rolling 5-min window) the x clamps to
+              the chart's left edge so the marker+chip is still
+              anchored visibly on the chart. */}
+        {candles.length > 0
+          ? positions.map((p) => {
+              const openedTs = new Date(p.openedAt).getTime();
               const trueY = priceToY(p.entryPrice);
+              const minY = padTop + 4;
+              const maxY = padTop + priceH - 4;
               const offTop = trueY < minY;
               const offBottom = trueY > maxY;
+              const offChart = offTop || offBottom;
               const y = offTop ? minY : offBottom ? maxY : trueY;
-              return { p, y, trueY, offTop, offBottom };
+
+              const candleFirstTs = candles[0].bucket * 1000;
+              const candleLastTs =
+                (candles[candles.length - 1].bucket + CANDLE_SECONDS) *
+                1000;
+              let entryX: number;
+              if (openedTs < candleFirstTs) {
+                entryX = padLeft + 4;
+              } else if (openedTs > candleLastTs) {
+                entryX = padLeft + chartW - 4;
+              } else {
+                const bucketIdx =
+                  (openedTs / 1000 - candles[0].bucket) / CANDLE_SECONDS;
+                entryX =
+                  padLeft + offsetX + bucketIdx * slotW + slotW / 2;
+                if (entryX < padLeft + 4) entryX = padLeft + 4;
+                if (entryX > padLeft + chartW - 4)
+                  entryX = padLeft + chartW - 4;
+              }
+
+              const isBuy = p.direction.toUpperCase() === "BUY";
+              const color = isBuy ? "#34d399" : "#fb7185";
+              const arrow = offTop ? " ↑" : offBottom ? " ↓" : "";
+              const sideLabel = isBuy ? "BUY" : "SELL";
+              const labelText = `${sideLabel} ${p.entryPrice.toFixed(precision)}${arrow}`;
+              const chipW = arrow ? 80 : 70;
+              // Prefer chip to the LEFT of the marker; flip RIGHT
+              // when the marker is too close to the chart's left edge.
+              const chipOnLeft = entryX - 8 - chipW >= padLeft;
+              const chipX = chipOnLeft
+                ? entryX - 8 - chipW
+                : entryX + 8;
+
+              const ms = 4; // marker triangle half-size
+              const markerPoints = isBuy
+                ? `${entryX - ms},${y + ms} ${entryX + ms},${y + ms} ${entryX},${y - ms}`
+                : `${entryX - ms},${y - ms} ${entryX + ms},${y - ms} ${entryX},${y + ms}`;
+
+              return (
+                <g key={`pos-${p.id}`}>
+                  {/* P&L line: marker → right edge */}
+                  {!offChart ? (
+                    <line
+                      x1={entryX + ms + 1}
+                      x2={padLeft + chartW}
+                      y1={y}
+                      y2={y}
+                      stroke={color}
+                      strokeOpacity="0.4"
+                      strokeWidth="0.6"
+                      strokeDasharray="3 3"
+                    />
+                  ) : null}
+                  {/* Chip background */}
+                  <rect
+                    x={chipX}
+                    y={y - 5.5}
+                    width={chipW}
+                    height={11}
+                    rx={2}
+                    fill={color}
+                    opacity={offChart ? 0.32 : 0.22}
+                  />
+                  <text
+                    x={chipX + 4}
+                    y={y + 2}
+                    fill={color}
+                    fontSize="8"
+                    fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
+                    fontWeight="700"
+                    opacity="0.95"
+                  >
+                    {labelText}
+                  </text>
+                  {/* Marker triangle */}
+                  <polygon
+                    points={markerPoints}
+                    fill={color}
+                    opacity="0.95"
+                  />
+                </g>
+              );
             })
-            .sort((a, b) => a.y - b.y);
-          let lastChipBottom = -Infinity;
-          return visible.map(({ p, y, offTop, offBottom }) => {
-            const isBuy = p.direction.toUpperCase() === "BUY";
-            const color = isBuy ? "#34d399" : "#fb7185";
-            const sideIcon = isBuy ? "▲" : "▼";
-            const sideLabel = isBuy ? "BUY" : "SELL";
-            const offChart = offTop || offBottom;
-            const arrow = offTop ? " ↑" : offBottom ? " ↓" : "";
-            const label = `${sideIcon} ${sideLabel} ${p.entryPrice.toFixed(precision)}${arrow}`;
-            // chip vertical placement — push down to avoid overlapping
-            // the previous chip, but keep the dashed line at the true
-            // entry y so users can still read the actual price location.
-            let chipY = y - 7;
-            if (chipY < lastChipBottom + 1) chipY = lastChipBottom + 1;
-            // Keep chip inside the price area
-            if (chipY + 11 > padTop + priceH) chipY = padTop + priceH - 11;
-            if (chipY < padTop) chipY = padTop;
-            lastChipBottom = chipY + 11;
-            const chipW = offChart ? 92 : 80;
-            return (
-              <g key={`pos-${p.id}`}>
-                {/* True-price dashed h-line — only when entry is on
-                    chart. For off-chart entries we don't draw a line
-                    because the chip's edge clamp + arrow already
-                    communicates the position. */}
-                {!offChart ? (
-                  <line
-                    x1={padLeft}
-                    x2={padLeft + chartW}
-                    y1={y}
-                    y2={y}
-                    stroke={color}
-                    strokeOpacity="0.4"
-                    strokeWidth="0.6"
-                    strokeDasharray="2 5"
-                  />
-                ) : null}
-                {/* Leader from chip back to the true price line when
-                    chip has been pushed away from y (only if the
-                    entry IS on chart). */}
-                {!offChart && Math.abs(chipY + 5.5 - y) > 2 ? (
-                  <line
-                    x1={padLeft + chipW + 2}
-                    x2={padLeft + chipW + 10}
-                    y1={chipY + 5.5}
-                    y2={y}
-                    stroke={color}
-                    strokeOpacity="0.4"
-                    strokeWidth="0.5"
-                  />
-                ) : null}
-                <rect
-                  x={padLeft + 2}
-                  y={chipY}
-                  width={chipW}
-                  height={11}
-                  rx={2}
-                  fill={color}
-                  opacity={offChart ? 0.28 : 0.18}
-                />
-                <text
-                  x={padLeft + 5}
-                  y={chipY + 8}
-                  fill={color}
-                  fontSize="8"
-                  fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
-                  fontWeight="700"
-                  opacity="0.95"
-                >
-                  {label}
-                </text>
-              </g>
-            );
-          });
-        })()}
+          : null}
 
         {/* Right-side y-axis price ticks (price area only) */}
         <g
