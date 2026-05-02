@@ -1758,29 +1758,35 @@ export function BotTerminalCard() {
             <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
             LIVE
           </Badge>
+          <Badge
+            variant="outline"
+            className={cn(
+              "h-6 shrink-0 text-[11px] sm:text-xs font-bold tabular-nums px-2 gap-1 transition-colors",
+              scalpTotalPnl >= 0
+                ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-300"
+                : "border-rose-500/40 bg-rose-500/15 text-rose-300",
+            )}
+            title="Cumulative scalp bot P&L (persisted across reloads)"
+          >
+            <span className="opacity-60 text-[9px] tracking-wider hidden sm:inline">
+              P&L
+            </span>
+            <span>
+              {scalpTotalPnl >= 0 ? "+" : "−"}$
+              {Math.abs(scalpTotalPnl).toFixed(2)}
+            </span>
+          </Badge>
         </div>
         <div className="text-[10px] sm:text-[11px] text-muted-foreground tabular-nums flex items-center gap-1.5 sm:gap-2 shrink-0">
-          <span className="hidden xs:inline-flex items-center gap-1">
+          <span className="hidden sm:inline-flex items-center gap-1">
             <span className="text-emerald-400 font-semibold">L</span>
             <span className="text-emerald-400/80">{scalpStats.longWins}W</span>
             <span className="text-rose-400/80">{scalpStats.longLosses}L</span>
           </span>
-          <span className="hidden xs:inline-flex items-center gap-1">
+          <span className="hidden sm:inline-flex items-center gap-1">
             <span className="text-rose-400 font-semibold">S</span>
             <span className="text-emerald-400/80">{scalpStats.shortWins}W</span>
             <span className="text-rose-400/80">{scalpStats.shortLosses}L</span>
-          </span>
-          <span
-            className={cn(
-              "hidden xs:inline-flex items-center gap-1 font-semibold tabular-nums px-1.5 py-0.5 rounded",
-              scalpTotalPnl >= 0
-                ? "bg-emerald-500/15 text-emerald-400"
-                : "bg-rose-500/15 text-rose-400",
-            )}
-            title="Cumulative virtual scalp P&L (persisted across reloads)"
-          >
-            {scalpTotalPnl >= 0 ? "+" : "−"}$
-            {Math.abs(scalpTotalPnl).toFixed(2)}
           </span>
           {summary ? (
             <>
