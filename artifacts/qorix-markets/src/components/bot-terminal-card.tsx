@@ -507,7 +507,11 @@ function LiveCandleChart({
   const padTop = 12;
   const padBottom = 22;
   const padRight = 78; // room for live price tag
-  const padLeft = 8;
+  // padLeft includes a 145px "chip gutter" on the left so the
+  // bot-position chips render OUTSIDE the candle area (MT5 style),
+  // never overlapping the price action. chipX is anchored at 2 so
+  // chips occupy x=[2..142] and candles fill x=[152..padLeft+chartW].
+  const padLeft = 152;
   const chartW = W - padLeft - padRight;
   const chartH = H - padTop - padBottom;
   const VOL_GAP = 4;
@@ -656,6 +660,7 @@ function LiveCandleChart({
           const minY = padTop + 7;
           const maxY = padTop + priceH - 7;
           const livePrice = quote?.mid;
+          const chipX = 2; // anchored to svg left edge (chip gutter)
           const chipW = 140;
           const chipH = 13;
           const tagW = padRight - 22;
@@ -734,33 +739,36 @@ function LiveCandleChart({
 
             return (
               <g key={`pos-${p.id}`}>
-                {/* Full-width dashed entry-price line */}
+                {/* Full-width dashed entry-price line — spans the
+                    whole candle area (from end of chip gutter to right
+                    edge of candles), like MT5. */}
                 {!offChart ? (
                   <line
-                    x1={padLeft + chipW + 4}
+                    x1={chipX + chipW + 2}
                     x2={padLeft + chartW}
                     y1={y}
                     y2={y}
                     stroke={color}
-                    strokeOpacity="0.4"
+                    strokeOpacity="0.45"
                     strokeWidth="0.6"
                     strokeDasharray="3 3"
                   />
                 ) : null}
 
-                {/* 3-section chip on left edge */}
+                {/* 3-section chip in the LEFT GUTTER (outside the
+                    candle plot, never overlapping price action). */}
                 <rect
-                  x={padLeft + 1}
+                  x={chipX}
                   y={chipY}
                   width={chipW}
                   height={chipH}
                   rx={2}
                   fill={color}
-                  opacity={offChart ? 0.3 : 0.2}
+                  opacity={offChart ? 0.3 : 0.22}
                 />
                 {/* Section 1: side */}
                 <text
-                  x={padLeft + 7}
+                  x={chipX + 6}
                   y={chipY + 9}
                   fill={color}
                   fontSize="9"
@@ -771,17 +779,17 @@ function LiveCandleChart({
                 </text>
                 {/* Separator 1 */}
                 <line
-                  x1={padLeft + 36}
-                  x2={padLeft + 36}
+                  x1={chipX + 35}
+                  x2={chipX + 35}
                   y1={chipY + 2}
                   y2={chipY + chipH - 2}
                   stroke={color}
-                  strokeOpacity="0.5"
+                  strokeOpacity="0.55"
                   strokeWidth="0.5"
                 />
                 {/* Section 2: size */}
                 <text
-                  x={padLeft + 41}
+                  x={chipX + 40}
                   y={chipY + 9}
                   fill="currentColor"
                   fillOpacity="0.85"
@@ -792,17 +800,17 @@ function LiveCandleChart({
                 </text>
                 {/* Separator 2 */}
                 <line
-                  x1={padLeft + 88}
-                  x2={padLeft + 88}
+                  x1={chipX + 87}
+                  x2={chipX + 87}
                   y1={chipY + 2}
                   y2={chipY + chipH - 2}
                   stroke={color}
-                  strokeOpacity="0.5"
+                  strokeOpacity="0.55"
                   strokeWidth="0.5"
                 />
                 {/* Section 3: live USD P&L (independent color) */}
                 <text
-                  x={padLeft + 93}
+                  x={chipX + 92}
                   y={chipY + 9}
                   fill={pnlColor}
                   fontSize="9"
@@ -815,7 +823,7 @@ function LiveCandleChart({
                 {/* Off-chart arrow */}
                 {offChart ? (
                   <text
-                    x={padLeft + chipW - 8}
+                    x={chipX + chipW - 8}
                     y={chipY + 9}
                     fill={color}
                     fontSize="10"
@@ -1440,7 +1448,7 @@ export function BotTerminalCard() {
         (a, b) =>
           Math.abs(a.entryPrice - mid) - Math.abs(b.entryPrice - mid),
       )
-      .slice(0, 6);
+      .slice(0, 4);
   }, [positions, featuredCode, featuredMid]);
 
   const fillToast = useFillToast(state?.closedToday);
