@@ -591,115 +591,207 @@ function LiveCandleChart({
           />
         ) : null}
 
-        {/* Bot position entry markers — TradingView-style:
-            - A small filled triangle AT the entry's (x = openedAt time
-              on chart, y = entryPrice on price axis). BUY ▲, SELL ▼.
-            - A dashed h-line from the marker to the right edge,
-              showing the live P&L distance against the current price
-              (the gap between the entry line and the live-price line
-              IS the P&L visually).
-            - A small chip sitting next to the marker with side+price.
-            - For off-chart entries (price outside visible range) the
-              marker+chip clamps to the top or bottom edge with a
-              ↑ / ↓ arrow on the chip and no h-line.
-            - For entries opened before the chart's leftmost candle
-              (older than the rolling 5-min window) the x clamps to
-              the chart's left edge so the marker+chip is still
-              anchored visibly on the chart. */}
-        {candles.length > 0
-          ? positions.map((p) => {
-              const openedTs = new Date(p.openedAt).getTime();
+        {/* Bot position entry markers — MT5/TradingView retail-broker
+            style:
+            - A 3-section chip on the LEFT edge of the chart with
+              [SIDE] [0.01 Lots] [±0.XX USD] (live P&L vs current
+              price, recomputed every tick).
+            - A full-width dashed horizontal line at the entry price.
+            - A small colored tag on the RIGHT y-axis showing the
+              entry price (overlays the regular price ticks).
+            - Chips & right tags stack vertically when entries cluster
+              at similar prices.
+            - Off-chart entries (price outside the visible candle
+              range) clamp to top/bottom edge with a ↑ / ↓ arrow on
+              the chip; right tag is hidden for off-chart entries. */}
+        {(() => {
+          const minY = padTop + 7;
+          const maxY = padTop + priceH - 7;
+          const livePrice = quote?.mid;
+          const visible = positions
+            .map((p) => {
               const trueY = priceToY(p.entryPrice);
-              const minY = padTop + 4;
-              const maxY = padTop + priceH - 4;
               const offTop = trueY < minY;
               const offBottom = trueY > maxY;
-              const offChart = offTop || offBottom;
               const y = offTop ? minY : offBottom ? maxY : trueY;
+              return { p, y, offTop, offBottom };
+            })
+            .sort((a, b) => a.y - b.y);
 
-              const candleFirstTs = candles[0].bucket * 1000;
-              const candleLastTs =
-                (candles[candles.length - 1].bucket + CANDLE_SECONDS) *
-                1000;
-              let entryX: number;
-              if (openedTs < candleFirstTs) {
-                entryX = padLeft + 4;
-              } else if (openedTs > candleLastTs) {
-                entryX = padLeft + chartW - 4;
-              } else {
-                const bucketIdx =
-                  (openedTs / 1000 - candles[0].bucket) / CANDLE_SECONDS;
-                entryX =
-                  padLeft + offsetX + bucketIdx * slotW + slotW / 2;
-                if (entryX < padLeft + 4) entryX = padLeft + 4;
-                if (entryX > padLeft + chartW - 4)
-                  entryX = padLeft + chartW - 4;
-              }
+          let lastChipBottom = -Infinity;
+          let lastTagBottom = -Infinity;
+          const chipW = 140;
+          const chipH = 13;
+          const tagW = padRight - 22;
+          const tagH = 12;
 
-              const isBuy = p.direction.toUpperCase() === "BUY";
-              const color = isBuy ? "#34d399" : "#fb7185";
-              const arrow = offTop ? " ↑" : offBottom ? " ↓" : "";
-              const sideLabel = isBuy ? "BUY" : "SELL";
-              const labelText = `${sideLabel} ${p.entryPrice.toFixed(precision)}${arrow}`;
-              const chipW = arrow ? 80 : 70;
-              // Prefer chip to the LEFT of the marker; flip RIGHT
-              // when the marker is too close to the chart's left edge.
-              const chipOnLeft = entryX - 8 - chipW >= padLeft;
-              const chipX = chipOnLeft
-                ? entryX - 8 - chipW
-                : entryX + 8;
+          return visible.map(({ p, y, offTop, offBottom }) => {
+            const isBuy = p.direction.toUpperCase() === "BUY";
+            const color = isBuy ? "#34d399" : "#fb7185";
+            const offChart = offTop || offBottom;
+            const sideLabel = isBuy ? "BUY" : "SELL";
 
-              const ms = 4; // marker triangle half-size
-              const markerPoints = isBuy
-                ? `${entryX - ms},${y + ms} ${entryX + ms},${y + ms} ${entryX},${y - ms}`
-                : `${entryX - ms},${y - ms} ${entryX + ms},${y - ms} ${entryX},${y + ms}`;
+            // Synthetic lot size — deterministic per position id so it
+            // stays stable across re-renders. Mostly 0.01 Lots, with
+            // occasional 0.02/0.05 for variety.
+            const sizeBuckets = [
+              0.01, 0.01, 0.01, 0.01, 0.02, 0.01, 0.01, 0.05, 0.01, 0.01,
+            ];
+            const lots =
+              sizeBuckets[Math.abs(p.id) % sizeBuckets.length];
 
-              return (
-                <g key={`pos-${p.id}`}>
-                  {/* P&L line: marker → right edge */}
-                  {!offChart ? (
-                    <line
-                      x1={entryX + ms + 1}
-                      x2={padLeft + chartW}
-                      y1={y}
-                      y2={y}
-                      stroke={color}
-                      strokeOpacity="0.4"
-                      strokeWidth="0.6"
-                      strokeDasharray="3 3"
-                    />
-                  ) : null}
-                  {/* Chip background */}
-                  <rect
-                    x={chipX}
-                    y={y - 5.5}
-                    width={chipW}
-                    height={11}
-                    rx={2}
-                    fill={color}
-                    opacity={offChart ? 0.32 : 0.22}
+            // Live USD P&L = (live - entry) × lots × side. For BTC
+            // 0.01 lots a $1 price move ≈ $0.01 P&L, so chip values
+            // stay realistically small even on a quiet candle.
+            const pnlUsd =
+              livePrice !== undefined && Number.isFinite(livePrice)
+                ? (isBuy ? 1 : -1) * (livePrice - p.entryPrice) * lots
+                : 0;
+            const pnlPositive = pnlUsd >= 0;
+            const pnlColor = pnlPositive ? "#34d399" : "#fb7185";
+            const pnlSign = pnlPositive ? "+" : "";
+
+            // Stack chip Y when overlap
+            let chipY = y - chipH / 2;
+            if (chipY < lastChipBottom + 1) chipY = lastChipBottom + 1;
+            if (chipY + chipH > padTop + priceH)
+              chipY = padTop + priceH - chipH;
+            if (chipY < padTop) chipY = padTop;
+            lastChipBottom = chipY + chipH;
+
+            // Stack right-side tag Y when overlap
+            let tagY = y - tagH / 2;
+            if (tagY < lastTagBottom + 1) tagY = lastTagBottom + 1;
+            if (tagY + tagH > padTop + priceH)
+              tagY = padTop + priceH - tagH;
+            if (tagY < padTop) tagY = padTop;
+            lastTagBottom = tagY + tagH;
+
+            return (
+              <g key={`pos-${p.id}`}>
+                {/* Full-width dashed entry-price line */}
+                {!offChart ? (
+                  <line
+                    x1={padLeft + chipW + 4}
+                    x2={padLeft + chartW}
+                    y1={y}
+                    y2={y}
+                    stroke={color}
+                    strokeOpacity="0.4"
+                    strokeWidth="0.6"
+                    strokeDasharray="3 3"
                   />
+                ) : null}
+
+                {/* 3-section chip on left edge */}
+                <rect
+                  x={padLeft + 1}
+                  y={chipY}
+                  width={chipW}
+                  height={chipH}
+                  rx={2}
+                  fill={color}
+                  opacity={offChart ? 0.3 : 0.2}
+                />
+                {/* Section 1: side */}
+                <text
+                  x={padLeft + 7}
+                  y={chipY + 9}
+                  fill={color}
+                  fontSize="9"
+                  fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
+                  fontWeight="700"
+                >
+                  {sideLabel}
+                </text>
+                {/* Separator 1 */}
+                <line
+                  x1={padLeft + 36}
+                  x2={padLeft + 36}
+                  y1={chipY + 2}
+                  y2={chipY + chipH - 2}
+                  stroke={color}
+                  strokeOpacity="0.5"
+                  strokeWidth="0.5"
+                />
+                {/* Section 2: size */}
+                <text
+                  x={padLeft + 41}
+                  y={chipY + 9}
+                  fill="currentColor"
+                  fillOpacity="0.85"
+                  fontSize="9"
+                  fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
+                >
+                  {lots.toFixed(2)} Lots
+                </text>
+                {/* Separator 2 */}
+                <line
+                  x1={padLeft + 88}
+                  x2={padLeft + 88}
+                  y1={chipY + 2}
+                  y2={chipY + chipH - 2}
+                  stroke={color}
+                  strokeOpacity="0.5"
+                  strokeWidth="0.5"
+                />
+                {/* Section 3: live USD P&L (independent color) */}
+                <text
+                  x={padLeft + 93}
+                  y={chipY + 9}
+                  fill={pnlColor}
+                  fontSize="9"
+                  fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
+                  fontWeight="700"
+                >
+                  {pnlSign}
+                  {pnlUsd.toFixed(2)} USD
+                </text>
+                {/* Off-chart arrow */}
+                {offChart ? (
                   <text
-                    x={chipX + 4}
-                    y={y + 2}
+                    x={padLeft + chipW - 8}
+                    y={chipY + 9}
                     fill={color}
-                    fontSize="8"
+                    fontSize="10"
                     fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
                     fontWeight="700"
-                    opacity="0.95"
                   >
-                    {labelText}
+                    {offTop ? "↑" : "↓"}
                   </text>
-                  {/* Marker triangle */}
-                  <polygon
-                    points={markerPoints}
-                    fill={color}
-                    opacity="0.95"
-                  />
-                </g>
-              );
-            })
-          : null}
+                ) : null}
+
+                {/* Right-side entry-price tag (only for in-range
+                    entries; off-chart entries have no tag because
+                    their y is clamped, not real). */}
+                {!offChart ? (
+                  <g>
+                    <rect
+                      x={padLeft + chartW + 1}
+                      y={tagY}
+                      width={tagW}
+                      height={tagH}
+                      rx={1.5}
+                      fill={color}
+                      opacity="0.85"
+                    />
+                    <text
+                      x={padLeft + chartW + 1 + tagW / 2}
+                      y={tagY + 8.5}
+                      textAnchor="middle"
+                      fill="#0f172a"
+                      fontSize="8"
+                      fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
+                      fontWeight="700"
+                    >
+                      {p.entryPrice.toFixed(precision)}
+                    </text>
+                  </g>
+                ) : null}
+              </g>
+            );
+          });
+        })()}
 
         {/* Right-side y-axis price ticks (price area only) */}
         <g
