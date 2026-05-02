@@ -26,6 +26,10 @@ import {
   X,
   Bookmark,
   Plus,
+  MessageCircle,
+  Bot,
+  Shield,
+  User,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -79,6 +83,17 @@ interface LeadAuditEvent {
   action: "chat_lead_contacted" | "chat_lead_note";
   summary: string | null;
   metadata: string | null;
+  createdAt: string;
+}
+
+// Batch N — conversation transcript for the lead's session. Read-only
+// admin view of the actual chat the guest had with the bot before
+// dropping their email. senderType matches the chat_messages enum.
+interface ChatMessage {
+  id: number;
+  senderType: "user" | "bot" | "admin" | string;
+  senderId: number | null;
+  content: string;
   createdAt: string;
 }
 
@@ -1122,6 +1137,12 @@ function LeadOutreachPanel({
   const [channel, setChannel] = useState<ContactChannel>("email");
   const [contactNote, setContactNote] = useState("");
   const [note, setNote] = useState("");
+  // Batch N — conversation transcript. Lazy-loaded in parallel with the
+  // audit feed when the row first opens. Errors render inline so a
+  // missing/failed transcript never blocks the rest of the panel.
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [loadingTimeline, setLoadingTimeline] = useState(true);
+  const [timelineError, setTimelineError] = useState<string | null>(null);
 
   async function loadEvents() {
     try {
@@ -1134,9 +1155,25 @@ function LeadOutreachPanel({
     }
   }
 
+  async function loadTimeline() {
+    try {
+      const data = await authFetch(`/api/admin/chat-leads/${lead.id}/timeline`);
+      setMessages(data.messages ?? []);
+      setTimelineError(null);
+    } catch (err: any) {
+      setTimelineError(typeof err?.message === "string" ? err.message : "Failed to load transcript");
+    } finally {
+      setLoadingTimeline(false);
+    }
+  }
+
   useEffect(() => {
     setLoading(true);
+    setLoadingTimeline(true);
+    // Fire both fetches in parallel — they're independent and the panel
+    // renders progressively as each resolves.
     loadEvents();
+    loadTimeline();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lead.id]);
 
@@ -1354,6 +1391,85 @@ function LeadOutreachPanel({
                   {e.adminEmail && (
                     <p className="text-[10px] text-white/30 mt-0.5">— {e.adminEmail}</p>
                   )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/*
+        Batch N — full-width conversation transcript.
+        Spans both columns on md+ so message bubbles get enough room.
+        User msgs anchor right (sky), bot msgs anchor left (slate),
+        admin msgs anchor left (purple) so the operator can tell at a
+        glance who said what.
+      */}
+      <div className="md:col-span-2">
+        <div className="flex items-center justify-between mb-1.5">
+          <p className="text-[10px] uppercase tracking-wider text-white/40 flex items-center gap-1.5">
+            <MessageCircle className="w-3 h-3" />
+            Conversation transcript
+          </p>
+          {!loadingTimeline && messages.length > 0 && (
+            <span className="text-[10px] text-white/25">
+              {messages.length} message{messages.length === 1 ? "" : "s"}
+            </span>
+          )}
+        </div>
+        {loadingTimeline ? (
+          <div className="flex items-center gap-2 text-xs text-white/40">
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            Loading transcript…
+          </div>
+        ) : timelineError ? (
+          <div className="rounded-md px-2.5 py-1.5 text-[11px] text-rose-300 bg-rose-500/10 border border-rose-500/30">
+            {timelineError}
+          </div>
+        ) : messages.length === 0 ? (
+          <p className="text-xs text-white/30">No messages in this session.</p>
+        ) : (
+          <div className="flex flex-col gap-1.5 max-h-[360px] overflow-y-auto pr-1 rounded-md bg-white/[0.02] border border-white/[0.05] p-2.5">
+            {messages.map((m) => {
+              const isUser = m.senderType === "user";
+              const isAdmin = m.senderType === "admin";
+              const Icon = isUser ? User : isAdmin ? Shield : Bot;
+              const senderLabel = isUser ? "Guest" : isAdmin ? "Admin" : "Bot";
+              return (
+                <div
+                  key={m.id}
+                  className={cn(
+                    "flex flex-col max-w-[85%]",
+                    isUser ? "self-end items-end" : "self-start items-start",
+                  )}
+                >
+                  <div className="flex items-center gap-1 mb-0.5 text-[10px] text-white/35">
+                    <Icon
+                      className={cn(
+                        "w-2.5 h-2.5",
+                        isUser
+                          ? "text-sky-300/70"
+                          : isAdmin
+                            ? "text-purple-300/70"
+                            : "text-white/40",
+                      )}
+                    />
+                    <span>{senderLabel}</span>
+                    <span className="text-white/25">·</span>
+                    <span>{format(new Date(m.createdAt), "MMM d, h:mm a")}</span>
+                  </div>
+                  <div
+                    className={cn(
+                      "rounded-lg px-2.5 py-1.5 text-xs whitespace-pre-wrap break-words border",
+                      isUser
+                        ? "bg-sky-500/15 border-sky-500/25 text-sky-100/90"
+                        : isAdmin
+                          ? "bg-purple-500/15 border-purple-500/25 text-purple-100/90"
+                          : "bg-white/[0.04] border-white/[0.08] text-white/80",
+                    )}
+                  >
+                    {m.content}
+                  </div>
                 </div>
               );
             })}

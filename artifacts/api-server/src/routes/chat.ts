@@ -1384,6 +1384,50 @@ router.get("/admin/chat-leads/:id/audit", authMiddleware, adminMiddleware, async
   }
 });
 
+// Conversation timeline for one lead (Task #145 Batch N). Returns the
+// full chat-message thread for the lead's session in chronological
+// order so the sales operator can see what the guest actually asked
+// before reaching out. Read-only, admin-gated, capped at 500 messages
+// (sessions are short-lived guest chats — 500 is comfortably above the
+// observed p99). senderType is "user" | "bot" | "admin".
+router.get("/admin/chat-leads/:id/timeline", authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const leadId = parseInt(getParam(req, "id"));
+    if (!Number.isFinite(leadId) || leadId <= 0) {
+      res.status(400).json({ error: "Invalid lead id" });
+      return;
+    }
+    // Resolve sessionId via the lead — never trust a session id from the
+    // client. Single-row lookup so this is a fast indexed read.
+    const leadRow = await db
+      .select({ sessionId: chatLeadsTable.sessionId })
+      .from(chatLeadsTable)
+      .where(eq(chatLeadsTable.id, leadId))
+      .limit(1);
+    if (leadRow.length === 0) {
+      res.status(404).json({ error: "Lead not found" });
+      return;
+    }
+    const sessionId = leadRow[0]!.sessionId;
+    const messages = await db
+      .select({
+        id: chatMessagesTable.id,
+        senderType: chatMessagesTable.senderType,
+        senderId: chatMessagesTable.senderId,
+        content: chatMessagesTable.content,
+        createdAt: chatMessagesTable.createdAt,
+      })
+      .from(chatMessagesTable)
+      .where(eq(chatMessagesTable.sessionId, sessionId))
+      .orderBy(chatMessagesTable.createdAt)
+      .limit(500);
+    res.json({ sessionId, messages });
+  } catch (err) {
+    logger.warn({ err: (err as Error).message }, "[chat] /admin/chat-leads/:id/timeline failed");
+    res.status(500).json({ error: "Failed to fetch conversation timeline" });
+  }
+});
+
 // "Mark contacted" toggle (Task #145 Batch G). Pure audit-log insert —
 // no schema change. Idempotent on re-fire only in the sense that we
 // always log a fresh row with the latest timestamp; the listing query
