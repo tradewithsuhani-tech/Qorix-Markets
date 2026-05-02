@@ -1497,10 +1497,12 @@ export function BotTerminalCard() {
   //   • Closed at sl < entry (BUY) / sl > entry (SELL) → LOSS
   //   • Closed at BE (sl == entry) → WIN (zero-risk scalp)
   // -------------------------------------------------------------------------
-  const SCALP_SL_PCT = 0.0005;
+  const SCALP_SL_PCT = 0.0005;          // 0.05% risk
+  const SCALP_TP_PCT = 0.0010;          // 0.10% target → 2:1 R:R
   const SCALP_BE_DELAY_MS = 3000;
   const SCALP_MAX_LIFETIME_MS = 30000;
   const SCALP_CLOSED_FADE_MS = 4000;
+  const SCALP_COOLDOWN_MS = 2000;       // throttle same-direction stacking
 
   type Scalp = {
     id: number;
@@ -1508,8 +1510,9 @@ export function BotTerminalCard() {
     direction: "BUY" | "SELL";
     entry: number;
     sl: number;
+    tp: number;
     openedAt: number;
-    status: "open" | "won" | "lost";
+    status: "open" | "won_tp" | "won_be" | "lost";
     closedAt?: number;
   };
 
@@ -1523,7 +1526,7 @@ export function BotTerminalCard() {
   type ScalpEvent = {
     id: number;
     bot: "LONG" | "SHORT";
-    outcome: "SL" | "BE";
+    outcome: "TP" | "BE" | "SL";
     pnlUsd: number;
     at: number;
   };
@@ -1570,6 +1573,18 @@ export function BotTerminalCard() {
         let sl = s.sl;
         // Move SL → BE at 3 s
         if (age >= SCALP_BE_DELAY_MS && sl !== s.entry) sl = s.entry;
+        // Check TP hit FIRST (full +0.10% target, 2x SL distance)
+        const tpHit = s.direction === "BUY" ? m >= s.tp : m <= s.tp;
+        if (tpHit) {
+          const closed: Scalp = {
+            ...s,
+            sl,
+            status: "won_tp",
+            closedAt: now,
+          };
+          closedThisTick.push(closed);
+          return closed;
+        }
         // Check SL hit
         const slHit = s.direction === "BUY" ? m <= sl : m >= sl;
         if (slHit) {
@@ -1579,18 +1594,18 @@ export function BotTerminalCard() {
           const closed: Scalp = {
             ...s,
             sl,
-            status: lost ? "lost" : "won",
+            status: lost ? "lost" : "won_be",
             closedAt: now,
           };
           closedThisTick.push(closed);
           return closed;
         }
-        // 30 s lifetime → close as WIN (BE-protected, market never came back)
+        // 30 s lifetime → close as BE win (BE-protected, never reached TP)
         if (age >= SCALP_MAX_LIFETIME_MS) {
           const closed: Scalp = {
             ...s,
             sl: s.entry,
-            status: "won",
+            status: "won_be",
             closedAt: now,
           };
           closedThisTick.push(closed);
@@ -1599,7 +1614,7 @@ export function BotTerminalCard() {
         return { ...s, sl };
       });
 
-      // Open new trades on direction change
+      // Open new trades on direction change (with cooldown to avoid stacking)
       const dir = prev == null ? 0 : Math.sign(m - prev);
       if (dir !== 0) {
         const bot: "LONG" | "SHORT" = dir > 0 ? "LONG" : "SHORT";
@@ -1607,11 +1622,23 @@ export function BotTerminalCard() {
         const hasOpen = next.some(
           (s) => s.bot === bot && s.status === "open",
         );
-        if (!hasOpen) {
+        // Cooldown: skip if this bot just closed a trade <2s ago
+        const recentClose = next.some(
+          (s) =>
+            s.bot === bot &&
+            s.status !== "open" &&
+            s.closedAt != null &&
+            now - s.closedAt < SCALP_COOLDOWN_MS,
+        );
+        if (!hasOpen && !recentClose) {
           const sl =
             direction === "BUY"
               ? m * (1 - SCALP_SL_PCT)
               : m * (1 + SCALP_SL_PCT);
+          const tp =
+            direction === "BUY"
+              ? m * (1 + SCALP_TP_PCT)
+              : m * (1 - SCALP_TP_PCT);
           const id = scalpIdRef.current--;
           next.push({
             id,
@@ -1619,6 +1646,7 @@ export function BotTerminalCard() {
             direction,
             entry: m,
             sl,
+            tp,
             openedAt: now,
             status: "open",
           });
@@ -1630,11 +1658,12 @@ export function BotTerminalCard() {
         setScalpStats((s) => {
           const ns = { ...s };
           for (const c of closedThisTick) {
+            const isWin = c.status === "won_tp" || c.status === "won_be";
             if (c.bot === "LONG") {
-              if (c.status === "won") ns.longWins++;
+              if (isWin) ns.longWins++;
               else ns.longLosses++;
             } else {
-              if (c.status === "won") ns.shortWins++;
+              if (isWin) ns.shortWins++;
               else ns.shortLosses++;
             }
           }
@@ -1643,20 +1672,28 @@ export function BotTerminalCard() {
         let tickPnlSum = 0;
         setScalpEvents((evts) => {
           const fresh: ScalpEvent[] = closedThisTick.map((c) => {
-            // Synthetic notional ($5k–$8k, deterministic by id) → ~$2.50–$4.00
-            // SL loss when SL hit; small positive vig ($0.10–$0.40) when
-            // BE-protected exit (TP-side breakeven survived 30 s, treat as
-            // a tiny grind-out so the cumulative P&L can actually move).
+            // Synthetic notional $5k–$8k (deterministic by id).
+            //   • TP hit  →  +0.10% × notional   ≈  +$5.00–$8.00  (big win)
+            //   • SL hit  →  −0.05% × notional   ≈  −$2.50–$4.00  (loss)
+            //   • BE      →  small +vig $0.05–$0.35 (tiny grind, breakeven)
             const notional = 5000 + (Math.abs(c.id) % 7) * 500;
-            const pnlUsd =
-              c.status === "lost"
-                ? -SCALP_SL_PCT * notional
-                : 0.05 * (1 + (Math.abs(c.id) % 7));
+            let pnlUsd: number;
+            let outcome: "TP" | "BE" | "SL";
+            if (c.status === "won_tp") {
+              pnlUsd = SCALP_TP_PCT * notional;
+              outcome = "TP";
+            } else if (c.status === "lost") {
+              pnlUsd = -SCALP_SL_PCT * notional;
+              outcome = "SL";
+            } else {
+              pnlUsd = 0.05 * (1 + (Math.abs(c.id) % 7));
+              outcome = "BE";
+            }
             tickPnlSum += pnlUsd;
             return {
               id: scalpEventIdRef.current++,
               bot: c.bot,
-              outcome: c.status === "lost" ? "SL" : "BE",
+              outcome,
               pnlUsd,
               at: now,
             };
