@@ -826,33 +826,35 @@ function LiveCandleChart({
                   </text>
                 ) : null}
 
-                {/* Right-side entry-price tag (only for in-range
-                    entries; off-chart entries have no tag because
-                    their y is clamped, not real). */}
-                {!offChart ? (
-                  <g>
-                    <rect
-                      x={padLeft + chartW + 1}
-                      y={tagY}
-                      width={tagW}
-                      height={tagH}
-                      rx={1.5}
-                      fill={color}
-                      opacity="0.85"
-                    />
-                    <text
-                      x={padLeft + chartW + 1 + tagW / 2}
-                      y={tagY + 8.5}
-                      textAnchor="middle"
-                      fill="#0f172a"
-                      fontSize="8"
-                      fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
-                      fontWeight="700"
-                    >
-                      {p.entryPrice.toFixed(precision)}
-                    </text>
-                  </g>
-                ) : null}
+                {/* Right-side entry-price tag — ALWAYS rendered so
+                    every position has a y-axis label even when its
+                    chip is clamped to the chart edge (off-chart). The
+                    tag y matches chip y (both come from stackY); the
+                    text always shows the TRUE entry price so the
+                    user can read the actual fill price even for
+                    out-of-range entries. */}
+                <g>
+                  <rect
+                    x={padLeft + chartW + 1}
+                    y={tagY}
+                    width={tagW}
+                    height={tagH}
+                    rx={1.5}
+                    fill={color}
+                    opacity={offChart ? 0.7 : 0.85}
+                  />
+                  <text
+                    x={padLeft + chartW + 1 + tagW / 2}
+                    y={tagY + 8.5}
+                    textAnchor="middle"
+                    fill="#0f172a"
+                    fontSize="8"
+                    fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
+                    fontWeight="700"
+                  >
+                    {p.entryPrice.toFixed(precision)}
+                  </text>
+                </g>
               </g>
             );
           });
