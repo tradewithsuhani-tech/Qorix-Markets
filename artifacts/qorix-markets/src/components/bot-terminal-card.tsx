@@ -397,15 +397,19 @@ function computeEma(candles: Candle[], period: number): Array<number | null> {
 
 function LiveCandleChart({
   quote,
+  persistKey,
   height = 280,
 }: {
   quote: BotQuote | undefined;
+  persistKey: string;
   height?: number;
 }) {
-  // Persist key locks to "XAUUSD" since the chart is dedicated to
-  // that pair. Including the candle period in the storage key (done
-  // inside useCandleSeries) makes period changes self-invalidating.
-  const candles = useCandleSeries(quote, "XAUUSD");
+  // Persist key is driven by the parent's `featuredCode` so that
+  // switching the featured pair (e.g. XAUUSD → BTCUSD on weekends)
+  // doesn't bleed buckets across pairs. The candle period is folded
+  // into the storage key inside useCandleSeries, so period changes
+  // are self-invalidating too.
+  const candles = useCandleSeries(quote, persistKey);
   const ema = useMemo(() => computeEma(candles, EMA_PERIOD), [candles]);
   const flash = useFlash(quote?.mid ?? 0, 350);
 
@@ -872,7 +876,12 @@ export function BotTerminalCard() {
   // volatility without touching the backend.
   const realQuotes = quotesData?.quotes ?? [];
   const quotes = useSynthQuotes(realQuotes);
-  const xau = quotes.find((q) => q.code === "XAUUSD");
+  // Featured pair for the live chart. Forex / metals close on
+  // weekends — BTC trades 24/7 so we use it whenever the legacy
+  // XAU/USD session is shut. The chart's persist key tracks the
+  // featured pair so storage doesn't bleed across pairs.
+  const featuredCode = "BTCUSD";
+  const featured = quotes.find((q) => q.code === featuredCode);
   const summary = state?.summary;
   const plan = state?.bot.plan;
   const userToday = state?.userToday;
@@ -923,10 +932,14 @@ export function BotTerminalCard() {
         </div>
       </div>
 
-      {/* Live XAU/USD candlestick chart */}
-      <ChartHeader quote={xau} />
+      {/* Live candlestick chart for the featured pair */}
+      <ChartHeader quote={featured} />
       <div className="p-3">
-        <LiveCandleChart quote={xau} height={280} />
+        <LiveCandleChart
+          quote={featured}
+          persistKey={featuredCode}
+          height={280}
+        />
       </div>
 
       {/* Open positions strip */}
