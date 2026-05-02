@@ -592,46 +592,69 @@ function LiveCandleChart({
         ) : null}
 
         {/* Bot position entry lines (BUY/SELL dashed h-lines on the
-            featured pair, with a small chip on the left). Out-of-range
-            entries are skipped. Visible chips are stacked so two
-            entries near the same price don't overlap on top of each
-            other — each subsequent chip slides down 12px from the
-            previous one when their natural y is within 12px. */}
+            featured pair, with a chip on the left). Entries that fall
+            within the visible price range get a true dashed h-line.
+            Entries outside the range are CLAMPED to the top or bottom
+            edge with a ↑ / ↓ arrow on the chip, so the user always
+            sees "where the bot opened, even if it's far from the
+            current candle window." Chips stack vertically with leader
+            lines so multiple chips at the same price don't overlap. */}
         {(() => {
+          const minY = padTop + 6;
+          const maxY = padTop + priceH - 6;
           const visible = positions
-            .map((p) => ({ p, y: priceToY(p.entryPrice) }))
-            .filter(({ y }) => y >= padTop + 6 && y <= padTop + priceH - 6)
+            .map((p) => {
+              const trueY = priceToY(p.entryPrice);
+              const offTop = trueY < minY;
+              const offBottom = trueY > maxY;
+              const y = offTop ? minY : offBottom ? maxY : trueY;
+              return { p, y, trueY, offTop, offBottom };
+            })
             .sort((a, b) => a.y - b.y);
           let lastChipBottom = -Infinity;
-          return visible.map(({ p, y }) => {
+          return visible.map(({ p, y, offTop, offBottom }) => {
             const isBuy = p.direction.toUpperCase() === "BUY";
             const color = isBuy ? "#34d399" : "#fb7185";
-            const label = `${isBuy ? "▲ BUY" : "▼ SELL"} ${p.entryPrice.toFixed(precision)}`;
+            const sideIcon = isBuy ? "▲" : "▼";
+            const sideLabel = isBuy ? "BUY" : "SELL";
+            const offChart = offTop || offBottom;
+            const arrow = offTop ? " ↑" : offBottom ? " ↓" : "";
+            const label = `${sideIcon} ${sideLabel} ${p.entryPrice.toFixed(precision)}${arrow}`;
             // chip vertical placement — push down to avoid overlapping
             // the previous chip, but keep the dashed line at the true
             // entry y so users can still read the actual price location.
             let chipY = y - 7;
             if (chipY < lastChipBottom + 1) chipY = lastChipBottom + 1;
-            const chipBottom = chipY + 11;
-            lastChipBottom = chipBottom;
+            // Keep chip inside the price area
+            if (chipY + 11 > padTop + priceH) chipY = padTop + priceH - 11;
+            if (chipY < padTop) chipY = padTop;
+            lastChipBottom = chipY + 11;
+            const chipW = offChart ? 92 : 80;
             return (
               <g key={`pos-${p.id}`}>
-                <line
-                  x1={padLeft}
-                  x2={padLeft + chartW}
-                  y1={y}
-                  y2={y}
-                  stroke={color}
-                  strokeOpacity="0.4"
-                  strokeWidth="0.6"
-                  strokeDasharray="2 5"
-                />
-                {/* tiny leader from chip back to the actual price line
-                    when chip has been pushed away from y */}
-                {Math.abs(chipY + 5.5 - y) > 2 ? (
+                {/* True-price dashed h-line — only when entry is on
+                    chart. For off-chart entries we don't draw a line
+                    because the chip's edge clamp + arrow already
+                    communicates the position. */}
+                {!offChart ? (
                   <line
-                    x1={padLeft + 80}
-                    x2={padLeft + 88}
+                    x1={padLeft}
+                    x2={padLeft + chartW}
+                    y1={y}
+                    y2={y}
+                    stroke={color}
+                    strokeOpacity="0.4"
+                    strokeWidth="0.6"
+                    strokeDasharray="2 5"
+                  />
+                ) : null}
+                {/* Leader from chip back to the true price line when
+                    chip has been pushed away from y (only if the
+                    entry IS on chart). */}
+                {!offChart && Math.abs(chipY + 5.5 - y) > 2 ? (
+                  <line
+                    x1={padLeft + chipW + 2}
+                    x2={padLeft + chipW + 10}
                     y1={chipY + 5.5}
                     y2={y}
                     stroke={color}
@@ -642,11 +665,11 @@ function LiveCandleChart({
                 <rect
                   x={padLeft + 2}
                   y={chipY}
-                  width={78}
+                  width={chipW}
                   height={11}
                   rx={2}
                   fill={color}
-                  opacity="0.18"
+                  opacity={offChart ? 0.28 : 0.18}
                 />
                 <text
                   x={padLeft + 5}
