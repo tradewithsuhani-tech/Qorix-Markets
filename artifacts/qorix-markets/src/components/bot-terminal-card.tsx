@@ -1669,37 +1669,39 @@ export function BotTerminalCard() {
           }
           return ns;
         });
+        // Compute fresh events + pnl OUTSIDE the setScalpEvents updater
+        // so the cumulative total reads the real sum (the updater is
+        // queued and runs later — reading tickPnlSum from inside it
+        // would always yield 0 at the time of setScalpTotalPnl).
         let tickPnlSum = 0;
-        setScalpEvents((evts) => {
-          const fresh: ScalpEvent[] = closedThisTick.map((c) => {
-            // Synthetic notional $5k–$8k (deterministic by id).
-            //   • TP hit  →  +0.10% × notional   ≈  +$5.00–$8.00  (big win)
-            //   • SL hit  →  −0.05% × notional   ≈  −$2.50–$4.00  (loss)
-            //   • BE      →  small +vig $0.05–$0.35 (tiny grind, breakeven)
-            const notional = 5000 + (Math.abs(c.id) % 7) * 500;
-            let pnlUsd: number;
-            let outcome: "TP" | "BE" | "SL";
-            if (c.status === "won_tp") {
-              pnlUsd = SCALP_TP_PCT * notional;
-              outcome = "TP";
-            } else if (c.status === "lost") {
-              pnlUsd = -SCALP_SL_PCT * notional;
-              outcome = "SL";
-            } else {
-              pnlUsd = 0.05 * (1 + (Math.abs(c.id) % 7));
-              outcome = "BE";
-            }
-            tickPnlSum += pnlUsd;
-            return {
-              id: scalpEventIdRef.current++,
-              bot: c.bot,
-              outcome,
-              pnlUsd,
-              at: now,
-            };
-          });
-          return [...fresh, ...evts].slice(0, 8);
+        const fresh: ScalpEvent[] = closedThisTick.map((c) => {
+          // Synthetic notional $5k–$8k (deterministic by id).
+          //   • TP hit  →  +0.10% × notional   ≈  +$5.00–$8.00  (big win)
+          //   • SL hit  →  −0.05% × notional   ≈  −$2.50–$4.00  (loss)
+          //   • BE      →  small +vig $0.05–$0.35 (tiny grind, breakeven)
+          const notional = 5000 + (Math.abs(c.id) % 7) * 500;
+          let pnlUsd: number;
+          let outcome: "TP" | "BE" | "SL";
+          if (c.status === "won_tp") {
+            pnlUsd = SCALP_TP_PCT * notional;
+            outcome = "TP";
+          } else if (c.status === "lost") {
+            pnlUsd = -SCALP_SL_PCT * notional;
+            outcome = "SL";
+          } else {
+            pnlUsd = 0.05 * (1 + (Math.abs(c.id) % 7));
+            outcome = "BE";
+          }
+          tickPnlSum += pnlUsd;
+          return {
+            id: scalpEventIdRef.current++,
+            bot: c.bot,
+            outcome,
+            pnlUsd,
+            at: now,
+          };
         });
+        setScalpEvents((evts) => [...fresh, ...evts].slice(0, 8));
         if (tickPnlSum !== 0) {
           setScalpTotalPnl((p) => p + tickPnlSum);
         }
