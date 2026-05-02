@@ -28,7 +28,7 @@
 // worker filters on attempts=0 / sent IS NULL, so a re-stamped row
 // can't fall back into its queue).
 
-import { db, chatLeadsTable } from "@workspace/db";
+import { db, chatLeadsTable, chatMessagesTable } from "@workspace/db";
 import { and, eq, isNotNull, isNull, lt, sql } from "drizzle-orm";
 import { logger, errorLogger } from "../lib/logger";
 import { getChatSettings } from "../lib/chat-settings-cache";
@@ -112,6 +112,23 @@ export async function chatFollowup2Tick(): Promise<{ sent: number; skipped: numb
       : DEFAULT_DELAY_HOURS;
   const cutoff = new Date(Date.now() - delayHours * 60 * 60 * 1000);
 
+  // Batch P suppression: skip leads whose visitor came back to chat
+  // AFTER the first nudge went out. If they're back in the widget,
+  // the bot is already re-engaging them in real time and a second
+  // email becomes redundant noise. Reference timestamp here is
+  // `followUpSentAt` (NOT `createdAt` like the first worker) — we
+  // only care about activity AFTER the first nudge, since the
+  // first-worker's own suppression already handled "user re-engaged
+  // before nudge1." That keeps the two filters orthogonal: each
+  // nudge is suppressed by activity that happened in its OWN
+  // waiting window, not the lead's whole lifetime.
+  const reEngagedSinceFirstNudge = sql`EXISTS (
+    SELECT 1 FROM ${chatMessagesTable} cm
+    WHERE cm.session_id = ${chatLeadsTable.sessionId}
+      AND cm.sender_type = 'user'
+      AND cm.created_at > ${chatLeadsTable.followUpSentAt}
+  )`;
+
   // Candidate selection. Order by oldest follow_up_sent_at first so a
   // backlog drains FIFO — the lead who's been waiting longest gets
   // their second nudge first. lt(attempts, 2) is the hard cap; once a
@@ -126,6 +143,7 @@ export async function chatFollowup2Tick(): Promise<{ sent: number; skipped: numb
         lt(chatLeadsTable.followUpAttempts, 2),
         isNull(chatLeadsTable.unsubscribedAt),
         isNull(chatLeadsTable.convertedAt),
+        sql`NOT ${reEngagedSinceFirstNudge}`,
       ),
     )
     .orderBy(chatLeadsTable.followUpSentAt)
