@@ -1689,20 +1689,45 @@ router.get("/admin/chat-leads/analytics", authMiddleware, adminMiddleware, async
 
     // 4. 30d totals + average hours to conversion (only across leads
     //    that did convert — otherwise the AVG is meaningless).
+    //
+    // Batch Q (funnel breakout): the legacy `sent` column conflated
+    // both nudge attempts because chat-followup2-worker re-stamps
+    // follow_up_sent_at on the second send. Now we expose
+    // `nudge1Sent` and `nudge2Sent` separately (gated on
+    // follow_up_attempts) so the operator can see how the second
+    // drip is actually performing. Also adds `reEngaged` — leads
+    // whose visitor came back to chat after capture (any user
+    // message later than created_at). Same EXISTS shape as the
+    // suppression filter in chat-followup-worker.ts (Batch P) so
+    // the metric can never drift from the worker's behaviour: if
+    // Batch P would suppress a lead, that lead counts here.
     const totalsRes = await db.execute(sql`
       SELECT
         COUNT(*)::int AS captured,
-        COUNT(*) FILTER (WHERE follow_up_sent_at IS NOT NULL)::int AS sent,
-        COUNT(*) FILTER (WHERE converted_at IS NOT NULL)::int AS converted,
-        COUNT(*) FILTER (WHERE unsubscribed_at IS NOT NULL)::int AS unsubscribed,
-        AVG(EXTRACT(EPOCH FROM (converted_at - created_at)) / 3600.0)
-          FILTER (WHERE converted_at IS NOT NULL) AS avg_hours_to_convert
-      FROM chat_leads
-      WHERE created_at >= NOW() - INTERVAL '30 days'
+        COUNT(*) FILTER (WHERE l.follow_up_sent_at IS NOT NULL)::int AS sent,
+        COUNT(*) FILTER (WHERE l.follow_up_attempts >= 1)::int AS nudge1_sent,
+        COUNT(*) FILTER (WHERE l.follow_up_attempts >= 2)::int AS nudge2_sent,
+        COUNT(*) FILTER (
+          WHERE EXISTS (
+            SELECT 1 FROM chat_messages cm
+            WHERE cm.session_id = l.session_id
+              AND cm.sender_type = 'user'
+              AND cm.created_at > l.created_at
+          )
+        )::int AS re_engaged,
+        COUNT(*) FILTER (WHERE l.converted_at IS NOT NULL)::int AS converted,
+        COUNT(*) FILTER (WHERE l.unsubscribed_at IS NOT NULL)::int AS unsubscribed,
+        AVG(EXTRACT(EPOCH FROM (l.converted_at - l.created_at)) / 3600.0)
+          FILTER (WHERE l.converted_at IS NOT NULL) AS avg_hours_to_convert
+      FROM chat_leads l
+      WHERE l.created_at >= NOW() - INTERVAL '30 days'
     `);
     type TotalsRow = {
       captured: number;
       sent: number;
+      nudge1_sent: number;
+      nudge2_sent: number;
+      re_engaged: number;
       converted: number;
       unsubscribed: number;
       avg_hours_to_convert: string | number | null;
@@ -1710,6 +1735,9 @@ router.get("/admin/chat-leads/analytics", authMiddleware, adminMiddleware, async
     const t = ((totalsRes.rows ?? []) as TotalsRow[])[0] ?? {
       captured: 0,
       sent: 0,
+      nudge1_sent: 0,
+      nudge2_sent: 0,
+      re_engaged: 0,
       converted: 0,
       unsubscribed: 0,
       avg_hours_to_convert: null,
@@ -1721,6 +1749,9 @@ router.get("/admin/chat-leads/analytics", authMiddleware, adminMiddleware, async
     const totals30d = {
       captured: t.captured,
       sent: t.sent,
+      nudge1Sent: t.nudge1_sent,
+      nudge2Sent: t.nudge2_sent,
+      reEngaged: t.re_engaged,
       converted: t.converted,
       unsubscribed: t.unsubscribed,
       conversionPct: t.captured > 0 ? Math.round((t.converted / t.captured) * 100) : 0,

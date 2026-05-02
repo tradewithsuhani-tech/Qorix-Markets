@@ -137,6 +137,14 @@ interface AnalyticsResponse {
   totals30d: {
     captured: number;
     sent: number;
+    // Batch Q — nudge breakout. `sent` stays for backward compat (it
+    // equals nudge1Sent today since the worker stamps follow_up_sent_at
+    // on every attempt) but the funnel UI prefers the explicit fields.
+    // Optional in the type so an older API server during a partial
+    // rollout doesn't crash the UI — we fall back to `sent` / 0 below.
+    nudge1Sent?: number;
+    nudge2Sent?: number;
+    reEngaged?: number;
     converted: number;
     unsubscribed: number;
     conversionPct: number;
@@ -1689,13 +1697,43 @@ function AnalyticsStrip({
                     </div>
                   )}
                 </div>
-                <div className="grid grid-cols-2 gap-2">
+                {/* Batch Q — funnel breakout. Each card shows count + the
+                    /captured ratio so the operator can read it as a
+                    drop-off rate. Tones tell the story top-to-bottom:
+                    sky → indigo step the user through both nudges,
+                    emerald flags the positive signal (came back to
+                    chat), white shows the cohort that opted out. */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                   <div className="rounded-md px-2.5 py-1.5 bg-white/[0.03] border border-white/[0.06]">
                     <p className="text-[10px] uppercase tracking-wider text-white/40">
-                      Followup sent
+                      Nudge 1 sent
                     </p>
                     <p className="text-sm font-medium text-sky-300 mt-0.5">
-                      {totals30d.sent}
+                      {totals30d.nudge1Sent ?? totals30d.sent}
+                      <span className="text-white/30 text-[10px] font-normal">
+                        {" "}
+                        / {totals30d.captured}
+                      </span>
+                    </p>
+                  </div>
+                  <div className="rounded-md px-2.5 py-1.5 bg-white/[0.03] border border-white/[0.06]">
+                    <p className="text-[10px] uppercase tracking-wider text-white/40">
+                      Nudge 2 sent
+                    </p>
+                    <p className="text-sm font-medium text-indigo-300 mt-0.5">
+                      {totals30d.nudge2Sent ?? 0}
+                      <span className="text-white/30 text-[10px] font-normal">
+                        {" "}
+                        / {totals30d.nudge1Sent ?? totals30d.sent}
+                      </span>
+                    </p>
+                  </div>
+                  <div className="rounded-md px-2.5 py-1.5 bg-white/[0.03] border border-white/[0.06]">
+                    <p className="text-[10px] uppercase tracking-wider text-white/40">
+                      Re-engaged
+                    </p>
+                    <p className="text-sm font-medium text-emerald-300 mt-0.5">
+                      {totals30d.reEngaged ?? 0}
                       <span className="text-white/30 text-[10px] font-normal">
                         {" "}
                         / {totals30d.captured}
