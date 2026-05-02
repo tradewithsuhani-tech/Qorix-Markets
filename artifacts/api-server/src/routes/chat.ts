@@ -4,12 +4,13 @@ import {
   chatSessionsTable,
   chatMessagesTable,
   chatConversionEventsTable,
+  chatLeadsTable,
   usersTable,
   walletsTable,
   investmentsTable,
   transactionsTable,
 } from "@workspace/db/schema";
-import { eq, desc, and, sql, gte, lt, ne } from "drizzle-orm";
+import { eq, desc, and, sql, gte, lt, ne, isNull } from "drizzle-orm";
 import { authMiddleware, adminMiddleware, getParam, type AuthRequest } from "../middlewares/auth";
 import { makeRedisLimiter } from "../middlewares/rate-limit";
 import {
@@ -22,7 +23,7 @@ import {
 } from "../lib/chat-llm";
 import { isLLMAvailable } from "../lib/openai-client";
 import { logger } from "../lib/logger";
-import type { Response } from "express";
+import type { Request, Response } from "express";
 
 const router = Router();
 
@@ -1252,6 +1253,546 @@ router.get(
     } catch (err) {
       logger.warn({ err: (err as Error).message }, "[chat] /admin/chat-analytics failed");
       res.status(500).json({ error: "Failed to fetch chat analytics" });
+    }
+  },
+);
+
+// ─── GUEST (anonymous visitor) ROUTES — Task 145, Batch A ──────────────────
+// Mirror of the authed `/chat/*` surface for unauthenticated visitors on the
+// landing / login / public marketing pages. Sessions are keyed by an opaque
+// client-generated `visitorId` (UUID stored in the visitor's localStorage).
+// Hardened with IP + visitor rate limits because there is no user gating.
+
+// Conservative: a visitor on the landing page typically sends 1–10 messages
+// before either signing up or leaving. 60 LLM calls / hour / visitor is a
+// generous ceiling that still caps a runaway script.
+const guestLlmReplyLimiter = makeRedisLimiter({
+  name: "chat-guest-llm-reply",
+  windowMs: 60 * 60 * 1000,
+  limit: 60,
+  message: {
+    error: "Too many AI replies — please slow down or sign up to continue.",
+    code: "guest_llm_rate_limited",
+    fallbackReply: FALLBACK_REPLY,
+  },
+  keyGenerator: (req) => {
+    const vid = getVisitorId(req as Request);
+    // Express-rate-limit's IPv6 keygen validator trips if we touch req.ip
+    // directly here, so prefer the visitor cookie/header. Fall back to a
+    // stable string when missing — the per-IP global limiter (600/min, see
+    // rate-limit.ts) handles those cases as a backstop.
+    return vid ? `v:${vid}` : `v:anon`;
+  },
+});
+
+// Heavier per-IP cap on session-creation specifically so a botnet can't
+// mint thousands of empty sessions to flood the admin dashboard.
+const guestSessionCreateLimiter = makeRedisLimiter({
+  name: "chat-guest-session-create",
+  windowMs: 60 * 60 * 1000,
+  limit: 30,
+  message: { error: "Too many chat sessions — try again later.", code: "guest_session_rate_limited" },
+});
+
+// Visitor IDs are client-generated UUIDs. Accept anything that looks like a
+// UUID-ish opaque token: 16–64 chars, alphanumeric + dashes/underscores.
+// Anything else is rejected to keep junk out of the index.
+const VISITOR_ID_RE = /^[A-Za-z0-9_-]{16,64}$/;
+
+function getVisitorId(req: Request): string | null {
+  const fromHeader = req.headers["x-visitor-id"];
+  if (typeof fromHeader === "string" && VISITOR_ID_RE.test(fromHeader)) return fromHeader;
+  const fromBody = (req.body as { visitorId?: unknown } | undefined)?.visitorId;
+  if (typeof fromBody === "string" && VISITOR_ID_RE.test(fromBody)) return fromBody;
+  return null;
+}
+
+// Synthetic UserContext for anonymous visitors. The system prompt's
+// USER_CONTEXT block uses these fields purely as situational awareness;
+// for a guest we want the LLM to treat them as a brand-new prospect with
+// zero history.
+function guestUserContext(): UserContext {
+  return {
+    fullName: null,
+    kycStatus: "guest",
+    walletMain: "0",
+    walletProfit: "0",
+    walletTrading: "0",
+    hasActiveInvestment: false,
+    totalDeposited: "0",
+    daysSinceSignup: 0,
+    hasMadeFirstDeposit: false,
+  };
+}
+
+// Verify the supplied visitorId actually owns the supplied sessionId.
+// Returns the session row when authorised, null otherwise. Centralised so
+// every guest endpoint applies the same check.
+async function authoriseGuestSession(visitorId: string, sessionId: number) {
+  const rows = await db
+    .select()
+    .from(chatSessionsTable)
+    .where(eq(chatSessionsTable.id, sessionId))
+    .limit(1);
+  const sess = rows[0];
+  if (!sess) return null;
+  if (sess.visitorId !== visitorId) return null;
+  return sess;
+}
+
+// Resume the visitor's most recent non-resolved session, or mint a new one.
+router.post(
+  "/chat/guest-session",
+  guestSessionCreateLimiter,
+  async (req: Request, res: Response) => {
+    try {
+      const visitorId = getVisitorId(req);
+      if (!visitorId) {
+        res.status(400).json({ error: "visitorId required (16–64 chars, [A-Za-z0-9_-])" });
+        return;
+      }
+
+      const existing = await db
+        .select()
+        .from(chatSessionsTable)
+        .where(
+          and(
+            eq(chatSessionsTable.visitorId, visitorId),
+            isNull(chatSessionsTable.userId),
+            ne(chatSessionsTable.status, "resolved"),
+          ),
+        )
+        .orderBy(desc(chatSessionsTable.lastMessageAt))
+        .limit(1);
+
+      if (existing.length > 0) {
+        res.json({ session: existing[0] });
+        return;
+      }
+
+      const [session] = await db
+        .insert(chatSessionsTable)
+        .values({ visitorId })
+        .returning();
+      res.json({ session });
+    } catch (err) {
+      logger.warn({ err: (err as Error).message }, "[chat] /chat/guest-session failed");
+      res.status(500).json({ error: "Failed to create guest session" });
+    }
+  },
+);
+
+// Fetch messages for a guest session. visitorId required (header or body).
+router.get(
+  "/chat/guest-session/:id/messages",
+  async (req: Request, res: Response) => {
+    try {
+      const visitorId = getVisitorId(req);
+      if (!visitorId) {
+        res.status(400).json({ error: "visitorId required" });
+        return;
+      }
+      const sessionId = parseInt(getParam(req as AuthRequest, "id"), 10);
+      const sess = await authoriseGuestSession(visitorId, sessionId);
+      if (!sess) {
+        res.status(403).json({ error: "Forbidden" });
+        return;
+      }
+      const messages = await db
+        .select()
+        .from(chatMessagesTable)
+        .where(eq(chatMessagesTable.sessionId, sessionId))
+        .orderBy(chatMessagesTable.createdAt);
+      res.json({ messages });
+    } catch (err) {
+      res.status(500).json({ error: "Failed to fetch messages" });
+    }
+  },
+);
+
+// Persist a user-typed message for a guest session.
+router.post("/chat/guest-message", async (req: Request, res: Response) => {
+  try {
+    const visitorId = getVisitorId(req);
+    const { sessionId, content } = req.body ?? {};
+    if (!visitorId || !sessionId || typeof content !== "string" || !content.trim()) {
+      res.status(400).json({ error: "visitorId, sessionId, content required" });
+      return;
+    }
+    const sess = await authoriseGuestSession(visitorId, Number(sessionId));
+    if (!sess) {
+      res.status(403).json({ error: "Forbidden" });
+      return;
+    }
+    const [message] = await db
+      .insert(chatMessagesTable)
+      .values({ sessionId: sess.id, senderType: "user", senderId: null, content })
+      .returning();
+    await db
+      .update(chatSessionsTable)
+      .set({ lastMessageAt: new Date() })
+      .where(eq(chatSessionsTable.id, sess.id));
+    res.json({ message });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to send guest message" });
+  }
+});
+
+// Persist a bot message for a guest session (used by client-side rule-tree
+// flows that don't go through the LLM endpoint).
+router.post("/chat/guest-bot-message", async (req: Request, res: Response) => {
+  try {
+    const visitorId = getVisitorId(req);
+    const { sessionId, content } = req.body ?? {};
+    if (!visitorId || !sessionId || typeof content !== "string") {
+      res.status(400).json({ error: "visitorId, sessionId, content required" });
+      return;
+    }
+    const sess = await authoriseGuestSession(visitorId, Number(sessionId));
+    if (!sess) {
+      res.status(403).json({ error: "Forbidden" });
+      return;
+    }
+    const [message] = await db
+      .insert(chatMessagesTable)
+      .values({ sessionId: sess.id, senderType: "bot", content })
+      .returning();
+    res.json({ message });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to save guest bot message" });
+  }
+});
+
+// End a guest session.
+router.post("/chat/guest-session/:id/end", async (req: Request, res: Response) => {
+  try {
+    const visitorId = getVisitorId(req);
+    if (!visitorId) {
+      res.status(400).json({ error: "visitorId required" });
+      return;
+    }
+    const sessionId = parseInt(getParam(req as AuthRequest, "id"), 10);
+    const sess = await authoriseGuestSession(visitorId, sessionId);
+    if (!sess) {
+      res.status(403).json({ error: "Forbidden" });
+      return;
+    }
+    await db
+      .update(chatSessionsTable)
+      .set({ status: "resolved" })
+      .where(eq(chatSessionsTable.id, sessionId));
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to end guest session" });
+  }
+});
+
+// Set the guest's preferred reply language pill.
+router.post(
+  "/chat/guest-session/:id/language",
+  async (req: Request, res: Response) => {
+    try {
+      const visitorId = getVisitorId(req);
+      if (!visitorId) {
+        res.status(400).json({ error: "visitorId required" });
+        return;
+      }
+      const sessionId = parseInt(getParam(req as AuthRequest, "id"), 10);
+      const sess = await authoriseGuestSession(visitorId, sessionId);
+      if (!sess) {
+        res.status(403).json({ error: "Forbidden" });
+        return;
+      }
+      const normalized = normalizePreferredLanguage(
+        typeof req.body?.language === "string" ? req.body.language : null,
+      );
+      await db
+        .update(chatSessionsTable)
+        .set({ preferredLanguage: normalized })
+        .where(eq(chatSessionsTable.id, sessionId));
+      res.json({ success: true, preferredLanguage: normalized });
+    } catch (err) {
+      res.status(500).json({ error: "Failed to update language" });
+    }
+  },
+);
+
+// Guest LLM reply — mirror of /chat/llm-reply. No auth, IP+visitor-rate-limited.
+// Uses synthetic guest UserContext so the LLM treats the visitor as a brand-
+// new prospect. CTA cards are still emitted (the landing-page widget will
+// generally route them to /register instead of /deposit — handled client-side).
+router.post(
+  "/chat/guest-llm-reply",
+  guestLlmReplyLimiter,
+  async (req: Request, res: Response) => {
+    try {
+      const visitorId = getVisitorId(req);
+      const { sessionId: rawSessionId, content } = req.body ?? {};
+      const sessionId = Number(rawSessionId);
+      const userMessage = typeof content === "string" ? content.trim() : "";
+
+      if (!visitorId || !sessionId || !userMessage) {
+        res.status(400).json({ error: "visitorId, sessionId and non-empty content required" });
+        return;
+      }
+      if (userMessage.length > 2000) {
+        res.status(400).json({ error: "Message too long (max 2000 chars)" });
+        return;
+      }
+
+      const session = await authoriseGuestSession(visitorId, sessionId);
+      if (!session) {
+        res.status(403).json({ error: "Forbidden" });
+        return;
+      }
+
+      // Expert mode for guests: persist the message but don't generate a
+      // bot reply. (Guests can't actually request "expert" yet — Batch A
+      // does not wire a guest /chat/expert — but if a session was migrated
+      // from authed → guest somehow the flag should still be honoured.)
+      if (session.status === "expert_requested") {
+        const [savedUser] = await db
+          .insert(chatMessagesTable)
+          .values({ sessionId, senderType: "user", senderId: null, content: userMessage })
+          .returning();
+        await db
+          .update(chatSessionsTable)
+          .set({ lastMessageAt: new Date() })
+          .where(eq(chatSessionsTable.id, sessionId));
+        res.json({ userMessage: savedUser, reply: null, expertMode: true });
+        return;
+      }
+
+      const [savedUser] = await db
+        .insert(chatMessagesTable)
+        .values({ sessionId, senderType: "user", senderId: null, content: userMessage })
+        .returning();
+
+      const history = await db
+        .select({ senderType: chatMessagesTable.senderType, content: chatMessagesTable.content })
+        .from(chatMessagesTable)
+        .where(eq(chatMessagesTable.sessionId, sessionId))
+        .orderBy(chatMessagesTable.createdAt);
+      const trimmedHistory: ChatHistoryItem[] = history
+        .slice(0, -1)
+        .map((h) => ({ senderType: h.senderType as ChatHistoryItem["senderType"], content: h.content }));
+
+      const userContext = guestUserContext();
+      const sessionProfile = (session.profile ?? {}) as SessionProfile;
+      const turnCount = trimmedHistory.filter((h) => h.senderType === "user").length + 1;
+
+      const now = new Date();
+      const budgetIsStale = isStaleBudgetDate(session.llmBudgetDate ?? null, now);
+      const tokensUsedToday = budgetIsStale ? 0 : session.llmTokensUsed;
+      const llmDisabled = !isLLMAvailable() || tokensUsedToday >= SESSION_DAILY_TOKEN_BUDGET;
+
+      let llmResult = null as Awaited<ReturnType<typeof generateAssistantReply>>;
+      if (!llmDisabled) {
+        llmResult = await generateAssistantReply({
+          history: trimmedHistory,
+          userMessage,
+          userContext,
+          sessionProfile,
+          turnCount,
+          preferredLanguage: session.preferredLanguage,
+        });
+      }
+
+      const replyText = llmResult?.reply ?? FALLBACK_REPLY;
+      const metadata = llmResult?.metadata;
+      const fallbackOptions = llmResult ? null : FALLBACK_QUICK_OPTIONS;
+
+      const [savedAssistant] = await db
+        .insert(chatMessagesTable)
+        .values({ sessionId, senderType: "bot", content: replyText })
+        .returning();
+
+      const engagementBoost = computeEngagementBoost(userMessage);
+      const newEngagementScore = session.engagementScore + engagementBoost;
+      const mergedProfile = metadata
+        ? mergeProfile(sessionProfile, metadata.profileUpdates)
+        : sessionProfile;
+
+      const ctaEligible =
+        Boolean(metadata?.shouldShowCta) &&
+        Boolean(metadata?.ctaVariant) &&
+        (metadata!.engagementSignal === "high" || newEngagementScore >= ENGAGEMENT_CTA_THRESHOLD);
+
+      const ctaLanguage = session.preferredLanguage ?? metadata?.language ?? null;
+      const ctaCard = ctaEligible && metadata?.ctaVariant
+        ? buildCtaCard(metadata.ctaVariant, ctaLanguage)
+        : null;
+
+      const tokensThisCall = llmResult?.tokensUsed ?? 0;
+      const newTokensUsed = budgetIsStale ? tokensThisCall : session.llmTokensUsed + tokensThisCall;
+
+      await db
+        .update(chatSessionsTable)
+        .set({
+          lastMessageAt: new Date(),
+          ...(metadata?.detectedIntent ? { detectedIntent: metadata.detectedIntent } : {}),
+          ...(metadata?.language ? { language: metadata.language } : {}),
+          engagementScore: newEngagementScore,
+          profile: mergedProfile,
+          llmReplyCount: session.llmReplyCount + 1,
+          llmTokensUsed: newTokensUsed,
+          llmBudgetDate: now,
+          ...(ctaEligible ? { ctaShownCount: session.ctaShownCount + 1 } : {}),
+        })
+        .where(eq(chatSessionsTable.id, sessionId));
+
+      if (ctaEligible && ctaCard) {
+        await db.insert(chatConversionEventsTable).values({
+          sessionId,
+          userId: null,
+          eventType: "cta_shown",
+          metadata: { variant: ctaCard.variant, intent: metadata?.detectedIntent ?? null, guest: true },
+        });
+      }
+
+      res.json({
+        userMessage: savedUser,
+        reply: { ...savedAssistant, content: replyText },
+        cta: ctaCard,
+        intent: metadata?.detectedIntent ?? null,
+        language: metadata?.language ?? null,
+        engagementScore: newEngagementScore,
+        quickOptions: fallbackOptions,
+        llmDisabled,
+      });
+    } catch (err) {
+      logger.warn({ err: (err as Error).message }, "[chat] /chat/guest-llm-reply failed");
+      res.status(500).json({
+        error: "Failed to generate reply",
+        fallbackReply: FALLBACK_REPLY,
+        quickOptions: FALLBACK_QUICK_OPTIONS,
+      });
+    }
+  },
+);
+
+// Capture lead (email/name/phone) from a guest session for follow-up email.
+// Idempotent on (session_id, email) — a second submission updates name/phone
+// but does NOT re-arm follow-up.
+router.post("/chat/guest-lead", async (req: Request, res: Response) => {
+  try {
+    const visitorId = getVisitorId(req);
+    const { sessionId: rawSessionId, email, name, phone, consent } = req.body ?? {};
+    const sessionId = Number(rawSessionId);
+    const cleanEmail = typeof email === "string" ? email.trim().toLowerCase() : "";
+
+    if (!visitorId || !sessionId || !cleanEmail) {
+      res.status(400).json({ error: "visitorId, sessionId, email required" });
+      return;
+    }
+    // Lightweight email format check — full RFC validation would reject too
+    // many real addresses. Prefer permissive + downstream SES-bounce handling.
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail) || cleanEmail.length > 255) {
+      res.status(400).json({ error: "Invalid email" });
+      return;
+    }
+    const sess = await authoriseGuestSession(visitorId, sessionId);
+    if (!sess) {
+      res.status(403).json({ error: "Forbidden" });
+      return;
+    }
+
+    const cleanName = typeof name === "string" ? name.trim().slice(0, 120) : null;
+    const cleanPhone = typeof phone === "string" ? phone.trim().slice(0, 40) : null;
+
+    // Look for an existing lead on this session with this email — update in
+    // place, don't insert a duplicate.
+    const existing = await db
+      .select()
+      .from(chatLeadsTable)
+      .where(and(eq(chatLeadsTable.sessionId, sessionId), eq(chatLeadsTable.email, cleanEmail)))
+      .limit(1);
+
+    if (existing.length > 0) {
+      await db
+        .update(chatLeadsTable)
+        .set({
+          ...(cleanName ? { name: cleanName } : {}),
+          ...(cleanPhone ? { phone: cleanPhone } : {}),
+          ...(typeof consent === "boolean" ? { consent } : {}),
+        })
+        .where(eq(chatLeadsTable.id, existing[0]!.id));
+      res.json({ success: true, lead: { id: existing[0]!.id }, deduped: true });
+      return;
+    }
+
+    const [lead] = await db
+      .insert(chatLeadsTable)
+      .values({
+        sessionId,
+        visitorId,
+        email: cleanEmail,
+        name: cleanName,
+        phone: cleanPhone,
+        consent: typeof consent === "boolean" ? consent : false,
+      })
+      .returning();
+    res.json({ success: true, lead: { id: lead!.id } });
+  } catch (err) {
+    logger.warn({ err: (err as Error).message }, "[chat] /chat/guest-lead failed");
+    res.status(500).json({ error: "Failed to save lead" });
+  }
+});
+
+// Claim a guest session into the just-authenticated user's account. Called
+// by the client immediately after sign-in / sign-up so the chat history
+// follows the visitor across the auth boundary.
+router.post(
+  "/chat/guest-session/claim",
+  authMiddleware,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const userId = req.userId!;
+      const visitorId = getVisitorId(req as Request);
+      if (!visitorId) {
+        res.status(400).json({ error: "visitorId required" });
+        return;
+      }
+      // Find the most recent non-resolved guest session for this visitor.
+      const rows = await db
+        .select()
+        .from(chatSessionsTable)
+        .where(
+          and(
+            eq(chatSessionsTable.visitorId, visitorId),
+            isNull(chatSessionsTable.userId),
+          ),
+        )
+        .orderBy(desc(chatSessionsTable.lastMessageAt))
+        .limit(1);
+      const guestSession = rows[0];
+      if (!guestSession) {
+        res.json({ success: true, claimed: false });
+        return;
+      }
+
+      // Migrate ownership. Keep visitor_id for analytics / dedupe.
+      await db
+        .update(chatSessionsTable)
+        .set({ userId })
+        .where(eq(chatSessionsTable.id, guestSession.id));
+
+      // Re-stamp any chat_leads on this session with no converted_at — the
+      // user just signed up, which counts as a lead conversion.
+      await db
+        .update(chatLeadsTable)
+        .set({ convertedAt: new Date() })
+        .where(
+          and(
+            eq(chatLeadsTable.sessionId, guestSession.id),
+            isNull(chatLeadsTable.convertedAt),
+          ),
+        );
+
+      res.json({ success: true, claimed: true, sessionId: guestSession.id });
+    } catch (err) {
+      logger.warn({ err: (err as Error).message }, "[chat] /chat/guest-session/claim failed");
+      res.status(500).json({ error: "Failed to claim guest session" });
     }
   },
 );
