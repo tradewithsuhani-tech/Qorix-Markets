@@ -40,6 +40,18 @@ export interface DepositCtaOverrides {
   };
 }
 
+// Batch L (Task #145) — second nudge config. Fired by
+// chat-followup2-worker.ts when a lead is still un-converted /
+// un-unsubscribed N hours after the first nudge. Lives inside the
+// existing emailFollowup JSONB to avoid a schema change. CtaUrl is
+// reused from the parent config (operators rarely want two CTAs).
+export interface EmailFollowup2Config {
+  enabled?: boolean;
+  delayHours?: number;
+  subject?: string;
+  body?: string;
+}
+
 export interface EmailFollowupConfig {
   enabled?: boolean;
   delayMinutes?: number;
@@ -47,6 +59,7 @@ export interface EmailFollowupConfig {
   body?: string;
   fromName?: string;
   ctaUrl?: string;
+  followup2?: EmailFollowup2Config;
 }
 
 export interface ResolvedChatSettings {

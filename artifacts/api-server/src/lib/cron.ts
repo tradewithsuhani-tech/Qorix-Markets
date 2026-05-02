@@ -10,6 +10,7 @@ import { emitProfitDistribution } from "./event-bus";
 import { tickAutoSignalEngine, closeMaturedAutoTrades, rehydrateAutoEngineState } from "./auto-signal-engine";
 import { runEscalationTick } from "./escalation-cron";
 import { chatFollowupTick } from "../workers/chat-followup-worker";
+import { chatFollowup2Tick } from "../workers/chat-followup2-worker";
 
 const AUTO_ENGINE_ENABLED = (process.env.AUTO_SIGNAL_ENGINE_ENABLED ?? "1") !== "0";
 
@@ -138,8 +139,23 @@ export async function initCronJobs(): Promise<void> {
     }
   });
 
+  // Batch L: every minute, scan chat_leads that already had the first
+  // auto-nudge and still haven't converted/unsubscribed N hours later
+  // (default 72h). Hard-capped at 2 total attempts via
+  // follow_up_attempts < 2. Same idempotency guarantees as the first
+  // worker — atomic UPDATE with attempts=1 in the WHERE blocks
+  // double-sends across instances. No-ops fast when
+  // chat_settings.email_followup.followup2.enabled = false (default).
+  cron.schedule("* * * * *", async () => {
+    try {
+      await chatFollowup2Tick();
+    } catch (err) {
+      errorLogger.error({ err }, "Cron: chat follow-up #2 tick failed");
+    }
+  });
+
   logger.info(
-    "Cron: jobs registered — daily profit (00:00), monthly trading→profit sweep (25th 00:00), hourly promo expiry, INR escalation (every 1min), chat lead follow-up (every 1min)",
+    "Cron: jobs registered — daily profit (00:00), monthly trading→profit sweep (25th 00:00), hourly promo expiry, INR escalation (every 1min), chat lead follow-up (every 1min), chat lead 2nd nudge (every 1min)",
   );
   // Touch sql import so it isn't dropped by tooling — kept for future hourly maintenance jobs.
   void sql;
