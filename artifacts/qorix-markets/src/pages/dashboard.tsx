@@ -639,6 +639,12 @@ export function DemoDashboardBody({
   });
 
   const trades = Array.isArray(tradesData?.trades) ? tradesData.trades : [];
+  // 5-second tick used to drive live unrealized P&L on each Live Trades row.
+  const [livePnlTick, setLivePnlTick] = useState(0);
+  useEffect(() => {
+    const id = window.setInterval(() => setLivePnlTick((n) => (n + 1) % 1_000_000), 5000);
+    return () => window.clearInterval(id);
+  }, []);
   const equityArr = Array.isArray(equity) ? equity : [];
 
   // Daily P&L is now derived from Total Equity (= Total AUM) × today's % rate,
@@ -1812,6 +1818,25 @@ export function DemoDashboardBody({
               ) : (
                 trades.map((trade: any, i: number) => {
                   const isBuy = trade.direction === 'BUY' || trade.direction === 'LONG';
+                  // Deterministic live P&L per trade — derived from trade.id +
+                  // current 5-second time bucket so every user / device sees
+                  // the SAME ticking number. Re-renders via livePnlTick.
+                  void livePnlTick;
+                  const idStr = String(trade.id ?? trade.pair ?? i);
+                  const seed = (() => {
+                    let h = 2166136261 >>> 0;
+                    for (let c = 0; c < idStr.length; c++) {
+                      h ^= idStr.charCodeAt(c);
+                      h = Math.imul(h, 16777619);
+                    }
+                    return h >>> 0;
+                  })();
+                  const bucket = Math.floor(Date.now() / 5000);
+                  const mix = ((seed ^ bucket) >>> 0) / 4294967296;
+                  // Range: -$8 .. +$24 with positive bias (typical "running"
+                  // trade unrealized P&L feel).
+                  const livePnl = +(mix * 32 - 8).toFixed(2);
+                  const pnlPos = livePnl >= 0;
                   return (
                     <motion.div
                       key={trade.id}
@@ -1829,18 +1854,20 @@ export function DemoDashboardBody({
                               {trade.direction}
                             </span>
                           </div>
-                          <div className="text-[11px] text-muted-foreground">In progress…</div>
+                          <div className="text-[11px] text-muted-foreground">Unrealized · live</div>
                         </div>
                       </div>
                       <div className="text-right">
-                        <div className="flex items-center gap-1.5 text-[11px] text-amber-400 font-medium">
+                        <div className={`text-sm font-mono font-semibold tabular-nums ${pnlPos ? 'profit-text' : 'loss-text'}`}>
+                          {pnlPos ? '+' : '−'}${Math.abs(livePnl).toFixed(2)}
+                        </div>
+                        <div className="flex items-center gap-1.5 text-[10px] text-amber-400 font-medium mt-0.5 justify-end">
                           <span className="relative flex h-1.5 w-1.5">
                             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-60"></span>
                             <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-amber-400"></span>
                           </span>
                           RUNNING
                         </div>
-                        <div className="text-[10px] text-muted-foreground mt-0.5">Managed by Qorix system</div>
                       </div>
                     </motion.div>
                   );
