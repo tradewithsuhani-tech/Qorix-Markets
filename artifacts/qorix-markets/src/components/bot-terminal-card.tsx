@@ -31,6 +31,8 @@ import {
   Activity,
   ArrowDown,
   ArrowUp,
+  Maximize2,
+  Minimize2,
   Target,
   Zap,
 } from "lucide-react";
@@ -576,6 +578,24 @@ function LiveCandleChart({
   };
   const isZoomedOrPanned = visibleCount !== MAX_CANDLES || clampedPan > 0;
 
+  // ── Fullscreen mode ────────────────────────────────────────────────
+  // Click maximize button (or press F) → chart expands to a fullscreen
+  // overlay (fixed inset-0) styled like a pro exchange terminal.
+  // ESC exits fullscreen.
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  useEffect(() => {
+    if (!isFullscreen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setIsFullscreen(false);
+    };
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = "";
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [isFullscreen]);
+
   // Aggregate live unrealized P&L across ALL open positions — shown as
   // a prominent overlay so the investor can see at a glance what the
   // bot is currently making on this pair.
@@ -688,6 +708,8 @@ function LiveCandleChart({
         flash === "up" && "bg-emerald-500/[0.04]",
         flash === "down" && "bg-rose-500/[0.04]",
         dragRef.current ? "cursor-grabbing" : "cursor-grab",
+        isFullscreen &&
+          "fixed inset-0 z-[100] !rounded-none bg-zinc-950 p-3 sm:p-4 flex flex-col justify-center",
       )}
       onWheel={handleWheel}
       onTouchStart={handleTouchStart}
@@ -700,6 +722,49 @@ function LiveCandleChart({
       onDoubleClick={resetZoom}
       style={{ touchAction: isZoomedOrPanned ? "none" : "pan-y" }}
     >
+      {/* Fullscreen header (only in FS) — pro exchange terminal feel */}
+      {isFullscreen && (
+        <div className="absolute top-0 left-0 right-0 flex items-center justify-between px-4 py-2 bg-gradient-to-b from-black/80 to-transparent z-20">
+          <div className="flex items-center gap-3">
+            <span className="text-xs font-bold uppercase tracking-widest text-emerald-400">
+              ● LIVE TERMINAL
+            </span>
+            <span className="text-xs font-mono text-white/70">
+              {persistKey}
+            </span>
+            {quote?.mid !== undefined && (
+              <span className="text-sm font-mono font-bold text-white">
+                {quote.mid.toFixed(precision)}
+              </span>
+            )}
+          </div>
+          <div className="text-[10px] text-white/40 hidden sm:block">
+            scroll = zoom · drag = pan · ESC to exit
+          </div>
+        </div>
+      )}
+      {/* Maximize / minimize button */}
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          setIsFullscreen((v) => !v);
+        }}
+        onMouseDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        className={cn(
+          "absolute z-20 p-1.5 rounded bg-white/10 hover:bg-white/20 text-white/90 backdrop-blur transition-colors",
+          isFullscreen ? "top-2 right-2" : "bottom-1.5 right-1.5",
+        )}
+        title={isFullscreen ? "Exit fullscreen (ESC)" : "Fullscreen"}
+        aria-label={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
+      >
+        {isFullscreen ? (
+          <Minimize2 className="w-3.5 h-3.5" />
+        ) : (
+          <Maximize2 className="w-3.5 h-3.5" />
+        )}
+      </button>
       {/* Aggregate live P&L overlay — top-left of chart. Updates every
           tick so the investor immediately sees what the bot is doing. */}
       {positions.length > 0 ? (
@@ -737,9 +802,11 @@ function LiveCandleChart({
       )}
       <svg
         viewBox={`0 0 ${W} ${H}`}
-        className="w-full h-auto block"
-        preserveAspectRatio="none"
-        style={{ minHeight: 200 }}
+        className={cn("w-full block", isFullscreen ? "h-full" : "h-auto")}
+        preserveAspectRatio={isFullscreen ? "none" : "none"}
+        style={{
+          minHeight: isFullscreen ? "calc(100vh - 24px)" : 200,
+        }}
       >
         {/* Grid lines (price area only) */}
         <g stroke="currentColor" strokeOpacity="0.07" strokeWidth="0.5">
