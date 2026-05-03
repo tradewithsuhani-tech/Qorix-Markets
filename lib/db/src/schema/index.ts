@@ -31,3 +31,4 @@ export * from "./admin-permissions";
 export * from "./admin-audit-log";
 export * from "./user-devices";
 export * from "./admin-escalation-contacts";
+export * from "./worker-heartbeats";
