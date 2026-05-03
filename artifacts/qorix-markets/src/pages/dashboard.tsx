@@ -771,7 +771,7 @@ export function DemoDashboardBody({
       label: "Total Equity",
       // synced with Total AUM (Fund Transparency) — same value across both cards
       icon: <Wallet style={{ width: 16, height: 16 }} className="text-blue-400" />,
-      value: <BigBalanceCounter value={fundStats?.totalAUM ?? summary?.totalBalance ?? 0} className="text-lg sm:text-2xl md:text-3xl" />,
+      value: <BigBalanceCounter value={(fundStats?.totalAUM ?? summary?.totalBalance ?? 0) + scalpBotPnl} className="text-lg sm:text-2xl md:text-3xl" />,
       sub: (
         <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-400">
           <ArrowUpRight style={{ width: 12, height: 12 }} />
@@ -811,7 +811,7 @@ export function DemoDashboardBody({
       label: "Active Trading Fund",
       // synced with Active Capital (Fund Transparency) — same value across both cards
       icon: <Zap style={{ width: 16, height: 16 }} className="text-indigo-400" />,
-      value: <BigBalanceCounter value={fundStats?.activeCapital ?? summary?.activeInvestment ?? 0} className="text-lg sm:text-2xl md:text-3xl" />,
+      value: <BigBalanceCounter value={(fundStats?.activeCapital ?? summary?.activeInvestment ?? 0) + scalpBotPnl} className="text-lg sm:text-2xl md:text-3xl" />,
       sub: (
         <div className="flex items-center gap-1.5 flex-wrap">
           {isMarketLive ? (
