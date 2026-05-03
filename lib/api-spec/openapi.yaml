@@ -32,6 +32,10 @@ tags:
     description: Trading desk statistics and trader roster
   - name: deposit
     description: Blockchain USDT deposit system
+  - name: quiz
+    description: Real-time quiz giveaway (user-facing)
+  - name: admin-quiz
+    description: Admin quiz management
 
 paths:
   /healthz:
@@ -115,6 +119,108 @@ paths:
                 $ref: "#/components/schemas/AuthResponse"
         "401":
           description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/forgot-password:
+    post:
+      operationId: forgotPassword
+      tags: [auth]
+      summary: Request a password-reset OTP via email
+      description: |
+        Sends a 6-digit OTP to the user's email if an account exists. Always
+        returns a generic 200 success response to avoid leaking which emails
+        are registered. Rate-limited per IP.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ForgotPasswordBody"
+      responses:
+        "200":
+          description: Generic success (sent if account exists)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessMessage"
+        "400":
+          description: Email missing or malformed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/verify-reset-otp:
+    post:
+      operationId: verifyResetOtp
+      tags: [auth]
+      summary: Verify a password-reset OTP and obtain a fresh single-use code
+      description: |
+        Two-step reset flow step 2 of 3. Verifies the OTP from
+        /auth/forgot-password, consumes it, and re-issues a fresh OTP that
+        the client must present to /auth/reset-password. Lets the UI show a
+        "code accepted, enter new password" screen without holding the
+        original code.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VerifyResetOtpBody"
+      responses:
+        "200":
+          description: OTP verified — `otp` field is the fresh code for the next step
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VerifyResetOtpResponse"
+        "400":
+          description: Invalid or expired OTP
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/reset-password:
+    post:
+      operationId: resetPassword
+      tags: [auth]
+      summary: Reset password using a verified OTP
+      description: |
+        Final step of the reset flow. Requires the fresh OTP returned by
+        /auth/verify-reset-otp. New password must be 8–128 chars. On
+        success, `passwordChangedAt` is stamped which freezes withdrawals
+        for the configured cool-down window (anti-account-takeover).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResetPasswordBody"
+      responses:
+        "200":
+          description: Password reset successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessMessage"
+        "400":
+          description: Invalid OTP or password fails policy (8–128 chars)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: Too many requests
           content:
             application/json:
               schema:
@@ -876,6 +982,453 @@ paths:
               schema:
                 $ref: "#/components/schemas/BlockchainDepositHistory"
 
+  # ── QUIZ (user) ──────────────────────────────────────────────────────────
+  /quiz:
+    get:
+      operationId: listVisibleQuizzes
+      tags: [quiz]
+      summary: List scheduled / live / recently-ended quizzes
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Visible quizzes for the current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuizListResponse"
+
+  /quiz/me/past:
+    get:
+      operationId: getMyPastQuizzes
+      tags: [quiz]
+      summary: Past quizzes the user joined
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, default: 20 }
+      responses:
+        "200":
+          description: Past quizzes with my score and rank
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MyPastQuizListResponse"
+
+  /quiz/{id}:
+    get:
+      operationId: getQuizDetail
+      tags: [quiz]
+      summary: Quiz detail (no answers)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Quiz detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuizDetailResponse"
+
+  /quiz/{id}/join:
+    post:
+      operationId: joinQuiz
+      tags: [quiz]
+      summary: Join a quiz (KYC required)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Joined
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /quiz/{id}/answer:
+    post:
+      operationId: submitQuizAnswer
+      tags: [quiz]
+      summary: Submit an answer for the live question
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QuizAnswerSubmitRequest"
+      responses:
+        "200":
+          description: Answer accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuizAnswerSubmitResponse"
+
+  /quiz/{id}/me:
+    get:
+      operationId: getMyQuizStanding
+      tags: [quiz]
+      summary: Current rank/score on the live quiz
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: My standing
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuizMyStandingResponse"
+
+  # ── QUIZ (admin) ─────────────────────────────────────────────────────────
+  /admin/quizzes:
+    get:
+      operationId: adminListQuizzes
+      tags: [admin-quiz]
+      summary: List quizzes (admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string, enum: [scheduled, live, ended, cancelled] }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 50 }
+      responses:
+        "200":
+          description: Quiz list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminQuizListResponse"
+    post:
+      operationId: adminCreateQuiz
+      tags: [admin-quiz]
+      summary: Schedule a new quiz
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminCreateQuizRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminQuiz"
+
+  /admin/quizzes/{id}:
+    patch:
+      operationId: adminUpdateQuiz
+      tags: [admin-quiz]
+      summary: Update a scheduled quiz
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminUpdateQuizRequest"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminQuiz"
+
+  /admin/quizzes/{id}/cancel:
+    post:
+      operationId: adminCancelQuiz
+      tags: [admin-quiz]
+      summary: Cancel a scheduled quiz
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Cancelled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /admin/quizzes/{id}/force-start:
+    post:
+      operationId: adminForceStartQuiz
+      tags: [admin-quiz]
+      summary: Force-start a scheduled quiz now
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Force-start triggered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminForceStartResponse"
+
+  /admin/quizzes/{id}/questions:
+    get:
+      operationId: adminListQuizQuestions
+      tags: [admin-quiz]
+      summary: List quiz questions (with answers)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Questions list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminQuizQuestionListResponse"
+    post:
+      operationId: adminAddQuizQuestions
+      tags: [admin-quiz]
+      summary: Add a single question or bulk-replace all questions
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminAddQuizQuestionsRequest"
+      responses:
+        "201":
+          description: Question(s) added
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminAddQuizQuestionsResponse"
+
+  /admin/quizzes/{id}/questions/{qid}:
+    patch:
+      operationId: adminUpdateQuizQuestion
+      tags: [admin-quiz]
+      summary: Update a single question
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: qid
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminQuizQuestionPayload"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminQuizQuestion"
+    delete:
+      operationId: adminDeleteQuizQuestion
+      tags: [admin-quiz]
+      summary: Delete a question
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: qid
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /admin/quizzes/{id}/questions/reorder:
+    post:
+      operationId: adminReorderQuizQuestions
+      tags: [admin-quiz]
+      summary: Reorder questions
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminReorderQuizQuestionsRequest"
+      responses:
+        "200":
+          description: Reordered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminQuizQuestionListResponse"
+
+  /admin/quizzes/{id}/questions/generate-ai:
+    post:
+      operationId: adminGenerateQuizQuestionsAi
+      tags: [admin-quiz]
+      summary: AI-generate 5 question drafts
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminGenerateQuizAiRequest"
+      responses:
+        "200":
+          description: Drafts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminGenerateQuizAiResponse"
+
+  /admin/quizzes/{id}/monitor:
+    get:
+      operationId: adminMonitorQuiz
+      tags: [admin-quiz]
+      summary: Live monitor snapshot
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Monitor snapshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminQuizMonitorResponse"
+
+  /admin/quizzes/{id}/results:
+    get:
+      operationId: adminGetQuizResults
+      tags: [admin-quiz]
+      summary: Final results with PII for payout
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminQuizResultsResponse"
+
+  /admin/quizzes/{id}/winners/{wid}/mark-paid:
+    post:
+      operationId: adminMarkQuizWinnerPaid
+      tags: [admin-quiz]
+      summary: Mark a winner as paid (manual settlement)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: wid
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminMarkQuizWinnerPaidRequest"
+      responses:
+        "200":
+          description: Marked paid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminQuizWinnerPaidResult"
+
 components:
   schemas:
     SuccessResponse:
@@ -990,6 +1543,72 @@ components:
       required:
         - email
         - password
+
+    ForgotPasswordBody:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+      required:
+        - email
+
+    VerifyResetOtpBody:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        otp:
+          type: string
+          description: 6-digit OTP from the forgot-password email
+      required:
+        - email
+        - otp
+
+    VerifyResetOtpResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        otp:
+          type: string
+          description: |
+            Freshly re-issued single-use OTP. The client MUST forward this
+            value to /auth/reset-password — the original OTP from the email
+            has been consumed. Valid for the same 10-minute window.
+      required:
+        - success
+        - otp
+
+    ResetPasswordBody:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        otp:
+          type: string
+          description: Fresh OTP from /auth/verify-reset-otp response
+        newPassword:
+          type: string
+          minLength: 8
+          maxLength: 128
+      required:
+        - email
+        - otp
+        - newPassword
+
+    SuccessMessage:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+      required:
+        - success
+        - message
 
     AuthResponse:
       type: object
@@ -2037,3 +2656,392 @@ components:
             $ref: "#/components/schemas/BlockchainDepositItem"
       required:
         - deposits
+
+    # ── QUIZ schemas ─────────────────────────────────────────────────────
+    Quiz:
+      type: object
+      properties:
+        id: { type: integer }
+        title: { type: string }
+        description: { type: string }
+        status: { type: string, enum: [scheduled, live, ended, cancelled] }
+        scheduledStartAt: { type: string }
+        startedAt: { type: string, nullable: true }
+        endedAt: { type: string, nullable: true }
+        prizePool: { type: string }
+        prizeCurrency: { type: string }
+        prizeSplit:
+          type: array
+          items: { type: number }
+        questionTimeMs: { type: integer }
+        entryRules:
+          type: object
+          properties:
+            requireKyc: { type: boolean }
+        createdAt: { type: string }
+        updatedAt: { type: string }
+        joined: { type: boolean }
+      required:
+        - id
+        - title
+        - description
+        - status
+        - scheduledStartAt
+        - prizePool
+        - prizeCurrency
+        - prizeSplit
+        - questionTimeMs
+        - createdAt
+        - updatedAt
+
+    AdminQuiz:
+      type: object
+      properties:
+        id: { type: integer }
+        title: { type: string }
+        description: { type: string }
+        status: { type: string, enum: [scheduled, live, ended, cancelled] }
+        scheduledStartAt: { type: string }
+        startedAt: { type: string, nullable: true }
+        endedAt: { type: string, nullable: true }
+        prizePool: { type: string }
+        prizeCurrency: { type: string }
+        prizeSplit:
+          type: array
+          items: { type: number }
+        questionTimeMs: { type: integer }
+        entryRules:
+          type: object
+          properties:
+            requireKyc: { type: boolean }
+        notifyEnabled: { type: boolean }
+        createdAt: { type: string }
+        updatedAt: { type: string }
+      required:
+        - id
+        - title
+        - description
+        - status
+        - scheduledStartAt
+        - prizePool
+        - prizeCurrency
+        - prizeSplit
+        - questionTimeMs
+        - notifyEnabled
+        - createdAt
+        - updatedAt
+
+    QuizListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/Quiz" }
+      required: [data]
+
+    AdminQuizListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/AdminQuiz" }
+      required: [data]
+
+    QuizPublicWinner:
+      type: object
+      properties:
+        rank: { type: integer }
+        displayName: { type: string }
+        finalScore: { type: integer }
+        prizeAmount: { type: string }
+        prizeCurrency: { type: string }
+        userId: { type: integer }
+      required: [rank, displayName, finalScore, prizeAmount, prizeCurrency, userId]
+
+    QuizDetailResponse:
+      type: object
+      properties:
+        quiz: { $ref: "#/components/schemas/AdminQuiz" }
+        joined: { type: boolean }
+        participants: { type: integer }
+        winners:
+          type: array
+          items: { $ref: "#/components/schemas/QuizPublicWinner" }
+      required: [quiz, joined, participants, winners]
+
+    MyPastQuizPrize:
+      type: object
+      properties:
+        amount: { type: string }
+        currency: { type: string }
+      required: [amount, currency]
+
+    MyPastQuiz:
+      allOf:
+        - $ref: "#/components/schemas/AdminQuiz"
+        - type: object
+          properties:
+            myScore: { type: integer }
+            myRank:
+              type: integer
+              nullable: true
+            myPrize:
+              $ref: "#/components/schemas/MyPastQuizPrize"
+          required: [myScore]
+
+    MyPastQuizListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/MyPastQuiz" }
+      required: [data]
+
+    QuizAnswerSubmitRequest:
+      type: object
+      properties:
+        questionId: { type: integer }
+        selectedOption: { type: integer, minimum: 0, maximum: 3 }
+      required: [questionId, selectedOption]
+
+    QuizAnswerSubmitResponse:
+      type: object
+      properties:
+        accepted: { type: boolean }
+        scoreAwarded: { type: integer }
+        totalScore: { type: integer }
+        rank:
+          type: integer
+          nullable: true
+        locked: { type: boolean }
+      required: [accepted, scoreAwarded, totalScore, locked]
+
+    QuizMyStandingResponse:
+      type: object
+      properties:
+        score: { type: integer }
+        rank:
+          type: integer
+          nullable: true
+        participants: { type: integer }
+      required: [score, participants]
+
+    AdminCreateQuizRequest:
+      type: object
+      properties:
+        title: { type: string }
+        description: { type: string }
+        scheduledStartAt: { type: string }
+        prizePool: { type: string }
+        prizeCurrency: { type: string }
+        prizeSplit:
+          type: array
+          items: { type: number }
+        questionTimeMs: { type: integer }
+        entryRules:
+          type: object
+          properties:
+            requireKyc: { type: boolean }
+        notifyEnabled: { type: boolean }
+      required: [title, scheduledStartAt, prizePool]
+
+    AdminUpdateQuizRequest:
+      type: object
+      properties:
+        title: { type: string }
+        description: { type: string }
+        scheduledStartAt: { type: string }
+        prizePool: { type: string }
+        prizeCurrency: { type: string }
+        prizeSplit:
+          type: array
+          items: { type: number }
+        questionTimeMs: { type: integer }
+        entryRules:
+          type: object
+          properties:
+            requireKyc: { type: boolean }
+        notifyEnabled: { type: boolean }
+
+    AdminForceStartResponse:
+      type: object
+      properties:
+        success: { type: boolean }
+        startedHere: { type: boolean }
+      required: [success, startedHere]
+
+    AdminQuizQuestion:
+      type: object
+      properties:
+        id: { type: integer }
+        quizId: { type: integer }
+        position: { type: integer }
+        prompt: { type: string }
+        options:
+          type: array
+          items: { type: string }
+        correctIndex: { type: integer }
+        explanation: { type: string }
+        source: { type: string, enum: [manual, ai] }
+      required: [id, quizId, position, prompt, options, correctIndex, source]
+
+    AdminQuizQuestionListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/AdminQuizQuestion" }
+      required: [data]
+
+    AdminQuizQuestionPayload:
+      type: object
+      properties:
+        prompt: { type: string }
+        options:
+          type: array
+          items: { type: string }
+        correctIndex: { type: integer, minimum: 0, maximum: 3 }
+        explanation: { type: string }
+        source: { type: string, enum: [manual, ai] }
+      required: [prompt, options, correctIndex]
+
+    AdminAddQuizQuestionsRequest:
+      type: object
+      properties:
+        question:
+          $ref: "#/components/schemas/AdminQuizQuestionPayload"
+        questions:
+          type: array
+          items: { $ref: "#/components/schemas/AdminQuizQuestionPayload" }
+        replace:
+          type: boolean
+
+    AdminAddQuizQuestionsResponse:
+      oneOf:
+        - $ref: "#/components/schemas/AdminQuizQuestion"
+        - $ref: "#/components/schemas/AdminQuizQuestionListResponse"
+
+    AdminReorderQuizQuestionsRequest:
+      type: object
+      properties:
+        order:
+          type: array
+          items: { type: integer }
+      required: [order]
+
+    AdminGenerateQuizAiRequest:
+      type: object
+      properties:
+        topicHint:
+          type: string
+
+    AdminGenerateQuizAiDraft:
+      type: object
+      properties:
+        prompt: { type: string }
+        options:
+          type: array
+          items: { type: string }
+        correctIndex: { type: integer }
+        explanation: { type: string }
+      required: [prompt, options, correctIndex, explanation]
+
+    AdminGenerateQuizAiResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/AdminGenerateQuizAiDraft" }
+      required: [data]
+
+    AdminQuizMonitorLeaderboardRow:
+      type: object
+      properties:
+        userId: { type: integer }
+        score: { type: integer }
+        rank: { type: integer }
+        displayName: { type: string }
+      required: [userId, score, rank, displayName]
+
+    AdminQuizMonitorRunner:
+      type: object
+      properties:
+        currentQuestionIndex: { type: integer, nullable: true }
+        currentQuestionId: { type: integer, nullable: true }
+        questionStartedAtMs: { type: integer, nullable: true }
+        questionDeadlineMs: { type: integer, nullable: true }
+        windowMs: { type: integer }
+        phase: { type: string }
+
+    AdminQuizMonitorResponse:
+      type: object
+      properties:
+        quiz: { $ref: "#/components/schemas/AdminQuiz" }
+        runner:
+          $ref: "#/components/schemas/AdminQuizMonitorRunner"
+        leaderboard:
+          type: array
+          items: { $ref: "#/components/schemas/AdminQuizMonitorLeaderboardRow" }
+        participants: { type: integer }
+      required: [quiz, leaderboard, participants]
+
+    AdminQuizWinner:
+      type: object
+      properties:
+        id: { type: integer }
+        rank: { type: integer }
+        finalScore: { type: integer }
+        prizeAmount: { type: string }
+        prizeCurrency: { type: string }
+        paidStatus: { type: string, enum: [pending, paid] }
+        paidAt:
+          type: string
+          nullable: true
+        paidNote:
+          type: string
+          nullable: true
+        paidTxnId:
+          type: integer
+          nullable: true
+        paidByAdminId:
+          type: integer
+          nullable: true
+        userId: { type: integer }
+        userEmail:
+          type: string
+          nullable: true
+        userName:
+          type: string
+          nullable: true
+        userPhone:
+          type: string
+          nullable: true
+      required: [id, rank, finalScore, prizeAmount, prizeCurrency, paidStatus, userId]
+
+    AdminQuizResultsResponse:
+      type: object
+      properties:
+        quiz: { $ref: "#/components/schemas/AdminQuiz" }
+        participants: { type: integer }
+        winners:
+          type: array
+          items: { $ref: "#/components/schemas/AdminQuizWinner" }
+      required: [quiz, participants, winners]
+
+    AdminMarkQuizWinnerPaidRequest:
+      type: object
+      properties:
+        note: { type: string }
+
+    AdminQuizWinnerPaidResult:
+      type: object
+      properties:
+        id: { type: integer }
+        paidStatus: { type: string }
+        paidAt:
+          type: string
+          nullable: true
+        paidNote:
+          type: string
+          nullable: true
+      required: [id, paidStatus]
