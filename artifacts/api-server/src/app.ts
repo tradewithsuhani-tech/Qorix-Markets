@@ -121,7 +121,10 @@ if (corsOriginEnv) {
         // Allow same-origin / curl / health probes (no Origin header).
         if (!origin) return cb(null, true);
         if (allowedOrigins.includes(origin)) return cb(null, true);
-        return cb(new Error(`Origin ${origin} not allowed by CORS_ORIGIN`));
+        // BP: do NOT throw — that bubbles to 500. Returning false here
+        // skips the ACAO header (browser blocks the response on its end);
+        // the subsequent originGuard middleware then issues a clean 403.
+        return cb(null, false);
       },
       credentials: true,
     }),
