@@ -798,7 +798,12 @@ router.post(
       // forget — never blocks the chat response.
       mirrorChatTurnToAdminChannel({
         sessionId,
-        userLabel: `${userContext.fullName} (${userContext.email})`,
+        // UserContext only carries fullName/kyc/wallet info — no email.
+        // Fall back to "User #id" when fullName is null so the channel
+        // message still has a stable identifier admins can search by.
+        userLabel: userContext.fullName
+          ? `${userContext.fullName} (user#${userId})`
+          : `User #${userId}`,
         userMessage,
         reply: replyText,
         llmDisabled,
