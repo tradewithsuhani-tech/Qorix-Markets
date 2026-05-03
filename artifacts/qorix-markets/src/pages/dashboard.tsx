@@ -19,6 +19,7 @@ import { UpdatedAgo } from "@/components/updated-ago";
 import { VipBadge, VipCard } from "@/components/vip-badge";
 import { AnimatedCounter, BigBalanceCounter } from "@/components/animated-counter";
 import { useAuth } from "@/hooks/use-auth";
+import { useScalpBotPnl } from "@/hooks/use-scalp-pnl";
 import { generateMonthlyReport } from "@/lib/report-generator";
 import { authFetch } from "@/lib/auth-fetch";
 import { cn } from "@/lib/utils";
@@ -644,7 +645,13 @@ export function DemoDashboardBody({
   // so the displayed $ amount always ties to the equity card and the % shown.
   const totalEquityValue = fundStats?.totalAUM ?? summary?.totalBalance ?? 0;
   const dailyPct = summary?.dailyProfitPercent || 0;
-  const dailyPL = +(totalEquityValue * (dailyPct / 100)).toFixed(2);
+  // Live bot P&L from the Bot Terminal scalp engine. Added on top of
+  // the backend-derived dailyPL so all the dashboard cards (Daily P&L,
+  // Today's gain, Total Profit, Live Profit) breathe in sync with the
+  // bot terminal pill — gives the "real desk" feel.
+  const scalpBotPnl = useScalpBotPnl();
+  const baseDailyPL = +(totalEquityValue * (dailyPct / 100)).toFixed(2);
+  const dailyPL = +(baseDailyPL + scalpBotPnl).toFixed(2);
   const isPositive = dailyPL >= 0;
   // Total Profit scales with Total Equity using the same profit-to-equity ratio
   // as the underlying user, so all three cards (Equity, Daily P&L, Total Profit)
@@ -654,7 +661,7 @@ export function DemoDashboardBody({
   // Baseline floor — admin-controlled in system_settings.baseline_total_profit.
   // Total Profit starts here, then accumulates upward as equity grows.
   const totalProfitBaseline = Number((fundStats as any)?.totalProfitBaseline ?? 0) || 0;
-  const totalProfitDisplay = +(totalProfitBaseline + (summary?.totalProfit ?? 0) * equityScale).toFixed(2);
+  const totalProfitDisplay = +(totalProfitBaseline + (summary?.totalProfit ?? 0) * equityScale + scalpBotPnl).toFixed(2);
   const dailyPnlMeta = (summary as any)?.dailyPnl as
     | { marketClosed?: boolean; marketOpensAt?: number | null; nextChunkAt?: number | null }
     | undefined;
