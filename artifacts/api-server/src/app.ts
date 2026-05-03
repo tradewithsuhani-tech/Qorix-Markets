@@ -12,6 +12,12 @@ import { adminIpAllowlist, adminIpAllowlistEnabled } from "./middlewares/admin-i
 import { getCaptchaProvider } from "./lib/captcha-service";
 import { issueCsrfToken } from "./lib/csrf-token";
 import { peekLocalHeartbeat } from "./lib/worker-heartbeat-service";
+// OpenAPI spec bundled as a string at build time via esbuild's
+// '.yaml': 'text' loader (see build.mjs). Served by /api/openapi.yaml +
+// /api/docs (Scalar UI) below. Module declaration in src/yaml.d.ts.
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore — resolved at build time by esbuild's text loader
+import openapiYamlContent from "../../../lib/api-spec/openapi.yaml";
 
 const app: Express = express();
 
@@ -432,9 +438,6 @@ app.get("/api/csrf", (req, res) => {
 //                          search, deep links, request/response samples,
 //                          and copy-paste curl/Kotlin/Swift snippets,
 //                          which is exactly what the mobile dev needs.
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore — resolved at build time by esbuild's text loader
-import openapiYamlContent from "../../../lib/api-spec/openapi.yaml";
 app.get("/api/openapi.yaml", (_req, res) => {
   res.setHeader("Content-Type", "application/yaml; charset=utf-8");
   res.setHeader("Cache-Control", "public, max-age=300");
