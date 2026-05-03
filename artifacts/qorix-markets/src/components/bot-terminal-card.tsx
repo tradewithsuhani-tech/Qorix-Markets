@@ -1244,15 +1244,15 @@ function LiveCandleChart({
                     ? "#34d399"
                     : "#fbbf24"
               }
-              strokeOpacity="0.6"
-              strokeWidth="0.85"
-              strokeDasharray="3 3"
+              strokeOpacity="0.85"
+              strokeWidth="1.8"
+              strokeDasharray="4 3"
             />
             <rect
               x={padLeft + chartW + 1}
-              y={liveY - 9}
+              y={liveY - (isFullscreen ? 13 : 11)}
               width={padRight - 4}
-              height={18}
+              height={isFullscreen ? 26 : 22}
               rx={2}
               fill={
                 flash === "down"
@@ -1265,10 +1265,10 @@ function LiveCandleChart({
             />
             <text
               x={padLeft + chartW + padRight / 2 - 1}
-              y={liveY + (isFullscreen ? 5 : 4)}
+              y={liveY + (isFullscreen ? 7 : 5)}
               textAnchor="middle"
               fill="#0f172a"
-              fontSize={isFullscreen ? 16 : 11}
+              fontSize={isFullscreen ? 20 : 14}
               fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
               fontWeight="800"
             >
