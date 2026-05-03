@@ -14,7 +14,6 @@ import { AdminPopup } from "@/components/admin-popup";
 import { PeriodFilter, DAYS_PERIOD_OPTIONS } from "@/components/period-filter";
 import { GrowthPanel } from "@/components/growth-panel";
 import { IdleBalanceBanner } from "@/components/idle-balance-banner";
-import { MissedTradeBanner } from "@/components/missed-trade-banner";
 import { PromoBonusBanner } from "@/components/promo-bonus-banner";
 import { UpdatedAgo } from "@/components/updated-ago";
 import { VipBadge, VipCard } from "@/components/vip-badge";
@@ -1339,7 +1338,7 @@ export function DemoDashboardBody({
         <PromoBonusBanner />
 
         {/* Missed-trade FOMO banner (main screen alert, not a popup) */}
-        <MissedTradeBanner />
+        {/* MissedTradeBanner removed to give more vertical space for trade positions */}
 
         {/* Investment CTA + Trust block — only for users who haven't activated trading */}
         {conversion?.demoModeEnabled !== false && !investment?.isActive && (
