@@ -1502,7 +1502,7 @@ function BotThinkingTicker() {
   );
 }
 
-export function BotTerminalCard() {
+export function BotTerminalCard({ totalAum = 0 }: { totalAum?: number } = {}) {
   const { data: quotesData } = useBotQuotes();
   const { data: state } = useBotState();
 
@@ -1609,16 +1609,95 @@ export function BotTerminalCard() {
   // Cumulative scalp P&L — persisted to localStorage so it accumulates
   // across reloads and we can see how much the virtual desk grinds out.
   const SCALP_PNL_KEY = "qorix.scalp.totalPnl.v1";
+  const SCALP_DAY_KEY = "qorix.scalp.day.v1";
+  // YYYY-MM-DD in user's local time — defines a "trading day"
+  // boundary. Crossing this resets the scalp P&L so the desk
+  // starts fresh each morning.
+  const todayStr = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  };
+  // Daily target band: 0.40%–0.50% of Total AUM. Bot stops opening
+  // new scalps for the day once the target is hit (P&L stays
+  // visible in the pill, just doesn't grow further until next day).
+  const computeTarget = (aum: number) => {
+    const pct = 0.004 + Math.random() * 0.001; // [0.4%, 0.5%)
+    return +(aum * pct).toFixed(2);
+  };
   const [scalpTotalPnl, setScalpTotalPnl] = useState<number>(() => {
     if (typeof window === "undefined") return 0;
-    const raw = window.localStorage.getItem(SCALP_PNL_KEY);
-    const n = raw ? Number(raw) : 0;
-    return Number.isFinite(n) ? n : 0;
+    try {
+      const dayRaw = window.localStorage.getItem(SCALP_DAY_KEY);
+      const day = dayRaw ? JSON.parse(dayRaw) : null;
+      if (day && day.date === todayStr()) {
+        const raw = window.localStorage.getItem(SCALP_PNL_KEY);
+        const n = raw ? Number(raw) : 0;
+        return Number.isFinite(n) ? n : 0;
+      }
+    } catch {}
+    // New day → reset
+    window.localStorage.setItem(SCALP_PNL_KEY, "0");
+    return 0;
   });
+  const [dailyTarget, setDailyTarget] = useState<number>(() => {
+    if (typeof window === "undefined") return 0;
+    try {
+      const dayRaw = window.localStorage.getItem(SCALP_DAY_KEY);
+      const day = dayRaw ? JSON.parse(dayRaw) : null;
+      if (day && day.date === todayStr() && Number.isFinite(day.target)) {
+        return Number(day.target);
+      }
+    } catch {}
+    return 0;
+  });
+  // Persist pnl
   useEffect(() => {
     if (typeof window === "undefined") return;
     window.localStorage.setItem(SCALP_PNL_KEY, String(scalpTotalPnl));
   }, [scalpTotalPnl]);
+  // Initialize / refresh daily target when AUM is known and missing/stale.
+  useEffect(() => {
+    if (typeof window === "undefined" || totalAum <= 0) return;
+    try {
+      const dayRaw = window.localStorage.getItem(SCALP_DAY_KEY);
+      const day = dayRaw ? JSON.parse(dayRaw) : null;
+      if (!day || day.date !== todayStr() || !Number.isFinite(day.target)) {
+        const target = computeTarget(totalAum);
+        window.localStorage.setItem(
+          SCALP_DAY_KEY,
+          JSON.stringify({ date: todayStr(), target }),
+        );
+        setDailyTarget(target);
+      }
+    } catch {}
+  }, [totalAum]);
+  // Day-rollover watcher: every minute check if the date changed
+  // (covers tabs left open across midnight). Resets pnl + sets a
+  // new target so the bot starts the next session fresh.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const id = setInterval(() => {
+      try {
+        const dayRaw = window.localStorage.getItem(SCALP_DAY_KEY);
+        const day = dayRaw ? JSON.parse(dayRaw) : null;
+        if (!day || day.date !== todayStr()) {
+          const target = totalAum > 0 ? computeTarget(totalAum) : 0;
+          window.localStorage.setItem(
+            SCALP_DAY_KEY,
+            JSON.stringify({ date: todayStr(), target }),
+          );
+          window.localStorage.setItem(SCALP_PNL_KEY, "0");
+          setScalpTotalPnl(0);
+          setDailyTarget(target);
+        }
+      } catch {}
+    }, 60_000);
+    return () => clearInterval(id);
+  }, [totalAum]);
+  // Bot is "stopped for the day" once the target is hit. We still
+  // let already-open scalps close out naturally — only the
+  // new-trade-opening branch is gated on this flag.
+  const dailyTargetHit = dailyTarget > 0 && scalpTotalPnl >= dailyTarget;
   const lastMidRef = useRef<number | null>(null);
   const scalpIdRef = useRef(-1);
 
@@ -1688,9 +1767,11 @@ export function BotTerminalCard() {
         return { ...s, sl };
       });
 
-      // Open new trades on direction change (with cooldown to avoid stacking)
+      // Open new trades on direction change (with cooldown to avoid stacking).
+      // Gate: once daily target (0.4-0.5% of AUM) is reached, stop opening
+      // new scalps — bot is "done for the day" until the date rolls over.
       const dir = prev == null ? 0 : Math.sign(m - prev);
-      if (dir !== 0) {
+      if (dir !== 0 && !dailyTargetHit) {
         const bot: "LONG" | "SHORT" = dir > 0 ? "LONG" : "SHORT";
         const direction: "BUY" | "SELL" = dir > 0 ? "BUY" : "SELL";
         const hasOpen = next.some(
