@@ -36,6 +36,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
+import { computeGlobalScalpState } from "@/lib/scalp-pnl";
 import { useIsMobile } from "@/hooks/use-mobile";
 import {
   useBotQuotes,
@@ -1608,111 +1609,20 @@ export function BotTerminalCard({ totalAum = 0 }: { totalAum?: number } = {}) {
   const scalpEventIdRef = useRef(0);
   // Cumulative scalp P&L — persisted to localStorage so it accumulates
   // across reloads and we can see how much the virtual desk grinds out.
-  const SCALP_PNL_KEY = "qorix.scalp.totalPnl.v1";
-  const SCALP_DAY_KEY = "qorix.scalp.day.v1";
-  // YYYY-MM-DD in user's local time — defines a "trading day"
-  // boundary. Crossing this resets the scalp P&L so the desk
-  // starts fresh each morning.
-  const todayStr = () => {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-  };
-  // Daily target band: 0.40%–0.50% of Total AUM. Bot stops opening
-  // new scalps for the day once the target is hit (P&L stays
-  // visible in the pill, just doesn't grow further until next day).
-  const computeTarget = (aum: number) => {
-    const pct = 0.004 + Math.random() * 0.001; // [0.4%, 0.5%)
-    return +(aum * pct).toFixed(2);
-  };
-  // Read existing day record once. If today's record exists we keep the
-  // persisted P&L; otherwise we lazily write a fresh day record (target=0
-  // placeholder, real target gets set when AUM is loaded). Crucially we
-  // ALWAYS stamp the day key on first mount so subsequent reloads don't
-  // see "missing day key" and falsely treat it as a new day → reset loop.
-  const [scalpTotalPnl, setScalpTotalPnl] = useState<number>(() => {
-    if (typeof window === "undefined") return 0;
-    try {
-      const dayRaw = window.localStorage.getItem(SCALP_DAY_KEY);
-      const day = dayRaw ? JSON.parse(dayRaw) : null;
-      if (day && day.date === todayStr()) {
-        const raw = window.localStorage.getItem(SCALP_PNL_KEY);
-        const n = raw ? Number(raw) : 0;
-        return Number.isFinite(n) ? n : 0;
-      }
-      // First-ever load OR stale day → stamp today's date (target=0 for now;
-      // it will be filled in by the AUM effect once fundStats loads).
-      window.localStorage.setItem(
-        SCALP_DAY_KEY,
-        JSON.stringify({ date: todayStr(), target: 0 }),
-      );
-      window.localStorage.setItem(SCALP_PNL_KEY, "0");
-    } catch {}
-    return 0;
-  });
-  const [dailyTarget, setDailyTarget] = useState<number>(() => {
-    if (typeof window === "undefined") return 0;
-    try {
-      const dayRaw = window.localStorage.getItem(SCALP_DAY_KEY);
-      const day = dayRaw ? JSON.parse(dayRaw) : null;
-      if (day && day.date === todayStr() && Number.isFinite(day.target)) {
-        return Number(day.target);
-      }
-    } catch {}
-    return 0;
-  });
-  // Persist pnl
+  // Scalp P&L + daily target are now derived GLOBALLY from
+  // (UTC date + AUM + UTC seconds-since-midnight). Every browser
+  // / device / user computes the SAME number — no localStorage
+  // drift, no per-user variation. Ticks once a second so the
+  // pill animates smoothly.
+  const [scalpState, setScalpState] = useState(() => computeGlobalScalpState(totalAum));
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    window.localStorage.setItem(SCALP_PNL_KEY, String(scalpTotalPnl));
-  }, [scalpTotalPnl]);
-  // Initialize / refresh daily target when AUM is known. Fills in the
-  // placeholder target=0 written on first mount, OR refreshes if the
-  // day rolled over. Does NOT touch the persisted P&L — that's handled
-  // by the rollover watcher only.
-  useEffect(() => {
-    if (typeof window === "undefined" || totalAum <= 0) return;
-    try {
-      const dayRaw = window.localStorage.getItem(SCALP_DAY_KEY);
-      const day = dayRaw ? JSON.parse(dayRaw) : null;
-      const sameDay = day && day.date === todayStr();
-      const hasTarget = sameDay && Number.isFinite(day.target) && Number(day.target) > 0;
-      if (!hasTarget) {
-        const target = computeTarget(totalAum);
-        window.localStorage.setItem(
-          SCALP_DAY_KEY,
-          JSON.stringify({ date: todayStr(), target }),
-        );
-        setDailyTarget(target);
-      }
-    } catch {}
-  }, [totalAum]);
-  // Day-rollover watcher: every minute check if the date changed
-  // (covers tabs left open across midnight). Resets pnl + sets a
-  // new target so the bot starts the next session fresh.
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const id = setInterval(() => {
-      try {
-        const dayRaw = window.localStorage.getItem(SCALP_DAY_KEY);
-        const day = dayRaw ? JSON.parse(dayRaw) : null;
-        if (!day || day.date !== todayStr()) {
-          const target = totalAum > 0 ? computeTarget(totalAum) : 0;
-          window.localStorage.setItem(
-            SCALP_DAY_KEY,
-            JSON.stringify({ date: todayStr(), target }),
-          );
-          window.localStorage.setItem(SCALP_PNL_KEY, "0");
-          setScalpTotalPnl(0);
-          setDailyTarget(target);
-        }
-      } catch {}
-    }, 60_000);
+    const tick = () => setScalpState(computeGlobalScalpState(totalAum));
+    tick();
+    const id = setInterval(tick, 1000);
     return () => clearInterval(id);
   }, [totalAum]);
-  // Bot is "stopped for the day" once the target is hit. We still
-  // let already-open scalps close out naturally — only the
-  // new-trade-opening branch is gated on this flag.
-  const dailyTargetHit = dailyTarget > 0 && scalpTotalPnl >= dailyTarget;
+  const scalpTotalPnl = scalpState.pnl;
+  const dailyTargetHit = scalpState.targetHit;
   const lastMidRef = useRef<number | null>(null);
   const scalpIdRef = useRef(-1);
 
@@ -1872,9 +1782,10 @@ export function BotTerminalCard({ totalAum = 0 }: { totalAum?: number } = {}) {
           };
         });
         setScalpEvents((evts) => [...fresh, ...evts].slice(0, 8));
-        if (tickPnlSum !== 0) {
-          setScalpTotalPnl((p) => p + tickPnlSum);
-        }
+        // NOTE: cumulative scalpTotalPnl is now derived globally from
+        // computeGlobalScalpState (time + AUM), not accumulated per
+        // browser. The per-tick pnl values above are only used for
+        // the live-tape row visuals.
       }
 
       // Cleanup: drop closed trades after fade window
