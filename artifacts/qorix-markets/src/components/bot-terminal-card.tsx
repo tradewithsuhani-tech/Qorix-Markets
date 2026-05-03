@@ -2724,13 +2724,11 @@ function TradePanel({
       )}
     >
       <div className="px-3 py-3 border-b bg-gradient-to-b from-sky-500/[0.06] to-transparent shrink-0">
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
-            Trade
-          </span>
+        <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-2">
+          Trade —{" "}
           <span
             className={cn(
-              "tabular-nums font-bold text-[15px]",
+              "tabular-nums",
               pnlPositive ? "text-sky-400" : "text-rose-400",
             )}
           >
