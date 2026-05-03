@@ -1,36 +1,24 @@
 import { useEffect, useState } from "react";
+import { computeGlobalScalpState } from "@/lib/scalp-pnl";
 
-const SCALP_PNL_KEY = "qorix.scalp.totalPnl.v1";
-
-function readScalpPnl(): number {
-  if (typeof window === "undefined") return 0;
-  try {
-    const raw = window.localStorage.getItem(SCALP_PNL_KEY);
-    const n = raw == null ? 0 : Number(raw);
-    return Number.isFinite(n) ? n : 0;
-  } catch {
-    return 0;
-  }
-}
-
-export function useScalpBotPnl(): number {
-  const [pnl, setPnl] = useState<number>(() => readScalpPnl());
+/**
+ * Live scalp-bot P&L derived globally from time + AUM, so every
+ * user / browser / device sees the SAME number. No localStorage
+ * coupling — it's pure deterministic derivation that ticks once a
+ * second so the dashboard cards animate smoothly.
+ */
+export function useScalpBotPnl(aum: number): number {
+  const [pnl, setPnl] = useState<number>(() => computeGlobalScalpState(aum).pnl);
 
   useEffect(() => {
     const tick = () => {
-      const next = readScalpPnl();
+      const next = computeGlobalScalpState(aum).pnl;
       setPnl((prev) => (prev === next ? prev : next));
     };
+    tick();
     const id = window.setInterval(tick, 1000);
-    const onStorage = (e: StorageEvent) => {
-      if (e.key === SCALP_PNL_KEY) tick();
-    };
-    window.addEventListener("storage", onStorage);
-    return () => {
-      window.clearInterval(id);
-      window.removeEventListener("storage", onStorage);
-    };
-  }, []);
+    return () => window.clearInterval(id);
+  }, [aum]);
 
   return pnl;
 }
