@@ -25,6 +25,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -2233,14 +2234,8 @@ export function BotTerminalCard({ totalAum = 0 }: { totalAum?: number } = {}) {
   const freeMargin = Math.max(0, equity - usedMargin);
   const marginLevelPct = usedMargin > 0 ? (equity / usedMargin) * 100 : 0;
 
-  return (
-    <Card
-      className={cn(
-        "overflow-hidden relative",
-        isCardFs &&
-          "fixed inset-0 z-[100] !rounded-none bg-zinc-950 flex flex-col",
-      )}
-    >
+  const cardInner = (
+    <>
       <JustFilledToast fill={fillToast} />
 
       {/* Header */}
@@ -2397,7 +2392,29 @@ export function BotTerminalCard({ totalAum = 0 }: { totalAum?: number } = {}) {
           <TerminalTabBar active={activeTab} onChange={setActiveTab} />
         </div>
       )}
-    </Card>
+    </>
+  );
+
+  // In fullscreen we render the card via a portal anchored on
+  // document.body so that no ancestor `transform` (commonly applied by
+  // animation wrappers) creates a containing block — otherwise our
+  // `fixed inset-0` would be sized to the ancestor instead of the
+  // viewport, which is what was making the bottom tab bar appear in
+  // the middle of the screen with a big empty area below it.
+  if (isCardFs && typeof document !== "undefined") {
+    return createPortal(
+      <Card
+        className="fixed inset-0 z-[100] !rounded-none bg-zinc-950 flex flex-col overflow-hidden"
+        style={{ height: "100dvh", width: "100vw" }}
+      >
+        {cardInner}
+      </Card>,
+      document.body,
+    );
+  }
+
+  return (
+    <Card className="overflow-hidden relative">{cardInner}</Card>
   );
 }
 
