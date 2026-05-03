@@ -1547,7 +1547,7 @@ type TapePrint = {
 
 const TAPE_MIN_DELAY_MS = 4000;
 const TAPE_MAX_DELAY_MS = 10000;
-const TAPE_MAX = 24;
+const TAPE_MAX = 60;
 const TAPE_VISIBLE = 6;
 
 function randomTapeSize(code: string): number {
@@ -1646,7 +1646,9 @@ function LiveTapeStrip({
   const prints = usePrintTape(quote);
   // In expanded (fullscreen) mode show up to 50 rows; otherwise the
   // compact 6-row strip is used inline.
-  const rowCount = expanded ? Math.min(50, prints.length || 50) : TAPE_VISIBLE;
+  const rowCount = expanded
+    ? Math.min(TAPE_MAX, prints.length || TAPE_MAX)
+    : TAPE_VISIBLE;
   const visible = prints.slice(0, rowCount);
   const precision = quote?.precision ?? 2;
   const pairLabel = quote?.display ?? "—";
