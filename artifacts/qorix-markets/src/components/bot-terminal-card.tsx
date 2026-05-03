@@ -1673,12 +1673,12 @@ function LiveTapeStrip({
       </div>
       <div
         className={cn(
-          "font-mono text-[10px]",
+          "font-mono text-[11px]",
           expanded
             ? "flex-1 min-h-0 overflow-y-auto"
             : "relative overflow-hidden",
         )}
-        style={expanded ? undefined : { height: TAPE_VISIBLE * 16 }}
+        style={expanded ? undefined : { height: TAPE_VISIBLE * 18 }}
       >
         <AnimatePresence initial={false}>
           {visible.map((p, idx) => (
@@ -1687,12 +1687,12 @@ function LiveTapeStrip({
               initial={
                 expanded
                   ? { opacity: 0, x: -6 }
-                  : { opacity: 0, x: -6, y: idx * 16 }
+                  : { opacity: 0, x: -6, y: idx * 18 }
               }
               animate={
                 expanded
                   ? { opacity: 1, x: 0 }
-                  : { opacity: 1 - idx * 0.13, x: 0, y: idx * 16 }
+                  : { opacity: 1 - idx * 0.13, x: 0, y: idx * 18 }
               }
               exit={{ opacity: 0 }}
               transition={{
@@ -1701,7 +1701,7 @@ function LiveTapeStrip({
                 y: { duration: 0.22, ease: "easeOut" },
               }}
               className={cn(
-                "flex items-center gap-2 sm:gap-3 tabular-nums leading-4 h-4",
+                "flex items-center gap-2 sm:gap-3 tabular-nums leading-[18px] h-[18px]",
                 expanded
                   ? "border-b border-border/30 py-px"
                   : "absolute inset-x-0 top-0",
