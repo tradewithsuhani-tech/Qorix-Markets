@@ -2826,6 +2826,51 @@ function HistoryPanel({
     };
   }, [snapshotProfit]);
 
+  // Build a unified feed: every ~5 trades a withdrawal entry appears,
+  // styled like a Binance/Bybit "Withdraw-USDT-TRC-CPS" balance row.
+  type FeedItem =
+    | {
+        kind: "trade";
+        ts: number;
+        row: BotStateClosedTrade & { savedAt: number };
+      }
+    | { kind: "withdrawal"; ts: number; amount: number; id: string };
+  const feed = useMemo<FeedItem[]>(() => {
+    const items: FeedItem[] = rows.map((r) => ({
+      kind: "trade",
+      ts: new Date(r.closedAt).getTime(),
+      row: r,
+    }));
+    // Generate withdrawals — chunk total withdrawal across the time
+    // span of the trades, every ~5 rows. Skipped if profit ≤ 0.
+    if (stats.withdrawal > 0 && rows.length >= 5) {
+      const count = Math.max(2, Math.floor(rows.length / 5));
+      const per = stats.withdrawal / count;
+      const sortedByTs = [...rows].sort(
+        (a, b) =>
+          new Date(a.closedAt).getTime() - new Date(b.closedAt).getTime(),
+      );
+      const tMin = new Date(sortedByTs[0].closedAt).getTime();
+      const tMax = new Date(
+        sortedByTs[sortedByTs.length - 1].closedAt,
+      ).getTime();
+      const span = Math.max(1, tMax - tMin);
+      for (let i = 0; i < count; i++) {
+        const wobble = 0.85 + (((i * 9301 + 49297) % 1000) / 1000) * 0.3;
+        const amount = per * wobble;
+        const ts = tMin + (span * (i + 0.5)) / count;
+        items.push({
+          kind: "withdrawal",
+          ts,
+          amount,
+          id: `w-${i}-${Math.round(ts)}`,
+        });
+      }
+    }
+    items.sort((a, b) => b.ts - a.ts);
+    return items;
+  }, [rows, stats.withdrawal]);
+
   const fmt = (n: number) =>
     n.toLocaleString("en-US", {
       minimumFractionDigits: 2,
@@ -2871,7 +2916,42 @@ function HistoryPanel({
             positions.
           </div>
         ) : (
-          rows.map((r) => {
+          feed.map((item) => {
+            if (item.kind === "withdrawal") {
+              const d = new Date(item.ts);
+              const wds = `${d.getFullYear()}.${String(
+                d.getMonth() + 1,
+              ).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")} ${String(
+                d.getHours(),
+              ).padStart(2, "0")}:${String(d.getMinutes()).padStart(
+                2,
+                "0",
+              )}:${String(d.getSeconds()).padStart(2, "0")}`;
+              return (
+                <div
+                  key={item.id}
+                  className="px-3 py-2 grid grid-cols-[1fr_auto] gap-2"
+                >
+                  <div className="min-w-0">
+                    <div className="text-[12.5px] font-bold tracking-wide truncate">
+                      Balance
+                    </div>
+                    <div className="text-[11px] text-muted-foreground truncate">
+                      Withdraw-USDT-TRC-CPS
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-[10.5px] text-muted-foreground tabular-nums">
+                      {wds}
+                    </div>
+                    <div className="tabular-nums font-bold text-[13px] text-rose-400">
+                      −{fmt(item.amount)}
+                    </div>
+                  </div>
+                </div>
+              );
+            }
+            const r = item.row;
             const dir = (r.direction ?? "").toUpperCase();
             const isSell = dir === "SELL" || dir === "SHORT";
             const pct = r.realizedProfitPercent ?? 0;
@@ -2895,7 +2975,10 @@ function HistoryPanel({
               date.getMinutes(),
             ).padStart(2, "0")}:${String(date.getSeconds()).padStart(2, "0")}`;
             return (
-              <div key={r.id} className="px-3 py-2 grid grid-cols-[1fr_auto] gap-2">
+              <div
+                key={`t-${r.id}`}
+                className="px-3 py-2 grid grid-cols-[1fr_auto] gap-2"
+              >
                 <div className="min-w-0">
                   <div className="text-[12.5px] font-bold tracking-wide truncate">
                     <span>{r.pair}, </span>
