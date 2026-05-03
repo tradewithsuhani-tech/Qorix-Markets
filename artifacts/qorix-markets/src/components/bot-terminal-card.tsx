@@ -2824,8 +2824,8 @@ function HistoryPanel({
   const sign = (n: number) => (n > 0 ? "+" : n < 0 ? "−" : "");
 
   return (
-    <div>
-      <div className="px-3 py-3 border-b bg-gradient-to-b from-sky-500/[0.06] to-transparent">
+    <div className="flex flex-col h-full min-h-0">
+      <div className="px-3 py-3 border-b bg-gradient-to-b from-sky-500/[0.06] to-transparent shrink-0">
         <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-2">
           History — All symbols · {rows.length} trades
         </div>
@@ -2854,7 +2854,7 @@ function HistoryPanel({
           />
         </dl>
       </div>
-      <div className="max-h-[380px] overflow-y-auto divide-y divide-border/40">
+      <div className="flex-1 min-h-0 max-h-[380px] sm:max-h-none overflow-y-auto divide-y divide-border/40">
         {rows.length === 0 ? (
           <div className="p-6 text-center text-xs text-muted-foreground">
             No closed trades yet. They will appear here as the bot closes
