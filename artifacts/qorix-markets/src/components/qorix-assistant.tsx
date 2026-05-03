@@ -421,6 +421,15 @@ export function QorixAssistant({ guestMode = false }: { guestMode?: boolean } = 
     }
   }, [isOpen]);
 
+  // Allow other components (e.g. INR deposit "Contact support" link) to open
+  // the support chat by dispatching a global window event:
+  //   window.dispatchEvent(new CustomEvent("qorix:open-support"))
+  useEffect(() => {
+    const onOpen = () => setIsOpen(true);
+    window.addEventListener("qorix:open-support", onOpen);
+    return () => window.removeEventListener("qorix:open-support", onOpen);
+  }, []);
+
   const dismissNudge = (e: React.MouseEvent) => {
     e.stopPropagation();
     setShowNudge(false);
