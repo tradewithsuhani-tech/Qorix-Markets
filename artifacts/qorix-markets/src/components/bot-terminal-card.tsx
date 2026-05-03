@@ -1608,14 +1608,28 @@ function usePrintTape(quote: BotQuote | undefined): TapePrint[] {
   return prints;
 }
 
-function LiveTapeStrip({ quote }: { quote: BotQuote | undefined }) {
+function LiveTapeStrip({
+  quote,
+  expanded = false,
+}: {
+  quote: BotQuote | undefined;
+  expanded?: boolean;
+}) {
   const prints = usePrintTape(quote);
-  const visible = prints.slice(0, TAPE_VISIBLE);
+  // In expanded (fullscreen) mode show up to 50 rows; otherwise the
+  // compact 6-row strip is used inline.
+  const rowCount = expanded ? Math.min(50, prints.length || 50) : TAPE_VISIBLE;
+  const visible = prints.slice(0, rowCount);
   const precision = quote?.precision ?? 2;
   const pairLabel = quote?.display ?? "—";
 
   return (
-    <div className="border-t bg-background/30 px-3 py-2">
+    <div
+      className={cn(
+        "border-t bg-background/30 px-3 py-2",
+        expanded && "flex-1 min-h-0 flex flex-col",
+      )}
+    >
       <div className="text-[10px] font-semibold tracking-wider text-muted-foreground mb-1.5 flex items-center gap-2">
         <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
         <span>LIVE TAPE</span>
@@ -1628,8 +1642,11 @@ function LiveTapeStrip({ quote }: { quote: BotQuote | undefined }) {
         </span>
       </div>
       <div
-        className="font-mono text-[10px] relative overflow-hidden"
-        style={{ height: TAPE_VISIBLE * 16 }}
+        className={cn(
+          "font-mono text-[10px] relative overflow-hidden",
+          expanded && "flex-1 min-h-0 overflow-y-auto",
+        )}
+        style={expanded ? undefined : { height: TAPE_VISIBLE * 16 }}
       >
         <AnimatePresence initial={false}>
           {visible.map((p, idx) => (
@@ -2363,6 +2380,7 @@ export function BotTerminalCard({ totalAum = 0 }: { totalAum?: number } = {}) {
               positions={positions}
               quotes={quotes}
               virtualOpenCount={virtualScalpPositions.length}
+              expanded={isCardFs}
             />
           )}
           {activeTab === "history" && <HistoryPanel rows={historyRows} />}
@@ -2371,9 +2389,13 @@ export function BotTerminalCard({ totalAum = 0 }: { totalAum?: number } = {}) {
 
       {/* ---------------- MT5-style bottom tab bar ----------------
           Only shown in card fullscreen — keeps the main dashboard
-          clean (just the chart) like before. */}
+          clean (just the chart) like before. mt-auto pins it to the
+          bottom of the flex column so it never jumps up when a tab
+          panel is shorter than the viewport. */}
       {isCardFs && (
-        <TerminalTabBar active={activeTab} onChange={setActiveTab} />
+        <div className="mt-auto shrink-0">
+          <TerminalTabBar active={activeTab} onChange={setActiveTab} />
+        </div>
       )}
     </Card>
   );
@@ -2529,6 +2551,7 @@ function TradePanel({
   positions,
   quotes,
   virtualOpenCount,
+  expanded = false,
 }: {
   balance: number;
   equity: number;
@@ -2540,6 +2563,7 @@ function TradePanel({
   positions: BotStateOpenPosition[];
   quotes: BotQuote[];
   virtualOpenCount: number;
+  expanded?: boolean;
 }) {
   const fmt = (n: number) =>
     n.toLocaleString("en-US", {
@@ -2548,7 +2572,7 @@ function TradePanel({
     });
   const pnlPositive = pnl >= 0;
   return (
-    <div>
+    <div className={cn(expanded && "flex flex-col h-full min-h-0")}>
       <div className="px-3 py-3 border-b bg-gradient-to-b from-sky-500/[0.06] to-transparent">
         <div className="flex items-center justify-between mb-2">
           <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
@@ -2574,7 +2598,7 @@ function TradePanel({
           />
         </dl>
       </div>
-      <LiveTapeStrip quote={quote} />
+      <LiveTapeStrip quote={quote} expanded={expanded} />
       <PositionsStrip
         positions={positions}
         quotes={quotes}
