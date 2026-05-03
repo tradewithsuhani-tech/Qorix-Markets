@@ -1658,7 +1658,7 @@ function LiveTapeStrip({
         expanded && "flex-1 min-h-0 flex flex-col",
       )}
     >
-      <div className="text-[10px] font-semibold tracking-wider text-muted-foreground mb-1.5 flex items-center gap-2">
+      <div className="text-[10px] font-semibold tracking-wider text-muted-foreground mb-1.5 flex items-center gap-2 shrink-0">
         <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
         <span>LIVE TAPE</span>
         <span className="text-foreground/70 font-mono">{pairLabel}</span>
@@ -2715,8 +2715,13 @@ function TradePanel({
     });
   const pnlPositive = pnl >= 0;
   return (
-    <div className={cn(expanded && "flex flex-col h-full min-h-0")}>
-      <div className="px-3 py-3 border-b bg-gradient-to-b from-sky-500/[0.06] to-transparent">
+    <div
+      className={cn(
+        "flex flex-col",
+        expanded ? "flex-1 min-h-0 h-full" : "",
+      )}
+    >
+      <div className="px-3 py-3 border-b bg-gradient-to-b from-sky-500/[0.06] to-transparent shrink-0">
         <div className="flex items-center justify-between mb-2">
           <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
             Trade
