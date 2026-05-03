@@ -1022,9 +1022,9 @@ export function InrDepositTab() {
               <div>
                 <div className="text-[11px] text-muted-foreground font-medium mb-1.5 flex items-center justify-between gap-2">
                   <span>
-                    Upload Payment Proof *{" "}
+                    Upload Payment Proof{" "}
                     <span className="text-muted-foreground/60">
-                      (up to {MAX_PROOFS} images · 2 MB each)
+                      (optional · up to {MAX_PROOFS} images · 2 MB each)
                     </span>
                   </span>
                   {proofs.length > 0 && (
@@ -1161,7 +1161,7 @@ export function InrDepositTab() {
               <button
                 type="button"
                 onClick={() => submit.mutate()}
-                disabled={!utr.trim() || proofs.length === 0 || submit.isPending}
+                disabled={!utr.trim() || submit.isPending}
                 className="flex-[2] py-3 rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-bold text-sm hover:from-emerald-400 hover:to-teal-400 shadow-[0_0_24px_-6px_rgba(16,185,129,0.6)] disabled:opacity-40 disabled:cursor-not-allowed transition-all"
               >
                 {submit.isPending ? (
