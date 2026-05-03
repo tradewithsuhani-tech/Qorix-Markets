@@ -73,7 +73,7 @@ export async function buildLinkUrl(
  * so callers can react.
  */
 export async function sendTelegramMessage(
-  chatId: number,
+  chatId: number | string,
   title: string,
   body: string,
 ): Promise<{ ok: boolean; blocked?: boolean }> {

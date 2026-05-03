@@ -456,9 +456,34 @@ async function notifyAdminsOfExpertRequest(
     const lastMsg =
       lastMsgRaw.length > 200 ? lastMsgRaw.slice(0, 200) + "…" : lastMsgRaw;
 
-    // Pull every admin with a usable telegram binding. We deliberately
-    // notify ALL admins (not just one) so an expert request can never
-    // fall through the cracks if a single admin is offline / asleep.
+    const title = "🚨 Expert Help Requested";
+    const body =
+      `User: ${u.fullName} (${u.email})\n` +
+      `Last message: "${lastMsg}"\n\n` +
+      `Open chat: https://qorixmarkets.com/admin/chats?id=${sessionId}`;
+
+    // PRIMARY destination: a shared admin Telegram channel/group. We
+    // prefer this over per-admin lookups because (a) admins don't have
+    // to individually link Telegram, (b) the whole team sees the same
+    // alert in one place, and (c) coverage doesn't break when an admin
+    // logs out / unbinds. Telegram's sendMessage accepts either a
+    // numeric chat_id OR a "@channelusername" string, so we just pass
+    // the env var straight through. The bot account behind
+    // TELEGRAM_BOT_TOKEN must be added to the channel/group as a
+    // member (and as an admin if it's a channel) for delivery to work.
+    const sharedChat = (process.env.ADMIN_TELEGRAM_CHAT ?? "").trim();
+    if (sharedChat) {
+      const r = await sendTelegramMessage(sharedChat, title, body);
+      logger.info(
+        { sessionId, userId, sharedChat, ok: r.ok },
+        "[chat/expert] shared-channel telegram notify dispatched",
+      );
+      return;
+    }
+
+    // FALLBACK: when ADMIN_TELEGRAM_CHAT isn't set, fan-out to every
+    // admin who has personally bound Telegram. Keeps backward-compat
+    // with the per-admin model we shipped first.
     const admins = await db
       .select({
         chatId: usersTable.telegramChatId,
@@ -478,17 +503,10 @@ async function notifyAdminsOfExpertRequest(
     if (reachable.length === 0) {
       logger.warn(
         { sessionId, userId },
-        "[chat/expert] no admin has telegram bound + opted-in — silent handoff",
+        "[chat/expert] no admin has telegram bound + ADMIN_TELEGRAM_CHAT unset — silent handoff",
       );
       return;
     }
-
-    const title = "🚨 Expert Help Requested";
-    const body =
-      `User: ${u.fullName} (${u.email})\n` +
-      `Last message: "${lastMsg}"\n\n` +
-      `Open chat: https://qorixmarkets.com/admin/chats?id=${sessionId}`;
-
     const results = await Promise.allSettled(
       reachable.map((a) => sendTelegramMessage(a.chatId, title, body)),
     );
@@ -497,7 +515,7 @@ async function notifyAdminsOfExpertRequest(
     ).length;
     logger.info(
       { sessionId, userId, adminCount: reachable.length, okCount },
-      "[chat/expert] admin telegram notify dispatched",
+      "[chat/expert] per-admin telegram notify dispatched",
     );
   } catch (err) {
     logger.warn(
