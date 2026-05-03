@@ -2877,6 +2877,14 @@ function HistoryPanel({
             const pct = r.realizedProfitPercent ?? 0;
             const pnlUsd = pct * 10;
             const exit = r.realizedExitPrice ?? r.entryPrice;
+            // Per-symbol price precision so EUR/USD shows 5 decimals
+            // (e.g. 1.08512 → 1.08567) instead of collapsing to 1.09.
+            const sym = (r.pair ?? "").toUpperCase();
+            const decimals = sym.includes("JPY")
+              ? 3
+              : sym.includes("XAU") || sym.includes("BTC") || sym.includes("ETH")
+                ? 2
+                : 5;
             const date = new Date(r.closedAt);
             const ds = `${date.getFullYear()}.${String(
               date.getMonth() + 1,
@@ -2898,7 +2906,7 @@ function HistoryPanel({
                     </span>
                   </div>
                   <div className="text-[11px] tabular-nums text-muted-foreground">
-                    {r.entryPrice.toFixed(2)} → {exit.toFixed(2)}
+                    {r.entryPrice.toFixed(decimals)} → {exit.toFixed(decimals)}
                   </div>
                 </div>
                 <div className="text-right">
