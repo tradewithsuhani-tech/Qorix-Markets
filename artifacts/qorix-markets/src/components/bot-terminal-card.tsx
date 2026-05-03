@@ -1142,10 +1142,12 @@ function PositionsStrip({
   positions,
   quotes,
   livePnl,
+  openCount,
 }: {
   positions: BotStateOpenPosition[];
   quotes: BotQuote[];
   livePnl: number;
+  openCount: number;
 }) {
   const quotesByPair = useMemo(() => {
     const m = new Map<string, BotQuote>();
@@ -1165,7 +1167,10 @@ function PositionsStrip({
     [positions, quotesByPair],
   );
 
-  if (visiblePositions.length === 0) return null;
+  // Render the strip even when openCount is 0 — the live P/L pill
+  // and counter still need to be visible so the user can watch the
+  // count tick up/down as the bot opens and closes scalps.
+  void visiblePositions;
 
   // Use the SAME live P&L value as the header pill so the two
   // numbers stay perfectly synced (single source of truth from
@@ -1178,7 +1183,7 @@ function PositionsStrip({
       <div className="flex items-center gap-2 mb-1.5 text-[10px] font-semibold tracking-wider text-muted-foreground">
         <Zap className="size-3 text-amber-400 shrink-0" />
         <span className="truncate">
-          {visiblePositions.length} OPEN
+          {openCount} OPEN
           <span className="hidden sm:inline"> POSITIONS</span>
         </span>
         <span className="ml-auto shrink-0 text-muted-foreground/50 italic font-normal normal-case tracking-normal">
@@ -1925,7 +1930,7 @@ export function BotTerminalCard() {
       <LiveTapeStrip quote={featured} />
 
       {/* Open positions strip */}
-      <PositionsStrip positions={positions} quotes={quotes} livePnl={scalpTotalPnl} />
+      <PositionsStrip positions={positions} quotes={quotes} livePnl={scalpTotalPnl} openCount={virtualScalpPositions.length} />
 
     </Card>
   );
