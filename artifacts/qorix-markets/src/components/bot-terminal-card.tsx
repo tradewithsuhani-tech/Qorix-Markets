@@ -469,25 +469,52 @@ function LiveCandleChart({
   // / double-click resets to the full window.
   const ZOOM_MIN = 15;
   const [visibleCount, setVisibleCount] = useState(MAX_CANDLES);
+  // panOffset = how many candles to scroll back from "latest". 0 means
+  // latest candle is on the right edge. Increases as the user drags
+  // RIGHT (revealing older candles on the left). Clamped so we never
+  // scroll past the start of the buffer.
+  const [panOffset, setPanOffset] = useState(0);
+  const maxPan = Math.max(0, candles.length - visibleCount);
+  const clampedPan = Math.min(panOffset, maxPan);
+  const endIdx = candles.length - clampedPan;
+  const startIdx = Math.max(0, endIdx - visibleCount);
   const visibleCandles = useMemo(
-    () => candles.slice(-visibleCount),
-    [candles, visibleCount],
+    () => candles.slice(startIdx, endIdx),
+    [candles, startIdx, endIdx],
   );
   const visibleEma = useMemo(
-    () => ema.slice(-visibleCount),
-    [ema, visibleCount],
+    () => ema.slice(startIdx, endIdx),
+    [ema, startIdx, endIdx],
   );
   const pinchRef = useRef<number | null>(null);
+  const dragRef = useRef<{ x: number; pan: number } | null>(null);
   const touchDist = (touches: React.TouchList) => {
     const a = touches[0];
     const b = touches[1];
     return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
   };
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  // pixels-per-candle (approx) — used to convert drag pixels into
+  // candle-offset deltas. Recomputed on each drag start using the live
+  // container width so it stays accurate at any breakpoint.
+  const pixelsPerCandle = () => {
+    const elW = containerRef.current?.clientWidth ?? 800;
+    const candleAreaW = elW * (chartW / W); // proportionally exclude padding
+    return Math.max(2, candleAreaW / visibleCount);
+  };
   const handleWheel = (e: React.WheelEvent) => {
-    // Only intercept when the user is clearly zooming the chart
-    // (vertical scroll). Lets the page still scroll when over the
-    // chart with momentum scroll on trackpads.
-    if (Math.abs(e.deltaY) < 1) return;
+    if (Math.abs(e.deltaY) < 1 && Math.abs(e.deltaX) < 1) return;
+    // Shift+wheel OR horizontal trackpad swipe → pan; plain wheel → zoom
+    if (e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
+      e.preventDefault();
+      e.stopPropagation();
+      const dx = e.deltaX !== 0 ? e.deltaX : e.deltaY;
+      const ppc = pixelsPerCandle();
+      setPanOffset((p) =>
+        Math.max(0, Math.min(maxPan, p - Math.round(dx / ppc))),
+      );
+      return;
+    }
     e.preventDefault();
     e.stopPropagation();
     const factor = e.deltaY > 0 ? 1.12 : 0.88;
@@ -496,24 +523,76 @@ function LiveCandleChart({
     );
   };
   const handleTouchStart = (e: React.TouchEvent) => {
-    if (e.touches.length === 2) pinchRef.current = touchDist(e.touches);
+    if (e.touches.length === 2) {
+      pinchRef.current = touchDist(e.touches);
+      dragRef.current = null;
+    } else if (e.touches.length === 1) {
+      dragRef.current = { x: e.touches[0].clientX, pan: clampedPan };
+    }
   };
   const handleTouchMove = (e: React.TouchEvent) => {
     if (e.touches.length === 2 && pinchRef.current != null) {
       e.preventDefault();
       const d = touchDist(e.touches);
       if (d <= 0) return;
-      const ratio = pinchRef.current / d; // spread fingers → ratio<1 → fewer candles → zoom in
+      const ratio = pinchRef.current / d;
       setVisibleCount((v) =>
         Math.max(ZOOM_MIN, Math.min(MAX_CANDLES, Math.round(v * ratio))),
       );
       pinchRef.current = d;
+    } else if (e.touches.length === 1 && dragRef.current) {
+      const dx = e.touches[0].clientX - dragRef.current.x;
+      // Only intercept once finger has clearly dragged horizontally
+      // (>5px) — otherwise let the page scroll vertically as normal.
+      if (Math.abs(dx) > 5) {
+        e.preventDefault();
+        const ppc = pixelsPerCandle();
+        const newPan = dragRef.current.pan + Math.round(dx / ppc);
+        setPanOffset(Math.max(0, Math.min(maxPan, newPan)));
+      }
     }
   };
   const handleTouchEnd = () => {
     pinchRef.current = null;
+    dragRef.current = null;
   };
-  const resetZoom = () => setVisibleCount(MAX_CANDLES);
+  const handleMouseDown = (e: React.MouseEvent) => {
+    dragRef.current = { x: e.clientX, pan: clampedPan };
+  };
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!dragRef.current) return;
+    const dx = e.clientX - dragRef.current.x;
+    if (Math.abs(dx) < 2) return;
+    const ppc = pixelsPerCandle();
+    const newPan = dragRef.current.pan + Math.round(dx / ppc);
+    setPanOffset(Math.max(0, Math.min(maxPan, newPan)));
+  };
+  const handleMouseUp = () => {
+    dragRef.current = null;
+  };
+  const resetZoom = () => {
+    setVisibleCount(MAX_CANDLES);
+    setPanOffset(0);
+  };
+  const isZoomedOrPanned = visibleCount !== MAX_CANDLES || clampedPan > 0;
+
+  // Aggregate live unrealized P&L across ALL open positions — shown as
+  // a prominent overlay so the investor can see at a glance what the
+  // bot is currently making on this pair.
+  const totalOpenPnl = useMemo(() => {
+    if (!quote?.mid || !Number.isFinite(quote.mid)) return 0;
+    let sum = 0;
+    const sizeBuckets = [
+      0.01, 0.01, 0.01, 0.01, 0.02, 0.01, 0.01, 0.05, 0.01, 0.01,
+    ];
+    for (const p of positions) {
+      if (!Number.isFinite(p.entryPrice)) continue;
+      const isBuy = p.direction.toUpperCase() === "BUY";
+      const lots = sizeBuckets[Math.abs(p.id) % sizeBuckets.length];
+      sum += (isBuy ? 1 : -1) * (quote.mid - p.entryPrice) * lots;
+    }
+    return sum;
+  }, [positions, quote?.mid]);
 
   // Auto-scaled price range with 8% padding. Featured positions ARE
   // folded into the range so entries render at their TRUE y position
@@ -603,26 +682,57 @@ function LiveCandleChart({
 
   return (
     <div
+      ref={containerRef}
       className={cn(
         "relative w-full transition-colors duration-300 rounded-md select-none",
         flash === "up" && "bg-emerald-500/[0.04]",
         flash === "down" && "bg-rose-500/[0.04]",
+        dragRef.current ? "cursor-grabbing" : "cursor-grab",
       )}
       onWheel={handleWheel}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
+      onMouseDown={handleMouseDown}
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
+      onMouseLeave={handleMouseUp}
       onDoubleClick={resetZoom}
-      style={{ touchAction: visibleCount === MAX_CANDLES ? "auto" : "none" }}
+      style={{ touchAction: isZoomedOrPanned ? "none" : "pan-y" }}
     >
-      {visibleCount !== MAX_CANDLES && (
+      {/* Aggregate live P&L overlay — top-left of chart. Updates every
+          tick so the investor immediately sees what the bot is doing. */}
+      {positions.length > 0 ? (
+        <div className="absolute top-1.5 left-2 z-10 flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-black/40 backdrop-blur border border-white/10">
+          <span className="relative flex h-1.5 w-1.5">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-60" />
+            <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-amber-400" />
+          </span>
+          <span className="text-[9px] font-semibold uppercase tracking-wider text-white/60">
+            Bot P&L
+          </span>
+          <span
+            className={cn(
+              "text-[11px] font-mono font-bold tabular-nums",
+              totalOpenPnl >= 0 ? "text-emerald-400" : "text-rose-400",
+            )}
+          >
+            {totalOpenPnl >= 0 ? "+" : "−"}${Math.abs(totalOpenPnl).toFixed(2)}
+          </span>
+          <span className="text-[9px] text-white/40">
+            · {positions.length} {positions.length === 1 ? "pos" : "pos"}
+          </span>
+        </div>
+      ) : null}
+      {isZoomedOrPanned && (
         <button
           type="button"
           onClick={resetZoom}
           className="absolute top-1.5 right-1.5 z-10 px-2 py-0.5 text-[10px] font-semibold rounded bg-white/10 hover:bg-white/20 text-white/90 backdrop-blur"
-          title="Reset zoom"
+          title="Reset zoom & pan"
         >
-          {visibleCount}/{MAX_CANDLES} · reset
+          {visibleCount}/{MAX_CANDLES}
+          {clampedPan > 0 ? ` · −${clampedPan}` : ""} · reset
         </button>
       )}
       <svg
