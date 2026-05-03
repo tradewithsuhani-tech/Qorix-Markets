@@ -1824,34 +1824,47 @@ const BOT_STATUS_PHRASES = [
 
 function BotThinkingTicker() {
   const [idx, setIdx] = useState(0);
+  const [latencyMs, setLatencyMs] = useState(12);
   useEffect(() => {
     const id = setInterval(() => {
       setIdx((i) => (i + 1) % BOT_STATUS_PHRASES.length);
+      // Pseudo-random latency 8-22ms so the status line feels alive
+      setLatencyMs(8 + Math.floor(Math.random() * 15));
     }, 2800);
     return () => clearInterval(id);
   }, []);
   const phrase = BOT_STATUS_PHRASES[idx];
   return (
-    <div className="px-3 sm:px-4 py-1.5 border-b bg-background/20 flex items-center gap-2 text-[10px] text-muted-foreground overflow-hidden">
-      <span className="size-1.5 rounded-full bg-amber-400 animate-pulse shrink-0" />
-      <span className="font-mono text-foreground/60 shrink-0 tracking-wider">
+    <div className="px-3 sm:px-4 py-1.5 border-b bg-background/30 flex items-center gap-2.5 text-[10.5px] font-mono text-muted-foreground overflow-hidden">
+      <span className="relative flex h-1.5 w-1.5 shrink-0">
+        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-70" />
+        <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-400" />
+      </span>
+      <span className="text-emerald-400/80 shrink-0 tracking-[0.18em] font-semibold text-[9.5px]">
         BOT
       </span>
+      <span className="text-muted-foreground/30 shrink-0">·</span>
       <div className="relative flex-1 min-w-0 h-3.5">
         <AnimatePresence mode="wait" initial={false}>
           <motion.span
             key={phrase}
-            initial={{ opacity: 0, y: 5 }}
+            initial={{ opacity: 0, y: 4 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -5 }}
-            transition={{ duration: 0.28, ease: "easeOut" }}
-            className="absolute inset-0 italic truncate"
+            exit={{ opacity: 0, y: -4 }}
+            transition={{ duration: 0.24, ease: "easeOut" }}
+            className="absolute inset-0 truncate text-foreground/70"
           >
             {phrase}
           </motion.span>
         </AnimatePresence>
       </div>
-      <span className="hidden sm:inline shrink-0 font-mono text-muted-foreground/40 text-[9px] tracking-wider">
+      <span className="hidden xs:inline shrink-0 text-muted-foreground/50 tabular-nums text-[9.5px]">
+        {latencyMs}ms
+      </span>
+      <span className="hidden sm:inline shrink-0 text-muted-foreground/30">
+        ·
+      </span>
+      <span className="hidden sm:inline shrink-0 text-muted-foreground/40 tracking-[0.18em] text-[9.5px] font-semibold">
         AUTOPILOT
       </span>
     </div>
