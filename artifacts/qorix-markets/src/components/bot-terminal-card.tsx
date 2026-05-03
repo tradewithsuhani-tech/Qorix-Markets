@@ -1155,6 +1155,22 @@ function PositionsStrip({
 
   if (positions.length === 0) return null;
 
+  // Aggregate live USD P&L across all open positions. Mirrors the
+  // per-position calc on the chart chips (lots from deterministic
+  // bucket by id, then (live - entry) × lots × side).
+  const sizeBuckets = [
+    0.01, 0.01, 0.01, 0.01, 0.02, 0.01, 0.01, 0.05, 0.01, 0.01,
+  ];
+  let totalPnl = 0;
+  for (const p of positions) {
+    const q = quotesByPair.get(p.pair);
+    if (!q || !p.entryPrice) continue;
+    const sign = p.direction.toUpperCase() === "BUY" ? 1 : -1;
+    const lots = sizeBuckets[Math.abs(p.id) % sizeBuckets.length];
+    totalPnl += (q.mid - p.entryPrice) * lots * sign;
+  }
+  const pnlPositive = totalPnl >= 0;
+
   return (
     <div className="border-t bg-background/30 px-2.5 sm:px-3 py-2">
       <div className="flex items-center gap-2 mb-1.5 text-[10px] font-semibold tracking-wider text-muted-foreground">
@@ -1165,6 +1181,17 @@ function PositionsStrip({
         </span>
         <span className="ml-auto shrink-0 text-muted-foreground/50 italic font-normal normal-case tracking-normal">
           live P/L
+        </span>
+        <span
+          className={cn(
+            "shrink-0 font-mono tabular-nums font-semibold rounded px-1.5 py-0.5 text-[10px] normal-case tracking-normal",
+            pnlPositive
+              ? "bg-emerald-500/15 text-emerald-400"
+              : "bg-rose-500/15 text-rose-400",
+          )}
+        >
+          {pnlPositive ? "+" : ""}
+          {totalPnl.toFixed(2)}
         </span>
       </div>
       <div className="flex gap-1.5 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
