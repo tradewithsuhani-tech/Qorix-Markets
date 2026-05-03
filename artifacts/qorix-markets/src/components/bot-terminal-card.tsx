@@ -38,6 +38,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
+import { useIsMobile } from "@/hooks/use-mobile";
 import {
   useBotQuotes,
   useBotState,
@@ -462,6 +463,7 @@ function LiveCandleChart({
   const candles = useCandleSeries(quote, persistKey);
   const ema = useMemo(() => computeEma(candles, EMA_PERIOD), [candles]);
   const flash = useFlash(quote?.mid ?? 0, 350);
+  const isMobile = useIsMobile();
 
   // Auto-scaled price range with 8% padding. Featured positions ARE
   // folded into the range so entries render at their TRUE y position
@@ -520,12 +522,14 @@ function LiveCandleChart({
   const H = height;
   const padTop = 12;
   const padBottom = 22;
-  const padRight = 78; // room for live price tag
-  // padLeft includes a 145px "chip gutter" on the left so the
-  // bot-position chips render OUTSIDE the candle area (MT5 style),
-  // never overlapping the price action. chipX is anchored at 2 so
-  // chips occupy x=[2..142] and candles fill x=[152..padLeft+chartW].
-  const padLeft = 152;
+  // On mobile we drop the left chip gutter entirely (chips would be
+  // unreadable at phone width) and shrink the right price-tag column,
+  // so candles get nearly the full svg width for clarity.
+  const padRight = isMobile ? 56 : 78;
+  // Desktop padLeft includes a 145px chip gutter for MT5-style
+  // position chips OUTSIDE the candle area; on mobile we collapse it
+  // to a thin margin and the per-position chips are skipped below.
+  const padLeft = isMobile ? 14 : 152;
   const chartW = W - padLeft - padRight;
   const chartH = H - padTop - padBottom;
   const VOL_GAP = 4;
@@ -770,83 +774,83 @@ function LiveCandleChart({
                 ) : null}
 
                 {/* 3-section chip in the LEFT GUTTER (outside the
-                    candle plot, never overlapping price action). */}
-                <rect
-                  x={chipX}
-                  y={chipY}
-                  width={chipW}
-                  height={chipH}
-                  rx={2}
-                  fill={color}
-                  opacity={offChart ? 0.3 : 0.22}
-                />
-                {/* Section 1: side */}
-                <text
-                  x={chipX + 6}
-                  y={chipY + 9}
-                  fill={color}
-                  fontSize="9"
-                  fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
-                  fontWeight="700"
-                >
-                  {sideLabel}
-                </text>
-                {/* Separator 1 */}
-                <line
-                  x1={chipX + 35}
-                  x2={chipX + 35}
-                  y1={chipY + 2}
-                  y2={chipY + chipH - 2}
-                  stroke={color}
-                  strokeOpacity="0.55"
-                  strokeWidth="0.5"
-                />
-                {/* Section 2: size */}
-                <text
-                  x={chipX + 40}
-                  y={chipY + 9}
-                  fill="currentColor"
-                  fillOpacity="0.85"
-                  fontSize="9"
-                  fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
-                >
-                  {lots.toFixed(2)} Lots
-                </text>
-                {/* Separator 2 */}
-                <line
-                  x1={chipX + 87}
-                  x2={chipX + 87}
-                  y1={chipY + 2}
-                  y2={chipY + chipH - 2}
-                  stroke={color}
-                  strokeOpacity="0.55"
-                  strokeWidth="0.5"
-                />
-                {/* Section 3: live USD P&L (independent color) */}
-                <text
-                  x={chipX + 92}
-                  y={chipY + 9}
-                  fill={pnlColor}
-                  fontSize="9"
-                  fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
-                  fontWeight="700"
-                >
-                  {pnlSign}
-                  {pnlUsd.toFixed(2)} USD
-                </text>
-                {/* Off-chart arrow */}
-                {offChart ? (
-                  <text
-                    x={chipX + chipW - 8}
-                    y={chipY + 9}
-                    fill={color}
-                    fontSize="10"
-                    fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
-                    fontWeight="700"
-                  >
-                    {offTop ? "↑" : "↓"}
-                  </text>
-                ) : null}
+                    candle plot, never overlapping price action).
+                    Skipped on mobile because the gutter is collapsed
+                    to give candles maximum width. */}
+                {!isMobile && (
+                  <>
+                    <rect
+                      x={chipX}
+                      y={chipY}
+                      width={chipW}
+                      height={chipH}
+                      rx={2}
+                      fill={color}
+                      opacity={offChart ? 0.3 : 0.22}
+                    />
+                    <text
+                      x={chipX + 6}
+                      y={chipY + 9}
+                      fill={color}
+                      fontSize="9"
+                      fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
+                      fontWeight="700"
+                    >
+                      {sideLabel}
+                    </text>
+                    <line
+                      x1={chipX + 35}
+                      x2={chipX + 35}
+                      y1={chipY + 2}
+                      y2={chipY + chipH - 2}
+                      stroke={color}
+                      strokeOpacity="0.55"
+                      strokeWidth="0.5"
+                    />
+                    <text
+                      x={chipX + 40}
+                      y={chipY + 9}
+                      fill="currentColor"
+                      fillOpacity="0.85"
+                      fontSize="9"
+                      fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
+                    >
+                      {lots.toFixed(2)} Lots
+                    </text>
+                    <line
+                      x1={chipX + 87}
+                      x2={chipX + 87}
+                      y1={chipY + 2}
+                      y2={chipY + chipH - 2}
+                      stroke={color}
+                      strokeOpacity="0.55"
+                      strokeWidth="0.5"
+                    />
+                    <text
+                      x={chipX + 92}
+                      y={chipY + 9}
+                      fill={pnlColor}
+                      fontSize="9"
+                      fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
+                      fontWeight="700"
+                    >
+                      {pnlSign}
+                      {pnlUsd.toFixed(2)} USD
+                    </text>
+                    {offChart ? (
+                      <text
+                        x={chipX + chipW - 8}
+                        y={chipY + 9}
+                        fill={color}
+                        fontSize="10"
+                        fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
+                        fontWeight="700"
+                      >
+                        {offTop ? "↑" : "↓"}
+                      </text>
+                    ) : null}
+                  </>
+                )}
 
                 {/* Right-side entry-price tag — ALWAYS rendered so
                     every position has a y-axis label even when its
@@ -889,7 +893,7 @@ function LiveCandleChart({
           fontSize="9"
           fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
         >
-          {[0, 0.25, 0.5, 0.75, 1].map((f, i) => {
+          {(isMobile ? [0, 0.5, 1] : [0, 0.25, 0.5, 0.75, 1]).map((f, i) => {
             const p = range.max - (range.max - range.min) * f;
             const y = padTop + priceH * f;
             return (
