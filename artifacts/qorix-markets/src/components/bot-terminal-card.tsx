@@ -2369,8 +2369,12 @@ export function BotTerminalCard({ totalAum = 0 }: { totalAum?: number } = {}) {
         </div>
       )}
 
-      {/* ---------------- MT5-style bottom tab bar ---------------- */}
-      <TerminalTabBar active={activeTab} onChange={setActiveTab} />
+      {/* ---------------- MT5-style bottom tab bar ----------------
+          Only shown in card fullscreen — keeps the main dashboard
+          clean (just the chart) like before. */}
+      {isCardFs && (
+        <TerminalTabBar active={activeTab} onChange={setActiveTab} />
+      )}
     </Card>
   );
 }
