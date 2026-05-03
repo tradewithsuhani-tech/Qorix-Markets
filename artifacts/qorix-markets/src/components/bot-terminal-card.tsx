@@ -2617,13 +2617,18 @@ function HistoryPanel({
       profit += p * 10;
       commission += Math.abs(p) * 1.5;
     }
+    // Auto-withdrawal stream: 80% of accumulated profit is treated as
+    // payout to the investor, 20% is retained as Balance. Negative
+    // profit days yield zero withdrawal (no payout on losses).
+    const withdrawal = profit > 0 ? profit * 0.8 : 0;
+    const balance = profit - withdrawal;
     return {
       profit,
       deposit: 0,
-      withdrawal: 0,
+      withdrawal,
       swap: 0,
       commission: -commission,
-      balance: profit - commission,
+      balance,
     };
   }, [rows]);
 
@@ -2647,7 +2652,11 @@ function HistoryPanel({
             valueClass={stats.profit >= 0 ? "text-sky-400" : "text-rose-400"}
           />
           <Row label="Deposit" value={fmt(stats.deposit)} />
-          <Row label="Withdrawal" value={fmt(stats.withdrawal)} />
+          <Row
+            label="Withdrawal"
+            value={`${stats.withdrawal > 0 ? "−" : ""}${fmt(stats.withdrawal)}`}
+            valueClass={stats.withdrawal > 0 ? "text-amber-400" : undefined}
+          />
           <Row label="Swap" value={fmt(stats.swap)} />
           <Row
             label="Commission"
