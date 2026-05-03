@@ -1717,7 +1717,9 @@ export function BotTerminalCard({ totalAum = 0 }: { totalAum?: number } = {}) {
     // far-away positions (e.g. opened hours ago when BTC was $1800
     // below current) are hidden from the chart but remain in the
     // open-positions count above the chart.
-    const band = mid * 0.01;
+    // Wider band (±2%) so more concurrent entries qualify — investor
+    // sees a busy "trading desk" feel instead of just 1-2 chips.
+    const band = mid * 0.02;
     return positions
       .filter((p) => p.pair === featuredCode)
       .filter(
@@ -1730,7 +1732,7 @@ export function BotTerminalCard({ totalAum = 0 }: { totalAum?: number } = {}) {
         (a, b) =>
           Math.abs(a.entryPrice - mid) - Math.abs(b.entryPrice - mid),
       )
-      .slice(0, 4);
+      .slice(0, 8);
   }, [positions, featuredCode, featuredMid]);
 
   const fillToast = useFillToast(state?.closedToday);
@@ -1754,7 +1756,8 @@ export function BotTerminalCard({ totalAum = 0 }: { totalAum?: number } = {}) {
   const SCALP_BE_DELAY_MS = 3000;
   const SCALP_MAX_LIFETIME_MS = 30000;
   const SCALP_CLOSED_FADE_MS = 4000;
-  const SCALP_COOLDOWN_MS = 2000;       // throttle same-direction stacking
+  const SCALP_COOLDOWN_MS = 600;        // throttle same-direction stacking
+  const SCALP_MAX_PER_SIDE = 4;         // allow up to 4 concurrent same-direction scalps
 
   type Scalp = {
     id: number;
@@ -1876,10 +1879,17 @@ export function BotTerminalCard({ totalAum = 0 }: { totalAum?: number } = {}) {
       if (dir !== 0 && !dailyTargetHit) {
         const bot: "LONG" | "SHORT" = dir > 0 ? "LONG" : "SHORT";
         const direction: "BUY" | "SELL" = dir > 0 ? "BUY" : "SELL";
-        const hasOpen = next.some(
+        // Allow up to SCALP_MAX_PER_SIDE concurrent same-direction
+        // scalps so the chart shows a busy multi-entry desk instead of
+        // just 1-2 chips. Each new scalp must be at least ~0.03% away
+        // from the most recent same-side entry to avoid duplicate
+        // chips at identical prices.
+        const sameOpen = next.filter(
           (s) => s.bot === bot && s.status === "open",
         );
-        // Cooldown: skip if this bot just closed a trade <2s ago
+        const tooClose = sameOpen.some(
+          (s) => Math.abs(m - s.entry) / m < 0.0003,
+        );
         const recentClose = next.some(
           (s) =>
             s.bot === bot &&
@@ -1887,7 +1897,7 @@ export function BotTerminalCard({ totalAum = 0 }: { totalAum?: number } = {}) {
             s.closedAt != null &&
             now - s.closedAt < SCALP_COOLDOWN_MS,
         );
-        if (!hasOpen && !recentClose) {
+        if (sameOpen.length < SCALP_MAX_PER_SIDE && !tooClose && !recentClose) {
           const sl =
             direction === "BUY"
               ? m * (1 - SCALP_SL_PCT)
@@ -1993,10 +2003,12 @@ export function BotTerminalCard({ totalAum = 0 }: { totalAum?: number } = {}) {
       }));
   }, [scalps, featuredCode]);
 
-  // Scalps render FIRST (most recent at top of chip stack), then
-  // real platform positions fill remaining slots up to 4.
+  // Scalps render FIRST (most recent at top of chip stack), then real
+  // platform positions fill remaining slots up to 8 — gives the chart
+  // a busy multi-entry "trading desk" feel matching the high-frequency
+  // tape, instead of looking like only 1-2 trades are open.
   const chartPositions = useMemo(
-    () => [...virtualScalpPositions, ...featuredPositions].slice(0, 4),
+    () => [...virtualScalpPositions, ...featuredPositions].slice(0, 8),
     [virtualScalpPositions, featuredPositions],
   );
 
