@@ -2811,7 +2811,7 @@ function HistoryPanel({
       deposit: 0,
       withdrawal,
       swap: 0,
-      commission: -commission,
+      commission: 0,
       balance,
     };
   }, [rows]);
