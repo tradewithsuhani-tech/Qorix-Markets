@@ -689,8 +689,10 @@ function LiveCandleChart({
   const padBottom = isFullscreen ? 36 : 22;
   // On mobile we drop the left chip gutter entirely (chips would be
   // unreadable at phone width) and shrink the right price-tag column,
-  // so candles get nearly the full svg width for clarity.
-  const padRight = isMobile ? 56 : 78;
+  // so candles get nearly the full svg width for clarity. In FULLSCREEN
+  // we widen the right gutter so big bold price ticks fit cleanly
+  // (no more numbers running off the edge).
+  const padRight = isFullscreen ? 130 : isMobile ? 56 : 78;
   // Desktop padLeft includes a 145px chip gutter for MT5-style
   // position chips OUTSIDE the candle area; on mobile we collapse it
   // to a thin margin and the per-position chips are skipped below.
@@ -1175,15 +1177,21 @@ function LiveCandleChart({
         {/* Right-side y-axis price ticks (price area only) */}
         <g
           fill="currentColor"
-          fillOpacity="0.5"
-          fontSize="9"
+          fillOpacity={isFullscreen ? 0.85 : 0.5}
+          fontSize={isFullscreen ? 14 : 9}
+          fontWeight={isFullscreen ? 700 : 400}
           fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
         >
-          {(isMobile ? [0, 0.5, 1] : [0, 0.25, 0.5, 0.75, 1]).map((f, i) => {
+          {(isFullscreen
+            ? [0, 0.15, 0.3, 0.45, 0.6, 0.75, 0.9, 1]
+            : isMobile
+              ? [0, 0.5, 1]
+              : [0, 0.25, 0.5, 0.75, 1]
+          ).map((f, i) => {
             const p = range.max - (range.max - range.min) * f;
             const y = padTop + priceH * f;
             return (
-              <text key={i} x={padLeft + chartW + 4} y={y + 3}>
+              <text key={i} x={padLeft + chartW + 6} y={y + 3}>
                 {p.toFixed(precision)}
               </text>
             );
@@ -1238,12 +1246,12 @@ function LiveCandleChart({
             />
             <text
               x={padLeft + chartW + padRight / 2 - 1}
-              y={liveY + 4}
+              y={liveY + (isFullscreen ? 5 : 4)}
               textAnchor="middle"
               fill="#0f172a"
-              fontSize="11"
+              fontSize={isFullscreen ? 16 : 11}
               fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
-              fontWeight="700"
+              fontWeight="800"
             >
               {quote.mid.toFixed(precision)}
             </text>
