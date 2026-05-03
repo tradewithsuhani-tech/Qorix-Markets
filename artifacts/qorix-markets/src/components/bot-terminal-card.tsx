@@ -31,9 +31,7 @@ import {
   Activity,
   ArrowDown,
   ArrowUp,
-  Sparkles,
   Target,
-  TrendingUp,
   Zap,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -1521,8 +1519,8 @@ export function BotTerminalCard() {
   const featuredCode = "BTCUSD";
   const featured = quotes.find((q) => q.code === featuredCode);
   const summary = state?.summary;
-  const plan = state?.bot.plan;
-  const userToday = state?.userToday;
+  void state?.bot.plan;
+  void state?.userToday;
   const positions = state?.openPositions ?? [];
 
   // Featured-pair entry lines — pick the 4 positions whose entry
@@ -1933,43 +1931,6 @@ export function BotTerminalCard() {
       {/* Open positions strip */}
       <PositionsStrip positions={positions} quotes={quotes} livePnl={scalpTotalPnl} />
 
-      {/* Bot plan + user share strip */}
-      <div className="px-3 sm:px-4 py-2.5 border-t bg-background/40 text-[10px] sm:text-[11px] flex items-center justify-between gap-2 sm:gap-3 flex-wrap">
-        <div className="flex items-center gap-1.5 sm:gap-2 text-muted-foreground flex-wrap">
-          <TrendingUp className="size-3 text-emerald-400 shrink-0" />
-          <span>Plan</span>
-          {plan ? (
-            <span className="font-mono tabular-nums text-foreground">
-              {plan.executed}/{plan.totalSlots}
-            </span>
-          ) : (
-            <span className="text-muted-foreground/60">—</span>
-          )}
-          {plan?.nextSlot ? (
-            <>
-              <span className="text-muted-foreground/40">·</span>
-              <span>next</span>
-              <span className="font-mono text-foreground">
-                {plan.nextSlot.pair} {plan.nextSlot.direction}
-              </span>
-              <span>in</span>
-              <CountdownLabel to={plan.nextSlot.scheduledAt} />
-            </>
-          ) : plan ? (
-            <span className="text-muted-foreground/60">· no upcoming slot</span>
-          ) : null}
-        </div>
-        <div className="text-muted-foreground inline-flex items-center gap-1.5">
-          <Sparkles className="size-3 text-amber-400 shrink-0" />
-          <span>Your share today:</span>
-          <span className="font-mono tabular-nums text-foreground">
-            ${(userToday?.totalProfit ?? 0).toFixed(2)}
-          </span>
-          <span className="text-muted-foreground/60">
-            ({userToday?.distributionsCount ?? 0})
-          </span>
-        </div>
-      </div>
     </Card>
   );
 }
