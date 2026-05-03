@@ -466,7 +466,49 @@ export function InrDepositTab() {
     },
   });
 
-  const handleFiles = (files: FileList | File[]) => {
+  // Downscale + re-encode to JPEG so even 10–15 MB phone screenshots
+  // (which previously blanked the page on submit) become ~150–400 KB
+  // data URLs the API can accept. We never reject by raw file size now;
+  // compression handles it.
+  const compressImage = (file: File): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error("Could not read file"));
+      reader.onload = () => {
+        const src = reader.result as string;
+        const img = new Image();
+        img.onerror = () => reject(new Error("Unsupported image"));
+        img.onload = () => {
+          try {
+            const MAX_EDGE = 1600;
+            let { width, height } = img;
+            if (width > MAX_EDGE || height > MAX_EDGE) {
+              if (width >= height) {
+                height = Math.round((height * MAX_EDGE) / width);
+                width = MAX_EDGE;
+              } else {
+                width = Math.round((width * MAX_EDGE) / height);
+                height = MAX_EDGE;
+              }
+            }
+            const canvas = document.createElement("canvas");
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext("2d");
+            if (!ctx) return reject(new Error("Canvas unavailable"));
+            ctx.drawImage(img, 0, 0, width, height);
+            const out = canvas.toDataURL("image/jpeg", 0.82);
+            resolve(out);
+          } catch (err: any) {
+            reject(err);
+          }
+        };
+        img.src = src;
+      };
+      reader.readAsDataURL(file);
+    });
+
+  const handleFiles = async (files: FileList | File[]) => {
     const list = Array.from(files);
     const remaining = MAX_PROOFS - proofs.length;
     if (remaining <= 0) {
@@ -485,22 +527,26 @@ export function InrDepositTab() {
       });
     }
     for (const file of accepted) {
-      if (file.size > 2 * 1024 * 1024) {
+      if (!file.type.startsWith("image/")) {
         toast({
-          title: `${file.name || "Image"} too large`,
-          description: "Each image must be under 2 MB.",
+          title: `${file.name || "File"} not an image`,
+          description: "Please upload PNG or JPG screenshots.",
           variant: "destructive",
         });
         continue;
       }
-      const reader = new FileReader();
-      reader.onload = () => {
-        const dataUrl = reader.result as string;
+      try {
+        const dataUrl = await compressImage(file);
         setProofs((prev) =>
           prev.length >= MAX_PROOFS ? prev : [...prev, dataUrl],
         );
-      };
-      reader.readAsDataURL(file);
+      } catch (err: any) {
+        toast({
+          title: `${file.name || "Image"} could not be processed`,
+          description: err?.message ?? "Try a different screenshot.",
+          variant: "destructive",
+        });
+      }
     }
   };
 
@@ -1024,7 +1070,7 @@ export function InrDepositTab() {
                   <span>
                     Upload Payment Proof{" "}
                     <span className="text-muted-foreground/60">
-                      (optional · up to {MAX_PROOFS} images · 2 MB each)
+                      (optional · up to {MAX_PROOFS} images)
                     </span>
                   </span>
                   {proofs.length > 0 && (
