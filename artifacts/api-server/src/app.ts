@@ -12,6 +12,12 @@ import { adminIpAllowlist, adminIpAllowlistEnabled } from "./middlewares/admin-i
 import { getCaptchaProvider } from "./lib/captcha-service";
 import { issueCsrfToken } from "./lib/csrf-token";
 import { peekLocalHeartbeat } from "./lib/worker-heartbeat-service";
+// OpenAPI spec bundled as a string at build time via esbuild's
+// '.yaml': 'text' loader (see build.mjs). Served by /api/openapi.yaml +
+// /api/docs (Scalar UI) below. Module declaration in src/yaml.d.ts.
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore — resolved at build time by esbuild's text loader
+import openapiYamlContent from "../../../lib/api-spec/openapi.yaml";
 
 const app: Express = express();
 
@@ -410,6 +416,50 @@ app.get("/api/csrf", (req, res) => {
     return;
   }
   res.json({ enabled: true, token: issued.token, expiresAt: issued.expiresAt });
+});
+
+// ─── Public API documentation (Batch BH) ──────────────────────────────────
+// Two routes that together expose the full OpenAPI 3 specification of this
+// server in both raw + browsable form. Mounted here (after CSRF, before the
+// authenticated /api/* router tree) so they inherit the global rate limit
+// but require neither auth nor a CSRF token — public docs are intentional,
+// just like Stripe / Twilio / GitHub. Mobile clients (and the third-party
+// mobile dev currently integrating) need a single canonical reference URL
+// they can hit from a browser, curl, or codegen tool without credentials.
+//
+// GET /api/openapi.yaml  → raw spec (text/yaml). Bundled at build time via
+//                          esbuild's ".yaml": "text" loader, so the file
+//                          ships INSIDE dist/index.mjs as a string — zero
+//                          runtime fs reads, zero risk of "file not found"
+//                          when the container WORKDIR differs from dev.
+// GET /api/docs          → Scalar API Reference UI (single-page HTML that
+//                          loads /api/openapi.yaml). Pure CDN — no npm
+//                          install, no extra bundle weight. Includes
+//                          search, deep links, request/response samples,
+//                          and copy-paste curl/Kotlin/Swift snippets,
+//                          which is exactly what the mobile dev needs.
+app.get("/api/openapi.yaml", (_req, res) => {
+  res.setHeader("Content-Type", "application/yaml; charset=utf-8");
+  res.setHeader("Cache-Control", "public, max-age=300");
+  res.send(openapiYamlContent as unknown as string);
+});
+app.get("/api/docs", (_req, res) => {
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.setHeader("Cache-Control", "public, max-age=300");
+  res.send(`<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Qorix Markets API — Mobile Developer Reference</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%E2%9A%A1%3C/text%3E%3C/svg%3E" />
+  <style>body{margin:0;background:#0a0a0a;}</style>
+</head>
+<body>
+  <script id="api-reference" data-url="/api/openapi.yaml" data-configuration='{"theme":"purple","darkMode":true,"layout":"modern","showSidebar":true,"hideClientButton":false,"defaultHttpClient":{"targetKey":"shell","clientKey":"curl"}}'></script>
+  <script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference"></script>
+</body>
+</html>`);
 });
 
 // ─── B28 L4: Admin IP allowlist (opt-in via ADMIN_IP_ALLOWLIST env) ───────
