@@ -1046,6 +1046,15 @@ export function DemoDashboardBody({
           date: format(new Date(p.date), "MMM dd"),
           ret: base > 0 ? ((Number(p.equity) - base) / base) * 100 : 0,
         }));
+        // Live nudge: lift the trailing point + headline % by scalp bot pnl
+        // so Rolling Returns breathes with Bot Terminal pill.
+        const liveDeltaPct = base > 0 ? (scalpBotPnl / base) * 100 : 0;
+        if (series.length > 0) {
+          series[series.length - 1] = {
+            ...series[series.length - 1],
+            ret: series[series.length - 1].ret + liveDeltaPct,
+          };
+        }
         const last = series.length > 0 ? series[series.length - 1].ret : 0;
         const isPos = last >= 0;
         const stroke = isPos ? "rgba(34,197,94,1)" : "rgba(239,68,68,1)";
