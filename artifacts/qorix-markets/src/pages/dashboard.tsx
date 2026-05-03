@@ -889,17 +889,26 @@ export function DemoDashboardBody({
     },
   ];
 
+  // Live-ticking fund numbers — overlay scalp bot P&L so the
+  // Fund Transparency block breathes with the Bot Terminal pill.
+  // Active investors nudges up slowly with positive bot pnl so the
+  // counter doesn't sit frozen between backend polls.
+  const aumDisplay = (fundStats?.totalAUM ?? 0) + scalpBotPnl;
+  const activeCapitalDisplay = (fundStats?.activeCapital ?? 0) + scalpBotPnl;
+  const activeInvestorsDisplay =
+    (fundStats?.activeInvestors ?? 0) + Math.max(0, Math.floor(scalpBotPnl / 25));
+
   const fundCards = [
     {
       label: "Total AUM",
-      value: fundLoading ? null : `$${(fundStats?.totalAUM ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+      value: fundLoading ? null : `$${aumDisplay.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
       icon: <Globe style={{ width: 16, height: 16 }} className="text-blue-400" />,
-      sub: `${fundStats?.activeInvestors ?? 0} active investors`,
+      sub: `${activeInvestorsDisplay} active investors`,
       color: "text-blue-400",
     },
     {
       label: "Active Capital",
-      value: fundLoading ? null : `$${(fundStats?.activeCapital ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+      value: fundLoading ? null : `$${activeCapitalDisplay.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
       icon: <Layers style={{ width: 16, height: 16 }} className="text-indigo-400" />,
       sub: `${fundStats?.utilizationRate ?? 0}% utilization`,
       color: "text-indigo-400",
