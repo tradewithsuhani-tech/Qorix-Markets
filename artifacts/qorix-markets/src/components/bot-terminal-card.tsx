@@ -454,11 +454,19 @@ function LiveCandleChart({
   persistKey,
   positions = [],
   height = 280,
+  isFullscreenExternal,
+  onToggleFullscreen,
 }: {
   quote: BotQuote | undefined;
   persistKey: string;
   positions?: BotStateOpenPosition[];
   height?: number;
+  // When provided, the chart's fullscreen state is controlled by the
+  // parent (used so the BotTerminalCard can wrap the entire card —
+  // including the MT5-style bottom tab bar — in the fullscreen
+  // overlay instead of just the chart SVG).
+  isFullscreenExternal?: boolean;
+  onToggleFullscreen?: () => void;
 }) {
   // Persist key is driven by the parent's `featuredCode` so that
   // switching the featured pair (e.g. XAUUSD → BTCUSD on weekends)
@@ -586,7 +594,25 @@ function LiveCandleChart({
   // Click maximize button (or press F) → chart expands to a fullscreen
   // overlay (fixed inset-0) styled like a pro exchange terminal.
   // ESC exits fullscreen.
-  const [isFullscreen, setIsFullscreen] = useState(false);
+  // The parent BotTerminalCard can take control of fullscreen state
+  // so the entire card (including the bottom tab bar) goes fullscreen
+  // together. When `isFullscreenExternal` is provided, the chart is
+  // NO LONGER its own fixed overlay — the parent handles that — and
+  // the chart simply renders large to fill the parent container.
+  const [internalFullscreen, setInternalFullscreen] = useState(false);
+  const isControlled = isFullscreenExternal !== undefined;
+  const isFullscreen = isControlled
+    ? (isFullscreenExternal as boolean)
+    : internalFullscreen;
+  const setIsFullscreen = (v: boolean | ((prev: boolean) => boolean)) => {
+    if (isControlled) {
+      onToggleFullscreen?.();
+    } else {
+      setInternalFullscreen((prev) =>
+        typeof v === "function" ? (v as (p: boolean) => boolean)(prev) : v,
+      );
+    }
+  };
   const [viewport, setViewport] = useState({
     w: typeof window !== "undefined" ? window.innerWidth : 800,
     h: typeof window !== "undefined" ? window.innerHeight : 600,
@@ -594,22 +620,26 @@ function LiveCandleChart({
   useEffect(() => {
     if (!isFullscreen) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setIsFullscreen(false);
+      if (e.key === "Escape") {
+        if (isControlled) onToggleFullscreen?.();
+        else setInternalFullscreen(false);
+      }
     };
     const onResize = () =>
       setViewport({ w: window.innerWidth, h: window.innerHeight });
     onResize();
-    document.body.style.overflow = "hidden";
+    // Body scroll lock is owned by the parent when controlled.
+    if (!isControlled) document.body.style.overflow = "hidden";
     window.addEventListener("keydown", onKey);
     window.addEventListener("resize", onResize);
     window.addEventListener("orientationchange", onResize);
     return () => {
-      document.body.style.overflow = "";
+      if (!isControlled) document.body.style.overflow = "";
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("resize", onResize);
       window.removeEventListener("orientationchange", onResize);
     };
-  }, [isFullscreen]);
+  }, [isFullscreen, isControlled, onToggleFullscreen]);
 
   // Aggregate live unrealized P&L across ALL open positions — shown as
   // a prominent overlay so the investor can see at a glance what the
@@ -730,8 +760,11 @@ function LiveCandleChart({
         flash === "up" && "bg-emerald-500/[0.04]",
         flash === "down" && "bg-rose-500/[0.04]",
         dragRef.current ? "cursor-grabbing" : "cursor-grab",
-        isFullscreen &&
+        // When the chart is controlled by the parent card-level FS,
+        // the parent owns the fixed overlay — the chart just fills it.
+        isFullscreen && !isControlled &&
           "fixed inset-0 z-[100] !rounded-none bg-zinc-950 p-3 sm:p-4 flex flex-col justify-center",
+        isFullscreen && isControlled && "h-full flex flex-col justify-center",
       )}
       onWheel={handleWheel}
       onTouchStart={handleTouchStart}
@@ -2120,6 +2153,23 @@ export function BotTerminalCard({ totalAum = 0 }: { totalAum?: number } = {}) {
   type TerminalTab = "quotes" | "charts" | "trade" | "history";
   const [activeTab, setActiveTab] = useState<TerminalTab>("charts");
 
+  // Card-level fullscreen — the chart's maximize button toggles this
+  // so the WHOLE terminal (chart + bottom tab bar) goes fullscreen
+  // together. ESC exits.
+  const [isCardFs, setIsCardFs] = useState(false);
+  useEffect(() => {
+    if (!isCardFs) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setIsCardFs(false);
+    };
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = "";
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [isCardFs]);
+
   // Persist last 100 closed bot trades to localStorage so the History
   // tab keeps a meaningful tape across reloads (closedToday from API
   // resets at UTC midnight). Dedupe by trade id.
@@ -2167,7 +2217,13 @@ export function BotTerminalCard({ totalAum = 0 }: { totalAum?: number } = {}) {
   const marginLevelPct = usedMargin > 0 ? (equity / usedMargin) * 100 : 0;
 
   return (
-    <Card className="overflow-hidden relative">
+    <Card
+      className={cn(
+        "overflow-hidden relative",
+        isCardFs &&
+          "fixed inset-0 z-[100] !rounded-none bg-zinc-950 flex flex-col",
+      )}
+    >
       <JustFilledToast fill={fillToast} />
 
       {/* Header */}
@@ -2269,12 +2325,14 @@ export function BotTerminalCard({ totalAum = 0 }: { totalAum?: number } = {}) {
               </div>
             </div>
           )}
-          <div className="p-2 sm:p-3">
+          <div className={cn("p-2 sm:p-3", isCardFs && "flex-1 min-h-0")}>
             <LiveCandleChart
               quote={featured}
               persistKey={featuredCode}
               positions={chartPositions}
-              height={260}
+              height={isCardFs ? Math.max(280, window.innerHeight - 220) : 260}
+              isFullscreenExternal={isCardFs}
+              onToggleFullscreen={() => setIsCardFs((v) => !v)}
             />
           </div>
         </>
