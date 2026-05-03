@@ -1054,9 +1054,9 @@ function LiveCandleChart({
                     y1={y}
                     y2={y}
                     stroke={color}
-                    strokeOpacity="0.45"
-                    strokeWidth="0.6"
-                    strokeDasharray="3 3"
+                    strokeOpacity="0.75"
+                    strokeWidth={isFullscreen ? 1.6 : 1.3}
+                    strokeDasharray="4 3"
                   />
                 ) : null}
 
@@ -1147,12 +1147,12 @@ function LiveCandleChart({
                     pile up at the chart top/bottom edge. */}
                 {isMobile && !offChart ? (
                   <text
-                    x={padLeft + 2}
-                    y={y - 2}
+                    x={padLeft + 4}
+                    y={y - 4}
                     fill={color}
-                    fontSize="9"
+                    fontSize={isFullscreen ? 14 : 12}
                     fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
-                    fontWeight="700"
+                    fontWeight="800"
                   >
                     {sideLabel} {lots.toFixed(2)},  {pnlSign}
                     {pnlUsd.toFixed(2)} USD
@@ -1169,21 +1169,21 @@ function LiveCandleChart({
                 <g>
                   <rect
                     x={padLeft + chartW + 1}
-                    y={tagY}
-                    width={tagW}
-                    height={tagH}
+                    y={tagY - (isFullscreen ? 5 : 3)}
+                    width={padRight - 4}
+                    height={isFullscreen ? 22 : 18}
                     rx={1.5}
                     fill={color}
-                    opacity={offChart ? 0.7 : 0.85}
+                    opacity={offChart ? 0.78 : 0.92}
                   />
                   <text
-                    x={padLeft + chartW + 1 + tagW / 2}
-                    y={tagY + 8.5}
+                    x={padLeft + chartW + 1 + (padRight - 4) / 2}
+                    y={tagY + (isFullscreen ? 11 : 9)}
                     textAnchor="middle"
                     fill="#0f172a"
-                    fontSize="8"
+                    fontSize={isFullscreen ? 16 : 12}
                     fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
-                    fontWeight="700"
+                    fontWeight="800"
                   >
                     {p.entryPrice.toFixed(precision)}
                   </text>
