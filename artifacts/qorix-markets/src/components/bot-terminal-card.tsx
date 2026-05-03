@@ -2398,23 +2398,7 @@ export function BotTerminalCard({
             <span className="text-rose-400/80">{scalpStats.shortLosses}L</span>
           </span>
           {summary ? (
-            <>
-              <span className="text-muted-foreground/50 hidden sm:inline">•</span>
-              <span className="hidden sm:inline">{summary.openCount} open</span>
-              <span className="text-muted-foreground/50 hidden sm:inline">•</span>
-              <span
-                className={cn(
-                  summary.closedTodayPctSum > 0
-                    ? "text-emerald-400"
-                    : summary.closedTodayPctSum < 0
-                      ? "text-rose-400"
-                      : "",
-                )}
-              >
-                {summary.closedTodayPctSum >= 0 ? "+" : ""}
-                {summary.closedTodayPctSum.toFixed(2)}% today
-              </span>
-            </>
+            <span className="hidden sm:inline">{summary.openCount} open</span>
           ) : (
             <span className="text-muted-foreground/50">—</span>
           )}
