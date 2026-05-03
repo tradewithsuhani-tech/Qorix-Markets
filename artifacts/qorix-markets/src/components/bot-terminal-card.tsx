@@ -2944,7 +2944,7 @@ function HistoryPanel({
           />
         </dl>
       </div>
-      <div className="flex-1 min-h-0 max-h-[380px] sm:max-h-none overflow-y-auto divide-y divide-border/40">
+      <div className="flex-1 min-h-0 overflow-y-auto divide-y divide-border/40">
         {rows.length === 0 ? (
           <div className="p-6 text-center text-xs text-muted-foreground">
             No closed trades yet. They will appear here as the bot closes
