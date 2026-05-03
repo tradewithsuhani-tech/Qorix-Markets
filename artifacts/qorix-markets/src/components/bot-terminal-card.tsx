@@ -463,6 +463,57 @@ function LiveCandleChart({
   const ema = useMemo(() => computeEma(candles, EMA_PERIOD), [candles]);
   const flash = useFlash(quote?.mid ?? 0, 350);
   const isMobile = useIsMobile();
+  // ── Zoom state ──────────────────────────────────────────────────────
+  // visibleCount = how many of the most-recent candles to draw. Wheel
+  // / trackpad-pinch on desktop, two-finger pinch on mobile, double-tap
+  // / double-click resets to the full window.
+  const ZOOM_MIN = 15;
+  const [visibleCount, setVisibleCount] = useState(MAX_CANDLES);
+  const visibleCandles = useMemo(
+    () => candles.slice(-visibleCount),
+    [candles, visibleCount],
+  );
+  const visibleEma = useMemo(
+    () => ema.slice(-visibleCount),
+    [ema, visibleCount],
+  );
+  const pinchRef = useRef<number | null>(null);
+  const touchDist = (touches: React.TouchList) => {
+    const a = touches[0];
+    const b = touches[1];
+    return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+  };
+  const handleWheel = (e: React.WheelEvent) => {
+    // Only intercept when the user is clearly zooming the chart
+    // (vertical scroll). Lets the page still scroll when over the
+    // chart with momentum scroll on trackpads.
+    if (Math.abs(e.deltaY) < 1) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const factor = e.deltaY > 0 ? 1.12 : 0.88;
+    setVisibleCount((v) =>
+      Math.max(ZOOM_MIN, Math.min(MAX_CANDLES, Math.round(v * factor))),
+    );
+  };
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length === 2) pinchRef.current = touchDist(e.touches);
+  };
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (e.touches.length === 2 && pinchRef.current != null) {
+      e.preventDefault();
+      const d = touchDist(e.touches);
+      if (d <= 0) return;
+      const ratio = pinchRef.current / d; // spread fingers → ratio<1 → fewer candles → zoom in
+      setVisibleCount((v) =>
+        Math.max(ZOOM_MIN, Math.min(MAX_CANDLES, Math.round(v * ratio))),
+      );
+      pinchRef.current = d;
+    }
+  };
+  const handleTouchEnd = () => {
+    pinchRef.current = null;
+  };
+  const resetZoom = () => setVisibleCount(MAX_CANDLES);
 
   // Auto-scaled price range with 8% padding. Featured positions ARE
   // folded into the range so entries render at their TRUE y position
@@ -471,12 +522,12 @@ function LiveCandleChart({
   // single far-away entry from squashing candles into a sliver, the
   // position-driven extension is capped at 2.5× the raw candle range.
   const range = useMemo(() => {
-    if (candles.length === 0) {
+    if (visibleCandles.length === 0) {
       return { min: (quote?.mid ?? 0) - 1, max: (quote?.mid ?? 0) + 1 };
     }
     let cMin = Infinity;
     let cMax = -Infinity;
-    for (const c of candles) {
+    for (const c of visibleCandles) {
       if (c.low < cMin) cMin = c.low;
       if (c.high > cMax) cMax = c.high;
     }
@@ -503,16 +554,16 @@ function LiveCandleChart({
     }
     const pad = (max - min) * 0.08;
     return { min: min - pad, max: max + pad };
-  }, [candles, quote?.mid, positions]);
+  }, [visibleCandles, quote?.mid, positions]);
 
   // Volume scale — uses live tick count per candle as a proxy for
   // activity. Feels organic because busy candles (lots of synth
   // ticks) get tall bars and quiet ones get short bars.
   const maxTicks = useMemo(() => {
     let m = 1;
-    for (const c of candles) if ((c.ticks ?? 1) > m) m = c.ticks ?? 1;
+    for (const c of visibleCandles) if ((c.ticks ?? 1) > m) m = c.ticks ?? 1;
     return m;
-  }, [candles]);
+  }, [visibleCandles]);
 
   // SVG geometry — fixed viewBox, scales responsively via class.
   // Bottom 18% reserved for the volume strip; the price area uses
@@ -536,7 +587,7 @@ function LiveCandleChart({
   const priceH = chartH - volH - VOL_GAP;
   const volTop = padTop + priceH + VOL_GAP;
   const volBottom = padTop + chartH;
-  const slotW = chartW / MAX_CANDLES;
+  const slotW = chartW / visibleCount;
   const bodyW = Math.max(2, slotW * 0.65);
 
   const priceToY = (p: number) => {
@@ -545,7 +596,7 @@ function LiveCandleChart({
   };
 
   // Right-anchored: most recent candle sits at chartW edge
-  const offsetX = chartW - candles.length * slotW;
+  const offsetX = chartW - visibleCandles.length * slotW;
 
   const precision = quote?.precision ?? 2;
   const liveY = quote?.mid !== undefined ? priceToY(quote.mid) : null;
@@ -553,11 +604,27 @@ function LiveCandleChart({
   return (
     <div
       className={cn(
-        "relative w-full transition-colors duration-300 rounded-md",
+        "relative w-full transition-colors duration-300 rounded-md select-none",
         flash === "up" && "bg-emerald-500/[0.04]",
         flash === "down" && "bg-rose-500/[0.04]",
       )}
+      onWheel={handleWheel}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+      onDoubleClick={resetZoom}
+      style={{ touchAction: visibleCount === MAX_CANDLES ? "auto" : "none" }}
     >
+      {visibleCount !== MAX_CANDLES && (
+        <button
+          type="button"
+          onClick={resetZoom}
+          className="absolute top-1.5 right-1.5 z-10 px-2 py-0.5 text-[10px] font-semibold rounded bg-white/10 hover:bg-white/20 text-white/90 backdrop-blur"
+          title="Reset zoom"
+        >
+          {visibleCount}/{MAX_CANDLES} · reset
+        </button>
+      )}
       <svg
         viewBox={`0 0 ${W} ${H}`}
         className="w-full h-auto block"
@@ -590,7 +657,7 @@ function LiveCandleChart({
           strokeOpacity="0.12"
           strokeWidth="0.5"
         />
-        {candles.map((c, i) => {
+        {visibleCandles.map((c, i) => {
           const cx = padLeft + offsetX + i * slotW + slotW / 2;
           const ratio = (c.ticks ?? 1) / maxTicks;
           const barH = Math.max(1, ratio * (volH - 2));
@@ -610,7 +677,7 @@ function LiveCandleChart({
         })}
 
         {/* Candles */}
-        {candles.map((c, i) => {
+        {visibleCandles.map((c, i) => {
           const cx = padLeft + offsetX + i * slotW + slotW / 2;
           const yOpen = priceToY(c.open);
           const yClose = priceToY(c.close);
@@ -643,13 +710,13 @@ function LiveCandleChart({
         })}
 
         {/* EMA(20) overlay */}
-        {ema.some((v) => v !== null) ? (
+        {visibleEma.some((v) => v !== null) ? (
           <polyline
             fill="none"
             stroke="#fbbf24"
             strokeWidth="1.25"
             strokeOpacity="0.85"
-            points={ema
+            points={visibleEma
               .map((v, i) => {
                 if (v === null) return null;
                 const cx = padLeft + offsetX + i * slotW + slotW / 2;
