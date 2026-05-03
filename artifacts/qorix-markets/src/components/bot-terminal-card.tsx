@@ -583,16 +583,27 @@ function LiveCandleChart({
   // overlay (fixed inset-0) styled like a pro exchange terminal.
   // ESC exits fullscreen.
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [viewport, setViewport] = useState({
+    w: typeof window !== "undefined" ? window.innerWidth : 800,
+    h: typeof window !== "undefined" ? window.innerHeight : 600,
+  });
   useEffect(() => {
     if (!isFullscreen) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setIsFullscreen(false);
     };
+    const onResize = () =>
+      setViewport({ w: window.innerWidth, h: window.innerHeight });
+    onResize();
     document.body.style.overflow = "hidden";
     window.addEventListener("keydown", onKey);
+    window.addEventListener("resize", onResize);
+    window.addEventListener("orientationchange", onResize);
     return () => {
       document.body.style.overflow = "";
       window.removeEventListener("keydown", onKey);
+      window.removeEventListener("resize", onResize);
+      window.removeEventListener("orientationchange", onResize);
     };
   }, [isFullscreen]);
 
@@ -667,10 +678,15 @@ function LiveCandleChart({
   // SVG geometry — fixed viewBox, scales responsively via class.
   // Bottom 18% reserved for the volume strip; the price area uses
   // priceH and the volume area sits below with a 4px gap.
+  // In FULLSCREEN we recompute H from the live viewport so the SVG
+  // aspect ratio matches the screen and candles don't get stretched
+  // into thin vertical bars on portrait phones.
   const W = 800;
-  const H = height;
-  const padTop = 12;
-  const padBottom = 22;
+  const H = isFullscreen
+    ? Math.max(280, Math.round(W * (viewport.h / Math.max(1, viewport.w))))
+    : height;
+  const padTop = isFullscreen ? 56 : 12;
+  const padBottom = isFullscreen ? 36 : 22;
   // On mobile we drop the left chip gutter entirely (chips would be
   // unreadable at phone width) and shrink the right price-tag column,
   // so candles get nearly the full svg width for clarity.
@@ -766,9 +782,16 @@ function LiveCandleChart({
         )}
       </button>
       {/* Aggregate live P&L overlay — top-left of chart. Updates every
-          tick so the investor immediately sees what the bot is doing. */}
+          tick so the investor immediately sees what the bot is doing.
+          In fullscreen we move it BELOW the LIVE TERMINAL header so
+          the two pills don't overlap. */}
       {positions.length > 0 ? (
-        <div className="absolute top-1.5 left-2 z-10 flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-black/40 backdrop-blur border border-white/10">
+        <div
+          className={cn(
+            "absolute z-10 flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-black/40 backdrop-blur border border-white/10",
+            isFullscreen ? "top-11 left-3" : "top-1.5 left-2",
+          )}
+        >
           <span className="relative flex h-1.5 w-1.5">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-60" />
             <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-amber-400" />
