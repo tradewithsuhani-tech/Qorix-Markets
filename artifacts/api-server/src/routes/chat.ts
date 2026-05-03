@@ -25,6 +25,7 @@ import {
   type ChatHistoryItem,
 } from "../lib/chat-llm";
 import { isLLMAvailable } from "../lib/openai-client";
+import { sendTelegramMessage } from "../lib/telegram";
 import {
   getChatSettings,
   invalidateChatSettings,
@@ -420,6 +421,92 @@ router.post("/chat/session/:id/end", authMiddleware, async (req: AuthRequest, re
   }
 });
 
+// Fire-and-forget: ping every admin (isAdmin=true) who has a Telegram
+// chat bound + opt-in enabled, so the human team learns about a fresh
+// expert request immediately instead of having to sit on /admin/chats.
+// We never block the HTTP response on Telegram delivery — failures are
+// logged and swallowed.
+async function notifyAdminsOfExpertRequest(
+  sessionId: number,
+  userId: number,
+): Promise<void> {
+  try {
+    const userRows = await db
+      .select({ fullName: usersTable.fullName, email: usersTable.email })
+      .from(usersTable)
+      .where(eq(usersTable.id, userId))
+      .limit(1);
+    const u = userRows[0];
+    if (!u) return;
+
+    // Last user-typed message in this session — gives the admin instant
+    // context ("what was the user asking?") before they open the panel.
+    const lastUserRows = await db
+      .select({ content: chatMessagesTable.content })
+      .from(chatMessagesTable)
+      .where(
+        and(
+          eq(chatMessagesTable.sessionId, sessionId),
+          eq(chatMessagesTable.senderType, "user"),
+        ),
+      )
+      .orderBy(desc(chatMessagesTable.createdAt))
+      .limit(1);
+    const lastMsgRaw = lastUserRows[0]?.content ?? "(no message yet)";
+    const lastMsg =
+      lastMsgRaw.length > 200 ? lastMsgRaw.slice(0, 200) + "…" : lastMsgRaw;
+
+    // Pull every admin with a usable telegram binding. We deliberately
+    // notify ALL admins (not just one) so an expert request can never
+    // fall through the cracks if a single admin is offline / asleep.
+    const admins = await db
+      .select({
+        chatId: usersTable.telegramChatId,
+        fullName: usersTable.fullName,
+      })
+      .from(usersTable)
+      .where(
+        and(
+          eq(usersTable.isAdmin, true),
+          eq(usersTable.telegramOptIn, true),
+        ),
+      );
+    const reachable = admins.filter(
+      (a): a is { chatId: number; fullName: string } =>
+        typeof a.chatId === "number" && a.chatId > 0,
+    );
+    if (reachable.length === 0) {
+      logger.warn(
+        { sessionId, userId },
+        "[chat/expert] no admin has telegram bound + opted-in — silent handoff",
+      );
+      return;
+    }
+
+    const title = "🚨 Expert Help Requested";
+    const body =
+      `User: ${u.fullName} (${u.email})\n` +
+      `Last message: "${lastMsg}"\n\n` +
+      `Open chat: https://qorixmarkets.com/admin/chats?id=${sessionId}`;
+
+    const results = await Promise.allSettled(
+      reachable.map((a) => sendTelegramMessage(a.chatId, title, body)),
+    );
+    const okCount = results.filter(
+      (r) => r.status === "fulfilled" && r.value.ok,
+    ).length;
+    logger.info(
+      { sessionId, userId, adminCount: reachable.length, okCount },
+      "[chat/expert] admin telegram notify dispatched",
+    );
+  } catch (err) {
+    logger.warn(
+      { err: (err as Error).message, sessionId, userId },
+      "[chat/expert] admin notify failed",
+    );
+  }
+}
+
 // Request expert
 router.post("/chat/expert", authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
@@ -442,6 +529,13 @@ router.post("/chat/expert", authMiddleware, async (req: AuthRequest, res: Respon
       sessionId,
       senderType: "bot",
       content: "You have been connected to our expert team. An advisor will respond shortly. Our support hours are 9 AM – 6 PM (Mon–Sat).",
+    });
+
+    // Fire-and-forget Telegram alert to every admin with a bound chat.
+    // Wrapped in setImmediate so we never block the HTTP response on
+    // Telegram I/O (matches the pattern in lib/notifications.ts).
+    setImmediate(() => {
+      void notifyAdminsOfExpertRequest(sessionId, userId);
     });
 
     res.json({ success: true });
