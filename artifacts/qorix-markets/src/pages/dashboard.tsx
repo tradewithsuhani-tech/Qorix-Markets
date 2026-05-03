@@ -1215,7 +1215,7 @@ export function DemoDashboardBody({
         )}
 
         {/* Bot Trading Terminal — Batch T */}
-        <BotTerminalCard />
+        <BotTerminalCard totalAum={fundStats?.totalAUM ?? summary?.totalBalance ?? 0} />
 
         {/* Promo Banners — hidden per request */}
         {false && (
