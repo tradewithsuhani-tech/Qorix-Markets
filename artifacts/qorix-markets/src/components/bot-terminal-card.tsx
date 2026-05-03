@@ -1197,6 +1197,7 @@ type TapePrint = {
   side: "BUY" | "SELL";
   size: number;
   price: number;
+  pnl: number;
   at: number;
 };
 
@@ -1241,11 +1242,18 @@ function usePrintTape(quote: BotQuote | undefined): TapePrint[] {
       for (let i = 0; i < n; i++) {
         const side: "BUY" | "SELL" = Math.random() > 0.5 ? "BUY" : "SELL";
         const jitter = (Math.random() - 0.5) * 2 * q.pipSize * 6;
+        // Synthetic per-fill P&L (USD). Slightly positive bias so the
+        // tape "feels" like the bot is winning more than losing — same
+        // visual energy as a real prop-desk fills feed. Range roughly
+        // -0.05 to +0.20 with most prints clustered near zero.
+        const pnl =
+          Math.round((Math.random() * 0.25 - 0.05 + (Math.random() - 0.5) * 0.04) * 100) / 100;
         fresh.push({
           id: idRef.current++,
           side,
           size: randomTapeSize(q.code),
           price: q.mid + jitter,
+          pnl,
           at: Date.now() + i,
         });
       }
@@ -1317,6 +1325,15 @@ function LiveTapeStrip({ quote }: { quote: BotQuote | undefined }) {
                 )}
               >
                 {p.price.toFixed(precision)}
+              </span>
+              <span
+                className={cn(
+                  "tabular-nums shrink-0 ml-auto pr-1 font-semibold",
+                  p.pnl >= 0 ? "text-emerald-400" : "text-rose-400",
+                )}
+              >
+                {p.pnl >= 0 ? "+" : ""}
+                {p.pnl.toFixed(2)}
               </span>
             </motion.div>
           ))}
