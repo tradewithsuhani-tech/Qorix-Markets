@@ -1688,7 +1688,7 @@ function LiveTapeStrip({
                   : "absolute inset-x-0 top-0",
               )}
             >
-              <span className="text-muted-foreground/60 w-[52px] sm:w-16 shrink-0">
+              <span className="text-muted-foreground/60 w-[68px] sm:w-[72px] shrink-0">
                 {new Date(p.at).toLocaleTimeString("en-US", { hour12: false })}
               </span>
               <span
