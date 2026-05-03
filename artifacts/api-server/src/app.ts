@@ -11,6 +11,7 @@ import { cloudflarePin } from "./middlewares/cloudflare-pin";
 import { adminIpAllowlist, adminIpAllowlistEnabled } from "./middlewares/admin-ip-allowlist";
 import { getCaptchaProvider } from "./lib/captcha-service";
 import { issueCsrfToken } from "./lib/csrf-token";
+import { peekLocalHeartbeat } from "./lib/worker-heartbeat-service";
 
 const app: Express = express();
 
@@ -197,6 +198,62 @@ app.get("/api/healthz", (_req, res) => {
   res.json({ status: "ok", captchaProvider: getCaptchaProvider() });
 });
 
+// ─── Worker self-health probe (Task #135) ─────────────────────────────────
+// Mounted alongside /api/healthz so Fly's per-process [[checks]] block can
+// hit it directly on the worker VM's internal port (8080). The endpoint
+// returns 200 only while the in-process heartbeat loop has written a beat
+// in the last WORKER_BEAT_MAX_AGE_MS. If the loop wedges (cron tick stuck
+// inside Node, event-loop blocked, etc.) the probe flips to 503 and Fly
+// restarts the machine — which is exactly the auto-recovery behaviour the
+// 2026-05-01 incident lacked.
+//
+// Behaviour by process group:
+//   - worker  → returns 200 once first heartbeat is written, then tracks
+//               freshness; flips to 503 if the loop stalls.
+//   - app     → no heartbeat loop runs here (we don't write fake beats
+//               from web), so peekLocalHeartbeat() === null → returns 200
+//               with status:"not_applicable". Fly would never probe this
+//               on the app group anyway, but a stray manual curl from
+//               another process group should not 503.
+const WORKER_BEAT_MAX_AGE_MS = 3 * 60_000;
+const WORKER_BEAT_BOOT_GRACE_MS = 2 * 60_000;
+const appBootedAt = Date.now();
+app.get("/api/worker-healthz", (_req, res) => {
+  const lastBeat = peekLocalHeartbeat();
+  if (lastBeat === null) {
+    // No beat yet. On the worker this happens during the boot window
+    // before the first beat write completes — Fly's grace_period
+    // (configured in fly.toml) covers this. Beyond the grace window,
+    // returning 503 lets Fly recycle a worker that imported but never
+    // managed to write its first beat (e.g. DB unreachable on boot).
+    if (Date.now() - appBootedAt < WORKER_BEAT_BOOT_GRACE_MS) {
+      res.json({ status: "not_applicable", lastBeatAt: null });
+      return;
+    }
+    res.status(503).json({
+      status: "no_heartbeat",
+      lastBeatAt: null,
+      bootedAt: new Date(appBootedAt).toISOString(),
+    });
+    return;
+  }
+  const ageMs = Date.now() - lastBeat;
+  if (ageMs > WORKER_BEAT_MAX_AGE_MS) {
+    res.status(503).json({
+      status: "stale",
+      lastBeatAt: new Date(lastBeat).toISOString(),
+      ageMs,
+      maxAgeMs: WORKER_BEAT_MAX_AGE_MS,
+    });
+    return;
+  }
+  res.json({
+    status: "ok",
+    lastBeatAt: new Date(lastBeat).toISOString(),
+    ageMs,
+  });
+});
+
 // ─── B30 L6: CSRF token issuance endpoint ──────────────────────────────────
 // GET /api/csrf — returns a short-lived HMAC-signed token that the web app
 // must include as X-CSRF-Token on every state-changing request once the
@@ -241,7 +298,12 @@ app.get("/api/healthz", (_req, res) => {
 // "no healthy instance" cascade this whole file is designed to prevent.
 const REQUEST_TIMEOUT_MS = 30_000;
 app.use((req, res, next) => {
-  if (req.path === "/api/healthz" || req.path === "/healthz") return next();
+  if (
+    req.path === "/api/healthz" ||
+    req.path === "/healthz" ||
+    req.path === "/api/worker-healthz" ||
+    req.path === "/worker-healthz"
+  ) return next();
   const t = setTimeout(() => {
     if (res.headersSent) return;
     logger.warn(
@@ -348,6 +410,53 @@ app.get("/api/csrf", (req, res) => {
     return;
   }
   res.json({ enabled: true, token: issued.token, expiresAt: issued.expiresAt });
+});
+
+// ─── Public API documentation (Batch BH) ──────────────────────────────────
+// Two routes that together expose the full OpenAPI 3 specification of this
+// server in both raw + browsable form. Mounted here (after CSRF, before the
+// authenticated /api/* router tree) so they inherit the global rate limit
+// but require neither auth nor a CSRF token — public docs are intentional,
+// just like Stripe / Twilio / GitHub. Mobile clients (and the third-party
+// mobile dev currently integrating) need a single canonical reference URL
+// they can hit from a browser, curl, or codegen tool without credentials.
+//
+// GET /api/openapi.yaml  → raw spec (text/yaml). Bundled at build time via
+//                          esbuild's ".yaml": "text" loader, so the file
+//                          ships INSIDE dist/index.mjs as a string — zero
+//                          runtime fs reads, zero risk of "file not found"
+//                          when the container WORKDIR differs from dev.
+// GET /api/docs          → Scalar API Reference UI (single-page HTML that
+//                          loads /api/openapi.yaml). Pure CDN — no npm
+//                          install, no extra bundle weight. Includes
+//                          search, deep links, request/response samples,
+//                          and copy-paste curl/Kotlin/Swift snippets,
+//                          which is exactly what the mobile dev needs.
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore — resolved at build time by esbuild's text loader
+import openapiYamlContent from "../../../lib/api-spec/openapi.yaml";
+app.get("/api/openapi.yaml", (_req, res) => {
+  res.setHeader("Content-Type", "application/yaml; charset=utf-8");
+  res.setHeader("Cache-Control", "public, max-age=300");
+  res.send(openapiYamlContent as unknown as string);
+});
+app.get("/api/docs", (_req, res) => {
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.setHeader("Cache-Control", "public, max-age=300");
+  res.send(`<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Qorix Markets API — Mobile Developer Reference</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%E2%9A%A1%3C/text%3E%3C/svg%3E" />
+  <style>body{margin:0;background:#0a0a0a;}</style>
+</head>
+<body>
+  <script id="api-reference" data-url="/api/openapi.yaml" data-configuration='{"theme":"purple","darkMode":true,"layout":"modern","showSidebar":true,"hideClientButton":false,"defaultHttpClient":{"targetKey":"shell","clientKey":"curl"}}'></script>
+  <script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference"></script>
+</body>
+</html>`);
 });
 
 // ─── B28 L4: Admin IP allowlist (opt-in via ADMIN_IP_ALLOWLIST env) ───────
