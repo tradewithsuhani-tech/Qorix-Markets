@@ -652,7 +652,7 @@ export function DemoDashboardBody({
   // the backend-derived dailyPL so all the dashboard cards (Daily P&L,
   // Today's gain, Total Profit, Live Profit) breathe in sync with the
   // bot terminal pill — gives the "real desk" feel.
-  const scalpBotPnl = useScalpBotPnl();
+  const scalpBotPnl = useScalpBotPnl(totalEquityValue);
   const baseDailyPL = +(totalEquityValue * (dailyPct / 100)).toFixed(2);
   const dailyPL = +(baseDailyPL + scalpBotPnl).toFixed(2);
   const isPositive = dailyPL >= 0;
