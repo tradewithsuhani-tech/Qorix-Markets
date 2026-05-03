@@ -1174,8 +1174,19 @@ export function InrDepositTab() {
               </button>
             </div>
 
-            <button className="w-full text-center text-[11px] text-muted-foreground hover:text-white py-2">
-              Recharge not received? Contact support
+            <button
+              type="button"
+              onClick={() => {
+                try {
+                  window.dispatchEvent(new CustomEvent("qorix:open-support"));
+                } catch {}
+              }}
+              className="w-full text-center text-[11px] text-muted-foreground hover:text-white py-2 underline-offset-2 hover:underline"
+            >
+              Recharge not received?{" "}
+              <span className="text-emerald-300 font-semibold">
+                Contact support
+              </span>
             </button>
           </motion.div>
         )}
