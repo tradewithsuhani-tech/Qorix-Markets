@@ -1567,9 +1567,17 @@ function formatTapeSize(code: string, size: number): string {
   return String(size);
 }
 
+// Module-level cache so the tape survives tab switches (component
+// remounts) — without this the prints array resets every time the
+// user toggles between Quotes/Charts/Trade/History.
+const tapeCache: { prints: TapePrint[]; nextId: number } = {
+  prints: [],
+  nextId: 0,
+};
+
 function usePrintTape(quote: BotQuote | undefined): TapePrint[] {
-  const [prints, setPrints] = useState<TapePrint[]>([]);
-  const idRef = useRef(0);
+  const [prints, setPrints] = useState<TapePrint[]>(() => tapeCache.prints);
+  const idRef = useRef(tapeCache.nextId);
   const quoteRef = useRef(quote);
 
   useEffect(() => {
@@ -1601,7 +1609,12 @@ function usePrintTape(quote: BotQuote | undefined): TapePrint[] {
             at: Date.now() + i,
           });
         }
-        setPrints((prev) => [...fresh, ...prev].slice(0, TAPE_MAX));
+        setPrints((prev) => {
+          const next = [...fresh, ...prev].slice(0, TAPE_MAX);
+          tapeCache.prints = next;
+          tapeCache.nextId = idRef.current;
+          return next;
+        });
       }
       if (cancelled) return;
       const delay =
