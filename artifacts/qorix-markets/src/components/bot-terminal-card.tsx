@@ -1143,9 +1143,11 @@ function PositionPill({
 function PositionsStrip({
   positions,
   quotes,
+  livePnl,
 }: {
   positions: BotStateOpenPosition[];
   quotes: BotQuote[];
+  livePnl: number;
 }) {
   const quotesByPair = useMemo(() => {
     const m = new Map<string, BotQuote>();
@@ -1167,20 +1169,10 @@ function PositionsStrip({
 
   if (visiblePositions.length === 0) return null;
 
-  // Aggregate live USD P&L across all open positions. Mirrors the
-  // per-position calc on the chart chips (lots from deterministic
-  // bucket by id, then (live - entry) × lots × side).
-  const sizeBuckets = [
-    0.01, 0.01, 0.01, 0.01, 0.02, 0.01, 0.01, 0.05, 0.01, 0.01,
-  ];
-  let totalPnl = 0;
-  for (const p of visiblePositions) {
-    const q = quotesByPair.get(p.pair);
-    if (!q) continue;
-    const sign = p.direction.toUpperCase() === "BUY" ? 1 : -1;
-    const lots = sizeBuckets[Math.abs(p.id) % sizeBuckets.length];
-    totalPnl += (q.mid - p.entryPrice) * lots * sign;
-  }
+  // Use the SAME live P&L value as the header pill so the two
+  // numbers stay perfectly synced (single source of truth from
+  // the parent's scalp bot total).
+  const totalPnl = livePnl;
   const pnlPositive = totalPnl >= 0;
 
   return (
@@ -1202,8 +1194,8 @@ function PositionsStrip({
               : "bg-rose-500/15 text-rose-400",
           )}
         >
-          {pnlPositive ? "+" : ""}
-          {totalPnl.toFixed(2)}
+          {pnlPositive ? "+" : "−"}$
+          {Math.abs(totalPnl).toFixed(2)}
         </span>
       </div>
       <div className="flex gap-1.5 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -1939,7 +1931,7 @@ export function BotTerminalCard() {
       <LiveTapeStrip quote={featured} />
 
       {/* Open positions strip */}
-      <PositionsStrip positions={positions} quotes={quotes} />
+      <PositionsStrip positions={positions} quotes={quotes} livePnl={scalpTotalPnl} />
 
       {/* Bot plan + user share strip */}
       <div className="px-3 sm:px-4 py-2.5 border-t bg-background/40 text-[10px] sm:text-[11px] flex items-center justify-between gap-2 sm:gap-3 flex-wrap">
