@@ -2464,6 +2464,20 @@ export function BotTerminalCard({
               onToggleFullscreen={() => setIsCardFs((v) => !v)}
             />
           </div>
+          {/* Inline (non-fullscreen) dashboard view — show the live
+              scalp tape + positions strip below the chart so the
+              dashboard feels alive like the real bot terminal. */}
+          {!isCardFs && (
+            <>
+              <LiveTapeStrip quote={featured} expanded={false} />
+              <PositionsStrip
+                positions={positions}
+                quotes={quotes}
+                livePnl={scalpTotalPnl}
+                openCount={virtualScalpPositions.length}
+              />
+            </>
+          )}
         </>
       )}
 
