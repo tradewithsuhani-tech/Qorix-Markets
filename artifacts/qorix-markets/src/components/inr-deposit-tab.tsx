@@ -1036,10 +1036,9 @@ export function InrDepositTab() {
                 </label>
 
                 {proofs.length === 0 ? (
-                  <button
-                    type="button"
-                    onClick={() => fileRef.current?.click()}
-                    className="w-full rounded-2xl border-2 border-dashed border-white/15 hover:border-emerald-400/60 hover:bg-emerald-500/5 px-4 py-7 flex flex-col items-center gap-2.5 transition-all group"
+                  <label
+                    htmlFor="deposit-proof-input"
+                    className="cursor-pointer w-full rounded-2xl border-2 border-dashed border-white/15 hover:border-emerald-400/60 hover:bg-emerald-500/5 px-4 py-7 flex flex-col items-center gap-2.5 transition-all group"
                   >
                     <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500/25 to-teal-500/10 border border-emerald-500/30 flex items-center justify-center group-hover:scale-105 transition-transform shadow-[0_0_20px_-6px_rgba(16,185,129,0.5)]">
                       <Upload className="w-5 h-5 text-emerald-300" />
@@ -1050,7 +1049,7 @@ export function InrDepositTab() {
                     <span className="text-[10px] text-muted-foreground/70 text-center px-2">
                       PNG / JPG · Add multiple if you paid in parts
                     </span>
-                  </button>
+                  </label>
                 ) : (
                   <>
                     <div className="grid grid-cols-3 sm:grid-cols-4 gap-2.5">
@@ -1088,10 +1087,9 @@ export function InrDepositTab() {
                       ))}
 
                       {proofs.length < MAX_PROOFS && (
-                        <button
-                          type="button"
-                          onClick={() => fileRef.current?.click()}
-                          className="aspect-square rounded-xl border-2 border-dashed border-white/15 hover:border-emerald-400/60 hover:bg-emerald-500/5 flex flex-col items-center justify-center gap-1.5 transition-all group"
+                        <label
+                          htmlFor="deposit-proof-input"
+                          className="cursor-pointer aspect-square rounded-xl border-2 border-dashed border-white/15 hover:border-emerald-400/60 hover:bg-emerald-500/5 flex flex-col items-center justify-center gap-1.5 transition-all group"
                           aria-label="Add more proofs"
                         >
                           <div className="w-9 h-9 rounded-lg bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center group-hover:scale-110 transition-transform">
@@ -1103,7 +1101,7 @@ export function InrDepositTab() {
                           <span className="text-[9px] text-muted-foreground/70">
                             {MAX_PROOFS - proofs.length} left
                           </span>
-                        </button>
+                        </label>
                       )}
                     </div>
 
@@ -1125,6 +1123,7 @@ export function InrDepositTab() {
                     invisible (sr-only style). */}
                 <input
                   ref={fileRef}
+                  id="deposit-proof-input"
                   type="file"
                   accept="image/*"
                   multiple
@@ -1139,13 +1138,11 @@ export function InrDepositTab() {
                     whiteSpace: "nowrap",
                     border: 0,
                     opacity: 0,
-                    pointerEvents: "none",
                   }}
                   onChange={(e) => {
                     if (e.target.files && e.target.files.length > 0) {
                       handleFiles(e.target.files);
                     }
-                    // Reset so the same file can be re-picked
                     e.target.value = "";
                   }}
                 />
