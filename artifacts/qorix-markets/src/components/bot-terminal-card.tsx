@@ -2405,9 +2405,6 @@ export function BotTerminalCard({
 
       {/* FOMO live activity ticker — only shown in fullscreen so the
           terminal feels alive like the main dashboard pill. */}
-      {isCardFs && activeTab !== "history" && fomoMessages.length > 0 && (
-        <FomoTickerInline messages={fomoMessages} />
-      )}
 
       {/* Non-chart tabs share a min-height matching the chart area so
           the card doesn't collapse when switching tabs — otherwise
