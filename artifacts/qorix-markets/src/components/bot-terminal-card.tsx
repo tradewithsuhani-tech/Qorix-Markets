@@ -2502,7 +2502,9 @@ export function BotTerminalCard({
               expanded={isCardFs}
             />
           )}
-          {activeTab === "history" && <HistoryPanel rows={historyRows} />}
+          {activeTab === "history" && (
+            <HistoryPanel rows={historyRows} liveScalpPnl={scalpTotalPnl} />
+          )}
         </div>
       )}
 
@@ -2783,27 +2785,35 @@ function Row({
 
 function HistoryPanel({
   rows,
+  liveScalpPnl = 0,
 }: {
   rows: Array<BotStateClosedTrade & { savedAt: number }>;
+  liveScalpPnl?: number;
 }) {
   // Stable per-session withdrawal ratio in 78-85% range so the number
   // doesn't jump on every render but still varies across visits.
   const withdrawalRatioRef = useRef<number>(
     0.78 + Math.random() * 0.07,
   );
+
+  // Profit field tracks the live scalp bot P&L but only refreshes every
+  // 10 minutes — gives the History tab a slow, "settled accounting"
+  // feel rather than ticking on every render.
+  const [snapshotProfit, setSnapshotProfit] = useState<number>(liveScalpPnl);
+  const liveScalpPnlRef = useRef(liveScalpPnl);
+  useEffect(() => {
+    liveScalpPnlRef.current = liveScalpPnl;
+  }, [liveScalpPnl]);
+  useEffect(() => {
+    const id = setInterval(
+      () => setSnapshotProfit(liveScalpPnlRef.current),
+      10 * 60 * 1000,
+    );
+    return () => clearInterval(id);
+  }, []);
+
   const stats = useMemo(() => {
-    let profit = 0;
-    let commission = 0;
-    for (const r of rows) {
-      const p = r.realizedProfitPercent ?? 0;
-      // Convert pct to a synthetic USD using a $1000 notional unit
-      // — purely cosmetic, gives investor a feel for the scale.
-      profit += p * 10;
-      commission += Math.abs(p) * 1.5;
-    }
-    // Auto-withdrawal stream: 78-85% of accumulated profit is treated
-    // as payout to the investor, the rest is retained as Balance.
-    // Negative profit days yield zero withdrawal (no payout on losses).
+    const profit = snapshotProfit;
     const withdrawal = profit > 0 ? profit * withdrawalRatioRef.current : 0;
     const balance = profit - withdrawal;
     return {
@@ -2814,7 +2824,7 @@ function HistoryPanel({
       commission: 0,
       balance,
     };
-  }, [rows]);
+  }, [snapshotProfit]);
 
   const fmt = (n: number) =>
     n.toLocaleString("en-US", {
