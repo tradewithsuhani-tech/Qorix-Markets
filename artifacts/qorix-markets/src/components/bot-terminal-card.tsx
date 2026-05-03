@@ -778,27 +778,8 @@ function LiveCandleChart({
       onDoubleClick={resetZoom}
       style={{ touchAction: isZoomedOrPanned ? "none" : "pan-y" }}
     >
-      {/* Fullscreen header (only in FS) — pro exchange terminal feel */}
-      {isFullscreen && (
-        <div className="absolute top-0 left-0 right-0 flex items-center justify-between px-4 py-2 bg-gradient-to-b from-black/80 to-transparent z-20">
-          <div className="flex items-center gap-3">
-            <span className="text-xs font-bold uppercase tracking-widest text-emerald-400">
-              ● LIVE TERMINAL
-            </span>
-            <span className="text-xs font-mono text-white/70">
-              {persistKey}
-            </span>
-            {quote?.mid !== undefined && (
-              <span className="text-sm font-mono font-bold text-white">
-                {quote.mid.toFixed(precision)}
-              </span>
-            )}
-          </div>
-          <div className="text-[10px] text-white/40 hidden sm:block">
-            scroll = zoom · drag = pan · ESC to exit
-          </div>
-        </div>
-      )}
+      {/* Fullscreen header removed per investor request — chart stays
+          clean with just the maximize/minimize control. */}
       {/* Maximize / minimize button */}
       <button
         type="button"
@@ -829,7 +810,7 @@ function LiveCandleChart({
         <div
           className={cn(
             "absolute z-10 flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-black/40 backdrop-blur border border-white/10",
-            isFullscreen ? "top-11 left-3" : "top-1.5 left-2",
+            isFullscreen ? "top-2 left-3" : "top-1.5 left-2",
           )}
         >
           <span className="relative flex h-1.5 w-1.5">
