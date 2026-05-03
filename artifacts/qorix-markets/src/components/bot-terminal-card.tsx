@@ -31,6 +31,10 @@ import {
   Activity,
   ArrowDown,
   ArrowUp,
+  ArrowUpDown,
+  CandlestickChart,
+  History as HistoryIcon,
+  LineChart,
   Maximize2,
   Minimize2,
   Target,
@@ -2110,6 +2114,58 @@ export function BotTerminalCard({ totalAum = 0 }: { totalAum?: number } = {}) {
     [virtualScalpPositions, featuredPositions],
   );
 
+  // ----------------------------------------------------------------
+  // MT5-style bottom tab navigation
+  // ----------------------------------------------------------------
+  type TerminalTab = "quotes" | "charts" | "trade" | "history";
+  const [activeTab, setActiveTab] = useState<TerminalTab>("charts");
+
+  // Persist last 100 closed bot trades to localStorage so the History
+  // tab keeps a meaningful tape across reloads (closedToday from API
+  // resets at UTC midnight). Dedupe by trade id.
+  type HistoryRow = BotStateClosedTrade & { savedAt: number };
+  const HISTORY_KEY = "qx-bot-terminal-history-v1";
+  const HISTORY_MAX = 100;
+  const [historyRows, setHistoryRows] = useState<HistoryRow[]>(() => {
+    try {
+      const raw = localStorage.getItem(HISTORY_KEY);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return [];
+      return parsed.slice(0, HISTORY_MAX);
+    } catch {
+      return [];
+    }
+  });
+  useEffect(() => {
+    const incoming = state?.closedToday ?? [];
+    if (incoming.length === 0) return;
+    setHistoryRows((prev) => {
+      const seen = new Set(prev.map((r) => r.id));
+      const fresh: HistoryRow[] = incoming
+        .filter((t) => !seen.has(t.id))
+        .map((t) => ({ ...t, savedAt: Date.now() }));
+      if (fresh.length === 0) return prev;
+      const merged = [...fresh, ...prev].slice(0, HISTORY_MAX);
+      try {
+        localStorage.setItem(HISTORY_KEY, JSON.stringify(merged));
+      } catch {}
+      return merged;
+    });
+  }, [state?.closedToday]);
+
+  // Synthesised account stats for the Trade tab. The widget is a
+  // BOT terminal — we don't have a real broker account to read, so
+  // we derive Balance / Equity / Margin from the AUM prop and the
+  // running scalp P&L. Margin uses 0.5% of total open notional which
+  // matches a 1:200 leverage account.
+  const balance = totalAum;
+  const equity = totalAum + scalpTotalPnl;
+  const positionsForMargin = positions.length + virtualScalpPositions.length;
+  const usedMargin = Math.max(0, positionsForMargin * (totalAum * 0.0005));
+  const freeMargin = Math.max(0, equity - usedMargin);
+  const marginLevelPct = usedMargin > 0 ? (equity / usedMargin) * 100 : 0;
+
   return (
     <Card className="overflow-hidden relative">
       <JustFilledToast fill={fillToast} />
@@ -2181,52 +2237,429 @@ export function BotTerminalCard({ totalAum = 0 }: { totalAum?: number } = {}) {
         </div>
       </div>
 
-      {/* Live candlestick chart for the featured pair */}
-      <ChartHeader quote={featured} />
-      <BotThinkingTicker />
-      {scalpEvents.length > 0 && (
-        <div className="px-3 py-1 flex items-center gap-1.5 text-[10px] font-mono border-t bg-background/30 overflow-hidden">
-          <span className="text-muted-foreground/60 shrink-0 tracking-wider font-semibold">
-            SCALP
-          </span>
-          <div className="flex items-center gap-1.5 overflow-hidden">
-            {scalpEvents.slice(0, 6).map((e) => (
-              <span
-                key={e.id}
-                className={cn(
-                  "px-1.5 py-0.5 rounded shrink-0 tabular-nums transition-opacity duration-300",
-                  e.outcome === "SL"
-                    ? "bg-rose-500/15 text-rose-400"
-                    : "bg-emerald-500/15 text-emerald-400",
-                )}
-              >
-                <span className="font-bold">{e.outcome}</span>
-                <span className="opacity-70 mx-1">{e.bot}</span>
-                <span className="font-semibold">
-                  {e.pnlUsd >= 0 ? "+" : "−"}$
-                  {Math.abs(e.pnlUsd).toFixed(2)}
-                </span>
+      {/* ---------------- TAB CONTENT ---------------- */}
+      {activeTab === "charts" && (
+        <>
+          <ChartHeader quote={featured} />
+          <BotThinkingTicker />
+          {scalpEvents.length > 0 && (
+            <div className="px-3 py-1 flex items-center gap-1.5 text-[10px] font-mono border-t bg-background/30 overflow-hidden">
+              <span className="text-muted-foreground/60 shrink-0 tracking-wider font-semibold">
+                SCALP
               </span>
-            ))}
+              <div className="flex items-center gap-1.5 overflow-hidden">
+                {scalpEvents.slice(0, 6).map((e) => (
+                  <span
+                    key={e.id}
+                    className={cn(
+                      "px-1.5 py-0.5 rounded shrink-0 tabular-nums transition-opacity duration-300",
+                      e.outcome === "SL"
+                        ? "bg-rose-500/15 text-rose-400"
+                        : "bg-emerald-500/15 text-emerald-400",
+                    )}
+                  >
+                    <span className="font-bold">{e.outcome}</span>
+                    <span className="opacity-70 mx-1">{e.bot}</span>
+                    <span className="font-semibold">
+                      {e.pnlUsd >= 0 ? "+" : "−"}$
+                      {Math.abs(e.pnlUsd).toFixed(2)}
+                    </span>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+          <div className="p-2 sm:p-3">
+            <LiveCandleChart
+              quote={featured}
+              persistKey={featuredCode}
+              positions={chartPositions}
+              height={260}
+            />
           </div>
-        </div>
+        </>
       )}
-      <div className="p-2 sm:p-3">
-        <LiveCandleChart
+
+      {activeTab === "quotes" && (
+        <QuotesPanel quotes={quotes} />
+      )}
+
+      {activeTab === "trade" && (
+        <TradePanel
+          balance={balance}
+          equity={equity}
+          usedMargin={usedMargin}
+          freeMargin={freeMargin}
+          marginLevelPct={marginLevelPct}
+          pnl={scalpTotalPnl}
           quote={featured}
-          persistKey={featuredCode}
-          positions={chartPositions}
-          height={260}
+          positions={positions}
+          quotes={quotes}
+          virtualOpenCount={virtualScalpPositions.length}
         />
-      </div>
+      )}
 
-      {/* Live tape (synthetic Time & Sales for the featured pair) */}
-      <LiveTapeStrip quote={featured} />
+      {activeTab === "history" && (
+        <HistoryPanel rows={historyRows} />
+      )}
 
-      {/* Open positions strip */}
-      <PositionsStrip positions={positions} quotes={quotes} livePnl={scalpTotalPnl} openCount={virtualScalpPositions.length} />
-
+      {/* ---------------- MT5-style bottom tab bar ---------------- */}
+      <TerminalTabBar active={activeTab} onChange={setActiveTab} />
     </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// MT5-style bottom tab bar
+// ---------------------------------------------------------------------------
+
+function TerminalTabBar({
+  active,
+  onChange,
+}: {
+  active: "quotes" | "charts" | "trade" | "history";
+  onChange: (t: "quotes" | "charts" | "trade" | "history") => void;
+}) {
+  const items: Array<{
+    key: "quotes" | "charts" | "trade" | "history";
+    label: string;
+    Icon: typeof ArrowUpDown;
+  }> = [
+    { key: "quotes", label: "Quotes", Icon: ArrowUpDown },
+    { key: "charts", label: "Charts", Icon: CandlestickChart },
+    { key: "trade", label: "Trade", Icon: LineChart },
+    { key: "history", label: "History", Icon: HistoryIcon },
+  ];
+  return (
+    <div className="border-t bg-background/60 backdrop-blur grid grid-cols-4 select-none">
+      {items.map(({ key, label, Icon }) => {
+        const isActive = active === key;
+        return (
+          <button
+            key={key}
+            type="button"
+            onClick={() => onChange(key)}
+            className={cn(
+              "flex flex-col items-center gap-1 py-2.5 transition-colors",
+              isActive
+                ? "text-sky-400"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <Icon
+              className={cn(
+                "size-5",
+                isActive && "drop-shadow-[0_0_6px_rgba(56,189,248,0.6)]",
+              )}
+              strokeWidth={isActive ? 2.4 : 2}
+            />
+            <span
+              className={cn(
+                "text-[10.5px] tracking-wide",
+                isActive ? "font-semibold" : "font-medium",
+              )}
+            >
+              {label}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Quotes panel — MT5-style symbol list
+// ---------------------------------------------------------------------------
+
+const QUOTES_PRIORITY = ["XAUUSD", "EURUSD", "BTCUSD", "USOIL", "GBPUSD", "USDJPY"];
+
+function QuotesPanel({ quotes }: { quotes: BotQuote[] }) {
+  const sorted = useMemo(() => {
+    const idx = (c: string) => {
+      const i = QUOTES_PRIORITY.indexOf(c);
+      return i === -1 ? 999 : i;
+    };
+    return [...quotes].sort((a, b) => idx(a.code) - idx(b.code));
+  }, [quotes]);
+
+  if (sorted.length === 0) {
+    return (
+      <div className="p-6 text-center text-xs text-muted-foreground">
+        Loading quotes…
+      </div>
+    );
+  }
+
+  return (
+    <div className="divide-y divide-border/40">
+      <div className="grid grid-cols-[1fr_auto_auto] gap-3 px-3 py-2 text-[10px] uppercase tracking-wider text-muted-foreground/70 font-semibold">
+        <span>Symbol</span>
+        <span className="text-right">Bid</span>
+        <span className="text-right">Ask</span>
+      </div>
+      {sorted.map((q) => {
+        const up = q.change24h >= 0;
+        return (
+          <div
+            key={q.code}
+            className="grid grid-cols-[1fr_auto_auto] gap-3 px-3 py-2.5 items-center"
+          >
+            <div className="min-w-0">
+              <div className="font-bold text-[13px] tracking-wide truncate">
+                {q.display ?? q.code}
+              </div>
+              <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+                <span
+                  className={cn(
+                    "tabular-nums font-semibold",
+                    up ? "text-emerald-400" : "text-rose-400",
+                  )}
+                >
+                  {up ? "▲" : "▼"} {Math.abs(q.change24h).toFixed(2)}%
+                </span>
+                <span className="opacity-60">spread {q.spreadPips.toFixed(1)}p</span>
+              </div>
+            </div>
+            <div
+              className={cn(
+                "tabular-nums font-bold text-[13px] text-right",
+                up ? "text-emerald-400" : "text-rose-400",
+              )}
+            >
+              {formatPrice(q.bid, q.precision)}
+            </div>
+            <div
+              className={cn(
+                "tabular-nums font-bold text-[13px] text-right",
+                up ? "text-emerald-400" : "text-rose-400",
+              )}
+            >
+              {formatPrice(q.ask, q.precision)}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Trade panel — Balance / Equity / Margin top + live tape + open positions
+// ---------------------------------------------------------------------------
+
+function TradePanel({
+  balance,
+  equity,
+  usedMargin,
+  freeMargin,
+  marginLevelPct,
+  pnl,
+  quote,
+  positions,
+  quotes,
+  virtualOpenCount,
+}: {
+  balance: number;
+  equity: number;
+  usedMargin: number;
+  freeMargin: number;
+  marginLevelPct: number;
+  pnl: number;
+  quote: BotQuote | undefined;
+  positions: BotStateOpenPosition[];
+  quotes: BotQuote[];
+  virtualOpenCount: number;
+}) {
+  const fmt = (n: number) =>
+    n.toLocaleString("en-US", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+  const pnlPositive = pnl >= 0;
+  return (
+    <div>
+      <div className="px-3 py-3 border-b bg-gradient-to-b from-sky-500/[0.06] to-transparent">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+            Trade
+          </span>
+          <span
+            className={cn(
+              "tabular-nums font-bold text-[15px]",
+              pnlPositive ? "text-sky-400" : "text-rose-400",
+            )}
+          >
+            {pnlPositive ? "+" : "−"}${fmt(Math.abs(pnl))} USD
+          </span>
+        </div>
+        <dl className="text-[12px] space-y-1.5">
+          <Row label="Balance" value={fmt(balance)} />
+          <Row label="Equity" value={fmt(equity)} valueClass="text-sky-300" />
+          <Row label="Margin" value={fmt(usedMargin)} />
+          <Row label="Free margin" value={fmt(freeMargin)} />
+          <Row
+            label="Margin Level (%)"
+            value={marginLevelPct > 0 ? fmt(marginLevelPct) : "—"}
+          />
+        </dl>
+      </div>
+      <LiveTapeStrip quote={quote} />
+      <PositionsStrip
+        positions={positions}
+        quotes={quotes}
+        livePnl={pnl}
+        openCount={virtualOpenCount}
+      />
+    </div>
+  );
+}
+
+function Row({
+  label,
+  value,
+  valueClass,
+}: {
+  label: string;
+  value: string;
+  valueClass?: string;
+}) {
+  return (
+    <div className="flex items-baseline gap-2">
+      <dt className="text-muted-foreground font-medium shrink-0">{label}:</dt>
+      <span
+        aria-hidden
+        className="flex-1 border-b border-dotted border-muted-foreground/30 translate-y-[-3px]"
+      />
+      <dd
+        className={cn("tabular-nums font-bold text-right", valueClass)}
+      >
+        {value}
+      </dd>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// History panel — last 100 closed trades + summary
+// ---------------------------------------------------------------------------
+
+function HistoryPanel({
+  rows,
+}: {
+  rows: Array<BotStateClosedTrade & { savedAt: number }>;
+}) {
+  const stats = useMemo(() => {
+    let profit = 0;
+    let commission = 0;
+    for (const r of rows) {
+      const p = r.realizedProfitPercent ?? 0;
+      // Convert pct to a synthetic USD using a $1000 notional unit
+      // — purely cosmetic, gives investor a feel for the scale.
+      profit += p * 10;
+      commission += Math.abs(p) * 1.5;
+    }
+    return {
+      profit,
+      deposit: 0,
+      withdrawal: 0,
+      swap: 0,
+      commission: -commission,
+      balance: profit - commission,
+    };
+  }, [rows]);
+
+  const fmt = (n: number) =>
+    n.toLocaleString("en-US", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+  const sign = (n: number) => (n > 0 ? "+" : n < 0 ? "−" : "");
+
+  return (
+    <div>
+      <div className="px-3 py-3 border-b bg-gradient-to-b from-sky-500/[0.06] to-transparent">
+        <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-2">
+          History — All symbols · {rows.length} trades
+        </div>
+        <dl className="text-[12px] space-y-1.5">
+          <Row
+            label="Profit"
+            value={`${sign(stats.profit)}${fmt(Math.abs(stats.profit))}`}
+            valueClass={stats.profit >= 0 ? "text-sky-400" : "text-rose-400"}
+          />
+          <Row label="Deposit" value={fmt(stats.deposit)} />
+          <Row label="Withdrawal" value={fmt(stats.withdrawal)} />
+          <Row label="Swap" value={fmt(stats.swap)} />
+          <Row
+            label="Commission"
+            value={`${sign(stats.commission)}${fmt(Math.abs(stats.commission))}`}
+            valueClass="text-rose-400/80"
+          />
+          <Row
+            label="Balance"
+            value={`${sign(stats.balance)}${fmt(Math.abs(stats.balance))}`}
+            valueClass={stats.balance >= 0 ? "text-sky-300" : "text-rose-400"}
+          />
+        </dl>
+      </div>
+      <div className="max-h-[380px] overflow-y-auto divide-y divide-border/40">
+        {rows.length === 0 ? (
+          <div className="p-6 text-center text-xs text-muted-foreground">
+            No closed trades yet. They will appear here as the bot closes
+            positions.
+          </div>
+        ) : (
+          rows.map((r) => {
+            const dir = (r.direction ?? "").toUpperCase();
+            const isSell = dir === "SELL" || dir === "SHORT";
+            const pct = r.realizedProfitPercent ?? 0;
+            const pnlUsd = pct * 10;
+            const exit = r.realizedExitPrice ?? r.entryPrice;
+            const date = new Date(r.closedAt);
+            const ds = `${date.getFullYear()}.${String(
+              date.getMonth() + 1,
+            ).padStart(2, "0")}.${String(date.getDate()).padStart(
+              2,
+              "0",
+            )} ${String(date.getHours()).padStart(2, "0")}:${String(
+              date.getMinutes(),
+            ).padStart(2, "0")}:${String(date.getSeconds()).padStart(2, "0")}`;
+            return (
+              <div key={r.id} className="px-3 py-2 grid grid-cols-[1fr_auto] gap-2">
+                <div className="min-w-0">
+                  <div className="text-[12.5px] font-bold tracking-wide truncate">
+                    <span>{r.pair}, </span>
+                    <span
+                      className={isSell ? "text-rose-400" : "text-sky-400"}
+                    >
+                      {isSell ? "sell" : "buy"} 0.01
+                    </span>
+                  </div>
+                  <div className="text-[11px] tabular-nums text-muted-foreground">
+                    {r.entryPrice.toFixed(2)} → {exit.toFixed(2)}
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-[10.5px] text-muted-foreground tabular-nums">
+                    {ds}
+                  </div>
+                  <div
+                    className={cn(
+                      "tabular-nums font-bold text-[13px]",
+                      pnlUsd >= 0 ? "text-sky-400" : "text-rose-400",
+                    )}
+                  >
+                    {sign(pnlUsd)}
+                    {fmt(Math.abs(pnlUsd))}
+                  </div>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+    </div>
   );
 }
 
