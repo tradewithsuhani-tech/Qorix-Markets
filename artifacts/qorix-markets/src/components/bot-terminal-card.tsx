@@ -2338,27 +2338,35 @@ export function BotTerminalCard({ totalAum = 0 }: { totalAum?: number } = {}) {
         </>
       )}
 
-      {activeTab === "quotes" && (
-        <QuotesPanel quotes={quotes} />
-      )}
-
-      {activeTab === "trade" && (
-        <TradePanel
-          balance={balance}
-          equity={equity}
-          usedMargin={usedMargin}
-          freeMargin={freeMargin}
-          marginLevelPct={marginLevelPct}
-          pnl={scalpTotalPnl}
-          quote={featured}
-          positions={positions}
-          quotes={quotes}
-          virtualOpenCount={virtualScalpPositions.length}
-        />
-      )}
-
-      {activeTab === "history" && (
-        <HistoryPanel rows={historyRows} />
+      {/* Non-chart tabs share a min-height matching the chart area so
+          the card doesn't collapse when switching tabs — otherwise
+          the bottom tab bar would jump up and leave a big black gap
+          underneath. In card-fullscreen the panel grows to fill the
+          remaining viewport. */}
+      {activeTab !== "charts" && (
+        <div
+          className={cn(
+            "flex flex-col",
+            isCardFs ? "flex-1 min-h-0 overflow-y-auto" : "min-h-[420px]",
+          )}
+        >
+          {activeTab === "quotes" && <QuotesPanel quotes={quotes} />}
+          {activeTab === "trade" && (
+            <TradePanel
+              balance={balance}
+              equity={equity}
+              usedMargin={usedMargin}
+              freeMargin={freeMargin}
+              marginLevelPct={marginLevelPct}
+              pnl={scalpTotalPnl}
+              quote={featured}
+              positions={positions}
+              quotes={quotes}
+              virtualOpenCount={virtualScalpPositions.length}
+            />
+          )}
+          {activeTab === "history" && <HistoryPanel rows={historyRows} />}
+        </div>
       )}
 
       {/* ---------------- MT5-style bottom tab bar ---------------- */}
