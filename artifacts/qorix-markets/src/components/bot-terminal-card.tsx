@@ -1796,7 +1796,7 @@ export function BotTerminalCard() {
             <>
               <span className="text-muted-foreground/50 hidden sm:inline">•</span>
               <span className="hidden sm:inline">{summary.openCount} open</span>
-              <span className="text-muted-foreground/50">•</span>
+              <span className="text-muted-foreground/50 hidden sm:inline">•</span>
               <span
                 className={cn(
                   summary.closedTodayPctSum > 0
