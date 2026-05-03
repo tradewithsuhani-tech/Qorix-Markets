@@ -1153,7 +1153,19 @@ function PositionsStrip({
     return m;
   }, [quotes]);
 
-  if (positions.length === 0) return null;
+  // Only count/show positions that are actually trackable in the
+  // current view: must have a valid entry price AND a live quote
+  // for their pair. Stale or out-of-universe rows are hidden so the
+  // "OPEN" counter reflects what the user actually sees.
+  const visiblePositions = useMemo(
+    () =>
+      positions.filter(
+        (p) => Number.isFinite(p.entryPrice) && p.entryPrice > 0 && quotesByPair.has(p.pair),
+      ),
+    [positions, quotesByPair],
+  );
+
+  if (visiblePositions.length === 0) return null;
 
   // Aggregate live USD P&L across all open positions. Mirrors the
   // per-position calc on the chart chips (lots from deterministic
@@ -1162,9 +1174,9 @@ function PositionsStrip({
     0.01, 0.01, 0.01, 0.01, 0.02, 0.01, 0.01, 0.05, 0.01, 0.01,
   ];
   let totalPnl = 0;
-  for (const p of positions) {
+  for (const p of visiblePositions) {
     const q = quotesByPair.get(p.pair);
-    if (!q || !p.entryPrice) continue;
+    if (!q) continue;
     const sign = p.direction.toUpperCase() === "BUY" ? 1 : -1;
     const lots = sizeBuckets[Math.abs(p.id) % sizeBuckets.length];
     totalPnl += (q.mid - p.entryPrice) * lots * sign;
@@ -1176,7 +1188,7 @@ function PositionsStrip({
       <div className="flex items-center gap-2 mb-1.5 text-[10px] font-semibold tracking-wider text-muted-foreground">
         <Zap className="size-3 text-amber-400 shrink-0" />
         <span className="truncate">
-          {positions.length} OPEN
+          {visiblePositions.length} OPEN
           <span className="hidden sm:inline"> POSITIONS</span>
         </span>
         <span className="ml-auto shrink-0 text-muted-foreground/50 italic font-normal normal-case tracking-normal">
@@ -1195,7 +1207,7 @@ function PositionsStrip({
         </span>
       </div>
       <div className="flex gap-1.5 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {positions.map((p) => (
+        {visiblePositions.map((p) => (
           <PositionPill key={p.id} pos={p} quote={quotesByPair.get(p.pair)} />
         ))}
       </div>
