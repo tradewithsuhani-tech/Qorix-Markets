@@ -426,6 +426,48 @@ router.post("/chat/session/:id/end", authMiddleware, async (req: AuthRequest, re
 // expert request immediately instead of having to sit on /admin/chats.
 // We never block the HTTP response on Telegram delivery — failures are
 // logged and swallowed.
+// Live mirror of every AI sales-agent turn (user message + bot reply) to a
+// shared Telegram channel/group when ADMIN_TELEGRAM_CHAT is set. Fire-and-
+// forget via setImmediate so it never blocks the chat response. Skips the
+// expert-mode branch (those turns have no AI reply by design — covered by
+// notifyAdminsOfExpertRequest instead). Long bodies are truncated so a
+// single Telegram message stays well under the 4096-char limit.
+function mirrorChatTurnToAdminChannel(opts: {
+  sessionId: number;
+  userLabel: string;
+  userMessage: string;
+  reply: string;
+  llmDisabled: boolean;
+  intent: string | null;
+  language: string | null;
+  engagement: number;
+}): void {
+  const sharedChat = (process.env.ADMIN_TELEGRAM_CHAT ?? "").trim();
+  if (!sharedChat) return;
+  setImmediate(async () => {
+    try {
+      const trunc = (s: string, n: number) =>
+        s.length > n ? s.slice(0, n) + "…" : s;
+      const u = trunc(opts.userMessage, 600);
+      const r = trunc(opts.reply, 800);
+      const flag = opts.llmDisabled ? "⚠️ FALLBACK" : "🤖 AI";
+      const metaParts: string[] = [];
+      if (opts.intent) metaParts.push(`intent: ${opts.intent}`);
+      if (opts.language) metaParts.push(`lang: ${opts.language}`);
+      metaParts.push(`eng: ${opts.engagement}`);
+      const meta = metaParts.join(" | ");
+      const title = `💬 Chat #${opts.sessionId} — ${opts.userLabel}`;
+      const body = `${meta}\n\n👤 User:\n${u}\n\n${flag}:\n${r}`;
+      await sendTelegramMessage(sharedChat, title, body);
+    } catch (err) {
+      logger.warn(
+        { err: (err as Error).message, sessionId: opts.sessionId },
+        "[chat] mirror-to-admin-channel failed",
+      );
+    }
+  });
+}
+
 async function notifyAdminsOfExpertRequest(
   sessionId: number,
   userId: number,
@@ -750,6 +792,20 @@ router.post(
           metadata: { variant: ctaCard.variant, intent: metadata?.detectedIntent ?? null },
         });
       }
+
+      // Live-mirror this turn to the shared admin Telegram channel so the
+      // team sees every AI sales-agent conversation in real time. Fire-and-
+      // forget — never blocks the chat response.
+      mirrorChatTurnToAdminChannel({
+        sessionId,
+        userLabel: `${userContext.fullName} (${userContext.email})`,
+        userMessage,
+        reply: replyText,
+        llmDisabled,
+        intent: metadata?.detectedIntent ?? null,
+        language: metadata?.language ?? null,
+        engagement: newEngagementScore,
+      });
 
       res.json({
         userMessage: savedUser,
@@ -2735,6 +2791,20 @@ router.post(
           metadata: { variant: ctaCard.variant, intent: metadata?.detectedIntent ?? null, guest: true },
         });
       }
+
+      // Live-mirror guest chat turn to admin Telegram channel. Visitor ids
+      // are opaque random tokens — truncate to first 8 chars for a compact
+      // label that's still enough to correlate consecutive turns.
+      mirrorChatTurnToAdminChannel({
+        sessionId,
+        userLabel: `Guest (${visitorId.slice(0, 8)}…)`,
+        userMessage,
+        reply: replyText,
+        llmDisabled,
+        intent: metadata?.detectedIntent ?? null,
+        language: metadata?.language ?? null,
+        engagement: newEngagementScore,
+      });
 
       res.json({
         userMessage: savedUser,
