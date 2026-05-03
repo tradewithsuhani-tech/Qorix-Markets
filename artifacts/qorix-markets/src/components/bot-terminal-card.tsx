@@ -1928,7 +1928,7 @@ export function BotTerminalCard({
   // weekends — BTC trades 24/7 so we use it whenever the legacy
   // XAU/USD session is shut. The chart's persist key tracks the
   // featured pair so storage doesn't bleed across pairs.
-  const featuredCode = "BTCUSD";
+  const featuredCode = "XAUUSD";
   const featured = quotes.find((q) => q.code === featuredCode);
   const summary = state?.summary;
   void state?.bot.plan;
