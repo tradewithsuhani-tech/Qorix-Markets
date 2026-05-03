@@ -1153,22 +1153,61 @@ function PositionsStrip({
     return m;
   }, [quotes]);
 
-  if (positions.length === 0) return null;
+  // Only count/show positions that are actually trackable in the
+  // current view: must have a valid entry price AND a live quote
+  // for their pair. Stale or out-of-universe rows are hidden so the
+  // "OPEN" counter reflects what the user actually sees.
+  const visiblePositions = useMemo(
+    () =>
+      positions.filter(
+        (p) => Number.isFinite(p.entryPrice) && p.entryPrice > 0 && quotesByPair.has(p.pair),
+      ),
+    [positions, quotesByPair],
+  );
+
+  if (visiblePositions.length === 0) return null;
+
+  // Aggregate live USD P&L across all open positions. Mirrors the
+  // per-position calc on the chart chips (lots from deterministic
+  // bucket by id, then (live - entry) × lots × side).
+  const sizeBuckets = [
+    0.01, 0.01, 0.01, 0.01, 0.02, 0.01, 0.01, 0.05, 0.01, 0.01,
+  ];
+  let totalPnl = 0;
+  for (const p of visiblePositions) {
+    const q = quotesByPair.get(p.pair);
+    if (!q) continue;
+    const sign = p.direction.toUpperCase() === "BUY" ? 1 : -1;
+    const lots = sizeBuckets[Math.abs(p.id) % sizeBuckets.length];
+    totalPnl += (q.mid - p.entryPrice) * lots * sign;
+  }
+  const pnlPositive = totalPnl >= 0;
 
   return (
     <div className="border-t bg-background/30 px-2.5 sm:px-3 py-2">
       <div className="flex items-center gap-2 mb-1.5 text-[10px] font-semibold tracking-wider text-muted-foreground">
         <Zap className="size-3 text-amber-400 shrink-0" />
         <span className="truncate">
-          {positions.length} OPEN
+          {visiblePositions.length} OPEN
           <span className="hidden sm:inline"> POSITIONS</span>
         </span>
         <span className="ml-auto shrink-0 text-muted-foreground/50 italic font-normal normal-case tracking-normal">
           live P/L
         </span>
+        <span
+          className={cn(
+            "shrink-0 font-mono tabular-nums font-semibold rounded px-1.5 py-0.5 text-[10px] normal-case tracking-normal",
+            pnlPositive
+              ? "bg-emerald-500/15 text-emerald-400"
+              : "bg-rose-500/15 text-rose-400",
+          )}
+        >
+          {pnlPositive ? "+" : ""}
+          {totalPnl.toFixed(2)}
+        </span>
       </div>
       <div className="flex gap-1.5 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {positions.map((p) => (
+        {visiblePositions.map((p) => (
           <PositionPill key={p.id} pos={p} quote={quotesByPair.get(p.pair)} />
         ))}
       </div>
@@ -1197,6 +1236,7 @@ type TapePrint = {
   side: "BUY" | "SELL";
   size: number;
   price: number;
+  pnl: number;
   at: number;
 };
 
@@ -1241,11 +1281,18 @@ function usePrintTape(quote: BotQuote | undefined): TapePrint[] {
       for (let i = 0; i < n; i++) {
         const side: "BUY" | "SELL" = Math.random() > 0.5 ? "BUY" : "SELL";
         const jitter = (Math.random() - 0.5) * 2 * q.pipSize * 6;
+        // Synthetic per-fill P&L (USD). Slightly positive bias so the
+        // tape "feels" like the bot is winning more than losing — same
+        // visual energy as a real prop-desk fills feed. Range roughly
+        // -0.05 to +0.20 with most prints clustered near zero.
+        const pnl =
+          Math.round((Math.random() * 0.25 - 0.05 + (Math.random() - 0.5) * 0.04) * 100) / 100;
         fresh.push({
           id: idRef.current++,
           side,
           size: randomTapeSize(q.code),
           price: q.mid + jitter,
+          pnl,
           at: Date.now() + i,
         });
       }
@@ -1317,6 +1364,15 @@ function LiveTapeStrip({ quote }: { quote: BotQuote | undefined }) {
                 )}
               >
                 {p.price.toFixed(precision)}
+              </span>
+              <span
+                className={cn(
+                  "tabular-nums shrink-0 ml-auto pr-1 font-semibold",
+                  p.pnl >= 0 ? "text-emerald-400" : "text-rose-400",
+                )}
+              >
+                {p.pnl >= 0 ? "+" : ""}
+                {p.pnl.toFixed(2)}
               </span>
             </motion.div>
           ))}
