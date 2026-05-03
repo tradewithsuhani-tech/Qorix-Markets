@@ -645,6 +645,9 @@ export function DemoDashboardBody({
   // so the displayed $ amount always ties to the equity card and the % shown.
   const totalEquityValue = fundStats?.totalAUM ?? summary?.totalBalance ?? 0;
   const dailyPct = summary?.dailyProfitPercent || 0;
+  // Live percent that reflects the scalp-bot-augmented dailyPL.
+  // Recomputed each render against current equity so the % moves
+  // in lockstep with the dollar gain.
   // Live bot P&L from the Bot Terminal scalp engine. Added on top of
   // the backend-derived dailyPL so all the dashboard cards (Daily P&L,
   // Today's gain, Total Profit, Live Profit) breathe in sync with the
@@ -653,6 +656,9 @@ export function DemoDashboardBody({
   const baseDailyPL = +(totalEquityValue * (dailyPct / 100)).toFixed(2);
   const dailyPL = +(baseDailyPL + scalpBotPnl).toFixed(2);
   const isPositive = dailyPL >= 0;
+  // Live percent — recompute % from the augmented dailyPL so the
+  // percentage tick alongside the dollars (no more frozen 0.00%).
+  const livePct = totalEquityValue > 0 ? (dailyPL / totalEquityValue) * 100 : dailyPct;
   // Total Profit scales with Total Equity using the same profit-to-equity ratio
   // as the underlying user, so all three cards (Equity, Daily P&L, Total Profit)
   // grow together consistently.
@@ -775,7 +781,7 @@ export function DemoDashboardBody({
       sub: (
         <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-400">
           <ArrowUpRight style={{ width: 12, height: 12 }} />
-          +{(dailyPct || 0).toFixed(2)}% today
+          +{(livePct || 0).toFixed(2)}% today
         </span>
       ),
       accent: "blue",
@@ -795,7 +801,7 @@ export function DemoDashboardBody({
         <div className="flex flex-col gap-0.5">
           <span className={`text-xs font-medium flex items-center gap-1 ${marketClosed ? "text-muted-foreground" : isPositive ? "profit-text" : "loss-text"}`}>
             {marketClosed ? null : isPositive ? <ArrowUpRight style={{ width: 12, height: 12 }} /> : <ArrowDownRight style={{ width: 12, height: 12 }} />}
-            {marketClosed ? "0.00% today" : `${isPositive ? "+" : ""}${dailyPct.toFixed(2)}% today`}
+            {marketClosed ? "0.00% today" : `${isPositive ? "+" : ""}${livePct.toFixed(2)}% today`}
           </span>
           {marketClosed && marketOpensAt ? (
             <span className="text-[10px] text-amber-400">
@@ -1935,7 +1941,7 @@ export function DemoDashboardBody({
               <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
                 <span>Today's gain</span>
                 <span className={isPositive ? "profit-text font-semibold" : "loss-text font-semibold"}>
-                  {isPositive ? "+" : ""}${dailyPL.toFixed(2)} ({isPositive ? "+" : ""}{dailyPct.toFixed(2)}%)
+                  {isPositive ? "+" : ""}${dailyPL.toFixed(2)} ({isPositive ? "+" : ""}{livePct.toFixed(2)}%)
                 </span>
               </div>
             </div>
