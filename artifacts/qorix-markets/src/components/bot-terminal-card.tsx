@@ -2291,7 +2291,8 @@ export function BotTerminalCard({
     <>
       <JustFilledToast fill={fillToast} />
 
-      {/* Header */}
+      {/* Header — hidden in fullscreen for a clean MT5-like layout */}
+      {!isCardFs && (
       <div className="flex items-center justify-between gap-2 sm:gap-3 px-3 sm:px-4 py-2.5 sm:py-3 border-b bg-gradient-to-r from-emerald-500/5 via-transparent to-transparent">
         <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
           <Activity className="size-4 text-emerald-400 shrink-0" />
@@ -2357,6 +2358,7 @@ export function BotTerminalCard({
           )}
         </div>
       </div>
+      )}
 
       {/* ---------------- TAB CONTENT ---------------- */}
       {activeTab === "charts" && (
