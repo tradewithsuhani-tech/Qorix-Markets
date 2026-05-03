@@ -2931,7 +2931,7 @@ function HistoryPanel({
           <Row
             label="Withdrawal"
             value={`${stats.withdrawal > 0 ? "−" : ""}${fmt(stats.withdrawal)}`}
-            valueClass={stats.withdrawal > 0 ? "text-amber-400" : undefined}
+            valueClass={stats.withdrawal > 0 ? "text-rose-400" : undefined}
           />
           <Row label="Swap" value={fmt(stats.swap)} />
           <Row
