@@ -2820,10 +2820,13 @@ function HistoryPanel({
   const stats = useMemo(() => {
     const profit = snapshotProfit;
     const withdrawal = profit > 0 ? profit * withdrawalRatioRef.current : 0;
-    const balance = profit - withdrawal;
+    // Synthetic deposits roughly track the equity curve growth so the
+    // investor sees money flowing in at a similar pace to profit.
+    const deposit = Math.max(0, profit * 0.95);
+    const balance = profit - withdrawal + deposit;
     return {
       profit,
-      deposit: 0,
+      deposit,
       withdrawal,
       swap: 0,
       commission: 0,
@@ -2839,7 +2842,8 @@ function HistoryPanel({
         ts: number;
         row: BotStateClosedTrade & { savedAt: number };
       }
-    | { kind: "withdrawal"; ts: number; amount: number; id: string };
+    | { kind: "withdrawal"; ts: number; amount: number; id: string }
+    | { kind: "deposit"; ts: number; amount: number; id: string };
   const feed = useMemo<FeedItem[]>(() => {
     const items: FeedItem[] = rows.map((r) => ({
       kind: "trade",
@@ -2872,9 +2876,35 @@ function HistoryPanel({
         });
       }
     }
+    // Deposits — similar cadence, amounts clamped to a $10.20 minimum.
+    if (stats.deposit > 0 && rows.length >= 5) {
+      const count = Math.max(2, Math.floor(rows.length / 5));
+      const per = stats.deposit / count;
+      const sortedByTs = [...rows].sort(
+        (a, b) =>
+          new Date(a.closedAt).getTime() - new Date(b.closedAt).getTime(),
+      );
+      const tMin = new Date(sortedByTs[0].closedAt).getTime();
+      const tMax = new Date(
+        sortedByTs[sortedByTs.length - 1].closedAt,
+      ).getTime();
+      const span = Math.max(1, tMax - tMin);
+      for (let i = 0; i < count; i++) {
+        const wobble = 0.8 + (((i * 7919 + 30011) % 1000) / 1000) * 0.5;
+        const amount = Math.max(10.2, per * wobble);
+        // Offset deposits between withdrawals so the feed alternates.
+        const ts = tMin + (span * (i + 0.2)) / count;
+        items.push({
+          kind: "deposit",
+          ts,
+          amount,
+          id: `d-${i}-${Math.round(ts)}`,
+        });
+      }
+    }
     items.sort((a, b) => b.ts - a.ts);
     return items;
-  }, [rows, stats.withdrawal]);
+  }, [rows, stats.withdrawal, stats.deposit]);
 
   const fmt = (n: number) =>
     n.toLocaleString("en-US", {
@@ -2922,6 +2952,40 @@ function HistoryPanel({
           </div>
         ) : (
           feed.map((item) => {
+            if (item.kind === "deposit") {
+              const d = new Date(item.ts);
+              const dds = `${d.getFullYear()}.${String(
+                d.getMonth() + 1,
+              ).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")} ${String(
+                d.getHours(),
+              ).padStart(2, "0")}:${String(d.getMinutes()).padStart(
+                2,
+                "0",
+              )}:${String(d.getSeconds()).padStart(2, "0")}`;
+              return (
+                <div
+                  key={item.id}
+                  className="px-3 py-2 grid grid-cols-[1fr_auto] gap-2"
+                >
+                  <div className="min-w-0">
+                    <div className="text-[12.5px] font-bold tracking-wide truncate">
+                      Balance
+                    </div>
+                    <div className="text-[11px] text-muted-foreground truncate">
+                      Deposit-IN-P2P-CPS.APP
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-[10.5px] text-muted-foreground tabular-nums">
+                      {dds}
+                    </div>
+                    <div className="tabular-nums font-bold text-[13px] text-sky-400">
+                      {fmt(item.amount)}
+                    </div>
+                  </div>
+                </div>
+              );
+            }
             if (item.kind === "withdrawal") {
               const d = new Date(item.ts);
               const wds = `${d.getFullYear()}.${String(
