@@ -1253,19 +1253,22 @@ function LiveTapeStrip({ quote }: { quote: BotQuote | undefined }) {
         </span>
       </div>
       <div
-        className="font-mono text-[10px] relative"
-        style={{ minHeight: TAPE_VISIBLE * 16 }}
+        className="font-mono text-[10px] relative overflow-hidden"
+        style={{ height: TAPE_VISIBLE * 16 }}
       >
         <AnimatePresence initial={false}>
           {visible.map((p, idx) => (
             <motion.div
               key={p.id}
-              initial={{ opacity: 0, x: -6 }}
-              animate={{ opacity: 1 - idx * 0.13, x: 0 }}
+              initial={{ opacity: 0, x: -6, y: idx * 16 }}
+              animate={{ opacity: 1 - idx * 0.13, x: 0, y: idx * 16 }}
               exit={{ opacity: 0 }}
-              transition={{ duration: 0.18, ease: "easeOut" }}
-              layout
-              className="flex items-center gap-2 sm:gap-3 tabular-nums leading-4 h-4"
+              transition={{
+                opacity: { duration: 0.18, ease: "easeOut" },
+                x: { duration: 0.18, ease: "easeOut" },
+                y: { duration: 0.22, ease: "easeOut" },
+              }}
+              className="absolute inset-x-0 top-0 flex items-center gap-2 sm:gap-3 tabular-nums leading-4 h-4"
             >
               <span className="text-muted-foreground/60 w-[52px] sm:w-16 shrink-0">
                 {new Date(p.at).toLocaleTimeString("en-US", { hour12: false })}
