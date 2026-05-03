@@ -852,6 +852,26 @@ function LiveCandleChart({
                   </>
                 )}
 
+                {/* MOBILE MT5-style label — sits ABOVE the dashed
+                    entry line at the left edge of the chart. No box,
+                    just compact text in the position's side color
+                    (BUY=blue, SELL=red), matching real MT5 mobile
+                    behaviour. Skipped when off-chart so it doesn't
+                    pile up at the chart top/bottom edge. */}
+                {isMobile && !offChart ? (
+                  <text
+                    x={padLeft + 2}
+                    y={y - 2}
+                    fill={color}
+                    fontSize="9"
+                    fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
+                    fontWeight="700"
+                  >
+                    {sideLabel} {lots.toFixed(2)},  {pnlSign}
+                    {pnlUsd.toFixed(2)} USD
+                  </text>
+                ) : null}
+
                 {/* Right-side entry-price tag — ALWAYS rendered so
                     every position has a y-axis label even when its
                     chip is clamped to the chart edge (off-chart). The
