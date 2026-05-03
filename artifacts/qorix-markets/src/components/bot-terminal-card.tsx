@@ -1545,28 +1545,6 @@ export function BotTerminalCard() {
     if (typeof window === "undefined") return;
     window.localStorage.setItem(SCALP_PNL_KEY, String(scalpTotalPnl));
   }, [scalpTotalPnl]);
-  // Daily/session target — default $100, override via
-  // localStorage.setItem("qorix.scalp.target.v1", "250") + reload.
-  const SCALP_TARGET_KEY = "qorix.scalp.target.v1";
-  const SCALP_DEFAULT_TARGET = 100;
-  const scalpTarget = useMemo(() => {
-    if (typeof window === "undefined") return SCALP_DEFAULT_TARGET;
-    const raw = window.localStorage.getItem(SCALP_TARGET_KEY);
-    const n = raw ? Number(raw) : SCALP_DEFAULT_TARGET;
-    return Number.isFinite(n) && n > 0 ? n : SCALP_DEFAULT_TARGET;
-  }, []);
-  const scalpTargetPct = Math.max(
-    0,
-    Math.min(100, (scalpTotalPnl / scalpTarget) * 100),
-  );
-  // Owner-only debug HUD. Public dashboard hides all scalp metrics
-  // (P&L badge, target progress, L/S counters, SCALP events strip).
-  // Enable on YOUR browser only:
-  //   localStorage.setItem("qorix.dev.showScalp", "1"); location.reload();
-  const showScalpDebug = useMemo(() => {
-    if (typeof window === "undefined") return false;
-    return window.localStorage.getItem("qorix.dev.showScalp") === "1";
-  }, []);
   const lastMidRef = useRef<number | null>(null);
   const scalpIdRef = useRef(-1);
 
@@ -1782,55 +1760,35 @@ export function BotTerminalCard() {
             <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
             LIVE
           </Badge>
-          {showScalpDebug && (
           <div
             className={cn(
-              "relative h-6 shrink-0 rounded-md border overflow-hidden flex items-center gap-1.5 px-2 text-[11px] sm:text-xs font-bold tabular-nums transition-colors",
+              "h-6 shrink-0 rounded-md border flex items-center gap-1.5 px-2 text-[11px] sm:text-xs font-bold tabular-nums transition-colors",
               scalpTotalPnl >= 0
                 ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-300"
                 : "border-rose-500/40 bg-rose-500/15 text-rose-300",
             )}
-            title={`Scalp bot P&L $${scalpTotalPnl.toFixed(2)} of $${scalpTarget.toFixed(0)} target (${scalpTargetPct.toFixed(1)}%) — override via localStorage qorix.scalp.target.v1`}
+            title={`Scalp bot P&L $${scalpTotalPnl.toFixed(2)}`}
           >
-            {/* Progress fill bar (only when positive, shows journey to target) */}
-            {scalpTotalPnl > 0 && (
-              <span
-                aria-hidden
-                className="absolute inset-y-0 left-0 bg-emerald-500/15 transition-[width] duration-500 ease-out"
-                style={{ width: `${scalpTargetPct}%` }}
-              />
-            )}
-            <span className="relative opacity-60 text-[9px] tracking-wider hidden sm:inline">
+            <span className="opacity-60 text-[9px] tracking-wider hidden sm:inline">
               P&L
             </span>
-            <span className="relative">
+            <span>
               {scalpTotalPnl >= 0 ? "+" : "−"}$
               {Math.abs(scalpTotalPnl).toFixed(2)}
             </span>
-            <span className="relative opacity-50 text-[10px] hidden sm:inline">
-              / ${scalpTarget.toFixed(0)}
-            </span>
-            <span className="relative opacity-70 text-[9px] tabular-nums">
-              {scalpTargetPct.toFixed(0)}%
-            </span>
           </div>
-          )}
         </div>
         <div className="text-[10px] sm:text-[11px] text-muted-foreground tabular-nums flex items-center gap-1.5 sm:gap-2 shrink-0">
-          {showScalpDebug && (
-            <>
-              <span className="hidden sm:inline-flex items-center gap-1">
-                <span className="text-emerald-400 font-semibold">L</span>
-                <span className="text-emerald-400/80">{scalpStats.longWins}W</span>
-                <span className="text-rose-400/80">{scalpStats.longLosses}L</span>
-              </span>
-              <span className="hidden sm:inline-flex items-center gap-1">
-                <span className="text-rose-400 font-semibold">S</span>
-                <span className="text-emerald-400/80">{scalpStats.shortWins}W</span>
-                <span className="text-rose-400/80">{scalpStats.shortLosses}L</span>
-              </span>
-            </>
-          )}
+          <span className="hidden sm:inline-flex items-center gap-1">
+            <span className="text-emerald-400 font-semibold">L</span>
+            <span className="text-emerald-400/80">{scalpStats.longWins}W</span>
+            <span className="text-rose-400/80">{scalpStats.longLosses}L</span>
+          </span>
+          <span className="hidden sm:inline-flex items-center gap-1">
+            <span className="text-rose-400 font-semibold">S</span>
+            <span className="text-emerald-400/80">{scalpStats.shortWins}W</span>
+            <span className="text-rose-400/80">{scalpStats.shortLosses}L</span>
+          </span>
           {summary ? (
             <>
               <span className="text-muted-foreground/50 hidden sm:inline">•</span>
@@ -1858,7 +1816,7 @@ export function BotTerminalCard() {
       {/* Live candlestick chart for the featured pair */}
       <ChartHeader quote={featured} />
       <BotThinkingTicker />
-      {showScalpDebug && scalpEvents.length > 0 && (
+      {scalpEvents.length > 0 && (
         <div className="px-3 py-1 flex items-center gap-1.5 text-[10px] font-mono border-t bg-background/30 overflow-hidden">
           <span className="text-muted-foreground/60 shrink-0 tracking-wider font-semibold">
             SCALP
