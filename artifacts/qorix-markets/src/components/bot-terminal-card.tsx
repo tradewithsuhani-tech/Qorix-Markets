@@ -1196,11 +1196,7 @@ function PositionsStrip({
           {Math.abs(totalPnl).toFixed(2)}
         </span>
       </div>
-      <div className="flex gap-1.5 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {visiblePositions.map((p) => (
-          <PositionPill key={p.id} pos={p} quote={quotesByPair.get(p.pair)} />
-        ))}
-      </div>
+      {/* Per-position pill row removed for vertical space */}
     </div>
   );
 }
