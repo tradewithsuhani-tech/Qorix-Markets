@@ -1020,7 +1020,7 @@ export function InrDepositTab() {
               </div>
 
               <div>
-                <label className="text-[11px] text-muted-foreground font-medium mb-1.5 flex items-center justify-between gap-2">
+                <div className="text-[11px] text-muted-foreground font-medium mb-1.5 flex items-center justify-between gap-2">
                   <span>
                     Upload Payment Proof *{" "}
                     <span className="text-muted-foreground/60">
@@ -1033,7 +1033,7 @@ export function InrDepositTab() {
                       {proofs.length} / {MAX_PROOFS}
                     </span>
                   )}
-                </label>
+                </div>
 
                 {proofs.length === 0 ? (
                   <label
