@@ -1545,7 +1545,8 @@ type TapePrint = {
   at: number;
 };
 
-const TAPE_INTERVAL_MS = 380;
+const TAPE_MIN_DELAY_MS = 4000;
+const TAPE_MAX_DELAY_MS = 10000;
 const TAPE_MAX = 24;
 const TAPE_VISIBLE = 6;
 
@@ -1575,35 +1576,48 @@ function usePrintTape(quote: BotQuote | undefined): TapePrint[] {
     quoteRef.current = quote;
   }, [quote]);
 
-  // Stable interval — reads latest quote via ref so the timer never
-  // restarts on synth ticks (200ms cadence).
+  // Realistic burst cadence — every 4-10s a small burst of 2-3 prints
+  // pops onto the tape. Reads quote via ref so synth ticks (200ms)
+  // never restart the scheduler.
   useEffect(() => {
-    const id = setInterval(() => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let cancelled = false;
+    const tick = () => {
       const q = quoteRef.current;
-      if (!q || !Number.isFinite(q.mid)) return;
-      const n = 1 + Math.floor(Math.random() * 3); // 1-3 prints / interval
-      const fresh: TapePrint[] = [];
-      for (let i = 0; i < n; i++) {
-        const side: "BUY" | "SELL" = Math.random() > 0.5 ? "BUY" : "SELL";
-        const jitter = (Math.random() - 0.5) * 2 * q.pipSize * 6;
-        // Synthetic per-fill P&L (USD). Slightly positive bias so the
-        // tape "feels" like the bot is winning more than losing — same
-        // visual energy as a real prop-desk fills feed. Range roughly
-        // -0.05 to +0.20 with most prints clustered near zero.
-        const pnl =
-          Math.round((Math.random() * 0.25 - 0.05 + (Math.random() - 0.5) * 0.04) * 100) / 100;
-        fresh.push({
-          id: idRef.current++,
-          side,
-          size: randomTapeSize(q.code),
-          price: q.mid + jitter,
-          pnl,
-          at: Date.now() + i,
-        });
+      if (q && Number.isFinite(q.mid)) {
+        const n = 2 + Math.floor(Math.random() * 2); // 2-3 prints / burst
+        const fresh: TapePrint[] = [];
+        for (let i = 0; i < n; i++) {
+          const side: "BUY" | "SELL" = Math.random() > 0.5 ? "BUY" : "SELL";
+          const jitter = (Math.random() - 0.5) * 2 * q.pipSize * 6;
+          const pnl =
+            Math.round((Math.random() * 0.25 - 0.05 + (Math.random() - 0.5) * 0.04) * 100) / 100;
+          fresh.push({
+            id: idRef.current++,
+            side,
+            size: randomTapeSize(q.code),
+            price: q.mid + jitter,
+            pnl,
+            at: Date.now() + i,
+          });
+        }
+        setPrints((prev) => [...fresh, ...prev].slice(0, TAPE_MAX));
       }
-      setPrints((prev) => [...fresh, ...prev].slice(0, TAPE_MAX));
-    }, TAPE_INTERVAL_MS);
-    return () => clearInterval(id);
+      if (cancelled) return;
+      const delay =
+        TAPE_MIN_DELAY_MS +
+        Math.random() * (TAPE_MAX_DELAY_MS - TAPE_MIN_DELAY_MS);
+      timer = setTimeout(tick, delay);
+    };
+    timer = setTimeout(
+      tick,
+      TAPE_MIN_DELAY_MS +
+        Math.random() * (TAPE_MAX_DELAY_MS - TAPE_MIN_DELAY_MS),
+    );
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
   }, []);
 
   return prints;
