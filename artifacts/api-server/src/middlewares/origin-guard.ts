@@ -50,11 +50,13 @@ const STATE_CHANGING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 const PATH_EXEMPTIONS = new Set([
   // Mount-relative (matches req.path under app.use("/api", ...)):
   "/healthz",
+  "/worker-healthz",
   "/version",
   "/version.json",
   "/csrf",
   // Absolute (matches req.path if remounted at root):
   "/api/healthz",
+  "/api/worker-healthz",
   "/api/version",
   "/api/version.json",
   "/api/csrf",
@@ -88,6 +90,33 @@ export function originGuard(req: Request, res: Response, next: NextFunction): vo
 
   // Path exemptions: health probes and version pings.
   if (PATH_EXEMPTIONS.has(req.path)) {
+    next();
+    return;
+  }
+
+  // ─── BL: STATELESS BEARER BYPASS (mobile / native clients) ───────────────
+  // Origin + CSRF checks exist solely to defeat cross-site request forgery,
+  // which is only possible when a browser ambiently attaches Cookies to a
+  // cross-site request. A request that carries `Authorization: Bearer …`
+  // and NO Cookie header at all cannot be a CSRF attack — there is no
+  // ambient credential for the attacker site to ride. We therefore skip
+  // both gates for that exact shape (which is the standard mobile / native
+  // client pattern: JWT in Bearer, no cookies).
+  //
+  // Captcha (Turnstile) is a SEPARATE middleware and is NOT bypassed here:
+  // mobile clients must still pass cf-turnstile-response on sensitive
+  // endpoints, exactly like the web client does. So overall security for
+  // mobile == security for web (Turnstile + JWT on both); only the
+  // CSRF-specific belt is dropped where CSRF is structurally impossible.
+  //
+  // Concretely the check is conservative: we require Bearer AND zero
+  // cookies. If a future web flow ever sends both Cookie and Bearer, it
+  // will fall through to the normal Origin/CSRF path — no security regression.
+  const authHeader = (req.headers["authorization"] as string | undefined) ?? "";
+  const cookieHeader = (req.headers["cookie"] as string | undefined) ?? "";
+  const isStatelessBearer =
+    /^Bearer\s+\S+/i.test(authHeader) && cookieHeader.trim().length === 0;
+  if (isStatelessBearer) {
     next();
     return;
   }
