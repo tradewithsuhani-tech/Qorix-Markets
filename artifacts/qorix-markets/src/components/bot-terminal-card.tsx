@@ -2405,7 +2405,7 @@ export function BotTerminalCard({
 
       {/* FOMO live activity ticker — only shown in fullscreen so the
           terminal feels alive like the main dashboard pill. */}
-      {isCardFs && fomoMessages.length > 0 && (
+      {isCardFs && activeTab !== "history" && fomoMessages.length > 0 && (
         <FomoTickerInline messages={fomoMessages} />
       )}
 
