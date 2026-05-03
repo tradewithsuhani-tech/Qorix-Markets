@@ -12,7 +12,10 @@
  */
 
 const SECS_PER_DAY = 24 * 3600;
-const RAMP_SECS = 6 * 3600; // bot reaches its daily target after ~6h of UTC time
+// Bot reaches its daily target near the END of the UTC day, not after
+// just a few hours. This way the pill grows gradually through the user's
+// viewing session instead of jumping to the full target instantly.
+const RAMP_SECS = 20 * 3600; // ramps from UTC 00:00 → ~UTC 20:00
 
 function hash32(str: string): number {
   let h = 2166136261 >>> 0;
