@@ -2359,7 +2359,7 @@ export function BotTerminalCard({ totalAum = 0 }: { totalAum?: number } = {}) {
         <div
           className={cn(
             "flex flex-col",
-            isCardFs ? "flex-1 min-h-0 overflow-y-auto" : "min-h-[420px]",
+            isCardFs ? "flex-1 min-h-0 overflow-hidden" : "min-h-[420px]",
           )}
         >
           {activeTab === "quotes" && <QuotesPanel quotes={quotes} />}
