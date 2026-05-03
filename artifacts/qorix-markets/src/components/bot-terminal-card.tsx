@@ -2675,12 +2675,14 @@ function TradePanel({
         </dl>
       </div>
       <LiveTapeStrip quote={quote} expanded={expanded} />
-      <PositionsStrip
-        positions={positions}
-        quotes={quotes}
-        livePnl={pnl}
-        openCount={virtualOpenCount}
-      />
+      {!expanded && (
+        <PositionsStrip
+          positions={positions}
+          quotes={quotes}
+          livePnl={pnl}
+          openCount={virtualOpenCount}
+        />
+      )}
     </div>
   );
 }
