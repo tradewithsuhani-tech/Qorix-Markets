@@ -1833,7 +1833,45 @@ function BotThinkingTicker() {
   );
 }
 
-export function BotTerminalCard({ totalAum = 0 }: { totalAum?: number } = {}) {
+function FomoTickerInline({ messages }: { messages: string[] }) {
+  const [idx, setIdx] = useState(0);
+  useEffect(() => {
+    if (messages.length <= 1) return;
+    const t = setInterval(() => setIdx((i) => (i + 1) % messages.length), 3500);
+    return () => clearInterval(t);
+  }, [messages.length]);
+  if (!messages.length) return null;
+  return (
+    <div className="mx-3 mt-2 mb-1 flex items-center gap-3 px-3 py-2 rounded-lg border border-emerald-500/20 bg-emerald-500/5 overflow-hidden shrink-0">
+      <div className="shrink-0 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-emerald-300">
+        <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
+        Live
+      </div>
+      <div className="flex-1 min-w-0 relative h-4">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={idx}
+            initial={{ y: 10, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: -10, opacity: 0 }}
+            transition={{ duration: 0.35 }}
+            className="absolute inset-0 text-[12px] text-emerald-100 font-medium truncate"
+          >
+            {messages[idx]}
+          </motion.div>
+        </AnimatePresence>
+      </div>
+    </div>
+  );
+}
+
+export function BotTerminalCard({
+  totalAum = 0,
+  fomoMessages = [],
+}: {
+  totalAum?: number;
+  fomoMessages?: string[];
+} = {}) {
   const { data: quotesData } = useBotQuotes();
   const { data: state } = useBotState();
 
@@ -2348,6 +2386,12 @@ export function BotTerminalCard({ totalAum = 0 }: { totalAum?: number } = {}) {
             />
           </div>
         </>
+      )}
+
+      {/* FOMO live activity ticker — only shown in fullscreen so the
+          terminal feels alive like the main dashboard pill. */}
+      {isCardFs && fomoMessages.length > 0 && (
+        <FomoTickerInline messages={fomoMessages} />
       )}
 
       {/* Non-chart tabs share a min-height matching the chart area so
