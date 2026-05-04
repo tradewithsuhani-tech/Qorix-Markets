@@ -72,6 +72,15 @@ import TermsPage from "@/pages/legal/terms";
 import PrivacyPage from "@/pages/legal/privacy";
 import RiskDisclosurePage from "@/pages/legal/risk-disclosure";
 import AmlKycPage from "@/pages/legal/aml-kyc";
+// Public marketing / SEO pages — separate from the authenticated app shell
+// so they keep clean URLs (no /m/ prefix) and a marketing-only header.
+import AboutPage from "@/pages/marketing/about";
+import ContactPage from "@/pages/marketing/contact";
+import AiTradingPage from "@/pages/marketing/ai-trading";
+import ZeroFeePage from "@/pages/marketing/zero-fee";
+import LowInvestmentPage from "@/pages/marketing/low-investment";
+import BlogIndexPage from "@/pages/marketing/blog-index";
+import BlogPostPage from "@/pages/marketing/blog-post";
 
 // Perf overhaul: tighten query-client defaults so we stop firing 50+
 // requests on every render. Per-query polling (refetchInterval) still
@@ -243,6 +252,19 @@ function Router() {
       <Route path="/legal/privacy" component={PrivacyPage} />
       <Route path="/legal/risk-disclosure" component={RiskDisclosurePage} />
       <Route path="/legal/aml-kyc" component={AmlKycPage} />
+      {/* SEO marketing routes (public, indexable) */}
+      <Route path="/about" component={AboutPage} />
+      <Route path="/contact" component={ContactPage} />
+      <Route path="/ai-trading-platform" component={AiTradingPage} />
+      <Route path="/zero-trading-fee" component={ZeroFeePage} />
+      <Route path="/low-investment-trading" component={LowInvestmentPage} />
+      <Route path="/blog" component={BlogIndexPage} />
+      <Route path="/blog/:slug" component={BlogPostPage} />
+      {/* Clean-URL aliases for the existing legal pages so /privacy and
+          /terms (the URLs that show up in sitemaps and footers) resolve
+          without a redirect hop. */}
+      <Route path="/privacy" component={PrivacyPage} />
+      <Route path="/terms" component={TermsPage} />
       <Route component={NotFound} />
     </Switch>
   );
