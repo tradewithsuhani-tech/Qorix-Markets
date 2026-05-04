@@ -1014,11 +1014,10 @@ function PortfolioInner({ investment, invLoading, summary }: PortfolioInnerProps
         </div>
       </div>
 
-      {/* LIVE PROFIT FEED + NEXT TRADE STATUS — addictive engagement strip */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <LiveProfitFeed enabled={isActive} />
-        <NextTradeStatus enabled={isActive} />
-      </div>
+      {/* NEXT TRADE STATUS — keeps the user oriented on what the engine is
+          doing right now without the noisy fake-money ticker that confused
+          investors. */}
+      <NextTradeStatus enabled={isActive} />
 
       {/* Investment Setup — premium metric tile grid */}
       <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-[#0e1828] via-[#0a1322] to-[#070b14] p-4 sm:p-5 md:p-6">
