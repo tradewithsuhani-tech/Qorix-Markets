@@ -1,4 +1,4 @@
-import { ReactNode, useState } from "react";
+import { ReactNode, useState, useMemo } from "react";
 import { Link } from "wouter";
 import {
   ArrowRight,
@@ -11,6 +11,9 @@ import {
   Wallet,
   Globe2,
 } from "lucide-react";
+import { faqJsonLd, reviewJsonLd } from "@/lib/seo";
+import { trackCta } from "@/lib/analytics";
+import { withRef } from "@/lib/referral";
 
 export function StatsSection() {
   const stats = [
@@ -88,32 +91,40 @@ export function FeatureGrid({
   );
 }
 
+export const TESTIMONIALS = [
+  {
+    name: "Karan C.",
+    title: "Software engineer, India",
+    quote:
+      "I started with $10 just to test it. Six weeks later my portfolio is consistently green and the daily updates feel real, not hyped.",
+    rating: 5,
+  },
+  {
+    name: "Aisha R.",
+    title: "Product designer, UAE",
+    quote:
+      "Zero fees actually means zero. I have used three brokers before and Qorix is the first one that does not nickel-and-dime me.",
+    rating: 5,
+  },
+  {
+    name: "Marco D.",
+    title: "Small business owner, Italy",
+    quote:
+      "I wanted exposure to forex without the screen time. The AI desk handles it. I just check my dashboard once a week.",
+    rating: 5,
+  },
+];
+
 export function TestimonialsSection() {
-  const items = [
-    {
-      name: "Karan C.",
-      title: "Software engineer · India",
-      quote:
-        "I started with $10 just to test it. Six weeks later my portfolio is consistently green and the daily updates feel real, not hyped.",
-      rating: 5,
-    },
-    {
-      name: "Aisha R.",
-      title: "Product designer · UAE",
-      quote:
-        "Zero fees actually means zero. I have used three brokers before and Qorix is the first one that does not nickel-and-dime me.",
-      rating: 5,
-    },
-    {
-      name: "Marco D.",
-      title: "Small business owner · Italy",
-      quote:
-        "I wanted exposure to forex without the screen time. The AI desk handles it. I just check my dashboard once a week.",
-      rating: 5,
-    },
-  ];
+  // Inject Review schema so individual reviews + aggregate rating show up
+  // as rich snippets in Google search results.
+  const schema = useMemo(() => reviewJsonLd(TESTIMONIALS), []);
   return (
     <section className="max-w-7xl mx-auto px-4 md:px-8 py-12 md:py-16">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }}
+      />
       <div className="text-center max-w-2xl mx-auto mb-10">
         <h2 className="text-2xl md:text-4xl font-black text-white mb-3">
           Loved by investors worldwide
@@ -123,7 +134,7 @@ export function TestimonialsSection() {
         </p>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {items.map((t) => (
+        {TESTIMONIALS.map((t) => (
           <figure
             key={t.name}
             className="rounded-2xl p-6"
@@ -163,8 +174,14 @@ export function FaqSection({
   title?: string;
 }) {
   const [open, setOpen] = useState<number | null>(0);
+  // FAQPage schema → rich snippets with expandable Q/A directly on Google.
+  const schema = useMemo(() => faqJsonLd(items), [items]);
   return (
     <section className="max-w-3xl mx-auto px-4 md:px-8 py-12 md:py-16">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }}
+      />
       <div className="text-center mb-8">
         <h2 className="text-2xl md:text-4xl font-black text-white mb-3">{title}</h2>
       </div>
@@ -184,6 +201,7 @@ export function FaqSection({
                 type="button"
                 onClick={() => setOpen(isOpen ? null : i)}
                 className="w-full flex items-center justify-between gap-3 p-5 text-left"
+                aria-expanded={isOpen}
               >
                 <h3 className="text-sm md:text-base font-semibold text-white">{it.q}</h3>
                 <ChevronDown
@@ -211,11 +229,13 @@ export function CtaBand({
   subtitle = "Join thousands of investors growing capital on autopilot.",
   ctaHref = "/signup",
   ctaLabel = "Create your free account",
+  trackLocation = "cta_band",
 }: {
   title?: string;
   subtitle?: string;
   ctaHref?: string;
   ctaLabel?: string;
+  trackLocation?: string;
 }) {
   return (
     <section className="max-w-7xl mx-auto px-4 md:px-8 pb-16">
@@ -230,7 +250,8 @@ export function CtaBand({
         <h2 className="text-2xl md:text-4xl font-black text-white mb-3">{title}</h2>
         <p className="text-slate-300 max-w-xl mx-auto mb-6">{subtitle}</p>
         <Link
-          href={ctaHref}
+          href={withRef(ctaHref)}
+          onClick={() => trackCta(ctaLabel, trackLocation)}
           className="inline-flex items-center gap-1.5 px-6 py-3 rounded-xl text-sm font-bold text-white shadow-lg"
           style={{
             background: "linear-gradient(90deg,#10b981,#22c55e)",

@@ -12,6 +12,7 @@ import { QorixAssistant } from "@/components/qorix-assistant";
 import AdminChatsPage from "@/pages/admin-chats";
 import AdminCommunicationPage from "@/pages/admin-communication";
 import AdminContentPage from "@/pages/admin-content";
+import AdminBlogPage from "@/pages/admin-blog";
 import AdminTestPage from "@/pages/admin-test";
 import { useLocation } from "wouter";
 import { useEffect, useState } from "react";
@@ -239,6 +240,7 @@ function Router() {
       <Route path="/admin/chats"><ProtectedRoute component={AdminChatsPage} adminOnly={true} /></Route>
       <Route path="/admin/communication"><ProtectedRoute component={AdminCommunicationPage} adminOnly={true} /></Route>
       <Route path="/admin/content"><ProtectedRoute component={AdminContentPage} adminOnly={true} /></Route>
+      <Route path="/admin/blog"><ProtectedRoute component={AdminBlogPage} adminOnly={true} /></Route>
       <Route path="/admin/test"><ProtectedRoute component={AdminTestPage} adminOnly={true} /></Route>
       <Route path="/admin/hidden-features"><ProtectedRoute component={AdminHiddenFeaturesPage} adminOnly={true} /></Route>
       <Route path="/settings"><ProtectedRoute component={SettingsPage} /></Route>
@@ -322,6 +324,12 @@ function AppContent() {
   const { showSplash, onSplashDone } = useSplash();
   const [location] = useLocation();
   const isAdminArea = location.startsWith("/admin");
+
+  // GA4 page-view tracking on every wouter location change. The helper
+  // is a no-op when VITE_GA_MEASUREMENT_ID is not configured.
+  useEffect(() => {
+    import("@/lib/analytics").then(({ trackPageView }) => trackPageView(location));
+  }, [location]);
   // Don't show the floating "High Impact" market alert on public/marketing
   // pages — it overlaps the hero on mobile and is only meaningful for
   // logged-in investors.
@@ -339,7 +347,11 @@ function AppContent() {
     location.startsWith("/terms") ||
     location.startsWith("/privacy") ||
     location.startsWith("/about") ||
-    location.startsWith("/contact");
+    location.startsWith("/contact") ||
+    location.startsWith("/blog") ||
+    location.startsWith("/ai-trading-platform") ||
+    location.startsWith("/zero-trading-fee") ||
+    location.startsWith("/low-investment-trading");
 
   return (
     <MaintenanceGate>

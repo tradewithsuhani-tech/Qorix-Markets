@@ -1,8 +1,18 @@
 import { createRoot } from "react-dom/client";
 import { setBaseUrl, setMaintenanceHandler } from "@workspace/api-client-react";
 import { notifyMaintenance } from "@/lib/maintenance-state";
+import { captureReferralFromUrl } from "@/lib/referral";
+import { initAnalytics } from "@/lib/analytics";
 import App from "./App";
 import "./index.css";
+
+// SEO + growth boot:
+//  - capture `?ref=CODE` into localStorage (30-day TTL) so every CTA on
+//    the marketing site can append it to /signup links and the existing
+//    register endpoint receives the referralCode.
+//  - boot Google Analytics 4 if VITE_GA_MEASUREMENT_ID is baked in.
+captureReferralFromUrl();
+initAnalytics();
 
 // Strip the `?_v=<ts>` cache-buster that forceReload() (see
 // src/lib/version-check.ts) appends before reloading. By the time this
