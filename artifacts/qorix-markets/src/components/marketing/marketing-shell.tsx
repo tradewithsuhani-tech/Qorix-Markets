@@ -1,6 +1,10 @@
 import { ReactNode, useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { Menu, X, ArrowRight, TrendingUp } from "lucide-react";
+import { StickyJoinButton } from "./sticky-cta";
+import { SignupPopup } from "./signup-popup";
+import { trackCta } from "@/lib/analytics";
+import { withRef } from "@/lib/referral";
 
 const NAV_LINKS = [
   { href: "/", label: "Home" },
@@ -81,7 +85,8 @@ export function MarketingShell({ children }: { children: ReactNode }) {
               Log in
             </Link>
             <Link
-              href="/signup"
+              href={withRef("/signup")}
+              onClick={() => trackCta("Start Trading", "header")}
               className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-sm font-bold text-white transition-all shadow-lg"
               style={{
                 background: "linear-gradient(90deg,#10b981,#22c55e)",
@@ -130,6 +135,8 @@ export function MarketingShell({ children }: { children: ReactNode }) {
       <main className="flex-1">{children}</main>
 
       <MarketingFooter />
+      <StickyJoinButton />
+      <SignupPopup />
     </div>
   );
 }
@@ -162,7 +169,7 @@ export function MarketingFooter() {
             <li><Link href="/ai-trading-platform" className="hover:text-emerald-300">AI Trading</Link></li>
             <li><Link href="/zero-trading-fee" className="hover:text-emerald-300">Zero Trading Fee</Link></li>
             <li><Link href="/low-investment-trading" className="hover:text-emerald-300">Start at $10</Link></li>
-            <li><Link href="/signup" className="hover:text-emerald-300">Open Account</Link></li>
+            <li><Link href={withRef("/signup")} className="hover:text-emerald-300">Open Account</Link></li>
           </ul>
         </div>
         <div>
@@ -203,6 +210,7 @@ export function MarketingHero({
   ctaLabel = "Start Trading Free",
   secondaryHref,
   secondaryLabel,
+  trackLocation = "hero",
 }: {
   badge?: string;
   title: ReactNode;
@@ -211,6 +219,7 @@ export function MarketingHero({
   ctaLabel?: string;
   secondaryHref?: string;
   secondaryLabel?: string;
+  trackLocation?: string;
 }) {
   return (
     <section className="relative overflow-hidden">
@@ -243,7 +252,8 @@ export function MarketingHero({
         </p>
         <div className="mt-8 flex items-center justify-center gap-3 flex-wrap">
           <Link
-            href={ctaHref}
+            href={withRef(ctaHref)}
+            onClick={() => trackCta(ctaLabel, trackLocation)}
             className="inline-flex items-center gap-1.5 px-6 py-3 rounded-xl text-sm font-bold text-white shadow-lg"
             style={{
               background: "linear-gradient(90deg,#10b981,#22c55e)",

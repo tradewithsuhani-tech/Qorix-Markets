@@ -7,7 +7,7 @@ export interface SeoProps {
   image?: string;
   type?: "website" | "article";
   noindex?: boolean;
-  jsonLd?: object;
+  jsonLd?: object | object[];
   keywords?: string;
 }
 
@@ -38,10 +38,9 @@ function upsertLink(rel: string, href: string) {
 
 /**
  * Lightweight SEO helper for our Vite SPA. Updates document.title, meta
- * description, canonical, Open Graph, Twitter card, and optional JSON-LD.
- * Search bots that execute JavaScript (Googlebot, Bingbot) read the
- * resulting DOM. Pre-rendering can be added later via vite-plugin-ssr or
- * a static export without changing call sites.
+ * description, canonical, Open Graph, Twitter card, and one or many
+ * JSON-LD blocks. Pass an array to `jsonLd` to emit multiple schema
+ * documents on a single page (e.g. Organization + FAQPage + BlogPosting).
  */
 export function useSeo({
   title,
@@ -86,16 +85,18 @@ export function useSeo({
     upsertMeta("twitter:description", description);
     upsertMeta("twitter:image", ogImage);
 
-    let script: HTMLScriptElement | null = null;
-    if (jsonLd) {
-      script = document.createElement("script");
-      script.type = "application/ld+json";
-      script.dataset["seo"] = "1";
-      script.text = JSON.stringify(jsonLd);
-      document.head.appendChild(script);
-    }
+    const blocks = Array.isArray(jsonLd) ? jsonLd : jsonLd ? [jsonLd] : [];
+    const scripts: HTMLScriptElement[] = [];
+    blocks.forEach((b) => {
+      const s = document.createElement("script");
+      s.type = "application/ld+json";
+      s.dataset["seo"] = "1";
+      s.text = JSON.stringify(b);
+      document.head.appendChild(s);
+      scripts.push(s);
+    });
     return () => {
-      if (script && script.parentNode) script.parentNode.removeChild(script);
+      scripts.forEach((s) => s.parentNode && s.parentNode.removeChild(s));
     };
   }, [title, description, canonical, image, type, noindex, keywords, jsonLdKey]);
 }
@@ -113,3 +114,42 @@ export const orgJsonLd = {
   description:
     "Qorix Markets is a professionally managed AI-driven USDT trading platform with zero commissions and entry from just $10.",
 };
+
+export function faqJsonLd(items: { q: string; a: string }[]) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: items.map((it) => ({
+      "@type": "Question",
+      name: it.q,
+      acceptedAnswer: { "@type": "Answer", text: it.a },
+    })),
+  };
+}
+
+export function reviewJsonLd(items: { name: string; rating: number; quote: string }[]) {
+  const avg =
+    items.reduce((s, r) => s + r.rating, 0) / Math.max(items.length, 1);
+  return {
+    "@context": "https://schema.org",
+    "@type": "Product",
+    name: "Qorix Markets AI Trading Platform",
+    aggregateRating: {
+      "@type": "AggregateRating",
+      ratingValue: avg.toFixed(1),
+      reviewCount: items.length,
+      bestRating: 5,
+      worstRating: 1,
+    },
+    review: items.map((r) => ({
+      "@type": "Review",
+      author: { "@type": "Person", name: r.name },
+      reviewRating: {
+        "@type": "Rating",
+        ratingValue: r.rating,
+        bestRating: 5,
+      },
+      reviewBody: r.quote,
+    })),
+  };
+}
