@@ -5,7 +5,7 @@ import {
 } from "@workspace/db/schema";
 import { and, eq, isNull, lt, sql } from "drizzle-orm";
 import { logger, profitLogger, errorLogger } from "./logger";
-import { getLastDailyProfitPercent, sweepSignalProfitsToProfitWallet } from "./profit-service";
+import { getLastDailyProfitPercent, sweepSignalProfitsToProfitWallet, distributeAutoDailyProfit } from "./profit-service";
 import { emitProfitDistribution } from "./event-bus";
 import { tickAutoSignalEngine, closeMaturedAutoTrades, rehydrateAutoEngineState } from "./auto-signal-engine";
 import { runEscalationTick } from "./escalation-cron";
@@ -33,18 +33,24 @@ async function expireStalePromoRedemptions(): Promise<number> {
 }
 
 export async function initCronJobs(): Promise<void> {
-  cron.schedule("0 0 * * *", async () => {
-    profitLogger.info("Cron: daily profit distribution — enqueuing job");
+  // Auto daily profit accrual — runs every weekday (Mon–Fri) at 00:00 UTC
+  // and credits each active investment its per-risk monthly target / 22
+  // forex days (Conservative 4%, Balanced 6%, Aggressive 8%). No admin
+  // input required. If an admin override % is configured we still honour
+  // it via the legacy distribute path; otherwise auto-credit kicks in.
+  cron.schedule("0 0 * * 1-5", async () => {
+    profitLogger.info("Cron: daily profit accrual — starting");
     try {
-      const profitPercent = await getLastDailyProfitPercent();
-      if (profitPercent === 0) {
-        profitLogger.info("Cron: daily profit distribution skipped — no profit rate configured");
+      const adminPct = await getLastDailyProfitPercent();
+      if (adminPct !== 0) {
+        await emitProfitDistribution({ profitPercent: adminPct, triggeredBy: "cron" });
+        profitLogger.info({ profitPercent: adminPct }, "Cron: admin-overridden profit distribution enqueued");
         return;
       }
-      await emitProfitDistribution({ profitPercent, triggeredBy: "cron" });
-      profitLogger.info({ profitPercent }, "Cron: profit distribution job enqueued");
+      const result = await distributeAutoDailyProfit();
+      profitLogger.info(result, "Cron: auto daily profit accrual complete");
     } catch (err) {
-      errorLogger.error({ err }, "Cron: failed to enqueue daily profit distribution");
+      errorLogger.error({ err }, "Cron: failed to run daily profit accrual");
     }
   });
 
