@@ -84,6 +84,26 @@ export function autoDailyPctForRisk(riskKey: string | null | undefined): number 
   return monthly / FOREX_DAYS_PER_MONTH;
 }
 
+// Returns the current month's total forex trading days (Mon–Fri) and the
+// 1-based index of `d` within them. Used to spread the fixed monthly
+// target evenly while clamping cumulative profit to exactly the target.
+export function forexWorkingDayInfo(d: Date): { totalN: number; idxToday: number } {
+  const y = d.getUTCFullYear();
+  const m = d.getUTCMonth();
+  const today = d.getUTCDate();
+  const lastDay = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+  let totalN = 0;
+  let idxToday = 0;
+  for (let day = 1; day <= lastDay; day++) {
+    const dow = new Date(Date.UTC(y, m, day)).getUTCDay();
+    if (dow !== 0 && dow !== 6) {
+      totalN++;
+      if (day <= today) idxToday = totalN;
+    }
+  }
+  return { totalN, idxToday };
+}
+
 export async function getLastDailyProfitPercent(): Promise<number> {
   const rows = await db
     .select()
@@ -500,11 +520,40 @@ export async function distributeAutoDailyProfit(): Promise<DistributeProfitResul
       const totalProfit = parseFloat(inv.totalProfit as string);
       const currentPeakBalance = parseFloat(inv.peakBalance as string) || amount;
       const riskKey = (inv.riskLevel ?? "medium").toLowerCase();
-      const dailyPct = autoDailyPctForRisk(riskKey);
-      const baseDailyProfit = amount * (dailyPct / 100);
+      const monthlyPct = MONTHLY_PROFIT_TARGET_PCT[riskKey] ?? MONTHLY_PROFIT_TARGET_PCT.medium!;
+      const monthlyTargetAmount = amount * (monthlyPct / 100);
+
+      // Hard-cap to the FIXED monthly target — never more, never less.
+      // Spread is monthlyTarget * (tradingDayIdx / totalTradingDays) and
+      // we credit the gap vs whatever was paid earlier this month.
+      const nowDate = new Date();
+      const { totalN, idxToday } = forexWorkingDayInfo(nowDate);
+      const targetToDate = totalN > 0 ? monthlyTargetAmount * (idxToday / totalN) : 0;
+
+      const yearMonthStr = todayStr.slice(0, 7)!;
+      const monthRows = await tx
+        .select({ totalProfit: monthlyPerformanceTable.totalProfit })
+        .from(monthlyPerformanceTable)
+        .where(
+          and(
+            eq(monthlyPerformanceTable.userId, inv.userId),
+            eq(monthlyPerformanceTable.yearMonth, yearMonthStr),
+          ),
+        )
+        .limit(1);
+      const paidThisMonth = monthRows[0]
+        ? parseFloat(monthRows[0].totalProfit as unknown as string)
+        : 0;
+
+      // Clamp: never exceed monthly target, never go negative.
+      const remainingThisMonth = Math.max(0, monthlyTargetAmount - paidThisMonth);
+      const owedToDate = Math.max(0, targetToDate - paidThisMonth);
+      const dailyProfitAmount = Math.min(owedToDate, remainingThisMonth);
+      if (dailyProfitAmount <= 0) continue;
+      const dailyPct = amount > 0 ? (dailyProfitAmount / amount) * 100 : 0;
+      // VIP bonus intentionally skipped here — fixed monthly target is
+      // exactly 4/6/8% per risk tier and must not exceed it.
       const vipInfo = getVipInfo(amount);
-      const vipBonus = baseDailyProfit > 0 ? baseDailyProfit * vipInfo.profitBonus : 0;
-      const dailyProfitAmount = baseDailyProfit + vipBonus;
       const newTotalProfit = totalProfit + dailyProfitAmount;
 
       const equityAfterToday = inv.autoCompound
