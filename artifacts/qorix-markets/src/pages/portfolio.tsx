@@ -125,22 +125,11 @@ function buildDailyProjection(args: {
   const days = forexWorkingDaysOfMonth(args.year, args.month0);
   const n = days.length;
 
-  // Seed: amount + tier + year/month so it's stable but unique per user/month.
-  const seed =
-    Math.floor(args.amount * 100) +
-    args.year * 1000 +
-    (args.month0 + 1) * 31 +
-    (args.riskKey === "low" ? 1 : args.riskKey === "medium" ? 2 : 3) * 7919;
-  const rand = mulberry32(seed);
-
-  // Generate weights in 0.6..1.4 then normalize so sum * monthlyTarget = monthlyTarget.
-  const raw: number[] = [];
-  let total = 0;
-  for (let i = 0; i < n; i++) {
-    const w = 0.6 + rand() * 0.8;
-    raw.push(w);
-    total += w;
-  }
+  // Fixed monthly target — split EQUALLY across all forex working days
+  // in the month so cumulative = monthly target exactly. Backend cron
+  // credits the same per-day share (clamped to never exceed the target).
+  const evenAmount = n > 0 ? +(monthlyTarget / n).toFixed(2) : 0;
+  const evenPct = n > 0 ? +((100 / n)).toFixed(2) : 0;
 
   const today = new Date();
   const isCurrentMonth =
@@ -149,15 +138,12 @@ function buildDailyProjection(args: {
 
   let mtd = 0;
   let todayAmt = 0;
-  const projection: DayProjection[] = days.map((dt, i) => {
-    const share = raw[i] / total;
-    const amount = +(share * monthlyTarget).toFixed(2);
-    const pct = +(share * 100).toFixed(2);
+  const projection: DayProjection[] = days.map((dt) => {
     const isToday = isCurrentMonth && dt.getDate() === todayDate;
     const isPast = isCurrentMonth ? dt.getDate() < todayDate : false;
-    if (isPast || isToday) mtd += amount;
-    if (isToday) todayAmt = amount;
-    return { date: dt, amount, pct, isToday, isPast };
+    if (isPast || isToday) mtd += evenAmount;
+    if (isToday) todayAmt = evenAmount;
+    return { date: dt, amount: evenAmount, pct: evenPct, isToday, isPast };
   });
 
   return {
