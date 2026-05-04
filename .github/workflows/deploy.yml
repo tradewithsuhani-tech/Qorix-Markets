@@ -438,6 +438,7 @@ jobs:
             --build-arg VITE_API_URL="${API_BASE}" \
             --build-arg VITE_RECAPTCHA_SITE_KEY="${{ secrets.VITE_RECAPTCHA_SITE_KEY }}" \
             --build-arg VITE_TURNSTILE_SITE_KEY="${{ secrets.VITE_TURNSTILE_SITE_KEY }}" \
+            --build-arg VITE_GA_MEASUREMENT_ID="${{ secrets.VITE_GA_MEASUREMENT_ID }}" \
             --wait-timeout 600
           # NOTE: --no-cache is intentional. The vite plugin stamps a fresh
           # BUILD_VERSION (Date.now()) at build time, baked into both
