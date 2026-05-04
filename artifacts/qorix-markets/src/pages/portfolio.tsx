@@ -39,6 +39,7 @@ import {
   LineChart,
   Calendar,
   Target,
+  Settings,
 } from "lucide-react";
 import { AnimatedCounter, BigBalanceCounter } from "@/components/animated-counter";
 import { UpdatedAgo } from "@/components/updated-ago";
@@ -833,108 +834,61 @@ function PortfolioInner({ investment, invLoading, summary }: PortfolioInnerProps
 
   return (
     <div className="px-4 md:px-8 py-6 md:py-8 max-w-7xl mx-auto space-y-6">
-      {/* Header */}
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2.5">
-            <span className="bg-gradient-to-r from-white via-white to-emerald-200 bg-clip-text text-transparent">
-              Portfolio
-            </span>
-            {isActive && (
-              <span className="live-pill live-pill--green text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md">
-                <span className="live-dot inline-block w-1.5 h-1.5 rounded-full mr-1" />
-                Live
+      {/* Header — title + status, then a clean primary/secondary action stack */}
+      <div className="space-y-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2.5">
+              <span className="bg-gradient-to-r from-white via-white to-emerald-200 bg-clip-text text-transparent">
+                Portfolio
               </span>
-            )}
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1.5 flex items-center gap-1.5">
-            <span className="inline-block w-1 h-1 rounded-full bg-emerald-400 animate-pulse" />
-            Live performance · <UpdatedAgo timestamp={equityUpdatedAt} />
-          </p>
+              {isActive && (
+                <span className="live-pill live-pill--green text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md">
+                  <span className="live-dot inline-block w-1.5 h-1.5 rounded-full mr-1" />
+                  Live
+                </span>
+              )}
+            </h1>
+            <p className="text-xs md:text-sm text-muted-foreground mt-1.5 flex items-center gap-1.5">
+              <span className="inline-block w-1 h-1 rounded-full bg-emerald-400 animate-pulse" />
+              Live performance · <UpdatedAgo timestamp={equityUpdatedAt} />
+            </p>
+          </div>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
+
+        {/* Primary CTAs — Deposit + Withdraw always equal-width on mobile.
+            Manage Plan slots in as a third equal column on tablet+ for a
+            balanced 3-up bar; on mobile it drops to its own clean row. */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
           <Link
             href="/deposit"
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500/25 to-green-500/20 hover:from-emerald-500/40 hover:to-green-500/35 border border-emerald-400/40 text-emerald-100 text-sm font-semibold transition-all shadow-lg shadow-emerald-500/20"
+            className="inline-flex items-center justify-center gap-1.5 h-11 rounded-xl bg-gradient-to-r from-emerald-500/25 to-green-500/20 hover:from-emerald-500/40 hover:to-green-500/35 border border-emerald-400/40 text-emerald-100 text-sm font-semibold transition-all shadow-lg shadow-emerald-500/20"
           >
-            <Wallet className="w-3.5 h-3.5" /> Deposit
+            <Wallet className="w-4 h-4" /> Deposit
           </Link>
           {isActive ? (
             <Link
               href="/withdraw"
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500/20 to-orange-500/15 hover:from-amber-500/35 hover:to-orange-500/25 border border-amber-400/35 text-amber-100 text-sm font-semibold transition-all shadow-lg shadow-amber-500/15"
+              className="inline-flex items-center justify-center gap-1.5 h-11 rounded-xl bg-gradient-to-r from-amber-500/20 to-orange-500/15 hover:from-amber-500/35 hover:to-orange-500/25 border border-amber-400/35 text-amber-100 text-sm font-semibold transition-all shadow-lg shadow-amber-500/15"
             >
-              <ArrowUpRight className="w-3.5 h-3.5" /> Withdraw
+              <ArrowUpRight className="w-4 h-4" /> Withdraw
             </Link>
           ) : (
             <button
               type="button"
               disabled
               title="Start trading to enable"
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-muted-foreground text-sm font-semibold cursor-not-allowed opacity-60"
+              className="inline-flex items-center justify-center gap-1.5 h-11 rounded-xl bg-white/5 border border-white/10 text-muted-foreground text-sm font-semibold cursor-not-allowed opacity-60"
             >
-              <Lock className="w-3.5 h-3.5" /> Withdraw
+              <Lock className="w-4 h-4" /> Withdraw
             </button>
           )}
           <Link
             href="/invest"
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-blue-500/20 to-indigo-500/15 hover:from-blue-500/30 hover:to-indigo-500/25 border border-blue-500/30 text-blue-200 text-sm font-medium transition-all shadow-lg shadow-blue-500/10"
+            className="col-span-2 sm:col-span-1 inline-flex items-center justify-center gap-1.5 h-11 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 hover:border-blue-400/30 text-blue-200 text-sm font-semibold transition-all"
           >
-            Manage <ArrowUpRight className="w-3.5 h-3.5" />
+            <Settings className="w-4 h-4" /> Manage Plan
           </Link>
-          {isActive && (() => {
-            const on = !!investment?.autoCompound;
-            return (
-              <button
-                onClick={() => compoundMutation.mutate({ data: { autoCompound: !on } })}
-                disabled={compoundMutation.isPending}
-                title={on ? "Profits auto-reinvest daily" : "Click to enable auto-reinvest"}
-                className={`group inline-flex items-center gap-2.5 pl-3 pr-1.5 py-1.5 rounded-xl border text-sm font-semibold transition-all shadow-lg disabled:opacity-60 ${
-                  on
-                    ? "bg-gradient-to-r from-emerald-500/25 via-green-500/15 to-emerald-500/20 hover:from-emerald-500/35 hover:to-emerald-500/30 border-emerald-400/40 text-emerald-50 shadow-emerald-500/25"
-                    : "bg-gradient-to-r from-white/[0.04] to-white/[0.02] hover:from-white/[0.08] hover:to-white/[0.04] border-white/15 text-muted-foreground shadow-black/10"
-                }`}
-              >
-                <Repeat className={`w-3.5 h-3.5 transition-transform ${on ? "text-emerald-200" : ""} group-hover:rotate-180 duration-500`} />
-                <span>Auto-Compound</span>
-                {/* iOS-style toggle pill */}
-                <span
-                  className={`relative inline-flex items-center h-6 w-14 rounded-full transition-colors duration-300 border ${
-                    on
-                      ? "bg-gradient-to-r from-emerald-500 to-green-500 border-emerald-300/60 shadow-[0_0_12px_rgba(16,185,129,0.55)]"
-                      : "bg-white/[0.06] border-white/15"
-                  }`}
-                >
-                  <span
-                    className={`absolute inset-0 flex items-center ${
-                      on ? "justify-start pl-2" : "justify-end pr-2"
-                    } text-[9px] font-extrabold tracking-wider ${
-                      on ? "text-white/90" : "text-muted-foreground/80"
-                    }`}
-                  >
-                    {compoundMutation.isPending ? "" : on ? "ON" : "OFF"}
-                  </span>
-                  <span
-                    className={`absolute top-0.5 left-0.5 w-[18px] h-[18px] rounded-full shadow-md transition-all duration-300 ${
-                      on
-                        ? "translate-x-[32px] bg-gradient-to-br from-emerald-300 to-green-500 shadow-emerald-900/50"
-                        : "translate-x-0 bg-gradient-to-br from-red-400 to-rose-600 shadow-red-900/50"
-                    } ${compoundMutation.isPending ? "scale-75 opacity-80" : ""}`}
-                  />
-                </span>
-              </button>
-            );
-          })()}
-          {isActive && (
-            <button
-              onClick={handleStopTrading}
-              disabled={stopMutation.isPending}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-red-500/15 to-rose-500/10 hover:from-red-500/25 hover:to-rose-500/20 border border-red-500/30 text-red-200 text-sm font-semibold transition-all shadow-lg shadow-red-500/10 disabled:opacity-50"
-            >
-              <Square className="w-3.5 h-3.5" />
-              {stopMutation.isPending ? "Stopping..." : "Stop Trading"}
-            </button>
-          )}
         </div>
       </div>
 
@@ -1190,6 +1144,59 @@ function PortfolioInner({ investment, invLoading, summary }: PortfolioInnerProps
             </div>
           ))}
         </div>
+
+        {/* Controls strip — Auto-Compound toggle (left) + Stop Trading (right).
+            Only renders for active investments. Sits inside the hero on a
+            divider so it reads as part of the trading status, not floating
+            chrome above the fold. */}
+        {isActive && (
+          <div className="relative mt-5 pt-4 border-t border-white/[0.06] flex items-center justify-between gap-3 flex-wrap">
+            {(() => {
+              const on = !!investment?.autoCompound;
+              return (
+                <button
+                  onClick={() => compoundMutation.mutate({ data: { autoCompound: !on } })}
+                  disabled={compoundMutation.isPending}
+                  title={on ? "Profits auto-reinvest daily" : "Click to enable auto-reinvest"}
+                  className={cn(
+                    "group inline-flex items-center gap-2.5 pl-3 pr-1.5 py-1.5 rounded-xl border text-xs sm:text-sm font-semibold transition-all disabled:opacity-60",
+                    on
+                      ? "bg-emerald-500/[0.10] hover:bg-emerald-500/[0.18] border-emerald-400/35 text-emerald-100"
+                      : "bg-white/[0.03] hover:bg-white/[0.06] border-white/10 text-muted-foreground"
+                  )}
+                >
+                  <Repeat className={cn("w-3.5 h-3.5 transition-transform group-hover:rotate-180 duration-500", on && "text-emerald-300")} />
+                  <span>Auto-Compound</span>
+                  <span
+                    className={cn(
+                      "relative inline-flex items-center h-5 w-10 rounded-full transition-colors duration-300 border",
+                      on
+                        ? "bg-gradient-to-r from-emerald-500 to-green-500 border-emerald-300/60 shadow-[0_0_10px_rgba(16,185,129,0.45)]"
+                        : "bg-white/[0.06] border-white/15"
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "absolute top-0.5 left-0.5 w-[14px] h-[14px] rounded-full shadow-md transition-all duration-300",
+                        on
+                          ? "translate-x-[20px] bg-white"
+                          : "translate-x-0 bg-white/80"
+                      )}
+                    />
+                  </span>
+                </button>
+              );
+            })()}
+            <button
+              onClick={handleStopTrading}
+              disabled={stopMutation.isPending}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-transparent hover:bg-red-500/10 border border-red-500/25 text-red-300 hover:text-red-200 text-xs sm:text-sm font-semibold transition-all disabled:opacity-50"
+            >
+              <Square className="w-3.5 h-3.5" />
+              {stopMutation.isPending ? "Stopping…" : "Stop Trading"}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Daily Return Projection — investment-based forex-day breakdown */}
