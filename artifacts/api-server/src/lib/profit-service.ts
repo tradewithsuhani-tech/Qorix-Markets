@@ -69,6 +69,21 @@ export const RISK_PROFILES = {
 
 const REFERRAL_COMMISSION_RATE = 0.10;
 
+// Auto daily profit accrual: each risk tier earns a fixed monthly target,
+// spread evenly across 22 forex trading days (Mon–Fri). No admin input
+// required — cron credits this every weekday.
+export const FOREX_DAYS_PER_MONTH = 22;
+export const MONTHLY_PROFIT_TARGET_PCT: Record<string, number> = {
+  low: 4,      // Conservative
+  medium: 6,   // Balanced
+  high: 8,     // Aggressive
+};
+export function autoDailyPctForRisk(riskKey: string | null | undefined): number {
+  const k = (riskKey ?? "medium").toLowerCase();
+  const monthly = MONTHLY_PROFIT_TARGET_PCT[k] ?? MONTHLY_PROFIT_TARGET_PCT.medium!;
+  return monthly / FOREX_DAYS_PER_MONTH;
+}
+
 export async function getLastDailyProfitPercent(): Promise<number> {
   const rows = await db
     .select()
@@ -440,6 +455,288 @@ export async function distributeDailyProfit(
     totalAUM: 0,
     referralBonusPaid: totalReferralBonusPaid,
   };
+}
+
+/**
+ * Auto daily profit — credits every active investment its fixed
+ * per-risk monthly target / 22 forex days. No admin input required.
+ * Idempotent per user/day via equity_history (date,user_id) row check.
+ */
+export async function distributeAutoDailyProfit(): Promise<DistributeProfitResult> {
+  let investorsAffected = 0;
+  let totalProfitDistributed = 0;
+  let totalReferralBonusPaid = 0;
+  let totalAUM = 0;
+
+  await db.transaction(async (tx) => {
+    const activeInvestments = await tx
+      .select()
+      .from(investmentsTable)
+      .where(eq(investmentsTable.isActive, true));
+
+    const todayStr = new Date().toISOString().split("T")[0]!;
+    totalAUM = activeInvestments.reduce(
+      (acc, inv) => acc + parseFloat(inv.amount as string),
+      0,
+    );
+
+    for (const inv of activeInvestments) {
+      // Idempotency guard — skip if today's row already exists for this user.
+      const already = await tx
+        .select({ id: equityHistoryTable.id })
+        .from(equityHistoryTable)
+        .where(
+          and(
+            eq(equityHistoryTable.userId, inv.userId),
+            eq(equityHistoryTable.date, todayStr),
+          ),
+        )
+        .limit(1);
+      if (already.length > 0) continue;
+
+      await ensureUserAccounts(inv.userId, tx);
+
+      const amount = parseFloat(inv.amount as string);
+      const totalProfit = parseFloat(inv.totalProfit as string);
+      const currentPeakBalance = parseFloat(inv.peakBalance as string) || amount;
+      const riskKey = (inv.riskLevel ?? "medium").toLowerCase();
+      const dailyPct = autoDailyPctForRisk(riskKey);
+      const baseDailyProfit = amount * (dailyPct / 100);
+      const vipInfo = getVipInfo(amount);
+      const vipBonus = baseDailyProfit > 0 ? baseDailyProfit * vipInfo.profitBonus : 0;
+      const dailyProfitAmount = baseDailyProfit + vipBonus;
+      const newTotalProfit = totalProfit + dailyProfitAmount;
+
+      const equityAfterToday = inv.autoCompound
+        ? amount + dailyProfitAmount
+        : amount + (totalProfit + dailyProfitAmount);
+      const newPeakBalance = Math.max(currentPeakBalance, equityAfterToday);
+
+      const walletRows = await tx
+        .select()
+        .from(walletsTable)
+        .where(eq(walletsTable.userId, inv.userId))
+        .limit(1);
+      if (walletRows.length === 0) continue;
+      const wallet = walletRows[0]!;
+      const profitBalance = parseFloat(wallet.profitBalance as string);
+      const tradingBalance = parseFloat(wallet.tradingBalance as string);
+
+      if (inv.autoCompound) {
+        await tx
+          .update(walletsTable)
+          .set({
+            tradingBalance: (tradingBalance + dailyProfitAmount).toString(),
+            updatedAt: new Date(),
+          })
+          .where(eq(walletsTable.userId, inv.userId));
+
+        await tx
+          .update(investmentsTable)
+          .set({
+            amount: (amount + dailyProfitAmount).toString(),
+            totalProfit: newTotalProfit.toString(),
+            dailyProfit: dailyProfitAmount.toString(),
+            peakBalance: newPeakBalance.toString(),
+          })
+          .where(eq(investmentsTable.userId, inv.userId));
+      } else {
+        await tx
+          .update(walletsTable)
+          .set({
+            profitBalance: (profitBalance + dailyProfitAmount).toString(),
+            updatedAt: new Date(),
+          })
+          .where(eq(walletsTable.userId, inv.userId));
+
+        await tx
+          .update(investmentsTable)
+          .set({
+            totalProfit: newTotalProfit.toString(),
+            dailyProfit: dailyProfitAmount.toString(),
+            peakBalance: newPeakBalance.toString(),
+          })
+          .where(eq(investmentsTable.userId, inv.userId));
+      }
+
+      const vipDesc = vipInfo.tier !== "none"
+        ? ` · ${vipInfo.label} VIP +${(vipInfo.profitBonus * 100).toFixed(0)}% bonus`
+        : "";
+      const [profitTxn] = await tx
+        .insert(transactionsTable)
+        .values({
+          userId: inv.userId,
+          type: "profit",
+          amount: dailyProfitAmount.toString(),
+          status: "completed",
+          description: `Daily profit (${inv.riskLevel} risk, ${dailyPct.toFixed(3)}% rate${vipDesc})`,
+        })
+        .returning({ id: transactionsTable.id });
+
+      const profitAmt = Math.abs(dailyProfitAmount);
+      const profitAccount = inv.autoCompound
+        ? `user:${inv.userId}:trading`
+        : `user:${inv.userId}:profit`;
+      await postJournalEntry(
+        journalForTransaction(profitTxn!.id),
+        [
+          { accountCode: "platform:profit_expense", entryType: "debit", amount: profitAmt, description: "Daily profit expense" },
+          { accountCode: profitAccount, entryType: "credit", amount: profitAmt, description: `Daily profit credited to user ${inv.userId}` },
+        ],
+        profitTxn!.id,
+        tx,
+      );
+
+      await createNotification(
+        inv.userId,
+        "daily_profit",
+        "Daily Profit Credited",
+        `+$${dailyProfitAmount.toFixed(2)} USDT earned today (${dailyPct.toFixed(3)}% · ${inv.riskLevel} risk${vipInfo.tier !== "none" ? ` · ${vipInfo.label} VIP` : ""}).`,
+      );
+
+      const currentEquity = inv.autoCompound ? amount + dailyProfitAmount : amount;
+      await tx
+        .insert(equityHistoryTable)
+        .values({
+          userId: inv.userId,
+          date: todayStr,
+          equity: currentEquity.toString(),
+          profit: dailyProfitAmount.toString(),
+        })
+        .onConflictDoNothing();
+
+      // Monthly performance roll-up.
+      const yearMonth = todayStr.slice(0, 7)!;
+      const existing = await tx
+        .select()
+        .from(monthlyPerformanceTable)
+        .where(
+          and(
+            eq(monthlyPerformanceTable.userId, inv.userId),
+            eq(monthlyPerformanceTable.yearMonth, yearMonth),
+          ),
+        )
+        .limit(1);
+
+      if (existing.length === 0) {
+        const startEquity = currentEquity - dailyProfitAmount;
+        const peakEq = Math.max(startEquity, currentEquity);
+        const monthlyReturnPct = startEquity > 0
+          ? ((currentEquity - startEquity) / startEquity) * 100
+          : 0;
+        await tx.insert(monthlyPerformanceTable).values({
+          userId: inv.userId,
+          yearMonth,
+          monthlyReturn: monthlyReturnPct.toString(),
+          maxDrawdown: "0",
+          winRate: "100",
+          totalProfit: dailyProfitAmount.toString(),
+          tradingDays: 1,
+          winningDays: 1,
+          startEquity: startEquity.toString(),
+          peakEquity: peakEq.toString(),
+        });
+      } else {
+        const rec = existing[0]!;
+        const prevStartEquity = parseFloat(rec.startEquity as string);
+        const prevPeakEquity = parseFloat(rec.peakEquity as string);
+        const prevTotalProfit = parseFloat(rec.totalProfit as string);
+        const newPeakEquity = Math.max(prevPeakEquity, currentEquity);
+        const newTotal = prevTotalProfit + dailyProfitAmount;
+        const newDays = rec.tradingDays + 1;
+        const newWins = rec.winningDays + 1;
+        const monthlyReturnPct = prevStartEquity > 0
+          ? ((currentEquity - prevStartEquity) / prevStartEquity) * 100
+          : 0;
+        const wrPct = newDays > 0 ? (newWins / newDays) * 100 : 100;
+        await tx
+          .update(monthlyPerformanceTable)
+          .set({
+            monthlyReturn: monthlyReturnPct.toString(),
+            winRate: wrPct.toString(),
+            totalProfit: newTotal.toString(),
+            tradingDays: newDays,
+            winningDays: newWins,
+            peakEquity: newPeakEquity.toString(),
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(monthlyPerformanceTable.userId, inv.userId),
+              eq(monthlyPerformanceTable.yearMonth, yearMonth),
+            ),
+          );
+      }
+
+      // Sponsor referral bonus (10%).
+      const userRows = await tx
+        .select({ sponsorId: usersTable.sponsorId })
+        .from(usersTable)
+        .where(eq(usersTable.id, inv.userId))
+        .limit(1);
+      const sponsorId = userRows[0]?.sponsorId;
+      if (sponsorId && sponsorId !== inv.userId && sponsorId !== 0 && dailyProfitAmount > 0) {
+        const sponsorInvRows = await tx
+          .select({ isActive: investmentsTable.isActive })
+          .from(investmentsTable)
+          .where(eq(investmentsTable.userId, sponsorId))
+          .limit(1);
+        if (sponsorInvRows[0]?.isActive) {
+          const referralBonus = dailyProfitAmount * REFERRAL_COMMISSION_RATE;
+          const sponsorWalletRows = await tx
+            .select()
+            .from(walletsTable)
+            .where(eq(walletsTable.userId, sponsorId))
+            .limit(1);
+          if (sponsorWalletRows.length > 0) {
+            const sw = sponsorWalletRows[0]!;
+            const spProfit = parseFloat(sw.profitBalance as string);
+            await tx
+              .update(walletsTable)
+              .set({ profitBalance: (spProfit + referralBonus).toString(), updatedAt: new Date() })
+              .where(eq(walletsTable.userId, sponsorId));
+            const [refTxn] = await tx
+              .insert(transactionsTable)
+              .values({
+                userId: sponsorId,
+                type: "referral_bonus",
+                amount: referralBonus.toString(),
+                status: "completed",
+                description: `Referral commission: ${(REFERRAL_COMMISSION_RATE * 100).toFixed(0)}% of partner's daily profit ($${dailyProfitAmount.toFixed(2)})`,
+              })
+              .returning({ id: transactionsTable.id });
+            await ensureUserAccounts(sponsorId, tx);
+            await postJournalEntry(
+              journalForTransaction(refTxn!.id),
+              [
+                { accountCode: "platform:referral_expense", entryType: "debit", amount: referralBonus, description: `Referral bonus to sponsor ${sponsorId}` },
+                { accountCode: `user:${sponsorId}:profit`, entryType: "credit", amount: referralBonus, description: `Referral bonus credited to sponsor ${sponsorId}` },
+              ],
+              refTxn!.id,
+              tx,
+            );
+            totalReferralBonusPaid += referralBonus;
+          }
+        }
+      }
+
+      totalProfitDistributed += dailyProfitAmount;
+      investorsAffected++;
+    }
+
+    if (investorsAffected > 0) {
+      await tx.insert(dailyProfitRunsTable).values({
+        runDate: todayStr,
+        profitPercent: "0",
+        totalAUM: totalAUM.toString(),
+        totalProfitDistributed: totalProfitDistributed.toString(),
+        investorsAffected,
+        referralBonusPaid: totalReferralBonusPaid.toString(),
+      });
+    }
+  });
+
+  return { investorsAffected, totalProfitDistributed, totalAUM, referralBonusPaid: totalReferralBonusPaid };
 }
 
 /**

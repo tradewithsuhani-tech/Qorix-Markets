@@ -63,10 +63,13 @@ type RiskKey = "low" | "medium" | "high";
 // ---------------------------------------------------------------------------
 // Each risk tier maps to a monthly return % range. Average is used to derive
 // the monthly target $; the range is shown to the user as a band.
+// Fixed monthly target per risk tier — distributed evenly across 22 forex
+// trading days. Conservative 4%/mo, Balanced 6%/mo, Aggressive 8%/mo.
+// Daily rate ≈ monthly / 22.
 const MONTHLY_RETURN_BY_RISK: Record<RiskKey, { min: number; max: number; avg: number }> = {
-  low: { min: 2, max: 5, avg: 3.5 },
-  medium: { min: 4, max: 7, avg: 5.5 },
-  high: { min: 6, max: 10, avg: 8 },
+  low: { min: 4, max: 4, avg: 4 },
+  medium: { min: 6, max: 6, avg: 6 },
+  high: { min: 8, max: 8, avg: 8 },
 };
 
 // Mulberry32 — tiny seeded PRNG, deterministic per (seed) so the daily
