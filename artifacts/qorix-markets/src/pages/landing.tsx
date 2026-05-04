@@ -23,6 +23,7 @@ import {
 import { useGetMarketIndicators } from "@workspace/api-client-react";
 import { QorixLogo } from "@/components/qorix-logo";
 import { QorixAssistant } from "@/components/qorix-assistant";
+import { useSeo, SITE_URL, orgJsonLd } from "@/lib/seo";
 
 /* ───────────────────────── Helpers ───────────────────────── */
 
@@ -537,6 +538,17 @@ function LiveActivityFeed() {
 export default function Landing() {
   const [, navigate] = useLocation();
   const { data: indicators } = useGetMarketIndicators();
+
+  // SEO: home page is the highest-value indexable URL on the site.
+  useSeo({
+    title: "Qorix Markets — AI Trading Platform with Zero Fees, From $10",
+    description:
+      "Qorix Markets is an AI-managed USDT trading platform. Zero commissions, start from $10, withdraw anytime. Trusted by 12,000+ investors worldwide.",
+    canonical: "/",
+    keywords:
+      "ai trading platform, zero fee trading, low investment trading, usdt trading, automated trading, qorix markets",
+    jsonLd: { ...orgJsonLd, url: `${SITE_URL}/` },
+  });
 
   const investors = indicators?.activeInvestors || 124;
   const aum = 500000 + investors * 1200;
@@ -1165,7 +1177,11 @@ export default function Landing() {
         </div>
       </footer>
 
-      <QorixAssistant />
+      {/* guestMode lets the assistant render for not-yet-logged-in visitors
+          (who are the entire conversion funnel on the landing page). The
+          App.tsx-level mount is logged-in-only; here on the landing page
+          we want anonymous visitors to see the bot too. */}
+      <QorixAssistant guestMode />
     </div>
   );
 }

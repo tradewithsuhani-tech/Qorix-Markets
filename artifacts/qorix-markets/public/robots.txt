@@ -1,0 +1,12 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /admin-login
+Disallow: /merchant-login
+Disallow: /dashboard
+Disallow: /wallet
+Disallow: /portfolio
+Disallow: /transactions
+Disallow: /verify
+
+Sitemap: https://qorixmarkets.com/sitemap.xml
