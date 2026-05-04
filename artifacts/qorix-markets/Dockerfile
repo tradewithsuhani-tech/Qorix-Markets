@@ -73,3 +73,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD wget --quiet --tries=1 --spider http://127.0.0.1:8080/ || exit 1
 
 CMD ["nginx", "-g", "daemon off;"]
+# rebuild trigger 2026-05-04T21:33:09Z bake VITE_GA_MEASUREMENT_ID into bundle
