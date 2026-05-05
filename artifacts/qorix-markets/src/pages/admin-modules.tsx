@@ -693,6 +693,222 @@ function ConfirmForceLogoutModal({ user, onClose, onDone }: { user: any; onClose
   );
 }
 
+// ---------------------------------------------------------------------------
+// InvestmentDetailModal — full audit popup for one user opened from the per-row
+// "Investment" dropdown item. Shows profile, wallets, active/past investment,
+// daily ROI history (transactions of type=profit), withdrawals, deposits,
+// transfers, equity curve and monthly performance — everything an admin needs
+// to investigate a complaint in one place. Read-only, no mutations.
+// ---------------------------------------------------------------------------
+function InvestmentDetailModal({ user, onClose }: { user: any; onClose: () => void }) {
+  const [data, setData] = useState<any | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [tab, setTab] = useState<"summary" | "roi" | "deposits" | "withdrawals" | "transfers" | "all" | "equity" | "monthly">("summary");
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const d = await adminFetch(`/admin/users/${user.id}/investment-detail`);
+        if (!cancelled) setData(d);
+      } catch (e: any) {
+        if (!cancelled) setErr(e?.message ?? "Failed to load");
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [user.id]);
+
+  const fmt = (n: number | null | undefined) =>
+    n == null ? "—" : `$${Number(n).toFixed(Math.abs(n) < 1 ? 6 : 2)}`;
+  const fmtDt = (s: string | null | undefined) =>
+    s ? new Date(s).toLocaleString() : "—";
+
+  const txnsByType = data?.transactionsByType ?? {};
+  const totals = data?.transactionTotals ?? {};
+  const tabRows: any[] =
+    tab === "roi" ? txnsByType.profit ?? [] :
+    tab === "deposits" ? txnsByType.deposit ?? [] :
+    tab === "withdrawals" ? txnsByType.withdrawal ?? [] :
+    tab === "transfers" ? [...(txnsByType.transfer ?? []), ...(txnsByType.transfer_in ?? []), ...(txnsByType.transfer_out ?? [])] :
+    tab === "all" ? Object.values(txnsByType).flat() as any[] : [];
+  if (tab === "all") tabRows.sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt));
+
+  const tabBtn = (key: typeof tab, label: string, count?: number) => (
+    <button
+      key={key}
+      onClick={() => setTab(key)}
+      className={`px-3 py-1.5 rounded-lg text-xs whitespace-nowrap transition-colors ${
+        tab === key ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30" : "bg-white/5 hover:bg-white/10 text-muted-foreground"
+      }`}
+    >
+      {label}{count != null ? ` (${count})` : ""}
+    </button>
+  );
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-3" onClick={onClose}>
+      <motion.div
+        initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }}
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-4xl glass-card rounded-2xl p-5 space-y-4 max-h-[90vh] overflow-hidden flex flex-col"
+      >
+        <div className="flex items-start justify-between">
+          <h3 className="font-semibold text-base flex items-center gap-2">
+            <TrendingUp className="w-4 h-4 text-emerald-400" /> Investment Detail · {user.fullName}
+          </h3>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/10 text-muted-foreground"><X className="w-4 h-4" /></button>
+        </div>
+
+        {err && <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-300">{err}</div>}
+        {!data && !err && <div className="text-xs text-muted-foreground py-8 text-center">Loading…</div>}
+
+        {data && (
+          <div className="overflow-y-auto flex-1 space-y-4 pr-1">
+            {/* Profile + Wallet */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3 space-y-1.5 text-xs">
+                <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">Profile</div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Name</span><span className="font-mono">{data.user.fullName}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Email</span><span className="font-mono truncate ml-2">{data.user.email ?? "—"}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Phone</span><span className="font-mono">{data.user.phoneNumber ?? "—"}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">ID</span><span className="font-mono">#{data.user.id}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">KYC</span><span>{data.user.kycStatus ?? "—"}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Risk</span><span>{data.user.riskLevel ?? "—"}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Joined</span><span className="font-mono">{fmtDt(data.user.createdAt)}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Frozen / Disabled</span><span>{data.user.isFrozen ? "F" : "·"} / {data.user.isDisabled ? "D" : "·"}</span></div>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3 space-y-1.5 text-xs">
+                <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">Wallets</div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Main</span><span className="font-mono">{fmt(data.wallet?.mainBalance)}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Trading</span><span className="font-mono">{fmt(data.wallet?.tradingBalance)}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Profit</span><span className="font-mono">{fmt(data.wallet?.profitBalance)}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Updated</span><span className="font-mono">{fmtDt(data.wallet?.updatedAt)}</span></div>
+              </div>
+            </div>
+
+            {/* Active investment */}
+            <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/[0.04] p-3 space-y-1.5 text-xs">
+              <div className="text-[10px] uppercase tracking-wider text-emerald-300 font-semibold mb-1">Active Investment</div>
+              {data.activeInvestment ? (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                  <div><div className="text-muted-foreground">Amount</div><div className="font-mono font-bold">{fmt(data.activeInvestment.amount)}</div></div>
+                  <div><div className="text-muted-foreground">Risk</div><div className="font-mono">{data.activeInvestment.riskLevel}</div></div>
+                  <div><div className="text-muted-foreground">Auto-Compound</div><div className="font-mono">{data.activeInvestment.autoCompound ? "ON" : "OFF"}</div></div>
+                  <div><div className="text-muted-foreground">Started</div><div className="font-mono">{fmtDt(data.activeInvestment.createdAt)}</div></div>
+                  <div><div className="text-muted-foreground">Total Profit</div><div className="font-mono text-emerald-300">{fmt(data.activeInvestment.totalProfit)}</div></div>
+                  <div><div className="text-muted-foreground">Last Daily</div><div className="font-mono">{fmt(data.activeInvestment.dailyProfit)}</div></div>
+                  <div><div className="text-muted-foreground">Peak Equity</div><div className="font-mono">{fmt(data.activeInvestment.peakBalance)}</div></div>
+                  <div><div className="text-muted-foreground">Inv ID</div><div className="font-mono">#{data.activeInvestment.id}</div></div>
+                </div>
+              ) : <div className="text-muted-foreground">No active investment.</div>}
+            </div>
+
+            {/* Tabs */}
+            <div className="flex gap-1.5 flex-wrap">
+              {tabBtn("summary", "Summary")}
+              {tabBtn("roi", "Daily ROI", totals.profit?.count)}
+              {tabBtn("deposits", "Deposits", totals.deposit?.count)}
+              {tabBtn("withdrawals", "Withdrawals", totals.withdrawal?.count)}
+              {tabBtn("transfers", "Transfers", (totals.transfer?.count ?? 0) + (totals.transfer_in?.count ?? 0) + (totals.transfer_out?.count ?? 0))}
+              {tabBtn("all", "All Txns")}
+              {tabBtn("equity", "Equity")}
+              {tabBtn("monthly", "Monthly")}
+            </div>
+
+            {/* Tab content */}
+            {tab === "summary" && (
+              <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3 text-xs space-y-2">
+                <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Transaction Totals</div>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                  {Object.entries(totals).map(([k, v]: any) => (
+                    <div key={k} className="rounded-lg bg-white/[0.03] p-2">
+                      <div className="text-muted-foreground capitalize text-[10px]">{k.replace(/_/g, " ")}</div>
+                      <div className="font-mono font-bold">{fmt(v.sum)}</div>
+                      <div className="text-[10px] text-muted-foreground">{v.count} txn{v.count === 1 ? "" : "s"}</div>
+                    </div>
+                  ))}
+                  {Object.keys(totals).length === 0 && <div className="text-muted-foreground col-span-3 text-center py-3">No transactions.</div>}
+                </div>
+              </div>
+            )}
+
+            {(tab === "roi" || tab === "deposits" || tab === "withdrawals" || tab === "transfers" || tab === "all") && (
+              <div className="rounded-xl border border-white/10 bg-white/[0.02] overflow-hidden">
+                <div className="overflow-x-auto max-h-80">
+                  <table className="w-full text-xs">
+                    <thead className="bg-white/5 text-muted-foreground sticky top-0">
+                      <tr><th className="text-left p-2">When</th><th className="text-left p-2">Amount</th><th className="text-left p-2">Status</th><th className="text-left p-2">Description</th><th className="text-left p-2">Txn #</th></tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5">
+                      {tabRows.length === 0 ? (
+                        <tr><td colSpan={5} className="p-6 text-center text-muted-foreground">No entries.</td></tr>
+                      ) : tabRows.map((r) => (
+                        <tr key={r.id} className="hover:bg-white/[0.02]">
+                          <td className="p-2 font-mono whitespace-nowrap">{fmtDt(r.createdAt)}</td>
+                          <td className="p-2 font-mono font-semibold">{fmt(r.amount)}</td>
+                          <td className="p-2"><span className="text-[10px] px-1.5 py-0.5 rounded bg-white/5">{r.status}</span></td>
+                          <td className="p-2 text-muted-foreground">{r.description ?? "—"}</td>
+                          <td className="p-2 font-mono text-muted-foreground">#{r.id}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {tab === "equity" && (
+              <div className="rounded-xl border border-white/10 bg-white/[0.02] overflow-hidden">
+                <div className="overflow-x-auto max-h-80">
+                  <table className="w-full text-xs">
+                    <thead className="bg-white/5 text-muted-foreground sticky top-0"><tr><th className="text-left p-2">Date</th><th className="text-left p-2">Equity</th><th className="text-left p-2">Profit</th></tr></thead>
+                    <tbody className="divide-y divide-white/5">
+                      {(data.equityHistory ?? []).map((e: any, i: number) => (
+                        <tr key={i}><td className="p-2 font-mono">{e.date}</td><td className="p-2 font-mono">{fmt(e.equity)}</td><td className="p-2 font-mono text-emerald-300">{fmt(e.profit)}</td></tr>
+                      ))}
+                      {(data.equityHistory ?? []).length === 0 && <tr><td colSpan={3} className="p-6 text-center text-muted-foreground">No equity history.</td></tr>}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {tab === "monthly" && (
+              <div className="rounded-xl border border-white/10 bg-white/[0.02] overflow-hidden">
+                <div className="overflow-x-auto max-h-80">
+                  <table className="w-full text-xs">
+                    <thead className="bg-white/5 text-muted-foreground sticky top-0"><tr><th className="text-left p-2">Month</th><th className="text-left p-2">Total Profit</th><th className="text-left p-2">Trading Days</th><th className="text-left p-2">Winning Days</th></tr></thead>
+                    <tbody className="divide-y divide-white/5">
+                      {(data.monthlyPerformance ?? []).map((m: any, i: number) => (
+                        <tr key={i}><td className="p-2 font-mono">{m.yearMonth}</td><td className="p-2 font-mono text-emerald-300">{fmt(m.totalProfit)}</td><td className="p-2 font-mono">{m.tradingDays}</td><td className="p-2 font-mono">{m.winningDays}</td></tr>
+                      ))}
+                      {(data.monthlyPerformance ?? []).length === 0 && <tr><td colSpan={4} className="p-6 text-center text-muted-foreground">No monthly performance.</td></tr>}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {data.pastInvestments?.length > 0 && (
+              <details className="rounded-xl border border-white/10 bg-white/[0.02] p-3 text-xs">
+                <summary className="cursor-pointer font-semibold text-muted-foreground">Past investments ({data.pastInvestments.length})</summary>
+                <div className="mt-2 space-y-1">
+                  {data.pastInvestments.map((p: any) => (
+                    <div key={p.id} className="flex justify-between font-mono">
+                      <span>#{p.id} · {p.riskLevel} · {fmtDt(p.createdAt)}</span>
+                      <span>{fmt(p.amount)} → +{fmt(p.totalProfit)}</span>
+                    </div>
+                  ))}
+                </div>
+              </details>
+            )}
+          </div>
+        )}
+      </motion.div>
+    </div>
+  );
+}
+
 export function AdminUsersPage() {
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -714,6 +930,7 @@ export function AdminUsersPage() {
   const [editUser, setEditUser] = useState<any | null>(null);
   const [emailUser, setEmailUser] = useState<any | null>(null);
   const [devicesUser, setDevicesUser] = useState<any | null>(null);
+  const [investmentUser, setInvestmentUser] = useState<any | null>(null);
   const [confirmLogoutUser, setConfirmLogoutUser] = useState<any | null>(null);
   const [showSmokeTest, setShowSmokeTest] = useState(false);
   const { toast } = useToast();
@@ -787,6 +1004,9 @@ export function AdminUsersPage() {
         )}
         {devicesUser && (
           <DevicesModal user={devicesUser} onClose={() => setDevicesUser(null)} />
+        )}
+        {investmentUser && (
+          <InvestmentDetailModal user={investmentUser} onClose={() => setInvestmentUser(null)} />
         )}
         {confirmLogoutUser && (
           <ConfirmForceLogoutModal
@@ -886,6 +1106,13 @@ export function AdminUsersPage() {
                               {u.fullName}
                             </DropdownMenuLabel>
                             <DropdownMenuSeparator className="bg-white/10" />
+                            <DropdownMenuItem
+                              onSelect={() => setInvestmentUser(u)}
+                              className="cursor-pointer focus:bg-emerald-500/10 focus:text-emerald-300"
+                            >
+                              <TrendingUp className="w-3.5 h-3.5 mr-2 text-emerald-400" />
+                              Investment
+                            </DropdownMenuItem>
                             <DropdownMenuItem
                               onSelect={() => setDevicesUser(u)}
                               className="cursor-pointer focus:bg-cyan-500/10 focus:text-cyan-300"
