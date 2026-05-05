@@ -234,11 +234,21 @@ export async function closeSignalTrade(input: CloseTradeInput, actorUserId?: num
     }
   }
 
-  // Find all users with positive trading balance — they participate in the distribution
+  // Find all users with positive trading balance — they participate in the distribution.
+  // EXCLUDE users with an active REAL investment row: those users earn ROI exclusively
+  // via the daily auto-profit-accrual cron (4%/6%/8% per low/medium/high risk, spread
+  // across 22 forex days). Mixing signal-trade credits into real investor wallets
+  // contaminates equity_history and double-pays. Demo/non-investor users continue
+  // to participate in the signal-trade distribution as before.
   const eligible = await db
     .select({ userId: walletsTable.userId, tradingBalance: walletsTable.tradingBalance })
     .from(walletsTable)
-    .where(gt(walletsTable.tradingBalance, "0"));
+    .where(
+      and(
+        gt(walletsTable.tradingBalance, "0"),
+        sql`NOT EXISTS (SELECT 1 FROM ${investmentsTable} WHERE ${investmentsTable.userId} = ${walletsTable.userId} AND ${investmentsTable.isActive} = true)`,
+      ),
+    );
 
   if (eligible.length === 0) {
     // Nothing to distribute — just close the trade
