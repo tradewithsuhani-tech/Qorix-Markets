@@ -287,15 +287,25 @@ export async function distributeDailyProfit(
       );
 
       const currentEquity = inv.autoCompound ? amount + dailyProfitAmount : amount;
-      await tx
-        .insert(equityHistoryTable)
-        .values({
+      // equity_history has no UNIQUE(user_id,date) → read-first then UPDATE-or-INSERT
+      const eqExisting291 = await tx
+        .select({ id: equityHistoryTable.id })
+        .from(equityHistoryTable)
+        .where(and(eq(equityHistoryTable.userId, inv.userId), eq(equityHistoryTable.date, todayStr)))
+        .limit(1);
+      if (eqExisting291.length > 0) {
+        await tx
+          .update(equityHistoryTable)
+          .set({ equity: currentEquity.toString(), profit: dailyProfitAmount.toString() })
+          .where(and(eq(equityHistoryTable.userId, inv.userId), eq(equityHistoryTable.date, todayStr)));
+      } else {
+        await tx.insert(equityHistoryTable).values({
           userId: inv.userId,
           date: todayStr,
           equity: currentEquity.toString(),
           profit: dailyProfitAmount.toString(),
-        })
-        .onConflictDoNothing();
+        });
+      }
 
       // Update monthly performance
       const yearMonth = todayStr.slice(0, 7)!;
@@ -644,15 +654,25 @@ export async function distributeAutoDailyProfit(): Promise<DistributeProfitResul
       );
 
       const currentEquity = inv.autoCompound ? amount + dailyProfitAmount : amount;
-      await tx
-        .insert(equityHistoryTable)
-        .values({
+      // equity_history has no UNIQUE(user_id,date) → read-first then UPDATE-or-INSERT
+      const eqExisting648 = await tx
+        .select({ id: equityHistoryTable.id })
+        .from(equityHistoryTable)
+        .where(and(eq(equityHistoryTable.userId, inv.userId), eq(equityHistoryTable.date, todayStr)))
+        .limit(1);
+      if (eqExisting648.length > 0) {
+        await tx
+          .update(equityHistoryTable)
+          .set({ equity: currentEquity.toString(), profit: dailyProfitAmount.toString() })
+          .where(and(eq(equityHistoryTable.userId, inv.userId), eq(equityHistoryTable.date, todayStr)));
+      } else {
+        await tx.insert(equityHistoryTable).values({
           userId: inv.userId,
           date: todayStr,
           equity: currentEquity.toString(),
           profit: dailyProfitAmount.toString(),
-        })
-        .onConflictDoNothing();
+        });
+      }
 
       // Monthly performance roll-up.
       const yearMonth = todayStr.slice(0, 7)!;
