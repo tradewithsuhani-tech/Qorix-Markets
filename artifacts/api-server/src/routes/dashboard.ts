@@ -411,17 +411,31 @@ router.get("/dashboard/equity-chart", async (req: AuthRequest, res) => {
 
   // Persist today's equity snapshot to equity_history so a real series builds
   // up over time (charts will eventually use real records once enough exist).
+  // NOTE: equity_history has no UNIQUE(user_id, date) constraint so we must
+  // read-first then UPDATE-or-INSERT to avoid duplicate rows on every call.
   if (wallet) {
     const todayStr = new Date().toISOString().split("T")[0]!;
-    await db
-      .insert(equityHistoryTable)
-      .values({
+    const eqExisting = await db
+      .select({ id: equityHistoryTable.id })
+      .from(equityHistoryTable)
+      .where(and(eq(equityHistoryTable.userId, userId), eq(equityHistoryTable.date, todayStr)))
+      .limit(1);
+    if (eqExisting.length > 0) {
+      await db
+        .update(equityHistoryTable)
+        .set({
+          equity: currentEquity.toFixed(2),
+          profit: (currentEquity - realBalance).toFixed(2),
+        })
+        .where(and(eq(equityHistoryTable.userId, userId), eq(equityHistoryTable.date, todayStr)));
+    } else {
+      await db.insert(equityHistoryTable).values({
         userId,
         date: todayStr,
         equity: currentEquity.toFixed(2),
         profit: (currentEquity - realBalance).toFixed(2),
-      })
-      .onConflictDoNothing();
+      });
+    }
   }
 
   res.json(points);
