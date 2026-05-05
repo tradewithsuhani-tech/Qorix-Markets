@@ -1,0 +1,16 @@
+name: LinkedIn UserInfo (one-shot)
+on:
+  workflow_dispatch:
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get PERSON_ID
+        env:
+          TOK: ${{ secrets.LINKEDIN_ACCESS_TOKEN }}
+        run: |
+          echo "=== userinfo ==="
+          curl -s -H "Authorization: Bearer $TOK" https://api.linkedin.com/v2/userinfo
+          echo ""
+          echo "=== /me fallback ==="
+          curl -s -H "Authorization: Bearer $TOK" https://api.linkedin.com/v2/me
