@@ -323,6 +323,18 @@ function useCandleSeries(
       // Synthetic back-fill (run once per mount)
       if (!seededRef.current) {
         seededRef.current = true;
+        // Drop persisted candles that are way off the current live price.
+        // Without this, a refresh after the underlying price has moved
+        // significantly (e.g. XAU yesterday 4657 vs today 3319) leaves
+        // stale candles in the buffer and the y-axis stretches across
+        // both regimes — chart looks like a 27% vertical crash on load.
+        // 5% band matches the range-guard sanity band below.
+        const SANITY_BAND_PERSIST = 0.05;
+        if (working.length > 0 && Number.isFinite(price)) {
+          const lo = price * (1 - SANITY_BAND_PERSIST);
+          const hi = price * (1 + SANITY_BAND_PERSIST);
+          working = working.filter((c) => c.low >= lo && c.high <= hi);
+        }
         if (working.length < MAX_CANDLES) {
           const need = MAX_CANDLES - working.length;
           const targetPrice = working[0]?.open ?? price;
@@ -670,18 +682,37 @@ function LiveCandleChart({
     if (visibleCandles.length === 0) {
       return { min: (quote?.mid ?? 0) - 1, max: (quote?.mid ?? 0) + 1 };
     }
+    // Sanity guard: when we have a live quote, ignore any candle whose
+    // price is more than ±5% off the current mid. This prevents stale
+    // localStorage candles from yesterday (e.g. XAU at 4657 vs today's
+    // 3319) from stretching the Y-axis and rendering the chart as a
+    // fake vertical crash. Without this, persisted history from a
+    // different price regime makes the live price look like it just
+    // collapsed 27% in a single tick.
+    const guardMid =
+      quote?.mid && Number.isFinite(quote.mid) ? quote.mid : null;
+    const SANITY_BAND = 0.05; // 5%
     let cMin = Infinity;
     let cMax = -Infinity;
     for (const c of visibleCandles) {
+      if (guardMid != null) {
+        if (
+          c.low < guardMid * (1 - SANITY_BAND) ||
+          c.high > guardMid * (1 + SANITY_BAND)
+        )
+          continue;
+      }
       if (c.low < cMin) cMin = c.low;
       if (c.high > cMax) cMax = c.high;
     }
-    if (quote?.mid && Number.isFinite(quote.mid)) {
-      if (quote.mid < cMin) cMin = quote.mid;
-      if (quote.mid > cMax) cMax = quote.mid;
+    if (guardMid != null) {
+      if (guardMid < cMin) cMin = guardMid;
+      if (guardMid > cMax) cMax = guardMid;
     }
     if (!Number.isFinite(cMin) || !Number.isFinite(cMax) || cMin === cMax) {
-      const center = Number.isFinite(cMin) ? cMin : (quote?.mid ?? 0);
+      const center = Number.isFinite(cMin)
+        ? cMin
+        : (guardMid ?? 0);
       return { min: center - 1, max: center + 1 };
     }
     const candleSpan = cMax - cMin;
@@ -694,6 +725,14 @@ function LiveCandleChart({
     for (const p of positions) {
       if (!Number.isFinite(p.entryPrice)) continue;
       const ePrice = p.entryPrice as number;
+      // Same sanity band on entries — a bogus persisted entry shouldn't
+      // be allowed to blow the y-axis up either.
+      if (
+        guardMid != null &&
+        (ePrice < guardMid * (1 - SANITY_BAND) ||
+          ePrice > guardMid * (1 + SANITY_BAND))
+      )
+        continue;
       if (ePrice < min) min = Math.max(ePrice, cMin - maxExt);
       if (ePrice > max) max = Math.min(ePrice, cMax + maxExt);
     }
