@@ -195,9 +195,9 @@ def post_linkedin(b):
     upload_url = val["uploadMechanism"]["com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest"]["uploadUrl"]
     asset = val["asset"]
     img_bytes = urllib.request.urlopen(img_url(b), timeout=60).read()
-    code2, _ = http(upload_url, "POST", {"Authorization": f"Bearer {tok}"}, img_bytes)
+    code2, body2u = http(upload_url, "PUT", {"Authorization": f"Bearer {tok}", "Content-Type": "application/octet-stream"}, img_bytes)
     if code2 not in (200, 201):
-        return log("linkedin", False, f"upload {code2}")
+        return log("linkedin", False, f"upload {code2} {body2u}")
     text = b["caption_long"] + "\n\n" + TAGS_EN
     post = {
         "author": author,
