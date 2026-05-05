@@ -500,7 +500,6 @@ router.get("/admin/users/:id/investment-detail", async (req: AuthRequest, res) =
       email: user.email,
       phoneNumber: user.phoneNumber,
       kycStatus: user.kycStatus,
-      riskLevel: user.riskLevel,
       isFrozen: user.isFrozen,
       isDisabled: user.isDisabled,
       createdAt: (user.createdAt as Date).toISOString(),
@@ -519,15 +518,15 @@ router.get("/admin/users/:id/investment-detail", async (req: AuthRequest, res) =
       totalProfit: parseFloat(activeInv.totalProfit as string),
       dailyProfit: parseFloat(activeInv.dailyProfit as string),
       peakBalance: parseFloat(activeInv.peakBalance as string),
-      createdAt: activeInv.createdAt
-        ? (activeInv.createdAt as Date).toISOString() : null,
+      createdAt: activeInv.startedAt
+        ? (activeInv.startedAt as Date).toISOString() : null,
     } : null,
     pastInvestments: investments.filter((i) => !i.isActive).map((i) => ({
       id: i.id,
       amount: parseFloat(i.amount as string),
       riskLevel: i.riskLevel,
       totalProfit: parseFloat(i.totalProfit as string),
-      createdAt: i.createdAt ? (i.createdAt as Date).toISOString() : null,
+      createdAt: i.startedAt ? (i.startedAt as Date).toISOString() : null,
     })),
     transactionsByType: byType,
     transactionTotals: Object.fromEntries(
