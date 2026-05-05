@@ -49,6 +49,7 @@ import {
   LogOut,
   ChevronLeft,
   ChevronRight,
+  TrendingUp,
 } from "lucide-react";
 import { HIDDEN_FEATURES } from "@/lib/hidden-features";
 import { AddressDisplay } from "@/components/address-display";
