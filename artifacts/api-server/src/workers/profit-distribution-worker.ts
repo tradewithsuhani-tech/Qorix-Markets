@@ -1,6 +1,6 @@
 import { Worker } from "bullmq";
 import { newBullMQConnection } from "../lib/redis";
-import { distributeDailyProfit } from "../lib/profit-service";
+import { distributeAutoDailyProfit, distributeDailyProfit } from "../lib/profit-service";
 import { profitLogger, errorLogger } from "../lib/logger";
 import { emitProfitDistributionEvent } from "../lib/event-bus";
 import type { ProfitDistributionJobData } from "../lib/queues";
@@ -16,7 +16,10 @@ export function startProfitDistributionWorker(): Worker {
         "Profit distribution job started",
       );
 
-      const result = await distributeDailyProfit(profitPercent);
+      const result =
+        profitPercent === -999
+          ? await distributeAutoDailyProfit()
+          : await distributeDailyProfit(profitPercent);
 
       profitLogger.info(
         {
