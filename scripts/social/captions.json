@@ -1,0 +1,187 @@
+{
+  "site": "https://qorixmarkets.com",
+  "default_hashtags_en": "#AITrading #AlgoTrading #PassiveIncome #CryptoTrading #SmartInvesting #ZeroFees #TradingBot #FinancialFreedom #StockMarket #QorixMarkets",
+  "default_hashtags_hi": "#AITrading #ट्रेडिंग #पैसा #निवेश #ShareMarket #CryptoIndia #QorixMarkets",
+  "banners": [
+    {
+      "id": "b01",
+      "file": "b01-no-time.png",
+      "orientation": "landscape",
+      "title": "No Time For Trading? Let AI Trade 24/7",
+      "caption_short": "No time to trade? Qorix AI trades for you 24/7.\n\n247 automated trades. 71.83% success rate.\n\nStart with $10. Zero fees.\n\nhttps://qorixmarkets.com",
+      "caption_long": "Busy with work? Family? No time to watch charts all day?\n\nQorix Markets AI does the trading FOR YOU 24/7.\n\n- 247 automated trades executed\n- 71.83% success rate\n- Risk managed\n- Zero trading fees\n- Start with just $10\n\nWe trade. You focus on life.\n\n👉 https://qorixmarkets.com",
+      "caption_hi": "Trading ke liye time nahi hai?\n\nQorix AI tumhare liye 24/7 trade karta hai.\n\n✅ 247 automated trades\n✅ 71.83% success rate\n✅ Zero fees\n✅ $10 se shuru\n\n👉 https://qorixmarkets.com",
+      "platforms": ["x", "linkedin", "facebook", "telegram", "bluesky"]
+    },
+    {
+      "id": "b02",
+      "file": "b02-no-consistent.png",
+      "orientation": "landscape",
+      "title": "No Consistent Results? Try Systematic AI Trading",
+      "caption_short": "Random gains today, losses tomorrow?\n\nQorix gives systematic, data-driven results.\n\n568 trades. 71.63% win rate. +28.4% equity curve.\n\nhttps://qorixmarkets.com",
+      "caption_long": "Tired of inconsistent trading results?\n\nOne week profit, next week loss. Frustrating right?\n\nQorix Markets uses ONE proven systematic approach:\n\n- 568 total trades\n- 71.63% win rate\n- +28.4% equity curve\n- Data-driven execution\n- Risk managed every trade\n\nOne system. Consistent results.\n\n👉 https://qorixmarkets.com",
+      "caption_hi": "Trading me consistent profit nahi mil raha?\n\nQorix AI ek proven system use karta hai.\n\n✅ 568 trades\n✅ 71.63% win rate\n✅ Data driven\n\n👉 https://qorixmarkets.com",
+      "platforms": ["x", "linkedin", "facebook", "telegram", "bluesky"]
+    },
+    {
+      "id": "b03",
+      "file": "b03-afraid-losses.png",
+      "orientation": "landscape",
+      "title": "Afraid of Losses? Trade with Controlled Drawdown",
+      "caption_short": "Trading losses scary?\n\nQorix uses controlled drawdown - max risk capped.\n\nProtect capital. Stay in the game.\n\nhttps://qorixmarkets.com",
+      "caption_long": "Trading losses keep you up at night?\n\nMost traders blow up accounts because of unmanaged risk.\n\nQorix Markets builds in protection:\n\n- Max drawdown controlled (-35.6%)\n- Recovery built into system (+28.7%)\n- Capital protection priority\n- Risk-first approach\n- Bank-grade security\n\nProtect capital. Stay in the game.\n\n👉 https://qorixmarkets.com",
+      "caption_hi": "Trading me loss ka dar lagta hai?\n\nQorix risk control karta hai.\n\n✅ Capital protected\n✅ Risk managed\n✅ Bank security\n\n👉 https://qorixmarkets.com",
+      "platforms": ["x", "linkedin", "facebook", "telegram", "bluesky"]
+    },
+    {
+      "id": "b04",
+      "file": "b04-overthinking.png",
+      "orientation": "landscape",
+      "title": "Overthinking = No Trading. Stop Analysis Paralysis",
+      "caption_short": "Should I enter? Wait for confirmation? What if it reverses?\n\nOverthinking kills profits.\n\nQorix executes mechanically. No emotion.\n\nhttps://qorixmarkets.com",
+      "caption_long": "Should I enter now?\nWhat if it reverses?\nIs this the right setup?\nMarket conditions?\n\nOverthinking = NO TRADING = NO PROFITS\n\nQorix Markets removes the mental load:\n\n- Clear AI signals\n- Automated execution\n- No emotion. No hesitation.\n- Mechanical. Consistent. Profitable.\n\nStop overthinking. Start earning.\n\n👉 https://qorixmarkets.com",
+      "caption_hi": "Trading me jyada sochne se loss hota hai.\n\nQorix AI bina emotion ke trade karta hai.\n\n✅ Clear signals\n✅ Auto execution\n✅ Mechanical results\n\n👉 https://qorixmarkets.com",
+      "platforms": ["x", "linkedin", "facebook", "telegram", "bluesky"]
+    },
+    {
+      "id": "b05",
+      "file": "b05-no-strategy.png",
+      "orientation": "landscape",
+      "title": "No Strategy Works? Try a Backtested Fixed System",
+      "caption_short": "Tried 5 strategies. All failed?\n\nProblem: switching strategies kills you.\n\nQorix uses ONE backtested system. Proven. Consistent.\n\nhttps://qorixmarkets.com",
+      "caption_long": "Strategy 1 - failed\nStrategy 2 - failed\nStrategy 3 - failed\nStrategy 4 - failed\nStrategy 5 - failed\n\nThe problem isn't the strategies. It's switching them.\n\nQorix Markets uses ONE fixed system:\n\n- Backtested on years of data\n- Data-driven not opinion-driven\n- Consistent results across markets\n- No more strategy hopping\n\nOne system. Proven. Consistent.\n\n👉 https://qorixmarkets.com",
+      "caption_hi": "5 strategy try ki, sab fail?\n\nProblem strategy nahi, badalna hai.\n\nQorix ek fixed system use karta hai.\n\n👉 https://qorixmarkets.com",
+      "platforms": ["x", "linkedin", "facebook", "telegram", "bluesky"]
+    },
+    {
+      "id": "b06",
+      "file": "b06-always-late.png",
+      "orientation": "landscape",
+      "title": "Always Late In Trades? AI Executes At Perfect Time",
+      "caption_short": "Market moved. Missed entry.\nExited too early. Missed profit.\n\nSound familiar?\n\nQorix AI executes at the perfect moment. Every time.\n\nhttps://qorixmarkets.com",
+      "caption_long": "Always late to trades?\n\n- Market moved - missed entry\n- Exited too early - missed profit\n- Saw the move AFTER it happened\n\nHumans cannot beat the market on timing.\n\nQorix Markets AI executes at the perfect moment:\n\n- Real-time market scanning\n- Instant signal generation\n- Auto execution (no manual delay)\n- Right time. Right move. Every time.\n\n👉 https://qorixmarkets.com",
+      "caption_hi": "Trade me hamesha late ho jate ho?\n\nQorix AI sahi time pe execute karta hai.\n\n✅ Real-time signals\n✅ Auto execution\n✅ Perfect entry\n\n👉 https://qorixmarkets.com",
+      "platforms": ["x", "linkedin", "facebook", "telegram", "bluesky"]
+    },
+    {
+      "id": "b07",
+      "file": "b07-market-samajh.png",
+      "orientation": "landscape",
+      "title": "Market Samajh Nahi Aata? Data-Driven AI Solves It",
+      "caption_short": "Market samajh nahi aata?\n\nNews bolta crash, charts bolte rise. Confused?\n\nQorix AI = real data, not news. Smart insights.\n\nhttps://qorixmarkets.com",
+      "caption_long": "Market samajh nahi aata?\n\n- News says: MARKET CRASH\n- Charts say: MARKET RISING\n- You: Kya karu?\n\nProblem: too much noise, not enough signal.\n\nQorix Markets gives you:\n\n- Real market data (not opinions)\n- Advanced analytics\n- Smart actionable insights\n- Clear, transparent, reliable\n\nData driven. Not news driven.\n\n👉 https://qorixmarkets.com",
+      "caption_hi": "Market samajh nahi aata?\n\nNews aur chart alag bolte hain.\n\nQorix AI sirf data dekhta hai.\n\n✅ Real data\n✅ Smart insights\n✅ Reliable\n\n👉 https://qorixmarkets.com",
+      "platforms": ["x", "linkedin", "facebook", "telegram", "bluesky"]
+    },
+    {
+      "id": "b08",
+      "file": "b08-lift-poster.png",
+      "orientation": "vertical",
+      "title": "Qorix Markets - Automated Trading, Smarter Investing",
+      "caption_short": "Spotted in the wild! 🚀\n\nQorix Markets - automated trading platform.\n\nAdvanced algos. Risk managed. USDT based.\n\nhttps://qorixmarkets.com",
+      "caption_long": "Qorix Markets - Automated Trading. Smarter Investing.\n\nSystem driven. Hands free. Built for growth.\n\n✅ Automated strategies (24/7 algos)\n✅ Risk management built-in\n✅ Consistent systematic approach\n✅ USDT based - fast and secure\n✅ Secure platform\n✅ Instant access\n✅ Global access\n\nJoin Qorix Markets today.\n\n👉 https://qorixmarkets.com",
+      "caption_hi": "Qorix Markets - automated trading platform!\n\n✅ 24/7 AI strategies\n✅ Risk managed\n✅ USDT based\n✅ Global access\n\n👉 https://qorixmarkets.com",
+      "platforms": ["instagram", "facebook", "telegram"]
+    },
+    {
+      "id": "b09",
+      "file": "b09-best-ai-platform.png",
+      "orientation": "vertical",
+      "title": "Best AI Trading Platform In India 2026",
+      "caption_short": "🇮🇳 #1 AI Trading Platform In India 2026\n\nSmart Trading. Maximum Growth.\n\n- AI strategies\n- 24/7 automated\n- Zero fees\n- $10 minimum\n\nhttps://qorixmarkets.com",
+      "caption_long": "🇮🇳 BEST AI TRADING PLATFORM IN INDIA 2026\n\nSmart Trading. Maximum Growth.\n\n✅ AI POWERED STRATEGIES - advanced algorithms for smarter decisions\n✅ AUTOMATED TRADING - 24/7 system that works for you\n✅ LOW TRADING FEE - zero fees for higher profits\n✅ SECURE & RELIABLE - bank-level security to keep funds safe\n\n100% Secure | 24/7 Automated | Instant Execution | Maximum Profits\n\n- No hidden charges\n- Transparent pricing\n- Dedicated support\n\nStart trading now 👉 https://qorixmarkets.com",
+      "caption_hi": "🇮🇳 India ka #1 AI Trading Platform 2026\n\n✅ AI strategies\n✅ 24/7 automated\n✅ Zero fees\n✅ Bank-level security\n\n👉 https://qorixmarkets.com",
+      "platforms": ["instagram", "facebook", "telegram"]
+    },
+    {
+      "id": "b10",
+      "file": "b10-passive-income.png",
+      "orientation": "vertical",
+      "title": "Earn Passive Income Using AI Trading Bots",
+      "caption_short": "💰 Passive income while you sleep?\n\nAI trading bots work 24/7.\n\nLet bots work. You earn.\n\nhttps://qorixmarkets.com",
+      "caption_long": "💰 EARN PASSIVE INCOME USING AI TRADING BOTS\n\nLet Bots Work, You Earn!\n\n🕒 24/7 AUTOMATED TRADING - bots work round the clock to find best opportunities\n📊 SMART MARKET ANALYSIS - advanced AI scans market and detects high-probability trades\n📈 CONSISTENT PERFORMANCE - AI-driven strategies for stable consistent results\n💵 PASSIVE INCOME EVERYDAY - sit back and earn while bots do the hard work\n\n✅ Secure & Reliable - bank-grade security\n✅ Fast Execution - instant trade execution\n✅ Risk Management - smart algorithms minimize risks\n✅ Dedicated Support - 24/7 expert support\n\nStart earning today 👉 https://qorixmarkets.com",
+      "caption_hi": "💰 AI trading bots se passive income kamao\n\n✅ 24/7 bots\n✅ Smart analysis\n✅ Consistent\n✅ Daily income\n\n👉 https://qorixmarkets.com",
+      "platforms": ["instagram", "facebook", "telegram"]
+    },
+    {
+      "id": "b11",
+      "file": "b11-what-is-auto-trading.png",
+      "orientation": "vertical",
+      "title": "What Is Automated Trading & How It Works",
+      "caption_short": "What is automated trading?\n\nAI scans market → generates signals → auto-executes trades → maximizes returns.\n\nFull guide 👉 https://qorixmarkets.com",
+      "caption_long": "WHAT IS AUTOMATED TRADING & HOW IT WORKS\n\nAutomated trading uses smart algorithms and technology to analyze the market, generate signals and execute trades automatically.\n\n4-step process:\n\n📈 MARKET ANALYSIS - Advanced AI scans and analyzes market trends in real-time\n🎯 GENERATE SIGNALS - AI generates high-probability trading signals\n⚡ AUTO EXECUTE TRADES - Trades are executed automatically with speed and accuracy\n💰 MAXIMIZE RETURNS - Reduce emotions and maximize profits with smart automation\n\nSmart Technology, Smarter Trading.\n100% Automated | No Emotions | 24/7 Trading | Better Results\n\n👉 https://qorixmarkets.com",
+      "caption_hi": "Automated trading kya hai?\n\nAI market scan karta hai → signals deta hai → auto trade karta hai\n\n👉 https://qorixmarkets.com",
+      "platforms": ["instagram", "facebook", "telegram", "hashnode"]
+    },
+    {
+      "id": "b12",
+      "file": "b12-low-investment.png",
+      "orientation": "vertical",
+      "title": "Best Low Investment Trading Apps In India",
+      "caption_short": "💸 Start trading with as low as $10!\n\nBest low investment trading apps in India.\n\nStart small. Earn big.\n\nhttps://qorixmarkets.com",
+      "caption_long": "💸 BEST LOW INVESTMENT TRADING APPS IN INDIA\n\nStart Small, Earn Big.\n\n👤 LOW INVESTMENT - Start with minimum investment ($10)\n📱 EASY TO USE - User-friendly interface for everyone\n🛡️ HIGH SECURITY - Secure platform to protect your funds\n📊 GREAT RETURNS - Smart trading for better profits\n\nWhy traders trust Qorix:\n- LOW INVESTMENT - start as low as $10\n- FAST WITHDRAWAL - quick hassle-free withdrawals\n- 24/7 SUPPORT - support team always there\n- TRUSTED PLATFORM - trusted by thousands of traders\n\n👉 https://qorixmarkets.com",
+      "caption_hi": "💸 $10 se trading shuru karo!\n\n✅ Low investment\n✅ Easy interface\n✅ Fast withdrawal\n✅ Trusted by thousands\n\n👉 https://qorixmarkets.com",
+      "platforms": ["instagram", "facebook", "telegram", "hashnode"]
+    },
+    {
+      "id": "b13",
+      "file": "b13-zero-fee.png",
+      "orientation": "vertical",
+      "title": "Zero Trading Fee Platforms - Truth Explained",
+      "caption_short": "0% trading fees - is it real?\n\nQorix breaks down zero-fee platforms truth.\n\nNo hidden charges. Transparent pricing.\n\nhttps://qorixmarkets.com",
+      "caption_long": "🔥 ZERO TRADING FEE PLATFORMS - TRUTH EXPLAINED\n\nWhat 0% really means at Qorix:\n\n✅ NO HIDDEN CHARGES - what you see is what you get\n✅ TRANSPARENT PRICING - clear and simple pricing model\n✅ MORE PROFIT FOR YOU - save more and keep more\n✅ 100% TRANSPARENT - complete transparency in every transaction\n\nMost \"zero-fee\" platforms hide costs in spreads, withdrawals or fees you do not see.\n\nQorix Markets = TRUE 0% trading fees.\n\nMore money in YOUR pocket.\n\n👉 https://qorixmarkets.com",
+      "caption_hi": "🔥 0% trading fees - sach kya hai?\n\nQorix me sach me 0% fees.\n\n✅ No hidden charges\n✅ Transparent\n✅ Zyada profit\n\n👉 https://qorixmarkets.com",
+      "platforms": ["instagram", "facebook", "telegram"]
+    },
+    {
+      "id": "b14",
+      "file": "b14-ai-vs-manual.png",
+      "orientation": "vertical",
+      "title": "AI Trading vs Manual Trading - Which Wins?",
+      "caption_short": "AI Trading vs Manual Trading?\n\n✅ Faster ❌ Time consuming\n✅ 24/7 ❌ Emotional\n✅ Emotion-free ❌ Human errors\n\nChoose smart. Choose AI.\n\nhttps://qorixmarkets.com",
+      "caption_long": "🤖 AI TRADING vs MANUAL TRADING\n\nWhich one wins?\n\nAI TRADING:\n✅ Faster execution\n✅ 24/7 working\n✅ Emotion free\n✅ Data driven\n\nMANUAL TRADING:\n❌ Time consuming\n❌ Emotional decisions\n❌ Human errors\n❌ Inconsistent\n\nCHOOSE SMART. CHOOSE AI TRADING.\n\nWhy Qorix wins:\n- Smarter Decisions\n- 24/7 Automation\n- Maximize Profits\n- Secure & Reliable\n\n👉 https://qorixmarkets.com",
+      "caption_hi": "AI Trading vs Manual Trading?\n\nAI: ✅ Fast ✅ 24/7 ✅ No emotion\nManual: ❌ Slow ❌ Emotional ❌ Errors\n\nSmart choose karo. AI choose karo.\n\n👉 https://qorixmarkets.com",
+      "platforms": ["instagram", "facebook", "telegram"]
+    },
+    {
+      "id": "b15",
+      "file": "b15-safe-or-scam.png",
+      "orientation": "vertical",
+      "title": "Is AI Trading Safe Or Scam? Full Reality Check",
+      "caption_short": "Is AI trading safe or scam?\n\nReality: depends on platform.\n\nQorix = bank-grade security, transparent, regulated approach.\n\nhttps://qorixmarkets.com",
+      "caption_long": "🔒 IS AI TRADING SAFE OR SCAM? - FULL REALITY CHECK\n\nMost AI trading platforms ARE scams. Here is how to spot real ones:\n\n✅ SECURE PLATFORM - Bank-grade security to protect your data and funds\n✅ RISK MANAGEMENT - Advanced AI tools to manage risk intelligently\n✅ DATA PRIVACY PROTECTED - Your data is encrypted and never shared\n✅ TRANSPARENT SYSTEM - Clear processes and real-time insights you can trust\n\nQorix Markets meets ALL 4 criteria.\n\nTrade smart, trade safe with Qorix Markets.\n\n👉 https://qorixmarkets.com",
+      "caption_hi": "AI trading safe hai ya scam?\n\nReality: platform pe depend karta hai.\n\nQorix = bank security, transparent, safe.\n\n👉 https://qorixmarkets.com",
+      "platforms": ["instagram", "facebook", "telegram", "hashnode"]
+    },
+    {
+      "id": "b16",
+      "file": "b16-daily-income.png",
+      "orientation": "vertical",
+      "title": "How To Earn Daily Income From Trading Platforms",
+      "caption_short": "💰 How to earn DAILY income from trading?\n\n4 steps:\n1. Choose right platform\n2. Use smart strategies\n3. Manage risk\n4. Earn daily profit\n\nhttps://qorixmarkets.com",
+      "caption_long": "💰 HOW TO EARN DAILY INCOME FROM TRADING PLATFORMS\n\nConsistent Strategy. Daily Growth.\n\n4-step blueprint:\n\n🎯 CHOOSE RIGHT PLATFORM - Pick a reliable and secure trading platform\n💡 USE SMART STRATEGIES - Apply proven strategies to maximize results\n🛡️ MANAGE RISK - Control risk to protect your capital\n📈 EARN DAILY PROFIT - Stay consistent and build daily income\n\nSMALL STEPS EVERYDAY, BIG RESULTS ALWAYS!\n\nStart with Qorix Markets - already does steps 1-3 automatically. You just collect daily profit.\n\n👉 https://qorixmarkets.com",
+      "caption_hi": "💰 Daily income kaise kamao trading se?\n\n1. Sahi platform\n2. Smart strategy\n3. Risk manage\n4. Daily profit\n\nQorix sab kuch automatic karta hai.\n\n👉 https://qorixmarkets.com",
+      "platforms": ["instagram", "facebook", "telegram", "hashnode"]
+    },
+    {
+      "id": "b17",
+      "file": "b17-smart-trading-wide.png",
+      "orientation": "wide",
+      "title": "Smart Trading. Better Future. AI-Powered Platform",
+      "caption_short": "🚀 SMART TRADING. BETTER FUTURE.\n\nQorix Markets - AI-powered trading platform.\n\n✅ Zero fees ✅ $10 start ✅ Secure\n\nhttps://qorixmarkets.com",
+      "caption_long": "🚀 SMART TRADING. BETTER FUTURE.\n\nQorix Markets - the AI-Powered Trading Platform built for the future.\n\n🧠 AI POWERED TRADING\n💰 ZERO TRADING FEES\n📈 LOW INVESTMENT - START FROM $10\n🛡️ SECURE & TRANSPARENT\n🚀 HIGH RETURNS POTENTIAL\n\nThousands of happy users | 100% secure platform | 24/7 customer support | Built for traders, built for success.\n\n👉 Subscribe Now: https://qorixmarkets.com",
+      "caption_hi": "🚀 SMART TRADING. BETTER FUTURE.\n\nAI-powered trading platform.\n\n✅ Zero fees\n✅ $10 se start\n✅ Secure\n\n👉 https://qorixmarkets.com",
+      "platforms": ["x", "linkedin", "facebook", "telegram", "bluesky"]
+    },
+    {
+      "id": "b18",
+      "file": "b18-best-ai-india-2026.png",
+      "orientation": "vertical",
+      "title": "Best AI Trading Platform In India 2026",
+      "caption_short": "🇮🇳 BEST AI TRADING PLATFORM IN INDIA 2026\n\nSmart Trading. Maximum Growth.\n\nAI strategies. 24/7 automated. Zero fees. $10 start.\n\nhttps://qorixmarkets.com",
+      "caption_long": "🇮🇳 #1 BEST AI TRADING PLATFORM IN INDIA 2026\n\nSmart Trading. Maximum Growth.\n\n🧠 AI POWERED STRATEGIES - Advanced algorithms for smarter decisions\n🤖 AUTOMATED TRADING - 24/7 system that works for you\n💸 LOW TRADING FEE - Zero fees for higher profits\n🛡️ SECURE & RELIABLE - Bank-level security to keep your funds safe\n\n100% SECURE | 24/7 AUTOMATED | INSTANT EXECUTION | MAXIMUM PROFITS\n\nNo hidden charges. Transparent pricing. Dedicated support.\n\n👉 https://qorixmarkets.com",
+      "caption_hi": "🇮🇳 India ka #1 AI Trading Platform 2026\n\n✅ AI strategies\n✅ 24/7 automated\n✅ Zero fees\n✅ Bank security\n\n👉 https://qorixmarkets.com",
+      "platforms": ["instagram", "facebook", "telegram"]
+    }
+  ]
+}
