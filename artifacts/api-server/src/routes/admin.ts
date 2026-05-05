@@ -11,6 +11,8 @@ import {
   ledgerEntriesTable,
   notificationsTable,
   signalTradesTable,
+  equityHistoryTable,
+  monthlyPerformanceTable,
 } from "@workspace/db";
 import { loginEventsTable, blockchainDepositsTable, serviceSubscriptionsTable } from "@workspace/db/schema";
 import { eq, ne, sum, count, and, or, desc, sql, inArray, isNotNull, ilike } from "drizzle-orm";
@@ -441,6 +443,113 @@ router.post("/admin/users/:id/action", async (req: AuthRequest, res) => {
 //     so a malicious / mistaken admin edit is at least visible to them.
 //   - Every change is written to the transaction logger with admin id +
 //     before/after for audit trail.
+// Full investment / activity detail for one user — used by admin "Investment"
+// menu item to audit a user's full picture in one popup: profile, wallets,
+// active investment, daily ROI history (transactions of type=profit),
+// equity curve, all transactions (deposit/withdraw/transfer/profit/etc),
+// monthly performance summary. Read-only, no mutations.
+router.get("/admin/users/:id/investment-detail", async (req: AuthRequest, res) => {
+  const id = parseInt(getParam(req, "id"));
+  if (!Number.isFinite(id) || id <= 0) {
+    res.status(400).json({ error: "invalid_user_id" });
+    return;
+  }
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, id)).limit(1);
+  if (!user) { res.status(404).json({ error: "user_not_found" }); return; }
+  const [wallet] = await db.select().from(walletsTable).where(eq(walletsTable.userId, id)).limit(1);
+  const investments = await db
+    .select()
+    .from(investmentsTable)
+    .where(eq(investmentsTable.userId, id))
+    .orderBy(desc(investmentsTable.id));
+  const allTxns = await db
+    .select()
+    .from(transactionsTable)
+    .where(eq(transactionsTable.userId, id))
+    .orderBy(desc(transactionsTable.createdAt))
+    .limit(500);
+  const equity = await db
+    .select()
+    .from(equityHistoryTable)
+    .where(eq(equityHistoryTable.userId, id))
+    .orderBy(desc(equityHistoryTable.date))
+    .limit(180);
+  const monthly = await db
+    .select()
+    .from(monthlyPerformanceTable)
+    .where(eq(monthlyPerformanceTable.userId, id))
+    .orderBy(desc(monthlyPerformanceTable.yearMonth))
+    .limit(24);
+  // Bucket transactions by type for the modal's tabs
+  const byType: Record<string, any[]> = {};
+  for (const t of allTxns) {
+    const k = (t.type as string) || "other";
+    (byType[k] ||= []).push({
+      id: t.id,
+      amount: parseFloat(t.amount as string),
+      status: t.status,
+      description: t.description,
+      createdAt: (t.createdAt as Date).toISOString(),
+    });
+  }
+  const activeInv = investments.find((i) => i.isActive) ?? null;
+  res.json({
+    user: {
+      id: user.id,
+      fullName: user.fullName,
+      email: user.email,
+      phoneNumber: user.phoneNumber,
+      kycStatus: user.kycStatus,
+      riskLevel: user.riskLevel,
+      isFrozen: user.isFrozen,
+      isDisabled: user.isDisabled,
+      createdAt: (user.createdAt as Date).toISOString(),
+    },
+    wallet: wallet ? {
+      mainBalance: parseFloat(wallet.mainBalance as string),
+      tradingBalance: parseFloat(wallet.tradingBalance as string),
+      profitBalance: parseFloat(wallet.profitBalance as string),
+      updatedAt: (wallet.updatedAt as Date).toISOString(),
+    } : null,
+    activeInvestment: activeInv ? {
+      id: activeInv.id,
+      amount: parseFloat(activeInv.amount as string),
+      riskLevel: activeInv.riskLevel,
+      autoCompound: activeInv.autoCompound,
+      totalProfit: parseFloat(activeInv.totalProfit as string),
+      dailyProfit: parseFloat(activeInv.dailyProfit as string),
+      peakBalance: parseFloat(activeInv.peakBalance as string),
+      createdAt: activeInv.createdAt
+        ? (activeInv.createdAt as Date).toISOString() : null,
+    } : null,
+    pastInvestments: investments.filter((i) => !i.isActive).map((i) => ({
+      id: i.id,
+      amount: parseFloat(i.amount as string),
+      riskLevel: i.riskLevel,
+      totalProfit: parseFloat(i.totalProfit as string),
+      createdAt: i.createdAt ? (i.createdAt as Date).toISOString() : null,
+    })),
+    transactionsByType: byType,
+    transactionTotals: Object.fromEntries(
+      Object.entries(byType).map(([k, arr]) => [
+        k,
+        { count: arr.length, sum: arr.reduce((a, x) => a + (x.amount || 0), 0) },
+      ]),
+    ),
+    equityHistory: equity.map((e) => ({
+      date: e.date,
+      equity: parseFloat(e.equity as string),
+      profit: parseFloat(e.profit as string),
+    })),
+    monthlyPerformance: monthly.map((m) => ({
+      yearMonth: m.yearMonth,
+      totalProfit: parseFloat(m.totalProfit as string),
+      tradingDays: m.tradingDays,
+      winningDays: m.winningDays,
+    })),
+  });
+});
+
 router.patch("/admin/users/:id/profile", async (req: AuthRequest, res) => {
   const id = parseInt(getParam(req, "id"));
   if (!Number.isFinite(id) || id <= 0) {
