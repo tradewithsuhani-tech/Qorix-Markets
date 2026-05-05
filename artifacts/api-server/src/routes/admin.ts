@@ -263,6 +263,23 @@ router.post("/admin/profit", async (req: AuthRequest, res) => {
   res.json({ ...stats, queued: true });
 });
 
+// Auto daily ROI distribution — runs distributeAutoDailyProfit() (the same
+// fn the 00:00 UTC cron uses). Idempotent per (user,date). Manual button.
+router.post("/admin/profit/auto-distribute", async (req: AuthRequest, res) => {
+  try {
+    const { distributeAutoDailyProfit } = await import("../lib/profit-service");
+    const result = await distributeAutoDailyProfit();
+    profitLogger.info(
+      { adminId: req.userId, ...result },
+      "Admin: auto-daily ROI distribution executed",
+    );
+    res.json({ ok: true, ...result });
+  } catch (err: any) {
+    errorLogger.error({ err, adminId: req.userId }, "Admin: auto-daily ROI failed");
+    res.status(500).json({ error: err?.message || "Auto-distribute failed" });
+  }
+});
+
 router.get("/admin/profit/history", async (req, res) => {
   const limit = Math.min(getQueryInt(req, "limit", 30), 100);
 
