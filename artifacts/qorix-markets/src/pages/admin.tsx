@@ -83,6 +83,8 @@ export default function AdminPage() {
   const { toast } = useToast();
   const [profitInput, setProfitInput] = useState("");
   const [slotsInput, setSlotsInput] = useState("");
+  const [autoRoiBusy, setAutoRoiBusy] = useState(false);
+  const [autoRoiMsg, setAutoRoiMsg] = useState<string | null>(null);
 
   // Phase 7: All mutation invalidations now ALSO invalidate the new
   // dashboard aggregator key so this page refreshes immediately after a
@@ -250,6 +252,37 @@ export default function AdminPage() {
                     Execute
                   </button>
                 </div>
+              </div>
+
+              <div className="mt-5 pt-5 border-t border-white/10">
+                <h3 className="text-sm font-semibold mb-1">Auto Daily ROI (4/6/8% ÷ 22 days)</h3>
+                <p className="text-xs text-muted-foreground mb-3">
+                  Same job as the 00:00 UTC cron. Idempotent — safe to click anytime; if today's ROI is already credited per investor, it skips.
+                </p>
+                <button
+                  onClick={async () => {
+                    if (autoRoiBusy) return;
+                    setAutoRoiBusy(true);
+                    setAutoRoiMsg(null);
+                    try {
+                      const r = await authFetch<any>("/api/admin/profit/auto-distribute", { method: "POST" });
+                      setAutoRoiMsg(
+                        `OK — investors: ${r.investorsAffected ?? 0}, profit: $${(r.totalProfitDistributed ?? 0).toFixed(4)}, referral: $${(r.referralBonusPaid ?? 0).toFixed(4)}`,
+                      );
+                    } catch (e: any) {
+                      setAutoRoiMsg(`Error: ${e?.message || "failed"}`);
+                    } finally {
+                      setAutoRoiBusy(false);
+                    }
+                  }}
+                  disabled={autoRoiBusy}
+                  className="w-full bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-3 rounded-lg font-medium transition-colors disabled:opacity-50"
+                >
+                  {autoRoiBusy ? "Running…" : "Start Auto Daily ROI"}
+                </button>
+                {autoRoiMsg && (
+                  <div className="mt-2 text-xs text-muted-foreground break-words">{autoRoiMsg}</div>
+                )}
               </div>
             </div>
 
