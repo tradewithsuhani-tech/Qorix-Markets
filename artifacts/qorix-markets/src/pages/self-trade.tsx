@@ -770,48 +770,6 @@ export default function SelfTradePage() {
                 digits={pair.digits}
               />
             </div>
-            <div className="flex flex-wrap gap-1">
-              <button
-                onClick={() => setSlPx("")}
-                className="flex-1 min-w-[40px] py-1 rounded-md text-[9.5px] font-mono tabular-nums border border-white/8 text-white/45 hover:border-white/20"
-              >
-                SL—
-              </button>
-              {[50, 100, 200, 500].map((v) => (
-                <button
-                  key={`sl-${v}`}
-                  onClick={() => setSlPx((mid - v * pair.pip).toFixed(pair.digits))}
-                  className={`flex-1 min-w-[40px] py-1 rounded-md text-[9.5px] font-mono tabular-nums border ${
-                    slPts === v
-                      ? "border-rose-400/50 bg-rose-500/10 text-rose-300"
-                      : "border-white/8 text-white/45 hover:border-white/20"
-                  }`}
-                >
-                  −{v}
-                </button>
-              ))}
-            </div>
-            <div className="flex flex-wrap gap-1">
-              <button
-                onClick={() => setTpPx("")}
-                className="flex-1 min-w-[40px] py-1 rounded-md text-[9.5px] font-mono tabular-nums border border-white/8 text-white/45 hover:border-white/20"
-              >
-                TP—
-              </button>
-              {[50, 100, 200, 500].map((v) => (
-                <button
-                  key={`tp-${v}`}
-                  onClick={() => setTpPx((mid + v * pair.pip).toFixed(pair.digits))}
-                  className={`flex-1 min-w-[40px] py-1 rounded-md text-[9.5px] font-mono tabular-nums border ${
-                    tpPts === v
-                      ? "border-emerald-400/50 bg-emerald-500/10 text-emerald-300"
-                      : "border-white/8 text-white/45 hover:border-white/20"
-                  }`}
-                >
-                  +{v}
-                </button>
-              ))}
-            </div>
 
             {/* Risk / Reward preview */}
             {(slPts > 0 || tpPts > 0) && (
