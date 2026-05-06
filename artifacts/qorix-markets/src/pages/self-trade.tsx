@@ -914,16 +914,6 @@ export default function SelfTradePage() {
             </div>
             {/* Bot order-flow volume strip — 4 buy bots vs 4 sell bots per 5s candle */}
             <div className="px-2 pb-2">
-              <div className="flex items-center justify-end px-2 py-1">
-                <div className="flex items-center gap-3 text-[9px] font-mono">
-                  <span className="text-emerald-400/80 flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-sm bg-emerald-500/80" /> buy
-                  </span>
-                  <span className="text-rose-400/80 flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-sm bg-rose-500/80" /> sell
-                  </span>
-                </div>
-              </div>
               <div className="h-[64px] sm:h-[80px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <ComposedChart data={chartData} margin={{ top: 2, right: 8, left: 0, bottom: 4 }}>
