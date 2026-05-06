@@ -69,11 +69,11 @@ type Candle = {
   sv: number; // sell volume (4 bot sellers)
 };
 
-// Bot-scalp-style: 1-second candles, 90 in rolling window (matches bot-terminal-card)
-const CANDLE_MS = 1000;
+// Bot-scalp-style: 3-second candles, 90 in rolling window (~4.5 min)
+const CANDLE_MS = 3000;
 const MAX_CANDLES = 90;
-const BOT_BUYERS = 4;
-const BOT_SELLERS = 4;
+const BOT_BUYERS = 100;
+const BOT_SELLERS = 100;
 
 // Simulate per-tick liquidity from 4 buy bots + 4 sell bots.
 // Direction bias: if price ticked up, buyers slightly more aggressive (and vice versa).
@@ -241,10 +241,11 @@ export default function SelfTradePage() {
   // Reset to false on every pair change so each pair re-anchors on its first tick.
   const liveSeededRef = useRef(false);
 
-  // Per-tick base liquidity unit: scales with pair contract size so XAU/BTC don't dwarf JPY
+  // Per-tick per-bot liquidity unit. With 200 bots ticking, keep each bot's
+  // contribution tiny so totals stay visually readable in the volume strip.
   const baseUnit = useMemo(() => {
     const c = pair.contract || 100;
-    return Math.max(2, Math.round(c / 12));
+    return Math.max(1, Math.round(c / 80));
   }, [pair]);
 
   // when pair changes, rebuild history (synthetic seed; replaced by live below if available)
@@ -615,14 +616,14 @@ export default function SelfTradePage() {
               <div className="flex items-center gap-2">
                 <Activity style={{ width: 13, height: 13 }} className="text-emerald-400" />
                 <span className="text-[10px] font-mono uppercase tracking-[0.18em] text-white/55">
-                  {symbol} · 1s candles
+                  {symbol} · 3s candles
                 </span>
                 <span className="ml-2 px-1.5 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-400/40 text-[9px] font-mono uppercase tracking-[0.14em] text-emerald-300 flex items-center gap-1">
                   <span className="w-1 h-1 rounded-full bg-emerald-400 animate-pulse" />
                   live
                 </span>
                 <span className="ml-1 px-1.5 py-0.5 rounded-full bg-white/5 border border-white/10 text-[9px] font-mono uppercase tracking-[0.14em] text-white/55">
-                  4 buy · 4 sell bots
+                  100 buy · 100 sell bots
                 </span>
                 <span className="ml-1 px-1.5 py-0.5 rounded-full bg-amber-500/15 border border-amber-400/40 text-[9px] font-mono uppercase tracking-[0.14em] text-amber-300">
                   beta · demo only
