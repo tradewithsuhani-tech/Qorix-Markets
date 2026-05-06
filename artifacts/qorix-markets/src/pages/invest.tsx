@@ -969,56 +969,243 @@ export default function InvestPage() {
         ) : investment?.isActive ? (
           /* ── ACTIVE INVESTMENT VIEW ──────────────────────────────── */
           <div className="space-y-5">
-            {/* Active Banner */}
+            {/* Active Banner — Premium */}
+            {(() => {
+              const meta = BOT_META[activeProfile.id]!;
+              const ddMax = (investment.amount * activeProfile.drawdownLimit) / 100;
+              const ddPct = ddMax > 0 ? Math.min((investment.drawdown / ddMax) * 100, 100) : 0;
+              const roi = investment.amount > 0 ? (investment.totalProfit / investment.amount) * 100 : 0;
+              return (
             <motion.div
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
-              className="glass-card p-6 md:p-8 rounded-2xl relative overflow-hidden"
-              style={{ boxShadow: activeProfile.glowActive }}
+              className="relative rounded-3xl overflow-hidden border border-white/10"
+              style={{
+                background:
+                  "radial-gradient(120% 80% at 50% -10%, rgba(59,130,246,0.10), transparent 60%), linear-gradient(180deg, #0a0f1a 0%, #060912 100%)",
+                boxShadow:
+                  "0 30px 60px -25px rgba(0,0,0,0.65), inset 0 1px 0 rgba(255,255,255,0.04)",
+              }}
             >
-              <div className={`absolute inset-0 bg-gradient-to-br ${activeProfile.gradientFrom} ${activeProfile.gradientTo} pointer-events-none`} />
+              {/* Top accent line */}
+              <div
+                aria-hidden
+                className="absolute top-0 left-0 right-0 h-px"
+                style={{
+                  background:
+                    "linear-gradient(90deg, transparent, rgba(16,185,129,0.55), transparent)",
+                }}
+              />
+              {/* Corner sheen */}
+              <div
+                aria-hidden
+                className="pointer-events-none absolute -top-24 -right-24 w-72 h-72 rounded-full"
+                style={{
+                  background:
+                    "radial-gradient(closest-side, rgba(59,130,246,0.18), transparent 70%)",
+                }}
+              />
+              <div
+                aria-hidden
+                className="pointer-events-none absolute -bottom-32 -left-24 w-72 h-72 rounded-full"
+                style={{
+                  background:
+                    "radial-gradient(closest-side, rgba(16,185,129,0.10), transparent 70%)",
+                }}
+              />
 
-              <div className="relative">
-                <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
-                  <div className="flex items-center gap-3">
-                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${activeProfile.gradientFrom} border ${activeProfile.borderActive}`}>
-                      <activeProfile.icon style={{ width: 20, height: 20 }} className={activeProfile.color} />
+              <div className="relative p-6 md:p-7">
+                {/* ── Header ─────────────────────────────────────── */}
+                <div className="flex items-start justify-between gap-3 mb-6">
+                  <div className="flex items-center gap-3.5 min-w-0">
+                    {/* Bot avatar */}
+                    <div className="relative shrink-0">
+                      <div
+                        className="w-12 h-12 rounded-2xl flex items-center justify-center border border-white/10"
+                        style={{
+                          background:
+                            "linear-gradient(135deg, rgba(59,130,246,0.22), rgba(16,185,129,0.18))",
+                          boxShadow:
+                            "inset 0 1px 0 rgba(255,255,255,0.10), 0 0 22px -6px rgba(59,130,246,0.45)",
+                        }}
+                      >
+                        <Bot style={{ width: 22, height: 22 }} className="text-white" />
+                      </div>
+                      {/* Live ring */}
+                      <span
+                        aria-hidden
+                        className="absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full border-2 border-[#060912]"
+                        style={{
+                          background: "#10b981",
+                          boxShadow: "0 0 10px rgba(16,185,129,0.8)",
+                        }}
+                      />
                     </div>
-                    <div>
-                      <div className="font-bold text-lg">{activeProfile.label} Strategy</div>
-                      <div className="text-xs text-muted-foreground">{activeProfile.tagline}</div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <span className="text-[10px] font-mono font-bold uppercase tracking-[0.18em] text-emerald-300/85">
+                          {meta.codename}
+                        </span>
+                        <span className="text-[9px] font-mono px-1.5 py-px rounded border border-white/10 text-white/55">
+                          {meta.version}
+                        </span>
+                      </div>
+                      <div className="text-lg md:text-xl font-bold text-white tracking-tight leading-tight">
+                        {activeProfile.label} Strategy
+                      </div>
+                      <div className="text-[11px] text-white/50 mt-0.5 truncate">
+                        {meta.model} · {meta.pairs} pairs
+                      </div>
                     </div>
                   </div>
-                  <span className="flex items-center gap-2 px-3 py-1.5 bg-green-500/15 text-green-400 rounded-full text-xs font-semibold border border-green-500/25">
-                    <span className="live-dot" style={{ width: 6, height: 6 }} />
-                    Trading Active
-                  </span>
+
+                  {/* Live pill */}
+                  <div
+                    className="shrink-0 flex items-center gap-2 px-3 py-1.5 rounded-full border border-emerald-400/30"
+                    style={{
+                      background:
+                        "linear-gradient(135deg, rgba(16,185,129,0.18), rgba(16,185,129,0.06))",
+                    }}
+                  >
+                    <span className="relative flex w-2 h-2">
+                      <span className="absolute inset-0 rounded-full bg-emerald-400 animate-ping opacity-60" />
+                      <span className="relative w-2 h-2 rounded-full bg-emerald-400" />
+                    </span>
+                    <span className="text-[10px] font-mono font-bold uppercase tracking-[0.15em] text-emerald-300">
+                      Live
+                    </span>
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                {/* ── Hero KPI: Total Profit ─────────────────────── */}
+                <div
+                  className="rounded-2xl p-5 mb-5 border border-white/8 relative overflow-hidden"
+                  style={{
+                    background:
+                      "linear-gradient(135deg, rgba(16,185,129,0.10), rgba(16,185,129,0.02) 60%, transparent)",
+                  }}
+                >
+                  <div className="flex items-end justify-between gap-3">
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-[10px] font-mono uppercase tracking-[0.18em] text-emerald-300/80">
+                          Total Profit
+                        </span>
+                        <span className="text-[9px] font-mono px-1.5 py-px rounded border border-emerald-400/25 text-emerald-300/80 bg-emerald-500/5">
+                          +{roi.toFixed(2)}%
+                        </span>
+                      </div>
+                      <div
+                        className="text-3xl md:text-4xl font-bold tabular-nums tracking-tight"
+                        style={{
+                          background:
+                            "linear-gradient(135deg, #ffffff 0%, #6ee7b7 70%, #34d399 100%)",
+                          WebkitBackgroundClip: "text",
+                          WebkitTextFillColor: "transparent",
+                        }}
+                      >
+                        <AnimatedCounter value={investment.totalProfit} prefix="$" />
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-[10px] font-mono uppercase tracking-[0.18em] text-white/45 mb-1">
+                        Today
+                      </div>
+                      <div className="text-lg font-bold text-emerald-300 tabular-nums flex items-center gap-1 justify-end">
+                        <ArrowUpRight style={{ width: 14, height: 14 }} />
+                        <AnimatedCounter value={investment.dailyProfit} prefix="$" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* ── Stat grid ──────────────────────────────────── */}
+                <div className="grid grid-cols-3 gap-2.5 mb-5">
                   {[
-                    { label: "Trading Fund", value: <><AnimatedCounter value={investment.amount} prefix="$" /></>, color: "text-white" },
-                    { label: "Total Profit", value: <><AnimatedCounter value={investment.totalProfit} prefix="$" /></>, color: "text-green-400" },
-                    { label: "Today's Profit", value: <><AnimatedCounter value={investment.dailyProfit} prefix="$" /></>, color: "text-emerald-400" },
-                    { label: "Drawdown", value: `$${investment.drawdown.toFixed(2)}`, color: "text-orange-400" },
+                    {
+                      label: "Trading Fund",
+                      icon: Wallet,
+                      value: <AnimatedCounter value={investment.amount} prefix="$" />,
+                      tone: "text-white",
+                      glow: "rgba(255,255,255,0.06)",
+                    },
+                    {
+                      label: "Drawdown",
+                      icon: Shield,
+                      value: `$${investment.drawdown.toFixed(2)}`,
+                      tone: "text-orange-300",
+                      glow: "rgba(249,115,22,0.10)",
+                    },
+                    {
+                      label: "Win Rate",
+                      icon: TrendingUp,
+                      value: `${meta.winRate}%`,
+                      tone: "text-blue-300",
+                      glow: "rgba(59,130,246,0.10)",
+                    },
                   ].map((item, i) => (
                     <motion.div
                       key={item.label}
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: i * 0.06 }}
-                      className="stat-card p-4 rounded-xl"
+                      className="rounded-xl p-3 border border-white/8"
+                      style={{
+                        background: `linear-gradient(160deg, ${item.glow}, rgba(255,255,255,0.015))`,
+                      }}
                     >
-                      <div className="text-xs text-muted-foreground mb-1.5">{item.label}</div>
-                      <div className={`text-xl font-bold ${item.color}`}>{item.value}</div>
+                      <div className="flex items-center gap-1.5 mb-1.5">
+                        <item.icon
+                          style={{ width: 11, height: 11 }}
+                          className="text-white/45"
+                        />
+                        <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/55">
+                          {item.label}
+                        </span>
+                      </div>
+                      <div className={`text-base font-bold tabular-nums ${item.tone}`}>
+                        {item.value}
+                      </div>
                     </motion.div>
                   ))}
                 </div>
 
+                {/* ── Telemetry strip ────────────────────────────── */}
+                <div
+                  className="rounded-xl border border-white/8 px-3 py-2.5 mb-5 grid grid-cols-3 gap-2"
+                  style={{
+                    background:
+                      "linear-gradient(180deg, rgba(255,255,255,0.025), rgba(255,255,255,0.01))",
+                  }}
+                >
+                  {[
+                    { icon: Activity, label: "Trades/d", value: meta.tradesPerDay },
+                    { icon: Zap, label: "Latency", value: `${meta.latencyMs}ms` },
+                    { icon: Cpu, label: "Uptime", value: meta.uptime },
+                  ].map((t) => (
+                    <div key={t.label} className="flex items-center gap-2 min-w-0">
+                      <t.icon
+                        style={{ width: 12, height: 12 }}
+                        className="text-white/40 shrink-0"
+                      />
+                      <div className="min-w-0">
+                        <div className="text-[9px] font-mono uppercase tracking-[0.12em] text-white/45 leading-none">
+                          {t.label}
+                        </div>
+                        <div className="text-[11px] font-mono font-semibold text-white/85 tabular-nums leading-tight mt-0.5 truncate">
+                          {t.value}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
                 {/* Risk Meter */}
-                <div className="mb-6">
-                  <div className="flex justify-between text-xs mb-2">
-                    <span className="text-muted-foreground">Risk Exposure</span>
+                <div className="mb-5">
+                  <div className="flex justify-between items-center text-[11px] mb-2">
+                    <span className="text-white/55 font-medium uppercase tracking-wider text-[10px] font-mono">
+                      Risk Exposure
+                    </span>
                     <span className={`font-semibold ${activeProfile.color}`}>
                       {activeProfile.volatility} · {activeProfile.score}/10
                     </span>
@@ -1027,23 +1214,25 @@ export default function InvestPage() {
                 </div>
 
                 {/* Drawdown Progress */}
-                <div className="mb-6">
-                  <div className="flex justify-between text-xs mb-2">
-                    <span className="text-muted-foreground">Drawdown Usage</span>
-                    <span className="text-muted-foreground">
-                      ${investment.drawdown.toFixed(2)} / ${((investment.amount * activeProfile.drawdownLimit) / 100).toFixed(2)} max
+                <div className="mb-5">
+                  <div className="flex justify-between items-center text-[11px] mb-2">
+                    <span className="text-white/55 font-medium uppercase tracking-wider text-[10px] font-mono">
+                      Drawdown Usage
+                    </span>
+                    <span className="text-white/65 tabular-nums">
+                      ${investment.drawdown.toFixed(2)}{" "}
+                      <span className="text-white/40">/ ${ddMax.toFixed(2)}</span>
                     </span>
                   </div>
-                  <div className="h-2 bg-white/5 rounded-full overflow-hidden">
+                  <div className="h-2 bg-white/[0.04] rounded-full overflow-hidden border border-white/5">
                     <motion.div
                       initial={{ width: 0 }}
-                      animate={{
-                        width: `${Math.min((investment.drawdown / ((investment.amount * activeProfile.drawdownLimit) / 100)) * 100, 100)}%`
-                      }}
+                      animate={{ width: `${ddPct}%` }}
                       transition={{ duration: 0.8, ease: "easeOut" }}
                       className="h-full rounded-full"
                       style={{
-                        background: `linear-gradient(90deg, ${activeProfile.barColor}, ${activeProfile.barColor}99)`
+                        background: `linear-gradient(90deg, ${activeProfile.barColor}, ${activeProfile.barColor}99)`,
+                        boxShadow: `0 0 10px ${activeProfile.barColor}66`,
                       }}
                     />
                   </div>
@@ -1142,6 +1331,8 @@ export default function InvestPage() {
                 </div>
               </div>
             </motion.div>
+              );
+            })()}
 
             {/* Features of current profile */}
             <div className="glass-card p-5 rounded-2xl">
