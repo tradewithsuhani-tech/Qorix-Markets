@@ -821,34 +821,33 @@ export default function InvestPage() {
 
                 {/* Title block */}
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap mb-1">
-                    <h1
-                      className="text-2xl md:text-3xl font-bold tracking-tight leading-tight"
-                      style={{
-                        background:
-                          "linear-gradient(135deg, #ffffff 0%, #cbd5e1 60%, #93c5fd 100%)",
-                        WebkitBackgroundClip: "text",
-                        WebkitTextFillColor: "transparent",
-                      }}
-                    >
-                      AI Trading Bot Setup
-                    </h1>
+                  <div className="flex items-center gap-2 mb-1.5">
                     <span
-                      className="text-[10px] font-mono font-bold uppercase tracking-[0.15em] px-2 py-0.5 rounded-full border border-emerald-400/30 text-emerald-300"
+                      className="text-[9px] font-mono font-bold uppercase tracking-[0.18em] px-1.5 py-0.5 rounded border border-emerald-400/30 text-emerald-300/90"
                       style={{
                         background:
-                          "linear-gradient(135deg, rgba(16,185,129,0.18), rgba(16,185,129,0.06))",
-                        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.06)",
+                          "linear-gradient(135deg, rgba(16,185,129,0.15), rgba(16,185,129,0.04))",
                       }}
                     >
                       v3.1
                     </span>
+                    <span className="text-[9px] font-mono uppercase tracking-[0.15em] text-slate-500">
+                      qorix · ai trading
+                    </span>
                   </div>
-                  <p className="text-slate-400 text-sm leading-relaxed">
-                    Calibrate your bot in three quick steps —{" "}
-                    <span className="text-slate-200">personality</span>,{" "}
-                    <span className="text-slate-200">capital</span>, and{" "}
-                    <span className="text-slate-200">safety net</span>.
+                  <h1
+                    className="text-2xl md:text-3xl font-bold tracking-tight leading-[1.15] mb-1.5"
+                    style={{
+                      background:
+                        "linear-gradient(135deg, #ffffff 0%, #cbd5e1 60%, #93c5fd 100%)",
+                      WebkitBackgroundClip: "text",
+                      WebkitTextFillColor: "transparent",
+                    }}
+                  >
+                    AI Trading Bot Setup
+                  </h1>
+                  <p className="text-slate-400 text-sm leading-snug">
+                    Three quick steps to calibrate your bot.
                   </p>
                 </div>
               </div>
