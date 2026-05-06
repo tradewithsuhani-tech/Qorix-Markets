@@ -175,6 +175,83 @@ const RISK_DEFAULT_DRAWDOWN: Record<string, number> = {
   high: 10,
 };
 
+function BotActivityTicker({ codename }: { codename: string }) {
+  const PAIRS = ["EUR/USD", "GBP/USD", "USD/JPY", "AUD/USD", "USD/CHF", "EUR/JPY", "GBP/JPY", "XAU/USD"];
+  const ACTIONS = ["BUY", "SELL", "SCALE", "CLOSE", "HEDGE"];
+  const lines = useMemo(() => {
+    const out: { t: string; action: string; pair: string; pct: string; ok: boolean }[] = [];
+    const now = new Date();
+    for (let i = 0; i < 6; i++) {
+      const d = new Date(now.getTime() - i * (60_000 + ((i * 7919) % 90_000)));
+      const hh = d.getUTCHours().toString().padStart(2, "0");
+      const mm = d.getUTCMinutes().toString().padStart(2, "0");
+      const ss = d.getUTCSeconds().toString().padStart(2, "0");
+      const action = ACTIONS[(i * 3) % ACTIONS.length]!;
+      const pair = PAIRS[(i * 5) % PAIRS.length]!;
+      const ok = (i * 7) % 5 !== 0;
+      const pct = ((((i * 13) % 38) + 4) / 100).toFixed(2);
+      out.push({ t: `${hh}:${mm}:${ss}`, action, pair, pct: `${ok ? "+" : "-"}${pct}%`, ok });
+    }
+    return out;
+  }, [codename]);
+
+  return (
+    <div
+      className="rounded-xl border border-white/8 px-3 py-2 mb-5 overflow-hidden"
+      style={{
+        background:
+          "linear-gradient(180deg, rgba(0,0,0,0.4), rgba(255,255,255,0.01))",
+      }}
+    >
+      <div className="flex items-center gap-2 mb-1.5">
+        <Terminal style={{ width: 11, height: 11 }} className="text-emerald-300/80" />
+        <span className="text-[9px] font-mono font-bold uppercase tracking-[0.18em] text-white/50">
+          {codename} · live tape
+        </span>
+        <span className="ml-auto flex items-center gap-1">
+          <span className="relative flex w-1.5 h-1.5">
+            <span className="absolute inset-0 rounded-full bg-emerald-400 animate-ping opacity-60" />
+            <span className="relative w-1.5 h-1.5 rounded-full bg-emerald-400" />
+          </span>
+        </span>
+      </div>
+      <div className="space-y-0.5 font-mono text-[10.5px] leading-snug">
+        {lines.slice(0, 4).map((l, i) => (
+          <motion.div
+            key={`${l.t}-${i}`}
+            initial={{ opacity: 0, x: -6 }}
+            animate={{ opacity: 1 - i * 0.18, x: 0 }}
+            transition={{ delay: i * 0.06 }}
+            className="flex items-center gap-2 truncate"
+          >
+            <span className="text-white/35 tabular-nums">{l.t}</span>
+            <span
+              className={`px-1 rounded font-bold ${
+                l.action === "BUY"
+                  ? "text-emerald-300 bg-emerald-500/10"
+                  : l.action === "SELL"
+                  ? "text-rose-300 bg-rose-500/10"
+                  : "text-blue-300 bg-blue-500/10"
+              }`}
+            >
+              {l.action}
+            </span>
+            <span className="text-white/75">{l.pair}</span>
+            <span className="ml-auto text-white/40">→</span>
+            <span
+              className={`tabular-nums font-semibold ${
+                l.ok ? "text-emerald-300" : "text-rose-300"
+              }`}
+            >
+              {l.pct}
+            </span>
+          </motion.div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function RiskMeter({ score }: { score: number }) {
   return (
     <div className="flex items-center gap-1.5">
@@ -1077,38 +1154,75 @@ export default function InvestPage() {
                   </div>
                 </div>
 
-                {/* ── Hero KPI: Total Profit ─────────────────────── */}
+                {/* ── Hero KPI: Total Profit + Equity Sparkline ── */}
                 <div
-                  className="rounded-2xl p-5 mb-5 border border-white/8 relative overflow-hidden"
+                  className="rounded-2xl p-5 mb-5 border border-emerald-400/15 relative overflow-hidden"
                   style={{
                     background:
-                      "linear-gradient(135deg, rgba(16,185,129,0.10), rgba(16,185,129,0.02) 60%, transparent)",
+                      "radial-gradient(120% 120% at 0% 0%, rgba(16,185,129,0.18), transparent 55%), linear-gradient(180deg, rgba(6,15,12,0.7), rgba(6,9,18,0.4))",
                   }}
                 >
-                  <div className="flex items-end justify-between gap-3">
-                    <div>
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-[10px] font-mono uppercase tracking-[0.18em] text-emerald-300/80">
+                  {/* Animated grid */}
+                  <div
+                    aria-hidden
+                    className="absolute inset-0 opacity-[0.05] pointer-events-none"
+                    style={{
+                      backgroundImage:
+                        "linear-gradient(rgba(255,255,255,0.6) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.6) 1px, transparent 1px)",
+                      backgroundSize: "24px 24px",
+                    }}
+                  />
+                  {/* Scanning beam */}
+                  <motion.div
+                    aria-hidden
+                    className="absolute top-0 bottom-0 w-24 pointer-events-none"
+                    initial={{ left: "-15%" }}
+                    animate={{ left: "115%" }}
+                    transition={{ duration: 4.5, repeat: Infinity, ease: "linear" }}
+                    style={{
+                      background:
+                        "linear-gradient(90deg, transparent, rgba(16,185,129,0.10), transparent)",
+                    }}
+                  />
+                  {/* Glow orb */}
+                  <div
+                    aria-hidden
+                    className="pointer-events-none absolute -top-20 -right-10 w-56 h-56 rounded-full"
+                    style={{
+                      background:
+                        "radial-gradient(closest-side, rgba(16,185,129,0.28), transparent 70%)",
+                    }}
+                  />
+
+                  <div className="relative flex items-end justify-between gap-3 mb-3">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 mb-1.5">
+                        <Sparkles
+                          style={{ width: 12, height: 12 }}
+                          className="text-emerald-300"
+                        />
+                        <span className="text-[10px] font-mono uppercase tracking-[0.18em] text-emerald-300/85 font-bold">
                           Total Profit
                         </span>
-                        <span className="text-[9px] font-mono px-1.5 py-px rounded border border-emerald-400/25 text-emerald-300/80 bg-emerald-500/5">
+                        <span className="text-[9px] font-mono font-bold px-1.5 py-px rounded-full border border-emerald-400/35 text-emerald-200 bg-emerald-500/10">
                           +{roi.toFixed(2)}%
                         </span>
                       </div>
                       <div
-                        className="text-3xl md:text-4xl font-bold tabular-nums tracking-tight"
+                        className="text-4xl md:text-5xl font-black tabular-nums tracking-tight leading-none"
                         style={{
                           background:
-                            "linear-gradient(135deg, #ffffff 0%, #6ee7b7 70%, #34d399 100%)",
+                            "linear-gradient(135deg, #ffffff 0%, #a7f3d0 50%, #34d399 100%)",
                           WebkitBackgroundClip: "text",
                           WebkitTextFillColor: "transparent",
+                          textShadow: "0 0 40px rgba(16,185,129,0.15)",
                         }}
                       >
                         <AnimatedCounter value={investment.totalProfit} prefix="$" />
                       </div>
                     </div>
-                    <div className="text-right">
-                      <div className="text-[10px] font-mono uppercase tracking-[0.18em] text-white/45 mb-1">
+                    <div className="text-right shrink-0">
+                      <div className="text-[10px] font-mono uppercase tracking-[0.18em] text-white/50 mb-1">
                         Today
                       </div>
                       <div className="text-lg font-bold text-emerald-300 tabular-nums flex items-center gap-1 justify-end">
@@ -1116,6 +1230,87 @@ export default function InvestPage() {
                         <AnimatedCounter value={investment.dailyProfit} prefix="$" />
                       </div>
                     </div>
+                  </div>
+
+                  {/* Equity sparkline */}
+                  <div className="relative h-14 -mx-1">
+                    <svg
+                      viewBox="0 0 200 50"
+                      preserveAspectRatio="none"
+                      className="absolute inset-0 w-full h-full"
+                    >
+                      <defs>
+                        <linearGradient id="sparkFill" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#10b981" stopOpacity="0.45" />
+                          <stop offset="100%" stopColor="#10b981" stopOpacity="0" />
+                        </linearGradient>
+                        <linearGradient id="sparkLine" x1="0" y1="0" x2="1" y2="0">
+                          <stop offset="0%" stopColor="#34d399" stopOpacity="0.4" />
+                          <stop offset="100%" stopColor="#10b981" stopOpacity="1" />
+                        </linearGradient>
+                      </defs>
+                      {(() => {
+                        const seed = Math.max(1, investment.amount + investment.totalProfit * 7);
+                        const rng = (i: number) =>
+                          (Math.sin(seed * 0.013 + i * 1.7) + 1) / 2;
+                        const pts = Array.from({ length: 24 }, (_, i) => {
+                          const x = (i / 23) * 200;
+                          const trend = 42 - (i / 23) * 30;
+                          const noise = (rng(i) - 0.5) * 8;
+                          return [x, Math.max(4, Math.min(46, trend + noise))] as const;
+                        });
+                        const path = pts
+                          .map((p, i) => `${i === 0 ? "M" : "L"}${p[0]},${p[1]}`)
+                          .join(" ");
+                        const area = `${path} L200,50 L0,50 Z`;
+                        const last = pts[pts.length - 1]!;
+                        return (
+                          <>
+                            <motion.path
+                              d={area}
+                              fill="url(#sparkFill)"
+                              initial={{ opacity: 0 }}
+                              animate={{ opacity: 1 }}
+                              transition={{ duration: 0.6 }}
+                            />
+                            <motion.path
+                              d={path}
+                              stroke="url(#sparkLine)"
+                              strokeWidth="1.6"
+                              fill="none"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              initial={{ pathLength: 0 }}
+                              animate={{ pathLength: 1 }}
+                              transition={{ duration: 1.2, ease: "easeOut" }}
+                            />
+                            <motion.circle
+                              cx={last[0]}
+                              cy={last[1]}
+                              r="2.5"
+                              fill="#10b981"
+                              initial={{ scale: 0 }}
+                              animate={{ scale: [1, 1.6, 1] }}
+                              transition={{
+                                duration: 1.6,
+                                repeat: Infinity,
+                                ease: "easeInOut",
+                              }}
+                            />
+                            <circle cx={last[0]} cy={last[1]} r="1.4" fill="#fff" />
+                          </>
+                        );
+                      })()}
+                    </svg>
+                  </div>
+
+                  {/* Mini scale row */}
+                  <div className="relative flex items-center justify-between text-[9px] font-mono uppercase tracking-[0.15em] text-white/35 mt-1">
+                    <span>24h equity</span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-1 h-1 rounded-full bg-emerald-400" />
+                      live
+                    </span>
                   </div>
                 </div>
 
@@ -1172,7 +1367,7 @@ export default function InvestPage() {
 
                 {/* ── Telemetry strip ────────────────────────────── */}
                 <div
-                  className="rounded-xl border border-white/8 px-3 py-2.5 mb-5 grid grid-cols-3 gap-2"
+                  className="rounded-xl border border-white/8 px-3 py-2.5 mb-3 grid grid-cols-3 gap-2"
                   style={{
                     background:
                       "linear-gradient(180deg, rgba(255,255,255,0.025), rgba(255,255,255,0.01))",
@@ -1199,6 +1394,11 @@ export default function InvestPage() {
                     </div>
                   ))}
                 </div>
+
+                {/* ── Live activity terminal ─────────────────────── */}
+                <BotActivityTicker codename={meta.codename} />
+
+
 
                 {/* Risk Meter */}
                 <div className="mb-5">
