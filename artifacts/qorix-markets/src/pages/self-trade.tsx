@@ -60,14 +60,19 @@ function rng(seed: number) {
 
 type Candle = { t: number; o: number; h: number; l: number; c: number; v: number };
 
-function buildHistory(pair: Pair, count: number): Candle[] {
+// Bot-scalp-style: 1-second candles, 90 in rolling window
+const CANDLE_MS = 1000;
+const MAX_CANDLES = 90;
+
+function buildHistory(pair: Pair, count: number = MAX_CANDLES): Candle[] {
   const r = rng(Math.floor(pair.base * 1000));
   const out: Candle[] = [];
-  let price = pair.base * (1 - pair.vol * 8);
+  let price = pair.base * (1 - pair.vol * 4);
   const now = Date.now();
+  const baseBucket = Math.floor(now / CANDLE_MS) * CANDLE_MS;
   for (let i = count - 1; i >= 0; i--) {
-    const t = now - i * 5000;
-    const drift = (r() - 0.48) * pair.base * pair.vol;
+    const t = baseBucket - i * CANDLE_MS;
+    const drift = (r() - 0.48) * pair.base * pair.vol * 0.4;
     const o = price;
     const c = +(o + drift).toFixed(pair.digits);
     const h = +Math.max(o, c, o + Math.abs(drift) * (0.4 + r() * 0.8)).toFixed(pair.digits);
@@ -77,6 +82,44 @@ function buildHistory(pair: Pair, count: number): Candle[] {
     price = c;
   }
   return out;
+}
+
+// Aggregate a single live price tick into the rolling 1s candle buffer.
+// Mirrors the bot-terminal-card scalp aggregator.
+function aggregateTick(history: Candle[], price: number, digits: number): Candle[] {
+  if (!isFinite(price) || price <= 0) return history;
+  const bucket = Math.floor(Date.now() / CANDLE_MS) * CANDLE_MS;
+  if (history.length === 0) {
+    return [{ t: bucket, o: price, h: price, l: price, c: price, v: 1 }];
+  }
+  const last = history[history.length - 1];
+  if (last.t === bucket) {
+    const updated: Candle = {
+      ...last,
+      h: +Math.max(last.h, price).toFixed(digits),
+      l: +Math.min(last.l, price).toFixed(digits),
+      c: +price.toFixed(digits),
+      v: last.v + 1,
+    };
+    return [...history.slice(0, -1), updated];
+  }
+  // Fill any skipped buckets with flat candles so the x-axis stays uniform
+  const open = last.c;
+  const skipped: Candle[] = [];
+  let b = last.t + CANDLE_MS;
+  while (b < bucket) {
+    skipped.push({ t: b, o: open, h: open, l: open, c: open, v: 0 });
+    b += CANDLE_MS;
+  }
+  const fresh: Candle = {
+    t: bucket,
+    o: open,
+    h: +Math.max(open, price).toFixed(digits),
+    l: +Math.min(open, price).toFixed(digits),
+    c: +price.toFixed(digits),
+    v: 1,
+  };
+  return [...history, ...skipped, fresh].slice(-MAX_CANDLES);
 }
 
 type Position = {
@@ -131,53 +174,24 @@ export default function SelfTradePage() {
     setIsLive(false);
   }, [pair]);
 
-  // ── LIVE feed via Binance (when pair has .binance) ──
+  // ── LIVE feed via Binance @trade stream (when pair has .binance) ──
+  // Bot-scalp style: real-time price ticks aggregated into 1s candles
   useEffect(() => {
     if (!pair.binance) return;
     let cancelled = false;
     const sym = pair.binance;
-
-    // initial 80 × 1m klines
-    fetch(`https://api.binance.com/api/v3/klines?symbol=${sym}&interval=1m&limit=80`)
-      .then((r) => r.ok ? r.json() : Promise.reject(r.status))
-      .then((rows: any[]) => {
-        if (cancelled) return;
-        const cs: Candle[] = rows.map((k) => ({
-          t: k[0],
-          o: +(+k[1]).toFixed(pair.digits),
-          h: +(+k[2]).toFixed(pair.digits),
-          l: +(+k[3]).toFixed(pair.digits),
-          c: +(+k[4]).toFixed(pair.digits),
-          v: Math.round(+k[5]),
-        }));
-        if (cs.length) setHistory(cs);
-        setIsLive(true);
-      })
-      .catch(() => { /* keep synthetic seed */ });
-
-    // websocket live kline stream
     let ws: WebSocket | null = null;
+
     try {
-      ws = new WebSocket(`wss://stream.binance.com:9443/ws/${sym.toLowerCase()}@kline_1m`);
+      ws = new WebSocket(`wss://stream.binance.com:9443/ws/${sym.toLowerCase()}@trade`);
       ws.onmessage = (ev) => {
+        if (cancelled) return;
         try {
-          const k = JSON.parse(ev.data)?.k;
-          if (!k) return;
-          const next: Candle = {
-            t: k.t,
-            o: +(+k.o).toFixed(pair.digits),
-            h: +(+k.h).toFixed(pair.digits),
-            l: +(+k.l).toFixed(pair.digits),
-            c: +(+k.c).toFixed(pair.digits),
-            v: Math.round(+k.v),
-          };
-          setHistory((h) => {
-            if (!h.length) return [next];
-            const last = h[h.length - 1];
-            if (last.t === next.t) return [...h.slice(0, -1), next];
-            return [...h.slice(-79), next];
-          });
+          const msg = JSON.parse(ev.data);
+          const px = +msg?.p;
+          if (!isFinite(px) || px <= 0) return;
           setIsLive(true);
+          setHistory((h) => aggregateTick(h, px, pair.digits));
         } catch {}
       };
       ws.onerror = () => setIsLive(false);
@@ -202,69 +216,31 @@ export default function SelfTradePage() {
         const px = +(+j.price).toFixed(pair.digits);
         if (!isFinite(px) || px <= 0 || cancelled) return;
         setIsLive(true);
-        setHistory((h) => {
-          if (h.length === 0) return h;
-          const last = h[h.length - 1];
-          const updated: Candle = {
-            ...last,
-            c: px,
-            h: Math.max(last.h, px),
-            l: Math.min(last.l, px),
-          };
-          // roll a new candle every ~30s
-          if (Date.now() - last.t > 30_000) {
-            return [
-              ...h.slice(-79),
-              updated,
-              { t: Date.now(), o: px, h: px, l: px, c: px, v: 100 },
-            ].slice(-80);
-          }
-          return [...h.slice(0, -1), updated];
-        });
+        setHistory((h) => aggregateTick(h, px, pair.digits));
       } catch {}
     };
     poll();
-    const id = window.setInterval(poll, 3000);
+    const id = window.setInterval(poll, 1500);
     return () => { cancelled = true; clearInterval(id); };
   }, [pair.symbol, pair.digits]);
 
-  // live tick — for synthetic-only pairs (no live mapping)
+  // ── Synthetic price tick for unmapped pairs (GBP/USD, USD/JPY) ──
+  // 250ms ticks fed into the same 1s aggregator → bot-scalp feel
   useEffect(() => {
-    if (pair.binance) return; // live feed handles it
-    if (pair.symbol === "XAU/USD") return; // gold-api handles it
-    const id = window.setInterval(() => setTick((t) => t + 1), 1000);
+    if (pair.binance) return;
+    if (pair.symbol === "XAU/USD") return;
+    const id = window.setInterval(() => {
+      setHistory((h) => {
+        const last = h[h.length - 1];
+        const ref = last ? last.c : pair.base;
+        const drift = (Math.random() - 0.5) * pair.base * pair.vol * 0.18;
+        const px = +(ref + drift).toFixed(pair.digits);
+        setTick((t) => t + 1);
+        return aggregateTick(h, px, pair.digits);
+      });
+    }, 250);
     return () => clearInterval(id);
-  }, [pair.binance, pair.symbol]);
-
-  useEffect(() => {
-    if (pair.binance) return; // skip synthetic walk for live pairs
-    setHistory((h) => {
-      if (h.length === 0) return h;
-      const last = h[h.length - 1];
-      const r = Math.random();
-      const drift = (r - 0.5) * pair.base * pair.vol * 0.55;
-      const newClose = +(last.c + drift).toFixed(pair.digits);
-      const newHigh = +Math.max(last.h, newClose).toFixed(pair.digits);
-      const newLow = +Math.min(last.l, newClose).toFixed(pair.digits);
-      const updated: Candle = { ...last, c: newClose, h: newHigh, l: newLow };
-      const rollNew = tick > 0 && tick % 5 === 0;
-      if (rollNew) {
-        return [
-          ...h.slice(-79),
-          updated,
-          {
-            t: Date.now(),
-            o: newClose,
-            h: newClose,
-            l: newClose,
-            c: newClose,
-            v: Math.round(40 + Math.random() * 160),
-          },
-        ].slice(-80);
-      }
-      return [...h.slice(0, -1), updated];
-    });
-  }, [tick, pair]);
+  }, [pair.binance, pair.symbol, pair.base, pair.vol, pair.digits]);
 
   const mid = history.length ? history[history.length - 1].c : pair.base;
   const bid = +(mid - pair.spread / 2).toFixed(pair.digits);
