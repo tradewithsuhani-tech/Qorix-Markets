@@ -627,25 +627,25 @@ export default function SelfTradePage() {
             animate={{ opacity: 1, y: 0 }}
             className="rounded-2xl border border-white/8 bg-gradient-to-b from-[#0a0f1a] to-[#06090f] overflow-hidden"
           >
-            <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/5">
-              <div className="flex items-center gap-2">
-                <Activity style={{ width: 13, height: 13 }} className="text-emerald-400" />
-                <span className="text-[10px] font-mono uppercase tracking-[0.18em] text-white/55">
-                  {symbol} · 3s candles
+            <div className="flex items-center justify-between gap-2 px-3 sm:px-4 py-2 sm:py-2.5 border-b border-white/5">
+              <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-1">
+                <Activity style={{ width: 13, height: 13 }} className="text-emerald-400 shrink-0" />
+                <span className="text-[10px] font-mono uppercase tracking-[0.16em] text-white/55 whitespace-nowrap">
+                  {symbol} · 3s
                 </span>
-                <span className="ml-2 px-1.5 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-400/40 text-[9px] font-mono uppercase tracking-[0.14em] text-emerald-300 flex items-center gap-1">
+                <span className="px-1.5 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-400/40 text-[9px] font-mono uppercase tracking-[0.14em] text-emerald-300 inline-flex items-center gap-1 shrink-0">
                   <span className="w-1 h-1 rounded-full bg-emerald-400 animate-pulse" />
                   live
                 </span>
-                <span className="ml-1 px-1.5 py-0.5 rounded-full bg-white/5 border border-white/10 text-[9px] font-mono uppercase tracking-[0.14em] text-white/55">
+                <span className="hidden sm:inline-flex px-1.5 py-0.5 rounded-full bg-white/5 border border-white/10 text-[9px] font-mono uppercase tracking-[0.14em] text-white/55 whitespace-nowrap">
                   100 buy · 100 sell bots
                 </span>
-                <span className="ml-1 px-1.5 py-0.5 rounded-full bg-amber-500/15 border border-amber-400/40 text-[9px] font-mono uppercase tracking-[0.14em] text-amber-300">
+                <span className="hidden sm:inline-flex px-1.5 py-0.5 rounded-full bg-amber-500/15 border border-amber-400/40 text-[9px] font-mono uppercase tracking-[0.14em] text-amber-300 whitespace-nowrap">
                   beta · demo only
                 </span>
               </div>
-              <div className="text-[10px] font-mono text-white/40">
-                last {fmtPrice(mid, pair.digits)}
+              <div className="text-[10px] font-mono text-white/40 whitespace-nowrap shrink-0">
+                {fmtPrice(mid, pair.digits)}
               </div>
             </div>
             <div className="h-[360px] sm:h-[440px] p-2">
