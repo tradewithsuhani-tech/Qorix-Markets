@@ -172,8 +172,25 @@ export default function SelfTradePage() {
 
   // ── Order ticket state ──
   const [lots, setLots] = useState(0.01);
-  const [slPts, setSlPts] = useState<number>(0);
-  const [tpPts, setTpPts] = useState<number>(0);
+  // SL/TP are now PRICE strings (Exness-style). Empty = no SL/TP.
+  const [slPx, setSlPx] = useState<string>("");
+  const [tpPx, setTpPx] = useState<string>("");
+
+  // derived absolute distance in pts from mid (for risk calc + preview)
+  const slPts = useMemo(() => {
+    const v = parseFloat(slPx);
+    return isFinite(v) && v > 0 ? Math.round(Math.abs(v - mid) / pair.pip) : 0;
+  }, [slPx, mid, pair]);
+  const tpPts = useMemo(() => {
+    const v = parseFloat(tpPx);
+    return isFinite(v) && v > 0 ? Math.round(Math.abs(v - mid) / pair.pip) : 0;
+  }, [tpPx, mid, pair]);
+
+  // when pair changes, clear SL/TP (avoid stale price from previous pair)
+  useEffect(() => {
+    setSlPx("");
+    setTpPx("");
+  }, [pair.symbol]);
 
   // ── Account ──
   const [balance] = useState(10000);
@@ -188,18 +205,20 @@ export default function SelfTradePage() {
 
   const placeOrder = (side: "BUY" | "SELL") => {
     const entry = side === "BUY" ? ask : bid;
-    const sl =
-      slPts > 0
-        ? side === "BUY"
-          ? +(entry - slPts * pair.pip).toFixed(pair.digits)
-          : +(entry + slPts * pair.pip).toFixed(pair.digits)
-        : null;
-    const tp =
-      tpPts > 0
-        ? side === "BUY"
-          ? +(entry + tpPts * pair.pip).toFixed(pair.digits)
-          : +(entry - tpPts * pair.pip).toFixed(pair.digits)
-        : null;
+    // SL/TP are typed as PRICE. Use as-is when on the correct side of entry,
+    // else mirror the distance so it lands on the valid side.
+    const slRaw = parseFloat(slPx);
+    const tpRaw = parseFloat(tpPx);
+    const sl = isFinite(slRaw) && slRaw > 0
+      ? side === "BUY"
+        ? +(slRaw < entry ? slRaw : entry - Math.abs(slRaw - entry)).toFixed(pair.digits)
+        : +(slRaw > entry ? slRaw : entry + Math.abs(slRaw - entry)).toFixed(pair.digits)
+      : null;
+    const tp = isFinite(tpRaw) && tpRaw > 0
+      ? side === "BUY"
+        ? +(tpRaw > entry ? tpRaw : entry + Math.abs(tpRaw - entry)).toFixed(pair.digits)
+        : +(tpRaw < entry ? tpRaw : entry - Math.abs(tpRaw - entry)).toFixed(pair.digits)
+      : null;
     setPositions((ps) => [
       ...ps,
       {
@@ -732,38 +751,64 @@ export default function SelfTradePage() {
               </div>
             </div>
 
-            {/* SL / TP */}
+            {/* SL / TP — price inputs, autofill live mid on focus (Exness-style) */}
             <div className="grid grid-cols-2 gap-2">
-              <SlTpInput label="SL (pts)" value={slPts} onChange={setSlPts} tone="rose" />
-              <SlTpInput label="TP (pts)" value={tpPts} onChange={setTpPts} tone="emerald" />
+              <SlTpInput
+                label="SL (price)"
+                value={slPx}
+                onChange={setSlPx}
+                tone="rose"
+                live={mid}
+                digits={pair.digits}
+              />
+              <SlTpInput
+                label="TP (price)"
+                value={tpPx}
+                onChange={setTpPx}
+                tone="emerald"
+                live={mid}
+                digits={pair.digits}
+              />
             </div>
             <div className="flex flex-wrap gap-1">
-              {[0, 50, 100, 200, 500].map((v) => (
+              <button
+                onClick={() => setSlPx("")}
+                className="flex-1 min-w-[40px] py-1 rounded-md text-[9.5px] font-mono tabular-nums border border-white/8 text-white/45 hover:border-white/20"
+              >
+                SL—
+              </button>
+              {[50, 100, 200, 500].map((v) => (
                 <button
                   key={`sl-${v}`}
-                  onClick={() => setSlPts(v)}
+                  onClick={() => setSlPx((mid - v * pair.pip).toFixed(pair.digits))}
                   className={`flex-1 min-w-[40px] py-1 rounded-md text-[9.5px] font-mono tabular-nums border ${
                     slPts === v
                       ? "border-rose-400/50 bg-rose-500/10 text-rose-300"
                       : "border-white/8 text-white/45 hover:border-white/20"
                   }`}
                 >
-                  SL{v}
+                  −{v}
                 </button>
               ))}
             </div>
             <div className="flex flex-wrap gap-1">
-              {[0, 50, 100, 200, 500].map((v) => (
+              <button
+                onClick={() => setTpPx("")}
+                className="flex-1 min-w-[40px] py-1 rounded-md text-[9.5px] font-mono tabular-nums border border-white/8 text-white/45 hover:border-white/20"
+              >
+                TP—
+              </button>
+              {[50, 100, 200, 500].map((v) => (
                 <button
                   key={`tp-${v}`}
-                  onClick={() => setTpPts(v)}
+                  onClick={() => setTpPx((mid + v * pair.pip).toFixed(pair.digits))}
                   className={`flex-1 min-w-[40px] py-1 rounded-md text-[9.5px] font-mono tabular-nums border ${
                     tpPts === v
                       ? "border-emerald-400/50 bg-emerald-500/10 text-emerald-300"
                       : "border-white/8 text-white/45 hover:border-white/20"
                   }`}
                 >
-                  TP{v}
+                  +{v}
                 </button>
               ))}
             </div>
@@ -1061,28 +1106,47 @@ function SlTpInput({
   value,
   onChange,
   tone,
+  live,
+  digits,
 }: {
   label: string;
-  value: number;
-  onChange: (v: number) => void;
+  value: string;
+  onChange: (v: string) => void;
   tone: "rose" | "emerald";
+  live: number;
+  digits: number;
 }) {
   const color =
     tone === "rose"
-      ? "text-rose-300/80 border-rose-400/30 focus-within:border-rose-400/60"
-      : "text-emerald-300/80 border-emerald-400/30 focus-within:border-emerald-400/60";
+      ? "text-rose-300/90 border-rose-400/30 focus-within:border-rose-400/70"
+      : "text-emerald-300/90 border-emerald-400/30 focus-within:border-emerald-400/70";
   return (
     <div>
       <div className={`text-[10px] font-mono uppercase tracking-[0.14em] mb-1.5 ${color.split(" ")[0]}`}>
         {label}
       </div>
       <input
-        type="number"
-        min={0}
-        step={1}
+        type="text"
+        inputMode="decimal"
         value={value}
-        onChange={(e) => onChange(Math.max(0, Math.floor(+e.target.value || 0)))}
-        placeholder="0"
+        onFocus={(e) => {
+          if (!value || value === "0") {
+            const px = live.toFixed(digits);
+            onChange(px);
+            // select after state propagates
+            const el = e.currentTarget;
+            requestAnimationFrame(() => {
+              try {
+                el.setSelectionRange(0, px.length);
+              } catch {}
+            });
+          }
+        }}
+        onChange={(e) => {
+          const cleaned = e.target.value.replace(/[^0-9.]/g, "");
+          onChange(cleaned);
+        }}
+        placeholder={live.toFixed(digits)}
         className={`w-full rounded-xl bg-white/[0.03] border outline-none px-3 py-2 text-sm font-mono tabular-nums ${color}`}
       />
     </div>
