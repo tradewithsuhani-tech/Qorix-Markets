@@ -1113,136 +1113,186 @@ export default function InvestPage() {
                   </div>
                   <span className="text-xs text-muted-foreground">3 presets</span>
                 </div>
-                <div className="space-y-3">
+                <div className="space-y-4">
                   {RISK_PROFILES.map((profile, i) => {
                     const isSelected = riskLevel === profile.id;
                     const meta = BOT_META[profile.id]!;
                     return (
                       <motion.button
                         key={profile.id}
-                        initial={{ opacity: 0, x: -12 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: i * 0.07 }}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: i * 0.07, duration: 0.4 }}
                         onClick={() => setRiskLevel(profile.id)}
-                        className={`w-full text-left p-4 rounded-2xl border transition-all duration-200 relative overflow-hidden group ${
+                        className={`w-full text-left rounded-3xl border transition-all duration-300 relative overflow-hidden group ${
                           isSelected
-                            ? `${profile.borderActive} bg-gradient-to-br ${profile.gradientFrom} ${profile.gradientTo}`
-                            : "border-white/8 bg-gradient-to-br from-white/[0.03] to-white/[0.01] hover:from-white/[0.05] hover:border-white/15"
+                            ? `${profile.borderActive}`
+                            : "border-white/[0.06] hover:border-white/15"
                         }`}
-                        style={isSelected ? { boxShadow: `0 0 24px ${profile.glowColor}` } : {}}
+                        style={
+                          isSelected
+                            ? {
+                                background:
+                                  `linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)`,
+                                boxShadow: `0 0 0 1px ${profile.glowColor}, 0 20px 40px -20px ${profile.glowColor}, inset 0 1px 0 rgba(255,255,255,0.06)`,
+                              }
+                            : {
+                                background:
+                                  "linear-gradient(135deg, rgba(255,255,255,0.025) 0%, rgba(255,255,255,0.005) 100%)",
+                                boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
+                              }
+                        }
                       >
-                        {/* Subtle grid backdrop */}
+                        {/* Ambient color wash on selection */}
+                        {isSelected && (
+                          <div
+                            className={`absolute inset-0 bg-gradient-to-br ${profile.gradientFrom} ${profile.gradientTo} opacity-60 pointer-events-none`}
+                          />
+                        )}
+                        {/* Top accent line */}
                         <div
-                          className="absolute inset-0 opacity-[0.06] pointer-events-none"
+                          className="absolute top-0 left-6 right-6 h-px pointer-events-none"
                           style={{
-                            backgroundImage:
-                              "linear-gradient(rgba(255,255,255,0.4) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.4) 1px, transparent 1px)",
-                            backgroundSize: "22px 22px",
+                            background: isSelected
+                              ? `linear-gradient(90deg, transparent, ${profile.barColor}, transparent)`
+                              : "linear-gradient(90deg, transparent, rgba(255,255,255,0.12), transparent)",
                           }}
                         />
+                        {/* Corner sheen */}
+                        <div
+                          className="absolute -top-20 -right-20 w-40 h-40 rounded-full blur-3xl pointer-events-none opacity-50"
+                          style={{ background: isSelected ? profile.glowColor : "transparent" }}
+                        />
 
-                        <div className="relative flex items-start gap-3">
-                          {/* Bot avatar */}
-                          <div className={`relative w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${
-                            isSelected
-                              ? `bg-gradient-to-br ${profile.gradientFrom} ${profile.gradientTo} border ${profile.borderActive}`
-                              : "bg-white/5 border border-white/10"
-                          }`}>
-                            <Bot style={{ width: 22, height: 22 }} className={isSelected ? profile.color : "text-slate-400"} />
-                            <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-400 border-2 border-black/70 animate-pulse" />
-                          </div>
-
-                          <div className="flex-1 min-w-0">
-                            {/* Codename row */}
-                            <div className="flex items-center gap-1.5 flex-wrap mb-1">
-                              <span className={`font-mono text-[13px] font-bold ${isSelected ? profile.color : "text-white"}`}>
+                        <div className="relative p-5 sm:p-6">
+                          {/* Header strip: codename · version · status · recommended */}
+                          <div className="flex items-center justify-between gap-2 mb-5">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className={`font-mono text-[11px] font-bold tracking-wider truncate ${
+                                isSelected ? profile.color : "text-slate-300"
+                              }`}>
                                 {meta.codename}
                               </span>
-                              <span className="text-[9px] font-mono text-muted-foreground border border-white/10 px-1 py-px rounded">
+                              <span className="text-[9px] font-mono text-muted-foreground/80 border border-white/10 px-1.5 py-px rounded">
                                 {meta.version}
                               </span>
-                              <span className="text-[9px] font-mono text-emerald-400 flex items-center gap-1">
-                                <span className="w-1 h-1 rounded-full bg-emerald-400 animate-pulse" />
-                                ONLINE
-                              </span>
-                              {profile.recommended && (
-                                <span className="ml-auto text-[9px] px-1.5 py-0.5 bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 rounded font-bold uppercase tracking-wide">
-                                  Recommended
+                              <span className="text-[9px] font-mono text-emerald-400/90 flex items-center gap-1 shrink-0">
+                                <span className="relative flex w-1.5 h-1.5">
+                                  <span className="absolute inset-0 rounded-full bg-emerald-400 animate-ping opacity-60" />
+                                  <span className="relative w-1.5 h-1.5 rounded-full bg-emerald-400" />
                                 </span>
+                                LIVE
+                              </span>
+                            </div>
+                            {profile.recommended && (
+                              <span className="text-[9px] px-2 py-0.5 bg-gradient-to-r from-indigo-500/25 to-violet-500/25 text-indigo-200 border border-indigo-400/40 rounded-full font-bold uppercase tracking-wider shrink-0 shadow-[0_0_12px_rgba(99,102,241,0.3)]">
+                                ★ Recommended
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Hero row: avatar + personality */}
+                          <div className="flex items-center gap-4 mb-5">
+                            {/* Premium bot avatar */}
+                            <div className="relative shrink-0">
+                              {/* Outer glow ring */}
+                              {isSelected && (
+                                <div
+                                  className="absolute -inset-2 rounded-3xl blur-md opacity-70"
+                                  style={{ background: `radial-gradient(circle, ${profile.glowColor} 0%, transparent 70%)` }}
+                                />
                               )}
+                              {/* Rotating ring */}
+                              <div className={`absolute -inset-1 rounded-2xl ${isSelected ? "opacity-100" : "opacity-0"} transition-opacity`}
+                                style={{
+                                  background: `conic-gradient(from 0deg, transparent, ${profile.barColor}55, transparent, transparent)`,
+                                  animation: isSelected ? "spin 4s linear infinite" : undefined,
+                                }}
+                              />
+                              <div className={`relative w-14 h-14 rounded-2xl flex items-center justify-center ${
+                                isSelected
+                                  ? `bg-gradient-to-br ${profile.gradientFrom} ${profile.gradientTo} border ${profile.borderActive}`
+                                  : "bg-white/[0.04] border border-white/10"
+                              }`}>
+                                <Bot style={{ width: 24, height: 24 }} className={isSelected ? profile.color : "text-slate-400"} />
+                              </div>
                             </div>
 
-                            {/* Personality label + tagline */}
-                            <div className="flex items-baseline gap-2 mb-1">
-                              <span className="font-semibold text-sm">{profile.label}</span>
-                              <span className="text-[10px] text-muted-foreground font-mono uppercase tracking-wider truncate">
+                            <div className="flex-1 min-w-0">
+                              <div className="text-xl font-bold tracking-tight text-white leading-tight mb-0.5">
+                                {profile.label}
+                              </div>
+                              <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-[0.15em] truncate">
                                 {meta.model}
-                              </span>
-                            </div>
-
-                            <div className="text-xs text-muted-foreground mb-2.5 leading-snug">{profile.description}</div>
-
-                            {/* Telemetry grid */}
-                            <div className="grid grid-cols-3 gap-1.5 mb-2.5">
-                              <div className="rounded-lg bg-black/30 border border-white/[0.06] px-2 py-1.5">
-                                <div className="text-[9px] text-muted-foreground uppercase tracking-wider font-mono">Win</div>
-                                <div className={`text-[12px] font-bold tabular-nums ${profile.color}`}>{meta.winRate}%</div>
-                              </div>
-                              <div className="rounded-lg bg-black/30 border border-white/[0.06] px-2 py-1.5">
-                                <div className="text-[9px] text-muted-foreground uppercase tracking-wider font-mono">Trades/d</div>
-                                <div className="text-[12px] font-bold tabular-nums text-white">{meta.tradesPerDay}</div>
-                              </div>
-                              <div className="rounded-lg bg-black/30 border border-white/[0.06] px-2 py-1.5">
-                                <div className="text-[9px] text-muted-foreground uppercase tracking-wider font-mono">Latency</div>
-                                <div className="text-[12px] font-bold tabular-nums text-emerald-300">{meta.latencyMs}ms</div>
                               </div>
                             </div>
 
-                            {/* Tags */}
-                            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                              <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${profile.badgeColor}`}>
-                                {profile.monthlyMinPct}–{profile.monthlyMaxPct}% / month
-                              </span>
-                              <span className="text-[10px] text-muted-foreground font-mono">
-                                DD≤{profile.drawdownLimit}%
-                              </span>
-                              <span className="text-[10px] text-muted-foreground font-mono">
-                                {meta.pairs} pairs
-                              </span>
-                              <span className="text-[10px] text-muted-foreground font-mono">
-                                up {meta.uptime}
-                              </span>
+                            <AnimatePresence>
+                              {isSelected && (
+                                <motion.div
+                                  initial={{ scale: 0, opacity: 0 }}
+                                  animate={{ scale: 1, opacity: 1 }}
+                                  exit={{ scale: 0, opacity: 0 }}
+                                  className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${profile.badgeColor} border`}
+                                >
+                                  <CheckCircle style={{ width: 14, height: 14 }} />
+                                </motion.div>
+                              )}
+                            </AnimatePresence>
+                          </div>
+
+                          {/* Description */}
+                          <p className="text-[13px] text-slate-400 leading-relaxed mb-5">
+                            {profile.description}
+                          </p>
+
+                          {/* Telemetry strip — clean inline */}
+                          <div className="grid grid-cols-3 rounded-2xl bg-black/40 border border-white/[0.06] overflow-hidden mb-4">
+                            <div className="px-3 py-3 border-r border-white/[0.06]">
+                              <div className="text-[9px] text-muted-foreground/80 uppercase tracking-[0.12em] font-mono mb-0.5">Win Rate</div>
+                              <div className={`text-base font-bold tabular-nums ${profile.color}`}>{meta.winRate}<span className="text-xs opacity-70">%</span></div>
+                            </div>
+                            <div className="px-3 py-3 border-r border-white/[0.06]">
+                              <div className="text-[9px] text-muted-foreground/80 uppercase tracking-[0.12em] font-mono mb-0.5">Trades/d</div>
+                              <div className="text-base font-bold tabular-nums text-white">{meta.tradesPerDay}</div>
+                            </div>
+                            <div className="px-3 py-3">
+                              <div className="text-[9px] text-muted-foreground/80 uppercase tracking-[0.12em] font-mono mb-0.5">Latency</div>
+                              <div className="text-base font-bold tabular-nums text-emerald-300">{meta.latencyMs}<span className="text-xs opacity-70">ms</span></div>
                             </div>
                           </div>
 
-                          <AnimatePresence>
-                            {isSelected && (
-                              <motion.div
-                                initial={{ scale: 0, opacity: 0 }}
-                                animate={{ scale: 1, opacity: 1 }}
-                                exit={{ scale: 0, opacity: 0 }}
-                                className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-1 ${profile.badgeColor} border`}
-                              >
-                                <CheckCircle style={{ width: 12, height: 12 }} />
-                              </motion.div>
-                            )}
-                          </AnimatePresence>
-                        </div>
+                          {/* Footer pills */}
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+                            <span className={`text-[10px] px-2.5 py-1 rounded-full border font-semibold ${profile.badgeColor}`}>
+                              {profile.monthlyMinPct}–{profile.monthlyMaxPct}% / month
+                            </span>
+                            <span className="text-[10px] px-2 py-1 rounded-full bg-white/[0.04] border border-white/[0.08] text-slate-400 font-mono">
+                              DD≤{profile.drawdownLimit}%
+                            </span>
+                            <span className="text-[10px] px-2 py-1 rounded-full bg-white/[0.04] border border-white/[0.08] text-slate-400 font-mono">
+                              {meta.pairs} pairs
+                            </span>
+                            <span className="text-[10px] px-2 py-1 rounded-full bg-emerald-500/[0.08] border border-emerald-500/15 text-emerald-300/90 font-mono">
+                              ↑ {meta.uptime}
+                            </span>
+                          </div>
 
-                        {/* Risk Meter Bar */}
-                        {isSelected && (
-                          <motion.div
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            className="relative mt-3 pt-3 border-t border-white/8"
-                          >
-                            <div className="flex justify-between text-[10px] text-muted-foreground mb-1.5 font-mono uppercase tracking-wider">
-                              <span>Risk exposure</span>
-                              <span className={`font-bold ${profile.color}`}>{profile.score}/10</span>
-                            </div>
-                            <RiskMeter score={profile.score} />
-                          </motion.div>
-                        )}
+                          {/* Risk Meter Bar — only when selected */}
+                          {isSelected && (
+                            <motion.div
+                              initial={{ opacity: 0, height: 0 }}
+                              animate={{ opacity: 1, height: "auto" }}
+                              className="relative mt-5 pt-4 border-t border-white/[0.06]"
+                            >
+                              <div className="flex justify-between text-[10px] text-muted-foreground mb-2 font-mono uppercase tracking-[0.12em]">
+                                <span>Risk Exposure</span>
+                                <span className={`font-bold ${profile.color}`}>{profile.score}/10</span>
+                              </div>
+                              <RiskMeter score={profile.score} />
+                            </motion.div>
+                          )}
+                        </div>
                       </motion.button>
                     );
                   })}
