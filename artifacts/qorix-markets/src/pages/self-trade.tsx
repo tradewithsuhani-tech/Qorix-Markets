@@ -412,16 +412,18 @@ export default function SelfTradePage() {
                       fontSize: 11,
                     }}
                     labelStyle={{ color: "#94a3b8" }}
-                    formatter={(v: any, k: string) => {
+                    formatter={(v: any, k: any) => {
+                      const key = typeof k === "string" ? k : "";
                       if (
-                        k === "wickHigh" ||
-                        k === "wickLow" ||
-                        k === "bodyLow" ||
-                        k === "bodyHigh" ||
-                        k === "up"
+                        !key ||
+                        key === "wickHigh" ||
+                        key === "wickLow" ||
+                        key === "bodyLow" ||
+                        key === "bodyHigh" ||
+                        key === "up"
                       )
                         return null as any;
-                      return [fmtPrice(Number(v), pair.digits), k.toUpperCase()];
+                      return [fmtPrice(Number(v), pair.digits), key.toUpperCase()];
                     }}
                   />
                   {/* Soft area under close for depth */}
