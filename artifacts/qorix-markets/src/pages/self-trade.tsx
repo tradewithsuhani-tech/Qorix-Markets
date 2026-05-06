@@ -75,23 +75,28 @@ const MAX_CANDLES = 90;
 const BOT_BUYERS = 100;
 const BOT_SELLERS = 100;
 
-// Simulate per-tick liquidity from 4 buy bots + 4 sell bots.
-// Direction bias: if price ticked up, buyers slightly more aggressive (and vice versa).
-// Returns { bv, sv } — volume units in micro-lots scaled by pair.contract for visual feel.
-function botTickVolumes(priceDelta: number, baseUnit: number): { bv: number; sv: number } {
-  const bias = Math.tanh(priceDelta * 1000); // -1..1 directional
-  let bv = 0;
-  let sv = 0;
-  for (let i = 0; i < BOT_BUYERS; i++) {
-    // each buyer: 0..2x base, biased upward when price rising
-    const factor = Math.random() * (1 + Math.max(0, bias) * 0.8);
-    bv += baseUnit * factor;
-  }
-  for (let i = 0; i < BOT_SELLERS; i++) {
-    const factor = Math.random() * (1 + Math.max(0, -bias) * 0.8);
-    sv += baseUnit * factor;
-  }
-  return { bv: Math.round(bv), sv: Math.round(sv) };
+// Simulate per-tick liquidity from BOT_BUYERS buy bots + BOT_SELLERS sell bots.
+// Real-feel rules:
+//   • Bias scales with % price move (not absolute) so XAU/JPY/BTC behave the same
+//   • Strong directional dominance on real moves (60-90% one side)
+//   • Occasional whale bursts (3-8x normal) for spiky TradingView-style bars
+//   • Variable activity per tick (sparse → dense) so adjacent candles differ
+function botTickVolumes(priceDelta: number, price: number, baseUnit: number): { bv: number; sv: number } {
+  const deltaPct = price > 0 ? priceDelta / price : 0;
+  const bias = Math.tanh(deltaPct * 800); // -1..1, strong on real % moves
+  // Whale burst: ~6% of ticks get 3-8x normal volume
+  const burst = Math.random() < 0.06 ? 3 + Math.random() * 5 : 1;
+  // Activity floor + random spread so candles vary visibly
+  const activity = (0.15 + Math.random() * 0.85) * burst;
+  // Buy share: 0.5 baseline ± 0.4 from bias + ±0.12 random noise
+  const noise = (Math.random() - 0.5) * 0.24;
+  const rawShare = 0.5 + bias * 0.4 + noise;
+  const buyShare = Math.max(0.08, Math.min(0.92, rawShare));
+  const totalBots = BOT_BUYERS + BOT_SELLERS;
+  const totalVol = totalBots * baseUnit * activity;
+  const bv = Math.round(totalVol * buyShare);
+  const sv = Math.round(totalVol * (1 - buyShare));
+  return { bv, sv };
 }
 
 function buildHistory(pair: Pair, count: number = MAX_CANDLES): Candle[] {
@@ -146,18 +151,27 @@ function seedFromLivePrice(pair: Pair, livePrice: number, count: number = MAX_CA
   return out;
 }
 
-// Aggregate a single live price tick into the rolling 5s candle buffer
-// AND attribute the tick volume across the 4 buy / 4 sell bots.
-function aggregateTick(history: Candle[], price: number, digits: number, baseUnit: number): Candle[] {
+// Aggregate a single live price tick into the rolling candle buffer.
+// `silent=true` updates price ONLY (no bot volume) — used by the heartbeat
+// jitter so we don't pile fake equal volume on every candle.
+function aggregateTick(
+  history: Candle[],
+  price: number,
+  digits: number,
+  baseUnit: number,
+  silent: boolean = false,
+): Candle[] {
   if (!isFinite(price) || price <= 0) return history;
   const bucket = Math.floor(Date.now() / CANDLE_MS) * CANDLE_MS;
   if (history.length === 0) {
-    const { bv, sv } = botTickVolumes(0, baseUnit);
+    const { bv, sv } = silent ? { bv: 0, sv: 0 } : botTickVolumes(0, price, baseUnit);
     return [{ t: bucket, o: price, h: price, l: price, c: price, v: bv + sv, bv, sv }];
   }
   const last = history[history.length - 1];
   const delta = price - last.c;
-  const { bv: tickBv, sv: tickSv } = botTickVolumes(delta, baseUnit);
+  const { bv: tickBv, sv: tickSv } = silent
+    ? { bv: 0, sv: 0 }
+    : botTickVolumes(delta, price, baseUnit);
 
   if (last.t === bucket) {
     const updated: Candle = {
@@ -349,7 +363,8 @@ export default function SelfTradePage() {
         const last = h[h.length - 1];
         const jitter = (Math.random() - 0.5) * last.c * 0.0001; // ±0.005%
         const px = +(last.c + jitter).toFixed(pair.digits);
-        return aggregateTick(h, px, pair.digits, Math.max(1, Math.round(baseUnit / 3)));
+        // silent=true: price-only update, no fake bot volume during heartbeat
+        return aggregateTick(h, px, pair.digits, baseUnit, true);
       });
     }, 200);
     return () => clearInterval(id);
