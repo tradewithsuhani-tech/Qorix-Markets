@@ -16,7 +16,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Shield, Zap, BarChart2, Play, Square, RefreshCw,
   TrendingUp, AlertTriangle, CheckCircle, ChevronRight,
-  ArrowUpRight, Info, X, Wallet
+  ArrowUpRight, Info, X, Wallet, Bot, Cpu, Activity, Terminal, Sparkles
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
@@ -693,12 +693,50 @@ export default function InvestPage() {
         transition={{ duration: 0.4 }}
         className="space-y-6"
       >
-        {/* Header */}
-        <div>
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Trade Center</h1>
-          <p className="text-muted-foreground text-sm mt-0.5">
-            Configure your risk profile and deploy capital into automated strategies.
-          </p>
+        {/* Header — Bot setup feel */}
+        <div className="space-y-3">
+          <div className="flex items-start gap-3">
+            <motion.div
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ duration: 0.4 }}
+              className="relative w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-500/25 to-violet-500/15 border border-blue-400/30 flex items-center justify-center shrink-0 shadow-[0_0_24px_rgba(59,130,246,0.25)]"
+            >
+              <Bot style={{ width: 22, height: 22 }} className="text-blue-300" />
+              <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-emerald-400 border-2 border-black/60 animate-pulse" />
+            </motion.div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h1 className="text-2xl md:text-3xl font-bold tracking-tight">AI Trading Bot Setup</h1>
+                <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/25 font-bold">v3.1</span>
+              </div>
+              <p className="text-muted-foreground text-sm mt-0.5">
+                Calibrate your bot in three quick steps — personality, capital, and safety net.
+              </p>
+            </div>
+          </div>
+
+          {!investment?.isActive && !investment?.isPaused && (
+            <motion.div
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.15 }}
+              className="rounded-xl border border-emerald-500/20 bg-black/40 backdrop-blur-sm px-3 py-2 font-mono text-[11px] text-emerald-300/90 flex items-center gap-2 overflow-x-auto whitespace-nowrap"
+            >
+              <Terminal style={{ width: 12, height: 12 }} className="shrink-0 text-emerald-400" />
+              <span className="text-emerald-400">qorix-bot</span>
+              <span className="text-muted-foreground">~</span>
+              <span className="text-blue-300">$</span>
+              <span>boot</span>
+              <span className="text-muted-foreground">·</span>
+              <span className="text-emerald-300">engine: ONLINE</span>
+              <span className="text-muted-foreground">·</span>
+              <span className="text-emerald-300">latency 12ms</span>
+              <span className="text-muted-foreground">·</span>
+              <span className="text-amber-300">awaiting config…</span>
+              <span className="ml-1 inline-block w-1.5 h-3 bg-emerald-400 animate-pulse" />
+            </motion.div>
+          )}
         </div>
 
         {/* Limited Slots Banner */}
@@ -1027,8 +1065,11 @@ export default function InvestPage() {
               {/* Risk Profile Cards */}
               <div className="glass-card p-5 rounded-2xl">
                 <div className="flex items-center justify-between mb-4">
-                  <h2 className="font-semibold">Select Strategy Profile</h2>
-                  <span className="text-xs text-muted-foreground">3 profiles available</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-mono font-bold tracking-wider px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-300 border border-blue-500/25">STEP 01</span>
+                    <h2 className="font-semibold">Choose Bot Personality</h2>
+                  </div>
+                  <span className="text-xs text-muted-foreground">3 presets</span>
                 </div>
                 <div className="space-y-3">
                   {RISK_PROFILES.map((profile, i) => {
@@ -1118,7 +1159,10 @@ export default function InvestPage() {
               {/* Amount Input */}
               <div className="glass-card p-5 rounded-2xl">
                 <div className="flex items-center justify-between mb-3">
-                  <h2 className="font-semibold">Capital Allocation</h2>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-mono font-bold tracking-wider px-1.5 py-0.5 rounded bg-violet-500/15 text-violet-300 border border-violet-500/25">STEP 02</span>
+                    <h2 className="font-semibold">Fund the Bot</h2>
+                  </div>
                   <span className="text-xs text-muted-foreground">
                     Available:{" "}
                     <span className="text-blue-400 font-semibold">${maxAmount.toFixed(2)} USD</span>
@@ -1176,13 +1220,14 @@ export default function InvestPage() {
             <div className="lg:col-span-2 space-y-4">
               {/* Capital Protection Setup */}
               <div className="glass-card p-5 rounded-2xl">
-                <div className="flex items-center gap-2 mb-4">
+                <div className="flex items-center gap-2 mb-4 flex-wrap">
+                  <span className="text-[10px] font-mono font-bold tracking-wider px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/25">STEP 03</span>
                   <Shield style={{ width: 15, height: 15 }} className="text-blue-400" />
-                  <h3 className="font-semibold text-sm">Capital Protection</h3>
-                  <span className="ml-auto text-xs bg-green-500/15 text-green-400 border border-green-500/25 px-2 py-0.5 rounded-full">Always Active</span>
+                  <h3 className="font-semibold text-sm">Safety Circuit Breaker</h3>
+                  <span className="ml-auto text-xs bg-green-500/15 text-green-400 border border-green-500/25 px-2 py-0.5 rounded-full">Armed</span>
                 </div>
                 <p className="text-xs text-muted-foreground mb-3">
-                  Trading stops automatically if losses reach your set limit, protecting your capital.
+                  Bot auto-pauses if drawdown hits your limit — your capital stays safe.
                 </p>
                 <div className="grid grid-cols-3 gap-2">
                   {[3, 5, 10].map((pct) => {
@@ -1253,7 +1298,11 @@ export default function InvestPage() {
 
               {/* Strategy Summary */}
               <div className="glass-card p-5 rounded-2xl">
-                <h3 className="font-semibold text-sm mb-4">Deployment Summary</h3>
+                <div className="flex items-center gap-2 mb-4">
+                  <Cpu style={{ width: 15, height: 15 }} className="text-blue-400" />
+                  <h3 className="font-semibold text-sm">Bot Configuration</h3>
+                  <span className="ml-auto text-[10px] font-mono text-emerald-300/80">READY TO DEPLOY</span>
+                </div>
                 <div className="space-y-2.5 text-sm">
                   {[
                     { label: "Capital", value: numAmount > 0 ? `$${numAmount.toFixed(2)} USD` : "—" },
@@ -1291,12 +1340,12 @@ export default function InvestPage() {
                   {startMutation.isPending ? (
                     <>
                       <RefreshCw style={{ width: 15, height: 15 }} className="animate-spin" />
-                      Deploying...
+                      Booting bot…
                     </>
                   ) : (
                     <>
-                      <Play style={{ width: 15, height: 15 }} className="fill-current" />
-                      Deploy Capital
+                      <Bot style={{ width: 16, height: 16 }} />
+                      Activate Bot
                       <ChevronRight style={{ width: 14, height: 14 }} className="opacity-60" />
                     </>
                   )}
@@ -1304,7 +1353,7 @@ export default function InvestPage() {
 
                 {!canDeploy && numAmount === 0 && (
                   <p className="text-center text-xs text-muted-foreground mt-2">
-                    Enter an amount to deploy
+                    Fund the bot to activate
                   </p>
                 )}
               </div>
@@ -1320,7 +1369,7 @@ export default function InvestPage() {
                 >
                   <div className="flex items-center gap-2 mb-3">
                     <selectedProfile.icon style={{ width: 13, height: 13 }} className={selectedProfile.color} />
-                    <span className="text-xs text-muted-foreground font-medium">Strategy Includes</span>
+                    <span className="text-xs text-muted-foreground font-medium">Bot Capabilities</span>
                   </div>
                   <div className="space-y-2">
                     {selectedProfile.features.map((f, i) => (
