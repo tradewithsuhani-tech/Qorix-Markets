@@ -914,10 +914,7 @@ export default function SelfTradePage() {
             </div>
             {/* Bot order-flow volume strip — 4 buy bots vs 4 sell bots per 5s candle */}
             <div className="px-2 pb-2">
-              <div className="flex items-center justify-between px-2 py-1">
-                <span className="text-[9px] font-mono uppercase tracking-[0.16em] text-white/40">
-                  bot order flow · liquidity
-                </span>
+              <div className="flex items-center justify-end px-2 py-1">
                 <div className="flex items-center gap-3 text-[9px] font-mono">
                   <span className="text-emerald-400/80 flex items-center gap-1">
                     <span className="w-2 h-2 rounded-sm bg-emerald-500/80" /> buy
