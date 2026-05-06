@@ -735,13 +735,161 @@ export default function InvestPage() {
         transition={{ duration: 0.4 }}
         className="space-y-6"
       >
-        {/* Header — Bot setup feel */}
-        <div className="space-y-3">
+        {/* Header — Premium bot console */}
+        {!investment?.isActive && !investment?.isPaused ? (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+            className="relative rounded-3xl border border-white/[0.08] overflow-hidden"
+            style={{
+              background:
+                "radial-gradient(ellipse at top left, rgba(59,130,246,0.12), transparent 50%), radial-gradient(ellipse at bottom right, rgba(139,92,246,0.10), transparent 55%), linear-gradient(135deg, rgba(15,23,42,0.7) 0%, rgba(2,6,23,0.85) 100%)",
+              boxShadow:
+                "inset 0 1px 0 rgba(255,255,255,0.06), 0 30px 60px -30px rgba(59,130,246,0.25)",
+            }}
+          >
+            {/* Subtle grid backdrop */}
+            <div
+              className="absolute inset-0 opacity-[0.05] pointer-events-none"
+              style={{
+                backgroundImage:
+                  "linear-gradient(rgba(96,165,250,0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(96,165,250,0.5) 1px, transparent 1px)",
+                backgroundSize: "28px 28px",
+              }}
+            />
+            {/* Top accent line */}
+            <div
+              className="absolute top-0 left-8 right-8 h-px pointer-events-none"
+              style={{
+                background:
+                  "linear-gradient(90deg, transparent, rgba(96,165,250,0.5), rgba(167,139,250,0.5), transparent)",
+              }}
+            />
+            {/* Scanning beam */}
+            <motion.div
+              className="absolute inset-x-0 h-24 pointer-events-none"
+              style={{
+                background:
+                  "linear-gradient(180deg, transparent, rgba(96,165,250,0.06), transparent)",
+              }}
+              initial={{ y: "-100%" }}
+              animate={{ y: "400%" }}
+              transition={{ duration: 6, repeat: Infinity, ease: "linear" }}
+            />
+
+            <div className="relative p-5 sm:p-6">
+              {/* Hero row */}
+              <div className="flex items-start gap-4">
+                {/* Premium bot avatar */}
+                <div className="relative shrink-0">
+                  {/* Outer glow */}
+                  <div
+                    className="absolute -inset-3 rounded-3xl blur-xl opacity-60"
+                    style={{
+                      background:
+                        "radial-gradient(circle, rgba(59,130,246,0.4) 0%, transparent 70%)",
+                    }}
+                  />
+                  {/* Spinning conic ring */}
+                  <div
+                    className="absolute -inset-1.5 rounded-2xl"
+                    style={{
+                      background:
+                        "conic-gradient(from 0deg, transparent, rgba(96,165,250,0.6), transparent, rgba(167,139,250,0.5), transparent)",
+                      animation: "spin 5s linear infinite",
+                    }}
+                  />
+                  {/* Inner avatar */}
+                  <div
+                    className="relative w-16 h-16 rounded-2xl flex items-center justify-center border border-blue-400/30"
+                    style={{
+                      background:
+                        "linear-gradient(135deg, rgba(59,130,246,0.18) 0%, rgba(139,92,246,0.10) 100%)",
+                      boxShadow:
+                        "inset 0 1px 0 rgba(255,255,255,0.08), 0 0 24px rgba(59,130,246,0.2)",
+                    }}
+                  >
+                    <Bot style={{ width: 28, height: 28 }} className="text-blue-200" />
+                  </div>
+                  {/* Live status dot */}
+                  <span className="absolute -top-0.5 -right-0.5 flex w-3.5 h-3.5">
+                    <span className="absolute inset-0 rounded-full bg-emerald-400 animate-ping opacity-60" />
+                    <span className="relative w-3.5 h-3.5 rounded-full bg-emerald-400 border-2 border-black/70" />
+                  </span>
+                </div>
+
+                {/* Title block */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap mb-1">
+                    <h1
+                      className="text-2xl md:text-3xl font-bold tracking-tight leading-tight"
+                      style={{
+                        background:
+                          "linear-gradient(135deg, #ffffff 0%, #cbd5e1 60%, #93c5fd 100%)",
+                        WebkitBackgroundClip: "text",
+                        WebkitTextFillColor: "transparent",
+                      }}
+                    >
+                      AI Trading Bot Setup
+                    </h1>
+                    <span
+                      className="text-[10px] font-mono font-bold uppercase tracking-[0.15em] px-2 py-0.5 rounded-full border border-emerald-400/30 text-emerald-300"
+                      style={{
+                        background:
+                          "linear-gradient(135deg, rgba(16,185,129,0.18), rgba(16,185,129,0.06))",
+                        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.06)",
+                      }}
+                    >
+                      v3.1
+                    </span>
+                  </div>
+                  <p className="text-slate-400 text-sm leading-relaxed">
+                    Calibrate your bot in three quick steps —{" "}
+                    <span className="text-slate-200">personality</span>,{" "}
+                    <span className="text-slate-200">capital</span>, and{" "}
+                    <span className="text-slate-200">safety net</span>.
+                  </p>
+                </div>
+              </div>
+
+              {/* Console status strip */}
+              <div className="mt-5 grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {[
+                  { label: "Engine", value: "ONLINE", color: "text-emerald-300", dot: "bg-emerald-400" },
+                  { label: "Latency", value: "12ms", color: "text-emerald-300", dot: "bg-emerald-400" },
+                  { label: "Uptime", value: "99.96%", color: "text-blue-300", dot: "bg-blue-400" },
+                  { label: "Status", value: "AWAITING", color: "text-amber-300", dot: "bg-amber-400" },
+                ].map((s, idx) => (
+                  <div
+                    key={s.label}
+                    className="flex items-center justify-between gap-2 rounded-xl px-3 py-2 bg-black/30 border border-white/[0.06] backdrop-blur-sm"
+                  >
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className={`w-1.5 h-1.5 rounded-full ${s.dot} ${idx < 2 ? "animate-pulse" : ""}`} />
+                      <span className="text-[9px] font-mono uppercase tracking-[0.15em] text-muted-foreground">{s.label}</span>
+                    </div>
+                    <span className={`text-[11px] font-mono font-bold tabular-nums ${s.color}`}>{s.value}</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Terminal command line */}
+              <div className="mt-3 flex items-center gap-2 font-mono text-[11px] text-emerald-300/90 overflow-x-auto whitespace-nowrap">
+                <Terminal style={{ width: 12, height: 12 }} className="shrink-0 text-emerald-400" />
+                <span className="text-emerald-400">qorix-bot</span>
+                <span className="text-muted-foreground">~</span>
+                <span className="text-blue-300">$</span>
+                <span className="text-slate-300">init --calibrate</span>
+                <span className="ml-0.5 inline-block w-1.5 h-3 bg-emerald-400 animate-pulse" />
+              </div>
+            </div>
+          </motion.div>
+        ) : (
           <div className="flex items-start gap-3">
             <motion.div
               initial={{ scale: 0.8, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
-              transition={{ duration: 0.4 }}
               className="relative w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-500/25 to-violet-500/15 border border-blue-400/30 flex items-center justify-center shrink-0 shadow-[0_0_24px_rgba(59,130,246,0.25)]"
             >
               <Bot style={{ width: 22, height: 22 }} className="text-blue-300" />
@@ -749,37 +897,15 @@ export default function InvestPage() {
             </motion.div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
-                <h1 className="text-2xl md:text-3xl font-bold tracking-tight">AI Trading Bot Setup</h1>
+                <h1 className="text-2xl md:text-3xl font-bold tracking-tight">AI Trading Bot</h1>
                 <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/25 font-bold">v3.1</span>
               </div>
               <p className="text-muted-foreground text-sm mt-0.5">
-                Calibrate your bot in three quick steps — personality, capital, and safety net.
+                Live trading desk — monitor performance and controls below.
               </p>
             </div>
           </div>
-
-          {!investment?.isActive && !investment?.isPaused && (
-            <motion.div
-              initial={{ opacity: 0, y: -4 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.15 }}
-              className="rounded-xl border border-emerald-500/20 bg-black/40 backdrop-blur-sm px-3 py-2 font-mono text-[11px] text-emerald-300/90 flex items-center gap-2 overflow-x-auto whitespace-nowrap"
-            >
-              <Terminal style={{ width: 12, height: 12 }} className="shrink-0 text-emerald-400" />
-              <span className="text-emerald-400">qorix-bot</span>
-              <span className="text-muted-foreground">~</span>
-              <span className="text-blue-300">$</span>
-              <span>boot</span>
-              <span className="text-muted-foreground">·</span>
-              <span className="text-emerald-300">engine: ONLINE</span>
-              <span className="text-muted-foreground">·</span>
-              <span className="text-emerald-300">latency 12ms</span>
-              <span className="text-muted-foreground">·</span>
-              <span className="text-amber-300">awaiting config…</span>
-              <span className="ml-1 inline-block w-1.5 h-3 bg-emerald-400 animate-pulse" />
-            </motion.div>
-          )}
-        </div>
+        )}
 
         {/* Limited Slots Banner */}
         {fundStats && fundStats.maxSlots > 0 && (
