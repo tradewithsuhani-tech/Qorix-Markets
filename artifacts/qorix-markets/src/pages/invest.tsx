@@ -301,89 +301,254 @@ function CapitalProtectionPanel({
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: 0.15 }}
-      className="glass-card p-5 rounded-2xl"
+      className="relative rounded-3xl border border-white/10 overflow-hidden"
+      style={{
+        background:
+          "radial-gradient(120% 80% at 0% 0%, rgba(59,130,246,0.10), transparent 55%), linear-gradient(180deg, #0a0f1a 0%, #060912 100%)",
+        boxShadow:
+          "0 20px 50px -25px rgba(0,0,0,0.65), inset 0 1px 0 rgba(255,255,255,0.04)",
+      }}
     >
-      <div className="flex items-center justify-between mb-5">
-        <div className="flex items-center gap-2">
-          <Shield style={{ width: 16, height: 16 }} className="text-blue-400" />
-          <h3 className="font-semibold">Capital Protection</h3>
-        </div>
-        <span className={`text-xs px-2.5 py-1 rounded-full border font-semibold flex items-center gap-1.5 ${statusBg}`}>
-          {!isTriggered && <span className="live-dot" style={{ width: 5, height: 5 }} />}
-          {statusLabel}
-        </span>
-      </div>
+      {/* top accent */}
+      <div
+        aria-hidden
+        className="absolute top-0 left-0 right-0 h-px"
+        style={{
+          background:
+            "linear-gradient(90deg, transparent, rgba(59,130,246,0.55), transparent)",
+        }}
+      />
+      {/* corner glow */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -top-20 -right-16 w-56 h-56 rounded-full"
+        style={{
+          background: `radial-gradient(closest-side, ${barColor}33, transparent 70%)`,
+        }}
+      />
 
-      {/* Drawdown gauge */}
-      <div className="mb-5">
-        <div className="flex justify-between text-xs mb-2">
-          <span className="text-muted-foreground">Current Drawdown</span>
-          <span className={`font-bold ${statusColor}`}>
-            ${investment.drawdown.toFixed(2)} ({drawdownPct.toFixed(2)}%)
+      <div className="relative p-5">
+        {/* ── Header ─────────────────────────────────────── */}
+        <div className="flex items-center justify-between mb-5">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div
+              className="w-9 h-9 rounded-xl flex items-center justify-center border border-blue-400/30 shrink-0"
+              style={{
+                background:
+                  "linear-gradient(135deg, rgba(59,130,246,0.22), rgba(59,130,246,0.06))",
+                boxShadow: "inset 0 1px 0 rgba(255,255,255,0.08), 0 0 18px -6px rgba(59,130,246,0.5)",
+              }}
+            >
+              <Shield style={{ width: 16, height: 16 }} className="text-blue-300" />
+            </div>
+            <div className="min-w-0">
+              <h3 className="font-bold text-base text-white tracking-tight leading-tight">
+                Capital Protection
+              </h3>
+              <div className="text-[10px] font-mono uppercase tracking-[0.15em] text-white/45 mt-0.5">
+                drawdown · auto-pause
+              </div>
+            </div>
+          </div>
+          <span
+            className={`text-[10px] px-2.5 py-1 rounded-full border font-mono font-bold uppercase tracking-[0.14em] flex items-center gap-1.5 shrink-0 ${statusBg}`}
+          >
+            {!isTriggered && (
+              <span className="relative flex w-1.5 h-1.5">
+                <span className="absolute inset-0 rounded-full bg-current animate-ping opacity-60" />
+                <span className="relative w-1.5 h-1.5 rounded-full bg-current" />
+              </span>
+            )}
+            {statusLabel}
           </span>
         </div>
-        <div className="relative h-3 bg-white/5 rounded-full overflow-hidden">
-          <motion.div
-            initial={{ width: 0 }}
-            animate={{ width: `${usagePct}%` }}
-            transition={{ duration: 1, ease: "easeOut" }}
-            className="h-full rounded-full"
-            style={{ background: `linear-gradient(90deg, ${barColor}99, ${barColor})` }}
-          />
-        </div>
-        <div className="flex justify-between text-[10px] text-muted-foreground mt-1.5">
-          <span>$0</span>
-          <span>Limit: ${((investment.amount * limitPct) / 100).toFixed(2)} ({limitPct}%)</span>
-        </div>
-      </div>
 
-      {/* Stats row */}
-      <div className="grid grid-cols-3 gap-3 mb-5">
-        {[
-          { label: "Protection Limit", value: `${limitPct}%`, sub: `$${((investment.amount * limitPct) / 100).toFixed(2)}` },
-          { label: "Used", value: `${drawdownPct.toFixed(2)}%`, sub: `of ${limitPct}% limit` },
-          { label: "Remaining", value: `$${Math.max(0, (investment.amount * limitPct / 100) - investment.drawdown).toFixed(2)}`, sub: "buffer left" },
-        ].map((s) => (
-          <div key={s.label} className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.06] text-center">
-            <div className="text-[10px] text-muted-foreground mb-1">{s.label}</div>
-            <div className="font-bold text-sm">{s.value}</div>
-            <div className="text-[10px] text-muted-foreground mt-0.5">{s.sub}</div>
+        {/* ── Hero gauge ─────────────────────────────────── */}
+        <div
+          className="rounded-2xl p-4 mb-4 border border-white/8"
+          style={{
+            background: `radial-gradient(120% 100% at 0% 0%, ${barColor}18, transparent 55%), linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.005))`,
+          }}
+        >
+          <div className="flex items-end justify-between gap-3 mb-3">
+            <div className="min-w-0">
+              <div className="text-[10px] font-mono uppercase tracking-[0.15em] text-white/55 mb-1">
+                Current Drawdown
+              </div>
+              <div
+                className={`text-2xl font-bold tabular-nums leading-none ${statusColor}`}
+              >
+                ${investment.drawdown.toFixed(2)}
+              </div>
+            </div>
+            <div className="text-right shrink-0">
+              <div className="text-[10px] font-mono uppercase tracking-[0.15em] text-white/45 mb-1">
+                of capital
+              </div>
+              <div className={`text-base font-bold tabular-nums ${statusColor}`}>
+                {drawdownPct.toFixed(2)}%
+              </div>
+            </div>
           </div>
-        ))}
-      </div>
 
-      {/* Limit selector */}
-      <div className="pt-4 border-t border-white/8">
-        <div className="text-xs text-muted-foreground mb-2.5">Adjust protection limit</div>
-        <div className="flex gap-2 mb-3">
-          {[3, 5, 10].map((pct) => (
-            <button
-              key={pct}
-              onClick={() => setPendingLimit(pct)}
-              className={`flex-1 py-2.5 rounded-xl text-sm font-semibold border transition-all ${
-                selectedLimit === pct
-                  ? "bg-blue-500/20 text-blue-400 border-blue-500/40 shadow-[0_0_12px_rgba(59,130,246,0.15)]"
-                  : "bg-white/3 text-muted-foreground border-white/8 hover:border-white/15 hover:text-white"
-              }`}
+          {/* Bar with markers */}
+          <div className="relative h-2.5 bg-white/5 rounded-full overflow-hidden border border-white/5">
+            <motion.div
+              initial={{ width: 0 }}
+              animate={{ width: `${usagePct}%` }}
+              transition={{ duration: 1, ease: "easeOut" }}
+              className="h-full rounded-full"
+              style={{
+                background: `linear-gradient(90deg, ${barColor}99, ${barColor})`,
+                boxShadow: `0 0 10px ${barColor}88`,
+              }}
+            />
+          </div>
+          <div className="flex justify-between text-[9px] font-mono uppercase tracking-[0.12em] text-white/40 mt-2">
+            <span>$0.00</span>
+            <span className="text-white/55">
+              limit ${((investment.amount * limitPct) / 100).toFixed(2)} · {limitPct}%
+            </span>
+          </div>
+        </div>
+
+        {/* ── 3 stat tiles ───────────────────────────────── */}
+        <div className="grid grid-cols-3 gap-2 mb-5">
+          {[
+            {
+              label: "Protection",
+              value: `${limitPct}%`,
+              sub: `$${((investment.amount * limitPct) / 100).toFixed(2)} cap`,
+              color: "#3b82f6",
+            },
+            {
+              label: "Used",
+              value: `${drawdownPct.toFixed(2)}%`,
+              sub: `of ${limitPct}% limit`,
+              color: barColor,
+            },
+            {
+              label: "Remaining",
+              value: `$${Math.max(0, (investment.amount * limitPct) / 100 - investment.drawdown).toFixed(2)}`,
+              sub: "buffer left",
+              color: "#10b981",
+            },
+          ].map((s, i) => (
+            <motion.div
+              key={s.label}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 + i * 0.06 }}
+              className="relative p-3 rounded-xl border border-white/10 overflow-hidden"
+              style={{
+                background:
+                  "linear-gradient(180deg, rgba(255,255,255,0.025), rgba(255,255,255,0.005))",
+                boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
+              }}
             >
-              {pct}%
-            </button>
+              {/* top dot accent */}
+              <div
+                aria-hidden
+                className="absolute top-0 left-3 right-3 h-px"
+                style={{
+                  background: `linear-gradient(90deg, transparent, ${s.color}88, transparent)`,
+                }}
+              />
+              <div className="text-[9px] font-mono font-bold uppercase tracking-[0.14em] text-white/55 mb-1.5 leading-tight">
+                {s.label}
+              </div>
+              <div
+                className="text-base font-bold tabular-nums leading-none break-all"
+                style={{ color: s.color }}
+              >
+                {s.value}
+              </div>
+              <div className="text-[9px] font-mono uppercase tracking-[0.1em] text-white/40 mt-1.5 leading-[1.3] break-words">
+                {s.sub}
+              </div>
+            </motion.div>
           ))}
         </div>
-        <AnimatePresence>
-          {hasChanges && (
-            <motion.button
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              exit={{ opacity: 0, height: 0 }}
-              onClick={() => setShowConfirm(true)}
-              disabled={isSaving}
-              className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold transition-all disabled:opacity-60 flex items-center justify-center gap-2"
-            >
-              <CheckCircle style={{ width: 13, height: 13 }} /> Review Change
-            </motion.button>
-          )}
-        </AnimatePresence>
+
+        {/* ── Limit selector ─────────────────────────────── */}
+        <div className="pt-4 border-t border-white/8">
+          <div className="flex items-center justify-between mb-3">
+            <div className="text-[10px] font-mono font-bold uppercase tracking-[0.15em] text-white/55">
+              Adjust Protection Limit
+            </div>
+            <div className="text-[9px] font-mono uppercase tracking-[0.12em] text-white/35">
+              tap to change
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-2 mb-3">
+            {[
+              { pct: 3, label: "Conservative", tone: "#10b981" },
+              { pct: 5, label: "Balanced", tone: "#6366f1" },
+              { pct: 10, label: "Aggressive", tone: "#f97316" },
+            ].map((opt) => {
+              const active = selectedLimit === opt.pct;
+              return (
+                <button
+                  key={opt.pct}
+                  onClick={() => setPendingLimit(opt.pct)}
+                  className="relative py-2.5 px-2 rounded-xl border transition-all overflow-hidden text-center"
+                  style={{
+                    background: active
+                      ? `linear-gradient(180deg, ${opt.tone}22, ${opt.tone}08)`
+                      : "rgba(255,255,255,0.02)",
+                    borderColor: active ? `${opt.tone}66` : "rgba(255,255,255,0.08)",
+                    boxShadow: active
+                      ? `inset 0 1px 0 rgba(255,255,255,0.08), 0 0 18px -6px ${opt.tone}`
+                      : "none",
+                  }}
+                >
+                  <div
+                    className="text-base font-bold tabular-nums leading-none"
+                    style={{ color: active ? opt.tone : "rgba(255,255,255,0.85)" }}
+                  >
+                    {opt.pct}%
+                  </div>
+                  <div
+                    className="text-[8.5px] font-mono uppercase tracking-[0.12em] mt-1 leading-tight"
+                    style={{
+                      color: active ? `${opt.tone}cc` : "rgba(255,255,255,0.35)",
+                    }}
+                  >
+                    {opt.label}
+                  </div>
+                  {active && (
+                    <div
+                      aria-hidden
+                      className="absolute bottom-0 left-2 right-2 h-px"
+                      style={{
+                        background: `linear-gradient(90deg, transparent, ${opt.tone}, transparent)`,
+                      }}
+                    />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+          <AnimatePresence>
+            {hasChanges && (
+              <motion.button
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                onClick={() => setShowConfirm(true)}
+                disabled={isSaving}
+                className="w-full py-2.5 rounded-xl text-white text-sm font-semibold transition-all disabled:opacity-60 flex items-center justify-center gap-2 border border-blue-400/40"
+                style={{
+                  background:
+                    "linear-gradient(180deg, rgba(59,130,246,0.9), rgba(37,99,235,0.95))",
+                  boxShadow: "0 0 22px -6px rgba(59,130,246,0.65)",
+                }}
+              >
+                <CheckCircle style={{ width: 13, height: 13 }} /> Review Change
+              </motion.button>
+            )}
+          </AnimatePresence>
+        </div>
       </div>
 
       {/* Confirmation modal */}
