@@ -41,7 +41,7 @@ type Pair = {
   binance?: string; // when present, live price comes from Binance WS/REST
 };
 const PAIRS: Pair[] = [
-  { symbol: "XAU/USD",  base: 4683.74, digits: 2, pip: 0.01, spread: 0.25, vol: 0.0008, contract: 100,    binance: "PAXGUSDT" },
+  { symbol: "XAU/USD",  base: 4683.74, digits: 2, pip: 0.01, spread: 0.25, vol: 0.0008, contract: 100 },
   { symbol: "EUR/USD",  base: 1.0892,  digits: 5, pip: 0.0001, spread: 0.00012, vol: 0.00025, contract: 100000, binance: "EURUSDT" },
   { symbol: "GBP/USD",  base: 1.2734,  digits: 5, pip: 0.0001, spread: 0.00018, vol: 0.0003, contract: 100000 },
   { symbol: "USD/JPY",  base: 156.42,  digits: 3, pip: 0.01, spread: 0.018, vol: 0.04, contract: 100000 },
@@ -190,12 +190,51 @@ export default function SelfTradePage() {
     };
   }, [pair]);
 
-  // live tick — for synthetic-only pairs (no Binance mapping)
+  // ── LIVE feed via gold-api for XAU/USD (free, no key, CORS-enabled) ──
+  useEffect(() => {
+    if (pair.symbol !== "XAU/USD") return;
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const r = await fetch("https://api.gold-api.com/price/XAU");
+        if (!r.ok) return;
+        const j = await r.json();
+        const px = +(+j.price).toFixed(pair.digits);
+        if (!isFinite(px) || px <= 0 || cancelled) return;
+        setIsLive(true);
+        setHistory((h) => {
+          if (h.length === 0) return h;
+          const last = h[h.length - 1];
+          const updated: Candle = {
+            ...last,
+            c: px,
+            h: Math.max(last.h, px),
+            l: Math.min(last.l, px),
+          };
+          // roll a new candle every ~30s
+          if (Date.now() - last.t > 30_000) {
+            return [
+              ...h.slice(-79),
+              updated,
+              { t: Date.now(), o: px, h: px, l: px, c: px, v: 100 },
+            ].slice(-80);
+          }
+          return [...h.slice(0, -1), updated];
+        });
+      } catch {}
+    };
+    poll();
+    const id = window.setInterval(poll, 3000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, [pair.symbol, pair.digits]);
+
+  // live tick — for synthetic-only pairs (no live mapping)
   useEffect(() => {
     if (pair.binance) return; // live feed handles it
+    if (pair.symbol === "XAU/USD") return; // gold-api handles it
     const id = window.setInterval(() => setTick((t) => t + 1), 1000);
     return () => clearInterval(id);
-  }, [pair.binance]);
+  }, [pair.binance, pair.symbol]);
 
   useEffect(() => {
     if (pair.binance) return; // skip synthetic walk for live pairs
