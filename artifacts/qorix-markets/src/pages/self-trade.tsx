@@ -1,0 +1,851 @@
+import { useEffect, useMemo, useRef, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  ArrowDown,
+  ArrowUp,
+  ChevronDown,
+  Activity,
+  Minus,
+  Plus,
+  X,
+  TrendingUp,
+  TrendingDown,
+  Wallet as WalletIcon,
+  ShieldAlert,
+} from "lucide-react";
+import {
+  ResponsiveContainer,
+  ComposedChart,
+  Line,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  ReferenceLine,
+  Tooltip,
+} from "recharts";
+import { Layout } from "@/components/layout";
+
+// ─────────────────────────────────────────────────────────────────────
+// Pair catalog — purely visual demo prices
+// ─────────────────────────────────────────────────────────────────────
+type Pair = {
+  symbol: string;
+  base: number;
+  digits: number;
+  pip: number;
+  spread: number;
+  vol: number;
+  contract: number;
+};
+const PAIRS: Pair[] = [
+  { symbol: "XAU/USD",  base: 4683.74, digits: 2, pip: 0.01, spread: 0.25, vol: 0.0008, contract: 100 },
+  { symbol: "EUR/USD",  base: 1.0892,  digits: 5, pip: 0.0001, spread: 0.00012, vol: 0.00025, contract: 100000 },
+  { symbol: "GBP/USD",  base: 1.2734,  digits: 5, pip: 0.0001, spread: 0.00018, vol: 0.0003, contract: 100000 },
+  { symbol: "USD/JPY",  base: 156.42,  digits: 3, pip: 0.01, spread: 0.018, vol: 0.04, contract: 100000 },
+  { symbol: "BTC/USD",  base: 71240.5, digits: 1, pip: 0.1,  spread: 8.5, vol: 0.0012, contract: 1 },
+  { symbol: "ETH/USD",  base: 3458.2,  digits: 2, pip: 0.01, spread: 0.6, vol: 0.0014, contract: 1 },
+];
+
+// Seeded PRNG for stable candle history
+function rng(seed: number) {
+  let s = seed >>> 0;
+  return () => {
+    s = (s * 1664525 + 1013904223) >>> 0;
+    return s / 0xffffffff;
+  };
+}
+
+type Candle = { t: number; o: number; h: number; l: number; c: number; v: number };
+
+function buildHistory(pair: Pair, count: number): Candle[] {
+  const r = rng(Math.floor(pair.base * 1000));
+  const out: Candle[] = [];
+  let price = pair.base * (1 - pair.vol * 8);
+  const now = Date.now();
+  for (let i = count - 1; i >= 0; i--) {
+    const t = now - i * 5000;
+    const drift = (r() - 0.48) * pair.base * pair.vol;
+    const o = price;
+    const c = +(o + drift).toFixed(pair.digits);
+    const h = +Math.max(o, c, o + Math.abs(drift) * (0.4 + r() * 0.8)).toFixed(pair.digits);
+    const l = +Math.min(o, c, o - Math.abs(drift) * (0.4 + r() * 0.8)).toFixed(pair.digits);
+    const v = Math.round(40 + r() * 160);
+    out.push({ t, o, h, l, c, v });
+    price = c;
+  }
+  return out;
+}
+
+type Position = {
+  id: string;
+  pair: string;
+  side: "BUY" | "SELL";
+  lots: number;
+  entry: number;
+  sl: number | null;
+  tp: number | null;
+  openedAt: number;
+  contract: number;
+};
+type ClosedPosition = Position & {
+  closedAt: number;
+  exit: number;
+  pnl: number;
+  reason: "manual" | "sl" | "tp";
+};
+
+function fmtPrice(v: number, digits: number) {
+  return v.toLocaleString("en-US", {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  });
+}
+function fmtMoney(v: number) {
+  return `${v < 0 ? "−" : ""}$${Math.abs(v).toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+function pnl(p: Position, mid: number) {
+  const dir = p.side === "BUY" ? 1 : -1;
+  return +(((mid - p.entry) * dir) * p.lots * p.contract).toFixed(2);
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Page
+// ─────────────────────────────────────────────────────────────────────
+export default function SelfTradePage() {
+  const [symbol, setSymbol] = useState<string>("XAU/USD");
+  const pair = useMemo(() => PAIRS.find((p) => p.symbol === symbol)!, [symbol]);
+
+  const [history, setHistory] = useState<Candle[]>(() => buildHistory(pair, 80));
+  const [tick, setTick] = useState(0);
+
+  // when pair changes, rebuild history
+  useEffect(() => {
+    setHistory(buildHistory(pair, 80));
+  }, [pair]);
+
+  // live tick — every 1s update last candle, every 5s push new candle
+  useEffect(() => {
+    const id = window.setInterval(() => setTick((t) => t + 1), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    setHistory((h) => {
+      if (h.length === 0) return h;
+      const last = h[h.length - 1];
+      const r = Math.random();
+      const drift = (r - 0.5) * pair.base * pair.vol * 0.55;
+      const newClose = +(last.c + drift).toFixed(pair.digits);
+      const newHigh = +Math.max(last.h, newClose).toFixed(pair.digits);
+      const newLow = +Math.min(last.l, newClose).toFixed(pair.digits);
+      const updated: Candle = { ...last, c: newClose, h: newHigh, l: newLow };
+      // every ~5 ticks: roll a new candle
+      const rollNew = tick > 0 && tick % 5 === 0;
+      if (rollNew) {
+        return [
+          ...h.slice(-79),
+          updated,
+          {
+            t: Date.now(),
+            o: newClose,
+            h: newClose,
+            l: newClose,
+            c: newClose,
+            v: Math.round(40 + Math.random() * 160),
+          },
+        ].slice(-80);
+      }
+      return [...h.slice(0, -1), updated];
+    });
+  }, [tick, pair]);
+
+  const mid = history.length ? history[history.length - 1].c : pair.base;
+  const bid = +(mid - pair.spread / 2).toFixed(pair.digits);
+  const ask = +(mid + pair.spread / 2).toFixed(pair.digits);
+  const sessionOpen = history[0]?.o ?? pair.base;
+  const dayPct = sessionOpen > 0 ? ((mid - sessionOpen) / sessionOpen) * 100 : 0;
+
+  // ── Order ticket state ──
+  const [lots, setLots] = useState(0.01);
+  const [slPts, setSlPts] = useState<number>(0);
+  const [tpPts, setTpPts] = useState<number>(0);
+
+  // ── Account ──
+  const [balance] = useState(10000);
+  const [positions, setPositions] = useState<Position[]>([]);
+  const [closed, setClosed] = useState<ClosedPosition[]>([]);
+
+  const openPnL = positions.reduce((s, p) => s + pnl(p, mid), 0);
+  const equity = +(balance + openPnL + closed.reduce((s, c) => s + c.pnl, 0)).toFixed(2);
+  const usedMargin = positions.reduce((s, p) => s + (p.entry * p.lots * p.contract) / 200, 0);
+  const freeMargin = +(equity - usedMargin).toFixed(2);
+  const marginLevel = usedMargin > 0 ? (equity / usedMargin) * 100 : 0;
+
+  const placeOrder = (side: "BUY" | "SELL") => {
+    const entry = side === "BUY" ? ask : bid;
+    const sl =
+      slPts > 0
+        ? side === "BUY"
+          ? +(entry - slPts * pair.pip).toFixed(pair.digits)
+          : +(entry + slPts * pair.pip).toFixed(pair.digits)
+        : null;
+    const tp =
+      tpPts > 0
+        ? side === "BUY"
+          ? +(entry + tpPts * pair.pip).toFixed(pair.digits)
+          : +(entry - tpPts * pair.pip).toFixed(pair.digits)
+        : null;
+    setPositions((ps) => [
+      ...ps,
+      {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        pair: pair.symbol,
+        side,
+        lots,
+        entry,
+        sl,
+        tp,
+        openedAt: Date.now(),
+        contract: pair.contract,
+      },
+    ]);
+  };
+
+  const closePosition = (id: string, reason: ClosedPosition["reason"] = "manual") => {
+    setPositions((ps) => {
+      const target = ps.find((p) => p.id === id);
+      if (!target) return ps;
+      const exit = target.side === "BUY" ? bid : ask;
+      const realized = pnl(target, exit);
+      setClosed((cs) =>
+        [{ ...target, closedAt: Date.now(), exit, pnl: realized, reason }, ...cs].slice(0, 50),
+      );
+      return ps.filter((p) => p.id !== id);
+    });
+  };
+
+  // SL/TP auto-trigger
+  useEffect(() => {
+    positions.forEach((p) => {
+      const px = p.side === "BUY" ? bid : ask;
+      if (p.sl !== null) {
+        if ((p.side === "BUY" && px <= p.sl) || (p.side === "SELL" && px >= p.sl)) {
+          closePosition(p.id, "sl");
+          return;
+        }
+      }
+      if (p.tp !== null) {
+        if ((p.side === "BUY" && px >= p.tp) || (p.side === "SELL" && px <= p.tp)) {
+          closePosition(p.id, "tp");
+        }
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bid, ask]);
+
+  // ── Chart data ──
+  const chartData = useMemo(
+    () =>
+      history.map((c, i) => ({
+        i,
+        t: new Date(c.t).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false }),
+        o: c.o,
+        h: c.h,
+        l: c.l,
+        c: c.c,
+        v: c.v,
+        // stems for candle visual
+        wickLow: c.l,
+        wickHigh: c.h,
+        bodyLow: Math.min(c.o, c.c),
+        bodyHigh: Math.max(c.o, c.c),
+        up: c.c >= c.o,
+      })),
+    [history],
+  );
+
+  return (
+    <Layout>
+      <div className="min-h-screen bg-[#05070d] text-white">
+        {/* ── Header bar ───────────────────────────────────────────── */}
+        <div className="border-b border-white/8 bg-[#080c16] sticky top-0 z-20 backdrop-blur">
+          <div className="px-3 sm:px-5 py-2.5 flex items-center gap-3 overflow-x-auto scrollbar-hide">
+            <PairPicker symbol={symbol} onChange={setSymbol} />
+
+            <div className="flex items-center gap-3 ml-1 shrink-0">
+              <div>
+                <div className="text-[9px] font-mono uppercase tracking-[0.14em] text-rose-400/80">Bid</div>
+                <div className="text-base font-bold tabular-nums text-rose-300">
+                  {fmtPrice(bid, pair.digits)}
+                </div>
+              </div>
+              <div className="h-8 w-px bg-white/10" />
+              <div>
+                <div className="text-[9px] font-mono uppercase tracking-[0.14em] text-emerald-400/80">Ask</div>
+                <div className="text-base font-bold tabular-nums text-emerald-300">
+                  {fmtPrice(ask, pair.digits)}
+                </div>
+              </div>
+              <div className="h-8 w-px bg-white/10" />
+              <div>
+                <div className="text-[9px] font-mono uppercase tracking-[0.14em] text-white/45">Spread</div>
+                <div className="text-sm font-mono tabular-nums text-white/80">
+                  {fmtPrice(pair.spread, pair.digits)}
+                </div>
+              </div>
+              <div className="h-8 w-px bg-white/10" />
+              <div>
+                <div className="text-[9px] font-mono uppercase tracking-[0.14em] text-white/45">Day</div>
+                <div
+                  className={`text-sm font-bold tabular-nums ${
+                    dayPct >= 0 ? "text-emerald-400" : "text-rose-400"
+                  }`}
+                >
+                  {dayPct >= 0 ? "+" : ""}
+                  {dayPct.toFixed(2)}%
+                </div>
+              </div>
+            </div>
+
+            <div className="ml-auto flex items-center gap-3 shrink-0 pl-3 border-l border-white/10">
+              <div className="text-right">
+                <div className="text-[9px] font-mono uppercase tracking-[0.14em] text-white/45">
+                  Equity
+                </div>
+                <div className="text-sm font-bold tabular-nums">{fmtMoney(equity)}</div>
+              </div>
+              <div className="text-right">
+                <div className="text-[9px] font-mono uppercase tracking-[0.14em] text-white/45">
+                  Free Margin
+                </div>
+                <div className="text-sm font-bold tabular-nums text-white/80">
+                  {fmtMoney(freeMargin)}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Body grid ────────────────────────────────────────────── */}
+        <div className="p-3 sm:p-5 grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-4">
+          {/* Chart */}
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="rounded-2xl border border-white/8 bg-gradient-to-b from-[#0a0f1a] to-[#06090f] overflow-hidden"
+          >
+            <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/5">
+              <div className="flex items-center gap-2">
+                <Activity style={{ width: 13, height: 13 }} className="text-emerald-400" />
+                <span className="text-[10px] font-mono uppercase tracking-[0.18em] text-white/55">
+                  {symbol} · 5s candles
+                </span>
+                <span className="ml-2 px-1.5 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-400/40 text-[9px] font-mono uppercase tracking-[0.14em] text-emerald-300 flex items-center gap-1">
+                  <span className="w-1 h-1 rounded-full bg-emerald-400 animate-pulse" />
+                  live
+                </span>
+              </div>
+              <div className="text-[10px] font-mono text-white/40">
+                last {fmtPrice(mid, pair.digits)}
+              </div>
+            </div>
+            <div className="h-[360px] sm:h-[440px] p-2">
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={chartData} margin={{ top: 10, right: 18, left: 0, bottom: 6 }}>
+                  <CartesianGrid stroke="rgba(255,255,255,0.04)" strokeDasharray="3 3" vertical={false} />
+                  <XAxis
+                    dataKey="t"
+                    tick={{ fill: "#475569", fontSize: 9 }}
+                    axisLine={false}
+                    tickLine={false}
+                    interval={Math.max(0, Math.floor(chartData.length / 8))}
+                  />
+                  <YAxis
+                    tick={{ fill: "#475569", fontSize: 9 }}
+                    axisLine={false}
+                    tickLine={false}
+                    domain={["auto", "auto"]}
+                    tickFormatter={(v) => fmtPrice(Number(v), pair.digits)}
+                    width={70}
+                    orientation="right"
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      background: "rgba(8,12,22,0.96)",
+                      border: "1px solid rgba(255,255,255,0.1)",
+                      borderRadius: 10,
+                      fontSize: 11,
+                    }}
+                    labelStyle={{ color: "#94a3b8" }}
+                    formatter={(v: any, k: string) => {
+                      if (k === "wickHigh" || k === "wickLow" || k === "bodyHigh" || k === "bodyLow") return null as any;
+                      return [fmtPrice(Number(v), pair.digits), k.toUpperCase()];
+                    }}
+                  />
+                  {/* Wicks (thin line) */}
+                  <Bar dataKey="wickLow" fill="transparent" stackId="wick" isAnimationActive={false} />
+                  <Bar
+                    dataKey={(d: any) => d.wickHigh - d.wickLow}
+                    fill="rgba(148,163,184,0.55)"
+                    stackId="wick"
+                    barSize={1}
+                    isAnimationActive={false}
+                  />
+                  {/* Bodies (thick) */}
+                  <Bar dataKey="bodyLow" fill="transparent" stackId="body" isAnimationActive={false} />
+                  <Bar
+                    dataKey={(d: any) => Math.max(d.bodyHigh - d.bodyLow, pair.pip * 0.5)}
+                    stackId="body"
+                    barSize={6}
+                    isAnimationActive={false}
+                    shape={(props: any) => {
+                      const fill = props?.payload?.up
+                        ? "rgba(16,185,129,0.95)"
+                        : "rgba(244,63,94,0.95)";
+                      return (
+                        <rect
+                          x={props.x}
+                          y={props.y}
+                          width={props.width}
+                          height={Math.max(props.height, 1)}
+                          fill={fill}
+                          rx={1}
+                        />
+                      );
+                    }}
+                  />
+                  {/* Smooth EMA-ish overlay */}
+                  <Line
+                    type="monotone"
+                    dataKey="c"
+                    stroke="rgba(245,158,11,0.85)"
+                    strokeWidth={1.4}
+                    dot={false}
+                    isAnimationActive={false}
+                  />
+                  {/* Open position lines */}
+                  {positions
+                    .filter((p) => p.pair === symbol)
+                    .map((p) => (
+                      <ReferenceLine
+                        key={p.id}
+                        y={p.entry}
+                        stroke={p.side === "BUY" ? "#10b981" : "#f43f5e"}
+                        strokeDasharray="4 3"
+                        strokeWidth={1}
+                      />
+                    ))}
+                  <ReferenceLine
+                    y={mid}
+                    stroke="rgba(59,130,246,0.65)"
+                    strokeDasharray="2 3"
+                    strokeWidth={1}
+                  />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+          </motion.div>
+
+          {/* Order ticket */}
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.05 }}
+            className="rounded-2xl border border-white/8 bg-gradient-to-b from-[#0a0f1a] to-[#06090f] p-4 flex flex-col gap-3 h-fit"
+          >
+            <div className="flex items-center justify-between">
+              <div className="text-[10px] font-mono font-bold uppercase tracking-[0.16em] text-white/55">
+                New Order
+              </div>
+              <span className="text-[9px] font-mono uppercase tracking-[0.14em] text-amber-400/70">
+                market
+              </span>
+            </div>
+
+            {/* Lot stepper */}
+            <div>
+              <div className="text-[10px] font-mono uppercase tracking-[0.14em] text-white/45 mb-1.5">
+                Lot Size
+              </div>
+              <div className="flex items-center rounded-xl bg-white/[0.03] border border-white/10 overflow-hidden">
+                <button
+                  onClick={() => setLots((l) => +Math.max(0.01, l - 0.01).toFixed(2))}
+                  className="px-3 py-2 text-white/70 hover:text-white hover:bg-white/5"
+                >
+                  <Minus style={{ width: 13, height: 13 }} />
+                </button>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  value={lots}
+                  onChange={(e) => {
+                    const v = parseFloat(e.target.value);
+                    setLots(isNaN(v) ? 0.01 : Math.max(0.01, +v.toFixed(2)));
+                  }}
+                  className="flex-1 bg-transparent outline-none text-center text-base font-bold tabular-nums py-2"
+                />
+                <button
+                  onClick={() => setLots((l) => +(l + 0.01).toFixed(2))}
+                  className="px-3 py-2 text-white/70 hover:text-white hover:bg-white/5"
+                >
+                  <Plus style={{ width: 13, height: 13 }} />
+                </button>
+              </div>
+              <div className="flex gap-1.5 mt-2">
+                {[0.01, 0.05, 0.1, 0.5, 1].map((v) => (
+                  <button
+                    key={v}
+                    onClick={() => setLots(v)}
+                    className={`flex-1 py-1 rounded-md text-[10px] font-mono tabular-nums border ${
+                      lots === v
+                        ? "border-blue-400/50 bg-blue-500/10 text-blue-300"
+                        : "border-white/8 text-white/55 hover:border-white/20"
+                    }`}
+                  >
+                    {v}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* SL / TP */}
+            <div className="grid grid-cols-2 gap-2">
+              <SlTpInput label="SL (pts)" value={slPts} onChange={setSlPts} tone="rose" />
+              <SlTpInput label="TP (pts)" value={tpPts} onChange={setTpPts} tone="emerald" />
+            </div>
+
+            {/* Buy / Sell buttons */}
+            <div className="grid grid-cols-2 gap-2 mt-1">
+              <button
+                onClick={() => placeOrder("SELL")}
+                className="relative py-3 rounded-xl border border-rose-400/40 overflow-hidden group"
+                style={{
+                  background: "linear-gradient(180deg, rgba(244,63,94,0.22), rgba(244,63,94,0.08))",
+                  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.06), 0 0 22px -8px rgba(244,63,94,0.55)",
+                }}
+              >
+                <div className="text-[10px] font-mono font-bold uppercase tracking-[0.18em] text-rose-300/85">
+                  Sell
+                </div>
+                <div className="text-base font-bold tabular-nums text-rose-200 mt-0.5">
+                  {fmtPrice(bid, pair.digits)}
+                </div>
+                <ArrowDown
+                  style={{ width: 14, height: 14 }}
+                  className="absolute top-2 right-2 text-rose-400/70"
+                />
+              </button>
+              <button
+                onClick={() => placeOrder("BUY")}
+                className="relative py-3 rounded-xl border border-emerald-400/40 overflow-hidden"
+                style={{
+                  background: "linear-gradient(180deg, rgba(16,185,129,0.22), rgba(16,185,129,0.08))",
+                  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.06), 0 0 22px -8px rgba(16,185,129,0.55)",
+                }}
+              >
+                <div className="text-[10px] font-mono font-bold uppercase tracking-[0.18em] text-emerald-300/85">
+                  Buy
+                </div>
+                <div className="text-base font-bold tabular-nums text-emerald-200 mt-0.5">
+                  {fmtPrice(ask, pair.digits)}
+                </div>
+                <ArrowUp
+                  style={{ width: 14, height: 14 }}
+                  className="absolute top-2 right-2 text-emerald-400/70"
+                />
+              </button>
+            </div>
+
+            {/* Account snapshot */}
+            <div className="mt-2 pt-3 border-t border-white/8 grid grid-cols-2 gap-3 text-[11px]">
+              <Snap label="Balance" value={fmtMoney(balance)} icon={WalletIcon} />
+              <Snap
+                label="Open P&L"
+                value={fmtMoney(openPnL)}
+                tone={openPnL >= 0 ? "emerald" : "rose"}
+                icon={openPnL >= 0 ? TrendingUp : TrendingDown}
+              />
+              <Snap label="Used Margin" value={fmtMoney(usedMargin)} />
+              <Snap
+                label="Margin Lvl"
+                value={`${marginLevel ? marginLevel.toFixed(0) : "—"}%`}
+                tone={marginLevel > 0 && marginLevel < 200 ? "amber" : undefined}
+                icon={ShieldAlert}
+              />
+            </div>
+          </motion.div>
+        </div>
+
+        {/* ── Open Positions ───────────────────────────────────────── */}
+        <div className="px-3 sm:px-5 pb-4">
+          <PositionTable
+            title="Open Positions"
+            empty="No open positions. Place a Buy or Sell to start."
+            rows={positions.map((p) => {
+              const px = p.side === "BUY" ? bid : ask;
+              const live = pnl(p, px);
+              return (
+                <tr key={p.id} className="border-b border-white/5 hover:bg-white/[0.02]">
+                  <td className="px-3 py-2 font-mono text-xs text-white/80">{p.pair}</td>
+                  <td className="px-3 py-2">
+                    <span
+                      className={`px-1.5 py-0.5 rounded-md text-[9.5px] font-mono font-bold uppercase tracking-[0.12em] border ${
+                        p.side === "BUY"
+                          ? "text-emerald-300 border-emerald-400/40 bg-emerald-500/10"
+                          : "text-rose-300 border-rose-400/40 bg-rose-500/10"
+                      }`}
+                    >
+                      {p.side}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2 text-xs tabular-nums text-white/70">{p.lots.toFixed(2)}</td>
+                  <td className="px-3 py-2 text-xs tabular-nums text-white/70">
+                    {fmtPrice(p.entry, PAIRS.find((x) => x.symbol === p.pair)?.digits ?? 2)}
+                  </td>
+                  <td className="px-3 py-2 text-xs tabular-nums text-white/70">
+                    {fmtPrice(px, PAIRS.find((x) => x.symbol === p.pair)?.digits ?? 2)}
+                  </td>
+                  <td className="px-3 py-2 text-xs tabular-nums text-white/55">
+                    {p.sl ? fmtPrice(p.sl, PAIRS.find((x) => x.symbol === p.pair)?.digits ?? 2) : "—"}
+                  </td>
+                  <td className="px-3 py-2 text-xs tabular-nums text-white/55">
+                    {p.tp ? fmtPrice(p.tp, PAIRS.find((x) => x.symbol === p.pair)?.digits ?? 2) : "—"}
+                  </td>
+                  <td
+                    className={`px-3 py-2 text-xs font-bold tabular-nums ${
+                      live >= 0 ? "text-emerald-400" : "text-rose-400"
+                    }`}
+                  >
+                    {fmtMoney(live)}
+                  </td>
+                  <td className="px-3 py-2 text-right">
+                    <button
+                      onClick={() => closePosition(p.id)}
+                      className="px-2 py-1 rounded-md text-[10px] font-mono uppercase tracking-[0.12em] border border-white/10 text-white/70 hover:text-white hover:border-white/30 inline-flex items-center gap-1"
+                    >
+                      <X style={{ width: 11, height: 11 }} /> close
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+          />
+        </div>
+
+        {/* ── Closed History ───────────────────────────────────────── */}
+        {closed.length > 0 && (
+          <div className="px-3 sm:px-5 pb-8">
+            <PositionTable
+              title="Recent Closed"
+              empty=""
+              compact
+              rows={closed.map((c) => (
+                <tr key={c.id} className="border-b border-white/5">
+                  <td className="px-3 py-2 font-mono text-xs text-white/80">{c.pair}</td>
+                  <td className="px-3 py-2">
+                    <span
+                      className={`px-1.5 py-0.5 rounded-md text-[9.5px] font-mono font-bold uppercase tracking-[0.12em] border ${
+                        c.side === "BUY"
+                          ? "text-emerald-300 border-emerald-400/40 bg-emerald-500/10"
+                          : "text-rose-300 border-rose-400/40 bg-rose-500/10"
+                      }`}
+                    >
+                      {c.side}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2 text-xs tabular-nums text-white/70">{c.lots.toFixed(2)}</td>
+                  <td className="px-3 py-2 text-xs tabular-nums text-white/55">
+                    {fmtPrice(c.entry, PAIRS.find((x) => x.symbol === c.pair)?.digits ?? 2)}
+                  </td>
+                  <td className="px-3 py-2 text-xs tabular-nums text-white/70">
+                    {fmtPrice(c.exit, PAIRS.find((x) => x.symbol === c.pair)?.digits ?? 2)}
+                  </td>
+                  <td
+                    className={`px-3 py-2 text-xs font-bold tabular-nums ${
+                      c.pnl >= 0 ? "text-emerald-400" : "text-rose-400"
+                    }`}
+                  >
+                    {fmtMoney(c.pnl)}
+                  </td>
+                  <td className="px-3 py-2 text-[10px] font-mono uppercase tracking-[0.12em] text-white/40">
+                    {c.reason}
+                  </td>
+                </tr>
+              ))}
+            />
+          </div>
+        )}
+      </div>
+    </Layout>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Sub-components
+// ─────────────────────────────────────────────────────────────────────
+function PairPicker({
+  symbol,
+  onChange,
+}: {
+  symbol: string;
+  onChange: (s: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="relative shrink-0">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="flex items-center gap-2 px-3 py-2 rounded-xl border border-white/10 bg-white/[0.03] hover:bg-white/[0.06]"
+      >
+        <span className="text-sm font-bold tracking-tight">{symbol}</span>
+        <ChevronDown style={{ width: 13, height: 13 }} className="text-white/55" />
+      </button>
+      <AnimatePresence>
+        {open && (
+          <>
+            <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
+            <motion.div
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              className="absolute z-40 top-full mt-1 left-0 min-w-[180px] rounded-xl border border-white/10 bg-[#0a0f1a] shadow-2xl overflow-hidden"
+            >
+              {PAIRS.map((p) => (
+                <button
+                  key={p.symbol}
+                  onClick={() => {
+                    onChange(p.symbol);
+                    setOpen(false);
+                  }}
+                  className={`w-full flex items-center justify-between px-3 py-2 text-left hover:bg-white/5 ${
+                    p.symbol === symbol ? "bg-blue-500/10" : ""
+                  }`}
+                >
+                  <span className="text-sm font-bold">{p.symbol}</span>
+                  <span className="text-[10px] font-mono text-white/45">
+                    {fmtPrice(p.base, p.digits)}
+                  </span>
+                </button>
+              ))}
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+function SlTpInput({
+  label,
+  value,
+  onChange,
+  tone,
+}: {
+  label: string;
+  value: number;
+  onChange: (v: number) => void;
+  tone: "rose" | "emerald";
+}) {
+  const color =
+    tone === "rose"
+      ? "text-rose-300/80 border-rose-400/30 focus-within:border-rose-400/60"
+      : "text-emerald-300/80 border-emerald-400/30 focus-within:border-emerald-400/60";
+  return (
+    <div>
+      <div className={`text-[10px] font-mono uppercase tracking-[0.14em] mb-1.5 ${color.split(" ")[0]}`}>
+        {label}
+      </div>
+      <input
+        type="number"
+        min={0}
+        step={1}
+        value={value}
+        onChange={(e) => onChange(Math.max(0, Math.floor(+e.target.value || 0)))}
+        placeholder="0"
+        className={`w-full rounded-xl bg-white/[0.03] border outline-none px-3 py-2 text-sm font-mono tabular-nums ${color}`}
+      />
+    </div>
+  );
+}
+
+function Snap({
+  label,
+  value,
+  tone,
+  icon: Icon,
+}: {
+  label: string;
+  value: string;
+  tone?: "emerald" | "rose" | "amber";
+  icon?: any;
+}) {
+  const c =
+    tone === "emerald"
+      ? "text-emerald-400"
+      : tone === "rose"
+      ? "text-rose-400"
+      : tone === "amber"
+      ? "text-amber-400"
+      : "text-white/85";
+  return (
+    <div className="flex items-center gap-2">
+      {Icon && <Icon style={{ width: 12, height: 12 }} className="text-white/40" />}
+      <div className="min-w-0">
+        <div className="text-[9px] font-mono uppercase tracking-[0.14em] text-white/45 leading-tight">
+          {label}
+        </div>
+        <div className={`text-xs font-bold tabular-nums ${c}`}>{value}</div>
+      </div>
+    </div>
+  );
+}
+
+function PositionTable({
+  title,
+  rows,
+  empty,
+  compact = false,
+}: {
+  title: string;
+  rows: any[];
+  empty: string;
+  compact?: boolean;
+}) {
+  return (
+    <div className="rounded-2xl border border-white/8 bg-gradient-to-b from-[#0a0f1a] to-[#06090f] overflow-hidden">
+      <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/5">
+        <span className="text-[10px] font-mono font-bold uppercase tracking-[0.16em] text-white/55">
+          {title}
+        </span>
+        <span className="text-[10px] font-mono text-white/40">{rows.length} row{rows.length === 1 ? "" : "s"}</span>
+      </div>
+      {rows.length === 0 ? (
+        <div className="p-8 text-center text-xs text-white/40">{empty}</div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-left">
+            <thead>
+              <tr className="bg-white/[0.02] text-[9.5px] font-mono uppercase tracking-[0.14em] text-white/45">
+                <th className="px-3 py-2">Symbol</th>
+                <th className="px-3 py-2">Side</th>
+                <th className="px-3 py-2">Lots</th>
+                <th className="px-3 py-2">Entry</th>
+                <th className="px-3 py-2">{compact ? "Exit" : "Live"}</th>
+                {!compact && <th className="px-3 py-2">SL</th>}
+                {!compact && <th className="px-3 py-2">TP</th>}
+                <th className="px-3 py-2">P&L</th>
+                {!compact ? <th className="px-3 py-2 text-right">Action</th> : <th className="px-3 py-2">Reason</th>}
+              </tr>
+            </thead>
+            <tbody>{rows}</tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
