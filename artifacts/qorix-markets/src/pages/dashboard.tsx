@@ -2106,9 +2106,15 @@ export function DemoDashboardBody({
               </div>
               <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground gap-2">
                 <span>Today's gain</span>
-                <span className={`font-semibold tabular-nums shrink-0 ${isPositive ? "profit-text" : "loss-text"}`}>
-                  {isPositive ? "+" : ""}<AnimatedCounter value={Math.abs(dailyPL)} prefix="$" /> ({isPositive ? "+" : ""}{livePct.toFixed(2)}%)
-                </span>
+                {(() => {
+                  const scalpPos = scalpBotPnl >= 0;
+                  const scalpPct = totalEquityValue > 0 ? (scalpBotPnl / totalEquityValue) * 100 : 0;
+                  return (
+                    <span className={`font-semibold tabular-nums shrink-0 ${scalpPos ? "profit-text" : "loss-text"}`}>
+                      {scalpPos ? "+" : "−"}<AnimatedCounter value={Math.abs(scalpBotPnl)} prefix="$" /> ({scalpPos ? "+" : ""}{scalpPct.toFixed(2)}%)
+                    </span>
+                  );
+                })()}
               </div>
             </div>
           </motion.div>
