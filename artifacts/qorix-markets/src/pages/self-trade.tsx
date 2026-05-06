@@ -17,6 +17,7 @@ import {
   ResponsiveContainer,
   ComposedChart,
   Line,
+  Area,
   Bar,
   XAxis,
   YAxis,
@@ -268,6 +269,28 @@ export default function SelfTradePage() {
     [history],
   );
 
+  // Tight Y domain so candles render at proper scale (auto domain breaks because
+  // stacked Bar baselines push range to 0).
+  const yDomain = useMemo<[number, number]>(() => {
+    if (history.length === 0) return [pair.base * 0.999, pair.base * 1.001];
+    let lo = Infinity;
+    let hi = -Infinity;
+    for (const c of history) {
+      if (c.l < lo) lo = c.l;
+      if (c.h > hi) hi = c.h;
+    }
+    // include open positions + mid so reference lines stay in view
+    for (const p of positions.filter((p) => p.pair === symbol)) {
+      lo = Math.min(lo, p.entry);
+      hi = Math.max(hi, p.entry);
+    }
+    lo = Math.min(lo, mid);
+    hi = Math.max(hi, mid);
+    const span = Math.max(hi - lo, pair.pip * 20);
+    const pad = span * 0.18;
+    return [+(lo - pad).toFixed(pair.digits), +(hi + pad).toFixed(pair.digits)];
+  }, [history, positions, symbol, mid, pair]);
+
   return (
     <Layout>
       <div className="min-h-screen bg-[#05070d] text-white">
@@ -355,8 +378,14 @@ export default function SelfTradePage() {
             </div>
             <div className="h-[360px] sm:h-[440px] p-2">
               <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={chartData} margin={{ top: 10, right: 18, left: 0, bottom: 6 }}>
-                  <CartesianGrid stroke="rgba(255,255,255,0.04)" strokeDasharray="3 3" vertical={false} />
+                <ComposedChart data={chartData} margin={{ top: 10, right: 60, left: 0, bottom: 6 }}>
+                  <defs>
+                    <linearGradient id="stPriceFill" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="rgba(245,158,11,0.22)" />
+                      <stop offset="100%" stopColor="rgba(245,158,11,0)" />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid stroke="rgba(255,255,255,0.05)" strokeDasharray="2 4" vertical={false} />
                   <XAxis
                     dataKey="t"
                     tick={{ fill: "#475569", fontSize: 9 }}
@@ -365,15 +394,17 @@ export default function SelfTradePage() {
                     interval={Math.max(0, Math.floor(chartData.length / 8))}
                   />
                   <YAxis
-                    tick={{ fill: "#475569", fontSize: 9 }}
+                    tick={{ fill: "#64748b", fontSize: 9 }}
                     axisLine={false}
                     tickLine={false}
-                    domain={["auto", "auto"]}
+                    domain={yDomain}
+                    allowDataOverflow
                     tickFormatter={(v) => fmtPrice(Number(v), pair.digits)}
-                    width={70}
+                    width={60}
                     orientation="right"
                   />
                   <Tooltip
+                    cursor={{ stroke: "rgba(148,163,184,0.25)", strokeDasharray: "2 3" }}
                     contentStyle={{
                       background: "rgba(8,12,22,0.96)",
                       border: "1px solid rgba(255,255,255,0.1)",
@@ -382,30 +413,72 @@ export default function SelfTradePage() {
                     }}
                     labelStyle={{ color: "#94a3b8" }}
                     formatter={(v: any, k: string) => {
-                      if (k === "wickHigh" || k === "wickLow" || k === "bodyHigh" || k === "bodyLow") return null as any;
+                      if (
+                        k === "wickHigh" ||
+                        k === "wickLow" ||
+                        k === "bodyLow" ||
+                        k === "bodyHigh" ||
+                        k === "up"
+                      )
+                        return null as any;
                       return [fmtPrice(Number(v), pair.digits), k.toUpperCase()];
                     }}
                   />
-                  {/* Wicks (thin line) */}
-                  <Bar dataKey="wickLow" fill="transparent" stackId="wick" isAnimationActive={false} />
-                  <Bar
-                    dataKey={(d: any) => d.wickHigh - d.wickLow}
-                    fill="rgba(148,163,184,0.55)"
-                    stackId="wick"
-                    barSize={1}
+                  {/* Soft area under close for depth */}
+                  <Area
+                    type="monotone"
+                    dataKey="c"
+                    stroke="transparent"
+                    fill="url(#stPriceFill)"
                     isAnimationActive={false}
                   />
-                  {/* Bodies (thick) */}
-                  <Bar dataKey="bodyLow" fill="transparent" stackId="body" isAnimationActive={false} />
+                  {/* Wicks (thin line) */}
                   <Bar
-                    dataKey={(d: any) => Math.max(d.bodyHigh - d.bodyLow, pair.pip * 0.5)}
-                    stackId="body"
-                    barSize={6}
+                    dataKey="wickLow"
+                    fill="transparent"
+                    stackId="wick"
                     isAnimationActive={false}
+                    legendType="none"
+                  />
+                  <Bar
+                    dataKey={(d: any) => d.wickHigh - d.wickLow}
+                    stackId="wick"
+                    barSize={1.4}
+                    isAnimationActive={false}
+                    legendType="none"
                     shape={(props: any) => {
                       const fill = props?.payload?.up
-                        ? "rgba(16,185,129,0.95)"
-                        : "rgba(244,63,94,0.95)";
+                        ? "rgba(16,185,129,0.85)"
+                        : "rgba(244,63,94,0.85)";
+                      return (
+                        <rect
+                          x={props.x + props.width / 2 - 0.7}
+                          y={props.y}
+                          width={1.4}
+                          height={Math.max(props.height, 1)}
+                          fill={fill}
+                        />
+                      );
+                    }}
+                  />
+                  {/* Bodies (thick) */}
+                  <Bar
+                    dataKey="bodyLow"
+                    fill="transparent"
+                    stackId="body"
+                    isAnimationActive={false}
+                    legendType="none"
+                  />
+                  <Bar
+                    dataKey={(d: any) => Math.max(d.bodyHigh - d.bodyLow, pair.pip * 0.6)}
+                    stackId="body"
+                    barSize={7}
+                    isAnimationActive={false}
+                    legendType="none"
+                    shape={(props: any) => {
+                      const up = !!props?.payload?.up;
+                      const fill = up ? "rgba(16,185,129,0.95)" : "rgba(244,63,94,0.95)";
+                      const stroke = up ? "rgba(52,211,153,1)" : "rgba(251,113,133,1)";
                       return (
                         <rect
                           x={props.x}
@@ -413,17 +486,19 @@ export default function SelfTradePage() {
                           width={props.width}
                           height={Math.max(props.height, 1)}
                           fill={fill}
+                          stroke={stroke}
+                          strokeWidth={0.6}
                           rx={1}
                         />
                       );
                     }}
                   />
-                  {/* Smooth EMA-ish overlay */}
+                  {/* Smooth close overlay */}
                   <Line
                     type="monotone"
                     dataKey="c"
-                    stroke="rgba(245,158,11,0.85)"
-                    strokeWidth={1.4}
+                    stroke="rgba(245,158,11,0.9)"
+                    strokeWidth={1.3}
                     dot={false}
                     isAnimationActive={false}
                   />
@@ -437,13 +512,28 @@ export default function SelfTradePage() {
                         stroke={p.side === "BUY" ? "#10b981" : "#f43f5e"}
                         strokeDasharray="4 3"
                         strokeWidth={1}
+                        label={{
+                          value: `${p.side} ${p.lots}`,
+                          position: "left",
+                          fill: p.side === "BUY" ? "#34d399" : "#fb7185",
+                          fontSize: 9,
+                          fontFamily: "monospace",
+                        }}
                       />
                     ))}
+                  {/* Mid price line with label */}
                   <ReferenceLine
                     y={mid}
-                    stroke="rgba(59,130,246,0.65)"
+                    stroke="rgba(59,130,246,0.7)"
                     strokeDasharray="2 3"
                     strokeWidth={1}
+                    label={{
+                      value: fmtPrice(mid, pair.digits),
+                      position: "right",
+                      fill: "#60a5fa",
+                      fontSize: 10,
+                      fontFamily: "monospace",
+                    }}
                   />
                 </ComposedChart>
               </ResponsiveContainer>
