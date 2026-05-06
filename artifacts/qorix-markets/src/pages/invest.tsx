@@ -175,83 +175,6 @@ const RISK_DEFAULT_DRAWDOWN: Record<string, number> = {
   high: 10,
 };
 
-function BotActivityTicker({ codename }: { codename: string }) {
-  const PAIRS = ["EUR/USD", "GBP/USD", "USD/JPY", "AUD/USD", "USD/CHF", "EUR/JPY", "GBP/JPY", "XAU/USD"];
-  const ACTIONS = ["BUY", "SELL", "SCALE", "CLOSE", "HEDGE"];
-  const lines = useMemo(() => {
-    const out: { t: string; action: string; pair: string; pct: string; ok: boolean }[] = [];
-    const now = new Date();
-    for (let i = 0; i < 6; i++) {
-      const d = new Date(now.getTime() - i * (60_000 + ((i * 7919) % 90_000)));
-      const hh = d.getUTCHours().toString().padStart(2, "0");
-      const mm = d.getUTCMinutes().toString().padStart(2, "0");
-      const ss = d.getUTCSeconds().toString().padStart(2, "0");
-      const action = ACTIONS[(i * 3) % ACTIONS.length]!;
-      const pair = PAIRS[(i * 5) % PAIRS.length]!;
-      const ok = (i * 7) % 5 !== 0;
-      const pct = ((((i * 13) % 38) + 4) / 100).toFixed(2);
-      out.push({ t: `${hh}:${mm}:${ss}`, action, pair, pct: `${ok ? "+" : "-"}${pct}%`, ok });
-    }
-    return out;
-  }, [codename]);
-
-  return (
-    <div
-      className="rounded-xl border border-white/8 px-3 py-2 mb-5 overflow-hidden"
-      style={{
-        background:
-          "linear-gradient(180deg, rgba(0,0,0,0.4), rgba(255,255,255,0.01))",
-      }}
-    >
-      <div className="flex items-center gap-2 mb-1.5">
-        <Terminal style={{ width: 11, height: 11 }} className="text-emerald-300/80" />
-        <span className="text-[9px] font-mono font-bold uppercase tracking-[0.18em] text-white/50">
-          {codename} · live tape
-        </span>
-        <span className="ml-auto flex items-center gap-1">
-          <span className="relative flex w-1.5 h-1.5">
-            <span className="absolute inset-0 rounded-full bg-emerald-400 animate-ping opacity-60" />
-            <span className="relative w-1.5 h-1.5 rounded-full bg-emerald-400" />
-          </span>
-        </span>
-      </div>
-      <div className="space-y-0.5 font-mono text-[10.5px] leading-snug">
-        {lines.slice(0, 4).map((l, i) => (
-          <motion.div
-            key={`${l.t}-${i}`}
-            initial={{ opacity: 0, x: -6 }}
-            animate={{ opacity: 1 - i * 0.18, x: 0 }}
-            transition={{ delay: i * 0.06 }}
-            className="flex items-center gap-2 truncate"
-          >
-            <span className="text-white/35 tabular-nums">{l.t}</span>
-            <span
-              className={`px-1 rounded font-bold ${
-                l.action === "BUY"
-                  ? "text-emerald-300 bg-emerald-500/10"
-                  : l.action === "SELL"
-                  ? "text-rose-300 bg-rose-500/10"
-                  : "text-blue-300 bg-blue-500/10"
-              }`}
-            >
-              {l.action}
-            </span>
-            <span className="text-white/75">{l.pair}</span>
-            <span className="ml-auto text-white/40">→</span>
-            <span
-              className={`tabular-nums font-semibold ${
-                l.ok ? "text-emerald-300" : "text-rose-300"
-              }`}
-            >
-              {l.pct}
-            </span>
-          </motion.div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 function RiskMeter({ score }: { score: number }) {
   return (
     <div className="flex items-center gap-1.5">
@@ -1471,10 +1394,6 @@ export default function InvestPage() {
                     </div>
                   ))}
                 </div>
-
-                {/* ── Live activity terminal ─────────────────────── */}
-                <BotActivityTicker codename={meta.codename} />
-
 
 
                 {/* Risk Meter */}
