@@ -1,58 +1,84 @@
-import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowDown,
   ArrowUp,
+  ChevronDown,
+  Activity,
   Minus,
   Plus,
   X,
+  TrendingUp,
+  TrendingDown,
   Wallet as WalletIcon,
   ShieldAlert,
-  Activity,
 } from "lucide-react";
 import {
-  createChart,
-  CrosshairMode,
-  CandlestickSeries,
-  type IChartApi,
-  type ISeriesApi,
-  type CandlestickData,
-  type UTCTimestamp,
-} from "lightweight-charts";
+  ResponsiveContainer,
+  ComposedChart,
+  Line,
+  Area,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  ReferenceLine,
+  Tooltip,
+} from "recharts";
 import { Layout } from "@/components/layout";
 
 // ─────────────────────────────────────────────────────────────────────
-// Live market catalog — Binance public REST + WebSocket (no API key)
+// Pair catalog — purely visual demo prices
 // ─────────────────────────────────────────────────────────────────────
 type Pair = {
-  symbol: string;       // display: "BTC/USDT"
-  binance: string;      // "BTCUSDT"
-  digits: number;       // price decimals
-  step: number;         // min price tick
-  contract: number;     // 1 unit = 1 coin
-  minLots: number;
-  lotStep: number;
-  defLots: number;
+  symbol: string;
+  base: number;
+  digits: number;
+  pip: number;
+  spread: number;
+  vol: number;
+  contract: number;
+  binance?: string; // when present, live price comes from Binance WS/REST
 };
-
 const PAIRS: Pair[] = [
-  { symbol: "BTC/USDT",  binance: "BTCUSDT",  digits: 2, step: 0.01, contract: 1, minLots: 0.001, lotStep: 0.001, defLots: 0.01 },
-  { symbol: "ETH/USDT",  binance: "ETHUSDT",  digits: 2, step: 0.01, contract: 1, minLots: 0.01,  lotStep: 0.01,  defLots: 0.1  },
-  { symbol: "BNB/USDT",  binance: "BNBUSDT",  digits: 2, step: 0.01, contract: 1, minLots: 0.01,  lotStep: 0.01,  defLots: 0.5  },
-  { symbol: "SOL/USDT",  binance: "SOLUSDT",  digits: 2, step: 0.01, contract: 1, minLots: 0.1,   lotStep: 0.1,   defLots: 1    },
-  { symbol: "XRP/USDT",  binance: "XRPUSDT",  digits: 4, step: 0.0001, contract: 1, minLots: 1,   lotStep: 1,     defLots: 10   },
-  { symbol: "DOGE/USDT", binance: "DOGEUSDT", digits: 5, step: 0.00001, contract: 1, minLots: 10, lotStep: 10,    defLots: 100  },
+  { symbol: "XAU/USD",  base: 4683.74, digits: 2, pip: 0.01, spread: 0.25, vol: 0.0008, contract: 100,    binance: "PAXGUSDT" },
+  { symbol: "EUR/USD",  base: 1.0892,  digits: 5, pip: 0.0001, spread: 0.00012, vol: 0.00025, contract: 100000, binance: "EURUSDT" },
+  { symbol: "GBP/USD",  base: 1.2734,  digits: 5, pip: 0.0001, spread: 0.00018, vol: 0.0003, contract: 100000 },
+  { symbol: "USD/JPY",  base: 156.42,  digits: 3, pip: 0.01, spread: 0.018, vol: 0.04, contract: 100000 },
+  { symbol: "BTC/USD",  base: 71240.5, digits: 1, pip: 0.1,  spread: 8.5, vol: 0.0012, contract: 1,        binance: "BTCUSDT" },
+  { symbol: "ETH/USD",  base: 3458.2,  digits: 2, pip: 0.01, spread: 0.6, vol: 0.0014, contract: 1,        binance: "ETHUSDT" },
 ];
 
-type TF = "1m" | "5m" | "15m" | "30m" | "1h" | "4h" | "1d";
-const TF_LIST: TF[] = ["1m", "5m", "15m", "30m", "1h", "4h", "1d"];
-const TF_SECONDS: Record<TF, number> = {
-  "1m": 60, "5m": 300, "15m": 900, "30m": 1800, "1h": 3600, "4h": 14400, "1d": 86400,
-};
+// Seeded PRNG for stable candle history
+function rng(seed: number) {
+  let s = seed >>> 0;
+  return () => {
+    s = (s * 1664525 + 1013904223) >>> 0;
+    return s / 0xffffffff;
+  };
+}
 
-// ─────────────────────────────────────────────────────────────────────
-// Types
-// ─────────────────────────────────────────────────────────────────────
+type Candle = { t: number; o: number; h: number; l: number; c: number; v: number };
+
+function buildHistory(pair: Pair, count: number): Candle[] {
+  const r = rng(Math.floor(pair.base * 1000));
+  const out: Candle[] = [];
+  let price = pair.base * (1 - pair.vol * 8);
+  const now = Date.now();
+  for (let i = count - 1; i >= 0; i--) {
+    const t = now - i * 5000;
+    const drift = (r() - 0.48) * pair.base * pair.vol;
+    const o = price;
+    const c = +(o + drift).toFixed(pair.digits);
+    const h = +Math.max(o, c, o + Math.abs(drift) * (0.4 + r() * 0.8)).toFixed(pair.digits);
+    const l = +Math.min(o, c, o - Math.abs(drift) * (0.4 + r() * 0.8)).toFixed(pair.digits);
+    const v = Math.round(40 + r() * 160);
+    out.push({ t, o, h, l, c, v });
+    price = c;
+  }
+  return out;
+}
+
 type Position = {
   id: string;
   pair: string;
@@ -64,281 +90,198 @@ type Position = {
   openedAt: number;
   contract: number;
 };
-type ClosedPosition = Position & { closedAt: number; exit: number; pnl: number; reason: "manual" | "sl" | "tp" };
+type ClosedPosition = Position & {
+  closedAt: number;
+  exit: number;
+  pnl: number;
+  reason: "manual" | "sl" | "tp";
+};
 
-const fmtMoney = (n: number) =>
-  `${n < 0 ? "-" : ""}$${Math.abs(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
-const fmtPx = (n: number, d: number) =>
-  n.toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d });
+function fmtPrice(v: number, digits: number) {
+  return v.toLocaleString("en-US", {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  });
+}
+function fmtMoney(v: number) {
+  return `${v < 0 ? "−" : ""}$${Math.abs(v).toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+function pnl(p: Position, mid: number) {
+  const dir = p.side === "BUY" ? 1 : -1;
+  return +(((mid - p.entry) * dir) * p.lots * p.contract).toFixed(2);
+}
 
 // ─────────────────────────────────────────────────────────────────────
 // Page
 // ─────────────────────────────────────────────────────────────────────
 export default function SelfTradePage() {
-  const [pair, setPair] = useState<Pair>(PAIRS[0]);
-  const [tf, setTf] = useState<TF>("1m");
-  const [pairOpen, setPairOpen] = useState(false);
+  const [symbol, setSymbol] = useState<string>("XAU/USD");
+  const pair = useMemo(() => PAIRS.find((p) => p.symbol === symbol)!, [symbol]);
 
-  // Live data
-  const [candles, setCandles] = useState<CandlestickData[]>([]);
-  const [livePx, setLivePx] = useState<number>(0);
-  const [stats, setStats] = useState<{ o: number; h: number; l: number; c: number; chg: number; chgPct: number }>({
-    o: 0, h: 0, l: 0, c: 0, chg: 0, chgPct: 0,
-  });
-  const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState<string | null>(null);
+  const [history, setHistory] = useState<Candle[]>(() => buildHistory(pair, 80));
+  const [tick, setTick] = useState(0);
+  const [isLive, setIsLive] = useState(false);
 
-  const wsRef = useRef<WebSocket | null>(null);
-  const chartRef = useRef<IChartApi | null>(null);
-  const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
-  const containerRef = useRef<HTMLDivElement | null>(null);
-
-  // ── Fetch initial candles + open WS ──
+  // when pair changes, rebuild history (synthetic seed; replaced by live below if available)
   useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setErr(null);
+    setHistory(buildHistory(pair, 80));
+    setIsLive(false);
+  }, [pair]);
 
-    fetch(`https://api.binance.com/api/v3/klines?symbol=${pair.binance}&interval=${tf}&limit=500`)
-      .then((r) => {
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        return r.json();
-      })
+  // ── LIVE feed via Binance (when pair has .binance) ──
+  useEffect(() => {
+    if (!pair.binance) return;
+    let cancelled = false;
+    const sym = pair.binance;
+
+    // initial 80 × 1m klines
+    fetch(`https://api.binance.com/api/v3/klines?symbol=${sym}&interval=1m&limit=80`)
+      .then((r) => r.ok ? r.json() : Promise.reject(r.status))
       .then((rows: any[]) => {
         if (cancelled) return;
-        const cs: CandlestickData[] = rows.map((k) => ({
-          time: Math.floor(k[0] / 1000) as UTCTimestamp,
-          open: parseFloat(k[1]),
-          high: parseFloat(k[2]),
-          low: parseFloat(k[3]),
-          close: parseFloat(k[4]),
+        const cs: Candle[] = rows.map((k) => ({
+          t: k[0],
+          o: +(+k[1]).toFixed(pair.digits),
+          h: +(+k[2]).toFixed(pair.digits),
+          l: +(+k[3]).toFixed(pair.digits),
+          c: +(+k[4]).toFixed(pair.digits),
+          v: Math.round(+k[5]),
         }));
-        setCandles(cs);
-        const last = cs[cs.length - 1];
-        const first = cs[0];
-        if (last && first) {
-          const chg = last.close - first.open;
-          setStats({
-            o: first.open,
-            h: Math.max(...cs.map((c) => c.high)),
-            l: Math.min(...cs.map((c) => c.low)),
-            c: last.close,
-            chg,
-            chgPct: (chg / first.open) * 100,
-          });
-          setLivePx(last.close);
-        }
-        setLoading(false);
+        if (cs.length) setHistory(cs);
+        setIsLive(true);
       })
-      .catch((e) => {
-        if (!cancelled) {
-          setErr(e?.message || "Failed to load market data");
-          setLoading(false);
-        }
-      });
+      .catch(() => { /* keep synthetic seed */ });
 
-    // WebSocket live kline
+    // websocket live kline stream
+    let ws: WebSocket | null = null;
     try {
-      const ws = new WebSocket(
-        `wss://stream.binance.com:9443/ws/${pair.binance.toLowerCase()}@kline_${tf}`
-      );
-      wsRef.current = ws;
+      ws = new WebSocket(`wss://stream.binance.com:9443/ws/${sym.toLowerCase()}@kline_1m`);
       ws.onmessage = (ev) => {
         try {
-          const msg = JSON.parse(ev.data);
-          const k = msg?.k;
+          const k = JSON.parse(ev.data)?.k;
           if (!k) return;
-          const c: CandlestickData = {
-            time: Math.floor(k.t / 1000) as UTCTimestamp,
-            open: parseFloat(k.o),
-            high: parseFloat(k.h),
-            low: parseFloat(k.l),
-            close: parseFloat(k.c),
+          const next: Candle = {
+            t: k.t,
+            o: +(+k.o).toFixed(pair.digits),
+            h: +(+k.h).toFixed(pair.digits),
+            l: +(+k.l).toFixed(pair.digits),
+            c: +(+k.c).toFixed(pair.digits),
+            v: Math.round(+k.v),
           };
-          setLivePx(c.close);
-          if (seriesRef.current) {
-            seriesRef.current.update(c);
-          }
-          setCandles((prev) => {
-            if (!prev.length) return [c];
-            const last = prev[prev.length - 1];
-            if ((last.time as number) === (c.time as number)) {
-              const next = prev.slice();
-              next[next.length - 1] = c;
-              return next;
-            }
-            return [...prev, c];
+          setHistory((h) => {
+            if (!h.length) return [next];
+            const last = h[h.length - 1];
+            if (last.t === next.t) return [...h.slice(0, -1), next];
+            return [...h.slice(-79), next];
           });
-          setStats((s) => ({
-            ...s,
-            c: c.close,
-            h: Math.max(s.h, c.high),
-            l: s.l ? Math.min(s.l, c.low) : c.low,
-            chg: c.close - s.o,
-            chgPct: s.o > 0 ? ((c.close - s.o) / s.o) * 100 : 0,
-          }));
+          setIsLive(true);
         } catch {}
       };
-      ws.onerror = () => {};
+      ws.onerror = () => setIsLive(false);
+      ws.onclose = () => setIsLive(false);
     } catch {}
 
     return () => {
       cancelled = true;
-      try { wsRef.current?.close(); } catch {}
-      wsRef.current = null;
+      try { ws?.close(); } catch {}
     };
-  }, [pair.binance, tf]);
+  }, [pair]);
 
-  // ── Mount lightweight-chart ──
+  // live tick — for synthetic-only pairs (no Binance mapping)
   useEffect(() => {
-    if (!containerRef.current) return;
-    const el = containerRef.current;
-    const chart = createChart(el, {
-      layout: {
-        background: { color: "transparent" },
-        textColor: "rgba(255,255,255,0.65)",
-        fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
-        fontSize: 11,
-      },
-      grid: {
-        vertLines: { color: "rgba(255,255,255,0.04)" },
-        horzLines: { color: "rgba(255,255,255,0.04)" },
-      },
-      rightPriceScale: {
-        borderColor: "rgba(255,255,255,0.08)",
-        textColor: "rgba(255,255,255,0.85)",
-        scaleMargins: { top: 0.1, bottom: 0.1 },
-      },
-      timeScale: {
-        borderColor: "rgba(255,255,255,0.08)",
-        timeVisible: true,
-        secondsVisible: false,
-        rightOffset: 8,
-      },
-      crosshair: {
-        mode: CrosshairMode.Normal,
-        vertLine: { color: "rgba(99,179,237,0.45)", style: 2, labelBackgroundColor: "#1e3a5f" },
-        horzLine: { color: "rgba(99,179,237,0.45)", style: 2, labelBackgroundColor: "#1e3a5f" },
-      },
-      handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: true },
-      handleScale: { axisPressedMouseMove: true, mouseWheel: true, pinch: true },
-    });
-    const series = chart.addSeries(CandlestickSeries, {
-      upColor: "#22d3ee",
-      downColor: "#f43f5e",
-      borderUpColor: "#22d3ee",
-      borderDownColor: "#f43f5e",
-      wickUpColor: "#67e8f9",
-      wickDownColor: "#fb7185",
-      priceFormat: { type: "price", precision: pair.digits, minMove: pair.step },
-    });
-    chartRef.current = chart;
-    seriesRef.current = series;
+    if (pair.binance) return; // live feed handles it
+    const id = window.setInterval(() => setTick((t) => t + 1), 1000);
+    return () => clearInterval(id);
+  }, [pair.binance]);
 
-    const ro = new ResizeObserver(() => {
-      chart.applyOptions({ width: el.clientWidth, height: el.clientHeight });
-    });
-    ro.observe(el);
-
-    return () => {
-      ro.disconnect();
-      chart.remove();
-      chartRef.current = null;
-      seriesRef.current = null;
-    };
-  }, [pair.binance, pair.digits, pair.step]);
-
-  // ── Push candles to series whenever data is reset ──
   useEffect(() => {
-    if (seriesRef.current && candles.length) {
-      seriesRef.current.setData(candles);
-      chartRef.current?.timeScale().fitContent();
-    }
-  }, [pair.binance, tf]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (pair.binance) return; // skip synthetic walk for live pairs
+    setHistory((h) => {
+      if (h.length === 0) return h;
+      const last = h[h.length - 1];
+      const r = Math.random();
+      const drift = (r - 0.5) * pair.base * pair.vol * 0.55;
+      const newClose = +(last.c + drift).toFixed(pair.digits);
+      const newHigh = +Math.max(last.h, newClose).toFixed(pair.digits);
+      const newLow = +Math.min(last.l, newClose).toFixed(pair.digits);
+      const updated: Candle = { ...last, c: newClose, h: newHigh, l: newLow };
+      const rollNew = tick > 0 && tick % 5 === 0;
+      if (rollNew) {
+        return [
+          ...h.slice(-79),
+          updated,
+          {
+            t: Date.now(),
+            o: newClose,
+            h: newClose,
+            l: newClose,
+            c: newClose,
+            v: Math.round(40 + Math.random() * 160),
+          },
+        ].slice(-80);
+      }
+      return [...h.slice(0, -1), updated];
+    });
+  }, [tick, pair]);
+
+  const mid = history.length ? history[history.length - 1].c : pair.base;
+  const bid = +(mid - pair.spread / 2).toFixed(pair.digits);
+  const ask = +(mid + pair.spread / 2).toFixed(pair.digits);
+  const sessionOpen = history[0]?.o ?? pair.base;
+  const dayPct = sessionOpen > 0 ? ((mid - sessionOpen) / sessionOpen) * 100 : 0;
 
   // ── Order ticket state ──
-  const [lots, setLots] = useState<number>(pair.defLots);
+  const [lots, setLots] = useState(0.01);
+  // SL/TP are now PRICE strings (Exness-style). Empty = no SL/TP.
   const [slPx, setSlPx] = useState<string>("");
   const [tpPx, setTpPx] = useState<string>("");
 
+  // derived absolute distance in pts from mid (for risk calc + preview)
+  const slPts = useMemo(() => {
+    const v = parseFloat(slPx);
+    return isFinite(v) && v > 0 ? Math.round(Math.abs(v - mid) / pair.pip) : 0;
+  }, [slPx, mid, pair]);
+  const tpPts = useMemo(() => {
+    const v = parseFloat(tpPx);
+    return isFinite(v) && v > 0 ? Math.round(Math.abs(v - mid) / pair.pip) : 0;
+  }, [tpPx, mid, pair]);
+
+  // when pair changes, clear SL/TP (avoid stale price from previous pair)
   useEffect(() => {
-    setLots(pair.defLots);
     setSlPx("");
     setTpPx("");
-  }, [pair.symbol, pair.defLots]);
+  }, [pair.symbol]);
 
   // ── Account ──
-  const [balance, setBalance] = useState<number>(() => {
-    try {
-      const v = localStorage.getItem("qx-self-trade-balance");
-      return v ? +v : 10000;
-    } catch { return 10000; }
-  });
+  const [balance] = useState(10000);
   const [positions, setPositions] = useState<Position[]>([]);
   const [closed, setClosed] = useState<ClosedPosition[]>([]);
-  const [tab, setTab] = useState<"open" | "closed">("open");
 
-  useEffect(() => {
-    try { localStorage.setItem("qx-self-trade-balance", String(balance)); } catch {}
-  }, [balance]);
+  const openPnL = positions.reduce((s, p) => s + pnl(p, mid), 0);
+  const equity = +(balance + openPnL + closed.reduce((s, c) => s + c.pnl, 0)).toFixed(2);
+  const usedMargin = positions.reduce((s, p) => s + (p.entry * p.lots * p.contract) / 200, 0);
+  const freeMargin = +(equity - usedMargin).toFixed(2);
+  const marginLevel = usedMargin > 0 ? (equity / usedMargin) * 100 : 0;
 
-  // floating P&L per position
-  const pnlOf = useCallback(
-    (p: Position) => {
-      if (!livePx) return 0;
-      const dir = p.side === "BUY" ? 1 : -1;
-      return +(dir * (livePx - p.entry) * p.lots * p.contract).toFixed(2);
-    },
-    [livePx]
-  );
-
-  const openPnl = useMemo(
-    () => positions.reduce((s, p) => s + pnlOf(p), 0),
-    [positions, pnlOf]
-  );
-  const equity = +(balance + openPnl).toFixed(2);
-
-  // ── Auto-close on SL/TP hit (real price triggers) ──
-  useEffect(() => {
-    if (!livePx || positions.length === 0) return;
-    const now = Date.now();
-    const toClose: { p: Position; reason: "sl" | "tp"; exit: number }[] = [];
-    for (const p of positions) {
-      if (p.side === "BUY") {
-        if (p.sl !== null && livePx <= p.sl) toClose.push({ p, reason: "sl", exit: p.sl });
-        else if (p.tp !== null && livePx >= p.tp) toClose.push({ p, reason: "tp", exit: p.tp });
-      } else {
-        if (p.sl !== null && livePx >= p.sl) toClose.push({ p, reason: "sl", exit: p.sl });
-        else if (p.tp !== null && livePx <= p.tp) toClose.push({ p, reason: "tp", exit: p.tp });
-      }
-    }
-    if (toClose.length === 0) return;
-    setPositions((ps) => ps.filter((x) => !toClose.find((c) => c.p.id === x.id)));
-    setClosed((cs) => [
-      ...toClose.map(({ p, reason, exit }) => {
-        const dir = p.side === "BUY" ? 1 : -1;
-        const pnl = +(dir * (exit - p.entry) * p.lots * p.contract).toFixed(2);
-        return { ...p, closedAt: now, exit, pnl, reason };
-      }),
-      ...cs,
-    ]);
-    setBalance((b) =>
-      +(b + toClose.reduce((s, { p, exit }) => {
-        const dir = p.side === "BUY" ? 1 : -1;
-        return s + dir * (exit - p.entry) * p.lots * p.contract;
-      }, 0)).toFixed(2)
-    );
-  }, [livePx, positions]);
-
-  // ── Place / close orders ──
   const placeOrder = (side: "BUY" | "SELL") => {
-    if (!livePx) return;
-    const entry = livePx;
+    const entry = side === "BUY" ? ask : bid;
+    // SL/TP are typed as PRICE. Use as-is when on the correct side of entry,
+    // else mirror the distance so it lands on the valid side.
     const slRaw = parseFloat(slPx);
     const tpRaw = parseFloat(tpPx);
-    const sl = isFinite(slRaw) && slRaw > 0 ? +slRaw.toFixed(pair.digits) : null;
-    const tp = isFinite(tpRaw) && tpRaw > 0 ? +tpRaw.toFixed(pair.digits) : null;
+    const sl = isFinite(slRaw) && slRaw > 0
+      ? side === "BUY"
+        ? +(slRaw < entry ? slRaw : entry - Math.abs(slRaw - entry)).toFixed(pair.digits)
+        : +(slRaw > entry ? slRaw : entry + Math.abs(slRaw - entry)).toFixed(pair.digits)
+      : null;
+    const tp = isFinite(tpRaw) && tpRaw > 0
+      ? side === "BUY"
+        ? +(tpRaw > entry ? tpRaw : entry + Math.abs(tpRaw - entry)).toFixed(pair.digits)
+        : +(tpRaw < entry ? tpRaw : entry - Math.abs(tpRaw - entry)).toFixed(pair.digits)
+      : null;
     setPositions((ps) => [
       ...ps,
       {
@@ -356,341 +299,825 @@ export default function SelfTradePage() {
   };
 
   const closePosition = (id: string, reason: ClosedPosition["reason"] = "manual") => {
-    const p = positions.find((x) => x.id === id);
-    if (!p || !livePx) return;
-    const dir = p.side === "BUY" ? 1 : -1;
-    const pnl = +(dir * (livePx - p.entry) * p.lots * p.contract).toFixed(2);
-    setPositions((ps) => ps.filter((x) => x.id !== id));
-    setClosed((cs) => [{ ...p, closedAt: Date.now(), exit: livePx, pnl, reason }, ...cs]);
-    setBalance((b) => +(b + pnl).toFixed(2));
+    setPositions((ps) => {
+      const target = ps.find((p) => p.id === id);
+      if (!target) return ps;
+      const exit = target.side === "BUY" ? bid : ask;
+      const realized = pnl(target, exit);
+      setClosed((cs) =>
+        [{ ...target, closedAt: Date.now(), exit, pnl: realized, reason }, ...cs].slice(0, 50),
+      );
+      return ps.filter((p) => p.id !== id);
+    });
   };
 
-  const closeAll = () => positions.forEach((p) => closePosition(p.id, "manual"));
-
-  const resetBalance = () => {
-    if (positions.length > 0) return;
-    setBalance(10000);
-    setClosed([]);
+  const modifyPosition = (id: string, sl: number | null, tp: number | null) => {
+    setPositions((ps) => ps.map((p) => (p.id === id ? { ...p, sl, tp } : p)));
   };
 
-  // ── Render ──
+  const closeAll = () => {
+    positions.forEach((p) => closePosition(p.id, "manual"));
+  };
+
+  // ── Modify dialog state ──
+  const [modifyId, setModifyId] = useState<string | null>(null);
+
+  // SL/TP auto-trigger
+  useEffect(() => {
+    positions.forEach((p) => {
+      const px = p.side === "BUY" ? bid : ask;
+      if (p.sl !== null) {
+        if ((p.side === "BUY" && px <= p.sl) || (p.side === "SELL" && px >= p.sl)) {
+          closePosition(p.id, "sl");
+          return;
+        }
+      }
+      if (p.tp !== null) {
+        if ((p.side === "BUY" && px >= p.tp) || (p.side === "SELL" && px <= p.tp)) {
+          closePosition(p.id, "tp");
+        }
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bid, ask]);
+
+  // ── Chart data ──
+  const chartData = useMemo(
+    () =>
+      history.map((c, i) => ({
+        i,
+        t: new Date(c.t).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false }),
+        o: c.o,
+        h: c.h,
+        l: c.l,
+        c: c.c,
+        v: c.v,
+        // stems for candle visual
+        wickLow: c.l,
+        wickHigh: c.h,
+        bodyLow: Math.min(c.o, c.c),
+        bodyHigh: Math.max(c.o, c.c),
+        up: c.c >= c.o,
+      })),
+    [history],
+  );
+
+  // Tight Y domain so candles render at proper scale (auto domain breaks because
+  // stacked Bar baselines push range to 0).
+  const yDomain = useMemo<[number, number]>(() => {
+    if (history.length === 0) return [pair.base * 0.999, pair.base * 1.001];
+    let lo = Infinity;
+    let hi = -Infinity;
+    for (const c of history) {
+      if (c.l < lo) lo = c.l;
+      if (c.h > hi) hi = c.h;
+    }
+    // include open positions (entry/SL/TP) + ticket-preview SL/TP + mid
+    for (const p of positions.filter((p) => p.pair === symbol)) {
+      lo = Math.min(lo, p.entry);
+      hi = Math.max(hi, p.entry);
+      if (p.sl !== null) {
+        lo = Math.min(lo, p.sl);
+        hi = Math.max(hi, p.sl);
+      }
+      if (p.tp !== null) {
+        lo = Math.min(lo, p.tp);
+        hi = Math.max(hi, p.tp);
+      }
+    }
+    if (slPts > 0) {
+      lo = Math.min(lo, ask - slPts * pair.pip);
+      hi = Math.max(hi, bid + slPts * pair.pip);
+    }
+    if (tpPts > 0) {
+      lo = Math.min(lo, bid - tpPts * pair.pip);
+      hi = Math.max(hi, ask + tpPts * pair.pip);
+    }
+    lo = Math.min(lo, mid);
+    hi = Math.max(hi, mid);
+    const span = Math.max(hi - lo, pair.pip * 20);
+    const pad = span * 0.18;
+    return [+(lo - pad).toFixed(pair.digits), +(hi + pad).toFixed(pair.digits)];
+  }, [history, positions, symbol, mid, pair, slPts, tpPts, ask, bid]);
+
   return (
     <Layout>
-      <div className="min-h-screen px-3 py-4 sm:px-5 sm:py-6 max-w-[1500px] mx-auto">
-        {/* Beta banner */}
-        <div className="mb-3 rounded-xl border border-amber-400/25 bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent px-3 py-2 flex items-center gap-2">
-          <ShieldAlert className="w-4 h-4 text-amber-300" />
-          <div className="text-[11px] sm:text-xs text-amber-200/90 font-mono leading-tight">
-            <span className="font-semibold">BETA — Demo trading only.</span>{" "}
-            <span className="text-amber-100/70">
-              Real-time market prices · Virtual ${balance.toLocaleString()} balance · No real funds at risk.
-            </span>
-          </div>
-        </div>
+      <div className="min-h-screen bg-[#05070d] text-white">
+        {/* ── Header bar ───────────────────────────────────────────── */}
+        <div className="border-b border-white/8 bg-[#080c16] sticky top-0 z-20 backdrop-blur">
+          <div className="px-3 sm:px-5 py-2.5 flex items-center gap-3 overflow-x-auto scrollbar-hide">
+            <PairPicker symbol={symbol} onChange={setSymbol} />
 
-        {/* Top bar: pair selector + TF + stats */}
-        <div className="mb-3 rounded-2xl border border-white/8 bg-white/[0.02] p-2 sm:p-3 flex flex-wrap items-center gap-2 sm:gap-3">
-          <div className="relative">
-            <button
-              onClick={() => setPairOpen((o) => !o)}
-              className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-1.5 hover:border-cyan-400/40"
-            >
-              <span className="font-mono font-semibold text-sm">{pair.symbol}</span>
-              <ChevronDown />
-            </button>
-            <AnimatePresence>
-              {pairOpen && (
-                <motion.div
-                  initial={{ opacity: 0, y: -4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -4 }}
-                  className="absolute z-30 mt-1 w-48 rounded-xl border border-white/10 bg-[#0a1628] shadow-xl shadow-black/40 overflow-hidden"
-                >
-                  {PAIRS.map((p) => (
-                    <button
-                      key={p.symbol}
-                      onClick={() => { setPair(p); setPairOpen(false); }}
-                      className={`w-full text-left px-3 py-2 text-sm font-mono hover:bg-white/[0.04] ${
-                        p.symbol === pair.symbol ? "text-cyan-300 bg-cyan-500/5" : "text-white/85"
-                      }`}
-                    >
-                      {p.symbol}
-                    </button>
-                  ))}
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-
-          {/* TF selector */}
-          <div className="flex items-center gap-1 rounded-xl border border-white/8 bg-white/[0.02] p-1">
-            {TF_LIST.map((t) => (
-              <button
-                key={t}
-                onClick={() => setTf(t)}
-                className={`px-2.5 py-1 rounded-lg text-[11px] font-mono font-semibold transition ${
-                  tf === t
-                    ? "bg-cyan-500/15 text-cyan-300 border border-cyan-400/30"
-                    : "text-white/55 hover:text-white/85"
-                }`}
-              >
-                {t.toUpperCase()}
-              </button>
-            ))}
-          </div>
-
-          {/* OHLC + change */}
-          <div className="ml-auto flex items-center gap-3 sm:gap-4 text-[11px] font-mono tabular-nums">
-            <Stat label="O" value={fmtPx(stats.o, pair.digits)} />
-            <Stat label="H" value={fmtPx(stats.h, pair.digits)} tone="emerald" />
-            <Stat label="L" value={fmtPx(stats.l, pair.digits)} tone="rose" />
-            <Stat label="C" value={fmtPx(stats.c, pair.digits)} tone="cyan" />
-            <span
-              className={`px-2 py-0.5 rounded-md text-[11px] font-semibold ${
-                stats.chg >= 0 ? "bg-emerald-500/15 text-emerald-300" : "bg-rose-500/15 text-rose-300"
-              }`}
-            >
-              {stats.chg >= 0 ? "+" : ""}{fmtPx(stats.chg, pair.digits)} ({stats.chgPct >= 0 ? "+" : ""}{stats.chgPct.toFixed(2)}%)
-            </span>
-          </div>
-        </div>
-
-        <div className="grid lg:grid-cols-[1fr_300px] gap-3">
-          {/* Chart + positions */}
-          <div className="flex flex-col gap-3">
-            {/* Live price big */}
-            <div className="rounded-2xl border border-white/8 bg-gradient-to-br from-white/[0.03] to-transparent p-3 flex items-center justify-between">
+            <div className="flex items-center gap-3 ml-1 shrink-0">
               <div>
-                <div className="text-[10px] font-mono uppercase tracking-[0.18em] text-white/45">Live Price</div>
-                <div className="font-mono tabular-nums text-2xl sm:text-3xl font-bold text-white">
-                  {livePx ? fmtPx(livePx, pair.digits) : "—"}
+                <div className="text-[9px] font-mono uppercase tracking-[0.14em] text-rose-400/80">Bid</div>
+                <div className="text-base font-bold tabular-nums text-rose-300">
+                  {fmtPrice(bid, pair.digits)}
                 </div>
               </div>
-              <div className="flex items-center gap-2 text-[11px] font-mono">
-                <span className="flex items-center gap-1.5">
-                  <span className={`w-1.5 h-1.5 rounded-full ${err ? "bg-rose-400" : loading ? "bg-amber-400 animate-pulse" : "bg-emerald-400 animate-pulse"}`} />
-                  <span className="text-white/55">
-                    {err ? "Disconnected" : loading ? "Loading…" : "Live · Binance"}
-                  </span>
+              <div className="h-8 w-px bg-white/10" />
+              <div>
+                <div className="text-[9px] font-mono uppercase tracking-[0.14em] text-emerald-400/80">Ask</div>
+                <div className="text-base font-bold tabular-nums text-emerald-300">
+                  {fmtPrice(ask, pair.digits)}
+                </div>
+              </div>
+              <div className="h-8 w-px bg-white/10" />
+              <div>
+                <div className="text-[9px] font-mono uppercase tracking-[0.14em] text-white/45">Spread</div>
+                <div className="text-sm font-mono tabular-nums text-white/80">
+                  {fmtPrice(pair.spread, pair.digits)}
+                </div>
+              </div>
+              <div className="h-8 w-px bg-white/10" />
+              <div>
+                <div className="text-[9px] font-mono uppercase tracking-[0.14em] text-white/45">Day</div>
+                <div
+                  className={`text-sm font-bold tabular-nums ${
+                    dayPct >= 0 ? "text-emerald-400" : "text-rose-400"
+                  }`}
+                >
+                  {dayPct >= 0 ? "+" : ""}
+                  {dayPct.toFixed(2)}%
+                </div>
+              </div>
+            </div>
+
+            <div className="ml-auto flex items-center gap-3 shrink-0 pl-3 border-l border-white/10">
+              <div className="text-right">
+                <div className="text-[9px] font-mono uppercase tracking-[0.14em] text-white/45">
+                  Equity
+                </div>
+                <div className="text-sm font-bold tabular-nums">{fmtMoney(equity)}</div>
+              </div>
+              <div className="text-right">
+                <div className="text-[9px] font-mono uppercase tracking-[0.14em] text-white/45">
+                  Free Margin
+                </div>
+                <div className="text-sm font-bold tabular-nums text-white/80">
+                  {fmtMoney(freeMargin)}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Body grid ────────────────────────────────────────────── */}
+        <div className="p-3 sm:p-5 grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-4">
+          {/* Chart */}
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="rounded-2xl border border-white/8 bg-gradient-to-b from-[#0a0f1a] to-[#06090f] overflow-hidden"
+          >
+            <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/5">
+              <div className="flex items-center gap-2">
+                <Activity style={{ width: 13, height: 13 }} className="text-emerald-400" />
+                <span className="text-[10px] font-mono uppercase tracking-[0.18em] text-white/55">
+                  {symbol} · 5s candles
+                </span>
+                <span className="ml-2 px-1.5 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-400/40 text-[9px] font-mono uppercase tracking-[0.14em] text-emerald-300 flex items-center gap-1">
+                  <span className="w-1 h-1 rounded-full bg-emerald-400 animate-pulse" />
+                  live
                 </span>
               </div>
+              <div className="text-[10px] font-mono text-white/40">
+                last {fmtPrice(mid, pair.digits)}
+              </div>
             </div>
-
-            {/* Chart container */}
-            <div className="rounded-2xl border border-white/8 bg-[#070c16] overflow-hidden">
-              <div ref={containerRef} className="w-full h-[420px] sm:h-[500px]" />
-            </div>
-
-            {/* Positions */}
-            <div className="rounded-2xl border border-white/8 bg-white/[0.02] overflow-hidden">
-              <div className="flex items-center justify-between px-3 py-2 border-b border-white/8">
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => setTab("open")}
-                    className={`px-3 py-1.5 text-[11px] font-mono uppercase tracking-wider rounded-lg ${
-                      tab === "open" ? "bg-white/10 text-white" : "text-white/45 hover:text-white/75"
-                    }`}
-                  >
-                    Open ({positions.length})
-                  </button>
-                  <button
-                    onClick={() => setTab("closed")}
-                    className={`px-3 py-1.5 text-[11px] font-mono uppercase tracking-wider rounded-lg ${
-                      tab === "closed" ? "bg-white/10 text-white" : "text-white/45 hover:text-white/75"
-                    }`}
-                  >
-                    History ({closed.length})
-                  </button>
-                </div>
-                <div className="flex items-center gap-2">
-                  {tab === "open" && positions.length > 0 && (
+            <div className="h-[360px] sm:h-[440px] p-2">
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={chartData} margin={{ top: 10, right: 60, left: 0, bottom: 6 }}>
+                  <defs>
+                    <linearGradient id="stPriceFill" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="rgba(245,158,11,0.22)" />
+                      <stop offset="100%" stopColor="rgba(245,158,11,0)" />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid stroke="rgba(255,255,255,0.05)" strokeDasharray="2 4" vertical={false} />
+                  <XAxis
+                    dataKey="t"
+                    tick={{ fill: "#475569", fontSize: 9 }}
+                    axisLine={false}
+                    tickLine={false}
+                    interval={Math.max(0, Math.floor(chartData.length / 8))}
+                  />
+                  <YAxis
+                    tick={{ fill: "#64748b", fontSize: 9 }}
+                    axisLine={false}
+                    tickLine={false}
+                    domain={yDomain}
+                    allowDataOverflow
+                    tickFormatter={(v) => fmtPrice(Number(v), pair.digits)}
+                    width={60}
+                    orientation="right"
+                  />
+                  <Tooltip
+                    cursor={{ stroke: "rgba(148,163,184,0.25)", strokeDasharray: "2 3" }}
+                    contentStyle={{
+                      background: "rgba(8,12,22,0.96)",
+                      border: "1px solid rgba(255,255,255,0.1)",
+                      borderRadius: 10,
+                      fontSize: 11,
+                    }}
+                    labelStyle={{ color: "#94a3b8" }}
+                    formatter={(v: any, k: any) => {
+                      const key = typeof k === "string" ? k : "";
+                      if (
+                        !key ||
+                        key === "wickHigh" ||
+                        key === "wickLow" ||
+                        key === "bodyLow" ||
+                        key === "bodyHigh" ||
+                        key === "up"
+                      )
+                        return null as any;
+                      return [fmtPrice(Number(v), pair.digits), key.toUpperCase()];
+                    }}
+                  />
+                  {/* Soft area under close for depth */}
+                  <Area
+                    type="monotone"
+                    dataKey="c"
+                    stroke="transparent"
+                    fill="url(#stPriceFill)"
+                    isAnimationActive={false}
+                  />
+                  {/* Wicks (thin line) */}
+                  <Bar
+                    dataKey="wickLow"
+                    fill="transparent"
+                    stackId="wick"
+                    isAnimationActive={false}
+                    legendType="none"
+                  />
+                  <Bar
+                    dataKey={(d: any) => d.wickHigh - d.wickLow}
+                    stackId="wick"
+                    barSize={1.4}
+                    isAnimationActive={false}
+                    legendType="none"
+                    shape={(props: any) => {
+                      const fill = props?.payload?.up
+                        ? "rgba(16,185,129,0.85)"
+                        : "rgba(244,63,94,0.85)";
+                      return (
+                        <rect
+                          x={props.x + props.width / 2 - 0.7}
+                          y={props.y}
+                          width={1.4}
+                          height={Math.max(props.height, 1)}
+                          fill={fill}
+                        />
+                      );
+                    }}
+                  />
+                  {/* Bodies (thick) */}
+                  <Bar
+                    dataKey="bodyLow"
+                    fill="transparent"
+                    stackId="body"
+                    isAnimationActive={false}
+                    legendType="none"
+                  />
+                  <Bar
+                    dataKey={(d: any) => Math.max(d.bodyHigh - d.bodyLow, pair.pip * 0.6)}
+                    stackId="body"
+                    barSize={7}
+                    isAnimationActive={false}
+                    legendType="none"
+                    shape={(props: any) => {
+                      const up = !!props?.payload?.up;
+                      const fill = up ? "rgba(16,185,129,0.95)" : "rgba(244,63,94,0.95)";
+                      const stroke = up ? "rgba(52,211,153,1)" : "rgba(251,113,133,1)";
+                      return (
+                        <rect
+                          x={props.x}
+                          y={props.y}
+                          width={props.width}
+                          height={Math.max(props.height, 1)}
+                          fill={fill}
+                          stroke={stroke}
+                          strokeWidth={0.6}
+                          rx={1}
+                        />
+                      );
+                    }}
+                  />
+                  {/* Smooth close overlay */}
+                  <Line
+                    type="monotone"
+                    dataKey="c"
+                    stroke="rgba(245,158,11,0.9)"
+                    strokeWidth={1.3}
+                    dot={false}
+                    isAnimationActive={false}
+                  />
+                  {/* Open position entry + SL + TP lines */}
+                  {positions
+                    .filter((p) => p.pair === symbol)
+                    .flatMap((p) => {
+                      const items: any[] = [
+                        <ReferenceLine
+                          key={`${p.id}-e`}
+                          y={p.entry}
+                          stroke={p.side === "BUY" ? "#10b981" : "#f43f5e"}
+                          strokeDasharray="4 3"
+                          strokeWidth={1}
+                          label={{
+                            value: `${p.side} ${p.lots} @ ${fmtPrice(p.entry, pair.digits)}`,
+                            position: "left",
+                            fill: p.side === "BUY" ? "#34d399" : "#fb7185",
+                            fontSize: 9,
+                            fontFamily: "monospace",
+                          }}
+                        />,
+                      ];
+                      if (p.sl !== null) {
+                        items.push(
+                          <ReferenceLine
+                            key={`${p.id}-sl`}
+                            y={p.sl}
+                            stroke="rgba(244,63,94,0.85)"
+                            strokeDasharray="2 4"
+                            strokeWidth={1}
+                            label={{
+                              value: `SL ${fmtPrice(p.sl, pair.digits)}`,
+                              position: "left",
+                              fill: "#fb7185",
+                              fontSize: 9,
+                              fontFamily: "monospace",
+                            }}
+                          />,
+                        );
+                      }
+                      if (p.tp !== null) {
+                        items.push(
+                          <ReferenceLine
+                            key={`${p.id}-tp`}
+                            y={p.tp}
+                            stroke="rgba(16,185,129,0.85)"
+                            strokeDasharray="2 4"
+                            strokeWidth={1}
+                            label={{
+                              value: `TP ${fmtPrice(p.tp, pair.digits)}`,
+                              position: "left",
+                              fill: "#34d399",
+                              fontSize: 9,
+                              fontFamily: "monospace",
+                            }}
+                          />,
+                        );
+                      }
+                      return items;
+                    })}
+                  {/* Ticket SL/TP preview (ghost lines from current Ask for BUY, Bid for SELL) */}
+                  {slPts > 0 && (
                     <>
-                      <span className={`text-[11px] font-mono font-semibold ${openPnl >= 0 ? "text-emerald-300" : "text-rose-300"}`}>
-                        Net {fmtMoney(openPnl)}
-                      </span>
-                      <button
-                        onClick={closeAll}
-                        className="px-2.5 py-1 rounded-md text-[10.5px] font-mono uppercase tracking-wider border border-rose-400/40 text-rose-300 hover:bg-rose-500/10"
-                      >
-                        Close All
-                      </button>
+                      <ReferenceLine
+                        y={+(ask - slPts * pair.pip).toFixed(pair.digits)}
+                        stroke="rgba(244,63,94,0.45)"
+                        strokeDasharray="1 5"
+                        strokeWidth={1}
+                        label={{
+                          value: `BUY SL`,
+                          position: "right",
+                          fill: "rgba(251,113,133,0.7)",
+                          fontSize: 8.5,
+                          fontFamily: "monospace",
+                        }}
+                      />
+                      <ReferenceLine
+                        y={+(bid + slPts * pair.pip).toFixed(pair.digits)}
+                        stroke="rgba(244,63,94,0.45)"
+                        strokeDasharray="1 5"
+                        strokeWidth={1}
+                        label={{
+                          value: `SELL SL`,
+                          position: "right",
+                          fill: "rgba(251,113,133,0.7)",
+                          fontSize: 8.5,
+                          fontFamily: "monospace",
+                        }}
+                      />
                     </>
                   )}
-                </div>
+                  {tpPts > 0 && (
+                    <>
+                      <ReferenceLine
+                        y={+(ask + tpPts * pair.pip).toFixed(pair.digits)}
+                        stroke="rgba(16,185,129,0.45)"
+                        strokeDasharray="1 5"
+                        strokeWidth={1}
+                        label={{
+                          value: `BUY TP`,
+                          position: "right",
+                          fill: "rgba(52,211,153,0.7)",
+                          fontSize: 8.5,
+                          fontFamily: "monospace",
+                        }}
+                      />
+                      <ReferenceLine
+                        y={+(bid - tpPts * pair.pip).toFixed(pair.digits)}
+                        stroke="rgba(16,185,129,0.45)"
+                        strokeDasharray="1 5"
+                        strokeWidth={1}
+                        label={{
+                          value: `SELL TP`,
+                          position: "right",
+                          fill: "rgba(52,211,153,0.7)",
+                          fontSize: 8.5,
+                          fontFamily: "monospace",
+                        }}
+                      />
+                    </>
+                  )}
+                  {/* Mid price line with label */}
+                  <ReferenceLine
+                    y={mid}
+                    stroke="rgba(59,130,246,0.7)"
+                    strokeDasharray="2 3"
+                    strokeWidth={1}
+                    label={{
+                      value: fmtPrice(mid, pair.digits),
+                      position: "right",
+                      fill: "#60a5fa",
+                      fontSize: 10,
+                      fontFamily: "monospace",
+                    }}
+                  />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+          </motion.div>
+
+          {/* Order ticket */}
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.05 }}
+            className="rounded-2xl border border-white/8 bg-gradient-to-b from-[#0a0f1a] to-[#06090f] p-4 flex flex-col gap-3 h-fit"
+          >
+            <div className="flex items-center justify-between">
+              <div className="text-[10px] font-mono font-bold uppercase tracking-[0.16em] text-white/55">
+                New Order
               </div>
-              <div className="divide-y divide-white/5 max-h-64 overflow-y-auto">
-                {tab === "open" && positions.length === 0 && (
-                  <div className="px-3 py-8 text-center text-[12px] font-mono text-white/35">No open positions</div>
-                )}
-                {tab === "open" && positions.map((p) => {
-                  const pnl = pnlOf(p);
-                  return (
-                    <div key={p.id} className="px-3 py-2 grid grid-cols-[auto_1fr_auto_auto] items-center gap-3 text-[11.5px] font-mono">
-                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                        p.side === "BUY" ? "bg-emerald-500/15 text-emerald-300" : "bg-rose-500/15 text-rose-300"
-                      }`}>{p.side}</span>
-                      <div>
-                        <div className="text-white/85">{p.pair} · {p.lots} lot</div>
-                        <div className="text-[10px] text-white/40">
-                          @ {fmtPx(p.entry, pair.digits)}
-                          {p.sl !== null && <span className="text-rose-300/70"> · SL {fmtPx(p.sl, pair.digits)}</span>}
-                          {p.tp !== null && <span className="text-emerald-300/70"> · TP {fmtPx(p.tp, pair.digits)}</span>}
-                        </div>
-                      </div>
-                      <span className={`tabular-nums font-semibold ${pnl >= 0 ? "text-emerald-300" : "text-rose-300"}`}>
-                        {fmtMoney(pnl)}
-                      </span>
-                      <button
-                        onClick={() => closePosition(p.id)}
-                        className="px-2 py-0.5 rounded text-[10px] uppercase border border-white/15 text-white/65 hover:bg-white/5"
-                      >
-                        Close
-                      </button>
-                    </div>
-                  );
-                })}
-                {tab === "closed" && closed.length === 0 && (
-                  <div className="px-3 py-8 text-center text-[12px] font-mono text-white/35">No history yet</div>
-                )}
-                {tab === "closed" && closed.map((p) => (
-                  <div key={p.id} className="px-3 py-2 grid grid-cols-[auto_1fr_auto_auto] items-center gap-3 text-[11.5px] font-mono">
-                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                      p.side === "BUY" ? "bg-emerald-500/10 text-emerald-300/80" : "bg-rose-500/10 text-rose-300/80"
-                    }`}>{p.side}</span>
-                    <div>
-                      <div className="text-white/75">{p.pair} · {p.lots} lot</div>
-                      <div className="text-[10px] text-white/40">
-                        {fmtPx(p.entry, pair.digits)} → {fmtPx(p.exit, pair.digits)} · {p.reason.toUpperCase()}
-                      </div>
-                    </div>
-                    <span className={`tabular-nums font-semibold ${p.pnl >= 0 ? "text-emerald-300" : "text-rose-300"}`}>
-                      {fmtMoney(p.pnl)}
-                    </span>
-                    <span className="text-[10px] text-white/35">{new Date(p.closedAt).toLocaleTimeString()}</span>
-                  </div>
+              <span className="text-[9px] font-mono uppercase tracking-[0.14em] text-amber-400/70">
+                market
+              </span>
+            </div>
+
+            {/* Lot stepper */}
+            <div>
+              <div className="text-[10px] font-mono uppercase tracking-[0.14em] text-white/45 mb-1.5">
+                Lot Size
+              </div>
+              <div className="flex items-center rounded-xl bg-white/[0.03] border border-white/10 overflow-hidden">
+                <button
+                  onClick={() => setLots((l) => +Math.max(0.01, l - 0.01).toFixed(2))}
+                  className="px-3 py-2 text-white/70 hover:text-white hover:bg-white/5"
+                >
+                  <Minus style={{ width: 13, height: 13 }} />
+                </button>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  value={lots}
+                  onChange={(e) => {
+                    const v = parseFloat(e.target.value);
+                    setLots(isNaN(v) ? 0.01 : Math.max(0.01, +v.toFixed(2)));
+                  }}
+                  className="flex-1 bg-transparent outline-none text-center text-base font-bold tabular-nums py-2"
+                />
+                <button
+                  onClick={() => setLots((l) => +(l + 0.01).toFixed(2))}
+                  className="px-3 py-2 text-white/70 hover:text-white hover:bg-white/5"
+                >
+                  <Plus style={{ width: 13, height: 13 }} />
+                </button>
+              </div>
+              <div className="flex gap-1.5 mt-2">
+                {[0.01, 0.05, 0.1, 0.5, 1].map((v) => (
+                  <button
+                    key={v}
+                    onClick={() => setLots(v)}
+                    className={`flex-1 py-1 rounded-md text-[10px] font-mono tabular-nums border ${
+                      lots === v
+                        ? "border-blue-400/50 bg-blue-500/10 text-blue-300"
+                        : "border-white/8 text-white/55 hover:border-white/20"
+                    }`}
+                  >
+                    {v}
+                  </button>
                 ))}
               </div>
             </div>
-          </div>
 
-          {/* Order ticket sidebar */}
-          <div className="space-y-3">
-            {/* Account */}
-            <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-3">
-              <div className="flex items-center gap-2 mb-2">
-                <WalletIcon className="w-3.5 h-3.5 text-cyan-300" />
-                <span className="text-[10px] font-mono uppercase tracking-[0.18em] text-white/45">Demo Account</span>
-              </div>
-              <div className="grid grid-cols-2 gap-2 text-[11px] font-mono">
-                <Snap label="Balance" value={fmtMoney(balance)} />
-                <Snap label="Equity" value={fmtMoney(equity)} tone={openPnl >= 0 ? "emerald" : "rose"} />
-                <Snap label="Floating" value={fmtMoney(openPnl)} tone={openPnl >= 0 ? "emerald" : "rose"} />
-                <Snap label="Positions" value={String(positions.length)} />
-              </div>
-              {positions.length === 0 && balance !== 10000 && (
-                <button
-                  onClick={resetBalance}
-                  className="mt-2 w-full text-[10px] font-mono uppercase tracking-wider py-1 rounded-md border border-white/10 text-white/55 hover:text-white/85 hover:border-white/25"
-                >
-                  Reset Demo Balance
-                </button>
-              )}
+            {/* SL / TP — price inputs, autofill live mid on focus (Exness-style) */}
+            <div className="grid grid-cols-2 gap-2">
+              <SlTpInput
+                label="SL (price)"
+                value={slPx}
+                onChange={setSlPx}
+                tone="rose"
+                live={mid}
+                digits={pair.digits}
+              />
+              <SlTpInput
+                label="TP (price)"
+                value={tpPx}
+                onChange={setTpPx}
+                tone="emerald"
+                live={mid}
+                digits={pair.digits}
+              />
             </div>
 
-            {/* Ticket */}
-            <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-3 space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-mono uppercase tracking-[0.18em] text-white/45">New Order</span>
-                <span className="text-[10px] font-mono text-white/45">{pair.symbol}</span>
-              </div>
-
-              {/* Lots */}
-              <div>
-                <div className="text-[10px] font-mono uppercase tracking-[0.14em] text-white/45 mb-1.5">Volume (lots)</div>
-                <div className="flex items-center rounded-xl border border-white/10 bg-white/[0.03] overflow-hidden">
-                  <button
-                    onClick={() => setLots((v) => Math.max(pair.minLots, +(v - pair.lotStep).toFixed(4)))}
-                    className="px-3 py-2 text-white/65 hover:bg-white/5"
-                  ><Minus className="w-3.5 h-3.5" /></button>
-                  <input
-                    type="number"
-                    step={pair.lotStep}
-                    min={pair.minLots}
-                    value={lots}
-                    onChange={(e) => setLots(Math.max(pair.minLots, +e.target.value || pair.minLots))}
-                    className="flex-1 bg-transparent text-center text-sm font-mono tabular-nums outline-none"
-                  />
-                  <button
-                    onClick={() => setLots((v) => +(v + pair.lotStep).toFixed(4))}
-                    className="px-3 py-2 text-white/65 hover:bg-white/5"
-                  ><Plus className="w-3.5 h-3.5" /></button>
+            {/* Risk / Reward preview */}
+            {(slPts > 0 || tpPts > 0) && (
+              <div className="rounded-lg border border-white/8 bg-white/[0.02] p-2 grid grid-cols-3 gap-2 text-center">
+                <div>
+                  <div className="text-[8.5px] font-mono uppercase tracking-[0.14em] text-white/40">
+                    Risk
+                  </div>
+                  <div className="text-[11px] font-bold tabular-nums text-rose-300">
+                    {slPts > 0 ? fmtMoney(slPts * pair.pip * lots * pair.contract) : "—"}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[8.5px] font-mono uppercase tracking-[0.14em] text-white/40">
+                    Reward
+                  </div>
+                  <div className="text-[11px] font-bold tabular-nums text-emerald-300">
+                    {tpPts > 0 ? fmtMoney(tpPts * pair.pip * lots * pair.contract) : "—"}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[8.5px] font-mono uppercase tracking-[0.14em] text-white/40">
+                    R:R
+                  </div>
+                  <div className="text-[11px] font-bold tabular-nums text-amber-300">
+                    {slPts > 0 && tpPts > 0 ? `1 : ${(tpPts / slPts).toFixed(2)}` : "—"}
+                  </div>
                 </div>
               </div>
+            )}
 
-              {/* SL / TP price inputs with autofill on focus */}
-              <div className="grid grid-cols-2 gap-2">
-                <SlTpInput label="Stop Loss" value={slPx} onChange={setSlPx} tone="rose" live={livePx} digits={pair.digits} />
-                <SlTpInput label="Take Profit" value={tpPx} onChange={setTpPx} tone="emerald" live={livePx} digits={pair.digits} />
-              </div>
-
-              {/* Buy / Sell */}
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  onClick={() => placeOrder("SELL")}
-                  disabled={!livePx}
-                  className="rounded-xl py-2.5 font-bold text-sm bg-rose-500/15 text-rose-300 border border-rose-400/30 hover:bg-rose-500/25 disabled:opacity-40 disabled:cursor-not-allowed flex flex-col items-center"
-                >
-                  <span className="flex items-center gap-1"><ArrowDown className="w-3.5 h-3.5" /> SELL</span>
-                  <span className="text-[10px] font-mono opacity-80">{livePx ? fmtPx(livePx, pair.digits) : "—"}</span>
-                </button>
-                <button
-                  onClick={() => placeOrder("BUY")}
-                  disabled={!livePx}
-                  className="rounded-xl py-2.5 font-bold text-sm bg-emerald-500/15 text-emerald-300 border border-emerald-400/30 hover:bg-emerald-500/25 disabled:opacity-40 disabled:cursor-not-allowed flex flex-col items-center"
-                >
-                  <span className="flex items-center gap-1"><ArrowUp className="w-3.5 h-3.5" /> BUY</span>
-                  <span className="text-[10px] font-mono opacity-80">{livePx ? fmtPx(livePx, pair.digits) : "—"}</span>
-                </button>
-              </div>
-
-              <div className="text-[9.5px] font-mono text-white/35 leading-snug">
-                Orders execute instantly at live price · SL/TP auto-close when crossed.
-              </div>
+            {/* Buy / Sell buttons */}
+            <div className="grid grid-cols-2 gap-2 mt-1">
+              <button
+                onClick={() => placeOrder("SELL")}
+                className="relative py-3 rounded-xl border border-rose-400/40 overflow-hidden group"
+                style={{
+                  background: "linear-gradient(180deg, rgba(244,63,94,0.22), rgba(244,63,94,0.08))",
+                  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.06), 0 0 22px -8px rgba(244,63,94,0.55)",
+                }}
+              >
+                <div className="text-[10px] font-mono font-bold uppercase tracking-[0.18em] text-rose-300/85">
+                  Sell
+                </div>
+                <div className="text-base font-bold tabular-nums text-rose-200 mt-0.5">
+                  {fmtPrice(bid, pair.digits)}
+                </div>
+                <ArrowDown
+                  style={{ width: 14, height: 14 }}
+                  className="absolute top-2 right-2 text-rose-400/70"
+                />
+              </button>
+              <button
+                onClick={() => placeOrder("BUY")}
+                className="relative py-3 rounded-xl border border-emerald-400/40 overflow-hidden"
+                style={{
+                  background: "linear-gradient(180deg, rgba(16,185,129,0.22), rgba(16,185,129,0.08))",
+                  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.06), 0 0 22px -8px rgba(16,185,129,0.55)",
+                }}
+              >
+                <div className="text-[10px] font-mono font-bold uppercase tracking-[0.18em] text-emerald-300/85">
+                  Buy
+                </div>
+                <div className="text-base font-bold tabular-nums text-emerald-200 mt-0.5">
+                  {fmtPrice(ask, pair.digits)}
+                </div>
+                <ArrowUp
+                  style={{ width: 14, height: 14 }}
+                  className="absolute top-2 right-2 text-emerald-400/70"
+                />
+              </button>
             </div>
-          </div>
+
+            {/* Account snapshot */}
+            <div className="mt-2 pt-3 border-t border-white/8 grid grid-cols-2 gap-3 text-[11px]">
+              <Snap label="Balance" value={fmtMoney(balance)} icon={WalletIcon} />
+              <Snap
+                label="Open P&L"
+                value={fmtMoney(openPnL)}
+                tone={openPnL >= 0 ? "emerald" : "rose"}
+                icon={openPnL >= 0 ? TrendingUp : TrendingDown}
+              />
+              <Snap label="Used Margin" value={fmtMoney(usedMargin)} />
+              <Snap
+                label="Margin Lvl"
+                value={`${marginLevel ? marginLevel.toFixed(0) : "—"}%`}
+                tone={marginLevel > 0 && marginLevel < 200 ? "amber" : undefined}
+                icon={ShieldAlert}
+              />
+            </div>
+          </motion.div>
         </div>
+
+        {/* ── Open Positions ───────────────────────────────────────── */}
+        <div className="px-3 sm:px-5 pb-4">
+          {positions.length > 0 && (
+            <div className="flex items-center justify-end gap-2 mb-2">
+              <span className="text-[10px] font-mono uppercase tracking-[0.14em] text-white/40">
+                {positions.length} open · net{" "}
+                <span className={openPnL >= 0 ? "text-emerald-400" : "text-rose-400"}>
+                  {fmtMoney(openPnL)}
+                </span>
+              </span>
+              <button
+                onClick={closeAll}
+                className="px-2.5 py-1 rounded-md text-[10px] font-mono font-bold uppercase tracking-[0.14em] border border-rose-400/40 text-rose-300 hover:bg-rose-500/10"
+              >
+                close all
+              </button>
+            </div>
+          )}
+          <PositionTable
+            title="Open Positions"
+            empty="No open positions. Place a Buy or Sell to start."
+            rows={positions.map((p) => {
+              const px = p.side === "BUY" ? bid : ask;
+              const live = pnl(p, px);
+              return (
+                <tr key={p.id} className="border-b border-white/5 hover:bg-white/[0.02]">
+                  <td className="px-3 py-2 font-mono text-xs text-white/80">{p.pair}</td>
+                  <td className="px-3 py-2">
+                    <span
+                      className={`px-1.5 py-0.5 rounded-md text-[9.5px] font-mono font-bold uppercase tracking-[0.12em] border ${
+                        p.side === "BUY"
+                          ? "text-emerald-300 border-emerald-400/40 bg-emerald-500/10"
+                          : "text-rose-300 border-rose-400/40 bg-rose-500/10"
+                      }`}
+                    >
+                      {p.side}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2 text-xs tabular-nums text-white/70">{p.lots.toFixed(2)}</td>
+                  <td className="px-3 py-2 text-xs tabular-nums text-white/70">
+                    {fmtPrice(p.entry, PAIRS.find((x) => x.symbol === p.pair)?.digits ?? 2)}
+                  </td>
+                  <td className="px-3 py-2 text-xs tabular-nums text-white/70">
+                    {fmtPrice(px, PAIRS.find((x) => x.symbol === p.pair)?.digits ?? 2)}
+                  </td>
+                  <td className="px-3 py-2 text-xs tabular-nums text-white/55">
+                    {p.sl ? fmtPrice(p.sl, PAIRS.find((x) => x.symbol === p.pair)?.digits ?? 2) : "—"}
+                  </td>
+                  <td className="px-3 py-2 text-xs tabular-nums text-white/55">
+                    {p.tp ? fmtPrice(p.tp, PAIRS.find((x) => x.symbol === p.pair)?.digits ?? 2) : "—"}
+                  </td>
+                  <td
+                    className={`px-3 py-2 text-xs font-bold tabular-nums ${
+                      live >= 0 ? "text-emerald-400" : "text-rose-400"
+                    }`}
+                  >
+                    {fmtMoney(live)}
+                  </td>
+                  <td className="px-3 py-2 text-right">
+                    <div className="inline-flex items-center gap-1.5">
+                      <button
+                        onClick={() => setModifyId(p.id)}
+                        className="px-2 py-1 rounded-md text-[10px] font-mono uppercase tracking-[0.12em] border border-amber-400/30 text-amber-300/85 hover:text-amber-200 hover:border-amber-400/55"
+                      >
+                        modify
+                      </button>
+                      <button
+                        onClick={() => closePosition(p.id)}
+                        className="px-2 py-1 rounded-md text-[10px] font-mono uppercase tracking-[0.12em] border border-white/10 text-white/70 hover:text-white hover:border-white/30 inline-flex items-center gap-1"
+                      >
+                        <X style={{ width: 11, height: 11 }} /> close
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          />
+        </div>
+
+        {/* ── Closed History ───────────────────────────────────────── */}
+        {closed.length > 0 && (
+          <div className="px-3 sm:px-5 pb-8">
+            <PositionTable
+              title="Recent Closed"
+              empty=""
+              compact
+              rows={closed.map((c) => (
+                <tr key={c.id} className="border-b border-white/5">
+                  <td className="px-3 py-2 font-mono text-xs text-white/80">{c.pair}</td>
+                  <td className="px-3 py-2">
+                    <span
+                      className={`px-1.5 py-0.5 rounded-md text-[9.5px] font-mono font-bold uppercase tracking-[0.12em] border ${
+                        c.side === "BUY"
+                          ? "text-emerald-300 border-emerald-400/40 bg-emerald-500/10"
+                          : "text-rose-300 border-rose-400/40 bg-rose-500/10"
+                      }`}
+                    >
+                      {c.side}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2 text-xs tabular-nums text-white/70">{c.lots.toFixed(2)}</td>
+                  <td className="px-3 py-2 text-xs tabular-nums text-white/55">
+                    {fmtPrice(c.entry, PAIRS.find((x) => x.symbol === c.pair)?.digits ?? 2)}
+                  </td>
+                  <td className="px-3 py-2 text-xs tabular-nums text-white/70">
+                    {fmtPrice(c.exit, PAIRS.find((x) => x.symbol === c.pair)?.digits ?? 2)}
+                  </td>
+                  <td
+                    className={`px-3 py-2 text-xs font-bold tabular-nums ${
+                      c.pnl >= 0 ? "text-emerald-400" : "text-rose-400"
+                    }`}
+                  >
+                    {fmtMoney(c.pnl)}
+                  </td>
+                  <td className="px-3 py-2 text-[10px] font-mono uppercase tracking-[0.12em] text-white/40">
+                    {c.reason}
+                  </td>
+                </tr>
+              ))}
+            />
+          </div>
+        )}
       </div>
+      <AnimatePresence>
+        {modifyId && (
+          <ModifyDialog
+            position={positions.find((p) => p.id === modifyId)!}
+            pair={PAIRS.find((x) => x.symbol === positions.find((p) => p.id === modifyId)?.pair)!}
+            onClose={() => setModifyId(null)}
+            onSave={(sl, tp) => {
+              modifyPosition(modifyId, sl, tp);
+              setModifyId(null);
+            }}
+          />
+        )}
+      </AnimatePresence>
     </Layout>
   );
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// Subcomponents
+// Sub-components
 // ─────────────────────────────────────────────────────────────────────
-function ChevronDown() {
+function PairPicker({
+  symbol,
+  onChange,
+}: {
+  symbol: string;
+  onChange: (s: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
   return (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="6 9 12 15 18 9" />
-    </svg>
-  );
-}
-
-function Stat({ label, value, tone }: { label: string; value: string; tone?: "emerald" | "rose" | "cyan" }) {
-  const c = tone === "emerald" ? "text-emerald-300" : tone === "rose" ? "text-rose-300" : tone === "cyan" ? "text-cyan-300" : "text-white/85";
-  return (
-    <span className="hidden sm:inline-flex items-center gap-1">
-      <span className="text-white/40">{label}</span>
-      <span className={`font-semibold ${c}`}>{value}</span>
-    </span>
-  );
-}
-
-function Snap({ label, value, tone }: { label: string; value: string; tone?: "emerald" | "rose" }) {
-  const c = tone === "emerald" ? "text-emerald-300" : tone === "rose" ? "text-rose-300" : "text-white/90";
-  return (
-    <div className="rounded-lg bg-white/[0.02] border border-white/5 px-2 py-1.5">
-      <div className="text-[9px] uppercase tracking-[0.14em] text-white/40">{label}</div>
-      <div className={`tabular-nums font-semibold ${c}`}>{value}</div>
+    <div className="relative shrink-0">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="flex items-center gap-2 px-3 py-2 rounded-xl border border-white/10 bg-white/[0.03] hover:bg-white/[0.06]"
+      >
+        <span className="text-sm font-bold tracking-tight">{symbol}</span>
+        <ChevronDown style={{ width: 13, height: 13 }} className="text-white/55" />
+      </button>
+      <AnimatePresence>
+        {open && (
+          <>
+            <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
+            <motion.div
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              className="absolute z-40 top-full mt-1 left-0 min-w-[180px] rounded-xl border border-white/10 bg-[#0a0f1a] shadow-2xl overflow-hidden"
+            >
+              {PAIRS.map((p) => (
+                <button
+                  key={p.symbol}
+                  onClick={() => {
+                    onChange(p.symbol);
+                    setOpen(false);
+                  }}
+                  className={`w-full flex items-center justify-between px-3 py-2 text-left hover:bg-white/5 ${
+                    p.symbol === symbol ? "bg-blue-500/10" : ""
+                  }`}
+                >
+                  <span className="text-sm font-bold">{p.symbol}</span>
+                  <span className="text-[10px] font-mono text-white/45">
+                    {fmtPrice(p.base, p.digits)}
+                  </span>
+                </button>
+              ))}
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -724,19 +1151,230 @@ function SlTpInput({
         inputMode="decimal"
         value={value}
         onFocus={(e) => {
-          if ((!value || value === "0") && live > 0) {
+          if (!value || value === "0") {
             const px = live.toFixed(digits);
             onChange(px);
+            // select after state propagates
             const el = e.currentTarget;
             requestAnimationFrame(() => {
-              try { el.setSelectionRange(0, px.length); } catch {}
+              try {
+                el.setSelectionRange(0, px.length);
+              } catch {}
             });
           }
         }}
-        onChange={(e) => onChange(e.target.value.replace(/[^0-9.]/g, ""))}
-        placeholder={live > 0 ? live.toFixed(digits) : "—"}
+        onChange={(e) => {
+          const cleaned = e.target.value.replace(/[^0-9.]/g, "");
+          onChange(cleaned);
+        }}
+        placeholder={live.toFixed(digits)}
         className={`w-full rounded-xl bg-white/[0.03] border outline-none px-3 py-2 text-sm font-mono tabular-nums ${color}`}
       />
     </div>
+  );
+}
+
+function Snap({
+  label,
+  value,
+  tone,
+  icon: Icon,
+}: {
+  label: string;
+  value: string;
+  tone?: "emerald" | "rose" | "amber";
+  icon?: any;
+}) {
+  const c =
+    tone === "emerald"
+      ? "text-emerald-400"
+      : tone === "rose"
+      ? "text-rose-400"
+      : tone === "amber"
+      ? "text-amber-400"
+      : "text-white/85";
+  return (
+    <div className="flex items-center gap-2">
+      {Icon && <Icon style={{ width: 12, height: 12 }} className="text-white/40" />}
+      <div className="min-w-0">
+        <div className="text-[9px] font-mono uppercase tracking-[0.14em] text-white/45 leading-tight">
+          {label}
+        </div>
+        <div className={`text-xs font-bold tabular-nums ${c}`}>{value}</div>
+      </div>
+    </div>
+  );
+}
+
+function PositionTable({
+  title,
+  rows,
+  empty,
+  compact = false,
+}: {
+  title: string;
+  rows: any[];
+  empty: string;
+  compact?: boolean;
+}) {
+  return (
+    <div className="rounded-2xl border border-white/8 bg-gradient-to-b from-[#0a0f1a] to-[#06090f] overflow-hidden">
+      <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/5">
+        <span className="text-[10px] font-mono font-bold uppercase tracking-[0.16em] text-white/55">
+          {title}
+        </span>
+        <span className="text-[10px] font-mono text-white/40">{rows.length} row{rows.length === 1 ? "" : "s"}</span>
+      </div>
+      {rows.length === 0 ? (
+        <div className="p-8 text-center text-xs text-white/40">{empty}</div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-left">
+            <thead>
+              <tr className="bg-white/[0.02] text-[9.5px] font-mono uppercase tracking-[0.14em] text-white/45">
+                <th className="px-3 py-2">Symbol</th>
+                <th className="px-3 py-2">Side</th>
+                <th className="px-3 py-2">Lots</th>
+                <th className="px-3 py-2">Entry</th>
+                <th className="px-3 py-2">{compact ? "Exit" : "Live"}</th>
+                {!compact && <th className="px-3 py-2">SL</th>}
+                {!compact && <th className="px-3 py-2">TP</th>}
+                <th className="px-3 py-2">P&L</th>
+                {!compact ? <th className="px-3 py-2 text-right">Action</th> : <th className="px-3 py-2">Reason</th>}
+              </tr>
+            </thead>
+            <tbody>{rows}</tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ModifyDialog({
+  position,
+  pair,
+  onClose,
+  onSave,
+}: {
+  position: Position;
+  pair: Pair;
+  onClose: () => void;
+  onSave: (sl: number | null, tp: number | null) => void;
+}) {
+  const [slPx, setSlPx] = useState<string>(position.sl !== null ? position.sl.toFixed(pair.digits) : "");
+  const [tpPx, setTpPx] = useState<string>(position.tp !== null ? position.tp.toFixed(pair.digits) : "");
+
+  const slNum = slPx.trim() === "" ? null : +parseFloat(slPx).toFixed(pair.digits);
+  const tpNum = tpPx.trim() === "" ? null : +parseFloat(tpPx).toFixed(pair.digits);
+
+  const slDist =
+    slNum !== null
+      ? Math.round(Math.abs(slNum - position.entry) / pair.pip)
+      : 0;
+  const tpDist =
+    tpNum !== null
+      ? Math.round(Math.abs(tpNum - position.entry) / pair.pip)
+      : 0;
+  const riskMoney = slNum !== null ? slDist * pair.pip * position.lots * pair.contract : 0;
+  const rewardMoney = tpNum !== null ? tpDist * pair.pip * position.lots * pair.contract : 0;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ scale: 0.95, y: 8 }}
+        animate={{ scale: 1, y: 0 }}
+        exit={{ scale: 0.95, y: 8 }}
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-sm rounded-2xl border border-white/10 bg-gradient-to-b from-[#0a0f1a] to-[#06090f] p-5 shadow-2xl"
+      >
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <div className="text-[10px] font-mono uppercase tracking-[0.16em] text-white/45">
+              Modify Position
+            </div>
+            <div className="text-base font-bold mt-0.5 flex items-center gap-2">
+              <span>{position.pair}</span>
+              <span
+                className={`px-1.5 py-0.5 rounded-md text-[9.5px] font-mono font-bold uppercase tracking-[0.12em] border ${
+                  position.side === "BUY"
+                    ? "text-emerald-300 border-emerald-400/40 bg-emerald-500/10"
+                    : "text-rose-300 border-rose-400/40 bg-rose-500/10"
+                }`}
+              >
+                {position.side} {position.lots}
+              </span>
+            </div>
+            <div className="text-[10px] font-mono text-white/40 mt-0.5">
+              entry @ {fmtPrice(position.entry, pair.digits)}
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-md text-white/55 hover:text-white hover:bg-white/5"
+          >
+            <X style={{ width: 14, height: 14 }} />
+          </button>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <div className="text-[10px] font-mono uppercase tracking-[0.14em] text-rose-300/80 mb-1.5">
+              Stop Loss (price)
+            </div>
+            <input
+              value={slPx}
+              onChange={(e) => setSlPx(e.target.value)}
+              placeholder="0.00"
+              className="w-full rounded-xl bg-white/[0.03] border border-rose-400/30 outline-none focus:border-rose-400/60 px-3 py-2 text-sm font-mono tabular-nums text-rose-200"
+            />
+            <div className="text-[9px] font-mono text-white/40 mt-1">
+              {slNum !== null ? `${slDist} pts · ${fmtMoney(riskMoney)} risk` : "no SL"}
+            </div>
+          </div>
+          <div>
+            <div className="text-[10px] font-mono uppercase tracking-[0.14em] text-emerald-300/80 mb-1.5">
+              Take Profit (price)
+            </div>
+            <input
+              value={tpPx}
+              onChange={(e) => setTpPx(e.target.value)}
+              placeholder="0.00"
+              className="w-full rounded-xl bg-white/[0.03] border border-emerald-400/30 outline-none focus:border-emerald-400/60 px-3 py-2 text-sm font-mono tabular-nums text-emerald-200"
+            />
+            <div className="text-[9px] font-mono text-white/40 mt-1">
+              {tpNum !== null ? `${tpDist} pts · ${fmtMoney(rewardMoney)} reward` : "no TP"}
+            </div>
+          </div>
+        </div>
+
+        {slNum !== null && tpNum !== null && slDist > 0 && (
+          <div className="mt-3 text-center text-[10px] font-mono uppercase tracking-[0.14em] text-amber-300/80">
+            R:R 1 : {(tpDist / slDist).toFixed(2)}
+          </div>
+        )}
+
+        <div className="grid grid-cols-2 gap-2 mt-4">
+          <button
+            onClick={onClose}
+            className="py-2 rounded-xl border border-white/10 text-white/70 hover:text-white hover:border-white/30 text-xs font-mono uppercase tracking-[0.14em]"
+          >
+            cancel
+          </button>
+          <button
+            onClick={() => onSave(slNum, tpNum)}
+            className="py-2 rounded-xl border border-emerald-400/40 bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25 text-xs font-bold font-mono uppercase tracking-[0.14em]"
+          >
+            save
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
   );
 }
