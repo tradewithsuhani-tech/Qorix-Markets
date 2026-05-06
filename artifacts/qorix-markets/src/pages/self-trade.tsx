@@ -229,6 +229,17 @@ export default function SelfTradePage() {
     });
   };
 
+  const modifyPosition = (id: string, sl: number | null, tp: number | null) => {
+    setPositions((ps) => ps.map((p) => (p.id === id ? { ...p, sl, tp } : p)));
+  };
+
+  const closeAll = () => {
+    positions.forEach((p) => closePosition(p.id, "manual"));
+  };
+
+  // ── Modify dialog state ──
+  const [modifyId, setModifyId] = useState<string | null>(null);
+
   // SL/TP auto-trigger
   useEffect(() => {
     positions.forEach((p) => {
@@ -279,17 +290,33 @@ export default function SelfTradePage() {
       if (c.l < lo) lo = c.l;
       if (c.h > hi) hi = c.h;
     }
-    // include open positions + mid so reference lines stay in view
+    // include open positions (entry/SL/TP) + ticket-preview SL/TP + mid
     for (const p of positions.filter((p) => p.pair === symbol)) {
       lo = Math.min(lo, p.entry);
       hi = Math.max(hi, p.entry);
+      if (p.sl !== null) {
+        lo = Math.min(lo, p.sl);
+        hi = Math.max(hi, p.sl);
+      }
+      if (p.tp !== null) {
+        lo = Math.min(lo, p.tp);
+        hi = Math.max(hi, p.tp);
+      }
+    }
+    if (slPts > 0) {
+      lo = Math.min(lo, ask - slPts * pair.pip);
+      hi = Math.max(hi, bid + slPts * pair.pip);
+    }
+    if (tpPts > 0) {
+      lo = Math.min(lo, bid - tpPts * pair.pip);
+      hi = Math.max(hi, ask + tpPts * pair.pip);
     }
     lo = Math.min(lo, mid);
     hi = Math.max(hi, mid);
     const span = Math.max(hi - lo, pair.pip * 20);
     const pad = span * 0.18;
     return [+(lo - pad).toFixed(pair.digits), +(hi + pad).toFixed(pair.digits)];
-  }, [history, positions, symbol, mid, pair]);
+  }, [history, positions, symbol, mid, pair, slPts, tpPts, ask, bid]);
 
   return (
     <Layout>
@@ -504,25 +531,125 @@ export default function SelfTradePage() {
                     dot={false}
                     isAnimationActive={false}
                   />
-                  {/* Open position lines */}
+                  {/* Open position entry + SL + TP lines */}
                   {positions
                     .filter((p) => p.pair === symbol)
-                    .map((p) => (
+                    .flatMap((p) => {
+                      const items: any[] = [
+                        <ReferenceLine
+                          key={`${p.id}-e`}
+                          y={p.entry}
+                          stroke={p.side === "BUY" ? "#10b981" : "#f43f5e"}
+                          strokeDasharray="4 3"
+                          strokeWidth={1}
+                          label={{
+                            value: `${p.side} ${p.lots} @ ${fmtPrice(p.entry, pair.digits)}`,
+                            position: "left",
+                            fill: p.side === "BUY" ? "#34d399" : "#fb7185",
+                            fontSize: 9,
+                            fontFamily: "monospace",
+                          }}
+                        />,
+                      ];
+                      if (p.sl !== null) {
+                        items.push(
+                          <ReferenceLine
+                            key={`${p.id}-sl`}
+                            y={p.sl}
+                            stroke="rgba(244,63,94,0.85)"
+                            strokeDasharray="2 4"
+                            strokeWidth={1}
+                            label={{
+                              value: `SL ${fmtPrice(p.sl, pair.digits)}`,
+                              position: "left",
+                              fill: "#fb7185",
+                              fontSize: 9,
+                              fontFamily: "monospace",
+                            }}
+                          />,
+                        );
+                      }
+                      if (p.tp !== null) {
+                        items.push(
+                          <ReferenceLine
+                            key={`${p.id}-tp`}
+                            y={p.tp}
+                            stroke="rgba(16,185,129,0.85)"
+                            strokeDasharray="2 4"
+                            strokeWidth={1}
+                            label={{
+                              value: `TP ${fmtPrice(p.tp, pair.digits)}`,
+                              position: "left",
+                              fill: "#34d399",
+                              fontSize: 9,
+                              fontFamily: "monospace",
+                            }}
+                          />,
+                        );
+                      }
+                      return items;
+                    })}
+                  {/* Ticket SL/TP preview (ghost lines from current Ask for BUY, Bid for SELL) */}
+                  {slPts > 0 && (
+                    <>
                       <ReferenceLine
-                        key={p.id}
-                        y={p.entry}
-                        stroke={p.side === "BUY" ? "#10b981" : "#f43f5e"}
-                        strokeDasharray="4 3"
+                        y={+(ask - slPts * pair.pip).toFixed(pair.digits)}
+                        stroke="rgba(244,63,94,0.45)"
+                        strokeDasharray="1 5"
                         strokeWidth={1}
                         label={{
-                          value: `${p.side} ${p.lots}`,
-                          position: "left",
-                          fill: p.side === "BUY" ? "#34d399" : "#fb7185",
-                          fontSize: 9,
+                          value: `BUY SL`,
+                          position: "right",
+                          fill: "rgba(251,113,133,0.7)",
+                          fontSize: 8.5,
                           fontFamily: "monospace",
                         }}
                       />
-                    ))}
+                      <ReferenceLine
+                        y={+(bid + slPts * pair.pip).toFixed(pair.digits)}
+                        stroke="rgba(244,63,94,0.45)"
+                        strokeDasharray="1 5"
+                        strokeWidth={1}
+                        label={{
+                          value: `SELL SL`,
+                          position: "right",
+                          fill: "rgba(251,113,133,0.7)",
+                          fontSize: 8.5,
+                          fontFamily: "monospace",
+                        }}
+                      />
+                    </>
+                  )}
+                  {tpPts > 0 && (
+                    <>
+                      <ReferenceLine
+                        y={+(ask + tpPts * pair.pip).toFixed(pair.digits)}
+                        stroke="rgba(16,185,129,0.45)"
+                        strokeDasharray="1 5"
+                        strokeWidth={1}
+                        label={{
+                          value: `BUY TP`,
+                          position: "right",
+                          fill: "rgba(52,211,153,0.7)",
+                          fontSize: 8.5,
+                          fontFamily: "monospace",
+                        }}
+                      />
+                      <ReferenceLine
+                        y={+(bid - tpPts * pair.pip).toFixed(pair.digits)}
+                        stroke="rgba(16,185,129,0.45)"
+                        strokeDasharray="1 5"
+                        strokeWidth={1}
+                        label={{
+                          value: `SELL TP`,
+                          position: "right",
+                          fill: "rgba(52,211,153,0.7)",
+                          fontSize: 8.5,
+                          fontFamily: "monospace",
+                        }}
+                      />
+                    </>
+                  )}
                   {/* Mid price line with label */}
                   <ReferenceLine
                     y={mid}
@@ -610,6 +737,66 @@ export default function SelfTradePage() {
               <SlTpInput label="SL (pts)" value={slPts} onChange={setSlPts} tone="rose" />
               <SlTpInput label="TP (pts)" value={tpPts} onChange={setTpPts} tone="emerald" />
             </div>
+            <div className="flex flex-wrap gap-1">
+              {[0, 50, 100, 200, 500].map((v) => (
+                <button
+                  key={`sl-${v}`}
+                  onClick={() => setSlPts(v)}
+                  className={`flex-1 min-w-[40px] py-1 rounded-md text-[9.5px] font-mono tabular-nums border ${
+                    slPts === v
+                      ? "border-rose-400/50 bg-rose-500/10 text-rose-300"
+                      : "border-white/8 text-white/45 hover:border-white/20"
+                  }`}
+                >
+                  SL{v}
+                </button>
+              ))}
+            </div>
+            <div className="flex flex-wrap gap-1">
+              {[0, 50, 100, 200, 500].map((v) => (
+                <button
+                  key={`tp-${v}`}
+                  onClick={() => setTpPts(v)}
+                  className={`flex-1 min-w-[40px] py-1 rounded-md text-[9.5px] font-mono tabular-nums border ${
+                    tpPts === v
+                      ? "border-emerald-400/50 bg-emerald-500/10 text-emerald-300"
+                      : "border-white/8 text-white/45 hover:border-white/20"
+                  }`}
+                >
+                  TP{v}
+                </button>
+              ))}
+            </div>
+
+            {/* Risk / Reward preview */}
+            {(slPts > 0 || tpPts > 0) && (
+              <div className="rounded-lg border border-white/8 bg-white/[0.02] p-2 grid grid-cols-3 gap-2 text-center">
+                <div>
+                  <div className="text-[8.5px] font-mono uppercase tracking-[0.14em] text-white/40">
+                    Risk
+                  </div>
+                  <div className="text-[11px] font-bold tabular-nums text-rose-300">
+                    {slPts > 0 ? fmtMoney(slPts * pair.pip * lots * pair.contract) : "—"}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[8.5px] font-mono uppercase tracking-[0.14em] text-white/40">
+                    Reward
+                  </div>
+                  <div className="text-[11px] font-bold tabular-nums text-emerald-300">
+                    {tpPts > 0 ? fmtMoney(tpPts * pair.pip * lots * pair.contract) : "—"}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[8.5px] font-mono uppercase tracking-[0.14em] text-white/40">
+                    R:R
+                  </div>
+                  <div className="text-[11px] font-bold tabular-nums text-amber-300">
+                    {slPts > 0 && tpPts > 0 ? `1 : ${(tpPts / slPts).toFixed(2)}` : "—"}
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Buy / Sell buttons */}
             <div className="grid grid-cols-2 gap-2 mt-1">
@@ -675,6 +862,22 @@ export default function SelfTradePage() {
 
         {/* ── Open Positions ───────────────────────────────────────── */}
         <div className="px-3 sm:px-5 pb-4">
+          {positions.length > 0 && (
+            <div className="flex items-center justify-end gap-2 mb-2">
+              <span className="text-[10px] font-mono uppercase tracking-[0.14em] text-white/40">
+                {positions.length} open · net{" "}
+                <span className={openPnL >= 0 ? "text-emerald-400" : "text-rose-400"}>
+                  {fmtMoney(openPnL)}
+                </span>
+              </span>
+              <button
+                onClick={closeAll}
+                className="px-2.5 py-1 rounded-md text-[10px] font-mono font-bold uppercase tracking-[0.14em] border border-rose-400/40 text-rose-300 hover:bg-rose-500/10"
+              >
+                close all
+              </button>
+            </div>
+          )}
           <PositionTable
             title="Open Positions"
             empty="No open positions. Place a Buy or Sell to start."
@@ -716,12 +919,20 @@ export default function SelfTradePage() {
                     {fmtMoney(live)}
                   </td>
                   <td className="px-3 py-2 text-right">
-                    <button
-                      onClick={() => closePosition(p.id)}
-                      className="px-2 py-1 rounded-md text-[10px] font-mono uppercase tracking-[0.12em] border border-white/10 text-white/70 hover:text-white hover:border-white/30 inline-flex items-center gap-1"
-                    >
-                      <X style={{ width: 11, height: 11 }} /> close
-                    </button>
+                    <div className="inline-flex items-center gap-1.5">
+                      <button
+                        onClick={() => setModifyId(p.id)}
+                        className="px-2 py-1 rounded-md text-[10px] font-mono uppercase tracking-[0.12em] border border-amber-400/30 text-amber-300/85 hover:text-amber-200 hover:border-amber-400/55"
+                      >
+                        modify
+                      </button>
+                      <button
+                        onClick={() => closePosition(p.id)}
+                        className="px-2 py-1 rounded-md text-[10px] font-mono uppercase tracking-[0.12em] border border-white/10 text-white/70 hover:text-white hover:border-white/30 inline-flex items-center gap-1"
+                      >
+                        <X style={{ width: 11, height: 11 }} /> close
+                      </button>
+                    </div>
                   </td>
                 </tr>
               );
@@ -773,6 +984,19 @@ export default function SelfTradePage() {
           </div>
         )}
       </div>
+      <AnimatePresence>
+        {modifyId && (
+          <ModifyDialog
+            position={positions.find((p) => p.id === modifyId)!}
+            pair={PAIRS.find((x) => x.symbol === positions.find((p) => p.id === modifyId)?.pair)!}
+            onClose={() => setModifyId(null)}
+            onSave={(sl, tp) => {
+              modifyPosition(modifyId, sl, tp);
+              setModifyId(null);
+            }}
+          />
+        )}
+      </AnimatePresence>
     </Layout>
   );
 }
@@ -939,5 +1163,133 @@ function PositionTable({
         </div>
       )}
     </div>
+  );
+}
+
+function ModifyDialog({
+  position,
+  pair,
+  onClose,
+  onSave,
+}: {
+  position: Position;
+  pair: Pair;
+  onClose: () => void;
+  onSave: (sl: number | null, tp: number | null) => void;
+}) {
+  const [slPx, setSlPx] = useState<string>(position.sl !== null ? position.sl.toFixed(pair.digits) : "");
+  const [tpPx, setTpPx] = useState<string>(position.tp !== null ? position.tp.toFixed(pair.digits) : "");
+
+  const slNum = slPx.trim() === "" ? null : +parseFloat(slPx).toFixed(pair.digits);
+  const tpNum = tpPx.trim() === "" ? null : +parseFloat(tpPx).toFixed(pair.digits);
+
+  const slDist =
+    slNum !== null
+      ? Math.round(Math.abs(slNum - position.entry) / pair.pip)
+      : 0;
+  const tpDist =
+    tpNum !== null
+      ? Math.round(Math.abs(tpNum - position.entry) / pair.pip)
+      : 0;
+  const riskMoney = slNum !== null ? slDist * pair.pip * position.lots * pair.contract : 0;
+  const rewardMoney = tpNum !== null ? tpDist * pair.pip * position.lots * pair.contract : 0;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ scale: 0.95, y: 8 }}
+        animate={{ scale: 1, y: 0 }}
+        exit={{ scale: 0.95, y: 8 }}
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-sm rounded-2xl border border-white/10 bg-gradient-to-b from-[#0a0f1a] to-[#06090f] p-5 shadow-2xl"
+      >
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <div className="text-[10px] font-mono uppercase tracking-[0.16em] text-white/45">
+              Modify Position
+            </div>
+            <div className="text-base font-bold mt-0.5 flex items-center gap-2">
+              <span>{position.pair}</span>
+              <span
+                className={`px-1.5 py-0.5 rounded-md text-[9.5px] font-mono font-bold uppercase tracking-[0.12em] border ${
+                  position.side === "BUY"
+                    ? "text-emerald-300 border-emerald-400/40 bg-emerald-500/10"
+                    : "text-rose-300 border-rose-400/40 bg-rose-500/10"
+                }`}
+              >
+                {position.side} {position.lots}
+              </span>
+            </div>
+            <div className="text-[10px] font-mono text-white/40 mt-0.5">
+              entry @ {fmtPrice(position.entry, pair.digits)}
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-md text-white/55 hover:text-white hover:bg-white/5"
+          >
+            <X style={{ width: 14, height: 14 }} />
+          </button>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <div className="text-[10px] font-mono uppercase tracking-[0.14em] text-rose-300/80 mb-1.5">
+              Stop Loss (price)
+            </div>
+            <input
+              value={slPx}
+              onChange={(e) => setSlPx(e.target.value)}
+              placeholder="0.00"
+              className="w-full rounded-xl bg-white/[0.03] border border-rose-400/30 outline-none focus:border-rose-400/60 px-3 py-2 text-sm font-mono tabular-nums text-rose-200"
+            />
+            <div className="text-[9px] font-mono text-white/40 mt-1">
+              {slNum !== null ? `${slDist} pts · ${fmtMoney(riskMoney)} risk` : "no SL"}
+            </div>
+          </div>
+          <div>
+            <div className="text-[10px] font-mono uppercase tracking-[0.14em] text-emerald-300/80 mb-1.5">
+              Take Profit (price)
+            </div>
+            <input
+              value={tpPx}
+              onChange={(e) => setTpPx(e.target.value)}
+              placeholder="0.00"
+              className="w-full rounded-xl bg-white/[0.03] border border-emerald-400/30 outline-none focus:border-emerald-400/60 px-3 py-2 text-sm font-mono tabular-nums text-emerald-200"
+            />
+            <div className="text-[9px] font-mono text-white/40 mt-1">
+              {tpNum !== null ? `${tpDist} pts · ${fmtMoney(rewardMoney)} reward` : "no TP"}
+            </div>
+          </div>
+        </div>
+
+        {slNum !== null && tpNum !== null && slDist > 0 && (
+          <div className="mt-3 text-center text-[10px] font-mono uppercase tracking-[0.14em] text-amber-300/80">
+            R:R 1 : {(tpDist / slDist).toFixed(2)}
+          </div>
+        )}
+
+        <div className="grid grid-cols-2 gap-2 mt-4">
+          <button
+            onClick={onClose}
+            className="py-2 rounded-xl border border-white/10 text-white/70 hover:text-white hover:border-white/30 text-xs font-mono uppercase tracking-[0.14em]"
+          >
+            cancel
+          </button>
+          <button
+            onClick={() => onSave(slNum, tpNum)}
+            className="py-2 rounded-xl border border-emerald-400/40 bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25 text-xs font-bold font-mono uppercase tracking-[0.14em]"
+          >
+            save
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
   );
 }
