@@ -58,57 +58,125 @@ function rng(seed: number) {
   };
 }
 
-type Candle = { t: number; o: number; h: number; l: number; c: number; v: number };
+type Candle = {
+  t: number;
+  o: number;
+  h: number;
+  l: number;
+  c: number;
+  v: number;
+  bv: number; // buy volume (4 bot buyers)
+  sv: number; // sell volume (4 bot sellers)
+};
 
-// Bot-scalp-style: 1-second candles, 90 in rolling window
-const CANDLE_MS = 1000;
-const MAX_CANDLES = 90;
+// Bot-scalp-style: 5-second candles to match "5s candles" label
+const CANDLE_MS = 5000;
+const MAX_CANDLES = 72; // ~6 min rolling window
+const BOT_BUYERS = 4;
+const BOT_SELLERS = 4;
+
+// Simulate per-tick liquidity from 4 buy bots + 4 sell bots.
+// Direction bias: if price ticked up, buyers slightly more aggressive (and vice versa).
+// Returns { bv, sv } — volume units in micro-lots scaled by pair.contract for visual feel.
+function botTickVolumes(priceDelta: number, baseUnit: number): { bv: number; sv: number } {
+  const bias = Math.tanh(priceDelta * 1000); // -1..1 directional
+  let bv = 0;
+  let sv = 0;
+  for (let i = 0; i < BOT_BUYERS; i++) {
+    // each buyer: 0..2x base, biased upward when price rising
+    const factor = Math.random() * (1 + Math.max(0, bias) * 0.8);
+    bv += baseUnit * factor;
+  }
+  for (let i = 0; i < BOT_SELLERS; i++) {
+    const factor = Math.random() * (1 + Math.max(0, -bias) * 0.8);
+    sv += baseUnit * factor;
+  }
+  return { bv: Math.round(bv), sv: Math.round(sv) };
+}
 
 function buildHistory(pair: Pair, count: number = MAX_CANDLES): Candle[] {
   const r = rng(Math.floor(pair.base * 1000));
   const out: Candle[] = [];
-  let price = pair.base * (1 - pair.vol * 4);
+  let price = pair.base;
   const now = Date.now();
   const baseBucket = Math.floor(now / CANDLE_MS) * CANDLE_MS;
   for (let i = count - 1; i >= 0; i--) {
     const t = baseBucket - i * CANDLE_MS;
-    const drift = (r() - 0.48) * pair.base * pair.vol * 0.4;
+    const drift = (r() - 0.5) * pair.base * pair.vol * 0.5;
     const o = price;
     const c = +(o + drift).toFixed(pair.digits);
     const h = +Math.max(o, c, o + Math.abs(drift) * (0.4 + r() * 0.8)).toFixed(pair.digits);
     const l = +Math.min(o, c, o - Math.abs(drift) * (0.4 + r() * 0.8)).toFixed(pair.digits);
-    const v = Math.round(40 + r() * 160);
-    out.push({ t, o, h, l, c, v });
+    const baseUnit = 8 + r() * 12;
+    const bv = Math.round((BOT_BUYERS * baseUnit) * (0.6 + r() * 0.8));
+    const sv = Math.round((BOT_SELLERS * baseUnit) * (0.6 + r() * 0.8));
+    out.push({ t, o, h, l, c, v: bv + sv, bv, sv });
     price = c;
   }
   return out;
 }
 
-// Aggregate a single live price tick into the rolling 1s candle buffer.
-// Mirrors the bot-terminal-card scalp aggregator.
-function aggregateTick(history: Candle[], price: number, digits: number): Candle[] {
+// Re-seed history anchored to a real live price (used when the first
+// live tick arrives, so the chart doesn't show a vertical jump from
+// stale synthetic seed → real price).
+function seedFromLivePrice(pair: Pair, livePrice: number, count: number = MAX_CANDLES): Candle[] {
+  const out: Candle[] = [];
+  const baseBucket = Math.floor(Date.now() / CANDLE_MS) * CANDLE_MS;
+  // Random walk BACKWARDS from livePrice with ~0.05% steps, then reverse
+  const prices: number[] = [livePrice];
+  let p = livePrice;
+  for (let i = 0; i < count; i++) {
+    const step = (Math.random() - 0.5) * pair.base * pair.vol * 0.6;
+    p = p - step;
+    prices.push(p);
+  }
+  prices.reverse(); // now oldest -> newest, ends at livePrice
+  for (let i = 0; i < count; i++) {
+    const t = baseBucket - (count - 1 - i) * CANDLE_MS;
+    const o = +prices[i].toFixed(pair.digits);
+    const c = +prices[i + 1].toFixed(pair.digits);
+    const span = Math.abs(c - o);
+    const h = +(Math.max(o, c) + span * (0.2 + Math.random() * 0.6)).toFixed(pair.digits);
+    const l = +(Math.min(o, c) - span * (0.2 + Math.random() * 0.6)).toFixed(pair.digits);
+    const baseUnit = 8 + Math.random() * 12;
+    const bv = Math.round((BOT_BUYERS * baseUnit) * (0.6 + Math.random() * 0.8));
+    const sv = Math.round((BOT_SELLERS * baseUnit) * (0.6 + Math.random() * 0.8));
+    out.push({ t, o, h, l, c, v: bv + sv, bv, sv });
+  }
+  return out;
+}
+
+// Aggregate a single live price tick into the rolling 5s candle buffer
+// AND attribute the tick volume across the 4 buy / 4 sell bots.
+function aggregateTick(history: Candle[], price: number, digits: number, baseUnit: number): Candle[] {
   if (!isFinite(price) || price <= 0) return history;
   const bucket = Math.floor(Date.now() / CANDLE_MS) * CANDLE_MS;
   if (history.length === 0) {
-    return [{ t: bucket, o: price, h: price, l: price, c: price, v: 1 }];
+    const { bv, sv } = botTickVolumes(0, baseUnit);
+    return [{ t: bucket, o: price, h: price, l: price, c: price, v: bv + sv, bv, sv }];
   }
   const last = history[history.length - 1];
+  const delta = price - last.c;
+  const { bv: tickBv, sv: tickSv } = botTickVolumes(delta, baseUnit);
+
   if (last.t === bucket) {
     const updated: Candle = {
       ...last,
       h: +Math.max(last.h, price).toFixed(digits),
       l: +Math.min(last.l, price).toFixed(digits),
       c: +price.toFixed(digits),
-      v: last.v + 1,
+      bv: last.bv + tickBv,
+      sv: last.sv + tickSv,
+      v: last.v + tickBv + tickSv,
     };
     return [...history.slice(0, -1), updated];
   }
-  // Fill any skipped buckets with flat candles so the x-axis stays uniform
+  // Fill any skipped buckets with flat low-volume candles so x-axis stays uniform
   const open = last.c;
   const skipped: Candle[] = [];
   let b = last.t + CANDLE_MS;
   while (b < bucket) {
-    skipped.push({ t: b, o: open, h: open, l: open, c: open, v: 0 });
+    skipped.push({ t: b, o: open, h: open, l: open, c: open, v: 0, bv: 0, sv: 0 });
     b += CANDLE_MS;
   }
   const fresh: Candle = {
@@ -117,7 +185,9 @@ function aggregateTick(history: Candle[], price: number, digits: number): Candle
     h: +Math.max(open, price).toFixed(digits),
     l: +Math.min(open, price).toFixed(digits),
     c: +price.toFixed(digits),
-    v: 1,
+    bv: tickBv,
+    sv: tickSv,
+    v: tickBv + tickSv,
   };
   return [...history, ...skipped, fresh].slice(-MAX_CANDLES);
 }
@@ -164,18 +234,40 @@ export default function SelfTradePage() {
   const [symbol, setSymbol] = useState<string>("XAU/USD");
   const pair = useMemo(() => PAIRS.find((p) => p.symbol === symbol)!, [symbol]);
 
-  const [history, setHistory] = useState<Candle[]>(() => buildHistory(pair, 80));
+  const [history, setHistory] = useState<Candle[]>(() => buildHistory(pair));
   const [tick, setTick] = useState(0);
   const [isLive, setIsLive] = useState(false);
+  // Tracks whether we've already replaced synthetic seed with a live-anchored seed.
+  // Reset to false on every pair change so each pair re-anchors on its first tick.
+  const liveSeededRef = useRef(false);
+
+  // Per-tick base liquidity unit: scales with pair contract size so XAU/BTC don't dwarf JPY
+  const baseUnit = useMemo(() => {
+    const c = pair.contract || 100;
+    return Math.max(2, Math.round(c / 12));
+  }, [pair]);
 
   // when pair changes, rebuild history (synthetic seed; replaced by live below if available)
   useEffect(() => {
-    setHistory(buildHistory(pair, 80));
+    setHistory(buildHistory(pair));
     setIsLive(false);
+    liveSeededRef.current = false;
   }, [pair]);
 
+  // Helper: ingest a real live price. On the first one, drop the synthetic
+  // seed and re-anchor history to the live price (no vertical jump).
+  const ingestLive = (px: number) => {
+    setIsLive(true);
+    if (!liveSeededRef.current) {
+      liveSeededRef.current = true;
+      setHistory(seedFromLivePrice(pair, px));
+      return;
+    }
+    setHistory((h) => aggregateTick(h, px, pair.digits, baseUnit));
+  };
+
   // ── LIVE feed via Binance @trade stream (when pair has .binance) ──
-  // Bot-scalp style: real-time price ticks aggregated into 1s candles
+  // Bot-scalp style: real-time per-trade ticks → 5s candle aggregator
   useEffect(() => {
     if (!pair.binance) return;
     let cancelled = false;
@@ -190,8 +282,7 @@ export default function SelfTradePage() {
           const msg = JSON.parse(ev.data);
           const px = +msg?.p;
           if (!isFinite(px) || px <= 0) return;
-          setIsLive(true);
-          setHistory((h) => aggregateTick(h, px, pair.digits));
+          ingestLive(px);
         } catch {}
       };
       ws.onerror = () => setIsLive(false);
@@ -202,6 +293,7 @@ export default function SelfTradePage() {
       cancelled = true;
       try { ws?.close(); } catch {}
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pair]);
 
   // ── LIVE feed via gold-api for XAU/USD (free, no key, CORS-enabled) ──
@@ -215,17 +307,17 @@ export default function SelfTradePage() {
         const j = await r.json();
         const px = +(+j.price).toFixed(pair.digits);
         if (!isFinite(px) || px <= 0 || cancelled) return;
-        setIsLive(true);
-        setHistory((h) => aggregateTick(h, px, pair.digits));
+        ingestLive(px);
       } catch {}
     };
     poll();
     const id = window.setInterval(poll, 1500);
     return () => { cancelled = true; clearInterval(id); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pair.symbol, pair.digits]);
 
   // ── Synthetic price tick for unmapped pairs (GBP/USD, USD/JPY) ──
-  // 250ms ticks fed into the same 1s aggregator → bot-scalp feel
+  // 300ms ticks fed into the same 5s aggregator → bot-scalp feel
   useEffect(() => {
     if (pair.binance) return;
     if (pair.symbol === "XAU/USD") return;
@@ -233,14 +325,14 @@ export default function SelfTradePage() {
       setHistory((h) => {
         const last = h[h.length - 1];
         const ref = last ? last.c : pair.base;
-        const drift = (Math.random() - 0.5) * pair.base * pair.vol * 0.18;
+        const drift = (Math.random() - 0.5) * pair.base * pair.vol * 0.22;
         const px = +(ref + drift).toFixed(pair.digits);
         setTick((t) => t + 1);
-        return aggregateTick(h, px, pair.digits);
+        return aggregateTick(h, px, pair.digits, baseUnit);
       });
-    }, 250);
+    }, 300);
     return () => clearInterval(id);
-  }, [pair.binance, pair.symbol, pair.base, pair.vol, pair.digits]);
+  }, [pair.binance, pair.symbol, pair.base, pair.vol, pair.digits, baseUnit]);
 
   const mid = history.length ? history[history.length - 1].c : pair.base;
   const bid = +(mid - pair.spread / 2).toFixed(pair.digits);
@@ -367,6 +459,8 @@ export default function SelfTradePage() {
         l: c.l,
         c: c.c,
         v: c.v,
+        bv: c.bv,
+        sv: c.sv,
         // stems for candle visual
         wickLow: c.l,
         wickHigh: c.h,
@@ -494,6 +588,9 @@ export default function SelfTradePage() {
                 <span className="ml-2 px-1.5 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-400/40 text-[9px] font-mono uppercase tracking-[0.14em] text-emerald-300 flex items-center gap-1">
                   <span className="w-1 h-1 rounded-full bg-emerald-400 animate-pulse" />
                   live
+                </span>
+                <span className="ml-1 px-1.5 py-0.5 rounded-full bg-white/5 border border-white/10 text-[9px] font-mono uppercase tracking-[0.14em] text-white/55">
+                  4 buy · 4 sell bots
                 </span>
               </div>
               <div className="text-[10px] font-mono text-white/40">
@@ -763,6 +860,56 @@ export default function SelfTradePage() {
                   />
                 </ComposedChart>
               </ResponsiveContainer>
+            </div>
+            {/* Bot order-flow volume strip — 4 buy bots vs 4 sell bots per 5s candle */}
+            <div className="px-2 pb-2">
+              <div className="flex items-center justify-between px-2 py-1">
+                <span className="text-[9px] font-mono uppercase tracking-[0.16em] text-white/40">
+                  bot order flow · liquidity
+                </span>
+                <div className="flex items-center gap-3 text-[9px] font-mono">
+                  <span className="text-emerald-400/80 flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-sm bg-emerald-500/80" /> buy
+                  </span>
+                  <span className="text-rose-400/80 flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-sm bg-rose-500/80" /> sell
+                  </span>
+                </div>
+              </div>
+              <div className="h-[64px] sm:h-[80px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={chartData} margin={{ top: 2, right: 60, left: 0, bottom: 4 }}>
+                    <CartesianGrid stroke="rgba(255,255,255,0.04)" strokeDasharray="2 4" vertical={false} />
+                    <XAxis dataKey="t" hide />
+                    <YAxis
+                      tick={{ fill: "#475569", fontSize: 8 }}
+                      axisLine={false}
+                      tickLine={false}
+                      width={60}
+                      orientation="right"
+                      tickFormatter={(v) => String(Math.round(Number(v)))}
+                    />
+                    <Tooltip
+                      cursor={{ stroke: "rgba(148,163,184,0.2)", strokeDasharray: "2 3" }}
+                      contentStyle={{
+                        background: "rgba(8,12,22,0.96)",
+                        border: "1px solid rgba(255,255,255,0.1)",
+                        borderRadius: 8,
+                        fontSize: 10,
+                      }}
+                      labelStyle={{ color: "#94a3b8" }}
+                      formatter={(v: any, k: any) => {
+                        const key = typeof k === "string" ? k : "";
+                        if (key === "bv") return [Math.round(Number(v)), "BUY VOL"];
+                        if (key === "sv") return [Math.round(Number(v)), "SELL VOL"];
+                        return null as any;
+                      }}
+                    />
+                    <Bar dataKey="bv" stackId="vol" fill="rgba(16,185,129,0.75)" isAnimationActive={false} />
+                    <Bar dataKey="sv" stackId="vol" fill="rgba(244,63,94,0.75)" isAnimationActive={false} />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
             </div>
           </motion.div>
 
