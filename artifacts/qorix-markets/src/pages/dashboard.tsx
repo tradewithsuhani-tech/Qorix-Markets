@@ -554,6 +554,12 @@ export function DemoDashboardBody({
   const [chartDays, setChartDays] = useState(30);
   const [returnsDays, setReturnsDays] = useState(30);
   const [pnlDays, setPnlDays] = useState(30);
+  const [pnlTick, setPnlTick] = useState(0);
+  useEffect(() => {
+    if (pnlDays !== 1) return;
+    const id = setInterval(() => setPnlTick((t) => t + 1), 2500);
+    return () => clearInterval(id);
+  }, [pnlDays]);
   const [pendingLimit, setPendingLimit] = useState<number | null>(null);
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
   const prevProfitRef = useRef(0);
@@ -719,15 +725,83 @@ export function DemoDashboardBody({
   // (green) if today's percent > previous day's percent, otherwise down (red).
   // Sourced from /dashboard/pnl-history so it always matches the Daily P&L card.
   const pnlArr = Array.isArray(pnlHistory) ? pnlHistory : [];
-  const drawdownData = pnlArr.map((p, i) => {
-    const prevPct = i > 0 ? pnlArr[i - 1]!.percent : p.percent;
-    return {
-      date: format(new Date(p.date + "T00:00:00Z"), pnlDays <= 1 ? "HH:mm" : "MMM dd"),
-      value: p.amount,
-      percent: p.percent,
-      up: p.percent >= prevPct,
-    };
-  });
+  const drawdownData = (() => {
+    // ── 1D view: synthetic intraday scalp curve (purely visual) ─────
+    // Builds an animated minute-level curve from 09:15 → current IST minute,
+    // ramping toward today's `dailyPL` with bot-scalp-style oscillations.
+    if (pnlDays === 1) {
+      const istNow = new Date(Date.now() + 5.5 * 60 * 60 * 1000);
+      const hh = istNow.getUTCHours();
+      const mm = istNow.getUTCMinutes();
+      const minutesSinceOpen = Math.max(
+        0,
+        Math.min(15 * 60, (hh - 9) * 60 + (mm - 15)),
+      );
+      // 1 candle every 15 min — caps at ~60 points across the session
+      const stepMin = 15;
+      const steps = Math.max(1, Math.floor(minutesSinceOpen / stepMin)) + 1;
+      const target = dailyPL;
+      // deterministic seeded noise (per-step), plus live tick jitter so the
+      // last few candles wiggle each interval to feel alive.
+      const seed = (n: number) => {
+        const s = Math.sin(n * 12.9898 + 78.233) * 43758.5453;
+        return s - Math.floor(s);
+      };
+      const out: Array<{ date: string; value: number; percent: number; up: boolean }> = [];
+      let prev = 0;
+      for (let i = 0; i < steps; i++) {
+        const totalMin = 9 * 60 + 15 + i * stepMin;
+        const h = Math.floor(totalMin / 60);
+        const m = totalMin % 60;
+        const dateLbl = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+        // ramp curve: smoothstep from 0 → target across `steps`
+        const t = i / Math.max(1, steps - 1);
+        const ease = t * t * (3 - 2 * t);
+        // wave: 3 overlaid sines simulate scalp pulses
+        const wave =
+          Math.sin(i * 0.45) * 0.35 +
+          Math.sin(i * 1.1 + 1.7) * 0.18 +
+          Math.sin(i * 2.3 + 0.6) * 0.08;
+        // deterministic noise
+        const n = (seed(i + 1) - 0.5) * 0.22;
+        // live jitter only on last 3 candles, driven by pnlTick
+        const liveJitter =
+          i >= steps - 3
+            ? (seed(i * 31 + pnlTick) - 0.5) *
+              Math.max(2, Math.abs(target) * 0.05)
+            : 0;
+        // amplitude scales with target magnitude (or fallback for $0)
+        const amp = Math.max(8, Math.abs(target) * 0.18);
+        const value = +(ease * target + (wave + n) * amp + liveJitter).toFixed(2);
+        out.push({
+          date: dateLbl,
+          value,
+          percent: totalEquityValue > 0 ? (value / totalEquityValue) * 100 : 0,
+          up: value >= prev,
+        });
+        prev = value;
+      }
+      // pin the very last candle to current time + exact dailyPL
+      const lastLbl = `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
+      out.push({
+        date: lastLbl,
+        value: target,
+        percent: totalEquityValue > 0 ? (target / totalEquityValue) * 100 : 0,
+        up: target >= prev,
+      });
+      return out;
+    }
+    // ── multi-day view: real backend history ────────────────────────
+    return pnlArr.map((p, i) => {
+      const prevPct = i > 0 ? pnlArr[i - 1]!.percent : p.percent;
+      return {
+        date: format(new Date(p.date + "T00:00:00Z"), "MMM dd"),
+        value: p.amount,
+        percent: p.percent,
+        up: p.percent >= prevPct,
+      };
+    });
+  })();
 
   const handleDownloadReport = async () => {
     if (!user || !summary || !perf) {
