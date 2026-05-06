@@ -634,7 +634,7 @@ export default function SelfTradePage() {
             </div>
             <div className="h-[360px] sm:h-[440px] p-2">
               <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={chartData} margin={{ top: 10, right: 60, left: 0, bottom: 6 }}>
+                <ComposedChart data={chartData} margin={{ top: 10, right: 8, left: 0, bottom: 6 }}>
                   <defs>
                     <linearGradient id="stPriceFill" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="0%" stopColor="rgba(245,158,11,0.22)" />
@@ -913,7 +913,7 @@ export default function SelfTradePage() {
               </div>
               <div className="h-[64px] sm:h-[80px]">
                 <ResponsiveContainer width="100%" height="100%">
-                  <ComposedChart data={chartData} margin={{ top: 2, right: 60, left: 0, bottom: 4 }}>
+                  <ComposedChart data={chartData} margin={{ top: 2, right: 8, left: 0, bottom: 4 }}>
                     <CartesianGrid stroke="rgba(255,255,255,0.04)" strokeDasharray="2 4" vertical={false} />
                     <XAxis dataKey="t" hide />
                     <YAxis
