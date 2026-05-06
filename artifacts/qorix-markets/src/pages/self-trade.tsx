@@ -69,9 +69,9 @@ type Candle = {
   sv: number; // sell volume (4 bot sellers)
 };
 
-// Bot-scalp-style: 5-second candles to match "5s candles" label
-const CANDLE_MS = 5000;
-const MAX_CANDLES = 72; // ~6 min rolling window
+// Bot-scalp-style: 1-second candles, 90 in rolling window (matches bot-terminal-card)
+const CANDLE_MS = 1000;
+const MAX_CANDLES = 90;
 const BOT_BUYERS = 4;
 const BOT_SELLERS = 4;
 
@@ -317,7 +317,7 @@ export default function SelfTradePage() {
   }, [pair.symbol, pair.digits]);
 
   // ── Synthetic price tick for unmapped pairs (GBP/USD, USD/JPY) ──
-  // 300ms ticks fed into the same 5s aggregator → bot-scalp feel
+  // 200ms ticks fed into the 1s aggregator → bot-scalp feel
   useEffect(() => {
     if (pair.binance) return;
     if (pair.symbol === "XAU/USD") return;
@@ -330,9 +330,29 @@ export default function SelfTradePage() {
         setTick((t) => t + 1);
         return aggregateTick(h, px, pair.digits, baseUnit);
       });
-    }, 300);
+    }, 200);
     return () => clearInterval(id);
   }, [pair.binance, pair.symbol, pair.base, pair.vol, pair.digits, baseUnit]);
+
+  // ── Heartbeat for LIVE pairs (XAU + Binance) ──
+  // Even when real ticks pause briefly (between gold-api polls, low-trade
+  // moments, network hiccups), inject ±0.005% jitter every 200ms around
+  // the last close so the candle stays visibly alive instead of freezing.
+  // Real ticks always overwrite jitter on the next message.
+  useEffect(() => {
+    if (!pair.binance && pair.symbol !== "XAU/USD") return;
+    const id = window.setInterval(() => {
+      if (!liveSeededRef.current) return; // wait for first real tick to anchor
+      setHistory((h) => {
+        if (h.length === 0) return h;
+        const last = h[h.length - 1];
+        const jitter = (Math.random() - 0.5) * last.c * 0.0001; // ±0.005%
+        const px = +(last.c + jitter).toFixed(pair.digits);
+        return aggregateTick(h, px, pair.digits, Math.max(1, Math.round(baseUnit / 3)));
+      });
+    }, 200);
+    return () => clearInterval(id);
+  }, [pair.binance, pair.symbol, pair.digits, baseUnit]);
 
   const mid = history.length ? history[history.length - 1].c : pair.base;
   const bid = +(mid - pair.spread / 2).toFixed(pair.digits);
@@ -583,7 +603,7 @@ export default function SelfTradePage() {
               <div className="flex items-center gap-2">
                 <Activity style={{ width: 13, height: 13 }} className="text-emerald-400" />
                 <span className="text-[10px] font-mono uppercase tracking-[0.18em] text-white/55">
-                  {symbol} · 5s candles
+                  {symbol} · 1s candles
                 </span>
                 <span className="ml-2 px-1.5 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-400/40 text-[9px] font-mono uppercase tracking-[0.14em] text-emerald-300 flex items-center gap-1">
                   <span className="w-1 h-1 rounded-full bg-emerald-400 animate-pulse" />
