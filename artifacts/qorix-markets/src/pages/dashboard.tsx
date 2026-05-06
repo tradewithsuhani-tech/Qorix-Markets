@@ -2105,32 +2105,7 @@ export function DemoDashboardBody({
                 </div>
               </div>
               <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground gap-2">
-                <div className="flex items-center gap-1.5 min-w-0">
-                  <span>Today's gain</span>
-                  {scalpBotPnl !== 0 && (
-                    <motion.span
-                      key={Math.round(scalpBotPnl * 100)}
-                      initial={{ opacity: 0, y: -2 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.25 }}
-                      className="px-1.5 py-0.5 rounded-md text-[9px] font-mono font-bold uppercase tracking-[0.1em] border tabular-nums"
-                      style={{
-                        background: scalpBotPnl >= 0
-                          ? "rgba(34,197,94,0.12)"
-                          : "rgba(239,68,68,0.12)",
-                        borderColor: scalpBotPnl >= 0
-                          ? "rgba(34,197,94,0.35)"
-                          : "rgba(239,68,68,0.35)",
-                        color: scalpBotPnl >= 0
-                          ? "rgb(74,222,128)"
-                          : "rgb(248,113,113)",
-                      }}
-                    >
-                      <span className="opacity-70 mr-1">scalp</span>
-                      {scalpBotPnl >= 0 ? "+" : "−"}${Math.abs(scalpBotPnl).toFixed(2)}
-                    </motion.span>
-                  )}
-                </div>
+                <span>Today's gain</span>
                 <span className={`font-semibold tabular-nums shrink-0 ${isPositive ? "profit-text" : "loss-text"}`}>
                   {isPositive ? "+" : ""}<AnimatedCounter value={Math.abs(dailyPL)} prefix="$" /> ({isPositive ? "+" : ""}{livePct.toFixed(2)}%)
                 </span>
