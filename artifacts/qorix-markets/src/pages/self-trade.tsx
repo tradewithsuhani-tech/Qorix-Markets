@@ -591,6 +591,18 @@ export default function SelfTradePage() {
           </div>
         </div>
 
+        {/* ── Beta / demo-only notice ──────────────────────────────── */}
+        <div className="px-3 sm:px-5 pt-3">
+          <div className="rounded-xl border border-amber-400/30 bg-gradient-to-r from-amber-500/10 to-amber-500/5 px-3 py-2 flex items-center gap-2">
+            <span className="px-1.5 py-0.5 rounded-md bg-amber-500/25 border border-amber-400/50 text-[9px] font-mono uppercase tracking-[0.16em] text-amber-200 shrink-0">
+              beta
+            </span>
+            <p className="text-[11px] sm:text-xs text-amber-100/85 leading-snug">
+              This is a <span className="font-semibold">beta version</span> — only <span className="font-semibold">demo trading</span> for testing purposes. No real funds are used and no orders reach a live market.
+            </p>
+          </div>
+        </div>
+
         {/* ── Body grid ────────────────────────────────────────────── */}
         <div className="p-3 sm:p-5 grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-4">
           {/* Chart */}
@@ -611,6 +623,9 @@ export default function SelfTradePage() {
                 </span>
                 <span className="ml-1 px-1.5 py-0.5 rounded-full bg-white/5 border border-white/10 text-[9px] font-mono uppercase tracking-[0.14em] text-white/55">
                   4 buy · 4 sell bots
+                </span>
+                <span className="ml-1 px-1.5 py-0.5 rounded-full bg-amber-500/15 border border-amber-400/40 text-[9px] font-mono uppercase tracking-[0.14em] text-amber-300">
+                  beta · demo only
                 </span>
               </div>
               <div className="text-[10px] font-mono text-white/40">
