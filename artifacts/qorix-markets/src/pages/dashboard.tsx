@@ -560,6 +560,12 @@ export function DemoDashboardBody({
     const id = setInterval(() => setPnlTick((t) => t + 1), 2500);
     return () => clearInterval(id);
   }, [pnlDays]);
+  const [returnsTick, setReturnsTick] = useState(0);
+  useEffect(() => {
+    if (returnsDays !== 1) return;
+    const id = setInterval(() => setReturnsTick((t) => t + 1), 2500);
+    return () => clearInterval(id);
+  }, [returnsDays]);
   const [pendingLimit, setPendingLimit] = useState<number | null>(null);
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
   const prevProfitRef = useRef(0);
@@ -1133,18 +1139,69 @@ export function DemoDashboardBody({
         const rawArr = Array.isArray(returnsEquity) ? (returnsEquity as Array<{ date: string; equity: number }>) : [];
         const arr = [...rawArr].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
         const base = arr.length > 0 ? Number(arr[0].equity) || 0 : 0;
-        const series = arr.map(p => ({
-          date: format(new Date(p.date), "MMM dd"),
-          ret: base > 0 ? ((Number(p.equity) - base) / base) * 100 : 0,
-        }));
-        // Live nudge: lift the trailing point + headline % by scalp bot pnl
-        // so Rolling Returns breathes with Bot Terminal pill.
+        // Live nudge driven by scalp bot
         const liveDeltaPct = base > 0 ? (scalpBotPnl / base) * 100 : 0;
-        if (series.length > 0) {
-          series[series.length - 1] = {
-            ...series[series.length - 1],
-            ret: series[series.length - 1].ret + liveDeltaPct,
+
+        let series: Array<{ date: string; ret: number }>;
+        if (returnsDays === 1) {
+          // ── 1D: synthetic intraday scalp curve in % terms ─────────────
+          const istNow = new Date(Date.now() + 5.5 * 60 * 60 * 1000);
+          const hh = istNow.getUTCHours();
+          const mm = istNow.getUTCMinutes();
+          const minutesSinceOpen = Math.max(
+            0,
+            Math.min(15 * 60, (hh - 9) * 60 + (mm - 15)),
+          );
+          const stepMin = 15;
+          const steps = Math.max(1, Math.floor(minutesSinceOpen / stepMin)) + 1;
+          // target = today's % return: derive from dailyPL vs equity
+          const target =
+            totalEquityValue > 0
+              ? ((dailyPL || 0) / totalEquityValue) * 100
+              : 0;
+          const seed = (n: number) => {
+            const s = Math.sin(n * 12.9898 + 78.233) * 43758.5453;
+            return s - Math.floor(s);
           };
+          const amp = Math.max(0.04, Math.abs(target) * 0.18);
+          const out: Array<{ date: string; ret: number }> = [];
+          for (let i = 0; i < steps; i++) {
+            const totalMin = 9 * 60 + 15 + i * stepMin;
+            const h = Math.floor(totalMin / 60);
+            const m = totalMin % 60;
+            const lbl = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+            const t = i / Math.max(1, steps - 1);
+            const ease = t * t * (3 - 2 * t);
+            const wave =
+              Math.sin(i * 0.45) * 0.35 +
+              Math.sin(i * 1.1 + 1.7) * 0.18 +
+              Math.sin(i * 2.3 + 0.6) * 0.08;
+            const noise = (seed(i + 1) - 0.5) * 0.22;
+            const live =
+              i >= steps - 3
+                ? (seed(i * 31 + returnsTick) - 0.5) * Math.max(0.02, Math.abs(target) * 0.05)
+                : 0;
+            const ret = +(ease * target + (wave + noise) * amp + live).toFixed(3);
+            out.push({ date: lbl, ret });
+          }
+          // pin last point to current time + exact target
+          out.push({
+            date: `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`,
+            ret: +target.toFixed(3),
+          });
+          series = out;
+        } else {
+          // ── multi-day: real backend equity → cumulative % ─────────────
+          series = arr.map(p => ({
+            date: format(new Date(p.date), "MMM dd"),
+            ret: base > 0 ? ((Number(p.equity) - base) / base) * 100 : 0,
+          }));
+          if (series.length > 0) {
+            series[series.length - 1] = {
+              ...series[series.length - 1],
+              ret: series[series.length - 1].ret + liveDeltaPct,
+            };
+          }
         }
         const last = series.length > 0 ? series[series.length - 1].ret : 0;
         const isPos = last >= 0;
