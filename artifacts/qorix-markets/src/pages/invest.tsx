@@ -1314,55 +1314,132 @@ export default function InvestPage() {
                   </div>
                 </div>
 
-                {/* ── Stat grid ──────────────────────────────────── */}
-                <div className="grid grid-cols-3 gap-2.5 mb-5">
+                {/* ── Stat grid (premium with rings) ─────────────── */}
+                <div className="grid grid-cols-3 gap-2.5 mb-3">
                   {[
                     {
                       label: "Trading Fund",
                       icon: Wallet,
                       value: <AnimatedCounter value={investment.amount} prefix="$" />,
+                      sub: "active capital",
                       tone: "text-white",
-                      glow: "rgba(255,255,255,0.06)",
+                      ringColor: "#3b82f6",
+                      ringPct: 100,
+                      glow: "rgba(59,130,246,0.18)",
+                      tint: "rgba(59,130,246,0.08)",
                     },
                     {
                       label: "Drawdown",
                       icon: Shield,
                       value: `$${investment.drawdown.toFixed(2)}`,
+                      sub: `${ddPct.toFixed(0)}% of cap`,
                       tone: "text-orange-300",
-                      glow: "rgba(249,115,22,0.10)",
+                      ringColor: "#f97316",
+                      ringPct: ddPct,
+                      glow: "rgba(249,115,22,0.22)",
+                      tint: "rgba(249,115,22,0.08)",
                     },
                     {
                       label: "Win Rate",
                       icon: TrendingUp,
                       value: `${meta.winRate}%`,
+                      sub: `${meta.tradesPerDay} trades/d`,
                       tone: "text-blue-300",
-                      glow: "rgba(59,130,246,0.10)",
+                      ringColor: "#10b981",
+                      ringPct: meta.winRate,
+                      glow: "rgba(16,185,129,0.22)",
+                      tint: "rgba(16,185,129,0.08)",
                     },
-                  ].map((item, i) => (
-                    <motion.div
-                      key={item.label}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: i * 0.06 }}
-                      className="rounded-xl p-3 border border-white/8"
-                      style={{
-                        background: `linear-gradient(160deg, ${item.glow}, rgba(255,255,255,0.015))`,
-                      }}
-                    >
-                      <div className="flex items-center gap-1.5 mb-1.5">
-                        <item.icon
-                          style={{ width: 11, height: 11 }}
-                          className="text-white/45"
+                  ].map((item, i) => {
+                    const R = 18;
+                    const C = 2 * Math.PI * R;
+                    const offset = C - (Math.min(item.ringPct, 100) / 100) * C;
+                    return (
+                      <motion.div
+                        key={item.label}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.1 + i * 0.08 }}
+                        className="relative rounded-2xl p-3 border border-white/10 overflow-hidden"
+                        style={{
+                          background: `radial-gradient(110% 90% at 100% 0%, ${item.tint}, transparent 60%), linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01))`,
+                          boxShadow: `inset 0 1px 0 rgba(255,255,255,0.06), 0 6px 20px -10px ${item.glow}`,
+                        }}
+                      >
+                        {/* corner sheen */}
+                        <div
+                          aria-hidden
+                          className="pointer-events-none absolute -top-8 -right-8 w-20 h-20 rounded-full"
+                          style={{
+                            background: `radial-gradient(closest-side, ${item.glow}, transparent 70%)`,
+                          }}
                         />
-                        <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-white/55">
-                          {item.label}
-                        </span>
-                      </div>
-                      <div className={`text-base font-bold tabular-nums ${item.tone}`}>
-                        {item.value}
-                      </div>
-                    </motion.div>
-                  ))}
+
+                        {/* Ring + icon */}
+                        <div className="relative flex items-center gap-2 mb-2">
+                          <div className="relative w-10 h-10 shrink-0">
+                            <svg viewBox="0 0 44 44" className="w-10 h-10 -rotate-90">
+                              <circle
+                                cx="22"
+                                cy="22"
+                                r={R}
+                                stroke="rgba(255,255,255,0.08)"
+                                strokeWidth="3"
+                                fill="none"
+                              />
+                              <motion.circle
+                                cx="22"
+                                cy="22"
+                                r={R}
+                                stroke={item.ringColor}
+                                strokeWidth="3"
+                                fill="none"
+                                strokeLinecap="round"
+                                strokeDasharray={C}
+                                initial={{ strokeDashoffset: C }}
+                                animate={{ strokeDashoffset: offset }}
+                                transition={{
+                                  duration: 1.1,
+                                  ease: "easeOut",
+                                  delay: 0.2 + i * 0.08,
+                                }}
+                                style={{
+                                  filter: `drop-shadow(0 0 4px ${item.ringColor})`,
+                                }}
+                              />
+                            </svg>
+                            <div className="absolute inset-0 flex items-center justify-center">
+                              <item.icon
+                                style={{ width: 13, height: 13 }}
+                                className="text-white/85"
+                              />
+                            </div>
+                          </div>
+                          <span className="text-[9.5px] font-mono uppercase tracking-[0.12em] text-white/55 leading-tight">
+                            {item.label}
+                          </span>
+                        </div>
+
+                        <div
+                          className={`text-[17px] font-bold tabular-nums leading-none ${item.tone}`}
+                        >
+                          {item.value}
+                        </div>
+                        <div className="text-[9.5px] font-mono uppercase tracking-[0.1em] text-white/40 mt-1.5 truncate">
+                          {item.sub}
+                        </div>
+
+                        {/* bottom accent */}
+                        <div
+                          aria-hidden
+                          className="absolute bottom-0 left-3 right-3 h-px"
+                          style={{
+                            background: `linear-gradient(90deg, transparent, ${item.ringColor}55, transparent)`,
+                          }}
+                        />
+                      </motion.div>
+                    );
+                  })}
                 </div>
 
                 {/* ── Telemetry strip ────────────────────────────── */}
