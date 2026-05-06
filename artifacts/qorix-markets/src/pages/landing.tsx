@@ -150,7 +150,7 @@ const PROBLEM_VS = [
   {
     label: "Skill required",
     manual: "Years of trading experience",
-    auto: "None — start with $10 in 2 minutes",
+    auto: "None — sign up in 2 minutes",
   },
 ];
 
@@ -237,7 +237,7 @@ function StickyNav({ navigate }: { navigate: (p: string) => void }) {
             onClick={() => navigate("/register")}
             className="px-4 sm:px-5 py-2 sm:py-2.5 rounded-xl text-sm font-bold text-white bg-gradient-to-r from-blue-500 to-violet-500 hover:from-blue-400 hover:to-violet-400 shadow-lg shadow-blue-500/25 transition-all"
           >
-            Start with $10
+            Sign up
           </button>
         </div>
       </div>
@@ -616,7 +616,7 @@ export default function Landing() {
 
             <FadeIn delay={0.2}>
               <p className="text-lg sm:text-xl text-slate-400 leading-relaxed mb-8 max-w-xl">
-                Let our 24/7 trading desk grow your portfolio with hard risk limits, transparent execution, and monthly payouts. Start with just <span className="text-white font-semibold">$10</span> — no experience needed.
+                Let our 24/7 trading desk grow your portfolio with hard risk limits, transparent execution, and monthly payouts — no experience needed.
               </p>
             </FadeIn>
 
@@ -627,7 +627,7 @@ export default function Landing() {
                   className="group relative inline-flex items-center justify-center gap-2 px-7 py-4 rounded-2xl text-base font-bold text-white bg-gradient-to-r from-blue-500 via-indigo-500 to-violet-500 hover:from-blue-400 hover:via-indigo-400 hover:to-violet-400 shadow-[0_10px_30px_-10px_rgba(99,102,241,0.7)] hover:shadow-[0_14px_40px_-8px_rgba(99,102,241,0.85)] transition-all overflow-hidden"
                 >
                   <span className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/20 to-white/0 -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
-                  <span className="relative">Start with $10</span>
+                  <span className="relative">Sign up</span>
                   <ArrowRight size={18} className="relative group-hover:translate-x-1 transition-transform" />
                 </button>
                 <button
@@ -1116,7 +1116,7 @@ export default function Landing() {
                   </span>
                 </h2>
                 <p className="text-base sm:text-lg text-slate-300 mb-8 max-w-xl mx-auto">
-                  Join {investors.toLocaleString()}+ investors already earning. Start with $10 — withdraw anytime.
+                  Join {investors.toLocaleString()}+ investors already earning. Withdraw anytime.
                 </p>
 
                 <div className="flex flex-wrap items-center justify-center gap-3 mb-6">
@@ -1124,7 +1124,7 @@ export default function Landing() {
                     onClick={() => navigate("/register")}
                     className="group inline-flex items-center gap-2 px-8 py-4 rounded-2xl text-base font-bold text-white bg-white/10 hover:bg-white/15 border border-white/30 backdrop-blur-sm shadow-2xl transition-all"
                   >
-                    Start with $10
+                    Sign up
                     <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
                   </button>
                   <button
