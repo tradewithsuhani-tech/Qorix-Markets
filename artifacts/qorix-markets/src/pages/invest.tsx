@@ -1298,10 +1298,10 @@ export default function InvestPage() {
                           }}
                         />
 
-                        {/* Ring + icon */}
-                        <div className="relative flex items-center gap-2 mb-2">
-                          <div className="relative w-10 h-10 shrink-0">
-                            <svg viewBox="0 0 44 44" className="w-10 h-10 -rotate-90">
+                        {/* Ring + label header */}
+                        <div className="relative flex items-center justify-between gap-2 mb-2.5">
+                          <div className="relative w-9 h-9 shrink-0">
+                            <svg viewBox="0 0 44 44" className="w-9 h-9 -rotate-90">
                               <circle
                                 cx="22"
                                 cy="22"
@@ -1333,22 +1333,27 @@ export default function InvestPage() {
                             </svg>
                             <div className="absolute inset-0 flex items-center justify-center">
                               <item.icon
-                                style={{ width: 13, height: 13 }}
+                                style={{ width: 12, height: 12 }}
                                 className="text-white/85"
                               />
                             </div>
                           </div>
-                          <span className="text-[9.5px] font-mono uppercase tracking-[0.12em] text-white/55 leading-tight">
-                            {item.label}
-                          </span>
                         </div>
 
+                        {/* Label — full width, can wrap */}
+                        <div className="text-[9px] font-mono font-bold uppercase tracking-[0.14em] text-white/55 leading-[1.25] mb-1.5 break-words">
+                          {item.label}
+                        </div>
+
+                        {/* Value */}
                         <div
-                          className={`text-[17px] font-bold tabular-nums leading-none ${item.tone}`}
+                          className={`text-[15px] sm:text-[17px] font-bold tabular-nums leading-none ${item.tone} break-all`}
                         >
                           {item.value}
                         </div>
-                        <div className="text-[9.5px] font-mono uppercase tracking-[0.1em] text-white/40 mt-1.5 truncate">
+
+                        {/* Sub-line — wraps freely */}
+                        <div className="text-[9px] font-mono uppercase tracking-[0.1em] text-white/40 mt-1.5 leading-[1.3] break-words">
                           {item.sub}
                         </div>
 
