@@ -389,7 +389,7 @@ export default function RewardsPage() {
                   key={level.id}
                   className={cn(
                     "flex items-center gap-4 px-5 py-4 transition-all",
-                    isActive ? "bg-blue-500/5 border-l-2 border-l-blue-400" : "border-l-2 border-l-transparent"
+                    isActive ? "bg-emerald-500/5 border-l-2 border-l-emerald-400" : "border-l-2 border-l-transparent"
                   )}
                 >
                   {/* Level icon */}
@@ -402,7 +402,7 @@ export default function RewardsPage() {
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className={cn("text-sm font-bold", level.color)}>{level.label}</span>
                       {isActive && (
-                        <span className="text-[9px] font-bold bg-blue-500/20 text-blue-400 border border-blue-500/30 px-1.5 py-0.5 rounded-full uppercase tracking-wider">
+                        <span className="text-[9px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-1.5 py-0.5 rounded-full uppercase tracking-wider">
                           Current
                         </span>
                       )}
