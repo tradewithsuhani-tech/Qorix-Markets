@@ -1098,10 +1098,6 @@ export default function LoginPage() {
           <div className="absolute top-0 left-1/2 -translate-x-1/2 w-1/2 h-px bg-gradient-to-r from-transparent via-emerald-400/60 to-transparent" />
           {/* Heading */}
           <div className="text-center space-y-2">
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 text-[10px] font-semibold tracking-[0.18em] uppercase text-emerald-300">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              {isLogin ? "Secure Sign-in" : "Join Qorix"}
-            </div>
             <AnimatePresence mode="wait">
               <motion.h1
                 key={isLogin ? "login" : "register"}
