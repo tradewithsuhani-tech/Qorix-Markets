@@ -20,7 +20,9 @@
     "android": {
       "backgroundColor": "#0A0C10",
       "package": "com.qorixmarkets.app",
-      "permissions": ["INTERNET"]
+      "permissions": [
+        "INTERNET"
+      ]
     },
     "web": {
       "favicon": "./assets/images/icon.png"
@@ -38,6 +40,11 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "31d78905-5f29-46b9-9a3f-303763ee4b65"
+      }
     }
   }
 }
