@@ -65,7 +65,7 @@ export default function BlogPostPage() {
         <div className="max-w-2xl mx-auto px-4 py-24 text-center">
           <h1 className="text-3xl font-black text-white mb-3">Article not found</h1>
           <p className="text-slate-400 mb-6">The article you are looking for does not exist or has been moved.</p>
-          <Link href="/blog" className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-sm font-bold text-white" style={{ background: "linear-gradient(90deg,#10b981,#22c55e)" }}>
+          <Link href="/blog" className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-sm font-bold text-white" style={{ background: "linear-gradient(90deg,#8b5cf6,#6366f1)" }}>
             Back to blog
           </Link>
         </div>
@@ -85,7 +85,7 @@ export default function BlogPostPage() {
             <ChevronLeft size={14} /> All articles
           </Link>
 
-          <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-300 mb-3">{post.category}</div>
+          <div className="text-[10px] font-bold uppercase tracking-wider text-violet-300 mb-3">{post.category}</div>
           <h1 className="text-3xl md:text-5xl font-black text-white leading-[1.1] mb-5">{post.title}</h1>
           <div className="flex items-center gap-4 text-xs text-slate-500 mb-8 flex-wrap">
             <span className="inline-flex items-center gap-1"><User size={12} /> {post.author}</span>
@@ -95,7 +95,7 @@ export default function BlogPostPage() {
 
           <div
             className="aspect-video rounded-2xl mb-8"
-            style={{ background: "linear-gradient(135deg, rgba(16,185,129,0.20), rgba(59,130,246,0.18))" }}
+            style={{ background: "linear-gradient(135deg, rgba(139,92,246,0.20), rgba(59,130,246,0.18))" }}
             role="img"
             aria-label={post.featuredImageAlt}
           />
@@ -104,12 +104,12 @@ export default function BlogPostPage() {
           {toc.length > 0 && (
             <details className="lg:hidden mb-6 rounded-2xl p-4" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
               <summary className="cursor-pointer text-sm font-bold text-white inline-flex items-center gap-2">
-                <ListOrdered size={14} className="text-emerald-300" /> Table of contents
+                <ListOrdered size={14} className="text-violet-300" /> Table of contents
               </summary>
               <ul className="mt-3 space-y-1.5 text-sm">
                 {toc.map((t) => (
                   <li key={t.id}>
-                    <a href={`#${t.id}`} className="text-slate-400 hover:text-emerald-300">{t.text}</a>
+                    <a href={`#${t.id}`} className="text-slate-400 hover:text-violet-300">{t.text}</a>
                   </li>
                 ))}
               </ul>
@@ -127,7 +127,7 @@ export default function BlogPostPage() {
                 </ul>
               );
               if (b.type === "quote") return (
-                <blockquote key={i} className="border-l-2 pl-4 text-slate-400 italic" style={{ borderColor: "rgba(16,185,129,0.6)" }}>
+                <blockquote key={i} className="border-l-2 pl-4 text-slate-400 italic" style={{ borderColor: "rgba(139,92,246,0.6)" }}>
                   {b.text}
                 </blockquote>
               );
@@ -137,7 +137,7 @@ export default function BlogPostPage() {
                   href={withRef(b.href ?? "/signup")}
                   onClick={() => trackCta(b.text ?? "Blog CTA", `blog:${post.slug}`)}
                   className="not-prose inline-flex items-center gap-1.5 px-5 py-2.5 my-3 rounded-xl text-sm font-bold text-white shadow-lg"
-                  style={{ background: "linear-gradient(90deg,#10b981,#22c55e)" }}
+                  style={{ background: "linear-gradient(90deg,#8b5cf6,#6366f1)" }}
                 >
                   {b.text} <ArrowRight size={14} />
                 </Link>
@@ -154,10 +154,10 @@ export default function BlogPostPage() {
                   <Link
                     key={r.slug}
                     href={`/blog/${r.slug}`}
-                    className="block rounded-2xl p-4 hover:border-emerald-400/30 transition-colors"
+                    className="block rounded-2xl p-4 hover:border-violet-400/30 transition-colors"
                     style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}
                   >
-                    <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-300 mb-1.5">{r.category}</div>
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-violet-300 mb-1.5">{r.category}</div>
                     <h3 className="text-sm font-bold text-white leading-snug">{r.title}</h3>
                   </Link>
                 ))}
@@ -171,12 +171,12 @@ export default function BlogPostPage() {
           <aside className="hidden lg:block">
             <div className="sticky top-20 rounded-2xl p-5" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
               <div className="flex items-center gap-2 text-[11px] uppercase tracking-wider font-bold text-slate-400 mb-3">
-                <ListOrdered size={12} className="text-emerald-300" /> On this page
+                <ListOrdered size={12} className="text-violet-300" /> On this page
               </div>
               <ul className="space-y-2 text-sm">
                 {toc.map((t) => (
                   <li key={t.id}>
-                    <a href={`#${t.id}`} className="text-slate-400 hover:text-emerald-300 leading-snug block">
+                    <a href={`#${t.id}`} className="text-slate-400 hover:text-violet-300 leading-snug block">
                       {t.text}
                     </a>
                   </li>
@@ -212,7 +212,7 @@ function highlight(text: string, re: RegExp | null) {
         <mark
           key={i}
           className="px-1 rounded"
-          style={{ background: "rgba(16,185,129,0.18)", color: "#a7f3d0" }}
+          style={{ background: "rgba(139,92,246,0.18)", color: "#a7f3d0" }}
         >
           {p}
         </mark>

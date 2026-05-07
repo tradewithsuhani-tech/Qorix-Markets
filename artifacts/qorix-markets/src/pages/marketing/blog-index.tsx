@@ -32,7 +32,7 @@ export default function BlogIndexPage() {
     <MarketingShell>
       <MarketingHero
         badge="Blog"
-        title={<>Insights from the <span className="text-emerald-300">Qorix desk</span></>}
+        title={<>Insights from the <span className="text-violet-300">Qorix desk</span></>}
         subtitle="Guides, market analysis, and platform updates. Written for investors, by traders."
       />
 
@@ -47,17 +47,17 @@ export default function BlogIndexPage() {
               <div
                 className="aspect-video md:aspect-auto bg-cover bg-center"
                 style={{
-                  background: "linear-gradient(135deg, rgba(16,185,129,0.20), rgba(59,130,246,0.18))",
+                  background: "linear-gradient(135deg, rgba(139,92,246,0.20), rgba(59,130,246,0.18))",
                 }}
                 role="img"
                 aria-label={featured.featuredImageAlt}
               />
               <div className="p-6 md:p-8 flex flex-col justify-center">
                 <span className="inline-flex w-fit items-center gap-2 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider mb-4"
-                  style={{ background: "rgba(16,185,129,0.10)", border: "1px solid rgba(16,185,129,0.30)", color: "#6ee7b7" }}>
+                  style={{ background: "rgba(139,92,246,0.10)", border: "1px solid rgba(139,92,246,0.30)", color: "#c4b5fd" }}>
                   Featured · {featured.category}
                 </span>
-                <h2 className="text-2xl md:text-3xl font-black text-white leading-tight group-hover:text-emerald-200 transition-colors">
+                <h2 className="text-2xl md:text-3xl font-black text-white leading-tight group-hover:text-violet-200 transition-colors">
                   {featured.title}
                 </h2>
                 <p className="mt-3 text-slate-400 leading-relaxed">{featured.excerpt}</p>
@@ -65,7 +65,7 @@ export default function BlogIndexPage() {
                   <span className="inline-flex items-center gap-1"><Calendar size={12} /> {formatDate(featured.publishedAt)}</span>
                   <span className="inline-flex items-center gap-1"><Clock size={12} /> {featured.readMinutes} min read</span>
                 </div>
-                <span className="mt-5 inline-flex items-center gap-1 text-sm font-semibold text-emerald-300 group-hover:gap-2 transition-all">
+                <span className="mt-5 inline-flex items-center gap-1 text-sm font-semibold text-violet-300 group-hover:gap-2 transition-all">
                   Read article <ArrowRight size={14} />
                 </span>
               </div>
@@ -84,13 +84,13 @@ export default function BlogIndexPage() {
             >
               <div
                 className="aspect-video"
-                style={{ background: "linear-gradient(135deg, rgba(16,185,129,0.18), rgba(59,130,246,0.14))" }}
+                style={{ background: "linear-gradient(135deg, rgba(139,92,246,0.18), rgba(59,130,246,0.14))" }}
                 role="img"
                 aria-label={p.featuredImageAlt}
               />
               <div className="p-5">
-                <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-300 mb-2">{p.category}</div>
-                <h3 className="text-base font-bold text-white leading-tight group-hover:text-emerald-200 transition-colors">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-violet-300 mb-2">{p.category}</div>
+                <h3 className="text-base font-bold text-white leading-tight group-hover:text-violet-200 transition-colors">
                   {p.title}
                 </h3>
                 <p className="mt-2 text-xs text-slate-400 line-clamp-2">{p.excerpt}</p>

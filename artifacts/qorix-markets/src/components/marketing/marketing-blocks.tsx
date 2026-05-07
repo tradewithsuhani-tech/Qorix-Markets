@@ -36,8 +36,8 @@ export function StatsSection() {
             }}
           >
             <div className="inline-flex items-center justify-center w-9 h-9 rounded-xl mb-3"
-              style={{ background: "rgba(16,185,129,0.12)", border: "1px solid rgba(16,185,129,0.25)" }}>
-              <s.icon size={16} className="text-emerald-300" />
+              style={{ background: "rgba(139,92,246,0.12)", border: "1px solid rgba(139,92,246,0.25)" }}>
+              <s.icon size={16} className="text-violet-300" />
             </div>
             <div className="text-2xl md:text-3xl font-black text-white tabular-nums">
               {s.value}
@@ -79,8 +79,8 @@ export function FeatureGrid({
             }}
           >
             <div className="w-10 h-10 rounded-xl mb-4 flex items-center justify-center"
-              style={{ background: "rgba(16,185,129,0.12)", border: "1px solid rgba(16,185,129,0.25)" }}>
-              {it.icon ?? <CheckCircle2 size={18} className="text-emerald-300" />}
+              style={{ background: "rgba(139,92,246,0.12)", border: "1px solid rgba(139,92,246,0.25)" }}>
+              {it.icon ?? <CheckCircle2 size={18} className="text-violet-300" />}
             </div>
             <h3 className="text-lg font-bold text-white mb-2">{it.title}</h3>
             <p className="text-sm text-slate-400 leading-relaxed">{it.description}</p>
@@ -144,7 +144,7 @@ export function TestimonialsSection() {
               border: "1px solid rgba(255,255,255,0.07)",
             }}
           >
-            <Quote size={18} className="text-emerald-400/70 mb-3" />
+            <Quote size={18} className="text-violet-400/70 mb-3" />
             <blockquote className="text-slate-200 leading-relaxed text-sm">
               {t.quote}
             </blockquote>
@@ -243,8 +243,8 @@ export function CtaBand({
         className="rounded-3xl px-6 md:px-10 py-10 md:py-14 text-center relative overflow-hidden"
         style={{
           background:
-            "linear-gradient(135deg, rgba(16,185,129,0.18), rgba(59,130,246,0.10))",
-          border: "1px solid rgba(16,185,129,0.30)",
+            "linear-gradient(135deg, rgba(139,92,246,0.18), rgba(59,130,246,0.10))",
+          border: "1px solid rgba(139,92,246,0.30)",
         }}
       >
         <h2 className="text-2xl md:text-4xl font-black text-white mb-3">{title}</h2>
@@ -254,8 +254,8 @@ export function CtaBand({
           onClick={() => trackCta(ctaLabel, trackLocation)}
           className="inline-flex items-center gap-1.5 px-6 py-3 rounded-xl text-sm font-bold text-white shadow-lg"
           style={{
-            background: "linear-gradient(90deg,#10b981,#22c55e)",
-            boxShadow: "0 14px 40px -12px rgba(16,185,129,0.55)",
+            background: "linear-gradient(90deg,#8b5cf6,#6366f1)",
+            boxShadow: "0 14px 40px -12px rgba(139,92,246,0.55)",
           }}
         >
           {ctaLabel} <ArrowRight size={16} />

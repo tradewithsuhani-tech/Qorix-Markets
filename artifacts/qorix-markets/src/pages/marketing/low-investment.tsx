@@ -18,7 +18,7 @@ export default function LowInvestmentPage() {
         badge="Start Small"
         title={
           <>
-            Start trading with just <span className="text-emerald-300">$10</span>
+            Start trading with just <span className="text-violet-300">$10</span>
           </>
         }
         subtitle="No more $500 minimums. Activate a real AI-managed portfolio with $10 of USDT and grow at your own pace."
@@ -30,12 +30,12 @@ export default function LowInvestmentPage() {
         title="Why low minimums matter"
         subtitle="A platform built for everyone, not just whales."
         items={[
-          { icon: <Wallet size={18} className="text-emerald-300" />, title: "$10 minimum", description: "The lowest barrier to real, managed trading anywhere." },
-          { icon: <Zap size={18} className="text-emerald-300" />, title: "Live in minutes", description: "Sign up, deposit USDT, pick a tier, activate. No waiting on bank wires." },
-          { icon: <Smartphone size={18} className="text-emerald-300" />, title: "Mobile-first", description: "Manage your portfolio from your phone — install Qorix as a PWA in one tap." },
-          { icon: <ShieldCheck size={18} className="text-emerald-300" />, title: "Same risk controls", description: "$10 portfolios get the same drawdown caps and risk management as $10,000 ones." },
-          { icon: <TrendingUp size={18} className="text-emerald-300" />, title: "Compound your way up", description: "Auto-Compound turns daily profits into capital, growing your base over time." },
-          { icon: <Sparkles size={18} className="text-emerald-300" />, title: "Add anytime", description: "Top up whenever you are ready. No tiers, no lock-ins." },
+          { icon: <Wallet size={18} className="text-violet-300" />, title: "$10 minimum", description: "The lowest barrier to real, managed trading anywhere." },
+          { icon: <Zap size={18} className="text-violet-300" />, title: "Live in minutes", description: "Sign up, deposit USDT, pick a tier, activate. No waiting on bank wires." },
+          { icon: <Smartphone size={18} className="text-violet-300" />, title: "Mobile-first", description: "Manage your portfolio from your phone — install Qorix as a PWA in one tap." },
+          { icon: <ShieldCheck size={18} className="text-violet-300" />, title: "Same risk controls", description: "$10 portfolios get the same drawdown caps and risk management as $10,000 ones." },
+          { icon: <TrendingUp size={18} className="text-violet-300" />, title: "Compound your way up", description: "Auto-Compound turns daily profits into capital, growing your base over time." },
+          { icon: <Sparkles size={18} className="text-violet-300" />, title: "Add anytime", description: "Top up whenever you are ready. No tiers, no lock-ins." },
         ]}
       />
 

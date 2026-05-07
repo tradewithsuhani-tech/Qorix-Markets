@@ -40,7 +40,7 @@ export function MarketingShell({ children }: { children: ReactNode }) {
           <Link href="/" className="flex items-center gap-2 shrink-0">
             <div
               className="w-7 h-7 rounded-md flex items-center justify-center"
-              style={{ background: "linear-gradient(135deg,#10b981,#3b82f6)" }}
+              style={{ background: "linear-gradient(135deg,#8b5cf6,#3b82f6)" }}
             >
               <TrendingUp size={14} className="text-white" />
             </div>
@@ -48,7 +48,7 @@ export function MarketingShell({ children }: { children: ReactNode }) {
               Qorix{" "}
               <span
                 style={{
-                  background: "linear-gradient(90deg,#22c55e,#3b82f6)",
+                  background: "linear-gradient(90deg,#6366f1,#3b82f6)",
                   WebkitBackgroundClip: "text",
                   WebkitTextFillColor: "transparent",
                 }}
@@ -89,8 +89,8 @@ export function MarketingShell({ children }: { children: ReactNode }) {
               onClick={() => trackCta("Start Trading", "header")}
               className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-sm font-bold text-white transition-all shadow-lg"
               style={{
-                background: "linear-gradient(90deg,#10b981,#22c55e)",
-                boxShadow: "0 10px 30px -10px rgba(16,185,129,0.5)",
+                background: "linear-gradient(90deg,#8b5cf6,#6366f1)",
+                boxShadow: "0 10px 30px -10px rgba(139,92,246,0.5)",
               }}
             >
               Start Trading <ArrowRight size={14} />
@@ -152,7 +152,7 @@ export function MarketingFooter() {
           <div className="flex items-center gap-2 mb-3">
             <div
               className="w-7 h-7 rounded-md flex items-center justify-center"
-              style={{ background: "linear-gradient(135deg,#10b981,#3b82f6)" }}
+              style={{ background: "linear-gradient(135deg,#8b5cf6,#3b82f6)" }}
             >
               <TrendingUp size={14} className="text-white" />
             </div>
@@ -166,27 +166,27 @@ export function MarketingFooter() {
         <div>
           <h3 className="text-white font-bold mb-3 text-sm">Platform</h3>
           <ul className="space-y-2 text-slate-400">
-            <li><Link href="/ai-trading-platform" className="hover:text-emerald-300">AI Trading</Link></li>
-            <li><Link href="/zero-trading-fee" className="hover:text-emerald-300">Zero Trading Fee</Link></li>
-            <li><Link href="/low-investment-trading" className="hover:text-emerald-300">Start at $10</Link></li>
-            <li><Link href={withRef("/signup")} className="hover:text-emerald-300">Open Account</Link></li>
+            <li><Link href="/ai-trading-platform" className="hover:text-violet-300">AI Trading</Link></li>
+            <li><Link href="/zero-trading-fee" className="hover:text-violet-300">Zero Trading Fee</Link></li>
+            <li><Link href="/low-investment-trading" className="hover:text-violet-300">Start at $10</Link></li>
+            <li><Link href={withRef("/signup")} className="hover:text-violet-300">Open Account</Link></li>
           </ul>
         </div>
         <div>
           <h3 className="text-white font-bold mb-3 text-sm">Company</h3>
           <ul className="space-y-2 text-slate-400">
-            <li><Link href="/about" className="hover:text-emerald-300">About Us</Link></li>
-            <li><Link href="/blog" className="hover:text-emerald-300">Blog</Link></li>
-            <li><Link href="/contact" className="hover:text-emerald-300">Contact</Link></li>
+            <li><Link href="/about" className="hover:text-violet-300">About Us</Link></li>
+            <li><Link href="/blog" className="hover:text-violet-300">Blog</Link></li>
+            <li><Link href="/contact" className="hover:text-violet-300">Contact</Link></li>
           </ul>
         </div>
         <div>
           <h3 className="text-white font-bold mb-3 text-sm">Legal</h3>
           <ul className="space-y-2 text-slate-400">
-            <li><Link href="/privacy" className="hover:text-emerald-300">Privacy Policy</Link></li>
-            <li><Link href="/terms" className="hover:text-emerald-300">Terms &amp; Conditions</Link></li>
-            <li><Link href="/legal/risk-disclosure" className="hover:text-emerald-300">Risk Disclosure</Link></li>
-            <li><Link href="/legal/aml-kyc" className="hover:text-emerald-300">AML / KYC</Link></li>
+            <li><Link href="/privacy" className="hover:text-violet-300">Privacy Policy</Link></li>
+            <li><Link href="/terms" className="hover:text-violet-300">Terms &amp; Conditions</Link></li>
+            <li><Link href="/legal/risk-disclosure" className="hover:text-violet-300">Risk Disclosure</Link></li>
+            <li><Link href="/legal/aml-kyc" className="hover:text-violet-300">AML / KYC</Link></li>
           </ul>
         </div>
       </div>
@@ -227,7 +227,7 @@ export function MarketingHero({
         className="pointer-events-none absolute inset-0 opacity-60"
         style={{
           background:
-            "radial-gradient(circle at 20% 10%, rgba(16,185,129,0.18), transparent 55%), radial-gradient(circle at 80% 30%, rgba(59,130,246,0.16), transparent 50%)",
+            "radial-gradient(circle at 20% 10%, rgba(139,92,246,0.18), transparent 55%), radial-gradient(circle at 80% 30%, rgba(59,130,246,0.16), transparent 50%)",
         }}
       />
       <div className="relative max-w-7xl mx-auto px-4 md:px-8 pt-14 md:pt-24 pb-12 md:pb-20 text-center">
@@ -235,12 +235,12 @@ export function MarketingHero({
           <span
             className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider mb-5"
             style={{
-              background: "rgba(16,185,129,0.10)",
-              border: "1px solid rgba(16,185,129,0.30)",
-              color: "#6ee7b7",
+              background: "rgba(139,92,246,0.10)",
+              border: "1px solid rgba(139,92,246,0.30)",
+              color: "#c4b5fd",
             }}
           >
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-pulse" />
             {badge}
           </span>
         )}
@@ -256,8 +256,8 @@ export function MarketingHero({
             onClick={() => trackCta(ctaLabel, trackLocation)}
             className="inline-flex items-center gap-1.5 px-6 py-3 rounded-xl text-sm font-bold text-white shadow-lg"
             style={{
-              background: "linear-gradient(90deg,#10b981,#22c55e)",
-              boxShadow: "0 14px 40px -12px rgba(16,185,129,0.55)",
+              background: "linear-gradient(90deg,#8b5cf6,#6366f1)",
+              boxShadow: "0 14px 40px -12px rgba(139,92,246,0.55)",
             }}
           >
             {ctaLabel} <ArrowRight size={16} />
