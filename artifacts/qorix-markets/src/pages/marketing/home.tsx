@@ -644,7 +644,7 @@ export default function HomePage() {
                 {/* Price */}
                 <div className="flex items-baseline gap-1 mb-1">
                   <span className="text-3xl font-black text-white tabular-nums">{t.target}</span>
-                  <span className="text-xs text-slate-500">target</span>
+                  <span className="text-xs text-slate-500">Target</span>
                 </div>
                 <p className="text-[11px] uppercase tracking-wider text-slate-500 mb-4">{t.range}</p>
 
