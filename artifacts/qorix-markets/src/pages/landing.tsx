@@ -110,7 +110,7 @@ const HOW_STEPS = [
     n: "02",
     icon: Target,
     title: "Pick a risk profile",
-    desc: "Choose Starter, Balanced, or Growth. Drawdown limits are hard-enforced.",
+    desc: "Choose Conservative, Balanced, or Growth. Drawdown limits are hard-enforced.",
     color: "from-violet-500/20 to-violet-600/5",
     accent: "text-violet-400",
     border: "border-violet-500/30",

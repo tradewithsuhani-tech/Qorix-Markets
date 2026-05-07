@@ -45,7 +45,7 @@ export default function AiTradingPage() {
           { icon: <ShieldCheck size={18} className="text-emerald-300" />, title: "Hard risk caps", description: "Per-trade stop-losses and per-tier daily drawdown limits. Strategies auto-pause if breached." },
           { icon: <Activity size={18} className="text-emerald-300" />, title: "Multi-asset desks", description: "Forex majors, gold, indices, and crypto majors — diversified and rebalanced daily." },
           { icon: <LineChart size={18} className="text-emerald-300" />, title: "Live transparency", description: "Every trade, P/L, and equity tick posted to your dashboard in real time." },
-          { icon: <Target size={18} className="text-emerald-300" />, title: "Tier-based targeting", description: "Starter 4%, Balanced 6%, Aggressive 8% per month — you pick the profile." },
+          { icon: <Target size={18} className="text-emerald-300" />, title: "Tier-based targeting", description: "Conservative 4%, Balanced 6%, Aggressive 8% per month — you pick the profile." },
         ]}
       />
 

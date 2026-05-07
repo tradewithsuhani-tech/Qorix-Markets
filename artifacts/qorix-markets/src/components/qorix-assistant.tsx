@@ -70,7 +70,7 @@ const FLOWS: Record<FlowKey, { message: string; options?: QuickOption[] }> = {
     ],
   },
   how_to_start: {
-    message: "**Getting started on Qorix Markets is simple:**\n\n1️⃣ **Create Your Account** — Sign up with your email in under 2 minutes.\n\n2️⃣ **Fund Your Wallet** — Add USD securely to your investor wallet. Check the Wallet section for minimum deposit details.\n\n3️⃣ **Activate Investing** — Head to the *Invest* tab and activate your profile in one click.\n\n4️⃣ **Choose Your Tier** — Pick Starter, Balanced, or Growth based on your goals. Your drawdown ceiling is locked in before any capital moves.\n\n5️⃣ **Earn While You Sleep** — Our professional trading desk operates 24/7. You receive daily performance updates and monthly profit payouts automatically.\n\n🎯 *Most investors are fully set up and earning in under 10 minutes.*",
+    message: "**Getting started on Qorix Markets is simple:**\n\n1️⃣ **Create Your Account** — Sign up with your email in under 2 minutes.\n\n2️⃣ **Fund Your Wallet** — Add USD securely to your investor wallet. Check the Wallet section for minimum deposit details.\n\n3️⃣ **Activate Investing** — Head to the *Invest* tab and activate your profile in one click.\n\n4️⃣ **Choose Your Tier** — Pick Conservative, Balanced, or Growth based on your goals. Your drawdown ceiling is locked in before any capital moves.\n\n5️⃣ **Earn While You Sleep** — Our professional trading desk operates 24/7. You receive daily performance updates and monthly profit payouts automatically.\n\n🎯 *Most investors are fully set up and earning in under 10 minutes.*",
     options: [
       { label: "🚀 Start Investing", value: "start_investing" },
       { label: "📊 Investment Guide", value: "investment_guide" },
@@ -79,7 +79,7 @@ const FLOWS: Record<FlowKey, { message: string; options?: QuickOption[] }> = {
     ],
   },
   investment_guide: {
-    message: "**Qorix Investment Guide**\n\n📌 **Professional Trading Desk:**\nYour funds are deployed across three active strategies — scalping, swing, and arbitrage — executed 24/7 by our 43-strong professional desk.\n\n📌 **Strong Monthly Performance:**\n• 🟢 **Starter** → ~1.5% – 5% monthly\n• 🟡 **Balanced** → ~3% – 8% monthly\n• 🔴 **Growth** → ~5% – 10%+ monthly\n\n📌 **Auto-Compounding:**\nReinvest your returns automatically to accelerate growth over time — activated in one click.\n\n📌 **Monthly Payouts:**\nProfits flow into your dedicated profit wallet every month, available to withdraw on your own schedule — anytime.",
+    message: "**Qorix Investment Guide**\n\n📌 **Professional Trading Desk:**\nYour funds are deployed across three active strategies — scalping, swing, and arbitrage — executed 24/7 by our 43-strong professional desk.\n\n📌 **Strong Monthly Performance:**\n• 🟢 **Conservative** → ~1.5% – 5% monthly\n• 🟡 **Balanced** → ~3% – 8% monthly\n• 🔴 **Growth** → ~5% – 10%+ monthly\n\n📌 **Auto-Compounding:**\nReinvest your returns automatically to accelerate growth over time — activated in one click.\n\n📌 **Monthly Payouts:**\nProfits flow into your dedicated profit wallet every month, available to withdraw on your own schedule — anytime.",
     options: [
       { label: "🚀 Start Investing", value: "start_investing" },
       { label: "💹 Returns Explained", value: "returns" },
@@ -88,7 +88,7 @@ const FLOWS: Record<FlowKey, { message: string; options?: QuickOption[] }> = {
     ],
   },
   returns: {
-    message: "**Returns at Qorix Markets**\n\n💹 **Consistent Monthly Performance:**\nQorixMarkets has delivered positive returns across 10 consecutive months through disciplined desk execution and active profit management.\n\n📈 **Typical Monthly Return Ranges:**\n• 🟢 **Starter** → ~1.5% – 5% monthly\n• 🟡 **Balanced** → ~3% – 8% monthly\n• 🔴 **Growth** → ~5% – 10%+ monthly\n\nPeak periods have seen strong double-digit performance under Growth settings when market conditions aligned with our desk strategies.\n\n📊 **Full Profit Transparency:**\n• Daily profit updates in your Dashboard\n• Real-time equity tracking in Analytics\n• Monthly performance reports\n• Complete payout and withdrawal history",
+    message: "**Returns at Qorix Markets**\n\n💹 **Consistent Monthly Performance:**\nQorixMarkets has delivered positive returns across 10 consecutive months through disciplined desk execution and active profit management.\n\n📈 **Typical Monthly Return Ranges:**\n• 🟢 **Conservative** → ~1.5% – 5% monthly\n• 🟡 **Balanced** → ~3% – 8% monthly\n• 🔴 **Growth** → ~5% – 10%+ monthly\n\nPeak periods have seen strong double-digit performance under Growth settings when market conditions aligned with our desk strategies.\n\n📊 **Full Profit Transparency:**\n• Daily profit updates in your Dashboard\n• Real-time equity tracking in Analytics\n• Monthly performance reports\n• Complete payout and withdrawal history",
     options: [
       { label: "🚀 Start Investing", value: "start_investing" },
       { label: "🛡️ Capital Protection", value: "risk" },
@@ -97,7 +97,7 @@ const FLOWS: Record<FlowKey, { message: string; options?: QuickOption[] }> = {
     ],
   },
   risk: {
-    message: "**Your Capital Protection System**\n\n🛡️ **Protection-First Architecture:**\nEvery investment begins with a defined drawdown ceiling — locked before a single dollar is traded.\n\n✅ **Three protection tiers to match your goals:**\n• 🟢 **Starter (3% ceiling)** — stable, low-volatility growth\n• 🟡 **Balanced (5% ceiling)** — optimised returns with controlled exposure\n• 🔴 **Growth (10% ceiling)** — maximum performance potential\n\n🔒 **How it works:**\n• Real-time equity monitoring on all active positions\n• Auto-pause triggers if your ceiling is approached\n• Profits held in a dedicated wallet — separate from trading capital\n• 24/7 desk oversight by our professional risk team\n\n🏦 **Platform Security:**\nFunds held in segregated wallets. End-to-end encryption, multi-factor authentication, and regular security audits.",
+    message: "**Your Capital Protection System**\n\n🛡️ **Protection-First Architecture:**\nEvery investment begins with a defined drawdown ceiling — locked before a single dollar is traded.\n\n✅ **Three protection tiers to match your goals:**\n• 🟢 **Conservative (3% ceiling)** — stable, low-volatility growth\n• 🟡 **Balanced (5% ceiling)** — optimised returns with controlled exposure\n• 🔴 **Growth (10% ceiling)** — maximum performance potential\n\n🔒 **How it works:**\n• Real-time equity monitoring on all active positions\n• Auto-pause triggers if your ceiling is approached\n• Profits held in a dedicated wallet — separate from trading capital\n• 24/7 desk oversight by our professional risk team\n\n🏦 **Platform Security:**\nFunds held in segregated wallets. End-to-end encryption, multi-factor authentication, and regular security audits.",
     options: [
       { label: "🚀 Start Investing", value: "start_investing" },
       { label: "📊 Investment Guide", value: "investment_guide" },

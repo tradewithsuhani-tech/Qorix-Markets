@@ -54,7 +54,7 @@ const PILLARS = [
   { icon: ShieldCheck, t: "Hard risk caps", d: "Per-trade stops and per-tier daily drawdown limits. Strategies auto-pause if breached." },
   { icon: Activity, t: "Multi-asset desks", d: "Forex majors, gold, indices and crypto majors — diversified and rebalanced daily." },
   { icon: LineChart, t: "Live transparency", d: "Every trade, P/L and equity tick posted to your dashboard in real time." },
-  { icon: Target, t: "Tier-based targeting", d: "Starter 4%, Balanced 6%, Aggressive 8% per month — you pick the profile." },
+  { icon: Target, t: "Tier-based targeting", d: "Conservative 4%, Balanced 6%, Aggressive 8% per month — you pick the profile." },
 ];
 
 const DESKS = [
@@ -66,13 +66,13 @@ const DESKS = [
 
 const STEPS = [
   { icon: Wallet, title: "Deposit USDT", body: "Send any amount — minimum $10 — to your TRC20 address. Funds reflect in minutes." },
-  { icon: Target, title: "Pick a tier", body: "Starter 4% / Balanced 6% / Aggressive 8% per month — match risk to your goals." },
+  { icon: Target, title: "Pick a tier", body: "Conservative 4% / Balanced 6% / Aggressive 8% per month — match risk to your goals." },
   { icon: Sparkles, title: "Let AI work", body: "The engine trades across desks, posts every fill to your dashboard, and compounds daily." },
 ];
 
 const TIERS = [
-  { name: "Starter", range: "$10 — $499", target: "4% / mo", perks: ["AI auto-trading", "Daily payouts", "Community support"], popular: false },
-  { name: "Balanced", range: "$500 — $4,999", target: "6% / mo", perks: ["Everything in Starter", "Priority withdrawals", "Tier badge"], popular: true },
+  { name: "Conservative", range: "$10 — $499", target: "4% / mo", perks: ["AI auto-trading", "Daily payouts", "Community support"], popular: false },
+  { name: "Balanced", range: "$500 — $4,999", target: "6% / mo", perks: ["Everything in Conservative", "Priority withdrawals", "Tier badge"], popular: true },
   { name: "Aggressive", range: "$5,000+", target: "8% / mo", perks: ["Everything in Balanced", "Dedicated account manager", "Lower withdrawal fees"], popular: false },
 ];
 
