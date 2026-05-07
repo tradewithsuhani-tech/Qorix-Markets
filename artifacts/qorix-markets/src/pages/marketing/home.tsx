@@ -417,6 +417,133 @@ function LiveWithdrawalsTicker() {
 }
 
 /**
+ * InvestorCountriesStrip — global reach social proof.
+ * Scrolling marquee of flag emojis + caption "Investors from 65+ countries".
+ */
+const INVESTOR_COUNTRIES: Array<{ flag: string; name: string }> = [
+  { flag: "🇮🇳", name: "India" },
+  { flag: "🇺🇸", name: "United States" },
+  { flag: "🇦🇪", name: "UAE" },
+  { flag: "🇬🇧", name: "United Kingdom" },
+  { flag: "🇸🇬", name: "Singapore" },
+  { flag: "🇨🇦", name: "Canada" },
+  { flag: "🇦🇺", name: "Australia" },
+  { flag: "🇩🇪", name: "Germany" },
+  { flag: "🇯🇵", name: "Japan" },
+  { flag: "🇫🇷", name: "France" },
+  { flag: "🇧🇷", name: "Brazil" },
+  { flag: "🇿🇦", name: "South Africa" },
+  { flag: "🇳🇬", name: "Nigeria" },
+  { flag: "🇰🇷", name: "South Korea" },
+  { flag: "🇲🇾", name: "Malaysia" },
+  { flag: "🇮🇩", name: "Indonesia" },
+  { flag: "🇹🇭", name: "Thailand" },
+  { flag: "🇵🇭", name: "Philippines" },
+  { flag: "🇻🇳", name: "Vietnam" },
+  { flag: "🇪🇬", name: "Egypt" },
+  { flag: "🇸🇦", name: "Saudi Arabia" },
+  { flag: "🇶🇦", name: "Qatar" },
+  { flag: "🇰🇼", name: "Kuwait" },
+  { flag: "🇹🇷", name: "Türkiye" },
+  { flag: "🇳🇱", name: "Netherlands" },
+  { flag: "🇪🇸", name: "Spain" },
+  { flag: "🇮🇹", name: "Italy" },
+  { flag: "🇨🇭", name: "Switzerland" },
+  { flag: "🇸🇪", name: "Sweden" },
+  { flag: "🇳🇴", name: "Norway" },
+  { flag: "🇲🇽", name: "Mexico" },
+  { flag: "🇦🇷", name: "Argentina" },
+  { flag: "🇨🇱", name: "Chile" },
+  { flag: "🇰🇪", name: "Kenya" },
+  { flag: "🇬🇭", name: "Ghana" },
+  { flag: "🇵🇰", name: "Pakistan" },
+  { flag: "🇧🇩", name: "Bangladesh" },
+  { flag: "🇱🇰", name: "Sri Lanka" },
+  { flag: "🇳🇵", name: "Nepal" },
+  { flag: "🇲🇦", name: "Morocco" },
+];
+
+function InvestorCountriesStrip() {
+  const TOP = INVESTOR_COUNTRIES.slice(0, 5);
+  const more = Math.max(0, 65 - TOP.length);
+  return (
+    <section className="relative mt-3 md:mt-4">
+      <div
+        className="max-w-7xl mx-3 md:mx-auto rounded-2xl overflow-hidden"
+        style={{
+          background: "rgba(10,12,28,0.7)",
+          border: "1px solid rgba(16,185,129,0.18)",
+          boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
+          backdropFilter: "blur(6px)",
+        }}
+      >
+        <div className="flex items-stretch">
+          {/* Caption — sits left, doesn't scroll */}
+          <div
+            className="shrink-0 flex items-center gap-2 md:gap-2.5 px-3.5 md:px-5 py-2.5 md:py-3 border-r"
+            style={{
+              background:
+                "linear-gradient(90deg, rgba(16,185,129,0.14), rgba(16,185,129,0.04))",
+              borderColor: "rgba(16,185,129,0.18)",
+            }}
+          >
+            <span className="text-base md:text-lg" aria-hidden>🌍</span>
+            <div className="leading-tight">
+              <div className="text-[10px] md:text-[11px] font-bold uppercase tracking-wider text-emerald-300">
+                Global investors
+              </div>
+              <div className="text-[11px] md:text-xs text-slate-300 font-medium hidden sm:block">
+                <span className="text-white font-bold">65+</span> countries · live now
+              </div>
+            </div>
+          </div>
+
+          {/* Marquee */}
+          <div className="relative flex-1 overflow-hidden">
+            {/* edge fades */}
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-y-0 left-0 w-10 md:w-16 z-10"
+              style={{ background: "linear-gradient(90deg, rgba(10,12,28,1), rgba(10,12,28,0))" }}
+            />
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-y-0 right-0 w-10 md:w-16 z-10"
+              style={{ background: "linear-gradient(270deg, rgba(10,12,28,1), rgba(10,12,28,0))" }}
+            />
+
+            <div className="flex animate-flag-marquee whitespace-nowrap py-2.5 md:py-3">
+              {[...INVESTOR_COUNTRIES, ...INVESTOR_COUNTRIES].map((c, i) => (
+                <span
+                  key={`${c.name}-${i}`}
+                  className="inline-flex items-center gap-1.5 px-2.5 md:px-3 mx-0.5 text-[12px] md:text-[13px] text-slate-300"
+                  title={c.name}
+                >
+                  <span className="text-base md:text-lg leading-none" aria-hidden>{c.flag}</span>
+                  <span className="hidden md:inline font-medium">{c.name}</span>
+                </span>
+              ))}
+            </div>
+          </div>
+
+          {/* Top flags + "+N more" — visible md+ as static summary */}
+          <div className="hidden lg:flex shrink-0 items-center gap-1 px-4 border-l" style={{ borderColor: "rgba(16,185,129,0.18)" }}>
+            {TOP.map((c) => (
+              <span key={c.name} className="text-base" title={c.name} aria-hidden>{c.flag}</span>
+            ))}
+            <span className="ml-1 text-[11px] font-semibold text-emerald-300 whitespace-nowrap">+{more} more</span>
+          </div>
+        </div>
+      </div>
+      <style>{`
+        @keyframes flag-marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+        .animate-flag-marquee { animation: flag-marquee 60s linear infinite; }
+      `}</style>
+    </section>
+  );
+}
+
+/**
  * EarningsCalculator — interactive sliders + animated growth chart.
  * Daily compound: A = P × (1 + r)^n. Three risk presets map to daily %.
  * Big "deposit trigger" — investor sees their potential before signup.
@@ -1187,6 +1314,9 @@ export default function HomePage() {
 
       {/* LIVE WITHDRAWALS TICKER — proves real money is moving out */}
       <LiveWithdrawalsTicker />
+
+      {/* INVESTOR COUNTRIES STRIP — global reach social proof */}
+      <InvestorCountriesStrip />
 
       {/* LIVE MARKETS TICKER */}
       <section className="relative">
