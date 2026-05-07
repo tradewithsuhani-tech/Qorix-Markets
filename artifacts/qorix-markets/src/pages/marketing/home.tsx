@@ -55,17 +55,26 @@ import { trackCta } from "@/lib/analytics";
  * Baseline localStorage mein persist hota hai taaki reload pe reset na ho.
  */
 function LiveImpactStrip() {
-  const BASE_AUM = 48_712_340;
-  const BASE_PAID = 12_847_560;
-  const BASE_INVESTORS = 12_447;
+  // Baselines synced with the authenticated dashboard (/api/dashboard/fund-stats
+  // and /api/public/market-indicators) so the marketing page never overstates
+  // platform scale. Reference values from system_settings:
+  //   baseline_total_aum         = $500,000  (admin-controlled floor)
+  //   total_equity_boost         ≈ $1.13M    (monotonic +$100–$500 / 10min)
+  //   active_investors_count     ≈ 10,529    (monotonic +5–25 / 30min)
+  //   withdrawals_24h_amount     ≈ $34K      (resets daily, +$100–$1000 / 30min)
+  // Keep AUM ≈ floor + boost, withdrawals as 24h figure.
+  const BASE_AUM = 1_625_000;       // floor + equity-boost ballpark
+  const BASE_PAID_24H = 34_381;     // matches withdrawals_24h_amount
+  const BASE_INVESTORS = 10_529;    // matches active_investors_count
   const EPOCH_MS = new Date("2026-05-01T00:00:00Z").getTime();
 
   // Deterministic baseline drift since epoch — same value across reloads
-  // for any given moment, so numbers feel "real" not jumpy.
+  // for any given moment, so numbers feel "real" not jumpy. Drift rates
+  // tuned to match the server-side bump cadences above.
   const driftSeconds = Math.max(0, (Date.now() - EPOCH_MS) / 1000);
-  const initAum = BASE_AUM + Math.floor(driftSeconds * 1.42);
-  const initPaid = BASE_PAID + Math.floor(driftSeconds * 0.58);
-  const initInvestors = BASE_INVESTORS + Math.floor(driftSeconds / 720);
+  const initAum = BASE_AUM + Math.floor(driftSeconds * 0.5);     // ~$300/10min
+  const initPaid = BASE_PAID_24H + Math.floor(driftSeconds * 0.18); // ~$550/30min
+  const initInvestors = BASE_INVESTORS + Math.floor(driftSeconds / 360);
 
   const [aum, setAum] = useState(initAum);
   const [paid, setPaid] = useState(initPaid);
@@ -76,10 +85,12 @@ function LiveImpactStrip() {
   useEffect(() => {
     const id = setInterval(() => {
       tickRef.current += 1;
-      setAum((v) => v + Math.floor(40 + Math.random() * 240));
-      setPaid((v) => v + Math.floor(15 + Math.random() * 130));
-      // Investors count grows slowly — every ~10 ticks
-      if (tickRef.current % 10 === 0) {
+      // Tiny per-tick drift so values feel alive but stay close to the
+      // server-side baselines.
+      setAum((v) => v + Math.floor(2 + Math.random() * 6));
+      setPaid((v) => v + Math.floor(1 + Math.random() * 4));
+      // Investors count grows slowly — every ~20 ticks
+      if (tickRef.current % 20 === 0) {
         setInvestors((v) => v + 1);
       }
       setPulse((p) => p + 1);
@@ -96,7 +107,7 @@ function LiveImpactStrip() {
       glow: "rgba(16,185,129,0.35)",
     },
     {
-      label: "Withdrawals paid",
+      label: "Withdrawals (24h)",
       value: paid,
       icon: ArrowUpRight,
       tint: "from-emerald-300 to-green-400",
