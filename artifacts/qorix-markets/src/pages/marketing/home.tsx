@@ -919,11 +919,8 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* LIVE IMPACT COUNTERS — AUM / Withdrawals / Investors */}
-      <LiveImpactStrip />
-
       {/* LIVE MARKETS TICKER + inline trust badges (declutters: prev 3 strips → 1) */}
-      <section className="relative mt-3 md:mt-4">
+      <section className="relative mt-8 md:mt-12">
         <div
           className="max-w-7xl mx-3 md:mx-auto rounded-2xl overflow-hidden"
           style={{
@@ -1439,6 +1436,13 @@ export default function HomePage() {
           { q: "Do I need any trading experience?", a: "None. You only choose a risk tier — the AI handles markets, sizing, execution and risk." },
         ]}
       />
+
+      {/* LIVE IMPACT COUNTERS — moved here as a final social-proof punch
+          right before the conversion CTA. Was previously below the hero
+          but felt crowded there. */}
+      <div className="mt-12 md:mt-16">
+        <LiveImpactStrip />
+      </div>
 
       <CtaBand
         title="Activate your AI portfolio"
