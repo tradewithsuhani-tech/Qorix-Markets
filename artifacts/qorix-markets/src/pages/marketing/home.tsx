@@ -3,6 +3,7 @@ import {
   ArrowRight,
   PlayCircle,
   CheckCircle2,
+  XCircle,
   ShieldCheck,
   Zap,
   Brain,
@@ -33,6 +34,14 @@ import {
 import { useSeo, SITE_URL } from "@/lib/seo";
 import { withRef } from "@/lib/referral";
 import { trackCta } from "@/lib/analytics";
+
+const PROBLEM_VS = [
+  { label: "Time spent", manual: "8+ hrs daily glued to charts", auto: "Zero — runs 24/7 in the background" },
+  { label: "Emotional control", manual: "Fear & greed wreck your edge", auto: "Rule-based execution, no emotions" },
+  { label: "Risk management", manual: "Manual stops you forget to set", auto: "Hard drawdown ceiling enforced by system" },
+  { label: "Market coverage", manual: "You sleep — you miss moves", auto: "3 desks across global sessions" },
+  { label: "Skill required", manual: "Years of trading experience", auto: "None — sign up in 2 minutes" },
+];
 
 const TICKER = [
   { sym: "BTC/USDT", price: "67,420.18", chg: "+2.41%", up: true },
@@ -698,6 +707,71 @@ export default function HomePage() {
         <p className="text-center text-xs text-slate-500 mt-6">
           Targets are historical averages. Trading involves risk. Past performance is not a guarantee of future results.
         </p>
+      </section>
+
+      <section className="max-w-7xl mx-auto px-4 md:px-8 py-16 md:py-20">
+        <div className="text-center max-w-2xl mx-auto mb-12">
+          <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-amber-400 mb-3">
+            The honest comparison
+          </div>
+          <h2 className="text-3xl sm:text-4xl font-bold tracking-tight mb-4">
+            Manual trading vs Qorix
+          </h2>
+          <p className="text-slate-400 text-base sm:text-lg">
+            Why pros automate — and why you should too.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 lg:gap-6 max-w-5xl mx-auto">
+          <div className="h-full rounded-2xl border border-red-500/20 bg-gradient-to-br from-red-500/[0.04] to-transparent p-6 sm:p-7">
+            <div className="flex items-center gap-2 mb-5">
+              <div className="w-10 h-10 rounded-xl bg-red-500/15 border border-red-500/25 flex items-center justify-center">
+                <XCircle size={18} className="text-red-400" />
+              </div>
+              <div>
+                <div className="text-[10px] uppercase tracking-wider text-red-300/70 font-bold">Old way</div>
+                <div className="text-lg font-bold">Manual trading</div>
+              </div>
+            </div>
+            <div className="space-y-3">
+              {PROBLEM_VS.map((row) => (
+                <div key={row.label} className="flex items-start gap-3">
+                  <XCircle size={14} className="text-red-400/70 shrink-0 mt-1" />
+                  <div>
+                    <div className="text-[11px] uppercase text-slate-500 tracking-wider">{row.label}</div>
+                    <div className="text-sm text-slate-300">{row.manual}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="relative h-full rounded-2xl border border-emerald-500/30 bg-gradient-to-br from-emerald-500/[0.06] to-transparent p-6 sm:p-7 shadow-[0_0_60px_rgba(16,185,129,0.08)]">
+            <div className="absolute -top-2 right-5 px-2.5 py-1 rounded-full bg-emerald-500 text-[10px] font-black uppercase tracking-wider text-white">
+              Recommended
+            </div>
+            <div className="flex items-center gap-2 mb-5">
+              <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center">
+                <CheckCircle2 size={18} className="text-emerald-400" />
+              </div>
+              <div>
+                <div className="text-[10px] uppercase tracking-wider text-emerald-300/80 font-bold">New way</div>
+                <div className="text-lg font-bold">Qorix automated</div>
+              </div>
+            </div>
+            <div className="space-y-3">
+              {PROBLEM_VS.map((row) => (
+                <div key={row.label} className="flex items-start gap-3">
+                  <CheckCircle2 size={14} className="text-emerald-400 shrink-0 mt-1" />
+                  <div>
+                    <div className="text-[11px] uppercase text-slate-500 tracking-wider">{row.label}</div>
+                    <div className="text-sm text-white font-medium">{row.auto}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       </section>
 
       <StatsSection />
