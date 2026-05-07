@@ -146,7 +146,7 @@ async function guestGet(path: string) {
 function TypingIndicator() {
   return (
     <div className="flex items-end gap-2 mb-3">
-      <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center flex-shrink-0 shadow-lg shadow-blue-500/20">
+      <div className="w-7 h-7 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center flex-shrink-0 shadow-lg shadow-emerald-500/25">
         <Headphones className="w-3.5 h-3.5 text-white" />
       </div>
       <div className="bg-[#1a1f2e] border border-white/[0.06] rounded-2xl rounded-bl-sm px-4 py-3">
@@ -154,7 +154,7 @@ function TypingIndicator() {
           {[0, 1, 2].map((i) => (
             <motion.div
               key={i}
-              className="w-1.5 h-1.5 rounded-full bg-blue-400"
+              className="w-1.5 h-1.5 rounded-full bg-emerald-400"
               animate={{ y: [0, -5, 0], opacity: [0.4, 1, 0.4] }}
               transition={{ duration: 0.8, repeat: Infinity, delay: i * 0.15, ease: "easeInOut" }}
             />
@@ -184,8 +184,8 @@ function LiveInsightsCard() {
       <div
         className="rounded-xl px-3.5 py-2.5 text-xs"
         style={{
-          background: "linear-gradient(135deg, rgba(37,99,235,0.08) 0%, rgba(124,58,237,0.08) 100%)",
-          border: "1px solid rgba(99,102,241,0.15)",
+          background: "linear-gradient(135deg, rgba(16,185,129,0.08) 0%, rgba(20,184,166,0.08) 100%)",
+          border: "1px solid rgba(16,185,129,0.15)",
         }}
       >
         <div className="flex items-center gap-1.5 mb-2">
@@ -233,10 +233,10 @@ function CtaCardButton({ cta, onClick }: { cta: CtaCard; onClick: (cta: CtaCard)
         whileTap={{ scale: 0.98 }}
         className="w-full max-w-[260px] flex items-center justify-between gap-2 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all"
         style={{
-          background: "linear-gradient(135deg, rgba(37,99,235,0.18) 0%, rgba(124,58,237,0.18) 100%)",
-          border: "1px solid rgba(99,102,241,0.35)",
+          background: "linear-gradient(135deg, rgba(16,185,129,0.18) 0%, rgba(20,184,166,0.18) 100%)",
+          border: "1px solid rgba(16,185,129,0.35)",
           color: "rgb(199,210,254)",
-          boxShadow: "0 4px 14px rgba(99,102,241,0.18)",
+          boxShadow: "0 4px 14px rgba(16,185,129,0.18)",
         }}
         data-cta-variant={cta.variant}
       >
@@ -287,7 +287,7 @@ function MessageBubble({ msg }: { msg: Message }) {
         className="flex justify-end mb-3"
       >
         <div className="max-w-[75%]">
-          <div className="bg-gradient-to-r from-blue-600 to-blue-500 text-white rounded-2xl rounded-br-sm px-4 py-2.5 shadow-lg shadow-blue-500/20">
+          <div className="bg-gradient-to-r from-emerald-600 to-teal-500 text-white rounded-2xl rounded-br-sm px-4 py-2.5 shadow-lg shadow-emerald-500/25">
             <p className="text-sm leading-relaxed">{msg.content}</p>
           </div>
           <div className="flex justify-end mt-1">
@@ -312,7 +312,7 @@ function MessageBubble({ msg }: { msg: Message }) {
         "w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 shadow-lg",
         isAdmin
           ? "bg-gradient-to-br from-emerald-500 to-teal-600 shadow-emerald-500/20"
-          : "bg-gradient-to-br from-blue-500 to-blue-600 shadow-blue-500/20"
+          : "bg-gradient-to-br from-emerald-500 to-teal-600 shadow-emerald-500/25"
       )}>
         {isAdmin ? <UserCheck className="w-3.5 h-3.5 text-white" /> : <Headphones className="w-3.5 h-3.5 text-white" />}
       </div>
@@ -1052,8 +1052,8 @@ export function QorixAssistant({ guestMode = false }: { guestMode?: boolean } = 
               className="relative rounded-2xl rounded-br-sm px-4 py-3 shadow-2xl"
               style={{
                 background: "linear-gradient(135deg, #1a1f2e 0%, #0f1422 100%)",
-                border: "1px solid rgba(99,102,241,0.25)",
-                boxShadow: "0 12px 40px rgba(0,0,0,0.6), 0 0 0 1px rgba(99,102,241,0.1)",
+                border: "1px solid rgba(16,185,129,0.25)",
+                boxShadow: "0 12px 40px rgba(0,0,0,0.6), 0 0 0 1px rgba(16,185,129,0.1)",
               }}
             >
               {/* Close X */}
@@ -1084,7 +1084,7 @@ export function QorixAssistant({ guestMode = false }: { guestMode?: boolean } = 
                 className="absolute -bottom-2 right-5 w-3 h-3 rotate-45"
                 style={{
                   background: "#0f1422",
-                  border: "1px solid rgba(99,102,241,0.25)",
+                  border: "1px solid rgba(16,185,129,0.25)",
                   clipPath: "polygon(100% 0, 100% 100%, 0 100%)",
                 }}
               />
@@ -1098,7 +1098,7 @@ export function QorixAssistant({ guestMode = false }: { guestMode?: boolean } = 
         onClick={() => setIsOpen(true)}
         className={cn(
           "fixed bottom-24 right-2 md:bottom-6 md:right-6 z-40 w-10 h-10 md:w-14 md:h-14 rounded-full shadow-2xl",
-          "bg-gradient-to-br from-blue-600 to-blue-700",
+          "bg-gradient-to-br from-emerald-600 to-teal-700",
           "flex items-center justify-center",
           "hover:scale-105 active:scale-95 transition-transform",
           isOpen && "hidden"
@@ -1106,7 +1106,7 @@ export function QorixAssistant({ guestMode = false }: { guestMode?: boolean } = 
         initial={{ scale: 0, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         transition={{ type: "spring", stiffness: 200, delay: 1 }}
-        style={{ boxShadow: "0 0 30px rgba(99, 102, 241, 0.4)" }}
+        style={{ boxShadow: "0 0 30px rgba(16,185,129,0.4)" }}
         aria-label="Open Qorix Assistant"
       >
         <MessageCircle className="w-6 h-6 text-white" />
@@ -1119,7 +1119,7 @@ export function QorixAssistant({ guestMode = false }: { guestMode?: boolean } = 
         )}
         {/* Pulse ring */}
         <motion.div
-          className="absolute inset-0 rounded-full border-2 border-blue-500/40"
+          className="absolute inset-0 rounded-full border-2 border-emerald-500/40"
           animate={{ scale: [1, 1.5], opacity: [0.6, 0] }}
           transition={{ duration: 2, repeat: Infinity, ease: "easeOut" }}
         />
@@ -1139,21 +1139,21 @@ export function QorixAssistant({ guestMode = false }: { guestMode?: boolean } = 
               borderRadius: "20px",
               background: "linear-gradient(180deg, #0f1422 0%, #0a0d18 100%)",
               border: "1px solid rgba(255,255,255,0.07)",
-              boxShadow: "0 25px 60px rgba(0,0,0,0.7), 0 0 0 1px rgba(99,102,241,0.1), inset 0 1px 0 rgba(255,255,255,0.05)",
+              boxShadow: "0 25px 60px rgba(0,0,0,0.7), 0 0 0 1px rgba(16,185,129,0.1), inset 0 1px 0 rgba(255,255,255,0.05)",
             }}
           >
             {/* Header */}
             <div
               className="flex items-center gap-3 px-4 py-3.5 flex-shrink-0"
               style={{
-                background: "linear-gradient(135deg, rgba(37,99,235,0.15) 0%, rgba(124,58,237,0.1) 100%)",
+                background: "linear-gradient(135deg, rgba(16,185,129,0.15) 0%, rgba(20,184,166,0.1) 100%)",
                 borderBottom: "1px solid rgba(255,255,255,0.06)",
                 borderRadius: "20px 20px 0 0",
               }}
             >
               {/* Bot Avatar */}
               <div className="relative">
-                <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center shadow-lg shadow-blue-500/30">
+                <div className="w-9 h-9 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-500/35">
                   <Headphones className="w-4 h-4 text-white" />
                 </div>
                 <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-400 rounded-full border-2 border-[#0f1422]" />
@@ -1201,7 +1201,7 @@ export function QorixAssistant({ guestMode = false }: { guestMode?: boolean } = 
                           className="absolute right-0 top-9 w-44 z-20 rounded-xl overflow-hidden"
                           style={{
                             background: "#151b2d",
-                            border: "1px solid rgba(99,102,241,0.25)",
+                            border: "1px solid rgba(16,185,129,0.25)",
                             boxShadow: "0 10px 30px rgba(0,0,0,0.5)",
                           }}
                         >
@@ -1213,7 +1213,7 @@ export function QorixAssistant({ guestMode = false }: { guestMode?: boolean } = 
                             className={cn(
                               "w-full text-left px-3 py-2 text-xs flex items-center justify-between transition-colors",
                               language === null
-                                ? "bg-blue-500/15 text-blue-300"
+                                ? "bg-emerald-500/15 text-emerald-300"
                                 : "text-white/70 hover:bg-white/5 hover:text-white",
                             )}
                           >
@@ -1227,7 +1227,7 @@ export function QorixAssistant({ guestMode = false }: { guestMode?: boolean } = 
                               className={cn(
                                 "w-full text-left px-3 py-2 text-xs flex items-center justify-between transition-colors",
                                 language === opt.value
-                                  ? "bg-blue-500/15 text-blue-300"
+                                  ? "bg-emerald-500/15 text-emerald-300"
                                   : "text-white/70 hover:bg-white/5 hover:text-white",
                               )}
                               data-testid={`chat-language-option-${opt.value}`}
@@ -1330,7 +1330,7 @@ export function QorixAssistant({ guestMode = false }: { guestMode?: boolean } = 
                     className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all"
                     style={{
                       background: "linear-gradient(135deg, #2563eb, #7c3aed)",
-                      boxShadow: "0 6px 20px rgba(99,102,241,0.3)",
+                      boxShadow: "0 6px 20px rgba(16,185,129,0.3)",
                       color: "white",
                     }}
                   >
@@ -1401,8 +1401,8 @@ export function QorixAssistant({ guestMode = false }: { guestMode?: boolean } = 
                   whileTap={{ scale: 0.98 }}
                   className="w-full mt-2.5 py-2.5 rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-all"
                   style={{
-                    background: "linear-gradient(135deg, rgba(124,58,237,0.2) 0%, rgba(37,99,235,0.2) 100%)",
-                    border: "1px solid rgba(124,58,237,0.3)",
+                    background: "linear-gradient(135deg, rgba(20,184,166,0.2) 0%, rgba(16,185,129,0.2) 100%)",
+                    border: "1px solid rgba(20,184,166,0.3)",
                     color: "rgb(167,139,250)",
                   }}
                 >
@@ -1428,13 +1428,13 @@ export function QorixAssistant({ guestMode = false }: { guestMode?: boolean } = 
                 <div
                   className="rounded-xl p-3"
                   style={{
-                    background: "linear-gradient(135deg, rgba(37,99,235,0.12) 0%, rgba(124,58,237,0.12) 100%)",
+                    background: "linear-gradient(135deg, rgba(16,185,129,0.12) 0%, rgba(20,184,166,0.12) 100%)",
                     border: "1px solid rgba(96,165,250,0.25)",
                   }}
                 >
                   <div className="flex items-start justify-between gap-2 mb-2">
                     <div className="flex items-center gap-2">
-                      <Mail className="w-4 h-4 text-blue-300" />
+                      <Mail className="w-4 h-4 text-emerald-300" />
                       <p className="text-xs font-medium text-white/90">Stay in the loop</p>
                     </div>
                     <button
@@ -1490,7 +1490,7 @@ export function QorixAssistant({ guestMode = false }: { guestMode?: boolean } = 
                         className={cn(
                           "px-3 py-1.5 rounded-md text-[11px] font-medium transition-all flex items-center gap-1.5",
                           leadEmail.trim() && !leadSubmitting
-                            ? "bg-gradient-to-br from-blue-600 to-blue-700 text-white shadow-md shadow-blue-500/20"
+                            ? "bg-gradient-to-br from-emerald-600 to-teal-700 text-white shadow-md shadow-emerald-500/25"
                             : "bg-white/5 text-white/30 cursor-not-allowed",
                         )}
                       >
@@ -1527,7 +1527,7 @@ export function QorixAssistant({ guestMode = false }: { guestMode?: boolean } = 
                   className={cn(
                     "w-7 h-7 rounded-lg flex items-center justify-center transition-all",
                     inputText.trim()
-                      ? "bg-gradient-to-br from-blue-600 to-blue-700 text-white shadow-lg shadow-blue-500/30"
+                      ? "bg-gradient-to-br from-emerald-600 to-teal-700 text-white shadow-lg shadow-emerald-500/35"
                       : "bg-white/5 text-white/20"
                   )}
                 >
