@@ -1444,11 +1444,13 @@ export default function HomePage() {
         <LiveImpactStrip />
       </div>
 
-      <CtaBand
-        title="Activate your AI portfolio"
-        subtitle="Start with $10 and watch the engine work."
-        ctaLabel="Sign up free"
-      />
+      <div className="mt-10 md:mt-14">
+        <CtaBand
+          title="Activate your AI portfolio"
+          subtitle="Start with $10 and watch the engine work."
+          ctaLabel="Sign up free"
+        />
+      </div>
     </MarketingShell>
   );
 }
