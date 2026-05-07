@@ -92,11 +92,11 @@ export default function ForgotPasswordPage() {
       >
         <div className="flex justify-center mb-6">
           <div className="flex items-center gap-2.5">
-            <div className="w-12 h-12 rounded-2xl overflow-hidden flex items-center justify-center bg-gradient-to-br from-blue-500/20 to-indigo-500/20 border border-white/10">
+            <div className="w-12 h-12 rounded-2xl overflow-hidden flex items-center justify-center bg-gradient-to-br from-emerald-500/20 to-green-500/20 border border-white/10">
               <QorixLogo size={48} />
             </div>
             <span className="text-2xl font-bold text-white">
-              Qorix{" "}<span className="text-blue-400">Markets</span>
+              Qorix{" "}<span className="text-emerald-400">Markets</span>
             </span>
           </div>
         </div>
@@ -130,7 +130,7 @@ export default function ForgotPasswordPage() {
                 <button
                   type="submit"
                   disabled={pending || !email}
-                  className="btn btn-primary w-full"
+                  className="w-full h-11 rounded-lg font-semibold text-sm text-white bg-gradient-to-r from-emerald-500 to-green-500 hover:from-emerald-400 hover:to-green-400 active:scale-[0.99] transition-all shadow-[0_6px_20px_rgba(16,185,129,0.35)] hover:shadow-[0_8px_26px_rgba(16,185,129,0.5)] disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none"
                 >
                   {pending ? "Sending…" : "Send reset code"}
                 </button>
@@ -161,14 +161,14 @@ export default function ForgotPasswordPage() {
                 <button
                   type="submit"
                   disabled={pending || otp.length < 4}
-                  className="btn btn-primary w-full"
+                  className="w-full h-11 rounded-lg font-semibold text-sm text-white bg-gradient-to-r from-emerald-500 to-green-500 hover:from-emerald-400 hover:to-green-400 active:scale-[0.99] transition-all shadow-[0_6px_20px_rgba(16,185,129,0.35)] hover:shadow-[0_8px_26px_rgba(16,185,129,0.5)] disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none"
                 >
                   {pending ? "Verifying…" : "Verify code"}
                 </button>
                 <button
                   type="button"
                   onClick={() => setStep("email")}
-                  className="w-full text-xs text-muted-foreground hover:text-blue-400 transition-colors"
+                  className="w-full text-xs text-muted-foreground hover:text-emerald-400 transition-colors"
                 >
                   Didn't receive? Resend code
                 </button>
@@ -208,7 +208,7 @@ export default function ForgotPasswordPage() {
                 <button
                   type="submit"
                   disabled={pending || newPassword.length < 8}
-                  className="btn btn-primary w-full"
+                  className="w-full h-11 rounded-lg font-semibold text-sm text-white bg-gradient-to-r from-emerald-500 to-green-500 hover:from-emerald-400 hover:to-green-400 active:scale-[0.99] transition-all shadow-[0_6px_20px_rgba(16,185,129,0.35)] hover:shadow-[0_8px_26px_rgba(16,185,129,0.5)] disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none"
                 >
                   {pending ? "Updating…" : "Reset password"}
                 </button>

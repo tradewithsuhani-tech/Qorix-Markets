@@ -77,8 +77,8 @@ function EmailVerifyStep({
       className="space-y-5"
     >
       <div className="text-center space-y-2">
-        <div className="w-14 h-14 rounded-2xl bg-blue-500/20 flex items-center justify-center mx-auto">
-          <Mail className="h-7 w-7 text-blue-400" />
+        <div className="w-14 h-14 rounded-2xl bg-emerald-500/20 flex items-center justify-center mx-auto">
+          <Mail className="h-7 w-7 text-emerald-400" />
         </div>
         <h2 className="text-xl font-bold">Verify your email</h2>
         <p className="text-sm text-muted-foreground">
@@ -101,7 +101,7 @@ function EmailVerifyStep({
         <button
           onClick={handleVerify}
           disabled={verifying || otp.length < 6}
-          className="btn btn-primary w-full"
+          className="w-full h-11 rounded-lg font-semibold text-sm text-white bg-gradient-to-r from-emerald-500 to-green-500 hover:from-emerald-400 hover:to-green-400 active:scale-[0.99] transition-all shadow-[0_6px_20px_rgba(16,185,129,0.35)] hover:shadow-[0_8px_26px_rgba(16,185,129,0.5)] disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none"
         >
           {verifying ? "Verifying..." : "Verify Email"}
         </button>

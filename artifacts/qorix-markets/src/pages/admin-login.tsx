@@ -117,8 +117,8 @@ export default function AdminLoginPage() {
 
   return (
     <div className="min-h-screen w-full bg-background flex items-center justify-center px-4 relative overflow-hidden">
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[720px] h-[520px] bg-blue-500/10 rounded-full blur-[130px] pointer-events-none" />
-      <div className="absolute bottom-0 right-1/4 w-[420px] h-[420px] bg-indigo-600/8 rounded-full blur-[110px] pointer-events-none" />
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[720px] h-[520px] bg-emerald-500/10 rounded-full blur-[130px] pointer-events-none" />
+      <div className="absolute bottom-0 right-1/4 w-[420px] h-[420px] bg-green-600/8 rounded-full blur-[110px] pointer-events-none" />
 
       <button
         onClick={() => setLocation("/")}
@@ -135,14 +135,14 @@ export default function AdminLoginPage() {
         className="w-full max-w-md"
       >
         <div className="flex flex-col items-center text-center mb-8">
-          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-[0_0_30px_rgba(59,130,246,0.42)] mb-4">
+          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-emerald-500 to-green-600 flex items-center justify-center shadow-[0_0_30px_rgba(16,185,129,0.45)] mb-4">
             <ShieldCheck style={{ width: 25, height: 25 }} className="text-white" />
           </div>
           <h1 className="text-3xl font-bold tracking-tight text-white">Admin Access</h1>
           <p className="text-sm text-muted-foreground mt-2">Secure control panel login for Qorix administrators only.</p>
         </div>
 
-        <div className="glass-card rounded-2xl p-7 space-y-6 border border-blue-500/20">
+        <div className="glass-card rounded-2xl p-7 space-y-6 border border-emerald-500/20">
           <form onSubmit={handleSubmit} className="space-y-3">
             <div className="relative">
               <Mail
@@ -196,7 +196,7 @@ export default function AdminLoginPage() {
             <button
               type="submit"
               disabled={!canSubmit}
-              className="btn btn-primary w-full mt-1 disabled:opacity-60 disabled:cursor-not-allowed"
+              className="w-full mt-1 h-11 rounded-lg font-semibold text-sm text-white bg-gradient-to-r from-emerald-500 to-green-500 hover:from-emerald-400 hover:to-green-400 active:scale-[0.99] transition-all shadow-[0_6px_20px_rgba(16,185,129,0.35)] hover:shadow-[0_8px_26px_rgba(16,185,129,0.5)] disabled:opacity-60 disabled:cursor-not-allowed disabled:shadow-none"
             >
               {submitting ? "Checking access…" : "Enter Admin Panel"}
             </button>
