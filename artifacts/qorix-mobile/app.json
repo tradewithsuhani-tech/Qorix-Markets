@@ -14,10 +14,13 @@
       "backgroundColor": "#0A0C10"
     },
     "ios": {
-      "supportsTablet": false
+      "supportsTablet": false,
+      "bundleIdentifier": "com.qorixmarkets.app"
     },
     "android": {
-      "backgroundColor": "#0A0C10"
+      "backgroundColor": "#0A0C10",
+      "package": "com.qorixmarkets.app",
+      "permissions": ["INTERNET"]
     },
     "web": {
       "favicon": "./assets/images/icon.png"
