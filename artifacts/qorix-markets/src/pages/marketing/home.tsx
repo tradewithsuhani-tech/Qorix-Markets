@@ -711,7 +711,7 @@ export default function HomePage() {
 
       <section className="max-w-7xl mx-auto px-4 md:px-8 py-16 md:py-20">
         <div className="text-center max-w-2xl mx-auto mb-12">
-          <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-amber-400 mb-3">
+          <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-emerald-400 mb-3">
             The honest comparison
           </div>
           <h2 className="text-3xl sm:text-4xl font-bold tracking-tight mb-4">

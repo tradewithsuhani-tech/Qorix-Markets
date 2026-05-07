@@ -907,7 +907,7 @@ export default function Landing() {
       <section className="py-20 sm:py-28 px-4 sm:px-6 bg-white/[0.01] border-y border-white/[0.05]">
         <div className="max-w-6xl mx-auto">
           <FadeIn className="text-center max-w-2xl mx-auto mb-14">
-            <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-amber-400 mb-3">
+            <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-emerald-400 mb-3">
               The honest comparison
             </div>
             <h2 className="text-3xl sm:text-4xl font-bold tracking-tight mb-4">
