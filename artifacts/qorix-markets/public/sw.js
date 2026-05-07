@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'v8';
+const CACHE_VERSION = 'v9';
 const APP_SHELL_CACHE = `qorix-shell-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `qorix-runtime-${CACHE_VERSION}`;
 
