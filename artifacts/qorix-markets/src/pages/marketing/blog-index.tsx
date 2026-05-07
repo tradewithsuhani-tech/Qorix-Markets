@@ -5,10 +5,12 @@ import { Link } from "wouter";
 import { ArrowRight, Calendar, Clock } from "lucide-react";
 import aiTradingHero from "@/assets/blog/ai-trading-hero.png";
 import forexVsCrypto from "@/assets/blog/forex-vs-crypto.png";
+import zeroFeeTrading from "@/assets/blog/zero-fee-trading.png";
 
 const POST_IMAGES: Record<string, string> = {
   "how-ai-trading-works": aiTradingHero,
   "forex-vs-crypto-which-is-better": forexVsCrypto,
+  "zero-fee-trading-explained": zeroFeeTrading,
 };
 
 export default function BlogIndexPage() {
