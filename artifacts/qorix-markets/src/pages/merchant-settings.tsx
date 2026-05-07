@@ -76,7 +76,7 @@ export default function MerchantSettingsPage() {
             <SectionLabel>₹ per 1 USDT</SectionLabel>
             <div className="mt-2 flex items-end gap-3">
               <div className="relative flex-1">
-                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-base font-semibold text-amber-400">
+                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-lg font-bold leading-none text-amber-400">
                   ₹
                 </span>
                 <input
