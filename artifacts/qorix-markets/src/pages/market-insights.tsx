@@ -125,7 +125,7 @@ export default function MarketInsightsPage() {
       <PageContainer maxWidth="default">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Market Insights</h1>
+            <h1 className="text-2xl md:text-3xl font-bold tracking-tight gradient-text">Market Insights</h1>
             <p className="text-sm text-muted-foreground mt-1">Economic calendar — high-impact events affecting your trades</p>
           </div>
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-green-600 flex items-center justify-center shrink-0">
