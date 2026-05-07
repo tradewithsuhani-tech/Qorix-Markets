@@ -1078,9 +1078,13 @@ export default function LoginPage() {
           <span className="text-xl font-bold">Qorix{" "}<span className="text-emerald-400 font-light">Markets</span></span>
         </div>
 
-        <div className="glass-card rounded-2xl p-7 space-y-6">
+        <div className="glass-card rounded-2xl p-7 space-y-6 border border-white/10 shadow-[0_30px_80px_-30px_rgba(16,185,129,0.25)]">
           {/* Heading */}
-          <div className="text-center space-y-1">
+          <div className="text-center space-y-2">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 text-[10px] font-semibold tracking-[0.18em] uppercase text-emerald-300">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              {isLogin ? "Secure Sign-in" : "Join Qorix"}
+            </div>
             <AnimatePresence mode="wait">
               <motion.h1
                 key={isLogin ? "login" : "register"}
@@ -1090,7 +1094,21 @@ export default function LoginPage() {
                 transition={{ duration: 0.18 }}
                 className="text-2xl font-bold tracking-tight"
               >
-                {isLogin ? "Welcome back" : "Create account"}
+                {isLogin ? (
+                  <>
+                    Welcome{" "}
+                    <span className="bg-gradient-to-r from-emerald-300 to-green-400 bg-clip-text text-transparent">
+                      back
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    Create{" "}
+                    <span className="bg-gradient-to-r from-emerald-300 to-green-400 bg-clip-text text-transparent">
+                      account
+                    </span>
+                  </>
+                )}
               </motion.h1>
             </AnimatePresence>
             <p className="text-sm text-muted-foreground">
