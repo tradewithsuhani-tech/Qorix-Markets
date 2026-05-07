@@ -669,13 +669,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 {isActive && (
                   <motion.div
                     layoutId="sidebar-active"
-                    className="absolute inset-0 rounded-xl bg-blue-500/10 border border-blue-500/20"
+                    className="absolute inset-0 rounded-xl bg-emerald-500/10 border border-emerald-500/25"
                     transition={{ type: "spring", bounce: 0.2, duration: 0.4 }}
                   />
                 )}
-                <link.icon className={cn("relative z-10 shrink-0 transition-colors", isActive ? "text-blue-400" : "text-muted-foreground group-hover:text-white")} style={{ width: 17, height: 17 }} />
+                <link.icon className={cn("relative z-10 shrink-0 transition-colors", isActive ? "text-emerald-400" : "text-muted-foreground group-hover:text-white")} style={{ width: 17, height: 17 }} />
                 <span className="relative z-10">{link.label}</span>
-                {isActive && <ChevronRight className="ml-auto relative z-10 text-blue-400" style={{ width: 13, height: 13 }} />}
+                {isActive && <ChevronRight className="ml-auto relative z-10 text-emerald-400" style={{ width: 13, height: 13 }} />}
               </Link>
             );
           })}
@@ -683,7 +683,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <div className="mx-4 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent mb-2" />
         <div className="p-3">
           <div className="flex items-center gap-3 px-3 py-2 rounded-xl mb-1">
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500/30 to-indigo-500/30 border border-blue-500/20 flex items-center justify-center text-sm font-bold text-blue-400 shrink-0">
+            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-500/30 to-green-500/30 border border-emerald-500/25 flex items-center justify-center text-sm font-bold text-emerald-300 shrink-0">
               {isAdminArea ? "A" : user?.fullName?.[0]?.toUpperCase() || "U"}
             </div>
             <div className="flex-1 min-w-0">
@@ -718,11 +718,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
           }}
         >
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg overflow-hidden flex items-center justify-center" style={{ boxShadow: "0 0 20px rgba(99,102,241,0.4)" }}>
+            <div className="w-8 h-8 rounded-lg overflow-hidden flex items-center justify-center" style={{ boxShadow: "0 0 20px rgba(16,185,129,0.45)" }}>
               <QorixLogo size={32} />
             </div>
             <span className="text-sm font-bold text-white">
-              Qorix{" "}<span className="text-blue-400">Markets</span>
+              Qorix{" "}<span className="text-emerald-400">Markets</span>
             </span>
             {!isAdminArea && <VipBadge tier={vipTier} size="xs" />}
           </div>
@@ -791,16 +791,16 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 {isActive && !featured && (
                   <motion.div
                     layoutId="bottom-nav-active"
-                    className="absolute inset-0 rounded-xl bg-blue-500/10"
+                    className="absolute inset-0 rounded-xl bg-emerald-500/10"
                     transition={{ type: "spring", bounce: 0.25, duration: 0.35 }}
                   />
                 )}
                 {isActive && !featured && (
                   <motion.div
                     layoutId="bottom-nav-indicator"
-                    className="absolute -top-0.5 left-1/2 -translate-x-1/2 w-6 h-0.5 rounded-full bg-blue-400"
+                    className="absolute -top-0.5 left-1/2 -translate-x-1/2 w-6 h-0.5 rounded-full bg-emerald-400"
                     transition={{ type: "spring", bounce: 0.25, duration: 0.35 }}
-                    style={{ boxShadow: "0 0 8px rgba(96,165,250,0.9)" }}
+                    style={{ boxShadow: "0 0 8px rgba(52,211,153,0.9)" }}
                   />
                 )}
                 {featured ? (
@@ -814,26 +814,26 @@ export function Layout({ children }: { children: React.ReactNode }) {
                     >
                       {/* Outer pulsing glow ring (subtle) */}
                       <motion.div
-                        className="absolute inset-0 rounded-full bg-blue-500/25"
+                        className="absolute inset-0 rounded-full bg-emerald-500/25"
                         animate={{ scale: [1, 1.25, 1], opacity: [0.4, 0, 0.4] }}
                         transition={{ duration: 2.6, repeat: Infinity, ease: "easeInOut" }}
                         style={{ filter: "blur(5px)" }}
                       />
-                      {/* Subtle brand-blue ring */}
+                      {/* Subtle brand-emerald ring */}
                       <div
                         className="absolute -inset-[1.5px] rounded-full"
                         style={{
-                          background: "linear-gradient(160deg, #60a5fa 0%, #3b82f6 50%, #1e3a8a 100%)",
+                          background: "linear-gradient(160deg, #34d399 0%, #10b981 50%, #064e3b 100%)",
                         }}
                       />
-                      {/* Inner button — brand blue tones */}
+                      {/* Inner button — brand emerald tones */}
                       <div
                         className="relative flex items-center justify-center w-14 h-14 rounded-full text-white"
                         style={{
                           background:
-                            "radial-gradient(circle at 35% 30%, #5b8def 0%, #3b82f6 45%, #1e40af 100%)",
+                            "radial-gradient(circle at 35% 30%, #5eead4 0%, #10b981 45%, #065f46 100%)",
                           boxShadow:
-                            "0 6px 16px rgba(59,130,246,0.35), 0 0 0 1px rgba(255,255,255,0.10) inset, 0 -1px 4px rgba(255,255,255,0.12) inset",
+                            "0 6px 16px rgba(16,185,129,0.4), 0 0 0 1px rgba(255,255,255,0.10) inset, 0 -1px 4px rgba(255,255,255,0.12) inset",
                         }}
                       >
                         {/* Glossy highlight */}
@@ -850,16 +850,16 @@ export function Layout({ children }: { children: React.ReactNode }) {
                     <span
                       className={cn(
                         "mt-1 text-[10px] font-extrabold leading-none tracking-[0.08em] uppercase",
-                        isActive ? "text-blue-200" : "text-blue-300",
+                        isActive ? "text-emerald-200" : "text-emerald-300",
                       )}
-                      style={{ textShadow: "0 0 8px rgba(96,165,250,0.6)" }}
+                      style={{ textShadow: "0 0 8px rgba(52,211,153,0.6)" }}
                     >
                       {link.label}
                     </span>
                   </div>
                 ) : (
                   <motion.div
-                    className={cn("relative z-10 flex flex-col items-center gap-1 transition-colors duration-200", isActive ? "text-blue-400" : "text-muted-foreground")}
+                    className={cn("relative z-10 flex flex-col items-center gap-1 transition-colors duration-200", isActive ? "text-emerald-400" : "text-muted-foreground")}
                     animate={isActive ? { scale: 1.08 } : { scale: 1 }}
                     transition={{ type: "spring", bounce: 0.4, duration: 0.3 }}
                   >
@@ -879,19 +879,19 @@ export function Layout({ children }: { children: React.ReactNode }) {
             {isMoreActive && (
               <motion.div
                 layoutId="bottom-nav-active"
-                className="absolute inset-0 rounded-xl bg-blue-500/10"
+                className="absolute inset-0 rounded-xl bg-emerald-500/10"
                 transition={{ type: "spring", bounce: 0.25, duration: 0.35 }}
               />
             )}
             {isMoreActive && (
               <motion.div
                 layoutId="bottom-nav-indicator"
-                className="absolute -top-0.5 left-1/2 -translate-x-1/2 w-6 h-0.5 rounded-full bg-blue-400"
+                className="absolute -top-0.5 left-1/2 -translate-x-1/2 w-6 h-0.5 rounded-full bg-emerald-400"
                 transition={{ type: "spring", bounce: 0.25, duration: 0.35 }}
-                style={{ boxShadow: "0 0 8px rgba(96,165,250,0.9)" }}
+                style={{ boxShadow: "0 0 8px rgba(52,211,153,0.9)" }}
               />
             )}
-            <div className={cn("relative z-10 flex flex-col items-center gap-1", isMoreActive ? "text-blue-400" : "text-muted-foreground")}>
+            <div className={cn("relative z-10 flex flex-col items-center gap-1", isMoreActive ? "text-emerald-400" : "text-muted-foreground")}>
               <MoreHorizontal style={{ width: 20, height: 20 }} />
               <span className="text-[9px] font-medium leading-none">More</span>
             </div>
