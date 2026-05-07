@@ -1,5 +1,5 @@
 import { Link } from "wouter";
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import {
   ArrowRight,
   PlayCircle,
@@ -35,6 +35,15 @@ import {
   CtaBand,
 } from "@/components/marketing/marketing-blocks";
 import { AnimatedCounter } from "@/components/animated-counter";
+import {
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  CartesianGrid,
+} from "recharts";
 import { useSeo, SITE_URL } from "@/lib/seo";
 import { withRef } from "@/lib/referral";
 import { trackCta } from "@/lib/analytics";
@@ -401,6 +410,342 @@ function LiveWithdrawalsTicker() {
       <style>{`
         @keyframes withdraw-marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
         .animate-withdraw-marquee { animation: withdraw-marquee 55s linear infinite; }
+      `}</style>
+    </section>
+  );
+}
+
+/**
+ * EarningsCalculator — interactive sliders + animated growth chart.
+ * Daily compound: A = P × (1 + r)^n. Three risk presets map to daily %.
+ * Big "deposit trigger" — investor sees their potential before signup.
+ */
+// Monthly targets must mirror tier section (Conservative 4% / Balanced 6% / Aggressive 8%).
+// Daily rate derived so compounding stays consistent: daily = (1+monthly)^(1/30) - 1.
+const RISK_PRESETS = [
+  { id: "low", label: "Conservative", sub: "Capital protected", monthlyPct: 4, color: "#34d399" },
+  { id: "balanced", label: "Balanced", sub: "Recommended", monthlyPct: 6, color: "#10b981" },
+  { id: "aggressive", label: "Aggressive", sub: "Higher upside", monthlyPct: 8, color: "#22c55e" },
+] as const;
+
+const DAY_PRESETS = [7, 30, 60, 90, 180, 365] as const;
+
+function EarningsCalculator() {
+  const [amount, setAmount] = useState(1000);
+  const [days, setDays] = useState<number>(30);
+  const [riskId, setRiskId] = useState<typeof RISK_PRESETS[number]["id"]>("balanced");
+
+  const risk = RISK_PRESETS.find((r) => r.id === riskId)!;
+  const dailyPct = (Math.pow(1 + risk.monthlyPct / 100, 1 / 30) - 1) * 100;
+  const r = dailyPct / 100;
+
+  // Build growth series day-by-day for the chart
+  const series = useMemo(() => {
+    const out: { day: number; balance: number; profit: number }[] = [];
+    for (let d = 0; d <= days; d++) {
+      const bal = amount * Math.pow(1 + r, d);
+      out.push({ day: d, balance: Math.round(bal * 100) / 100, profit: Math.round((bal - amount) * 100) / 100 });
+    }
+    return out;
+  }, [amount, days, r]);
+
+  const final = series[series.length - 1].balance;
+  const profit = final - amount;
+  const roiPct = (profit / amount) * 100;
+  const monthlyAvg = (profit / days) * 30;
+
+  const fmt = (n: number) =>
+    n.toLocaleString("en-US", { maximumFractionDigits: 0 });
+  const fmt2 = (n: number) =>
+    n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  return (
+    <section className="max-w-7xl mx-auto px-4 md:px-8 py-12 md:py-16">
+      <div className="text-center max-w-2xl mx-auto mb-8 md:mb-10">
+        <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-emerald-400 mb-3">
+          Earnings simulator
+        </div>
+        <h2 className="text-3xl sm:text-4xl font-bold tracking-tight mb-3">
+          See what your money could become
+        </h2>
+        <p className="text-slate-400 text-sm md:text-base">
+          Move the sliders. Watch your potential balance grow with daily compounding.
+        </p>
+      </div>
+
+      <div
+        className="relative rounded-2xl md:rounded-3xl overflow-hidden"
+        style={{
+          background:
+            "linear-gradient(135deg, rgba(16,185,129,0.06) 0%, rgba(20,184,166,0.03) 100%)",
+          border: "1px solid rgba(16,185,129,0.18)",
+          boxShadow:
+            "0 40px 100px -50px rgba(16,185,129,0.40), inset 0 1px 0 rgba(255,255,255,0.05)",
+        }}
+      >
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-0">
+          {/* CONTROLS — left 2/5 on desktop, full on mobile */}
+          <div className="lg:col-span-2 p-5 md:p-7 border-b lg:border-b-0 lg:border-r border-white/[0.06] space-y-6">
+            {/* Amount slider */}
+            <div>
+              <div className="flex items-baseline justify-between mb-2.5">
+                <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                  Investment amount
+                </label>
+                <span className="text-2xl md:text-3xl font-bold text-white tabular-nums">
+                  ${fmt(amount)}
+                </span>
+              </div>
+              <input
+                type="range"
+                min={100}
+                max={50000}
+                step={100}
+                value={amount}
+                onChange={(e) => setAmount(Number(e.target.value))}
+                className="qx-range"
+                aria-label="Investment amount"
+              />
+              <div className="flex justify-between text-[10px] text-slate-500 mt-1.5 font-medium">
+                <span>$100</span>
+                <span>$50,000</span>
+              </div>
+            </div>
+
+            {/* Duration pills */}
+            <div>
+              <div className="flex items-baseline justify-between mb-2.5">
+                <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                  Duration
+                </label>
+                <span className="text-base md:text-lg font-bold text-white">
+                  {days} days
+                </span>
+              </div>
+              <div className="grid grid-cols-6 gap-1.5">
+                {DAY_PRESETS.map((d) => {
+                  const active = days === d;
+                  return (
+                    <button
+                      key={d}
+                      onClick={() => setDays(d)}
+                      className={`text-[11px] md:text-xs font-bold py-2 rounded-lg transition-all ${
+                        active
+                          ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+                          : "bg-white/[0.04] text-slate-400 border border-white/[0.06] hover:bg-white/[0.08]"
+                      }`}
+                    >
+                      {d}d
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Risk preset */}
+            <div>
+              <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-2.5">
+                Risk level
+              </label>
+              <div className="grid grid-cols-3 gap-2">
+                {RISK_PRESETS.map((rp) => {
+                  const active = rp.id === riskId;
+                  return (
+                    <button
+                      key={rp.id}
+                      onClick={() => setRiskId(rp.id)}
+                      className={`text-left px-3 py-2.5 rounded-xl transition-all border ${
+                        active
+                          ? "bg-emerald-500/15 border-emerald-500/45"
+                          : "bg-white/[0.03] border-white/[0.06] hover:bg-white/[0.06]"
+                      }`}
+                    >
+                      <div className={`text-xs md:text-sm font-bold ${active ? "text-emerald-300" : "text-slate-200"}`}>
+                        {rp.label}
+                      </div>
+                      <div className="text-[10px] text-slate-500 mt-0.5 leading-tight">
+                        {rp.sub}
+                      </div>
+                      <div className={`text-[10px] font-bold mt-1 ${active ? "text-emerald-400" : "text-slate-400"}`}>
+                        ~{rp.monthlyPct}% / month
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* RESULT — right 3/5 */}
+          <div className="lg:col-span-3 p-5 md:p-7">
+            {/* Big numbers */}
+            <div className="grid grid-cols-2 gap-3 md:gap-4 mb-5">
+              <div
+                className="rounded-xl p-3.5 md:p-4"
+                style={{
+                  background: "linear-gradient(135deg, rgba(16,185,129,0.12), rgba(20,184,166,0.05))",
+                  border: "1px solid rgba(16,185,129,0.25)",
+                }}
+              >
+                <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-300/80">
+                  Final balance
+                </div>
+                <div className="text-2xl md:text-3xl font-bold text-white tabular-nums mt-1">
+                  $<AnimatedCounter value={final} decimals={2} />
+                </div>
+                <div className="text-[11px] text-slate-400 mt-0.5">
+                  after {days} days
+                </div>
+              </div>
+              <div
+                className="rounded-xl p-3.5 md:p-4"
+                style={{
+                  background: "rgba(255,255,255,0.03)",
+                  border: "1px solid rgba(255,255,255,0.08)",
+                }}
+              >
+                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                  Total profit
+                </div>
+                <div className="text-2xl md:text-3xl font-bold text-emerald-400 tabular-nums mt-1">
+                  +$<AnimatedCounter value={profit} decimals={2} />
+                </div>
+                <div className="text-[11px] text-slate-400 mt-0.5">
+                  +{fmt2(roiPct)}% ROI
+                </div>
+              </div>
+            </div>
+
+            {/* Chart */}
+            <div className="h-[180px] md:h-[220px] -mx-1.5 mb-4">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={series} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="qx-earn-fill" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor={risk.color} stopOpacity={0.42} />
+                      <stop offset="100%" stopColor={risk.color} stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
+                  <XAxis
+                    dataKey="day"
+                    stroke="rgba(148,163,184,0.5)"
+                    tick={{ fontSize: 10 }}
+                    tickFormatter={(v) => `${v}d`}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    stroke="rgba(148,163,184,0.5)"
+                    tick={{ fontSize: 10 }}
+                    tickFormatter={(v) => `$${(v / 1000).toFixed(v >= 1000 ? 1 : 2)}k`}
+                    axisLine={false}
+                    tickLine={false}
+                    width={48}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      background: "rgba(10,16,32,0.95)",
+                      border: "1px solid rgba(16,185,129,0.30)",
+                      borderRadius: 10,
+                      fontSize: 12,
+                    }}
+                    labelStyle={{ color: "#94a3b8", fontWeight: 600 }}
+                    formatter={(value: number, name: string) => {
+                      if (name === "balance")
+                        return [`$${value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, "Balance"];
+                      return [value, name];
+                    }}
+                    labelFormatter={(d: number) => `Day ${d}`}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="balance"
+                    stroke={risk.color}
+                    strokeWidth={2.5}
+                    fill="url(#qx-earn-fill)"
+                    isAnimationActive={true}
+                    animationDuration={500}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+
+            {/* Footer stats + CTA */}
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 pt-3 border-t border-white/[0.06]">
+              <div className="flex items-center gap-4 sm:gap-5 flex-wrap">
+                <div>
+                  <div className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">
+                    Avg / month
+                  </div>
+                  <div className="text-sm font-bold text-emerald-300 tabular-nums">
+                    +${fmt2(monthlyAvg)}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">
+                    Target / month
+                  </div>
+                  <div className="text-sm font-bold text-white">
+                    {risk.monthlyPct}%
+                  </div>
+                </div>
+              </div>
+              <Link
+                href={withRef("/signup")}
+                onClick={() => trackCta("earnings_calc_signup")}
+                className="sm:ml-auto inline-flex items-center justify-center gap-1.5 px-5 py-2.5 rounded-xl text-sm font-bold text-white whitespace-nowrap"
+                style={{
+                  background: "linear-gradient(135deg, #10b981, #22c55e)",
+                  boxShadow: "0 8px 24px -6px rgba(16,185,129,0.55)",
+                }}
+              >
+                Start with ${fmt(amount)}
+                <ArrowRight size={15} />
+              </Link>
+            </div>
+
+            <p className="text-[10px] text-slate-500 leading-relaxed mt-3">
+              Indicative projection based on historical averages. Trading involves risk; actual results vary. Capital protection auto-pauses trading at your selected drawdown limit.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Range slider styles — emerald themed track + thumb */}
+      <style>{`
+        .qx-range {
+          -webkit-appearance: none;
+          appearance: none;
+          width: 100%;
+          height: 6px;
+          border-radius: 999px;
+          background: linear-gradient(90deg, #10b981 0%, #22c55e ${((amount - 100) / (50000 - 100)) * 100}%, rgba(255,255,255,0.08) ${((amount - 100) / (50000 - 100)) * 100}%, rgba(255,255,255,0.08) 100%);
+          outline: none;
+          cursor: pointer;
+        }
+        .qx-range::-webkit-slider-thumb {
+          -webkit-appearance: none;
+          appearance: none;
+          width: 22px;
+          height: 22px;
+          border-radius: 50%;
+          background: linear-gradient(135deg, #34d399, #10b981);
+          border: 2px solid #0a1020;
+          box-shadow: 0 0 0 1px rgba(16,185,129,0.6), 0 4px 14px rgba(16,185,129,0.5);
+          cursor: grab;
+          transition: transform 0.15s;
+        }
+        .qx-range::-webkit-slider-thumb:active { transform: scale(1.12); cursor: grabbing; }
+        .qx-range::-moz-range-thumb {
+          width: 22px;
+          height: 22px;
+          border-radius: 50%;
+          background: linear-gradient(135deg, #34d399, #10b981);
+          border: 2px solid #0a1020;
+          box-shadow: 0 0 0 1px rgba(16,185,129,0.6), 0 4px 14px rgba(16,185,129,0.5);
+          cursor: grab;
+        }
       `}</style>
     </section>
   );
@@ -1085,6 +1430,9 @@ export default function HomePage() {
           Targets are historical averages. Trading involves risk. Past performance is not a guarantee of future results.
         </p>
       </section>
+
+      {/* EARNINGS CALCULATOR — biggest deposit trigger */}
+      <EarningsCalculator />
 
       <section className="max-w-7xl mx-auto px-4 md:px-8 py-16 md:py-20">
         <div className="text-center max-w-2xl mx-auto mb-12">
