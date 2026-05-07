@@ -269,7 +269,7 @@ export default function WalletPage() {
           {/* Transfer — bidirectional (Main ↔ Trading) */}
           <div className="glass-card p-5 rounded-2xl space-y-4">
             <div className="flex items-center gap-2.5">
-              <div className="p-2 rounded-xl bg-indigo-500/15 text-indigo-400">
+              <div className="p-2 rounded-xl bg-emerald-500/15 text-emerald-400">
                 <ArrowRightLeft style={{ width: 16, height: 16 }} />
               </div>
               <div>
@@ -290,7 +290,7 @@ export default function WalletPage() {
                 onClick={() => { setTransferDirection("toTrading"); setTransferAmount(""); }}
                 className={`px-3 py-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5 ${
                   transferDirection === "toTrading"
-                    ? "bg-indigo-500/20 text-indigo-300 shadow-sm"
+                    ? "bg-emerald-500/20 text-emerald-300 shadow-sm"
                     : "text-muted-foreground hover:text-white"
                 }`}
               >
@@ -300,7 +300,7 @@ export default function WalletPage() {
                 onClick={() => { setTransferDirection("toMain"); setTransferAmount(""); }}
                 className={`px-3 py-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5 ${
                   transferDirection === "toMain"
-                    ? "bg-violet-500/20 text-violet-300 shadow-sm"
+                    ? "bg-teal-500/20 text-teal-300 shadow-sm"
                     : "text-muted-foreground hover:text-white"
                 }`}
               >
@@ -326,7 +326,7 @@ export default function WalletPage() {
                         ? (wallet?.mainBalance || 0)
                         : (wallet?.tradingBalance || 0),
                     ))}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-blue-400 font-bold px-2 py-1 bg-blue-500/10 rounded-lg hover:bg-blue-500/20 transition"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-emerald-300 font-bold px-2 py-1 bg-emerald-500/10 rounded-lg hover:bg-emerald-500/20 transition"
                   >
                     MAX
                   </button>
@@ -353,7 +353,7 @@ export default function WalletPage() {
                 })}
                 disabled={transferMutation.isPending || !transferAmount || Number(transferAmount) <= 0}
                 className="btn w-full"
-                style={{ background: "linear-gradient(135deg,#4f46e5,#7c3aed)", color: "#fff", boxShadow: "0 4px 18px rgba(99,102,241,0.3)" }}
+                style={{ background: "linear-gradient(135deg,#10b981,#22c55e)", color: "#fff", boxShadow: "0 4px 18px rgba(16,185,129,0.35)" }}
               >
                 {transferMutation.isPending
                   ? "Processing…"
@@ -458,7 +458,7 @@ export default function WalletPage() {
                   />
                   <button
                     onClick={() => setWithdrawAmount(String(sourceBalance))}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-blue-400 font-bold px-2 py-1 bg-blue-500/10 rounded-lg hover:bg-blue-500/20 transition"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-emerald-300 font-bold px-2 py-1 bg-emerald-500/10 rounded-lg hover:bg-emerald-500/20 transition"
                   >
                     MAX
                   </button>
