@@ -39,10 +39,10 @@ function UserRowSkeleton() {
 }
 
 const PLATFORM_BENEFITS = [
-  { icon: BarChart3, label: "Automated trading", detail: "Professional desk active 24/7" },
-  { icon: Zap, label: "Daily profit distribution", detail: "Credited to your wallet every day" },
-  { icon: Shield, label: "Capital protection system", detail: "Drawdown ceiling locked per account" },
-  { icon: Globe, label: "USDT (TRC20) settlement", detail: "Stable, borderless, instant" },
+  { icon: BarChart3, label: "Automated trading", detail: "Professional desk active 24/7", color: "text-emerald-300" },
+  { icon: Zap, label: "Daily profit distribution", detail: "Credited to your wallet every day", color: "text-teal-300" },
+  { icon: Shield, label: "Capital protection system", detail: "Drawdown ceiling locked per account", color: "text-lime-300" },
+  { icon: Globe, label: "USDT (TRC20) settlement", detail: "Stable, borderless, instant", color: "text-green-300" },
 ];
 
 const SHARE_MESSAGE = (code: string) =>
@@ -325,7 +325,7 @@ export default function ReferralPage() {
                 return (
                   <div key={b.label} className="flex items-start gap-3">
                     <div className="w-7 h-7 rounded-lg bg-white/[0.05] border border-white/[0.08] flex items-center justify-center shrink-0 mt-0.5">
-                      <Icon className="w-3.5 h-3.5 text-blue-400" />
+                      <Icon className={cn("w-3.5 h-3.5", b.color)} />
                     </div>
                     <div>
                       <p className="text-xs font-semibold text-white">{b.label}</p>
@@ -341,9 +341,9 @@ export default function ReferralPage() {
               <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Typical Monthly Returns</p>
               <div className="space-y-1.5">
                 {[
-                  { tier: "Conservative", range: "1.5% – 5%", color: "bg-blue-400" },
-                  { tier: "Balanced", range: "3% – 8%", color: "bg-violet-400" },
-                  { tier: "Growth", range: "5% – 10%+", color: "bg-emerald-400" },
+                  { tier: "Conservative", range: "1.5% – 5%", color: "bg-emerald-400" },
+                  { tier: "Balanced", range: "3% – 8%", color: "bg-teal-400" },
+                  { tier: "Growth", range: "5% – 10%+", color: "bg-lime-400" },
                 ].map(r => (
                   <div key={r.tier} className="flex items-center justify-between text-xs">
                     <div className="flex items-center gap-2">
@@ -367,15 +367,15 @@ export default function ReferralPage() {
                   n: "01",
                   title: "Share your link or code",
                   desc: "Send it via message, post it on social media, or include it in any content you create.",
-                  color: "text-blue-400",
-                  dot: "bg-blue-500",
+                  color: "text-emerald-300",
+                  dot: "bg-emerald-500",
                 },
                 {
                   n: "02",
                   title: "Your contact registers",
                   desc: "They sign up using your link — your partner code is automatically attached to their account.",
-                  color: "text-violet-400",
-                  dot: "bg-violet-500",
+                  color: "text-teal-300",
+                  dot: "bg-teal-500",
                 },
                 {
                   n: "03",
@@ -388,8 +388,8 @@ export default function ReferralPage() {
                   n: "04",
                   title: "Instant 3% activation bonus",
                   desc: "The moment your partner activates, you earn 3% of their first investment — credited to your profit balance immediately.",
-                  color: "text-cyan-400",
-                  dot: "bg-cyan-500",
+                  color: "text-lime-300",
+                  dot: "bg-lime-500",
                 },
                 {
                   n: "05",
