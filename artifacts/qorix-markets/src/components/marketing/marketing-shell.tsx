@@ -165,7 +165,7 @@ export function MarketingFooter() {
           </p>
           <div className="mt-4 flex items-center gap-2">
             {[
-              { href: "https://t.me/qorixmarkets", label: "Telegram", Icon: Send },
+              { href: "https://t.me/Qorixmarketsalerts", label: "Telegram", Icon: Send },
               { href: "https://twitter.com/qorixmarkets", label: "Twitter / X", Icon: Twitter },
               { href: "https://instagram.com/qorixmarkets", label: "Instagram", Icon: Instagram },
               { href: "https://youtube.com/@qorixmarkets", label: "YouTube", Icon: Youtube },
