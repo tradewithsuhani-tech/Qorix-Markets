@@ -29,15 +29,15 @@ export function StickyJoinButton() {
         className="pointer-events-auto flex items-center gap-2 pl-1 pr-1.5 py-1 rounded-full backdrop-blur-md shadow-2xl"
         style={{
           background: "rgba(5,8,20,0.85)",
-          border: "1px solid rgba(139,92,246,0.35)",
-          boxShadow: "0 16px 50px -16px rgba(139,92,246,0.55)",
+          border: "1px solid rgba(16,185,129,0.35)",
+          boxShadow: "0 16px 50px -16px rgba(16,185,129,0.55)",
         }}
       >
         <Link
           href={withRef("/signup")}
           onClick={() => trackCta("Join Now", "sticky_bar")}
           className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-bold text-white"
-          style={{ background: "linear-gradient(90deg,#8b5cf6,#6366f1)" }}
+          style={{ background: "linear-gradient(90deg,#10b981,#22c55e)" }}
         >
           Join Now <ArrowRight size={14} />
         </Link>

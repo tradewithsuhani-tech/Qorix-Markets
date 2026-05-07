@@ -47,7 +47,7 @@ export function SignupPopup() {
         className="relative w-full max-w-sm rounded-3xl p-6 md:p-7 text-center"
         style={{
           background: "linear-gradient(180deg, #0b1226, #060914)",
-          border: "1px solid rgba(139,92,246,0.30)",
+          border: "1px solid rgba(16,185,129,0.30)",
           boxShadow: "0 24px 60px -10px rgba(0,0,0,0.6)",
         }}
       >
@@ -61,8 +61,8 @@ export function SignupPopup() {
         </button>
 
         <div className="mx-auto w-12 h-12 rounded-2xl flex items-center justify-center mb-4"
-          style={{ background: "rgba(139,92,246,0.15)", border: "1px solid rgba(139,92,246,0.30)" }}>
-          <Sparkles size={20} className="text-violet-300" />
+          style={{ background: "rgba(16,185,129,0.15)", border: "1px solid rgba(16,185,129,0.30)" }}>
+          <Sparkles size={20} className="text-emerald-300" />
         </div>
 
         <h2 className="text-xl font-black text-white mb-2">Start with just $10</h2>
@@ -78,7 +78,7 @@ export function SignupPopup() {
             dismiss();
           }}
           className="inline-flex w-full items-center justify-center gap-1.5 px-5 py-3 rounded-xl text-sm font-bold text-white"
-          style={{ background: "linear-gradient(90deg,#8b5cf6,#6366f1)" }}
+          style={{ background: "linear-gradient(90deg,#10b981,#22c55e)" }}
         >
           Create my free account <ArrowRight size={14} />
         </Link>

@@ -58,8 +58,8 @@ const PILLARS = [
 ];
 
 const DESKS = [
-  { icon: Bitcoin, name: "Crypto Desk", pairs: "BTC · ETH · SOL · USDT pairs", blurb: "24/7 momentum + mean-reversion blends on the deepest crypto majors.", glow: "rgba(139,92,246,0.22)", border: "rgba(139,92,246,0.35)" },
-  { icon: DollarSign, name: "Forex Desk", pairs: "EURUSD · GBPUSD · USDJPY", blurb: "Session-aware execution across London, New York and Tokyo overlaps.", glow: "rgba(59,130,246,0.22)", border: "rgba(59,130,246,0.35)" },
+  { icon: Bitcoin, name: "Crypto Desk", pairs: "BTC · ETH · SOL · USDT pairs", blurb: "24/7 momentum + mean-reversion blends on the deepest crypto majors.", glow: "rgba(16,185,129,0.22)", border: "rgba(16,185,129,0.35)" },
+  { icon: DollarSign, name: "Forex Desk", pairs: "EURUSD · GBPUSD · USDJPY", blurb: "Session-aware execution across London, New York and Tokyo overlaps.", glow: "rgba(34,197,94,0.22)", border: "rgba(34,197,94,0.35)" },
   { icon: Coins, name: "Gold Desk", pairs: "XAU/USD spot", blurb: "Macro hedge on the world's most-watched safe-haven asset.", glow: "rgba(234,179,8,0.22)", border: "rgba(234,179,8,0.35)" },
   { icon: BarChart3, name: "Indices Desk", pairs: "US500 · NAS100 · GER40", blurb: "Trend-following on global benchmarks with strict drawdown caps.", glow: "rgba(236,72,153,0.22)", border: "rgba(236,72,153,0.35)" },
 ];
@@ -77,9 +77,9 @@ const TIERS = [
 ];
 
 // Brand purple/violet → blue gradient used across the home page hero & accents.
-const ACCENT_GRADIENT = "linear-gradient(90deg,#a855f7,#6366f1,#3b82f6)";
-const ACCENT_BUTTON = "linear-gradient(90deg,#8b5cf6,#6366f1)";
-const ACCENT_GLOW = "0 14px 40px -12px rgba(139,92,246,0.55)";
+const ACCENT_GRADIENT = "linear-gradient(90deg,#10b981,#22c55e,#22c55e)";
+const ACCENT_BUTTON = "linear-gradient(90deg,#10b981,#22c55e)";
+const ACCENT_GLOW = "0 14px 40px -12px rgba(16,185,129,0.55)";
 
 export default function HomePage() {
   useSeo({
@@ -106,7 +106,7 @@ export default function HomePage() {
           className="pointer-events-none absolute inset-0"
           style={{
             background:
-              "radial-gradient(circle at 18% 12%, rgba(139,92,246,0.22), transparent 55%), radial-gradient(circle at 88% 28%, rgba(59,130,246,0.18), transparent 50%), radial-gradient(circle at 60% 90%, rgba(236,72,153,0.10), transparent 60%)",
+              "radial-gradient(circle at 18% 12%, rgba(16,185,129,0.22), transparent 55%), radial-gradient(circle at 88% 28%, rgba(34,197,94,0.18), transparent 50%), radial-gradient(circle at 60% 90%, rgba(236,72,153,0.10), transparent 60%)",
           }}
         />
         <div className="relative max-w-7xl mx-auto px-4 md:px-8 pt-10 md:pt-20 pb-12 md:pb-24 grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-14 items-center">
@@ -161,7 +161,7 @@ export default function HomePage() {
                 href="/ai-trading-platform"
                 className="inline-flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-semibold text-slate-200 border border-white/10 hover:border-white/30 hover:bg-white/[0.04] transition-colors"
               >
-                <PlayCircle size={16} className="text-violet-300" /> See how it works
+                <PlayCircle size={16} className="text-emerald-300" /> See how it works
               </Link>
             </div>
 
@@ -182,7 +182,7 @@ export default function HomePage() {
               className="absolute -inset-6 rounded-[32px] blur-2xl opacity-60"
               style={{
                 background:
-                  "radial-gradient(circle at 30% 30%, rgba(139,92,246,0.45), transparent 60%), radial-gradient(circle at 70% 70%, rgba(59,130,246,0.35), transparent 60%)",
+                  "radial-gradient(circle at 30% 30%, rgba(16,185,129,0.45), transparent 60%), radial-gradient(circle at 70% 70%, rgba(34,197,94,0.35), transparent 60%)",
               }}
             />
             <div
@@ -262,9 +262,9 @@ export default function HomePage() {
               >
                 <div
                   className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
-                  style={{ background: "rgba(139,92,246,0.18)", border: "1px solid rgba(139,92,246,0.35)" }}
+                  style={{ background: "rgba(16,185,129,0.18)", border: "1px solid rgba(16,185,129,0.35)" }}
                 >
-                  <TrendingUp size={13} className="text-violet-300" />
+                  <TrendingUp size={13} className="text-emerald-300" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-bold text-white truncate">
@@ -313,9 +313,9 @@ export default function HomePage() {
             >
               <div
                 className="w-7 h-7 rounded-lg flex items-center justify-center"
-                style={{ background: "rgba(139,92,246,0.18)", border: "1px solid rgba(139,92,246,0.35)" }}
+                style={{ background: "rgba(16,185,129,0.18)", border: "1px solid rgba(16,185,129,0.35)" }}
               >
-                <Sparkles size={13} className="text-violet-300" />
+                <Sparkles size={13} className="text-emerald-300" />
               </div>
               <div>
                 <p className="text-[11px] font-bold text-white">Auto-compound</p>
@@ -334,15 +334,15 @@ export default function HomePage() {
             background:
               "linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.01))",
             border: "1px solid rgba(255,255,255,0.08)",
-            boxShadow: "0 30px 60px -30px rgba(139,92,246,0.18)",
+            boxShadow: "0 30px 60px -30px rgba(16,185,129,0.18)",
           }}
         >
           <div className="flex items-center gap-3 px-4 py-2.5 border-b border-white/[0.05]">
             <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-violet-400 opacity-60" />
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-violet-400" />
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-60" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400" />
             </span>
-            <span className="text-[11px] uppercase tracking-wider font-bold text-violet-300">
+            <span className="text-[11px] uppercase tracking-wider font-bold text-emerald-300">
               Live markets
             </span>
             <span className="text-[11px] text-slate-500 ml-auto">
@@ -386,7 +386,7 @@ export default function HomePage() {
               className="flex items-center gap-2.5 rounded-xl px-3.5 py-3"
               style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}
             >
-              <b.icon size={16} className="text-violet-300 shrink-0" />
+              <b.icon size={16} className="text-emerald-300 shrink-0" />
               <span className="text-xs md:text-sm text-slate-300 font-medium">{b.label}</span>
             </div>
           ))}
@@ -416,9 +416,9 @@ export default function HomePage() {
             >
               <div
                 className="w-10 h-10 rounded-xl mb-4 flex items-center justify-center"
-                style={{ background: "rgba(139,92,246,0.14)", border: "1px solid rgba(139,92,246,0.30)" }}
+                style={{ background: "rgba(16,185,129,0.14)", border: "1px solid rgba(16,185,129,0.30)" }}
               >
-                <p.icon size={18} className="text-violet-300" />
+                <p.icon size={18} className="text-emerald-300" />
               </div>
               <h3 className="text-lg font-bold text-white mb-2">{p.t}</h3>
               <p className="text-sm text-slate-400 leading-relaxed">{p.d}</p>
@@ -484,7 +484,7 @@ export default function HomePage() {
         <div className="relative grid grid-cols-1 md:grid-cols-3 gap-4">
           <div
             className="hidden md:block absolute top-12 left-[16%] right-[16%] h-px"
-            style={{ background: "linear-gradient(90deg, transparent, rgba(139,92,246,0.40), transparent)" }}
+            style={{ background: "linear-gradient(90deg, transparent, rgba(16,185,129,0.40), transparent)" }}
           />
           {STEPS.map((s, i) => (
             <div
@@ -499,11 +499,11 @@ export default function HomePage() {
               <div
                 className="relative inline-flex items-center justify-center w-14 h-14 rounded-2xl mb-4"
                 style={{
-                  background: "linear-gradient(135deg, rgba(139,92,246,0.20), rgba(59,130,246,0.10))",
-                  border: "1px solid rgba(139,92,246,0.35)",
+                  background: "linear-gradient(135deg, rgba(16,185,129,0.20), rgba(34,197,94,0.10))",
+                  border: "1px solid rgba(16,185,129,0.35)",
                 }}
               >
-                <s.icon size={22} className="text-violet-300" />
+                <s.icon size={22} className="text-emerald-300" />
                 <span
                   className="absolute -top-2 -right-2 w-6 h-6 rounded-full text-[11px] font-black flex items-center justify-center text-white"
                   style={{ background: ACCENT_BUTTON }}
@@ -535,10 +535,10 @@ export default function HomePage() {
               className="relative rounded-2xl p-6"
               style={{
                 background: t.popular
-                  ? "linear-gradient(180deg, rgba(139,92,246,0.12), rgba(255,255,255,0.02))"
+                  ? "linear-gradient(180deg, rgba(16,185,129,0.12), rgba(255,255,255,0.02))"
                   : "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01))",
-                border: `1px solid ${t.popular ? "rgba(139,92,246,0.45)" : "rgba(255,255,255,0.08)"}`,
-                boxShadow: t.popular ? "0 30px 60px -30px rgba(139,92,246,0.55)" : undefined,
+                border: `1px solid ${t.popular ? "rgba(16,185,129,0.45)" : "rgba(255,255,255,0.08)"}`,
+                boxShadow: t.popular ? "0 30px 60px -30px rgba(16,185,129,0.55)" : undefined,
               }}
             >
               {t.popular && (
@@ -558,7 +558,7 @@ export default function HomePage() {
               <ul className="space-y-2 mb-6">
                 {t.perks.map((p) => (
                   <li key={p} className="flex items-center gap-2 text-sm text-slate-300">
-                    <CheckCircle2 size={14} className="text-violet-300 shrink-0" />
+                    <CheckCircle2 size={14} className="text-emerald-300 shrink-0" />
                     {p}
                   </li>
                 ))}
@@ -626,13 +626,13 @@ function EquityCurve() {
     <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" className="w-full h-16">
       <defs>
         <linearGradient id="eqStroke" x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0%" stopColor="#a855f7" />
-          <stop offset="50%" stopColor="#6366f1" />
-          <stop offset="100%" stopColor="#3b82f6" />
+          <stop offset="0%" stopColor="#10b981" />
+          <stop offset="50%" stopColor="#22c55e" />
+          <stop offset="100%" stopColor="#22c55e" />
         </linearGradient>
         <linearGradient id="eqFill" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="rgba(139,92,246,0.35)" />
-          <stop offset="100%" stopColor="rgba(139,92,246,0)" />
+          <stop offset="0%" stopColor="rgba(16,185,129,0.35)" />
+          <stop offset="100%" stopColor="rgba(16,185,129,0)" />
         </linearGradient>
       </defs>
       <path d={area} fill="url(#eqFill)" />

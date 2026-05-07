@@ -19,7 +19,7 @@ export default function AboutPage() {
         badge="About us"
         title={
           <>
-            Building the worlds most <span className="text-violet-300">trusted</span> AI trading desk
+            Building the worlds most <span className="text-emerald-300">trusted</span> AI trading desk
           </>
         }
         subtitle="We are a team of traders, engineers, and risk managers on a mission to bring institutional-quality trading to everyday investors — at zero fees, starting from $10."
@@ -53,10 +53,10 @@ export default function AboutPage() {
       <FeatureGrid
         title="What makes us different"
         items={[
-          { icon: <Brain size={18} className="text-violet-300" />, title: "AI-first execution", description: "Models trained on years of cross-asset tick data drive every trade decision." },
-          { icon: <ShieldCheck size={18} className="text-violet-300" />, title: "Hard risk caps", description: "Drawdown limits auto-pause strategies. Your capital is protected first." },
-          { icon: <Rocket size={18} className="text-violet-300" />, title: "Built for compounding", description: "Auto-Compound reinvests profits daily so your capital grows on autopilot." },
-          { icon: <Heart size={18} className="text-violet-300" />, title: "Investor-first design", description: "No hidden fees. No lock-ins. Withdraw anytime in USDT." },
+          { icon: <Brain size={18} className="text-emerald-300" />, title: "AI-first execution", description: "Models trained on years of cross-asset tick data drive every trade decision." },
+          { icon: <ShieldCheck size={18} className="text-emerald-300" />, title: "Hard risk caps", description: "Drawdown limits auto-pause strategies. Your capital is protected first." },
+          { icon: <Rocket size={18} className="text-emerald-300" />, title: "Built for compounding", description: "Auto-Compound reinvests profits daily so your capital grows on autopilot." },
+          { icon: <Heart size={18} className="text-emerald-300" />, title: "Investor-first design", description: "No hidden fees. No lock-ins. Withdraw anytime in USDT." },
         ]}
       />
 

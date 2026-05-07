@@ -16,7 +16,7 @@ export default function ZeroFeePage() {
     <MarketingShell>
       <MarketingHero
         badge="Zero Fees"
-        title={<>0% commission. <span className="text-violet-300">Always.</span></>}
+        title={<>0% commission. <span className="text-emerald-300">Always.</span></>}
         subtitle="No deposit fees. No commission per trade. No monthly account fees. No inactivity penalties. Keep every dollar your capital earns."
         secondaryHref="/blog/zero-fee-trading-explained"
         secondaryLabel="How we make money"
@@ -26,12 +26,12 @@ export default function ZeroFeePage() {
         title="The Qorix fee promise"
         subtitle="Other brokers nickel-and-dime users. We chose differently."
         items={[
-          { icon: <CircleDollarSign size={18} className="text-violet-300" />, title: "0% commission", description: "Every order is executed without per-trade commissions, ever." },
-          { icon: <Wallet size={18} className="text-violet-300" />, title: "Free USDT deposits", description: "Deposit any amount of USDT on TRC20 or BEP20 for free." },
-          { icon: <Repeat size={18} className="text-violet-300" />, title: "No swap fees", description: "Hold positions overnight without rollover or swap charges." },
-          { icon: <ShieldCheck size={18} className="text-violet-300" />, title: "No account fees", description: "Free to open. Free to keep. Free to close." },
-          { icon: <Eye size={18} className="text-violet-300" />, title: "Total transparency", description: "Every fee that does apply (network gas on withdrawals) is shown upfront." },
-          { icon: <Handshake size={18} className="text-violet-300" />, title: "Aligned incentives", description: "We earn only when your portfolio earns — never on your activity." },
+          { icon: <CircleDollarSign size={18} className="text-emerald-300" />, title: "0% commission", description: "Every order is executed without per-trade commissions, ever." },
+          { icon: <Wallet size={18} className="text-emerald-300" />, title: "Free USDT deposits", description: "Deposit any amount of USDT on TRC20 or BEP20 for free." },
+          { icon: <Repeat size={18} className="text-emerald-300" />, title: "No swap fees", description: "Hold positions overnight without rollover or swap charges." },
+          { icon: <ShieldCheck size={18} className="text-emerald-300" />, title: "No account fees", description: "Free to open. Free to keep. Free to close." },
+          { icon: <Eye size={18} className="text-emerald-300" />, title: "Total transparency", description: "Every fee that does apply (network gas on withdrawals) is shown upfront." },
+          { icon: <Handshake size={18} className="text-emerald-300" />, title: "Aligned incentives", description: "We earn only when your portfolio earns — never on your activity." },
         ]}
       />
 

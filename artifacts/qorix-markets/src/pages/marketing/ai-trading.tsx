@@ -28,7 +28,7 @@ export default function AiTradingPage() {
         badge="AI Trading Platform"
         title={
           <>
-            Let AI <span className="text-violet-300">trade for you</span> 24/7
+            Let AI <span className="text-emerald-300">trade for you</span> 24/7
           </>
         }
         subtitle="Our AI engine analyzes thousands of cross-asset signals every minute and executes risk-managed orders on your behalf — across forex, gold, indices, and crypto majors."
@@ -40,12 +40,12 @@ export default function AiTradingPage() {
         title="Engineered for consistent monthly returns"
         subtitle="Six pillars that turn raw market data into compounding capital."
         items={[
-          { icon: <Brain size={18} className="text-violet-300" />, title: "Real-time signal engine", description: "Tick-level ingestion across major exchanges, normalized into model-ready features in milliseconds." },
-          { icon: <Zap size={18} className="text-violet-300" />, title: "Sub-second execution", description: "Direct routing to liquidity venues. Slippage is measured, logged, and optimized continuously." },
-          { icon: <ShieldCheck size={18} className="text-violet-300" />, title: "Hard risk caps", description: "Per-trade stop-losses and per-tier daily drawdown limits. Strategies auto-pause if breached." },
-          { icon: <Activity size={18} className="text-violet-300" />, title: "Multi-asset desks", description: "Forex majors, gold, indices, and crypto majors — diversified and rebalanced daily." },
-          { icon: <LineChart size={18} className="text-violet-300" />, title: "Live transparency", description: "Every trade, P/L, and equity tick posted to your dashboard in real time." },
-          { icon: <Target size={18} className="text-violet-300" />, title: "Tier-based targeting", description: "Conservative 4%, Balanced 6%, Aggressive 8% per month — you pick the profile." },
+          { icon: <Brain size={18} className="text-emerald-300" />, title: "Real-time signal engine", description: "Tick-level ingestion across major exchanges, normalized into model-ready features in milliseconds." },
+          { icon: <Zap size={18} className="text-emerald-300" />, title: "Sub-second execution", description: "Direct routing to liquidity venues. Slippage is measured, logged, and optimized continuously." },
+          { icon: <ShieldCheck size={18} className="text-emerald-300" />, title: "Hard risk caps", description: "Per-trade stop-losses and per-tier daily drawdown limits. Strategies auto-pause if breached." },
+          { icon: <Activity size={18} className="text-emerald-300" />, title: "Multi-asset desks", description: "Forex majors, gold, indices, and crypto majors — diversified and rebalanced daily." },
+          { icon: <LineChart size={18} className="text-emerald-300" />, title: "Live transparency", description: "Every trade, P/L, and equity tick posted to your dashboard in real time." },
+          { icon: <Target size={18} className="text-emerald-300" />, title: "Tier-based targeting", description: "Conservative 4%, Balanced 6%, Aggressive 8% per month — you pick the profile." },
         ]}
       />
 
