@@ -17,8 +17,12 @@ import {
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/context/AuthContext";
-import { usePortfolio } from "@/context/PortfolioContext";
 import { useColors } from "@/hooks/useColors";
+import {
+  useGetWallet,
+  useStartInvestment,
+} from "@workspace/api-client-react";
+import { FX_RATE } from "@/lib/tx-mapper";
 
 const BRAND_PURPLE = "#A855F7";
 const BRAND_PINK = "#EC4899";
@@ -45,7 +49,16 @@ export default function DeployScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user } = useAuth();
-  const { wallet, deployCapital } = usePortfolio();
+  const walletQ = useGetWallet();
+  const startMut = useStartInvestment();
+  const wRaw = walletQ.data as any;
+  const wallet = { balance: (Number(wRaw?.mainBalance) || 0) * FX_RATE };
+  const deployCapital = async (amountInr: number, tier: string) => {
+    await startMut.mutateAsync({
+      data: { amount: amountInr / FX_RATE, riskLevel: tier },
+    });
+    await walletQ.refetch();
+  };
 
   const [amount, setAmount] = useState("");
   const [loading, setLoading] = useState(false);
