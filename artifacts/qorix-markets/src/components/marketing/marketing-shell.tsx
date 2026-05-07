@@ -2,6 +2,7 @@ import { ReactNode, useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { Menu, X, ArrowRight, Send, Twitter, Instagram, Youtube, Facebook, Linkedin, Star } from "lucide-react";
 import { StickyJoinButton } from "./sticky-cta";
+import { LiveUsersPill } from "./live-users-pill";
 import { SignupPopup } from "./signup-popup";
 import { trackCta } from "@/lib/analytics";
 import { withRef } from "@/lib/referral";
@@ -168,6 +169,7 @@ export function MarketingShell({ children }: { children: ReactNode }) {
 
       <MarketingFooter />
       <StickyJoinButton />
+      <LiveUsersPill />
       <SignupPopup />
     </div>
   );
