@@ -1086,7 +1086,7 @@ export default function LoginPage() {
           className="relative rounded-3xl p-8 md:p-9 space-y-6 overflow-hidden"
           style={{
             background:
-              "linear-gradient(180deg, rgba(30,41,59,0.85) 0%, rgba(15,23,42,0.92) 100%)",
+              "linear-gradient(180deg, rgba(15,23,42,0.55) 0%, rgba(2,6,23,0.75) 100%)",
             border: "1px solid rgba(16,185,129,0.22)",
             backdropFilter: "blur(24px) saturate(180%)",
             WebkitBackdropFilter: "blur(24px) saturate(180%)",
