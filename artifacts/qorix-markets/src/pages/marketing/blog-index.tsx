@@ -94,16 +94,15 @@ export default function BlogIndexPage() {
               style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}
             >
               {POST_IMAGES[p.slug] ? (
-                <div className="relative aspect-video overflow-hidden">
+                <div
+                  className="relative aspect-[4/3] overflow-hidden"
+                  style={{ background: "#05100c" }}
+                >
                   <img
                     src={POST_IMAGES[p.slug]}
                     alt={p.featuredImageAlt}
                     loading="lazy"
-                    className="absolute inset-0 w-full h-full object-cover"
-                  />
-                  <div
-                    className="absolute inset-0 pointer-events-none"
-                    style={{ background: "linear-gradient(135deg, rgba(5,15,12,0.10), rgba(5,15,12,0.40))" }}
+                    className="absolute inset-0 w-full h-full object-contain"
                   />
                 </div>
               ) : (
