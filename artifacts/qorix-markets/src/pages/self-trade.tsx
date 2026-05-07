@@ -377,7 +377,7 @@ export default function SelfTradePage() {
   const dayPct = sessionOpen > 0 ? ((mid - sessionOpen) / sessionOpen) * 100 : 0;
 
   // ── Order ticket state ──
-  const [lots, setLots] = useState(0.01);
+  const [lots, setLots] = useState(0);
   // SL/TP are now PRICE strings (Exness-style). Empty = no SL/TP.
   const [slPx, setSlPx] = useState<string>("");
   const [tpPx, setTpPx] = useState<string>("");
@@ -410,6 +410,7 @@ export default function SelfTradePage() {
   const marginLevel = usedMargin > 0 ? (equity / usedMargin) * 100 : 0;
 
   const placeOrder = (side: "BUY" | "SELL") => {
+    if (!(lots > 0)) return;
     const entry = side === "BUY" ? ask : bid;
     // SL/TP are typed as PRICE. Use as-is when on the correct side of entry,
     // else mirror the distance so it lands on the valid side.
@@ -974,7 +975,7 @@ export default function SelfTradePage() {
               </div>
               <div className="flex items-center rounded-xl bg-white/[0.03] border border-white/10 overflow-hidden">
                 <button
-                  onClick={() => setLots((l) => +Math.max(0.01, l - 0.01).toFixed(2))}
+                  onClick={() => setLots((l) => +Math.max(0, l - 0.01).toFixed(2))}
                   className="px-3 py-2 text-white/70 hover:text-white hover:bg-white/5"
                 >
                   <Minus style={{ width: 13, height: 13 }} />
@@ -982,13 +983,16 @@ export default function SelfTradePage() {
                 <input
                   type="number"
                   step="0.01"
-                  min="0.01"
-                  value={lots}
+                  min="0"
+                  value={lots === 0 ? "" : lots}
+                  placeholder="0.00"
                   onChange={(e) => {
-                    const v = parseFloat(e.target.value);
-                    setLots(isNaN(v) ? 0.01 : Math.max(0.01, +v.toFixed(2)));
+                    const raw = e.target.value;
+                    if (raw === "") { setLots(0); return; }
+                    const v = parseFloat(raw);
+                    setLots(isNaN(v) ? 0 : Math.max(0, +v.toFixed(2)));
                   }}
-                  className="flex-1 bg-transparent outline-none text-center text-base font-bold tabular-nums py-2"
+                  className="flex-1 bg-transparent outline-none text-center text-base font-bold tabular-nums py-2 placeholder-white/25"
                 />
                 <button
                   onClick={() => setLots((l) => +(l + 0.01).toFixed(2))}
