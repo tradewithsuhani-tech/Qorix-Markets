@@ -15,12 +15,61 @@ import { faqJsonLd, reviewJsonLd } from "@/lib/seo";
 import { trackCta } from "@/lib/analytics";
 import { withRef } from "@/lib/referral";
 
+function StatSpark({ points, up = true }: { points: number[]; up?: boolean }) {
+  const w = 80;
+  const h = 28;
+  const min = Math.min(...points);
+  const max = Math.max(...points);
+  const range = max - min || 1;
+  const path = points
+    .map((p, i) => {
+      const x = (i / (points.length - 1)) * w;
+      const y = h - ((p - min) / range) * h;
+      return `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(" ");
+  const stroke = up ? "#10b981" : "#ef4444";
+  return (
+    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} className="overflow-visible">
+      <path d={path} fill="none" stroke={stroke} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 export function StatsSection() {
   const stats = [
-    { icon: Users, label: "Active investors", value: "12,400+" },
-    { icon: Wallet, label: "Total payouts", value: "$8.4M+" },
-    { icon: TrendingUp, label: "Avg monthly return", value: "6.0%" },
-    { icon: Globe2, label: "Countries served", value: "60+" },
+    {
+      icon: Users,
+      label: "Active investors",
+      value: "12,400+",
+      delta: "+248 this week",
+      trend: [10, 12, 11, 14, 16, 15, 18, 20, 22, 24, 26, 28],
+      code: "USR.LIVE",
+    },
+    {
+      icon: Wallet,
+      label: "Total payouts",
+      value: "$8.4M+",
+      delta: "+$184K · 30D",
+      trend: [4, 5, 5.4, 6, 6.3, 6.8, 7.1, 7.4, 7.8, 8.0, 8.2, 8.4],
+      code: "PAY.30D",
+    },
+    {
+      icon: TrendingUp,
+      label: "Avg monthly return",
+      value: "6.0%",
+      delta: "+0.4% vs Q1",
+      trend: [4.8, 5.1, 5.0, 5.3, 5.5, 5.4, 5.7, 5.9, 5.8, 6.0, 6.1, 6.0],
+      code: "ROI.MTD",
+    },
+    {
+      icon: Globe2,
+      label: "Countries served",
+      value: "60+",
+      delta: "3 new regions",
+      trend: [42, 44, 46, 48, 50, 52, 54, 55, 57, 58, 59, 60],
+      code: "GEO.ALL",
+    },
   ];
   return (
     <section className="max-w-7xl mx-auto px-4 md:px-8 py-12 md:py-16">
@@ -28,22 +77,53 @@ export function StatsSection() {
         {stats.map((s) => (
           <div
             key={s.label}
-            className="rounded-2xl p-5 text-center"
+            className="relative rounded-2xl p-4 md:p-5 overflow-hidden"
             style={{
               background:
-                "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01))",
+                "linear-gradient(180deg, rgba(16,185,129,0.04), rgba(8,12,24,0.6))",
               border: "1px solid rgba(255,255,255,0.07)",
             }}
           >
-            <div className="inline-flex items-center justify-center w-9 h-9 rounded-xl mb-3"
-              style={{ background: "rgba(16,185,129,0.12)", border: "1px solid rgba(16,185,129,0.25)" }}>
-              <s.icon size={16} className="text-emerald-300" />
+            {/* corner glow */}
+            <div
+              aria-hidden
+              className="absolute -top-10 -right-10 w-28 h-28 rounded-full blur-3xl opacity-40"
+              style={{ background: "rgba(16,185,129,0.45)" }}
+            />
+
+            {/* top row: icon + code + live pulse */}
+            <div className="relative flex items-center justify-between mb-3">
+              <div
+                className="inline-flex items-center justify-center w-9 h-9 rounded-xl"
+                style={{ background: "rgba(16,185,129,0.12)", border: "1px solid rgba(16,185,129,0.25)" }}
+              >
+                <s.icon size={16} className="text-emerald-300" />
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="relative flex h-1.5 w-1.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-70" />
+                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-400" />
+                </span>
+                <span className="text-[9px] font-mono font-bold text-slate-500 tracking-wider">
+                  {s.code}
+                </span>
+              </div>
             </div>
-            <div className="text-2xl md:text-3xl font-black text-white tabular-nums">
+
+            {/* main value */}
+            <div className="relative text-2xl md:text-3xl font-black text-white tabular-nums leading-tight">
               {s.value}
             </div>
-            <div className="text-[11px] uppercase tracking-wider text-slate-500 mt-1">
+            <div className="relative text-[11px] uppercase tracking-wider text-slate-500 mt-1">
               {s.label}
+            </div>
+
+            {/* footer: delta + sparkline */}
+            <div className="relative mt-3 pt-3 flex items-end justify-between gap-2 border-t border-white/5">
+              <span className="text-[10px] font-bold text-emerald-400 tabular-nums leading-tight">
+                ↑ {s.delta}
+              </span>
+              <StatSpark points={s.trend} />
             </div>
           </div>
         ))}
