@@ -10,6 +10,7 @@ import startWith10 from "@/assets/blog/start-with-10.png";
 import riskManagement from "@/assets/blog/risk-management.png";
 import usdtSettlement from "@/assets/blog/usdt-settlement.png";
 import compoundingMath from "@/assets/blog/compounding-math.png";
+import riskTier from "@/assets/blog/risk-tier.png";
 
 const POST_IMAGES: Record<string, string> = {
   "how-ai-trading-works": aiTradingHero,
@@ -19,6 +20,7 @@ const POST_IMAGES: Record<string, string> = {
   "risk-management-fundamentals": riskManagement,
   "usdt-trading-benefits": usdtSettlement,
   "compounding-monthly-returns": compoundingMath,
+  "choosing-the-right-risk-tier": riskTier,
 };
 
 export default function BlogIndexPage() {
