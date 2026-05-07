@@ -1,24 +1,49 @@
 import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React from "react";
+import React, { useMemo } from "react";
 import {
+  ActivityIndicator,
   FlatList,
   Platform,
   Pressable,
+  RefreshControl,
   StyleSheet,
   Text,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Card } from "@/components/Card";
-import { usePortfolio } from "@/context/PortfolioContext";
 import { useColors } from "@/hooks/useColors";
+import { useGetTransactions } from "@workspace/api-client-react";
+import { mapApiTx, type ApiTx } from "@/lib/tx-mapper";
 
 export default function IncomeScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { incomeLedger } = usePortfolio();
+
+  const txQ = useGetTransactions({ page: 1, limit: 100 });
+  const apiData = ((txQ.data as any)?.data ?? []) as ApiTx[];
+
+  const incomeLedger = useMemo(() => {
+    return apiData
+      .map(mapApiTx)
+      .filter((t) => t.type === "income")
+      .map((t) => {
+        const gross = t.amount;
+        const fee = +(gross * 0.25).toFixed(2);
+        const client = +(gross - fee).toFixed(2);
+        return {
+          id: t.id,
+          cycleDate: t.createdAt,
+          grossPnl: gross,
+          companyFee: fee,
+          clientIncome: client,
+          tdsDeducted: 0,
+          description: t.description,
+        };
+      });
+  }, [apiData]);
 
   const totalGross = incomeLedger.reduce((s, e) => s + e.grossPnl, 0);
   const totalClient = incomeLedger.reduce((s, e) => s + e.clientIncome, 0);
@@ -32,6 +57,13 @@ export default function IncomeScreen() {
         data={incomeLedger}
         keyExtractor={(item) => item.id}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={txQ.isFetching && !txQ.isLoading}
+            onRefresh={() => txQ.refetch()}
+            tintColor={colors.gold}
+          />
+        }
         contentContainerStyle={[styles.list, { paddingTop: topPadding, paddingBottom: insets.bottom + 100 }]}
         ListHeaderComponent={() => (
           <View style={styles.listHeader}>
@@ -45,7 +77,6 @@ export default function IncomeScreen() {
               <Text style={[styles.title, { color: colors.foreground }]}>Income Statements</Text>
             </View>
 
-            {/* Summary */}
             <Card variant="gold" padding={18}>
               <Text style={[styles.summaryLabel, { color: colors.goldDim }]}>TOTAL CLIENT INCOME</Text>
               <Text style={[styles.summaryValue, { color: colors.foreground }]}>
@@ -67,7 +98,6 @@ export default function IncomeScreen() {
               </View>
             </Card>
 
-            {/* How it works */}
             <View style={[styles.howWorks, { backgroundColor: colors.card, borderColor: colors.border }]}>
               <Text style={[styles.hwTitle, { color: colors.foreground }]}>How income is calculated</Text>
               {[
@@ -91,7 +121,7 @@ export default function IncomeScreen() {
         renderItem={({ item }) => {
           const date = new Date(item.cycleDate);
           const dateStr = date.toLocaleDateString("en-IN", { weekday: "short", day: "2-digit", month: "short", year: "numeric" });
-          const clientPct = Math.round((item.clientIncome / item.grossPnl) * 100);
+          const clientPct = item.grossPnl > 0 ? Math.round((item.clientIncome / item.grossPnl) * 100) : 0;
           return (
             <View style={{ paddingHorizontal: 16, marginBottom: 10 }}>
               <Card padding={16}>
@@ -124,12 +154,18 @@ export default function IncomeScreen() {
             </View>
           );
         }}
-        ListEmptyComponent={() => (
-          <View style={styles.empty}>
-            <Feather name="inbox" size={36} color={colors.textMuted} />
-            <Text style={[styles.emptyText, { color: colors.textMuted }]}>No income statements yet</Text>
-          </View>
-        )}
+        ListEmptyComponent={() =>
+          txQ.isLoading ? (
+            <View style={styles.empty}>
+              <ActivityIndicator color={colors.gold} />
+            </View>
+          ) : (
+            <View style={styles.empty}>
+              <Feather name="inbox" size={36} color={colors.textMuted} />
+              <Text style={[styles.emptyText, { color: colors.textMuted }]}>No income statements yet</Text>
+            </View>
+          )
+        }
       />
     </View>
   );

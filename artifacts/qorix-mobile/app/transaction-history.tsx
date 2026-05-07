@@ -17,12 +17,13 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { TransactionItem } from "@/components/TransactionItem";
 import {
-  usePortfolio,
   type Transaction,
   type TransactionType,
   type TransactionStatus,
 } from "@/context/PortfolioContext";
 import { useColors } from "@/hooks/useColors";
+import { useGetTransactions } from "@workspace/api-client-react";
+import { mapApiTx, type ApiTx } from "@/lib/tx-mapper";
 
 const TYPE_FILTERS: { label: string; value: "all" | TransactionType }[] = [
   { label: "All", value: "all" },
@@ -46,7 +47,9 @@ export default function TransactionHistoryScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { transactions } = usePortfolio();
+  const txQ = useGetTransactions({ page: 1, limit: 100 });
+  const apiData = ((txQ.data as any)?.data ?? []) as ApiTx[];
+  const transactions = useMemo(() => apiData.map(mapApiTx), [apiData]);
 
   const [typeFilter, setTypeFilter] = useState<"all" | TransactionType>("all");
   const [statusFilter, setStatusFilter] = useState<"all" | TransactionStatus>("all");
