@@ -20,8 +20,15 @@ import { Sparkline } from "@/components/Sparkline";
 import { TradeItem } from "@/components/TradeItem";
 import { BOT_STRATEGIES } from "@/constants/bots";
 import type { BotStrategy } from "@/components/BotStrategyCard";
-import { usePortfolio } from "@/context/PortfolioContext";
+import type { Trade } from "@/context/PortfolioContext";
 import { useColors } from "@/hooks/useColors";
+import {
+  useGetInvestment,
+  useGetDashboardSummary,
+  useGetTrades,
+  useGetWallet,
+} from "@workspace/api-client-react";
+import { FX_RATE } from "@/lib/tx-mapper";
 
 const FILTERS = ["All", "BUY", "SELL", "Win", "Loss"] as const;
 type Filter = (typeof FILTERS)[number];
@@ -54,7 +61,49 @@ export default function TradesScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { trades, portfolio, wallet } = usePortfolio();
+  const investmentQ = useGetInvestment();
+  const summaryQ = useGetDashboardSummary();
+  const tradesQ = useGetTrades({ limit: 50 });
+  const walletQ = useGetWallet();
+
+  const inv = investmentQ.data as any;
+  const summary = summaryQ.data as any;
+  const apiTrades = (tradesQ.data as any[]) ?? [];
+  const wRaw = walletQ.data as any;
+
+  const deployedAmount = (Number(inv?.amount) || 0) * FX_RATE;
+  const totalProfit = (Number(inv?.totalProfit) || 0) * FX_RATE;
+  const currentNAV = deployedAmount + totalProfit;
+  const dailyPnL = (Number(summary?.dailyProfitLoss) || 0) * FX_RATE;
+
+  const portfolio = inv
+    ? {
+        deployedAmount,
+        currentNAV,
+        totalPnL: totalProfit,
+        dailyPnL,
+      }
+    : null;
+
+  const wallet = wRaw
+    ? {
+        balance: (Number(wRaw.mainBalance) || 0) * FX_RATE,
+        lockedAmount: (Number(wRaw.tradingBalance) || 0) * FX_RATE,
+      }
+    : null;
+
+  const trades: Trade[] = apiTrades.map((t: any) => ({
+    id: String(t.id),
+    symbol: t.symbol ?? "—",
+    side: (t.direction === "SHORT" ? "SELL" : "BUY") as "BUY" | "SELL",
+    qty: 1,
+    entryPrice: Number(t.entryPrice) || 0,
+    exitPrice: Number(t.exitPrice) || 0,
+    pnl: (Number(t.profit) || 0) * FX_RATE,
+    executedAt: t.executedAt,
+    assetClass: "crypto" as const,
+  }));
+
   const [filter, setFilter] = useState<Filter>("All");
   const [selectedBot, setSelectedBot] = useState<BotStrategy | null>(null);
 
