@@ -74,9 +74,9 @@ export default function MerchantSettingsPage() {
 
           <div className="mt-5 rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
             <SectionLabel>₹ per 1 USDT</SectionLabel>
-            <div className="mt-2 flex items-end gap-3">
-              <div className="flex-1">
-                <div className="flex items-center rounded-lg border border-white/[0.08] bg-slate-950/50 pl-3 pr-3 focus-within:border-amber-500/60 focus-within:ring-2 focus-within:ring-amber-500/20">
+            <div className="mt-2">
+              <div className="flex items-stretch gap-3">
+                <div className="flex-1 flex items-center rounded-lg border border-white/[0.08] bg-slate-950/50 pl-3 pr-3 focus-within:border-amber-500/60 focus-within:ring-2 focus-within:ring-amber-500/20">
                   <span className="text-lg font-bold tabular-nums text-amber-400 mr-1.5 select-none">
                     ₹
                   </span>
@@ -88,34 +88,34 @@ export default function MerchantSettingsPage() {
                     inputMode="decimal"
                   />
                 </div>
-                {data?.rate ? (
-                  <p className="mt-1.5 text-[11px] text-slate-400">
-                    Current saved rate: <span className="font-semibold text-amber-300">₹{data.rate}</span> / USDT
-                  </p>
-                ) : null}
+                <GoldButton
+                  onClick={() => {
+                    const n = parseFloat(rate);
+                    if (!Number.isFinite(n) || n <= 0) {
+                      toast({
+                        title: "Rate must be a positive number",
+                        variant: "destructive",
+                      });
+                      return;
+                    }
+                    save.mutate();
+                  }}
+                  disabled={save.isPending}
+                  className="px-5"
+                >
+                  {save.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Save className="h-4 w-4" />
+                  )}
+                  Save
+                </GoldButton>
               </div>
-              <GoldButton
-                onClick={() => {
-                  const n = parseFloat(rate);
-                  if (!Number.isFinite(n) || n <= 0) {
-                    toast({
-                      title: "Rate must be a positive number",
-                      variant: "destructive",
-                    });
-                    return;
-                  }
-                  save.mutate();
-                }}
-                disabled={save.isPending}
-                className="px-5 py-2.5"
-              >
-                {save.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Save className="h-4 w-4" />
-                )}
-                Save
-              </GoldButton>
+              {data?.rate ? (
+                <p className="mt-1.5 text-[11px] text-slate-400">
+                  Current saved rate: <span className="font-semibold text-amber-300">₹{data.rate}</span> / USDT
+                </p>
+              ) : null}
             </div>
           </div>
 
