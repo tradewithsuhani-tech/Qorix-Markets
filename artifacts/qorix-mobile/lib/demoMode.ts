@@ -275,7 +275,12 @@ const DEMO_RESPONSES: Record<string, () => unknown> = {
 function findMockResponse(method: string, url: string): unknown | null {
   // strip baseUrl prefix to match against keys like "GET /wallet"
   const u = new URL(url, "https://placeholder.local");
-  let path = u.pathname.replace(/^.*?\/api/, "");
+  let path = u.pathname;
+  // strip host-prefix junk + ALL repeated "/api" prefixes (handles
+  // baseUrl ".../api" + generated "/api/..." double-prefix case)
+  const apiIdx = path.indexOf("/api");
+  if (apiIdx >= 0) path = path.slice(apiIdx);
+  while (path.startsWith("/api")) path = path.slice(4);
   if (!path.startsWith("/")) path = `/${path}`;
   const key = `${method.toUpperCase()} ${path}`;
   if (DEMO_RESPONSES[key]) return DEMO_RESPONSES[key]();
