@@ -4,6 +4,7 @@ import {
   setBaseUrl,
   setPendingCaptchaToken,
 } from "@workspace/api-client-react";
+import { DEMO_AUTH_TOKEN, installDemoMode, isDemoMode } from "./demoMode";
 
 export const QORIX_API_BASE = "https://qorix-api.fly.dev/api";
 export const TOKEN_STORAGE_KEY = "@qorix_token";
@@ -42,6 +43,11 @@ export async function getAuthToken(): Promise<string | null> {
 export function configureApiClient(): void {
   setBaseUrl(QORIX_API_BASE);
   setAuthTokenGetter(() => getAuthToken());
+  if (isDemoMode()) {
+    installDemoMode();
+    // Auto-login with a demo token so all gated screens render.
+    void setAuthToken(DEMO_AUTH_TOKEN);
+  }
 }
 
 // ---------------------------------------------------------------------------
