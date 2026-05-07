@@ -1110,6 +1110,78 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* CAPITAL PROTECTION BADGE — sole biggest objection-killer for fence-sitters */}
+      <section className="max-w-7xl mx-auto px-4 md:px-8 mt-6 md:mt-8">
+        <div
+          className="relative rounded-2xl md:rounded-3xl overflow-hidden p-5 md:p-6"
+          style={{
+            background:
+              "linear-gradient(120deg, rgba(16,185,129,0.14) 0%, rgba(20,184,166,0.06) 50%, rgba(34,197,94,0.10) 100%)",
+            border: "1px solid rgba(16,185,129,0.32)",
+            boxShadow:
+              "0 30px 80px -40px rgba(16,185,129,0.55), inset 0 1px 0 rgba(255,255,255,0.06)",
+          }}
+        >
+          {/* glow accent */}
+          <div
+            aria-hidden
+            className="pointer-events-none absolute -top-20 -left-10 w-72 h-72 rounded-full opacity-50 blur-3xl"
+            style={{ background: "radial-gradient(circle, rgba(16,185,129,0.55), transparent 70%)" }}
+          />
+          <div className="relative flex flex-col md:flex-row md:items-center gap-4 md:gap-6">
+            {/* Shield + headline */}
+            <div className="flex items-center gap-3.5 md:gap-4 shrink-0">
+              <div
+                className="w-12 h-12 md:w-14 md:h-14 rounded-2xl flex items-center justify-center shrink-0 relative"
+                style={{
+                  background: "linear-gradient(135deg, #10b981, #22c55e)",
+                  boxShadow: "0 12px 32px -6px rgba(16,185,129,0.65)",
+                }}
+              >
+                <ShieldCheck size={26} className="text-white" strokeWidth={2.4} />
+                <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-300 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-400 ring-2 ring-[#03060f]" />
+                </span>
+              </div>
+              <div className="min-w-0">
+                <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-300 mb-0.5">
+                  Money-back protection
+                </div>
+                <div className="text-base md:text-lg font-bold text-white leading-tight">
+                  1-Year No-Loss Guarantee
+                </div>
+              </div>
+            </div>
+
+            {/* Pills row */}
+            <div className="flex flex-wrap items-center gap-2 md:gap-2.5 md:ml-auto">
+              {[
+                { icon: ShieldCheck, label: "Auto-pause @ 3% drawdown" },
+                { icon: Activity, label: "Capital protected daily" },
+                { icon: CheckCircle2, label: "100% refund eligibility" },
+              ].map((p) => (
+                <div
+                  key={p.label}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 md:px-3.5 md:py-2 rounded-full text-[11px] md:text-xs font-semibold text-emerald-100"
+                  style={{
+                    background: "rgba(16,185,129,0.12)",
+                    border: "1px solid rgba(16,185,129,0.28)",
+                  }}
+                >
+                  <p.icon size={13} className="text-emerald-300 shrink-0" />
+                  {p.label}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <p className="relative text-[11px] md:text-xs text-slate-300/80 leading-relaxed mt-3.5 md:mt-4 max-w-3xl">
+            <span className="text-emerald-300 font-semibold">How it works:</span> trading auto-pauses the moment your portfolio touches your selected drawdown limit (Conservative 3% / Balanced 5% / Aggressive 10%). If your account is in net loss after 12 months of continuous activity, eligible deposits are refunded in full per our protection policy.
+          </p>
+        </div>
+      </section>
+
       {/* LIVE IMPACT COUNTERS — AUM / Withdrawals / Investors */}
       <LiveImpactStrip />
 
