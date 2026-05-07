@@ -36,7 +36,7 @@ import {
 const RISK_PROFILES = [
   {
     id: "LOW",
-    label: "Conservative",
+    label: "Starter",
     tagline: "Capital-first strategy",
     description: "Minimal volatility with steady, predictable gains. Ideal for capital preservation.",
     icon: Shield,
@@ -482,7 +482,7 @@ function CapitalProtectionPanel({
           </div>
           <div className="grid grid-cols-3 gap-2 mb-3">
             {[
-              { pct: 3, label: "Conservative", tone: "#10b981" },
+              { pct: 3, label: "Starter", tone: "#10b981" },
               { pct: 5, label: "Balanced", tone: "#6366f1" },
               { pct: 10, label: "Aggressive", tone: "#f97316" },
             ].map((opt) => {
@@ -590,7 +590,7 @@ function ProtectionConfirmModal({
   const newBuffer = (amount * newLimit) / 100;
   const diff = newBuffer - currentBuffer;
   const isWider = newLimit > currentLimit;
-  const labelFor = (p: number) => (p <= 3 ? "Conservative" : p <= 5 ? "Balanced" : "Aggressive");
+  const labelFor = (p: number) => (p <= 3 ? "Starter" : p <= 5 ? "Balanced" : "Aggressive");
 
   return (
     <motion.div

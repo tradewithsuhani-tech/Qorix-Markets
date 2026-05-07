@@ -341,7 +341,7 @@ export default function ReferralPage() {
               <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Typical Monthly Returns</p>
               <div className="space-y-1.5">
                 {[
-                  { tier: "Conservative", range: "1.5% – 5%", color: "bg-blue-400" },
+                  { tier: "Starter", range: "1.5% – 5%", color: "bg-blue-400" },
                   { tier: "Balanced", range: "3% – 8%", color: "bg-violet-400" },
                   { tier: "Growth", range: "5% – 10%+", color: "bg-emerald-400" },
                 ].map(r => (

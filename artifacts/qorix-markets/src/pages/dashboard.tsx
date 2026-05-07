@@ -253,7 +253,7 @@ function CapitalProtectionWidget({
   const selectedLimit = pendingLimit ?? drawdownLimit;
   const hasChanges = pendingLimit !== null && pendingLimit !== drawdownLimit;
   const [showConfirm, setShowConfirm] = useState(false);
-  const labelFor = (p: number) => (p <= 3 ? "Conservative" : p <= 5 ? "Balanced" : "Aggressive");
+  const labelFor = (p: number) => (p <= 3 ? "Starter" : p <= 5 ? "Balanced" : "Aggressive");
   const currentBuffer = (amount * drawdownLimit) / 100;
   const newBuffer = pendingLimit !== null ? (amount * pendingLimit) / 100 : currentBuffer;
   const bufferDiff = newBuffer - currentBuffer;
@@ -378,7 +378,7 @@ function CapitalProtectionWidget({
           </div>
           <div className="grid grid-cols-3 gap-2">
             {[
-              { pct: 3, label: "3%", hint: "Conservative", color: "blue" },
+              { pct: 3, label: "3%", hint: "Starter", color: "blue" },
               { pct: 5, label: "5%", hint: "Balanced", color: "indigo" },
               { pct: 10, label: "10%", hint: "Aggressive", color: "orange" },
             ].map(({ pct, label, hint, color }) => {

@@ -65,7 +65,7 @@ type RiskKey = "low" | "medium" | "high";
 // Each risk tier maps to a monthly return % range. Average is used to derive
 // the monthly target $; the range is shown to the user as a band.
 // Fixed monthly target per risk tier — distributed evenly across 22 forex
-// trading days. Conservative 4%/mo, Balanced 6%/mo, Aggressive 8%/mo.
+// trading days. Starter 4%/mo, Balanced 6%/mo, Aggressive 8%/mo.
 // Daily rate ≈ monthly / 22.
 const MONTHLY_RETURN_BY_RISK: Record<RiskKey, { min: number; max: number; avg: number }> = {
   low: { min: 4, max: 4, avg: 4 },
@@ -1074,7 +1074,7 @@ function PortfolioInner({ investment, invLoading, summary }: PortfolioInnerProps
                 const r = (investment?.riskLevel ?? "low").toString().toLowerCase();
                 if (r === "high") return "Aggressive growth";
                 if (r === "medium") return "Balanced approach";
-                return "Conservative & safe";
+                return "Starter & safe";
               })(),
               color: "text-emerald-400",
               bg: "from-emerald-500/[0.08] to-emerald-500/[0.02]",

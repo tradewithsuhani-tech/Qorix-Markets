@@ -380,7 +380,7 @@ export default function AnalyticsPage() {
   const userReturnDisplay = Math.max(0, Math.min(userMonthlyReturn, 11.5));
   const PLATFORM_LOSS_CAP = 1.0;
   const riskProfiles = [
-    { label: "Conservative", perTradeLoss: 0.3, monthlyReturn: 3,  isUser: false, actualReturn: 3 },
+    { label: "Starter", perTradeLoss: 0.3, monthlyReturn: 3,  isUser: false, actualReturn: 3 },
     { label: "Balanced",     perTradeLoss: 0.6, monthlyReturn: 6,  isUser: false, actualReturn: 6 },
     { label: "Aggressive",   perTradeLoss: 1.0, monthlyReturn: 10, isUser: false, actualReturn: 10 },
     { label: "Your Profile", perTradeLoss: userPerTradeLoss, monthlyReturn: userReturnDisplay, isUser: true, actualReturn: userMonthlyReturn },
@@ -1057,7 +1057,7 @@ export default function AnalyticsPage() {
               //      user can see at a glance that every tier sits
               //      inside the loss cap.
               //   2. A faint dashed line connects the three preset
-              //      tiers (Conservative / Balanced / Aggressive),
+              //      tiers (Starter / Balanced / Aggressive),
               //      which all sit on the platform's 10:1 reward-to-
               //      risk diagonal.
               //   3. Each bubble carries a translucent halo matched to
@@ -1084,7 +1084,7 @@ export default function AnalyticsPage() {
               const yMax = 12;    // fits Aggressive tier (10 %) with headroom
 
               const profileColors = [
-                "rgba(96,165,250,1)",   // Conservative — sky blue
+                "rgba(96,165,250,1)",   // Starter — sky blue
                 "rgba(167,139,250,1)",  // Balanced — violet
                 "rgba(251,146,60,1)",   // Aggressive — orange
               ];
@@ -1130,7 +1130,7 @@ export default function AnalyticsPage() {
                         pointBackgroundColor: profileFills,
                         pointBorderColor: profileHalos,
                         // Tightened bubble + halo so neighbouring presets
-                        // (e.g. Conservative at 3% and a user marker at
+                        // (e.g. Starter at 3% and a user marker at
                         // 5%) don't visually engulf each other or the
                         // Your-Profile diamond they sit beside.
                         pointBorderWidth: 4,
@@ -1255,7 +1255,7 @@ export default function AnalyticsPage() {
                         const ctx = chart.ctx as CanvasRenderingContext2D;
                         const profilesMeta = chart.getDatasetMeta(1);
                         const yourMeta = chart.getDatasetMeta(2);
-                        const presetLabels = ["Conservative", "Balanced", "Aggressive"];
+                        const presetLabels = ["Starter", "Balanced", "Aggressive"];
                         type LabelInfo = {
                           text: string;
                           color: string;
