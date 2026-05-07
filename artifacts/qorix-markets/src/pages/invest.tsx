@@ -48,15 +48,15 @@ const RISK_PROFILES = [
     drawdownLimit: 3,
     volatility: "Low",
     score: 1,
-    color: "text-blue-400",
-    gradientFrom: "from-blue-500/20",
-    gradientTo: "to-blue-600/5",
-    borderActive: "border-blue-400/50",
+    color: "text-emerald-300",
+    gradientFrom: "from-emerald-500/20",
+    gradientTo: "to-emerald-600/5",
+    borderActive: "border-emerald-400/50",
     borderIdle: "border-white/8",
-    glowColor: "rgba(59,130,246,0.15)",
-    glowActive: "0 0 30px rgba(59,130,246,0.2), 0 4px 24px rgba(0,0,0,0.4)",
-    badgeColor: "bg-blue-500/15 text-blue-400 border-blue-500/25",
-    barColor: "#3b82f6",
+    glowColor: "rgba(16,185,129,0.18)",
+    glowActive: "0 0 30px rgba(16,185,129,0.22), 0 4px 24px rgba(0,0,0,0.4)",
+    badgeColor: "bg-emerald-500/15 text-emerald-300 border-emerald-500/25",
+    barColor: "#10b981",
     barWidth: "10%",
     features: [
       "Max 3% drawdown protection",
@@ -78,15 +78,15 @@ const RISK_PROFILES = [
     drawdownLimit: 5,
     volatility: "Medium",
     score: 3,
-    color: "text-indigo-400",
-    gradientFrom: "from-indigo-500/20",
-    gradientTo: "to-indigo-600/5",
-    borderActive: "border-indigo-400/50",
+    color: "text-teal-300",
+    gradientFrom: "from-teal-500/20",
+    gradientTo: "to-teal-600/5",
+    borderActive: "border-teal-400/50",
     borderIdle: "border-white/8",
-    glowColor: "rgba(99,102,241,0.15)",
-    glowActive: "0 0 30px rgba(99,102,241,0.2), 0 4px 24px rgba(0,0,0,0.4)",
-    badgeColor: "bg-indigo-500/15 text-indigo-400 border-indigo-500/25",
-    barColor: "#6366f1",
+    glowColor: "rgba(20,184,166,0.18)",
+    glowActive: "0 0 30px rgba(20,184,166,0.22), 0 4px 24px rgba(0,0,0,0.4)",
+    badgeColor: "bg-teal-500/15 text-teal-300 border-teal-500/25",
+    barColor: "#14b8a6",
     barWidth: "30%",
     features: [
       "Max 5% drawdown protection",
@@ -184,8 +184,8 @@ function RiskMeter({ score }: { score: number }) {
           className="h-1.5 flex-1 rounded-full transition-all duration-300"
           style={{
             background: i < score
-              ? score <= 3 ? "#3b82f6"
-                : score <= 6 ? "#6366f1"
+              ? score <= 3 ? "#10b981"
+                : score <= 6 ? "#14b8a6"
                 : "#f97316"
               : "rgba(255,255,255,0.08)",
           }}
@@ -228,8 +228,8 @@ function ExpectedReturns({ profile, amount, drawdownLimit }: { profile: typeof R
           <div className="font-semibold text-sm">Max ${protection.toFixed(2)} loss</div>
         </div>
         <div className={`text-xs px-2 py-1 rounded-full border font-medium ${
-          profile.drawdownLimit <= 3 ? "bg-blue-500/15 text-blue-400 border-blue-500/25" :
-          profile.drawdownLimit <= 5 ? "bg-indigo-500/15 text-indigo-400 border-indigo-500/25" :
+          profile.drawdownLimit <= 3 ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/25" :
+          profile.drawdownLimit <= 5 ? "bg-teal-500/15 text-teal-300 border-teal-500/25" :
           "bg-orange-500/15 text-orange-400 border-orange-500/25"
         }`}>
           {profile.drawdownLimit}% limit
@@ -1004,7 +1004,7 @@ export default function InvestPage() {
                     className="text-2xl md:text-3xl font-bold tracking-tight leading-[1.15] mb-1.5"
                     style={{
                       background:
-                        "linear-gradient(135deg, #ffffff 0%, #cbd5e1 60%, #93c5fd 100%)",
+                        "linear-gradient(135deg, #ffffff 0%, #cbd5e1 60%, #6ee7b7 100%)",
                       WebkitBackgroundClip: "text",
                       WebkitTextFillColor: "transparent",
                     }}
@@ -1022,7 +1022,7 @@ export default function InvestPage() {
                 {[
                   { label: "Engine", value: "ONLINE", color: "text-emerald-300", dot: "bg-emerald-400" },
                   { label: "Latency", value: "12ms", color: "text-emerald-300", dot: "bg-emerald-400" },
-                  { label: "Uptime", value: "99.96%", color: "text-blue-300", dot: "bg-blue-400" },
+                  { label: "Uptime", value: "99.96%", color: "text-emerald-300", dot: "bg-emerald-400" },
                   { label: "Status", value: "AWAITING", color: "text-amber-300", dot: "bg-amber-400" },
                 ].map((s, idx) => (
                   <div
@@ -1043,7 +1043,7 @@ export default function InvestPage() {
                 <Terminal style={{ width: 12, height: 12 }} className="shrink-0 text-emerald-400" />
                 <span className="text-emerald-400">qorix-bot</span>
                 <span className="text-muted-foreground">~</span>
-                <span className="text-blue-300">$</span>
+                <span className="text-emerald-300">$</span>
                 <span className="text-slate-300">init --calibrate</span>
                 <span className="ml-0.5 inline-block w-1.5 h-3 bg-emerald-400 animate-pulse" />
               </div>
@@ -1054,9 +1054,9 @@ export default function InvestPage() {
             <motion.div
               initial={{ scale: 0.8, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
-              className="relative w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-500/25 to-violet-500/15 border border-blue-400/30 flex items-center justify-center shrink-0 shadow-[0_0_24px_rgba(59,130,246,0.25)]"
+              className="relative w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-500/25 to-green-500/15 border border-emerald-400/30 flex items-center justify-center shrink-0 shadow-[0_0_24px_rgba(16,185,129,0.3)]"
             >
-              <Bot style={{ width: 22, height: 22 }} className="text-blue-300" />
+              <Bot style={{ width: 22, height: 22 }} className="text-emerald-300" />
               <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-emerald-400 border-2 border-black/60 animate-pulse" />
             </motion.div>
             <div className="flex-1 min-w-0">
@@ -1119,7 +1119,7 @@ export default function InvestPage() {
 
         {isLoading ? (
           <div className="flex items-center justify-center py-20">
-            <div className="animate-spin w-8 h-8 border-2 border-blue-500/30 border-t-blue-500 rounded-full" />
+            <div className="animate-spin w-8 h-8 border-2 border-emerald-500/30 border-t-emerald-500 rounded-full" />
           </div>
         ) : (investment?.isPaused && !investment?.isActive) ? (
           /* ── PROTECTION TRIGGERED / PAUSED STATE ────────────────── */
@@ -1147,7 +1147,7 @@ export default function InvestPage() {
               className="relative rounded-3xl overflow-hidden border border-white/10"
               style={{
                 background:
-                  "radial-gradient(120% 80% at 50% -10%, rgba(59,130,246,0.10), transparent 60%), linear-gradient(180deg, #0a0f1a 0%, #060912 100%)",
+                  "radial-gradient(120% 80% at 50% -10%, rgba(16,185,129,0.12), transparent 60%), linear-gradient(180deg, #0a0f1a 0%, #060912 100%)",
                 boxShadow:
                   "0 30px 60px -25px rgba(0,0,0,0.65), inset 0 1px 0 rgba(255,255,255,0.04)",
               }}
@@ -1790,7 +1790,7 @@ export default function InvestPage() {
               <div className="glass-card p-5 rounded-2xl">
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-mono font-bold tracking-wider px-1.5 py-0.5 rounded bg-blue-500/15 text-blue-300 border border-blue-500/25">STEP 01</span>
+                    <span className="text-[10px] font-mono font-bold tracking-wider px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/25">STEP 01</span>
                     <h2 className="font-semibold">Choose Bot Personality</h2>
                   </div>
                   <span className="text-xs text-muted-foreground">3 presets</span>
@@ -1867,7 +1867,7 @@ export default function InvestPage() {
                               </span>
                             </div>
                             {profile.recommended && (
-                              <span className="text-[9px] px-2 py-0.5 bg-gradient-to-r from-indigo-500/25 to-violet-500/25 text-indigo-200 border border-indigo-400/40 rounded-full font-bold uppercase tracking-wider shrink-0 shadow-[0_0_12px_rgba(99,102,241,0.3)]">
+                              <span className="text-[9px] px-2 py-0.5 bg-gradient-to-r from-emerald-500/25 to-teal-500/25 text-emerald-200 border border-emerald-400/40 rounded-full font-bold uppercase tracking-wider shrink-0 shadow-[0_0_12px_rgba(16,185,129,0.3)]">
                                 ★ Recommended
                               </span>
                             )}
@@ -1985,12 +1985,12 @@ export default function InvestPage() {
               <div className="glass-card p-5 rounded-2xl">
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-mono font-bold tracking-wider px-1.5 py-0.5 rounded bg-violet-500/15 text-violet-300 border border-violet-500/25">STEP 02</span>
+                    <span className="text-[10px] font-mono font-bold tracking-wider px-1.5 py-0.5 rounded bg-teal-500/15 text-teal-300 border border-teal-500/25">STEP 02</span>
                     <h2 className="font-semibold">Fund the Bot</h2>
                   </div>
                   <span className="text-xs text-muted-foreground">
                     Available:{" "}
-                    <span className="text-blue-400 font-semibold">${maxAmount.toFixed(2)} USD</span>
+                    <span className="text-emerald-300 font-semibold">${maxAmount.toFixed(2)} USD</span>
                   </span>
                 </div>
 
@@ -1999,7 +1999,7 @@ export default function InvestPage() {
                     type="number"
                     value={amount}
                     onChange={(e) => setAmount(e.target.value)}
-                    className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-2xl font-bold text-white focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 focus:outline-none pr-24 transition-all"
+                    className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-2xl font-bold text-white focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 focus:outline-none pr-24 transition-all"
                     placeholder="0.00"
                     min="0"
                     max={maxAmount}
@@ -2007,7 +2007,7 @@ export default function InvestPage() {
                   <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
                     <button
                       onClick={() => setAmount(String(Math.floor(maxAmount * 100) / 100))}
-                      className="text-xs text-blue-400 font-semibold px-2 py-1 bg-blue-500/10 hover:bg-blue-500/20 rounded-lg transition border border-blue-500/20"
+                      className="text-xs text-emerald-300 font-semibold px-2 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 rounded-lg transition border border-emerald-500/20"
                     >
                       MAX
                     </button>
@@ -2047,7 +2047,7 @@ export default function InvestPage() {
               <div className="glass-card p-5 rounded-2xl">
                 <div className="flex items-center gap-2 mb-4 flex-wrap">
                   <span className="text-[10px] font-mono font-bold tracking-wider px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/25">STEP 03</span>
-                  <Shield style={{ width: 15, height: 15 }} className="text-blue-400" />
+                  <Shield style={{ width: 15, height: 15 }} className="text-emerald-400" />
                   <h3 className="font-semibold text-sm">Safety Circuit Breaker</h3>
                   <span className="ml-auto text-xs bg-green-500/15 text-green-400 border border-green-500/25 px-2 py-0.5 rounded-full">Armed</span>
                 </div>
@@ -2063,7 +2063,7 @@ export default function InvestPage() {
                         onClick={() => setPendingLimit(pct)}
                         className={`py-2.5 rounded-xl text-sm font-semibold border transition-all ${
                           isSelected
-                            ? "bg-blue-500/20 text-blue-400 border-blue-500/40 shadow-[0_0_12px_rgba(59,130,246,0.15)]"
+                            ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40 shadow-[0_0_12px_rgba(16,185,129,0.18)]"
                             : "bg-white/3 text-muted-foreground border-white/8 hover:border-white/15 hover:text-white"
                         }`}
                       >
@@ -2124,7 +2124,7 @@ export default function InvestPage() {
               {/* Strategy Summary */}
               <div className="glass-card p-5 rounded-2xl">
                 <div className="flex items-center gap-2 mb-4">
-                  <Cpu style={{ width: 15, height: 15 }} className="text-blue-400" />
+                  <Cpu style={{ width: 15, height: 15 }} className="text-emerald-400" />
                   <h3 className="font-semibold text-sm">Bot Configuration</h3>
                   <span className="ml-auto text-[10px] font-mono text-emerald-300/80">READY TO DEPLOY</span>
                 </div>
