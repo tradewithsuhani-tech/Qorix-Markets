@@ -722,7 +722,7 @@ export default function HomePage() {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 lg:gap-6 max-w-5xl mx-auto">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 lg:gap-6">
           <div className="h-full rounded-2xl border border-red-500/20 bg-gradient-to-br from-red-500/[0.04] to-transparent p-6 sm:p-7">
             <div className="flex items-center gap-2 mb-5">
               <div className="w-10 h-10 rounded-xl bg-red-500/15 border border-red-500/25 flex items-center justify-center">
