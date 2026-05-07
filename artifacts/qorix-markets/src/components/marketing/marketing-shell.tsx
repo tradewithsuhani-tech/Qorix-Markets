@@ -42,11 +42,8 @@ export function MarketingShell({ children }: { children: ReactNode }) {
             <img
               src={qorixLogo}
               alt="Qorix Markets logo"
-              className="w-8 h-8 md:w-9 md:h-9 object-contain"
-              style={{
-                mixBlendMode: "screen",
-                filter: "drop-shadow(0 0 6px rgba(16,185,129,0.55))",
-              }}
+              className="w-8 h-8 md:w-9 md:h-9 object-contain rounded-lg"
+              style={{ filter: "drop-shadow(0 0 6px rgba(16,185,129,0.45))" }}
             />
             <span className="font-black text-base md:text-lg text-white">
               Qorix{" "}
@@ -157,11 +154,8 @@ export function MarketingFooter() {
             <img
               src={qorixLogo}
               alt="Qorix Markets logo"
-              className="w-8 h-8 object-contain"
-              style={{
-                mixBlendMode: "screen",
-                filter: "drop-shadow(0 0 6px rgba(16,185,129,0.55))",
-              }}
+              className="w-8 h-8 object-contain rounded-lg"
+              style={{ filter: "drop-shadow(0 0 6px rgba(16,185,129,0.45))" }}
             />
             <span className="font-black text-white">Qorix Markets</span>
           </div>
