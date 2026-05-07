@@ -1525,30 +1525,30 @@ export function DemoDashboardBody({
             className="grid grid-cols-1 lg:grid-cols-5 gap-4"
           >
             {/* Activate Trading CTA — premium */}
-            <div className="lg:col-span-3 relative overflow-hidden rounded-2xl border border-blue-500/25 bg-gradient-to-br from-[#0d1117] via-[#0a0f1a] to-blue-950/40 p-4 sm:p-5 md:p-6 space-y-4 shadow-[0_0_40px_-12px_rgba(59,130,246,0.35)]">
+            <div className="lg:col-span-3 relative overflow-hidden rounded-2xl border border-emerald-500/25 bg-gradient-to-br from-[#0d1117] via-[#0a0f1a] to-emerald-950/40 p-4 sm:p-5 md:p-6 space-y-4 shadow-[0_0_40px_-12px_rgba(16,185,129,0.35)]">
               {/* Top hairline + ambient glow */}
-              <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-blue-400/60 to-transparent" />
+              <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-emerald-400/60 to-transparent" />
               <div
                 className="pointer-events-none absolute -top-24 -right-20 w-72 h-72 rounded-full opacity-40"
-                style={{ background: "radial-gradient(circle, rgba(59,130,246,0.25) 0%, transparent 70%)" }}
+                style={{ background: "radial-gradient(circle, rgba(16,185,129,0.28) 0%, transparent 70%)" }}
               />
               <div
                 className="pointer-events-none absolute -bottom-24 -left-20 w-72 h-72 rounded-full opacity-30"
-                style={{ background: "radial-gradient(circle, rgba(168,85,247,0.20) 0%, transparent 70%)" }}
+                style={{ background: "radial-gradient(circle, rgba(34,197,94,0.22) 0%, transparent 70%)" }}
               />
 
               {/* Header */}
               <div className="relative flex items-start justify-between gap-2">
                 <div className="flex items-start gap-3 min-w-0">
-                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500/25 to-purple-500/15 border border-blue-400/40 flex items-center justify-center shrink-0 shadow-[0_0_18px_-4px_rgba(59,130,246,0.6)]">
-                    <Zap style={{ width: 18, height: 18 }} className="text-blue-300" />
+                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500/25 to-green-500/15 border border-emerald-400/40 flex items-center justify-center shrink-0 shadow-[0_0_18px_-4px_rgba(16,185,129,0.6)]">
+                    <Zap style={{ width: 18, height: 18 }} className="text-emerald-300" />
                   </div>
                   <div className="min-w-0">
-                    <div className="text-[10px] font-bold uppercase tracking-wider text-blue-300/90 mb-0.5">
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-300/90 mb-0.5">
                       Start Trading
                     </div>
                     <h3 className="text-xl sm:text-2xl md:text-3xl font-extrabold leading-tight whitespace-nowrap">
-                      Start from <span className="bg-gradient-to-r from-blue-300 via-violet-300 to-purple-400 bg-clip-text text-transparent">$10</span>
+                      Start from <span className="bg-gradient-to-r from-emerald-300 via-green-300 to-teal-300 bg-clip-text text-transparent">$10</span>
                     </h3>
                   </div>
                 </div>
@@ -1566,8 +1566,8 @@ export function DemoDashboardBody({
                 <div className="grid grid-cols-3 gap-2 sm:gap-2.5">
                   {[
                     { name: "Low", returns: "2–5%", icon: ShieldCheck, accent: "emerald", bg: "from-emerald-500/[0.10] to-emerald-500/[0.02]", border: "border-emerald-500/25 hover:border-emerald-400/50", text: "text-emerald-300", iconBg: "bg-emerald-500/20 border-emerald-400/30" },
-                    { name: "Balanced", returns: "4–6%", icon: BarChart2, accent: "blue", bg: "from-blue-500/[0.10] to-blue-500/[0.02]", border: "border-blue-500/30 hover:border-blue-400/50", text: "text-blue-300", iconBg: "bg-blue-500/20 border-blue-400/30" },
-                    { name: "Growth", returns: "5–8%", icon: TrendingUp, accent: "violet", bg: "from-violet-500/[0.10] to-violet-500/[0.02]", border: "border-violet-500/25 hover:border-violet-400/50", text: "text-violet-300", iconBg: "bg-violet-500/20 border-violet-400/30" },
+                    { name: "Balanced", returns: "4–6%", icon: BarChart2, accent: "teal", bg: "from-teal-500/[0.10] to-teal-500/[0.02]", border: "border-teal-500/30 hover:border-teal-400/50", text: "text-teal-300", iconBg: "bg-teal-500/20 border-teal-400/30" },
+                    { name: "Growth", returns: "5–8%", icon: TrendingUp, accent: "lime", bg: "from-lime-500/[0.10] to-lime-500/[0.02]", border: "border-lime-500/25 hover:border-lime-400/50", text: "text-lime-300", iconBg: "bg-lime-500/20 border-lime-400/30" },
                   ].map((mode) => (
                     <div
                       key={mode.name}
@@ -1587,7 +1587,7 @@ export function DemoDashboardBody({
               {/* CTA button — premium with shimmer */}
               <button
                 onClick={() => navigate("/deposit")}
-                className="group relative w-full overflow-hidden px-5 py-3.5 rounded-xl text-sm sm:text-base font-bold text-white bg-gradient-to-r from-blue-600 via-violet-600 to-purple-600 hover:from-blue-500 hover:via-violet-500 hover:to-purple-500 shadow-[0_8px_24px_-6px_rgba(99,102,241,0.55)] hover:shadow-[0_12px_32px_-6px_rgba(99,102,241,0.75)] transition-all duration-300 border border-white/15"
+                className="group relative w-full overflow-hidden px-5 py-3.5 rounded-xl text-sm sm:text-base font-bold text-white bg-gradient-to-r from-emerald-600 via-green-600 to-teal-600 hover:from-emerald-500 hover:via-green-500 hover:to-teal-500 shadow-[0_8px_24px_-6px_rgba(16,185,129,0.55)] hover:shadow-[0_12px_32px_-6px_rgba(16,185,129,0.75)] transition-all duration-300 border border-white/15"
               >
                 {/* Shimmer sweep */}
                 <span className="pointer-events-none absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out" />
