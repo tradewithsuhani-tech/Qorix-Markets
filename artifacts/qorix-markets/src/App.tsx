@@ -17,7 +17,7 @@ import AdminTestPage from "@/pages/admin-test";
 import { useLocation } from "wouter";
 import { useEffect, useState } from "react";
 
-import Landing from "@/pages/marketing/ai-trading";
+import Landing from "@/pages/marketing/home";
 import LoginPage from "@/pages/login";
 import ForgotPasswordPage from "@/pages/forgot-password";
 import AdminLoginPage from "@/pages/admin-login";
