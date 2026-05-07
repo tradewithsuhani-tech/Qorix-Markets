@@ -1,10 +1,11 @@
 import { ReactNode, useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
-import { Menu, X, ArrowRight, TrendingUp } from "lucide-react";
+import { Menu, X, ArrowRight } from "lucide-react";
 import { StickyJoinButton } from "./sticky-cta";
 import { SignupPopup } from "./signup-popup";
 import { trackCta } from "@/lib/analytics";
 import { withRef } from "@/lib/referral";
+import qorixLogo from "@/assets/qorix-logo.png";
 
 const NAV_LINKS = [
   { href: "/", label: "Home" },
@@ -38,12 +39,12 @@ export function MarketingShell({ children }: { children: ReactNode }) {
       >
         <div className="max-w-7xl mx-auto px-4 md:px-8 h-14 md:h-16 flex items-center justify-between gap-4">
           <Link href="/" className="flex items-center gap-2 shrink-0">
-            <div
-              className="w-7 h-7 rounded-md flex items-center justify-center"
-              style={{ background: "linear-gradient(135deg,#10b981,#22c55e)" }}
-            >
-              <TrendingUp size={14} className="text-white" />
-            </div>
+            <img
+              src={qorixLogo}
+              alt="Qorix Markets logo"
+              className="w-8 h-8 md:w-9 md:h-9 object-contain"
+              style={{ filter: "drop-shadow(0 0 8px rgba(16,185,129,0.45))" }}
+            />
             <span className="font-black text-base md:text-lg text-white">
               Qorix{" "}
               <span
@@ -150,12 +151,12 @@ export function MarketingFooter() {
       <div className="max-w-7xl mx-auto px-4 md:px-8 py-12 grid grid-cols-2 md:grid-cols-4 gap-8 text-sm">
         <div className="col-span-2 md:col-span-1">
           <div className="flex items-center gap-2 mb-3">
-            <div
-              className="w-7 h-7 rounded-md flex items-center justify-center"
-              style={{ background: "linear-gradient(135deg,#10b981,#22c55e)" }}
-            >
-              <TrendingUp size={14} className="text-white" />
-            </div>
+            <img
+              src={qorixLogo}
+              alt="Qorix Markets logo"
+              className="w-8 h-8 object-contain"
+              style={{ filter: "drop-shadow(0 0 8px rgba(16,185,129,0.45))" }}
+            />
             <span className="font-black text-white">Qorix Markets</span>
           </div>
           <p className="text-slate-500 leading-relaxed text-xs">
