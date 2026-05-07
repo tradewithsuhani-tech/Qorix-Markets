@@ -124,7 +124,7 @@ function LiveImpactStrip() {
   ];
 
   return (
-    <section className="max-w-7xl mx-auto px-4 md:px-8 -mt-2 md:-mt-4">
+    <section className="max-w-7xl mx-auto px-4 md:px-8 mt-6 md:mt-10">
       <div
         className="relative rounded-2xl md:rounded-3xl overflow-hidden"
         style={{
