@@ -18,6 +18,10 @@ import {
   Sparkles,
   Wallet,
   TrendingUp,
+  Bot,
+  Cpu,
+  Radar,
+  Flame,
 } from "lucide-react";
 import { MarketingShell } from "@/components/marketing/marketing-shell";
 import {
@@ -71,9 +75,51 @@ const STEPS = [
 ];
 
 const TIERS = [
-  { name: "Conservative", range: "$10 — $499", target: "4% / mo", perks: ["AI auto-trading", "Daily payouts", "Community support"], popular: false },
-  { name: "Balanced", range: "$500 — $4,999", target: "6% / mo", perks: ["Everything in Conservative", "Priority withdrawals", "Tier badge"], popular: true },
-  { name: "Aggressive", range: "$5,000+", target: "8% / mo", perks: ["Everything in Balanced", "Dedicated account manager", "Lower withdrawal fees"], popular: false },
+  {
+    name: "Conservative",
+    codename: "QX-Sentinel",
+    version: "v1.4",
+    strategy: "DEFENSIVE-GRID",
+    icon: ShieldCheck,
+    tagline: "Minimal volatility. Steady, predictable gains. Built for capital preservation.",
+    range: "$10 — $499",
+    target: "4% / mo",
+    drawdownCap: "3%",
+    winRate: "71%",
+    signals: "180/day",
+    perks: ["AI auto-trading", "Daily payouts", "Community support"],
+    popular: false,
+  },
+  {
+    name: "Balanced",
+    codename: "QX-Apex",
+    version: "v2.1",
+    strategy: "MOMENTUM-CORE",
+    icon: Cpu,
+    tagline: "Optimized risk/reward. Multi-asset momentum with adaptive position sizing.",
+    range: "$500 — $4,999",
+    target: "6% / mo",
+    drawdownCap: "5%",
+    winRate: "68%",
+    signals: "420/day",
+    perks: ["Everything in Conservative", "Priority withdrawals", "Tier badge"],
+    popular: true,
+  },
+  {
+    name: "Aggressive",
+    codename: "QX-Phoenix",
+    version: "v1.8",
+    strategy: "VOLATILITY-EDGE",
+    icon: Flame,
+    tagline: "Maximum yield strategy. High-conviction trades on volatility breakouts.",
+    range: "$5,000+",
+    target: "8% / mo",
+    drawdownCap: "10%",
+    winRate: "62%",
+    signals: "640/day",
+    perks: ["Everything in Balanced", "Dedicated account manager", "Lower withdrawal fees"],
+    popular: false,
+  },
 ];
 
 // Brand purple/violet → blue gradient used across the home page hero & accents.
@@ -529,54 +575,125 @@ export default function HomePage() {
           </p>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {TIERS.map((t) => (
-            <div
-              key={t.name}
-              className="relative rounded-2xl p-6"
-              style={{
-                background: t.popular
-                  ? "linear-gradient(180deg, rgba(16,185,129,0.12), rgba(255,255,255,0.02))"
-                  : "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01))",
-                border: `1px solid ${t.popular ? "rgba(16,185,129,0.45)" : "rgba(255,255,255,0.08)"}`,
-                boxShadow: t.popular ? "0 30px 60px -30px rgba(16,185,129,0.55)" : undefined,
-              }}
-            >
-              {t.popular && (
-                <span
-                  className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider text-white"
-                  style={{ background: ACCENT_BUTTON }}
-                >
-                  Most popular
-                </span>
-              )}
-              <h3 className="text-white font-bold text-lg">{t.name}</h3>
-              <p className="text-[11px] uppercase tracking-wider text-slate-500 mt-1">{t.range}</p>
-              <div className="mt-4 mb-5">
-                <span className="text-3xl font-black text-white tabular-nums">{t.target}</span>
-                <span className="text-xs text-slate-500 ml-1">target</span>
-              </div>
-              <ul className="space-y-2 mb-6">
-                {t.perks.map((p) => (
-                  <li key={p} className="flex items-center gap-2 text-sm text-slate-300">
-                    <CheckCircle2 size={14} className="text-emerald-300 shrink-0" />
-                    {p}
-                  </li>
-                ))}
-              </ul>
-              <Link
-                href={withRef("/signup")}
-                onClick={() => trackCta(`Start ${t.name}`, "pricing")}
-                className="inline-flex w-full items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-bold transition-all"
-                style={
-                  t.popular
-                    ? { background: ACCENT_BUTTON, color: "#fff", boxShadow: ACCENT_GLOW }
-                    : { background: "rgba(255,255,255,0.04)", color: "#e2e8f0", border: "1px solid rgba(255,255,255,0.10)" }
-                }
+          {TIERS.map((t) => {
+            const Icon = t.icon;
+            return (
+              <div
+                key={t.name}
+                className="relative rounded-2xl p-5 md:p-6 flex flex-col"
+                style={{
+                  background: t.popular
+                    ? "linear-gradient(180deg, rgba(16,185,129,0.12), rgba(8,12,24,0.6))"
+                    : "linear-gradient(180deg, rgba(255,255,255,0.03), rgba(8,12,24,0.5))",
+                  border: `1px solid ${t.popular ? "rgba(16,185,129,0.45)" : "rgba(255,255,255,0.08)"}`,
+                  boxShadow: t.popular ? "0 30px 60px -30px rgba(16,185,129,0.55)" : undefined,
+                }}
               >
-                Start {t.name} <ArrowRight size={14} />
-              </Link>
-            </div>
-          ))}
+                {t.popular && (
+                  <span
+                    className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider text-white"
+                    style={{ background: ACCENT_BUTTON }}
+                  >
+                    Most popular
+                  </span>
+                )}
+
+                {/* Bot identity strip */}
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[12px] font-mono font-bold text-emerald-300 tracking-wider">
+                      {t.codename}
+                    </span>
+                    <span
+                      className="text-[10px] font-mono px-1.5 py-0.5 rounded text-slate-400"
+                      style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.08)" }}
+                    >
+                      {t.version}
+                    </span>
+                  </div>
+                  <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-emerald-400">
+                    <span className="relative flex h-1.5 w-1.5">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-70" />
+                      <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-400" />
+                    </span>
+                    LIVE
+                  </span>
+                </div>
+
+                {/* Bot avatar + tier name */}
+                <div className="flex items-start gap-3 mb-3">
+                  <div
+                    className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0"
+                    style={{
+                      background: "rgba(16,185,129,0.10)",
+                      border: "1px solid rgba(16,185,129,0.25)",
+                    }}
+                  >
+                    <Icon size={22} className="text-emerald-300" />
+                  </div>
+                  <div className="min-w-0">
+                    <h3 className="text-white font-black text-xl leading-tight">{t.name}</h3>
+                    <p className="text-[10px] uppercase tracking-[0.15em] text-slate-500 mt-0.5 font-mono">
+                      {t.strategy}
+                    </p>
+                  </div>
+                </div>
+
+                <p className="text-xs text-slate-400 leading-relaxed mb-4">{t.tagline}</p>
+
+                {/* Price */}
+                <div className="flex items-baseline gap-1 mb-1">
+                  <span className="text-3xl font-black text-white tabular-nums">{t.target}</span>
+                  <span className="text-xs text-slate-500">target</span>
+                </div>
+                <p className="text-[11px] uppercase tracking-wider text-slate-500 mb-4">{t.range}</p>
+
+                {/* Mini bot stats */}
+                <div
+                  className="grid grid-cols-3 gap-2 mb-5 p-2.5 rounded-lg"
+                  style={{
+                    background: "rgba(0,0,0,0.25)",
+                    border: "1px solid rgba(255,255,255,0.06)",
+                  }}
+                >
+                  {[
+                    { l: "WIN", v: t.winRate },
+                    { l: "DD CAP", v: t.drawdownCap },
+                    { l: "SIGNALS", v: t.signals },
+                  ].map((s) => (
+                    <div key={s.l} className="text-center">
+                      <div className="text-[9px] uppercase tracking-wider text-slate-500 font-mono mb-0.5">
+                        {s.l}
+                      </div>
+                      <div className="text-xs font-bold text-emerald-300 tabular-nums">{s.v}</div>
+                    </div>
+                  ))}
+                </div>
+
+                <ul className="space-y-2 mb-6 flex-1">
+                  {t.perks.map((p) => (
+                    <li key={p} className="flex items-center gap-2 text-sm text-slate-300">
+                      <CheckCircle2 size={14} className="text-emerald-300 shrink-0" />
+                      {p}
+                    </li>
+                  ))}
+                </ul>
+
+                <Link
+                  href={withRef("/signup")}
+                  onClick={() => trackCta(`Start ${t.name}`, "pricing")}
+                  className="inline-flex w-full items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-bold transition-all"
+                  style={
+                    t.popular
+                      ? { background: ACCENT_BUTTON, color: "#fff", boxShadow: ACCENT_GLOW }
+                      : { background: "rgba(255,255,255,0.04)", color: "#e2e8f0", border: "1px solid rgba(255,255,255,0.10)" }
+                  }
+                >
+                  Activate {t.codename} <ArrowRight size={14} />
+                </Link>
+              </div>
+            );
+          })}
         </div>
         <p className="text-center text-xs text-slate-500 mt-6">
           Targets are historical averages. Trading involves risk. Past performance is not a guarantee of future results.
