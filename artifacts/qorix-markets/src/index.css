@@ -741,11 +741,11 @@
   .btn:disabled { opacity: 0.45; cursor: not-allowed; pointer-events: none; }
 
   .btn-primary {
-    background: linear-gradient(135deg, #3b82f6, #6366f1);
+    background: linear-gradient(135deg, #10b981, #22c55e);
     color: #fff;
-    box-shadow: 0 4px 18px rgba(59,130,246,0.35);
+    box-shadow: 0 4px 18px rgba(16,185,129,0.35);
   }
-  .btn-primary:hover { box-shadow: 0 6px 24px rgba(59,130,246,0.5); }
+  .btn-primary:hover { box-shadow: 0 6px 24px rgba(16,185,129,0.5); }
 
   .btn-success {
     background: linear-gradient(135deg, #16a34a, #22c55e);
@@ -911,8 +911,8 @@
   .btn-primary {
     position: relative;
     overflow: hidden;
-    background: linear-gradient(135deg, #2563eb, #4f46e5, #7c3aed);
-    box-shadow: 0 4px 22px rgba(79,70,229,0.45);
+    background: linear-gradient(135deg, #059669, #10b981, #22c55e);
+    box-shadow: 0 4px 22px rgba(16,185,129,0.45);
   }
   .btn-primary::after {
     content: '';
@@ -923,8 +923,8 @@
     animation: btnShimmer 3.6s ease-in-out infinite;
   }
   .btn-primary:hover {
-    box-shadow: 0 6px 28px rgba(79,70,229,0.6), 0 0 0 1px rgba(129,140,248,0.3);
-    background: linear-gradient(135deg, #3b82f6, #6366f1, #8b5cf6);
+    box-shadow: 0 6px 28px rgba(16,185,129,0.6), 0 0 0 1px rgba(52,211,153,0.35);
+    background: linear-gradient(135deg, #10b981, #22c55e, #34d399);
   }
 
   /* Hero dot grid overlay */

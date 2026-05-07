@@ -333,7 +333,7 @@ export default function DepositPage() {
                   key={s}
                   className={cn(
                     "h-1 rounded-full transition-all duration-300",
-                    step === s ? "w-6 bg-blue-500" :
+                    step === s ? "w-6 bg-emerald-500" :
                     i < ["amount", "address", "confirmed"].indexOf(step) ? "w-4 bg-emerald-500/60" :
                     "w-4 bg-white/10"
                   )}
@@ -375,8 +375,8 @@ export default function DepositPage() {
                         className={cn(
                           "text-xs py-2 rounded-xl border font-medium transition-all",
                           amount === String(amt)
-                            ? "bg-blue-500/20 text-blue-400 border-blue-500/40"
-                            : "bg-white/5 hover:bg-blue-500/15 hover:text-blue-400 border-white/8 hover:border-blue-500/25 text-muted-foreground"
+                            ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
+                            : "bg-white/5 hover:bg-emerald-500/15 hover:text-emerald-300 border-white/8 hover:border-emerald-500/25 text-muted-foreground"
                         )}
                       >
                         ${amt >= 1000 ? `${amt / 1000}k` : amt}
@@ -387,7 +387,7 @@ export default function DepositPage() {
                   {/* Promo Code Input */}
                   <div>
                     <label className="text-xs text-muted-foreground font-medium mb-1.5 flex items-center gap-1.5">
-                      <Gift className="w-3.5 h-3.5 text-purple-400" />
+                      <Gift className="w-3.5 h-3.5 text-emerald-400" />
                       Promo Code <span className="text-muted-foreground/60 font-normal">(optional)</span>
                     </label>
                     {promoOffer?.alreadyRedeemed ? (
@@ -447,7 +447,7 @@ export default function DepositPage() {
                                 });
                               }
                             }}
-                            className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-purple-300/70 hover:text-purple-300 hover:bg-purple-500/15 transition-all"
+                            className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-emerald-300/70 hover:text-emerald-300 hover:bg-emerald-500/15 transition-all"
                             title="Paste from clipboard"
                             aria-label="Paste from clipboard"
                           >
@@ -460,18 +460,18 @@ export default function DepositPage() {
                             if (code) redeemPromo.mutate(code);
                           }}
                           disabled={redeemPromo.isPending || (!promoInput.trim() && !promoOffer?.code)}
-                          className="px-4 rounded-xl bg-purple-500/15 hover:bg-purple-500/25 border border-purple-500/30 text-purple-300 text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed transition-all whitespace-nowrap"
+                          className="px-4 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed transition-all whitespace-nowrap"
                         >
                           {redeemPromo.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Apply"}
                         </button>
                       </div>
                     )}
                     {!promoOffer?.alreadyRedeemed && promoOffer?.active && (
-                      <div className="text-[10px] text-purple-300/70 mt-1.5 flex items-start gap-1">
+                      <div className="text-[10px] text-emerald-300/80 mt-1.5 flex items-start gap-1">
                         <Sparkles className="w-3 h-3 shrink-0 mt-px" />
                         <span className="leading-snug min-w-0">
                           Live offer:{" "}
-                          <span className="font-mono font-bold text-purple-300 whitespace-nowrap">
+                          <span className="font-mono font-bold text-emerald-300 whitespace-nowrap">
                             {promoOffer.code}
                           </span>{" "}
                           — {promoOffer.bonusPercent}% bonus to Trading Balance
@@ -480,8 +480,8 @@ export default function DepositPage() {
                     )}
                   </div>
 
-                  <div className="flex items-start gap-2.5 bg-blue-500/6 border border-blue-500/15 rounded-xl px-3 py-2.5">
-                    <ShieldCheck className="w-3.5 h-3.5 text-blue-400 shrink-0 mt-0.5" />
+                  <div className="flex items-start gap-2.5 bg-emerald-500/6 border border-emerald-500/15 rounded-xl px-3 py-2.5">
+                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
                     <p className="text-xs text-muted-foreground leading-relaxed">
                       Send exactly <span className="text-white font-semibold">{amount ? `${amount} USDT` : "the entered amount"}</span> via <span className="text-white font-medium">TRON (TRC20)</span>. Your deposit will be detected and credited within ~15 seconds.
                     </p>
@@ -509,7 +509,7 @@ export default function DepositPage() {
                   className="space-y-5"
                 >
                   {/* Amount badge */}
-                  <div className="flex items-center justify-between bg-blue-500/8 border border-blue-500/20 rounded-xl px-4 py-3">
+                  <div className="flex items-center justify-between bg-emerald-500/8 border border-emerald-500/20 rounded-xl px-4 py-3">
                     <span className="text-xs text-muted-foreground">Send exactly</span>
                     <div className="flex items-center gap-2">
                       <span className="text-base font-bold text-white">{amount} USDT</span>
@@ -519,7 +519,7 @@ export default function DepositPage() {
 
                   {addressLoading ? (
                     <div className="flex items-center justify-center py-12">
-                      <Loader2 className="w-6 h-6 text-blue-400 animate-spin" />
+                      <Loader2 className="w-6 h-6 text-emerald-400 animate-spin" />
                     </div>
                   ) : platformAddress ? (
                     <div className="flex flex-col md:flex-row items-center gap-6">
@@ -571,7 +571,7 @@ export default function DepositPage() {
                           href={`https://tronscan.org/#/address/${platformAddress}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300 transition-colors"
+                          className="flex items-center gap-1.5 text-xs text-emerald-400 hover:text-emerald-300 transition-colors"
                         >
                           <ExternalLink className="w-3.5 h-3.5" />
                           View on TronScan
@@ -587,10 +587,10 @@ export default function DepositPage() {
 
                   {/* Waiting indicator */}
                   {polling && (
-                    <div className="flex items-center gap-3 bg-blue-500/8 border border-blue-500/20 rounded-xl px-4 py-3">
-                      <Loader2 className="w-4 h-4 text-blue-400 animate-spin shrink-0" />
+                    <div className="flex items-center gap-3 bg-emerald-500/8 border border-emerald-500/20 rounded-xl px-4 py-3">
+                      <Loader2 className="w-4 h-4 text-emerald-400 animate-spin shrink-0" />
                       <div>
-                        <div className="text-xs font-semibold text-blue-400">Waiting for payment…</div>
+                        <div className="text-xs font-semibold text-emerald-400">Waiting for payment…</div>
                         <div className="text-[11px] text-muted-foreground mt-0.5">Checking every 10 seconds. Do not close this page.</div>
                       </div>
                     </div>
@@ -643,7 +643,7 @@ export default function DepositPage() {
           className="glass-card rounded-2xl p-5"
         >
           <div className="flex items-center gap-2 mb-4">
-            <Info className="w-4 h-4 text-blue-400" />
+            <Info className="w-4 h-4 text-emerald-400" />
             <span className="text-sm font-semibold text-white">How it works</span>
           </div>
           <div className="space-y-3">
@@ -654,7 +654,7 @@ export default function DepositPage() {
               { step: "4", text: "System detects your transaction within ~15 seconds and credits your balance" },
             ].map(({ step, text }) => (
               <div key={step} className="flex items-start gap-3">
-                <div className="w-5 h-5 rounded-full bg-blue-500/15 border border-blue-500/25 flex items-center justify-center text-[10px] font-bold text-blue-400 shrink-0 mt-0.5">
+                <div className="w-5 h-5 rounded-full bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center text-[10px] font-bold text-emerald-400 shrink-0 mt-0.5">
                   {step}
                 </div>
                 <p className="text-xs text-muted-foreground leading-relaxed">{text}</p>
