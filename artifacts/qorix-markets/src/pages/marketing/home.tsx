@@ -1,26 +1,26 @@
 import { Link } from "wouter";
 import {
   ArrowRight,
-  Brain,
+  PlayCircle,
+  CheckCircle2,
   ShieldCheck,
   Zap,
-  LineChart,
+  Brain,
   Activity,
+  LineChart,
   Target,
   Bitcoin,
   DollarSign,
   Coins,
   BarChart3,
-  CheckCircle2,
   Lock,
   Globe2,
   Sparkles,
   Wallet,
-  PlayCircle,
+  TrendingUp,
 } from "lucide-react";
-import { MarketingShell, MarketingHero } from "@/components/marketing/marketing-shell";
+import { MarketingShell } from "@/components/marketing/marketing-shell";
 import {
-  FeatureGrid,
   StatsSection,
   TestimonialsSection,
   FaqSection,
@@ -41,138 +41,308 @@ const TICKER = [
   { sym: "USD/JPY", price: "151.84", chg: "-0.08%", up: false },
 ];
 
+const TRUST_PILLS = [
+  "No lock-in",
+  "Withdraw anytime",
+  "USDT (TRC20)",
+  "Drawdown protected",
+];
+
+const PILLARS = [
+  { icon: Brain, t: "Real-time signal engine", d: "Tick-level ingestion across major venues, normalized to model-ready features in milliseconds." },
+  { icon: Zap, t: "Sub-second execution", d: "Direct routing to liquidity providers. Slippage measured and continuously optimized." },
+  { icon: ShieldCheck, t: "Hard risk caps", d: "Per-trade stops and per-tier daily drawdown limits. Strategies auto-pause if breached." },
+  { icon: Activity, t: "Multi-asset desks", d: "Forex majors, gold, indices and crypto majors — diversified and rebalanced daily." },
+  { icon: LineChart, t: "Live transparency", d: "Every trade, P/L and equity tick posted to your dashboard in real time." },
+  { icon: Target, t: "Tier-based targeting", d: "Conservative 4%, Balanced 6%, Aggressive 8% per month — you pick the profile." },
+];
+
 const DESKS = [
-  {
-    icon: Bitcoin,
-    name: "Crypto Desk",
-    pairs: "BTC · ETH · SOL · USDT pairs",
-    blurb:
-      "24/7 momentum + mean-reversion blends on the deepest crypto majors.",
-    accent: "rgba(245,158,11,0.30)",
-    glow: "rgba(245,158,11,0.18)",
-  },
-  {
-    icon: DollarSign,
-    name: "Forex Desk",
-    pairs: "EURUSD · GBPUSD · USDJPY",
-    blurb:
-      "Session-aware execution across London, New York and Tokyo overlaps.",
-    accent: "rgba(59,130,246,0.30)",
-    glow: "rgba(59,130,246,0.18)",
-  },
-  {
-    icon: Coins,
-    name: "Gold Desk",
-    pairs: "XAU/USD spot",
-    blurb:
-      "Macro hedge on the world's most-watched safe-haven asset.",
-    accent: "rgba(234,179,8,0.30)",
-    glow: "rgba(234,179,8,0.18)",
-  },
-  {
-    icon: BarChart3,
-    name: "Indices Desk",
-    pairs: "US500 · NAS100 · GER40",
-    blurb:
-      "Trend-following on global equity benchmarks with strict drawdown caps.",
-    accent: "rgba(16,185,129,0.30)",
-    glow: "rgba(16,185,129,0.18)",
-  },
+  { icon: Bitcoin, name: "Crypto Desk", pairs: "BTC · ETH · SOL · USDT pairs", blurb: "24/7 momentum + mean-reversion blends on the deepest crypto majors.", glow: "rgba(139,92,246,0.22)", border: "rgba(139,92,246,0.35)" },
+  { icon: DollarSign, name: "Forex Desk", pairs: "EURUSD · GBPUSD · USDJPY", blurb: "Session-aware execution across London, New York and Tokyo overlaps.", glow: "rgba(59,130,246,0.22)", border: "rgba(59,130,246,0.35)" },
+  { icon: Coins, name: "Gold Desk", pairs: "XAU/USD spot", blurb: "Macro hedge on the world's most-watched safe-haven asset.", glow: "rgba(234,179,8,0.22)", border: "rgba(234,179,8,0.35)" },
+  { icon: BarChart3, name: "Indices Desk", pairs: "US500 · NAS100 · GER40", blurb: "Trend-following on global benchmarks with strict drawdown caps.", glow: "rgba(236,72,153,0.22)", border: "rgba(236,72,153,0.35)" },
 ];
 
 const STEPS = [
-  {
-    icon: Wallet,
-    title: "Deposit USDT",
-    body: "Send any amount — minimum $10 — to your unique TRC20 address. Funds reflect within minutes.",
-  },
-  {
-    icon: Target,
-    title: "Pick a tier",
-    body: "Conservative 4% / Balanced 6% / Aggressive 8% per month — match the risk to your goals.",
-  },
-  {
-    icon: Sparkles,
-    title: "Let AI work",
-    body: "Our engine trades across desks, posts every fill to your dashboard, and compounds daily.",
-  },
+  { icon: Wallet, title: "Deposit USDT", body: "Send any amount — minimum $10 — to your TRC20 address. Funds reflect in minutes." },
+  { icon: Target, title: "Pick a tier", body: "Conservative 4% / Balanced 6% / Aggressive 8% per month — match risk to your goals." },
+  { icon: Sparkles, title: "Let AI work", body: "The engine trades across desks, posts every fill to your dashboard, and compounds daily." },
 ];
 
 const TIERS = [
-  {
-    name: "Starter",
-    range: "$10 — $499",
-    target: "4% / mo",
-    perks: ["AI auto-trading", "Daily payouts", "Community support"],
-    accent: "rgba(148,163,184,0.30)",
-  },
-  {
-    name: "Balanced",
-    range: "$500 — $4,999",
-    target: "6% / mo",
-    perks: ["Everything in Starter", "Priority withdrawals", "Tier badge"],
-    accent: "rgba(16,185,129,0.45)",
-    popular: true,
-  },
-  {
-    name: "Aggressive",
-    range: "$5,000+",
-    target: "8% / mo",
-    perks: ["Everything in Balanced", "Dedicated account manager", "Lower withdrawal fees"],
-    accent: "rgba(59,130,246,0.40)",
-  },
+  { name: "Starter", range: "$10 — $499", target: "4% / mo", perks: ["AI auto-trading", "Daily payouts", "Community support"], popular: false },
+  { name: "Balanced", range: "$500 — $4,999", target: "6% / mo", perks: ["Everything in Starter", "Priority withdrawals", "Tier badge"], popular: true },
+  { name: "Aggressive", range: "$5,000+", target: "8% / mo", perks: ["Everything in Balanced", "Dedicated account manager", "Lower withdrawal fees"], popular: false },
 ];
+
+// Brand purple/violet → blue gradient used across the home page hero & accents.
+const ACCENT_GRADIENT = "linear-gradient(90deg,#a855f7,#6366f1,#3b82f6)";
+const ACCENT_BUTTON = "linear-gradient(90deg,#8b5cf6,#6366f1)";
+const ACCENT_GLOW = "0 14px 40px -12px rgba(139,92,246,0.55)";
 
 export default function HomePage() {
   useSeo({
-    title: "Qorix Markets — AI-Managed USDT Trading. Zero Fees. Start at $10",
+    title: "Qorix Markets — Automated Trading. Real Results. Zero Manual Effort.",
     description:
-      "Premium AI trading platform for forex, gold, indices and crypto. Zero commissions. Start with just $10 USDT and let our engine compound your capital 24/7.",
+      "Premium AI-managed USDT trading platform. 24/7 trading desk with hard risk limits, transparent execution and monthly payouts. Start at $10. No lock-in.",
     canonical: "/",
-    keywords:
-      "qorix markets, ai trading, automated trading, usdt trading, zero fee broker, ai trading platform",
+    keywords: "qorix markets, ai trading, automated trading, usdt trading, zero fee broker",
     jsonLd: {
       "@context": "https://schema.org",
       "@type": "Organization",
       name: "Qorix Markets",
       url: SITE_URL,
       logo: `${SITE_URL}/icons/icon-512.png`,
-      sameAs: [],
     },
   });
 
   return (
     <MarketingShell>
-      {/* HERO */}
-      <MarketingHero
-        badge="AI Trading Platform"
-        title={
-          <>
-            Let AI <span className="text-emerald-300">trade for you</span> 24/7
-          </>
-        }
-        subtitle="Our AI engine analyzes thousands of cross-asset signals every minute and executes risk-managed orders on your behalf — across forex, gold, indices and crypto majors."
-        secondaryHref="/ai-trading-platform"
-        secondaryLabel="How it works"
-      />
-
-      {/* LIVE TICKER STRIP */}
-      <section className="relative -mt-4 md:-mt-6">
+      {/* HERO — split layout */}
+      <section className="relative overflow-hidden">
+        {/* layered background glows */}
         <div
-          className="max-w-7xl mx-auto mx-3 md:mx-auto rounded-2xl overflow-hidden"
+          className="pointer-events-none absolute inset-0"
+          style={{
+            background:
+              "radial-gradient(circle at 18% 12%, rgba(139,92,246,0.22), transparent 55%), radial-gradient(circle at 88% 28%, rgba(59,130,246,0.18), transparent 50%), radial-gradient(circle at 60% 90%, rgba(236,72,153,0.10), transparent 60%)",
+          }}
+        />
+        <div className="relative max-w-7xl mx-auto px-4 md:px-8 pt-10 md:pt-20 pb-12 md:pb-24 grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-14 items-center">
+          {/* LEFT: copy */}
+          <div>
+            <span
+              className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider mb-6"
+              style={{
+                background: "rgba(255,255,255,0.04)",
+                border: "1px solid rgba(255,255,255,0.10)",
+                color: "#cbd5e1",
+              }}
+            >
+              <span className="relative flex h-1.5 w-1.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-70" />
+                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-400" />
+              </span>
+              LIVE · TRUSTED BY 12,400+ INVESTORS
+            </span>
+
+            <h1 className="text-4xl sm:text-5xl md:text-6xl font-black tracking-tight leading-[1.05] text-white mb-6">
+              Automated Trading.
+              <br />
+              <span
+                style={{
+                  background: ACCENT_GRADIENT,
+                  WebkitBackgroundClip: "text",
+                  WebkitTextFillColor: "transparent",
+                  backgroundClip: "text",
+                }}
+              >
+                Real Results.
+              </span>
+              <br />
+              Zero Manual Effort.
+            </h1>
+
+            <p className="text-base md:text-lg text-slate-400 leading-relaxed max-w-xl mb-8">
+              Let our 24/7 trading desk grow your portfolio with hard risk limits, transparent execution, and monthly payouts — no experience needed.
+            </p>
+
+            <div className="flex items-center gap-3 flex-wrap mb-7">
+              <Link
+                href={withRef("/signup")}
+                onClick={() => trackCta("Sign up", "hero")}
+                className="inline-flex items-center gap-1.5 px-6 py-3 rounded-xl text-sm font-bold text-white shadow-lg"
+                style={{ background: ACCENT_BUTTON, boxShadow: ACCENT_GLOW }}
+              >
+                Sign up <ArrowRight size={16} />
+              </Link>
+              <Link
+                href="/ai-trading-platform"
+                className="inline-flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-semibold text-slate-200 border border-white/10 hover:border-white/30 hover:bg-white/[0.04] transition-colors"
+              >
+                <PlayCircle size={16} className="text-violet-300" /> See how it works
+              </Link>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+              {TRUST_PILLS.map((p) => (
+                <div key={p} className="flex items-center gap-1.5 text-xs md:text-[13px] text-slate-400">
+                  <CheckCircle2 size={14} className="text-emerald-400 shrink-0" />
+                  {p}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* RIGHT: dashboard preview */}
+          <div className="relative">
+            {/* halo */}
+            <div
+              className="absolute -inset-6 rounded-[32px] blur-2xl opacity-60"
+              style={{
+                background:
+                  "radial-gradient(circle at 30% 30%, rgba(139,92,246,0.45), transparent 60%), radial-gradient(circle at 70% 70%, rgba(59,130,246,0.35), transparent 60%)",
+              }}
+            />
+            <div
+              className="relative rounded-2xl p-5 md:p-6"
+              style={{
+                background: "rgba(10,12,28,0.92)",
+                border: "1px solid rgba(255,255,255,0.10)",
+                boxShadow: "0 40px 80px -20px rgba(0,0,0,0.7)",
+              }}
+            >
+              {/* breadcrumb + LIVE */}
+              <div className="flex items-center justify-between mb-4">
+                <span className="text-[11px] text-slate-500 font-medium">
+                  qorixmarkets / dashboard
+                </span>
+                <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-300">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  LIVE
+                </span>
+              </div>
+
+              {/* total balance */}
+              <p className="text-[11px] uppercase tracking-wider text-slate-500">Total balance</p>
+              <div className="flex items-end justify-between mt-1 mb-1">
+                <p className="text-3xl md:text-4xl font-black text-white tabular-nums">
+                  $12,847.32
+                </p>
+                <div className="text-right">
+                  <p className="text-[11px] uppercase tracking-wider text-slate-500">Today</p>
+                  <p className="text-base font-bold text-emerald-300 tabular-nums">+0.8%</p>
+                </div>
+              </div>
+              <p className="text-xs text-emerald-300/80 tabular-nums mb-4">
+                ↗ +$102.78 today (+0.8%)
+              </p>
+
+              {/* equity curve */}
+              <div
+                className="rounded-xl p-3 mb-4"
+                style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.05)" }}
+              >
+                <p className="text-[10px] uppercase tracking-wider text-slate-500 mb-2">
+                  Equity curve · 30D
+                </p>
+                <EquityCurve />
+              </div>
+
+              {/* mini stats */}
+              <div className="grid grid-cols-3 gap-2 mb-4">
+                {[
+                  { label: "Active trades", value: "7", color: "#a78bfa" },
+                  { label: "Win rate", value: "73%", color: "#34d399" },
+                  { label: "Risk", value: "Low", color: "#60a5fa" },
+                ].map((s) => (
+                  <div
+                    key={s.label}
+                    className="rounded-xl p-3 text-center"
+                    style={{
+                      background: "rgba(255,255,255,0.03)",
+                      border: "1px solid rgba(255,255,255,0.06)",
+                    }}
+                  >
+                    <p className="text-lg font-black tabular-nums" style={{ color: s.color }}>
+                      {s.value}
+                    </p>
+                    <p className="text-[10px] uppercase tracking-wider text-slate-500 mt-0.5">
+                      {s.label}
+                    </p>
+                  </div>
+                ))}
+              </div>
+
+              {/* trade row */}
+              <div
+                className="flex items-center gap-3 rounded-xl px-3 py-2.5"
+                style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}
+              >
+                <div
+                  className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+                  style={{ background: "rgba(139,92,246,0.18)", border: "1px solid rgba(139,92,246,0.35)" }}
+                >
+                  <TrendingUp size={13} className="text-violet-300" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-bold text-white truncate">
+                    XAUUSD · <span className="text-emerald-300">BUY</span>
+                    <span className="text-slate-500 font-normal"> · Managed by Qorix system</span>
+                  </p>
+                  <p className="text-[10px] text-slate-500 truncate">
+                    Entry $4702.20 · running 1m
+                  </p>
+                </div>
+                <p className="text-sm font-bold text-emerald-300 tabular-nums shrink-0">
+                  +$4.00
+                </p>
+              </div>
+            </div>
+
+            {/* floating tag — drawdown */}
+            <div
+              className="hidden sm:flex absolute -top-3 -left-3 md:-top-4 md:-left-6 items-center gap-2 px-3 py-2 rounded-xl"
+              style={{
+                background: "rgba(10,12,28,0.95)",
+                border: "1px solid rgba(255,255,255,0.10)",
+                boxShadow: "0 12px 30px -10px rgba(0,0,0,0.5)",
+              }}
+            >
+              <div
+                className="w-7 h-7 rounded-lg flex items-center justify-center"
+                style={{ background: "rgba(239,68,68,0.15)", border: "1px solid rgba(239,68,68,0.30)" }}
+              >
+                <ShieldCheck size={13} className="text-rose-300" />
+              </div>
+              <div>
+                <p className="text-[11px] font-bold text-white">Drawdown</p>
+                <p className="text-[10px] text-slate-400">2.4% of 5% limit</p>
+              </div>
+            </div>
+
+            {/* floating tag — auto-compound */}
+            <div
+              className="hidden sm:flex absolute -bottom-3 -right-3 md:-bottom-4 md:-right-6 items-center gap-2 px-3 py-2 rounded-xl"
+              style={{
+                background: "rgba(10,12,28,0.95)",
+                border: "1px solid rgba(255,255,255,0.10)",
+                boxShadow: "0 12px 30px -10px rgba(0,0,0,0.5)",
+              }}
+            >
+              <div
+                className="w-7 h-7 rounded-lg flex items-center justify-center"
+                style={{ background: "rgba(139,92,246,0.18)", border: "1px solid rgba(139,92,246,0.35)" }}
+              >
+                <Sparkles size={13} className="text-violet-300" />
+              </div>
+              <div>
+                <p className="text-[11px] font-bold text-white">Auto-compound</p>
+                <p className="text-[10px] text-slate-400">+0.8% / day avg</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* LIVE MARKETS TICKER */}
+      <section className="relative">
+        <div
+          className="max-w-7xl mx-3 md:mx-auto rounded-2xl overflow-hidden"
           style={{
             background:
               "linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.01))",
             border: "1px solid rgba(255,255,255,0.08)",
-            boxShadow: "0 30px 60px -30px rgba(16,185,129,0.18)",
+            boxShadow: "0 30px 60px -30px rgba(139,92,246,0.18)",
           }}
         >
           <div className="flex items-center gap-3 px-4 py-2.5 border-b border-white/[0.05]">
             <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-60" />
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400" />
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-violet-400 opacity-60" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-violet-400" />
             </span>
-            <span className="text-[11px] uppercase tracking-wider font-bold text-emerald-300">
+            <span className="text-[11px] uppercase tracking-wider font-bold text-violet-300">
               Live markets
             </span>
             <span className="text-[11px] text-slate-500 ml-auto">
@@ -188,11 +358,7 @@ export default function HomePage() {
                 >
                   <span className="text-xs font-bold text-slate-200">{t.sym}</span>
                   <span className="text-xs tabular-nums text-slate-400">{t.price}</span>
-                  <span
-                    className={`text-[11px] font-bold tabular-nums ${
-                      t.up ? "text-emerald-300" : "text-rose-300"
-                    }`}
-                  >
+                  <span className={`text-[11px] font-bold tabular-nums ${t.up ? "text-emerald-300" : "text-rose-300"}`}>
                     {t.chg}
                   </span>
                 </div>
@@ -201,10 +367,7 @@ export default function HomePage() {
           </div>
         </div>
         <style>{`
-          @keyframes marquee {
-            from { transform: translateX(0); }
-            to   { transform: translateX(-50%); }
-          }
+          @keyframes marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
           .animate-marquee { animation: marquee 38s linear infinite; }
         `}</style>
       </section>
@@ -221,33 +384,48 @@ export default function HomePage() {
             <div
               key={b.label}
               className="flex items-center gap-2.5 rounded-xl px-3.5 py-3"
-              style={{
-                background: "rgba(255,255,255,0.03)",
-                border: "1px solid rgba(255,255,255,0.06)",
-              }}
+              style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}
             >
-              <b.icon size={16} className="text-emerald-300 shrink-0" />
-              <span className="text-xs md:text-sm text-slate-300 font-medium">
-                {b.label}
-              </span>
+              <b.icon size={16} className="text-violet-300 shrink-0" />
+              <span className="text-xs md:text-sm text-slate-300 font-medium">{b.label}</span>
             </div>
           ))}
         </div>
       </section>
 
       {/* SIX PILLARS */}
-      <FeatureGrid
-        title="Engineered for consistent monthly returns"
-        subtitle="Six pillars that turn raw market data into compounding capital."
-        items={[
-          { icon: <Brain size={18} className="text-emerald-300" />, title: "Real-time signal engine", description: "Tick-level ingestion across major venues, normalized into model-ready features in milliseconds." },
-          { icon: <Zap size={18} className="text-emerald-300" />, title: "Sub-second execution", description: "Direct routing to liquidity providers. Slippage is measured, logged and continuously optimized." },
-          { icon: <ShieldCheck size={18} className="text-emerald-300" />, title: "Hard risk caps", description: "Per-trade stop-losses and per-tier daily drawdown limits. Strategies auto-pause if breached." },
-          { icon: <Activity size={18} className="text-emerald-300" />, title: "Multi-asset desks", description: "Forex majors, gold, indices and crypto majors — diversified and rebalanced daily." },
-          { icon: <LineChart size={18} className="text-emerald-300" />, title: "Live transparency", description: "Every trade, P/L and equity tick posted to your dashboard in real time." },
-          { icon: <Target size={18} className="text-emerald-300" />, title: "Tier-based targeting", description: "Conservative 4%, Balanced 6%, Aggressive 8% per month — you pick the profile." },
-        ]}
-      />
+      <section className="max-w-7xl mx-auto px-4 md:px-8 py-12 md:py-16">
+        <div className="text-center max-w-2xl mx-auto mb-10">
+          <h2 className="text-2xl md:text-4xl font-black text-white mb-3">
+            Engineered for consistent monthly returns
+          </h2>
+          <p className="text-slate-400">
+            Six pillars that turn raw market data into compounding capital.
+          </p>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {PILLARS.map((p) => (
+            <div
+              key={p.t}
+              className="rounded-2xl p-6"
+              style={{
+                background:
+                  "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01))",
+                border: "1px solid rgba(255,255,255,0.07)",
+              }}
+            >
+              <div
+                className="w-10 h-10 rounded-xl mb-4 flex items-center justify-center"
+                style={{ background: "rgba(139,92,246,0.14)", border: "1px solid rgba(139,92,246,0.30)" }}
+              >
+                <p.icon size={18} className="text-violet-300" />
+              </div>
+              <h3 className="text-lg font-bold text-white mb-2">{p.t}</h3>
+              <p className="text-sm text-slate-400 leading-relaxed">{p.d}</p>
+            </div>
+          ))}
+        </div>
+      </section>
 
       {/* TRADING DESKS */}
       <section className="max-w-7xl mx-auto px-4 md:px-8 py-12 md:py-16">
@@ -267,7 +445,7 @@ export default function HomePage() {
               style={{
                 background:
                   "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01))",
-                border: `1px solid ${d.accent}`,
+                border: `1px solid ${d.border}`,
                 boxShadow: `0 30px 60px -30px ${d.glow}`,
               }}
             >
@@ -277,7 +455,7 @@ export default function HomePage() {
               />
               <div
                 className="relative w-10 h-10 rounded-xl mb-3 flex items-center justify-center"
-                style={{ background: d.glow, border: `1px solid ${d.accent}` }}
+                style={{ background: d.glow, border: `1px solid ${d.border}` }}
               >
                 <d.icon size={18} className="text-white" />
               </div>
@@ -293,7 +471,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* HOW IT WORKS — 3 STEPS */}
+      {/* HOW IT WORKS */}
       <section className="max-w-7xl mx-auto px-4 md:px-8 py-12 md:py-16">
         <div className="text-center max-w-2xl mx-auto mb-10">
           <h2 className="text-2xl md:text-4xl font-black text-white mb-3">
@@ -306,10 +484,7 @@ export default function HomePage() {
         <div className="relative grid grid-cols-1 md:grid-cols-3 gap-4">
           <div
             className="hidden md:block absolute top-12 left-[16%] right-[16%] h-px"
-            style={{
-              background:
-                "linear-gradient(90deg, transparent, rgba(16,185,129,0.40), transparent)",
-            }}
+            style={{ background: "linear-gradient(90deg, transparent, rgba(139,92,246,0.40), transparent)" }}
           />
           {STEPS.map((s, i) => (
             <div
@@ -324,15 +499,14 @@ export default function HomePage() {
               <div
                 className="relative inline-flex items-center justify-center w-14 h-14 rounded-2xl mb-4"
                 style={{
-                  background:
-                    "linear-gradient(135deg, rgba(16,185,129,0.20), rgba(59,130,246,0.10))",
-                  border: "1px solid rgba(16,185,129,0.35)",
+                  background: "linear-gradient(135deg, rgba(139,92,246,0.20), rgba(59,130,246,0.10))",
+                  border: "1px solid rgba(139,92,246,0.35)",
                 }}
               >
-                <s.icon size={22} className="text-emerald-300" />
+                <s.icon size={22} className="text-violet-300" />
                 <span
-                  className="absolute -top-2 -right-2 w-6 h-6 rounded-full text-[11px] font-black flex items-center justify-center text-slate-900"
-                  style={{ background: "linear-gradient(135deg,#10b981,#22c55e)" }}
+                  className="absolute -top-2 -right-2 w-6 h-6 rounded-full text-[11px] font-black flex items-center justify-center text-white"
+                  style={{ background: ACCENT_BUTTON }}
                 >
                   {i + 1}
                 </span>
@@ -344,7 +518,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* PRICING TIERS */}
+      {/* PRICING */}
       <section className="max-w-7xl mx-auto px-4 md:px-8 py-12 md:py-16">
         <div className="text-center max-w-2xl mx-auto mb-10">
           <h2 className="text-2xl md:text-4xl font-black text-white mb-3">
@@ -361,36 +535,30 @@ export default function HomePage() {
               className="relative rounded-2xl p-6"
               style={{
                 background: t.popular
-                  ? "linear-gradient(180deg, rgba(16,185,129,0.10), rgba(255,255,255,0.02))"
+                  ? "linear-gradient(180deg, rgba(139,92,246,0.12), rgba(255,255,255,0.02))"
                   : "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01))",
-                border: `1px solid ${t.accent}`,
-                boxShadow: t.popular
-                  ? "0 30px 60px -30px rgba(16,185,129,0.45)"
-                  : undefined,
+                border: `1px solid ${t.popular ? "rgba(139,92,246,0.45)" : "rgba(255,255,255,0.08)"}`,
+                boxShadow: t.popular ? "0 30px 60px -30px rgba(139,92,246,0.55)" : undefined,
               }}
             >
               {t.popular && (
                 <span
-                  className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider text-slate-900"
-                  style={{ background: "linear-gradient(90deg,#10b981,#22c55e)" }}
+                  className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider text-white"
+                  style={{ background: ACCENT_BUTTON }}
                 >
                   Most popular
                 </span>
               )}
               <h3 className="text-white font-bold text-lg">{t.name}</h3>
-              <p className="text-[11px] uppercase tracking-wider text-slate-500 mt-1">
-                {t.range}
-              </p>
+              <p className="text-[11px] uppercase tracking-wider text-slate-500 mt-1">{t.range}</p>
               <div className="mt-4 mb-5">
-                <span className="text-3xl font-black text-white tabular-nums">
-                  {t.target}
-                </span>
+                <span className="text-3xl font-black text-white tabular-nums">{t.target}</span>
                 <span className="text-xs text-slate-500 ml-1">target</span>
               </div>
               <ul className="space-y-2 mb-6">
                 {t.perks.map((p) => (
                   <li key={p} className="flex items-center gap-2 text-sm text-slate-300">
-                    <CheckCircle2 size={14} className="text-emerald-300 shrink-0" />
+                    <CheckCircle2 size={14} className="text-violet-300 shrink-0" />
                     {p}
                   </li>
                 ))}
@@ -401,16 +569,8 @@ export default function HomePage() {
                 className="inline-flex w-full items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-bold transition-all"
                 style={
                   t.popular
-                    ? {
-                        background: "linear-gradient(90deg,#10b981,#22c55e)",
-                        color: "#fff",
-                        boxShadow: "0 14px 40px -12px rgba(16,185,129,0.55)",
-                      }
-                    : {
-                        background: "rgba(255,255,255,0.04)",
-                        color: "#e2e8f0",
-                        border: "1px solid rgba(255,255,255,0.10)",
-                      }
+                    ? { background: ACCENT_BUTTON, color: "#fff", boxShadow: ACCENT_GLOW }
+                    : { background: "rgba(255,255,255,0.04)", color: "#e2e8f0", border: "1px solid rgba(255,255,255,0.10)" }
                 }
               >
                 Start {t.name} <ArrowRight size={14} />
@@ -423,134 +583,9 @@ export default function HomePage() {
         </p>
       </section>
 
-      {/* DASHBOARD PREVIEW BAND */}
-      <section className="max-w-7xl mx-auto px-4 md:px-8 py-12 md:py-16">
-        <div
-          className="rounded-3xl p-6 md:p-10 grid grid-cols-1 md:grid-cols-2 gap-8 items-center"
-          style={{
-            background:
-              "linear-gradient(135deg, rgba(16,185,129,0.10), rgba(59,130,246,0.06))",
-            border: "1px solid rgba(16,185,129,0.25)",
-          }}
-        >
-          <div>
-            <span
-              className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider mb-4"
-              style={{
-                background: "rgba(255,255,255,0.06)",
-                border: "1px solid rgba(255,255,255,0.10)",
-                color: "#cbd5e1",
-              }}
-            >
-              <PlayCircle size={12} className="text-emerald-300" /> Investor dashboard
-            </span>
-            <h2 className="text-2xl md:text-4xl font-black text-white mb-3 leading-tight">
-              See every fill, P/L and equity tick — live.
-            </h2>
-            <p className="text-slate-300 leading-relaxed">
-              No black box. Open your dashboard any time to inspect every trade the AI has placed on your behalf, today and historically. Withdraw, pause, or switch tier in one tap.
-            </p>
-            <div className="mt-6 flex items-center gap-3 flex-wrap">
-              <Link
-                href={withRef("/signup")}
-                onClick={() => trackCta("Start Trading Free", "dashboard_band")}
-                className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-sm font-bold text-white shadow-lg"
-                style={{
-                  background: "linear-gradient(90deg,#10b981,#22c55e)",
-                  boxShadow: "0 14px 40px -12px rgba(16,185,129,0.55)",
-                }}
-              >
-                Start Trading Free <ArrowRight size={14} />
-              </Link>
-              <Link
-                href="/login"
-                className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-sm font-semibold text-slate-200 border border-white/10 hover:border-white/30 hover:bg-white/[0.04] transition-colors"
-              >
-                I already have an account
-              </Link>
-            </div>
-          </div>
-
-          {/* Faux dashboard card */}
-          <div
-            className="rounded-2xl p-5"
-            style={{
-              background: "rgba(5,8,20,0.85)",
-              border: "1px solid rgba(255,255,255,0.10)",
-              boxShadow: "0 30px 60px -20px rgba(0,0,0,0.6)",
-            }}
-          >
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <p className="text-[11px] uppercase tracking-wider text-slate-500">
-                  Portfolio value
-                </p>
-                <p className="text-2xl font-black text-white tabular-nums">$12,486.42</p>
-              </div>
-              <div className="text-right">
-                <p className="text-[11px] uppercase tracking-wider text-slate-500">
-                  Today
-                </p>
-                <p className="text-base font-bold text-emerald-300 tabular-nums">
-                  +$184.21
-                </p>
-              </div>
-            </div>
-            {/* tiny equity bars */}
-            <div className="flex items-end gap-1 h-16 mb-4">
-              {[40, 55, 48, 62, 58, 70, 66, 75, 72, 84, 80, 92].map((h, i) => (
-                <div
-                  key={i}
-                  className="flex-1 rounded-sm"
-                  style={{
-                    height: `${h}%`,
-                    background:
-                      "linear-gradient(180deg, #10b981, rgba(16,185,129,0.20))",
-                  }}
-                />
-              ))}
-            </div>
-            <div className="space-y-2">
-              {[
-                { sym: "BTC/USDT", side: "LONG", pnl: "+$42.18" },
-                { sym: "XAU/USD", side: "LONG", pnl: "+$28.40" },
-                { sym: "EUR/USD", side: "SHORT", pnl: "+$11.05" },
-              ].map((r) => (
-                <div
-                  key={r.sym}
-                  className="flex items-center justify-between text-xs px-3 py-2 rounded-lg"
-                  style={{ background: "rgba(255,255,255,0.03)" }}
-                >
-                  <span className="text-slate-300 font-semibold">{r.sym}</span>
-                  <span
-                    className="px-2 py-0.5 rounded text-[10px] font-bold"
-                    style={{
-                      background:
-                        r.side === "LONG"
-                          ? "rgba(16,185,129,0.15)"
-                          : "rgba(244,63,94,0.15)",
-                      color: r.side === "LONG" ? "#6ee7b7" : "#fda4af",
-                    }}
-                  >
-                    {r.side}
-                  </span>
-                  <span className="text-emerald-300 font-bold tabular-nums">
-                    {r.pnl}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* STATS */}
       <StatsSection />
-
-      {/* TESTIMONIALS */}
       <TestimonialsSection />
 
-      {/* FAQ */}
       <FaqSection
         items={[
           { q: "How much do I need to start?", a: "Just $10 USDT. Deposit any amount above the minimum and the AI engine begins allocating immediately." },
@@ -561,11 +596,47 @@ export default function HomePage() {
         ]}
       />
 
-      {/* FINAL CTA */}
       <CtaBand
         title="Activate your AI portfolio"
         subtitle="Start with $10 and watch the engine work."
+        ctaLabel="Sign up free"
       />
     </MarketingShell>
+  );
+}
+
+// Mini SVG equity curve for the hero dashboard mock.
+function EquityCurve() {
+  const pts = [10, 18, 14, 24, 22, 30, 28, 38, 34, 44, 42, 52, 50, 60, 58, 70];
+  const w = 320;
+  const h = 80;
+  const max = Math.max(...pts);
+  const min = Math.min(...pts);
+  const range = max - min || 1;
+  const step = w / (pts.length - 1);
+  const path = pts
+    .map((v, i) => {
+      const x = i * step;
+      const y = h - ((v - min) / range) * (h - 8) - 4;
+      return `${i === 0 ? "M" : "L"} ${x.toFixed(1)} ${y.toFixed(1)}`;
+    })
+    .join(" ");
+  const area = `${path} L ${w} ${h} L 0 ${h} Z`;
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" className="w-full h-16">
+      <defs>
+        <linearGradient id="eqStroke" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stopColor="#a855f7" />
+          <stop offset="50%" stopColor="#6366f1" />
+          <stop offset="100%" stopColor="#3b82f6" />
+        </linearGradient>
+        <linearGradient id="eqFill" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="rgba(139,92,246,0.35)" />
+          <stop offset="100%" stopColor="rgba(139,92,246,0)" />
+        </linearGradient>
+      </defs>
+      <path d={area} fill="url(#eqFill)" />
+      <path d={path} fill="none" stroke="url(#eqStroke)" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+    </svg>
   );
 }
