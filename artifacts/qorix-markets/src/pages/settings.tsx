@@ -183,13 +183,13 @@ export default function SettingsPage() {
         {/* Profile Card */}
         <motion.div variants={item} className="glass-card rounded-2xl overflow-hidden">
           {/* Avatar banner */}
-          <div className="h-20 bg-gradient-to-br from-blue-600/20 via-indigo-600/10 to-transparent relative">
-            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,rgba(59,130,246,0.2),transparent_70%)]" />
+          <div className="h-20 bg-gradient-to-br from-emerald-600/20 via-green-600/10 to-transparent relative">
+            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,rgba(16,185,129,0.22),transparent_70%)]" />
           </div>
 
           <div className="px-5 pb-5 -mt-8 space-y-5">
             <div className="flex items-end gap-4">
-              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold text-2xl shadow-lg border-2 border-background shrink-0">
+              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-emerald-500 to-green-600 flex items-center justify-center text-white font-bold text-2xl shadow-lg border-2 border-background shrink-0">
                 {user.fullName.charAt(0).toUpperCase()}
               </div>
               <div className="pb-1">
@@ -237,7 +237,7 @@ export default function SettingsPage() {
         {/* Security */}
         <motion.div variants={item} className="glass-card rounded-2xl p-5 space-y-4">
           <div className="flex items-center gap-2.5 mb-1">
-            <div className="p-2 rounded-xl bg-blue-500/15 text-blue-400">
+            <div className="p-2 rounded-xl bg-emerald-500/15 text-emerald-300">
               <Shield style={{ width: 15, height: 15 }} />
             </div>
             <h3 className="font-semibold">Security</h3>
@@ -279,9 +279,9 @@ export default function SettingsPage() {
             <TwoFactorCard />
 
             <Link href="/devices">
-              <a className="flex items-center justify-between p-3.5 rounded-xl bg-white/[0.03] border border-white/[0.06] hover:border-blue-500/30 transition-colors">
+              <a className="flex items-center justify-between p-3.5 rounded-xl bg-white/[0.03] border border-white/[0.06] hover:border-emerald-500/30 transition-colors">
                 <div className="flex items-center gap-3 min-w-0 pr-3">
-                  <div className="p-2 rounded-xl bg-blue-500/15 text-blue-400 shrink-0">
+                  <div className="p-2 rounded-xl bg-emerald-500/15 text-emerald-300 shrink-0">
                     <Smartphone style={{ width: 16, height: 16 }} />
                   </div>
                   <div className="min-w-0">
@@ -300,9 +300,9 @@ export default function SettingsPage() {
         {/* KYC */}
         <motion.div variants={item}>
           <Link href="/kyc">
-            <a className="block glass-card rounded-2xl p-4 hover:border-blue-500/30 transition-colors">
+            <a className="block glass-card rounded-2xl p-4 hover:border-emerald-500/30 transition-colors">
               <div className="flex items-center gap-3">
-                <div className="p-2 rounded-xl bg-blue-500/15 text-blue-400 shrink-0">
+                <div className="p-2 rounded-xl bg-emerald-500/15 text-emerald-300 shrink-0">
                   <ShieldCheck style={{ width: 18, height: 18 }} />
                 </div>
                 <div className="flex-1 min-w-0">
@@ -359,7 +359,7 @@ export default function SettingsPage() {
         {/* Preferences */}
         <motion.div variants={item} className="glass-card rounded-2xl p-5 space-y-4">
           <div className="flex items-center gap-2.5 mb-1">
-            <div className="p-2 rounded-xl bg-purple-500/15 text-purple-400">
+            <div className="p-2 rounded-xl bg-emerald-500/15 text-emerald-300">
               {soundOn ? <Volume2 style={{ width: 15, height: 15 }} /> : <VolumeX style={{ width: 15, height: 15 }} />}
             </div>
             <h3 className="font-semibold">Preferences</h3>
@@ -377,7 +377,7 @@ export default function SettingsPage() {
               role="switch"
               aria-checked={soundOn}
               className={`relative w-12 h-7 rounded-full transition-colors duration-200 shrink-0 ${
-                soundOn ? "bg-blue-500" : "bg-white/15"
+                soundOn ? "bg-emerald-500" : "bg-white/15"
               }`}
             >
               <span
@@ -444,7 +444,7 @@ export default function SettingsPage() {
           >
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-center gap-2.5">
-                <div className="p-2 rounded-xl bg-blue-500/15 text-blue-400">
+                <div className="p-2 rounded-xl bg-emerald-500/15 text-emerald-300">
                   <KeyRound style={{ width: 16, height: 16 }} />
                 </div>
                 <div>
@@ -593,7 +593,7 @@ export default function SettingsPage() {
                 <button
                   type="submit"
                   disabled={changePassword.isPending}
-                  className="flex-1 px-4 py-2.5 rounded-xl bg-blue-500 hover:bg-blue-600 disabled:bg-blue-500/50 text-white text-sm font-semibold transition-all flex items-center justify-center gap-2 whitespace-nowrap"
+                  className="flex-1 px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 disabled:bg-emerald-500/50 text-white text-sm font-semibold transition-all flex items-center justify-center gap-2 whitespace-nowrap"
                 >
                   {changePassword.isPending ? (
                     <>
