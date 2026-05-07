@@ -4,6 +4,12 @@ import { BLOG_POSTS } from "@/data/blog-posts";
 import { Link } from "wouter";
 import { ArrowRight, Calendar, Clock } from "lucide-react";
 import aiTradingHero from "@/assets/blog/ai-trading-hero.png";
+import forexVsCrypto from "@/assets/blog/forex-vs-crypto.png";
+
+const POST_IMAGES: Record<string, string> = {
+  "how-ai-trading-works": aiTradingHero,
+  "forex-vs-crypto-which-is-better": forexVsCrypto,
+};
 
 export default function BlogIndexPage() {
   useSeo({
@@ -47,7 +53,7 @@ export default function BlogIndexPage() {
             <div className="grid md:grid-cols-2">
               <div className="relative aspect-video md:aspect-auto md:min-h-[360px] overflow-hidden">
                 <img
-                  src={featured.slug === "how-ai-trading-works" ? aiTradingHero : featured.featuredImage}
+                  src={POST_IMAGES[featured.slug] ?? featured.featuredImage}
                   alt={featured.featuredImageAlt}
                   loading="eager"
                   className="absolute inset-0 w-full h-full object-cover"
@@ -87,12 +93,27 @@ export default function BlogIndexPage() {
               className="group rounded-2xl overflow-hidden block transition-all"
               style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}
             >
-              <div
-                className="aspect-video"
-                style={{ background: "linear-gradient(135deg, rgba(16,185,129,0.18), rgba(34,197,94,0.14))" }}
-                role="img"
-                aria-label={p.featuredImageAlt}
-              />
+              {POST_IMAGES[p.slug] ? (
+                <div className="relative aspect-video overflow-hidden">
+                  <img
+                    src={POST_IMAGES[p.slug]}
+                    alt={p.featuredImageAlt}
+                    loading="lazy"
+                    className="absolute inset-0 w-full h-full object-cover"
+                  />
+                  <div
+                    className="absolute inset-0 pointer-events-none"
+                    style={{ background: "linear-gradient(135deg, rgba(5,15,12,0.10), rgba(5,15,12,0.40))" }}
+                  />
+                </div>
+              ) : (
+                <div
+                  className="aspect-video"
+                  style={{ background: "linear-gradient(135deg, rgba(16,185,129,0.18), rgba(34,197,94,0.14))" }}
+                  role="img"
+                  aria-label={p.featuredImageAlt}
+                />
+              )}
               <div className="p-5">
                 <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-300 mb-2">{p.category}</div>
                 <h3 className="text-base font-bold text-white leading-tight group-hover:text-emerald-200 transition-colors">

@@ -7,6 +7,12 @@ import { ArrowRight, Calendar, Clock, ChevronLeft, User, ListOrdered } from "luc
 import { trackCta } from "@/lib/analytics";
 import { withRef } from "@/lib/referral";
 import aiTradingHero from "@/assets/blog/ai-trading-hero.png";
+import forexVsCrypto from "@/assets/blog/forex-vs-crypto.png";
+
+const POST_IMAGES: Record<string, string> = {
+  "how-ai-trading-works": aiTradingHero,
+  "forex-vs-crypto-which-is-better": forexVsCrypto,
+};
 
 export default function BlogPostPage() {
   const [, params] = useRoute<{ slug: string }>("/blog/:slug");
@@ -96,7 +102,7 @@ export default function BlogPostPage() {
 
           <div className="relative aspect-video rounded-2xl mb-8 overflow-hidden" style={{ border: "1px solid rgba(16,185,129,0.18)" }}>
             <img
-              src={post.slug === "how-ai-trading-works" ? aiTradingHero : post.featuredImage}
+              src={POST_IMAGES[post.slug] ?? post.featuredImage}
               alt={post.featuredImageAlt}
               loading="eager"
               className="absolute inset-0 w-full h-full object-cover"
