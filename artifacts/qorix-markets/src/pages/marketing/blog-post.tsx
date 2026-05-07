@@ -11,6 +11,7 @@ import forexVsCrypto from "@/assets/blog/forex-vs-crypto.png";
 import zeroFeeTrading from "@/assets/blog/zero-fee-trading.png";
 import startWith10 from "@/assets/blog/start-with-10.png";
 import riskManagement from "@/assets/blog/risk-management.png";
+import usdtSettlement from "@/assets/blog/usdt-settlement.png";
 
 const POST_IMAGES: Record<string, string> = {
   "how-ai-trading-works": aiTradingHero,
@@ -18,6 +19,7 @@ const POST_IMAGES: Record<string, string> = {
   "zero-fee-trading-explained": zeroFeeTrading,
   "start-trading-with-10-dollars": startWith10,
   "risk-management-fundamentals": riskManagement,
+  "usdt-trading-benefits": usdtSettlement,
 };
 
 export default function BlogPostPage() {
