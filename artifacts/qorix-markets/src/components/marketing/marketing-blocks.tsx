@@ -233,7 +233,7 @@ export function TestimonialsSection() {
                 <div className="text-white font-semibold text-sm">{t.name}</div>
                 <div className="text-xs text-slate-500">{t.title}</div>
               </div>
-              <div className="flex items-center gap-0.5 text-amber-400">
+              <div className="flex items-center gap-0.5 text-emerald-400">
                 {Array.from({ length: t.rating }).map((_, i) => (
                   <Star key={i} size={12} fill="currentColor" stroke="none" />
                 ))}
