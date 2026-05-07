@@ -71,11 +71,11 @@ const NOTIF_ICONS: Record<string, React.ElementType> = {
 
 const NOTIF_COLORS: Record<string, string> = {
   daily_profit: "text-emerald-400",
-  monthly_payout: "text-blue-400",
+  monthly_payout: "text-teal-300",
   drawdown_alert: "text-red-400",
   deposit: "text-emerald-400",
   withdrawal: "text-amber-400",
-  system: "text-blue-400",
+  system: "text-teal-300",
   high_impact_news: "text-red-400",
 };
 
@@ -220,7 +220,7 @@ function NotificationPanel({ onClose, variant }: { onClose: () => void; variant:
           {unread > 0 && (
             <button
               onClick={handleMarkAll}
-              className="text-sm text-blue-400 font-medium px-2 py-1 active:opacity-60"
+              className="text-sm text-emerald-300 font-medium px-2 py-1 active:opacity-60"
             >
               Mark as read
             </button>
@@ -231,7 +231,7 @@ function NotificationPanel({ onClose, variant }: { onClose: () => void; variant:
         <div className="flex-1 overflow-y-auto">
           {isLoading ? (
             <div className="flex items-center justify-center py-16">
-              <div className="w-6 h-6 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" />
+              <div className="w-6 h-6 border-2 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin" />
             </div>
           ) : notifications.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-24 gap-3">
@@ -289,10 +289,10 @@ function NotificationPanel({ onClose, variant }: { onClose: () => void; variant:
     >
       <div className="flex items-center justify-between px-4 py-3 border-b border-white/8">
         <div className="flex items-center gap-2">
-          <Bell className="w-4 h-4 text-blue-400" />
+          <Bell className="w-4 h-4 text-emerald-300" />
           <span className="text-sm font-semibold text-white">Notifications</span>
           {unread > 0 && (
-            <span className="text-[10px] font-bold bg-blue-500 text-white rounded-full px-1.5 py-0.5 leading-none">
+            <span className="text-[10px] font-bold bg-emerald-500 text-white rounded-full px-1.5 py-0.5 leading-none">
               {unread}
             </span>
           )}
@@ -301,7 +301,7 @@ function NotificationPanel({ onClose, variant }: { onClose: () => void; variant:
           {unread > 0 && (
             <button
               onClick={handleMarkAll}
-              className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-blue-400 transition-colors px-2 py-1 rounded-lg hover:bg-white/5"
+              className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-emerald-300 transition-colors px-2 py-1 rounded-lg hover:bg-white/5"
             >
               <CheckCheck className="w-3.5 h-3.5" />
               Mark all read
@@ -315,7 +315,7 @@ function NotificationPanel({ onClose, variant }: { onClose: () => void; variant:
       <div className="max-h-[60vh] sm:max-h-[380px] overflow-y-auto">
         {isLoading ? (
           <div className="flex items-center justify-center py-12">
-            <div className="w-5 h-5 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" />
+            <div className="w-5 h-5 border-2 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin" />
           </div>
         ) : notifications.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 gap-2">
@@ -326,20 +326,20 @@ function NotificationPanel({ onClose, variant }: { onClose: () => void; variant:
           <div className="divide-y divide-white/5">
             {notifications.map((n) => {
               const Icon = NOTIF_ICONS[n.type] ?? Info;
-              const color = NOTIF_COLORS[n.type] ?? "text-blue-400";
+              const color = NOTIF_COLORS[n.type] ?? "text-emerald-300";
               return (
                 <motion.div
                   key={n.id}
                   layout
                   className={cn(
                     "group flex gap-3 px-4 py-3 cursor-pointer transition-colors",
-                    n.isRead ? "hover:bg-white/3" : "bg-blue-500/5 hover:bg-blue-500/8"
+                    n.isRead ? "hover:bg-white/3" : "bg-emerald-500/5 hover:bg-emerald-500/8"
                   )}
                   onClick={() => !n.isRead && handleMarkRead(n.id)}
                 >
                   <div className={cn(
                     "w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5",
-                    n.isRead ? "bg-white/5" : "bg-blue-500/10 border border-blue-500/20"
+                    n.isRead ? "bg-white/5" : "bg-emerald-500/10 border border-emerald-500/20"
                   )}>
                     <Icon className={cn("w-4 h-4", n.isRead ? "text-muted-foreground" : color)} />
                   </div>
@@ -358,7 +358,7 @@ function NotificationPanel({ onClose, variant }: { onClose: () => void; variant:
                     <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">{n.message}</p>
                     <span className="text-[10px] text-muted-foreground/60 mt-1 block">{timeAgo(n.createdAt)}</span>
                   </div>
-                  {!n.isRead && <div className="w-1.5 h-1.5 rounded-full bg-blue-400 shrink-0 mt-2" />}
+                  {!n.isRead && <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0 mt-2" />}
                 </motion.div>
               );
             })}
@@ -408,12 +408,12 @@ function NotificationBell({ variant = "mobile" }: { variant?: "mobile" | "deskto
           onClick={() => { setOpen((p) => !p); haptic(8); }}
           className={cn(
             "relative w-9 h-9 rounded-xl flex items-center justify-center transition-all duration-200",
-            open ? "bg-blue-500/15 border border-blue-500/30 text-blue-400" : "text-muted-foreground hover:text-white hover:bg-white/8 border border-transparent"
+            open ? "bg-emerald-500/15 border border-emerald-500/30 text-emerald-300" : "text-muted-foreground hover:text-white hover:bg-white/8 border border-transparent"
           )}
         >
           {unread > 0 ? <BellDot className="w-4.5 h-4.5" /> : <Bell className="w-4.5 h-4.5" />}
           {unread > 0 && (
-            <span className="absolute -top-0.5 -right-0.5 w-4 h-4 text-[9px] font-bold bg-blue-500 text-white rounded-full flex items-center justify-center leading-none">
+            <span className="absolute -top-0.5 -right-0.5 w-4 h-4 text-[9px] font-bold bg-emerald-500 text-white rounded-full flex items-center justify-center leading-none">
               {unread > 9 ? "9+" : unread}
             </span>
           )}
@@ -531,13 +531,13 @@ function MoreSheet({
                       className={cn(
                         "flex items-center gap-3 w-full px-4 py-3.5 rounded-xl text-sm font-medium transition-all duration-200",
                         isActive
-                          ? "bg-blue-500/10 border border-blue-500/20 text-blue-400"
+                          ? "bg-emerald-500/10 border border-emerald-500/20 text-emerald-300"
                           : "text-muted-foreground hover:text-white hover:bg-white/5"
                       )}
                     >
-                      <link.icon style={{ width: 18, height: 18 }} className={isActive ? "text-blue-400" : "text-muted-foreground"} />
+                      <link.icon style={{ width: 18, height: 18 }} className={isActive ? "text-emerald-300" : "text-muted-foreground"} />
                       {link.label}
-                      {isActive && <ChevronRight style={{ width: 13, height: 13 }} className="ml-auto text-blue-400" />}
+                      {isActive && <ChevronRight style={{ width: 13, height: 13 }} className="ml-auto text-emerald-300" />}
                     </button>
                   );
                 })}

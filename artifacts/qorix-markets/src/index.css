@@ -165,8 +165,8 @@
   body {
     @apply font-sans antialiased bg-background text-foreground;
     background-image:
-      radial-gradient(ellipse 80% 50% at 20% -10%, rgba(59, 130, 246, 0.08) 0%, transparent 60%),
-      radial-gradient(ellipse 60% 40% at 80% 110%, rgba(99, 102, 241, 0.06) 0%, transparent 60%);
+      radial-gradient(ellipse 80% 50% at 20% -10%, rgba(16, 185, 129, 0.09) 0%, transparent 60%),
+      radial-gradient(ellipse 60% 40% at 80% 110%, rgba(34, 197, 94, 0.06) 0%, transparent 60%);
     background-attachment: fixed;
     -webkit-tap-highlight-color: transparent;
     -webkit-touch-callout: none;
@@ -700,9 +700,13 @@
     padding-bottom: 11px;
     padding-left: 14px;
     color: #fff;
-    font-size: 14px;
+    /* 16px on mobile to prevent iOS auto-zoom on focus; 14px on tablet+ */
+    font-size: 16px;
     transition: border-color 0.18s, box-shadow 0.18s, background 0.18s;
     outline: none;
+  }
+  @media (min-width: 768px) {
+    .field-input { font-size: 14px; }
   }
   .field-input::placeholder { color: rgba(148,163,184,0.6); }
   .field-input:focus {
@@ -817,7 +821,7 @@
 
   /* Native-feel tap states */
   .tap-highlight {
-    -webkit-tap-highlight-color: rgba(59, 130, 246, 0.12);
+    -webkit-tap-highlight-color: rgba(16, 185, 129, 0.14);
   }
 
   /* Prevent text selection on interactive elements */
