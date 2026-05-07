@@ -12,6 +12,7 @@ import usdtSettlement from "@/assets/blog/usdt-settlement.png";
 import compoundingMath from "@/assets/blog/compounding-math.png";
 import riskTier from "@/assets/blog/risk-tier.png";
 import portfolioDiversification from "@/assets/blog/portfolio-diversification.png";
+import automatedVsManual from "@/assets/blog/automated-vs-manual.png";
 
 const POST_IMAGES: Record<string, string> = {
   "how-ai-trading-works": aiTradingHero,
@@ -23,6 +24,7 @@ const POST_IMAGES: Record<string, string> = {
   "compounding-monthly-returns": compoundingMath,
   "choosing-the-right-risk-tier": riskTier,
   "portfolio-diversification-2026": portfolioDiversification,
+  "why-automated-beats-manual": automatedVsManual,
 };
 
 export default function BlogIndexPage() {
