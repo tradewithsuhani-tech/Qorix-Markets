@@ -48,22 +48,22 @@ const CATEGORY_LABELS: Record<string, string> = {
 };
 
 const CATEGORY_COLORS: Record<string, string> = {
-  daily: "text-blue-400",
-  weekly: "text-violet-400",
+  daily: "text-emerald-300",
+  weekly: "text-teal-300",
   social: "text-pink-400",
   one_time: "text-amber-400",
 };
 
 const CATEGORY_BG: Record<string, string> = {
-  daily: "bg-blue-500/10 border-blue-500/20",
-  weekly: "bg-violet-500/10 border-violet-500/20",
+  daily: "bg-emerald-500/10 border-emerald-500/20",
+  weekly: "bg-teal-500/10 border-teal-500/20",
   social: "bg-pink-500/10 border-pink-500/20",
   one_time: "bg-amber-500/10 border-amber-500/20",
 };
 
 const CATEGORY_ICON_BG: Record<string, string> = {
-  daily: "bg-blue-500/20 text-blue-400",
-  weekly: "bg-violet-500/20 text-violet-400",
+  daily: "bg-emerald-500/20 text-emerald-300",
+  weekly: "bg-teal-500/20 text-teal-300",
   social: "bg-pink-500/20 text-pink-400",
   one_time: "bg-amber-500/20 text-amber-400",
 };
@@ -227,14 +227,14 @@ function EmailVerificationBanner({ onVerified }: { onVerified: () => void }) {
     <motion.div
       initial={{ opacity: 0, y: -8 }}
       animate={{ opacity: 1, y: 0 }}
-      className="bg-blue-500/10 border border-blue-500/25 rounded-2xl p-4 mb-6"
+      className="bg-emerald-500/10 border border-emerald-500/25 rounded-2xl p-4 mb-6"
     >
       <div className="flex items-start gap-3">
-        <div className="p-2 rounded-xl bg-blue-500/20 shrink-0">
-          <Mail className="h-4 w-4 text-blue-400" />
+        <div className="p-2 rounded-xl bg-emerald-500/20 shrink-0">
+          <Mail className="h-4 w-4 text-emerald-300" />
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-blue-300">Verify your email address</p>
+          <p className="text-sm font-medium text-emerald-300">Verify your email address</p>
           <p className="text-xs text-muted-foreground mt-0.5">Earn 25 bonus points + unlock all task rewards</p>
 
           {showInput ? (
@@ -246,12 +246,12 @@ function EmailVerificationBanner({ onVerified }: { onVerified: () => void }) {
                 value={otp}
                 onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
                 placeholder="Enter 6-digit code"
-                className="flex-1 bg-white/5 border border-white/15 rounded-lg px-3 py-2 text-sm font-mono tracking-widest focus:outline-none focus:border-blue-400/50"
+                className="flex-1 bg-white/5 border border-white/15 rounded-lg px-3 py-2 text-sm font-mono tracking-widest focus:outline-none focus:border-emerald-400/50"
               />
               <button
                 onClick={verifyOtp}
                 disabled={verifying || otp.length < 6}
-                className="px-4 py-2 rounded-lg bg-blue-500 text-white text-sm font-medium hover:bg-blue-400 transition-colors disabled:opacity-50"
+                className="px-4 py-2 rounded-lg bg-emerald-500 text-white text-sm font-medium hover:bg-emerald-400 transition-colors disabled:opacity-50"
               >
                 {verifying ? "..." : "Verify"}
               </button>
@@ -260,7 +260,7 @@ function EmailVerificationBanner({ onVerified }: { onVerified: () => void }) {
             <button
               onClick={sendOtp}
               disabled={sending}
-              className="mt-2.5 px-4 py-1.5 rounded-lg bg-blue-500/20 border border-blue-500/30 text-blue-300 text-xs font-medium hover:bg-blue-500/30 transition-colors disabled:opacity-50"
+              className="mt-2.5 px-4 py-1.5 rounded-lg bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 text-xs font-medium hover:bg-emerald-500/30 transition-colors disabled:opacity-50"
             >
               {sending ? "Sending..." : "Send verification code"}
             </button>
@@ -474,7 +474,7 @@ export default function TasksPage() {
 
             <div className="bg-white/[0.03] border border-white/8 rounded-2xl p-4 flex flex-col justify-between">
               <div className="flex items-center gap-1.5 mb-2">
-                <Trophy className="h-4 w-4 text-violet-400" />
+                <Trophy className="h-4 w-4 text-teal-300" />
                 <span className="text-xs text-muted-foreground">Progress</span>
               </div>
               <div>
@@ -483,7 +483,7 @@ export default function TasksPage() {
               </div>
               <div className="w-full bg-white/10 rounded-full h-1.5 mt-2">
                 <div
-                  className="bg-violet-500 h-1.5 rounded-full transition-all"
+                  className="bg-teal-500 h-1.5 rounded-full transition-all"
                   style={{ width: `${progressPct}%` }}
                 />
               </div>
