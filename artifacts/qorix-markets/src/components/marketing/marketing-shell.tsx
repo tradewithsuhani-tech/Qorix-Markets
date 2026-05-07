@@ -61,37 +61,6 @@ export function MarketingShell({ children }: { children: ReactNode }) {
             </span>
           </Link>
 
-          {/* Reviews badge — Trustpilot-style social proof */}
-          <a
-            href="https://www.trustpilot.com/review/qorixmarkets.com"
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={() => trackCta("Reviews badge", "header")}
-            aria-label="4.8 stars on Trustpilot — read 2,400+ reviews"
-            className="inline-flex items-center gap-1 sm:gap-1.5 md:gap-2 px-2 sm:px-2.5 md:px-3 min-h-[36px] md:min-h-[40px] rounded-lg text-[11px] sm:text-xs font-semibold transition-colors hover:bg-white/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[#050814] shrink-0"
-            style={{
-              background: "rgba(16,185,129,0.06)",
-              border: "1px solid rgba(16,185,129,0.22)",
-              color: "#e2e8f0",
-            }}
-          >
-            <span className="flex items-center gap-0.5" aria-hidden>
-              {[0, 1, 2, 3, 4].map((i) => (
-                <Star
-                  key={i}
-                  size={11}
-                  className="text-emerald-400"
-                  fill="currentColor"
-                  strokeWidth={0}
-                />
-              ))}
-            </span>
-            <span className="text-white font-bold tabular-nums">4.8</span>
-            <span className="hidden md:inline text-slate-400">·</span>
-            <span className="hidden md:inline text-slate-300">Trustpilot</span>
-            <span className="hidden 2xl:inline text-slate-500 font-normal">· 2,400+ reviews</span>
-          </a>
-
           <nav className="hidden lg:flex items-center gap-1">
             {NAV_LINKS.map((l) => {
               const active = location === l.href || (l.href !== "/" && location.startsWith(l.href));
@@ -198,6 +167,29 @@ export function MarketingFooter() {
             AI-managed USDT trading. Zero fees. Start with $10. Trusted by
             thousands of investors worldwide.
           </p>
+          {/* Trustpilot reviews badge — moved here from header */}
+          <a
+            href="https://www.trustpilot.com/review/qorixmarkets.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="4.8 stars on Trustpilot — read 2,400+ reviews"
+            className="mt-4 inline-flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors hover:bg-emerald-500/[0.10]"
+            style={{
+              background: "rgba(16,185,129,0.06)",
+              border: "1px solid rgba(16,185,129,0.22)",
+              color: "#e2e8f0",
+            }}
+          >
+            <span className="flex items-center gap-0.5" aria-hidden>
+              {[0, 1, 2, 3, 4].map((i) => (
+                <Star key={i} size={11} className="text-emerald-400" fill="currentColor" strokeWidth={0} />
+              ))}
+            </span>
+            <span className="text-white font-bold tabular-nums">4.8</span>
+            <span className="text-slate-400">·</span>
+            <span className="text-slate-300">Trustpilot</span>
+            <span className="text-slate-500 font-normal">· 2,400+ reviews</span>
+          </a>
           <div className="mt-4 flex items-center gap-2">
             {[
               { href: "https://t.me/Qorixmarketsalerts", label: "Telegram", Icon: Send },
