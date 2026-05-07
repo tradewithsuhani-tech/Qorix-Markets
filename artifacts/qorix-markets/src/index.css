@@ -706,8 +706,8 @@
   }
   .field-input::placeholder { color: rgba(148,163,184,0.6); }
   .field-input:focus {
-    border-color: rgba(59,130,246,0.55);
-    box-shadow: 0 0 0 3px rgba(59,130,246,0.12);
+    border-color: rgba(16,185,129,0.55);
+    box-shadow: 0 0 0 3px rgba(16,185,129,0.15);
     background: rgba(255,255,255,0.06);
   }
   .field-input:disabled {

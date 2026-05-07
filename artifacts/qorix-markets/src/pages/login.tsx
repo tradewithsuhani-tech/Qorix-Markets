@@ -1065,11 +1065,15 @@ export default function LoginPage() {
         Back to home
       </button>
 
+      {/* Ambient emerald glow behind the card */}
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[640px] h-[640px] bg-emerald-500/10 rounded-full blur-[140px] pointer-events-none" />
+      <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-[420px] h-[280px] bg-green-400/8 rounded-full blur-[100px] pointer-events-none" />
+
       <motion.div
         initial={{ opacity: 0, y: 24 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.45, ease: "easeOut" }}
-        className="w-full max-w-md"
+        className="w-full max-w-md relative"
       >
         <div className="flex items-center gap-3 mb-8 justify-center">
           <div className="w-12 h-12 rounded-xl overflow-hidden flex items-center justify-center shadow-[0_0_22px_rgba(16,185,129,0.45)]">
@@ -1078,7 +1082,20 @@ export default function LoginPage() {
           <span className="text-xl font-bold">Qorix{" "}<span className="text-emerald-400 font-light">Markets</span></span>
         </div>
 
-        <div className="glass-card rounded-2xl p-7 space-y-6 border border-white/10 shadow-[0_30px_80px_-30px_rgba(16,185,129,0.25)]">
+        <div
+          className="relative rounded-3xl p-8 md:p-9 space-y-6 overflow-hidden"
+          style={{
+            background:
+              "linear-gradient(180deg, rgba(15,23,42,0.55) 0%, rgba(2,6,23,0.75) 100%)",
+            border: "1px solid rgba(16,185,129,0.18)",
+            backdropFilter: "blur(24px) saturate(180%)",
+            WebkitBackdropFilter: "blur(24px) saturate(180%)",
+            boxShadow:
+              "0 40px 100px -30px rgba(16,185,129,0.30), 0 8px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06)",
+          }}
+        >
+          {/* top accent line */}
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-1/2 h-px bg-gradient-to-r from-transparent via-emerald-400/60 to-transparent" />
           {/* Heading */}
           <div className="text-center space-y-2">
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 text-[10px] font-semibold tracking-[0.18em] uppercase text-emerald-300">
