@@ -48,81 +48,98 @@ const DEMO_RESPONSES: Record<string, () => unknown> = {
 
   // ─── wallet ──────────────────────────────────────────────────────────────
   "GET /wallet": () => ({
-    main: 1250.45,
-    trading: 850.0,
-    profit: 312.78,
-    locked: 0,
-    currency: "USDT",
+    id: 1,
+    userId: 1,
+    mainBalance: 1250.45,
+    tradingBalance: 850.0,
+    profitBalance: 312.78,
+    updatedAt: NOW(),
   }),
 
   // ─── dashboard ───────────────────────────────────────────────────────────
   "GET /dashboard/summary": () => ({
     totalBalance: 2413.23,
-    todayProfit: 24.56,
-    todayProfitPercent: 1.05,
+    dailyProfitLoss: 24.56,
+    dailyProfitPercent: 1.05,
     activeInvestment: 850.0,
-    totalEarnings: 562.78,
-    referralEarnings: 45.5,
-    vipTier: 2,
-    nextTierAt: 5000,
-    dailyProfitPercent: 1.25,
-    autoTrading: true,
+    totalProfit: 562.78,
+    profitBalance: 312.78,
+    tradingBalance: 850.0,
+    nextPayoutDate: ISO(20 * 60 * 60 * 1000),
+    daysUntilPayout: 1,
     riskLevel: "medium",
+    isTrading: true,
+    vip: {
+      tier: "gold",
+      label: "Gold",
+      profitBonus: 0.05,
+      withdrawalFee: 0.015,
+      minAmount: 1000,
+      nextTier: { tier: "platinum", label: "Platinum", minAmount: 5000, gap: 2586.77 },
+    },
   }),
 
   // ─── investment ──────────────────────────────────────────────────────────
   "GET /investment": () => ({
-    active: true,
+    id: 1,
+    userId: 1,
     amount: 850.0,
     riskLevel: "medium",
-    drawdownLimit: 5,
+    isActive: true,
     autoCompound: true,
-    startedAt: ISO(-7 * 24 * 60 * 60 * 1000),
     totalProfit: 78.45,
-    todayProfit: 10.62,
-    daysActive: 7,
+    dailyProfit: 10.62,
+    drawdown: 1.2,
+    drawdownLimit: 5,
+    peakBalance: 940.0,
+    drawdownFromPeak: 1.2,
+    recoveryPct: 1.21,
+    isPaused: false,
+    startedAt: ISO(-7 * 24 * 60 * 60 * 1000),
+    stoppedAt: null,
   }),
-  "POST /investment/start": () => ({ success: true }),
-  "POST /investment/stop": () => ({ success: true }),
+  "POST /investment/start": () => DEMO_RESPONSES["GET /investment"](),
+  "POST /investment/stop": () => DEMO_RESPONSES["GET /investment"](),
 
-  // ─── trades ──────────────────────────────────────────────────────────────
-  "GET /trades": () => ({
-    trades: Array.from({ length: 12 }, (_, i) => ({
-      id: `trade-${i + 1}`,
-      pair: ["BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT"][i % 4],
-      side: i % 2 === 0 ? "buy" : "sell",
-      entryPrice: 42000 + i * 100,
-      exitPrice: 42000 + i * 100 + (i % 2 === 0 ? 250 : -180),
-      amount: 100 + i * 25,
-      pnl: i % 2 === 0 ? 2.45 + i * 0.3 : -1.2 - i * 0.15,
-      pnlPercent: i % 2 === 0 ? 0.6 + i * 0.05 : -0.3 - i * 0.02,
-      openedAt: ISO(-i * 60 * 60 * 1000),
-      closedAt: ISO(-i * 60 * 60 * 1000 + 30 * 60 * 1000),
-      status: "closed",
-    })),
-  }),
+  // ─── trades — TOP-LEVEL ARRAY ────────────────────────────────────────────
+  "GET /trades": () =>
+    Array.from({ length: 12 }, (_, i) => {
+      const profit = i % 3 === 0 ? -1.2 - i * 0.15 : 2.45 + i * 0.3;
+      return {
+        id: i + 1,
+        symbol: ["BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT"][i % 4],
+        direction: i % 2 === 0 ? "LONG" : "SHORT",
+        entryPrice: 42000 + i * 100,
+        exitPrice: 42000 + i * 100 + (profit > 0 ? 250 : -180),
+        profit,
+        profitPercent: profit > 0 ? 0.6 + i * 0.05 : -0.3 - i * 0.02,
+        executedAt: ISO(-i * 60 * 60 * 1000),
+      };
+    }),
 
   // ─── transactions ────────────────────────────────────────────────────────
   "GET /transactions": () => ({
-    transactions: Array.from({ length: 15 }, (_, i) => ({
-      id: `tx-${i + 1}`,
-      type: ["deposit", "withdraw", "profit", "transfer", "referral"][i % 5],
+    data: Array.from({ length: 15 }, (_, i) => ({
+      id: i + 1,
+      userId: 1,
+      type: ["deposit", "withdrawal", "daily_profit", "transfer", "referral"][i % 5],
       amount: 50 + i * 17.3,
-      currency: "USDT",
       status: i < 2 ? "pending" : "completed",
-      createdAt: ISO(-i * 4 * 60 * 60 * 1000),
       description: ["TRC20 USDT deposit", "INR withdrawal", "Daily profit", "Internal transfer", "Referral bonus"][i % 5],
-      txHash: i % 5 === 0 ? `0x${"a".repeat(64)}` : null,
+      createdAt: ISO(-i * 4 * 60 * 60 * 1000),
     })),
+    total: 15,
+    page: 1,
+    totalPages: 1,
   }),
 
   // ─── deposit ─────────────────────────────────────────────────────────────
   "GET /deposit/address": () => ({
     address: "TXyzAbc123Demo456Wallet789Address0Qor",
     network: "TRC20",
-    minimum: 10,
-    qrCodeData: "TXyzAbc123Demo456Wallet789Address0Qor",
+    token: "USDT",
   }),
+  "GET /deposit/history": () => ({ deposits: [], total: 0 }),
   "POST /deposit/initiate": () => ({ success: true, depositId: "dep-demo-1" }),
 
   // ─── withdraw ────────────────────────────────────────────────────────────
@@ -134,20 +151,21 @@ const DEMO_RESPONSES: Record<string, () => unknown> = {
 
   // ─── referral ────────────────────────────────────────────────────────────
   "GET /referral": () => ({
-    code: "QORIX2026",
-    link: "https://qorixmarkets.com/signup?ref=QORIX2026",
-    totalReferrals: 8,
+    referralCode: "QORIX2026",
+    totalReferred: 8,
     activeReferrals: 5,
-    totalEarnings: 145.5,
+    totalEarned: 145.5,
     monthlyEarnings: 32.4,
-    referrals: Array.from({ length: 5 }, (_, i) => ({
-      id: `ref-${i + 1}`,
-      name: `User ${i + 1}`,
-      joinedAt: ISO(-i * 7 * 24 * 60 * 60 * 1000),
-      invested: 200 + i * 100,
-      yourEarning: 5 + i * 2,
-    })),
   }),
+  "GET /referral/referred-users": () =>
+    Array.from({ length: 5 }, (_, i) => ({
+      id: i + 1,
+      fullName: `User ${i + 1}`,
+      email: `user${i + 1}@demo.com`,
+      investmentAmount: 200 + i * 100,
+      isActive: i < 3,
+      joinedAt: ISO(-i * 7 * 24 * 60 * 60 * 1000),
+    })),
 
   // ─── 2FA ─────────────────────────────────────────────────────────────────
   "GET /security/2fa/status": () => ({
@@ -235,10 +253,12 @@ const DEMO_RESPONSES: Record<string, () => unknown> = {
   // ─── notifications ───────────────────────────────────────────────────────
   "GET /notifications": () => ({
     notifications: Array.from({ length: 6 }, (_, i) => ({
-      id: `notif-${i + 1}`,
+      id: i + 1,
+      userId: 1,
+      type: ["daily_profit", "system", "system", "system", "deposit", "system"][i],
       title: ["Daily profit credited", "Trade closed", "Login from new device", "Welcome to Qorix", "Referral bonus", "VIP tier upgrade"][i],
-      body: "Demo notification body — design reference only.",
-      read: i > 1,
+      message: "Demo notification — design reference only.",
+      isRead: i > 1,
       createdAt: ISO(-i * 60 * 60 * 1000),
     })),
     unreadCount: 2,
