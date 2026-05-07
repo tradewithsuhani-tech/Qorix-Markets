@@ -36,13 +36,13 @@ function EventRow({ event, i }: { event: EconomicEvent; i: number }) {
       transition={{ delay: i * 0.03 }}
       className={cn(
         "flex items-center gap-2 md:gap-4 px-2.5 md:px-6 py-3 md:py-3.5 group transition-colors relative",
-        isNext && "bg-blue-500/5",
+        isNext && "bg-emerald-500/5",
         !isNext && "hover:bg-white/[0.02]",
         isPast && "opacity-40"
       )}
     >
       {isNext && (
-        <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-6 rounded-full bg-blue-400" />
+        <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-6 rounded-full bg-emerald-400" />
       )}
 
       <div className="flex items-center gap-1 shrink-0 w-12 md:w-16">
@@ -128,7 +128,7 @@ export default function MarketInsightsPage() {
             <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Market Insights</h1>
             <p className="text-sm text-muted-foreground mt-1">Economic calendar — high-impact events affecting your trades</p>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shrink-0">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-green-600 flex items-center justify-center shrink-0">
             <Globe className="w-5 h-5 text-white" />
           </div>
         </div>
@@ -137,7 +137,7 @@ export default function MarketInsightsPage() {
           {[
             { icon: AlertTriangle, label: "High-Impact Week", value: totalHigh, color: "text-red-400", bg: "bg-red-500/10 border-red-500/20" },
             { icon: Clock, label: "Upcoming High", value: upcomingHigh, color: "text-amber-400", bg: "bg-amber-500/10 border-amber-500/20" },
-            { icon: Calendar, label: "Events Today", value: todayCount, color: "text-blue-400", bg: "bg-blue-500/10 border-blue-500/20" },
+            { icon: Calendar, label: "Events Today", value: todayCount, color: "text-emerald-300", bg: "bg-emerald-500/10 border-emerald-500/20" },
           ].map(({ icon: Icon, label, value, color, bg }) => (
             <div key={label} className={cn("glass-card rounded-2xl p-4 border", bg)}>
               <div className="flex items-center gap-2 mb-2">
@@ -163,7 +163,7 @@ export default function MarketInsightsPage() {
                   className={cn(
                     "px-2.5 py-1 rounded-lg text-xs font-medium transition-all",
                     currencyFilter === c
-                      ? "bg-blue-500/20 border border-blue-500/40 text-blue-300"
+                      ? "bg-emerald-500/20 border border-emerald-500/40 text-emerald-300"
                       : "bg-white/[0.04] border border-white/[0.06] text-muted-foreground hover:text-white hover:bg-white/[0.07]"
                   )}
                 >
@@ -180,7 +180,7 @@ export default function MarketInsightsPage() {
                   className={cn(
                     "px-2.5 py-1 rounded-lg text-xs font-medium transition-all flex items-center gap-1",
                     impactFilter === value
-                      ? "bg-blue-500/20 border border-blue-500/40 text-blue-300"
+                      ? "bg-emerald-500/20 border border-emerald-500/40 text-emerald-300"
                       : "bg-white/[0.04] border border-white/[0.06] text-muted-foreground hover:text-white hover:bg-white/[0.07]"
                   )}
                 >
@@ -205,10 +205,10 @@ export default function MarketInsightsPage() {
               <div key={dayLabel} className="glass-card rounded-2xl overflow-hidden">
                 <div className={cn(
                   "flex items-center gap-2 px-4 md:px-6 py-3 border-b border-white/[0.06]",
-                  isToday && "bg-blue-500/5"
+                  isToday && "bg-emerald-500/5"
                 )}>
-                  <Calendar className={cn("w-3.5 h-3.5", isToday ? "text-blue-400" : "text-muted-foreground")} />
-                  <span className={cn("text-xs font-semibold", isToday ? "text-blue-300" : "text-muted-foreground")}>
+                  <Calendar className={cn("w-3.5 h-3.5", isToday ? "text-emerald-400" : "text-muted-foreground")} />
+                  <span className={cn("text-xs font-semibold", isToday ? "text-emerald-300" : "text-muted-foreground")}>
                     {isToday ? `Today · ${dayLabel}` : dayLabel}
                   </span>
                   <div className="ml-auto flex items-center gap-1.5">
