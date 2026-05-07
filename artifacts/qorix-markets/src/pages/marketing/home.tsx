@@ -1322,7 +1322,7 @@ export default function HomePage() {
       </section>
 
       {/* TRY DEMO BAND — bridges projection → real experience */}
-      <section className="max-w-7xl mx-auto px-4 md:px-8 mt-6 md:mt-8 mb-2">
+      <section className="max-w-7xl mx-auto px-4 md:px-8 mt-12 md:mt-16 mb-2">
         <button
           type="button"
           onClick={() => {
