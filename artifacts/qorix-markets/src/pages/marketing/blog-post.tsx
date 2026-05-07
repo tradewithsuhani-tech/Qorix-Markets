@@ -6,6 +6,7 @@ import { getPostBySlug, BLOG_POSTS, type BlogPost } from "@/data/blog-posts";
 import { ArrowRight, Calendar, Clock, ChevronLeft, User, ListOrdered } from "lucide-react";
 import { trackCta } from "@/lib/analytics";
 import { withRef } from "@/lib/referral";
+import aiTradingHero from "@/assets/blog/ai-trading-hero.png";
 
 export default function BlogPostPage() {
   const [, params] = useRoute<{ slug: string }>("/blog/:slug");
@@ -93,12 +94,18 @@ export default function BlogPostPage() {
             <span className="inline-flex items-center gap-1"><Clock size={12} /> {post.readMinutes} min read</span>
           </div>
 
-          <div
-            className="aspect-video rounded-2xl mb-8"
-            style={{ background: "linear-gradient(135deg, rgba(16,185,129,0.20), rgba(34,197,94,0.18))" }}
-            role="img"
-            aria-label={post.featuredImageAlt}
-          />
+          <div className="relative aspect-video rounded-2xl mb-8 overflow-hidden" style={{ border: "1px solid rgba(16,185,129,0.18)" }}>
+            <img
+              src={post.slug === "how-ai-trading-works" ? aiTradingHero : post.featuredImage}
+              alt={post.featuredImageAlt}
+              loading="eager"
+              className="absolute inset-0 w-full h-full object-cover"
+            />
+            <div
+              className="absolute inset-0 pointer-events-none"
+              style={{ background: "linear-gradient(135deg, rgba(5,15,12,0.10), rgba(5,15,12,0.45))" }}
+            />
+          </div>
 
           {/* Inline TOC for mobile (sidebar handles desktop) */}
           {toc.length > 0 && (

@@ -3,6 +3,7 @@ import { useSeo, SITE_URL } from "@/lib/seo";
 import { BLOG_POSTS } from "@/data/blog-posts";
 import { Link } from "wouter";
 import { ArrowRight, Calendar, Clock } from "lucide-react";
+import aiTradingHero from "@/assets/blog/ai-trading-hero.png";
 
 export default function BlogIndexPage() {
   useSeo({
@@ -44,14 +45,18 @@ export default function BlogIndexPage() {
             style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}
           >
             <div className="grid md:grid-cols-2">
-              <div
-                className="aspect-video md:aspect-auto bg-cover bg-center"
-                style={{
-                  background: "linear-gradient(135deg, rgba(16,185,129,0.20), rgba(34,197,94,0.18))",
-                }}
-                role="img"
-                aria-label={featured.featuredImageAlt}
-              />
+              <div className="relative aspect-video md:aspect-auto md:min-h-[360px] overflow-hidden">
+                <img
+                  src={featured.slug === "how-ai-trading-works" ? aiTradingHero : featured.featuredImage}
+                  alt={featured.featuredImageAlt}
+                  loading="eager"
+                  className="absolute inset-0 w-full h-full object-cover"
+                />
+                <div
+                  className="absolute inset-0 pointer-events-none"
+                  style={{ background: "linear-gradient(135deg, rgba(5,15,12,0.20), rgba(5,15,12,0.55))" }}
+                />
+              </div>
               <div className="p-6 md:p-8 flex flex-col justify-center">
                 <span className="inline-flex w-fit items-center gap-2 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider mb-4"
                   style={{ background: "rgba(16,185,129,0.10)", border: "1px solid rgba(16,185,129,0.30)", color: "#6ee7b7" }}>
