@@ -35,15 +35,19 @@ import { trackCta } from "@/lib/analytics";
  * - Conversion CTA always sticky at bottom.
  */
 
-type Pair = { sym: string; base: number; vol: number };
+// Only pairs with real live price feeds wired in the codebase:
+//   XAU/USD  — gold-api.com (free, no key)
+//   BTC/USD  — Binance WS/REST (BTCUSDT)
+//   ETH/USD  — Binance WS/REST (ETHUSDT)
+//   EUR/USD  — Binance WS/REST (EURUSDT proxy)
+// Synthetic pairs (GBPUSD, USDJPY, NAS100, SOLUSD) intentionally excluded
+// to avoid showing fake quotes.
+type Pair = { sym: string; base: number; vol: number; binance?: string; gold?: boolean };
 const PAIRS: Pair[] = [
-  { sym: "XAUUSD", base: 4702.2, vol: 4.2 },
-  { sym: "BTCUSD", base: 67420, vol: 380 },
-  { sym: "ETHUSD", base: 3512.6, vol: 22 },
-  { sym: "SOLUSD", base: 184.5, vol: 2.4 },
-  { sym: "EURUSD", base: 1.0921, vol: 0.0008 },
-  { sym: "GBPUSD", base: 1.2784, vol: 0.0011 },
-  { sym: "NAS100", base: 19442.1, vol: 38 },
+  { sym: "XAUUSD", base: 4702.2, vol: 4.2,    gold: true },
+  { sym: "BTCUSD", base: 67420,  vol: 380,    binance: "BTCUSDT" },
+  { sym: "ETHUSD", base: 3512.6, vol: 22,     binance: "ETHUSDT" },
+  { sym: "EURUSD", base: 1.0921, vol: 0.0008, binance: "EURUSDT" },
 ];
 
 type Trade = {
@@ -157,11 +161,64 @@ export function DemoSandbox({ open, onOpenChange }: DemoSandboxProps) {
   const stateRef = useRef<DemoState | null>(null);
   stateRef.current = state;
 
+  // Live prices fetched from real feeds (gold-api + Binance public REST).
+  // Falls back to PAIRS.base if a fetch hasn't completed yet.
+  const livePricesRef = useRef<Record<string, number>>({});
+
   // Initialize on open
   useEffect(() => {
     if (!open) return;
     const existing = loadState();
     setState(existing ?? freshState());
+  }, [open]);
+
+  // ── Live price polling: gold-api for XAU + Binance batch for crypto/EUR ──
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+
+    const binanceSyms = PAIRS.filter((p) => p.binance).map((p) => p.binance!);
+    // Binance batch ticker query: ?symbols=["BTCUSDT","ETHUSDT","EURUSDT"]
+    const binanceUrl = `https://api.binance.com/api/v3/ticker/price?symbols=${encodeURIComponent(
+      JSON.stringify(binanceSyms),
+    )}`;
+
+    const fetchAll = async () => {
+      // Binance (single batch call)
+      try {
+        const r = await fetch(binanceUrl);
+        if (r.ok && !cancelled) {
+          const arr: Array<{ symbol: string; price: string }> = await r.json();
+          const map: Record<string, number> = {};
+          for (const row of arr) map[row.symbol] = +row.price;
+          for (const p of PAIRS) {
+            if (p.binance && Number.isFinite(map[p.binance]) && map[p.binance] > 0) {
+              livePricesRef.current[p.sym] = map[p.binance];
+            }
+          }
+        }
+      } catch {
+        /* network blip — keep last known price */
+      }
+      // Gold-api (XAU/USD)
+      try {
+        const r = await fetch("https://api.gold-api.com/price/XAU");
+        if (r.ok && !cancelled) {
+          const j = await r.json();
+          const px = +j.price;
+          if (Number.isFinite(px) && px > 0) livePricesRef.current["XAUUSD"] = px;
+        }
+      } catch {
+        /* ignore */
+      }
+    };
+
+    fetchAll();
+    const id = window.setInterval(fetchAll, 12_000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
   }, [open]);
 
   // Tick clock for "time left" + time-ago labels
@@ -208,6 +265,9 @@ export function DemoSandbox({ open, onOpenChange }: DemoSandboxProps) {
       const openCount = trades.filter((x) => x.status === "open").length;
       if (openCount < 2 && balance > 0.5 && Math.random() < 0.55) {
         const p = PAIRS[Math.floor(Math.random() * PAIRS.length)];
+        // Use live-fetched price when available; fall back to seed base
+        const livePx = livePricesRef.current[p.sym];
+        const refPx = Number.isFinite(livePx) && livePx > 0 ? livePx : p.base;
         const drift = (Math.random() - 0.5) * p.vol * 2;
         const size = +(0.8 + Math.random() * 2.4).toFixed(2);
         if (size <= balance * 0.4) {
@@ -215,7 +275,7 @@ export function DemoSandbox({ open, onOpenChange }: DemoSandboxProps) {
             id: uid(),
             pair: p.sym,
             side: Math.random() > 0.5 ? "BUY" : "SELL",
-            entry: +(p.base + drift).toFixed(p.base < 10 ? 4 : 2),
+            entry: +(refPx + drift).toFixed(refPx < 10 ? 4 : 2),
             size,
             openedAt: t,
             status: "open",
