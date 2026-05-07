@@ -629,7 +629,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <aside className="hidden md:flex flex-col w-64 border-r border-white/5 glass-nav shrink-0">
         <div className="p-5 pb-4">
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-lg overflow-hidden flex items-center justify-center shrink-0" style={{ boxShadow: "0 0 20px rgba(99,102,241,0.4)" }}>
+            <div className="w-9 h-9 rounded-lg overflow-hidden flex items-center justify-center shrink-0" style={{ boxShadow: "0 0 20px rgba(16,185,129,0.45)" }}>
               <QorixLogo size={36} />
             </div>
             <div className="leading-none">
@@ -637,7 +637,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 <span className="text-white">Qorix</span>
                 <span
                   style={{
-                    background: "linear-gradient(90deg,#38bdf8,#818cf8)",
+                    background: "linear-gradient(90deg,#34d399,#22c55e)",
                     WebkitBackgroundClip: "text",
                     WebkitTextFillColor: "transparent",
                     backgroundClip: "text",
