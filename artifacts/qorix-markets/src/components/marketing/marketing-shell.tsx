@@ -1,6 +1,6 @@
 import { ReactNode, useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
-import { Menu, X, ArrowRight } from "lucide-react";
+import { Menu, X, ArrowRight, Send, Twitter, Instagram, Youtube, Facebook, Linkedin } from "lucide-react";
 import { StickyJoinButton } from "./sticky-cta";
 import { SignupPopup } from "./signup-popup";
 import { trackCta } from "@/lib/analytics";
@@ -163,6 +163,27 @@ export function MarketingFooter() {
             AI-managed USDT trading. Zero fees. Start with $10. Trusted by
             thousands of investors worldwide.
           </p>
+          <div className="mt-4 flex items-center gap-2">
+            {[
+              { href: "https://t.me/qorixmarkets", label: "Telegram", Icon: Send },
+              { href: "https://twitter.com/qorixmarkets", label: "Twitter / X", Icon: Twitter },
+              { href: "https://instagram.com/qorixmarkets", label: "Instagram", Icon: Instagram },
+              { href: "https://youtube.com/@qorixmarkets", label: "YouTube", Icon: Youtube },
+              { href: "https://facebook.com/qorixmarkets", label: "Facebook", Icon: Facebook },
+              { href: "https://linkedin.com/company/qorixmarkets", label: "LinkedIn", Icon: Linkedin },
+            ].map(({ href, label, Icon }) => (
+              <a
+                key={label}
+                href={href}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label={label}
+                className="w-8 h-8 rounded-lg flex items-center justify-center bg-white/[0.04] border border-white/10 text-slate-400 hover:text-emerald-300 hover:border-emerald-500/40 hover:bg-emerald-500/10 transition-colors"
+              >
+                <Icon className="w-3.5 h-3.5" />
+              </a>
+            ))}
+          </div>
         </div>
         <div>
           <h3 className="text-white font-bold mb-3 text-sm">Platform</h3>
