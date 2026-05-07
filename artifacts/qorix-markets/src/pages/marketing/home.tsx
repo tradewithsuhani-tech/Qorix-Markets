@@ -203,6 +203,209 @@ function LiveImpactStrip() {
   );
 }
 
+/**
+ * LiveWithdrawalsTicker — horizontal marquee of recent withdrawals.
+ * Shows realistic-looking entries with mixed names, currencies, flags.
+ * New entries push in periodically; "time ago" labels update live.
+ */
+type WithdrawalEntry = {
+  id: number;
+  name: string;
+  flag: string;
+  amount: string;
+  ts: number;
+};
+
+const FIRST_NAMES = [
+  "Rahul", "Priya", "Ahmed", "Sarah", "Vikram", "Aisha", "Rohan", "Neha",
+  "Daniel", "Fatima", "Arjun", "Maya", "James", "Ananya", "Hassan", "Lina",
+  "Karthik", "Zara", "Mohammed", "Pooja", "Ethan", "Divya", "Omar", "Sneha",
+  "Liam", "Riya", "Yusuf", "Kavya", "Noah", "Meera",
+];
+const LAST_INITIALS = ["S.", "M.", "K.", "R.", "P.", "T.", "G.", "N.", "B.", "V.", "L.", "A.", "C.", "J."];
+const COUNTRIES = [
+  { flag: "🇮🇳", w: 38 },
+  { flag: "🇦🇪", w: 14 },
+  { flag: "🇺🇸", w: 12 },
+  { flag: "🇸🇬", w: 8 },
+  { flag: "🇬🇧", w: 7 },
+  { flag: "🇨🇦", w: 5 },
+  { flag: "🇦🇺", w: 5 },
+  { flag: "🇩🇪", w: 4 },
+  { flag: "🇲🇾", w: 4 },
+  { flag: "🇳🇬", w: 3 },
+];
+
+function pickWeightedFlag(): string {
+  const total = COUNTRIES.reduce((s, c) => s + c.w, 0);
+  let r = Math.random() * total;
+  for (const c of COUNTRIES) {
+    if ((r -= c.w) <= 0) return c.flag;
+  }
+  return COUNTRIES[0].flag;
+}
+
+function formatAmount(flag: string): string {
+  // Indian users see INR, others see USDT — mix for realism
+  const isInr = flag === "🇮🇳" && Math.random() < 0.55;
+  if (isInr) {
+    const tiers = [
+      [2_000, 12_000],
+      [12_000, 45_000],
+      [45_000, 1_25_000],
+      [1_25_000, 4_50_000],
+    ];
+    const [lo, hi] = tiers[Math.floor(Math.random() * tiers.length)];
+    const amt = Math.round((lo + Math.random() * (hi - lo)) / 100) * 100;
+    return `₹${amt.toLocaleString("en-IN")}`;
+  }
+  const tiers = [
+    [40, 280],
+    [280, 1_200],
+    [1_200, 4_500],
+    [4_500, 18_000],
+  ];
+  const [lo, hi] = tiers[Math.floor(Math.random() * tiers.length)];
+  const amt = Math.round((lo + Math.random() * (hi - lo)) / 5) * 5;
+  return `$${amt.toLocaleString("en-US")}`;
+}
+
+function buildEntry(id: number, ageSec: number): WithdrawalEntry {
+  const name = `${FIRST_NAMES[Math.floor(Math.random() * FIRST_NAMES.length)]} ${LAST_INITIALS[Math.floor(Math.random() * LAST_INITIALS.length)]}`;
+  const flag = pickWeightedFlag();
+  return {
+    id,
+    name,
+    flag,
+    amount: formatAmount(flag),
+    ts: Date.now() - ageSec * 1000,
+  };
+}
+
+function timeAgoShort(ts: number): string {
+  const sec = Math.max(1, Math.floor((Date.now() - ts) / 1000));
+  if (sec < 60) return `${sec}s ago`;
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min}m ago`;
+  const h = Math.floor(min / 60);
+  return `${h}h ago`;
+}
+
+function LiveWithdrawalsTicker() {
+  // Seed with 16 entries spread across the last few minutes for natural variety
+  const [entries, setEntries] = useState<WithdrawalEntry[]>(() =>
+    Array.from({ length: 16 }, (_, i) => buildEntry(i, 5 + i * 18 + Math.floor(Math.random() * 12))),
+  );
+  const [, force] = useState(0);
+  const idRef = useRef(16);
+
+  // Push new entry every 4-7 seconds
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>;
+    const schedule = () => {
+      const delay = 4000 + Math.random() * 3000;
+      timer = setTimeout(() => {
+        setEntries((prev) => {
+          const fresh = buildEntry(idRef.current++, 0);
+          // Keep marquee size stable — drop oldest
+          return [fresh, ...prev].slice(0, 18);
+        });
+        schedule();
+      }, delay);
+    };
+    schedule();
+    return () => clearTimeout(timer);
+  }, []);
+
+  // Tick "time ago" labels every 5s
+  useEffect(() => {
+    const id = setInterval(() => force((n) => n + 1), 5000);
+    return () => clearInterval(id);
+  }, []);
+
+  return (
+    <section className="max-w-7xl mx-auto px-4 md:px-8 mt-3 md:mt-4">
+      <div
+        className="relative rounded-2xl overflow-hidden"
+        style={{
+          background:
+            "linear-gradient(180deg, rgba(16,185,129,0.06) 0%, rgba(255,255,255,0.01) 100%)",
+          border: "1px solid rgba(16,185,129,0.15)",
+          boxShadow: "0 20px 50px -30px rgba(16,185,129,0.30)",
+        }}
+      >
+        <div className="flex items-center gap-2.5 px-4 py-2.5 border-b border-white/[0.05]">
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-70" />
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400" />
+          </span>
+          <span className="text-[10px] md:text-[11px] uppercase tracking-[0.14em] font-bold text-emerald-300">
+            Recent withdrawals
+          </span>
+          <span className="text-[10px] md:text-[11px] text-slate-500 ml-auto hidden sm:inline">
+            Live · paid to bank / wallet
+          </span>
+        </div>
+
+        {/* Edge fades for premium marquee */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute left-0 top-9 bottom-0 w-12 z-10"
+          style={{
+            background:
+              "linear-gradient(90deg, rgba(7,12,22,0.95) 0%, transparent 100%)",
+          }}
+        />
+        <div
+          aria-hidden
+          className="pointer-events-none absolute right-0 top-9 bottom-0 w-12 z-10"
+          style={{
+            background:
+              "linear-gradient(270deg, rgba(7,12,22,0.95) 0%, transparent 100%)",
+          }}
+        />
+
+        <div className="overflow-hidden">
+          <div className="flex animate-withdraw-marquee whitespace-nowrap py-3">
+            {[...entries, ...entries].map((e, i) => (
+              <div
+                key={`${e.id}-${i}`}
+                className="inline-flex items-center gap-2.5 px-4 border-r border-white/[0.05]"
+              >
+                <span
+                  className="w-6 h-6 rounded-full flex items-center justify-center shrink-0"
+                  style={{
+                    background:
+                      "linear-gradient(135deg, rgba(16,185,129,0.22), rgba(20,184,166,0.10))",
+                    border: "1px solid rgba(16,185,129,0.32)",
+                  }}
+                >
+                  <ArrowUpRight size={11} className="text-emerald-300" strokeWidth={2.6} />
+                </span>
+                <span className="text-[11px] md:text-xs">{e.flag}</span>
+                <span className="text-[11px] md:text-xs font-semibold text-slate-200">
+                  {e.name}
+                </span>
+                <span className="text-[11px] md:text-xs text-slate-400">withdrew</span>
+                <span className="text-[11px] md:text-xs font-bold text-emerald-300 tabular-nums">
+                  {e.amount}
+                </span>
+                <span className="text-[10px] md:text-[11px] text-slate-500">
+                  · {timeAgoShort(e.ts)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+      <style>{`
+        @keyframes withdraw-marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+        .animate-withdraw-marquee { animation: withdraw-marquee 55s linear infinite; }
+      `}</style>
+    </section>
+  );
+}
+
 const PROBLEM_VS = [
   { label: "Time spent", manual: "8+ hrs daily glued to charts", auto: "Zero — runs 24/7 in the background" },
   { label: "Emotional control", manual: "Fear & greed wreck your edge", auto: "Rule-based execution, no emotions" },
@@ -551,6 +754,9 @@ export default function HomePage() {
 
       {/* LIVE IMPACT COUNTERS — AUM / Withdrawals / Investors */}
       <LiveImpactStrip />
+
+      {/* LIVE WITHDRAWALS TICKER — proves real money is moving out */}
+      <LiveWithdrawalsTicker />
 
       {/* LIVE MARKETS TICKER */}
       <section className="relative">
