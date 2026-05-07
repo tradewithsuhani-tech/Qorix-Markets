@@ -75,17 +75,19 @@ export default function MerchantSettingsPage() {
           <div className="mt-5 rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
             <SectionLabel>₹ per 1 USDT</SectionLabel>
             <div className="mt-2 flex items-end gap-3">
-              <div className="relative flex-1">
-                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-lg font-bold leading-none text-amber-400">
-                  ₹
-                </span>
-                <input
-                  value={rate}
-                  onChange={(e) => setRate(e.target.value)}
-                  className="w-full rounded-lg border border-white/[0.08] bg-slate-950/50 py-2.5 pl-7 pr-3 text-lg font-bold tabular-nums text-white placeholder-slate-600 focus:border-amber-500/60 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
-                  placeholder="0"
-                  inputMode="decimal"
-                />
+              <div className="flex-1">
+                <div className="flex items-center rounded-lg border border-white/[0.08] bg-slate-950/50 pl-3 pr-3 focus-within:border-amber-500/60 focus-within:ring-2 focus-within:ring-amber-500/20">
+                  <span className="text-lg font-bold tabular-nums text-amber-400 mr-1.5 select-none">
+                    ₹
+                  </span>
+                  <input
+                    value={rate}
+                    onChange={(e) => setRate(e.target.value)}
+                    className="flex-1 min-w-0 bg-transparent py-2.5 text-lg font-bold tabular-nums text-white placeholder-slate-600 focus:outline-none"
+                    placeholder="0"
+                    inputMode="decimal"
+                  />
+                </div>
                 {data?.rate ? (
                   <p className="mt-1.5 text-[11px] text-slate-400">
                     Current saved rate: <span className="font-semibold text-amber-300">₹{data.rate}</span> / USDT
