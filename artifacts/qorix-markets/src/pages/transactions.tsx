@@ -23,11 +23,11 @@ type Tx = {
 const TX_META: Record<string, { label: string; icon: React.ElementType; color: string; bg: string }> = {
   deposit:       { label: "Deposit",       icon: ArrowDownCircle,  color: "text-emerald-400", bg: "bg-emerald-500/12 border-emerald-500/20" },
   withdrawal:    { label: "Withdrawal",    icon: ArrowUpCircle,    color: "text-amber-400",   bg: "bg-amber-500/12 border-amber-500/20" },
-  transfer:      { label: "Transfer",      icon: ArrowRightLeft,   color: "text-blue-400",    bg: "bg-blue-500/12 border-blue-500/20" },
+  transfer:      { label: "Transfer",      icon: ArrowRightLeft,   color: "text-emerald-300", bg: "bg-emerald-500/12 border-emerald-500/20" },
   profit:        { label: "Profit",        icon: TrendingUp,       color: "text-emerald-400", bg: "bg-emerald-500/12 border-emerald-500/20" },
   fee:           { label: "Fee",           icon: DollarSign,       color: "text-red-400",     bg: "bg-red-500/12 border-red-500/20" },
-  referral_bonus:{ label: "Referral",      icon: DollarSign,       color: "text-violet-400",  bg: "bg-violet-500/12 border-violet-500/20" },
-  investment:    { label: "Investment",    icon: TrendingUp,       color: "text-blue-400",    bg: "bg-blue-500/12 border-blue-500/20" },
+  referral_bonus:{ label: "Referral",      icon: DollarSign,       color: "text-teal-300",    bg: "bg-teal-500/12 border-teal-500/20" },
+  investment:    { label: "Investment",    icon: TrendingUp,       color: "text-teal-300",    bg: "bg-teal-500/12 border-teal-500/20" },
   system:        { label: "System",        icon: Clock,            color: "text-muted-foreground", bg: "bg-white/5 border-white/8" },
 };
 
@@ -108,7 +108,7 @@ export default function TransactionsPage() {
               onClick={() => setFilter(f)}
               className={`shrink-0 text-xs font-medium px-3 py-1.5 rounded-full border transition-all duration-150 ${
                 filter === f
-                  ? "bg-blue-500/20 border-blue-500/35 text-blue-400"
+                  ? "bg-emerald-500/20 border-emerald-500/35 text-emerald-300"
                   : "bg-white/5 border-white/8 text-muted-foreground hover:text-white hover:bg-white/8"
               }`}
             >
