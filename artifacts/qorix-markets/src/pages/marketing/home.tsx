@@ -29,7 +29,6 @@ import {
 import { useSeo, SITE_URL } from "@/lib/seo";
 import { withRef } from "@/lib/referral";
 import { trackCta } from "@/lib/analytics";
-import heroBgImage from "@assets/ChatGPT_Image_May_8,_2026,_02_40_01_AM_1778188207280.png";
 
 const TICKER = [
   { sym: "BTC/USDT", price: "67,420.18", chg: "+2.41%", up: true },
@@ -108,23 +107,6 @@ export default function HomePage() {
           style={{
             background:
               "radial-gradient(circle at 18% 12%, rgba(16,185,129,0.22), transparent 55%), radial-gradient(circle at 88% 28%, rgba(34,197,94,0.18), transparent 50%), radial-gradient(circle at 60% 90%, rgba(236,72,153,0.10), transparent 60%)",
-          }}
-        />
-        {/* low-opacity AI artwork backdrop */}
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-0"
-          style={{
-            backgroundImage: `url(${heroBgImage})`,
-            backgroundSize: "cover",
-            backgroundPosition: "center",
-            backgroundRepeat: "no-repeat",
-            opacity: 0.1,
-            mixBlendMode: "screen",
-            maskImage:
-              "radial-gradient(ellipse at center, rgba(0,0,0,0.9) 35%, transparent 80%)",
-            WebkitMaskImage:
-              "radial-gradient(ellipse at center, rgba(0,0,0,0.9) 35%, transparent 80%)",
           }}
         />
         <div className="relative max-w-7xl mx-auto px-4 md:px-8 pt-10 md:pt-20 pb-12 md:pb-24 grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-14 items-center">
