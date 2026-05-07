@@ -35,6 +35,7 @@ import {
   CtaBand,
 } from "@/components/marketing/marketing-blocks";
 import { AnimatedCounter } from "@/components/animated-counter";
+import { DemoSandbox } from "@/components/marketing/demo-sandbox";
 import {
   AreaChart,
   Area,
@@ -853,6 +854,7 @@ const ACCENT_BUTTON = "linear-gradient(90deg,#10b981,#22c55e)";
 const ACCENT_GLOW = "0 14px 40px -12px rgba(16,185,129,0.55)";
 
 export default function HomePage() {
+  const [demoOpen, setDemoOpen] = useState(false);
   useSeo({
     title: "Qorix Markets — Automated Trading. Real Results. Zero Manual Effort.",
     description:
@@ -928,11 +930,22 @@ export default function HomePage() {
               >
                 Sign up <ArrowRight size={16} />
               </Link>
+              <button
+                type="button"
+                onClick={() => {
+                  trackCta("Try demo", "hero");
+                  setDemoOpen(true);
+                }}
+                className="inline-flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-semibold text-emerald-200 border border-emerald-500/30 hover:border-emerald-400/60 hover:bg-emerald-500/[0.06] transition-colors"
+                data-testid="button-hero-try-demo"
+              >
+                <Sparkles size={16} className="text-emerald-300" /> Try with $10 free
+              </button>
               <Link
                 href="/ai-trading-platform"
-                className="inline-flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-semibold text-slate-200 border border-white/10 hover:border-white/30 hover:bg-white/[0.04] transition-colors"
+                className="inline-flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-semibold text-slate-300 hover:text-white hover:bg-white/[0.04] transition-colors"
               >
-                <PlayCircle size={16} className="text-emerald-300" /> See how it works
+                <PlayCircle size={16} className="text-slate-400" /> How it works
               </Link>
             </div>
 
@@ -1434,6 +1447,46 @@ export default function HomePage() {
       {/* EARNINGS CALCULATOR — biggest deposit trigger */}
       <EarningsCalculator />
 
+      {/* TRY DEMO BAND — bridges projection → real experience */}
+      <section className="max-w-7xl mx-auto px-4 md:px-8 -mt-4 md:-mt-6 mb-2">
+        <button
+          type="button"
+          onClick={() => {
+            trackCta("Try demo", "post_calc");
+            setDemoOpen(true);
+          }}
+          className="group w-full rounded-2xl px-5 md:px-7 py-4 md:py-5 flex items-center gap-3.5 md:gap-4 text-left transition-all hover:scale-[1.005]"
+          style={{
+            background:
+              "linear-gradient(135deg, rgba(16,185,129,0.10), rgba(20,184,166,0.04))",
+            border: "1px dashed rgba(16,185,129,0.35)",
+          }}
+          data-testid="button-postcalc-try-demo"
+        >
+          <div
+            className="w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center shrink-0"
+            style={{
+              background: "linear-gradient(135deg, #10b981, #22c55e)",
+              boxShadow: "0 8px 24px -6px rgba(16,185,129,0.55)",
+            }}
+          >
+            <Sparkles size={18} className="text-white" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="text-sm md:text-base font-bold text-white leading-tight">
+              Don't just simulate — see it live with $10 free
+            </div>
+            <div className="text-[11px] md:text-xs text-slate-400 mt-0.5">
+              No signup. Watch real-style trades for 24 hours, then decide.
+            </div>
+          </div>
+          <ArrowRight
+            size={18}
+            className="text-emerald-300 shrink-0 transition-transform group-hover:translate-x-1"
+          />
+        </button>
+      </section>
+
       <section className="max-w-7xl mx-auto px-4 md:px-8 py-16 md:py-20">
         <div className="text-center max-w-2xl mx-auto mb-12">
           <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-emerald-400 mb-3">
@@ -1499,6 +1552,7 @@ export default function HomePage() {
         </div>
       </section>
 
+      <DemoSandbox open={demoOpen} onOpenChange={setDemoOpen} />
       <StatsSection />
       <TestimonialsSection />
 
