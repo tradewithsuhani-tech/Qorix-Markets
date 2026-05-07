@@ -16,8 +16,8 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Card } from "@/components/Card";
 import { CRYPTO_METHODS, FX_RATE } from "@/constants/cryptoMethods";
-import { usePortfolio } from "@/context/PortfolioContext";
 import { useColors } from "@/hooks/useColors";
+import { useGetWallet, useDeposit } from "@workspace/api-client-react";
 
 const INR_METHODS = [
   { id: "upi", icon: "zap" as const, label: "UPI", sub: "Instant · No charges" },
@@ -29,7 +29,16 @@ export default function DepositScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { deposit, wallet } = usePortfolio();
+  const walletQ = useGetWallet();
+  const depositMut = useDeposit();
+  const wRaw = walletQ.data as any;
+  const wallet = {
+    balance: (Number(wRaw?.mainBalance) || 0) * FX_RATE,
+  };
+  const deposit = async (amountInr: number) => {
+    await depositMut.mutateAsync({ data: { amount: amountInr / FX_RATE } });
+    await walletQ.refetch();
+  };
 
   const [amount, setAmount] = useState("");
   const [method, setMethod] = useState<string>("");

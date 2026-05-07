@@ -24,8 +24,13 @@ import Animated, {
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { TransferDirection, usePortfolio } from "@/context/PortfolioContext";
+import { TransferDirection } from "@/context/PortfolioContext";
 import { useColors } from "@/hooks/useColors";
+import {
+  useGetWallet,
+  useGetInvestment,
+  useTransferToTrading,
+} from "@workspace/api-client-react";
 
 const MIN_TRANSFER = 100;
 const FX_RATE = 83.42;
@@ -35,7 +40,27 @@ export default function TransferScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { wallet, portfolio, transfer } = usePortfolio();
+  const walletQ = useGetWallet();
+  const investmentQ = useGetInvestment();
+  const transferMut = useTransferToTrading();
+  const wRaw = walletQ.data as any;
+  const inv = investmentQ.data as any;
+  const wallet = { balance: (Number(wRaw?.mainBalance) || 0) * FX_RATE };
+  const portfolio = inv
+    ? {
+        currentNAV:
+          ((Number(inv.amount) || 0) + (Number(inv.totalProfit) || 0)) * FX_RATE,
+      }
+    : null;
+  const transfer = async (dir: TransferDirection, amountInr: number) => {
+    await transferMut.mutateAsync({
+      data: {
+        amount: amountInr / FX_RATE,
+        direction: dir === "main_to_trading" ? "to_trading" : "to_main",
+      },
+    });
+    await Promise.all([walletQ.refetch(), investmentQ.refetch()]);
+  };
 
   const [direction, setDirection] = useState<TransferDirection>("main_to_trading");
   const [amount, setAmount] = useState("");

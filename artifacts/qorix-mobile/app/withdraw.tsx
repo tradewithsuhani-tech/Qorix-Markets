@@ -15,8 +15,8 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Card } from "@/components/Card";
 import { CRYPTO_METHODS, FX_RATE } from "@/constants/cryptoMethods";
-import { usePortfolio } from "@/context/PortfolioContext";
 import { useColors } from "@/hooks/useColors";
+import { useGetWallet } from "@workspace/api-client-react";
 
 const INR_METHODS = [
   { id: "bank", icon: "credit-card" as const, label: "Bank Transfer", sub: "NEFT / IMPS · within 24 hours" },
@@ -34,7 +34,11 @@ export default function WithdrawScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { wallet } = usePortfolio();
+  const walletQ = useGetWallet();
+  const wRaw = walletQ.data as any;
+  const wallet = {
+    balance: (Number(wRaw?.mainBalance) || 0) * FX_RATE,
+  };
 
   const [amount, setAmount] = useState("");
   const [currency, setCurrency] = useState<"INR" | "USDT">("INR");
