@@ -4,7 +4,7 @@ type Props = {
 };
 
 export function QorixLogo({ size = 32, className = "" }: Props) {
-  const src = `${import.meta.env.BASE_URL}qorix-mark.png?v=11`;
+  const src = `${import.meta.env.BASE_URL}qorix-mark.png?v=12`;
   return (
     <img
       src={src}

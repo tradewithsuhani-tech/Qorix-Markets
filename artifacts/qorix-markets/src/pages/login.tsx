@@ -1072,10 +1072,10 @@ export default function LoginPage() {
         className="w-full max-w-md"
       >
         <div className="flex items-center gap-3 mb-8 justify-center">
-          <div className="w-12 h-12 rounded-xl overflow-hidden flex items-center justify-center shadow-[0_0_22px_rgba(59,130,246,0.38)]">
+          <div className="w-12 h-12 rounded-xl overflow-hidden flex items-center justify-center shadow-[0_0_22px_rgba(16,185,129,0.45)]">
             <QorixLogo size={48} />
           </div>
-          <span className="text-xl font-bold">Qorix{" "}<span className="text-primary font-light">Markets</span></span>
+          <span className="text-xl font-bold">Qorix{" "}<span className="text-emerald-400 font-light">Markets</span></span>
         </div>
 
         <div className="glass-card rounded-2xl p-7 space-y-6">
@@ -1185,7 +1185,7 @@ export default function LoginPage() {
             {/* Forgot password (login mode only) */}
             {isLogin && (
               <div className="flex justify-end -mt-1">
-                <Link href="/forgot-password" className="text-xs text-blue-400 hover:text-blue-300 hover:underline transition-colors">
+                <Link href="/forgot-password" className="text-xs text-emerald-400 hover:text-emerald-300 hover:underline transition-colors">
                   Forgot password?
                 </Link>
               </div>
@@ -1231,7 +1231,11 @@ export default function LoginPage() {
               </div>
             )}
 
-            <button type="submit" disabled={!canSubmit} className="btn btn-primary w-full mt-1">
+            <button
+              type="submit"
+              disabled={!canSubmit}
+              className="w-full mt-1 h-11 rounded-lg font-semibold text-sm text-white bg-gradient-to-r from-emerald-500 to-green-500 hover:from-emerald-400 hover:to-green-400 active:scale-[0.99] transition-all shadow-[0_6px_20px_rgba(16,185,129,0.35)] hover:shadow-[0_8px_26px_rgba(16,185,129,0.5)] disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none"
+            >
               {isPending ? "Please wait…" : isLogin ? "Sign In" : "Create Account"}
             </button>
           </form>
@@ -1284,7 +1288,7 @@ export default function LoginPage() {
 
           <p className="text-center text-sm text-muted-foreground">
             {isLogin ? "Don't have an account?" : "Already have an account?"}{" "}
-            <button type="button" onClick={() => setIsLogin(!isLogin)} className="text-primary hover:underline font-semibold">
+            <button type="button" onClick={() => setIsLogin(!isLogin)} className="text-emerald-400 hover:text-emerald-300 hover:underline font-semibold">
               {isLogin ? "Register now" : "Sign in"}
             </button>
           </p>
