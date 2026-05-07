@@ -449,7 +449,7 @@ export default function ReferralPage() {
               <button
                 onClick={() => handleCopy(referralLink)}
                 disabled={!referralLink}
-                className="mt-4 flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary/10 hover:bg-primary/20 border border-primary/20 text-primary text-xs font-semibold transition-all disabled:opacity-40"
+                className="mt-4 flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/25 text-emerald-300 text-xs font-semibold transition-all disabled:opacity-40"
               >
                 <Copy className="w-3.5 h-3.5" />
                 Copy Partner Link
@@ -459,7 +459,7 @@ export default function ReferralPage() {
             <div className="divide-y divide-white/[0.04]">
               {users.map((u) => (
                 <div key={u.id} className="flex items-center gap-3 px-5 py-3.5 hover:bg-white/[0.02] transition-colors">
-                  <div className="w-9 h-9 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-sm font-bold text-blue-300 shrink-0">
+                  <div className="w-9 h-9 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-sm font-bold text-emerald-300 shrink-0">
                     {u.fullName.charAt(0).toUpperCase()}
                   </div>
                   <div className="flex-1 min-w-0">
