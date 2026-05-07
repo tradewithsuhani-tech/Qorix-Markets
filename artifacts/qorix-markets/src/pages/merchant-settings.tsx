@@ -21,9 +21,9 @@ export default function MerchantSettingsPage() {
     queryFn: () => merchantAuthFetch(merchantApiUrl("/merchant/inr-rate")),
   });
 
-  useEffect(() => {
-    if (data?.rate && !rate) setRate(data.rate);
-  }, [data?.rate, rate]);
+  // Intentionally do NOT seed the input from the saved rate — admin should
+  // type the new value fresh each time. Current saved rate is shown as a
+  // helper line below the field for reference.
 
   const save = useMutation({
     mutationFn: async () =>
@@ -83,8 +83,14 @@ export default function MerchantSettingsPage() {
                   value={rate}
                   onChange={(e) => setRate(e.target.value)}
                   className="w-full rounded-lg border border-white/[0.08] bg-slate-950/50 py-2.5 pl-7 pr-3 text-lg font-bold tabular-nums text-white placeholder-slate-600 focus:border-amber-500/60 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
-                  placeholder="85.00"
+                  placeholder="0"
+                  inputMode="decimal"
                 />
+                {data?.rate ? (
+                  <p className="mt-1.5 text-[11px] text-slate-400">
+                    Current saved rate: <span className="font-semibold text-amber-300">₹{data.rate}</span> / USDT
+                  </p>
+                ) : null}
               </div>
               <GoldButton
                 onClick={() => {
