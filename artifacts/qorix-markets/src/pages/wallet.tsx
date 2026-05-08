@@ -718,10 +718,11 @@ export default function WalletPage() {
             const v = (fromBal * pct) / 100;
             setTransferAmount(v > 0 ? v.toFixed(2) : "");
           };
+          const inrEquiv = numAmt * FX_RATE;
           return (
-            <div className="space-y-4">
+            <div className="space-y-4 pb-2">
               {/* FROM / TO cards with swap */}
-              <div className="relative space-y-2">
+              <div className="relative">
                 <WalletCard
                   badge="FROM"
                   badgeTone="emerald"
@@ -731,13 +732,15 @@ export default function WalletPage() {
                   sub={fromIsMain ? "Withdrawable balance" : "Deployed capital"}
                   amount={fromBal}
                 />
-                <div className="flex justify-center -my-1">
+                {/* Connecting line */}
+                <div className="relative h-7 flex items-center justify-center">
+                  <div className="absolute inset-x-0 top-1/2 h-px bg-gradient-to-r from-transparent via-emerald-400/30 to-transparent" />
                   <button
                     onClick={swap}
                     aria-label="Swap direction"
-                    className="relative z-10 w-9 h-9 rounded-full bg-emerald-500 hover:bg-emerald-400 text-black flex items-center justify-center shadow-lg shadow-emerald-500/30 transition-colors"
+                    className="relative z-10 w-10 h-10 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-500 hover:from-emerald-300 hover:to-emerald-400 text-black flex items-center justify-center shadow-lg shadow-emerald-500/40 ring-4 ring-[#0b0f12] active:scale-95 transition-all"
                   >
-                    <ArrowRightLeft style={{ width: 14, height: 14 }} />
+                    <ArrowRightLeft style={{ width: 15, height: 15 }} strokeWidth={2.5} />
                   </button>
                 </div>
                 <WalletCard
@@ -748,23 +751,29 @@ export default function WalletPage() {
                   name={fromIsMain ? "Trading Wallet" : "Main Wallet"}
                   sub={fromIsMain ? "Deployed capital" : "Withdrawable balance"}
                   amount={toBal}
+                  incoming={numAmt}
                 />
               </div>
 
               {/* Transfer amount */}
               <div>
-                <div className="text-[10px] font-bold tracking-[0.18em] text-white/45 mb-2">TRANSFER AMOUNT</div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[10px] font-bold tracking-[0.18em] text-white/45">TRANSFER AMOUNT</span>
+                  <span className="text-[10px] text-white/40 tabular-nums">
+                    Max: ${fromBal.toFixed(2)}
+                  </span>
+                </div>
                 <div
-                  className={`rounded-2xl border bg-white/[0.025] px-4 py-3.5 transition-colors ${
+                  className={`rounded-2xl border bg-white/[0.025] transition-colors overflow-hidden ${
                     numAmt > 0 && !valid
                       ? "border-rose-500/45"
                       : valid
-                      ? "border-emerald-400/45"
+                      ? "border-emerald-400/45 shadow-[0_0_0_3px_rgba(16,185,129,0.08)]"
                       : "border-white/[0.10]"
                   }`}
                 >
-                  <div className="flex items-center gap-2">
-                    <span className="text-[22px] font-semibold leading-none text-emerald-400 shrink-0 select-none">$</span>
+                  <div className="px-4 pt-3.5 pb-3 flex items-center gap-2">
+                    <span className="text-[24px] font-semibold leading-none text-emerald-400 shrink-0 select-none">$</span>
                     <input
                       type="number"
                       inputMode="decimal"
@@ -773,15 +782,22 @@ export default function WalletPage() {
                       placeholder="0"
                       min="0"
                       autoFocus
-                      className="flex-1 bg-transparent border-0 outline-none text-[24px] font-semibold tracking-[-0.01em] tabular-nums placeholder:text-white/25 min-w-0"
+                      className="flex-1 bg-transparent border-0 outline-none text-[26px] font-semibold tracking-[-0.01em] tabular-nums placeholder:text-white/25 min-w-0"
                     />
+                    {numAmt > 0 && (
+                      <span className="text-[11px] text-white/45 font-mono tabular-nums shrink-0">
+                        ≈ ₹{Math.round(inrEquiv).toLocaleString("en-IN")}
+                      </span>
+                    )}
                   </div>
-                  <div className="grid grid-cols-4 gap-1.5 mt-3">
-                    {[25, 50, 75, 100].map((p) => (
+                  <div className="border-t border-white/[0.06] grid grid-cols-4">
+                    {[25, 50, 75, 100].map((p, i) => (
                       <button
                         key={p}
                         onClick={() => setPct(p)}
-                        className="py-1.5 rounded-lg border border-white/[0.07] bg-white/[0.025] hover:bg-white/[0.06] text-[11px] font-semibold text-white/75 transition-colors"
+                        className={`py-2.5 text-[11px] font-semibold text-white/65 hover:text-emerald-300 hover:bg-emerald-500/[0.06] transition-colors ${
+                          i > 0 ? "border-l border-white/[0.06]" : ""
+                        }`}
                       >
                         {p === 100 ? "MAX" : `${p}%`}
                       </button>
@@ -789,7 +805,10 @@ export default function WalletPage() {
                   </div>
                 </div>
                 {numAmt > fromBal && (
-                  <div className="mt-1.5 text-[11px] text-rose-400">Exceeds available balance</div>
+                  <div className="mt-1.5 text-[11px] text-rose-400 flex items-center gap-1">
+                    <AlertCircle className="w-3 h-3" />
+                    Exceeds available balance
+                  </div>
                 )}
               </div>
 
@@ -798,8 +817,8 @@ export default function WalletPage() {
                 <Info className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
                 <p className="text-[12px] text-white/70 leading-relaxed">
                   {fromIsMain
-                    ? "Funds moved to Trading are deployed to your active bot and will participate in the next trade cycle."
-                    : "Funds moved to Main are immediately available for withdrawal or external transfer."}
+                    ? "Funds moved to Trading are deployed to your active bot in the next cycle."
+                    : "Funds moved to Main are immediately available for withdrawal."}
                 </p>
               </div>
 
@@ -814,22 +833,30 @@ export default function WalletPage() {
                 disabled={transferMutation.isPending || !valid}
                 className={`w-full h-12 rounded-2xl text-[14px] font-bold flex items-center justify-center gap-2 transition-all ${
                   valid
-                    ? "bg-emerald-500 hover:bg-emerald-400 text-black shadow-lg shadow-emerald-500/25"
+                    ? "bg-gradient-to-r from-emerald-500 to-emerald-400 hover:from-emerald-400 hover:to-emerald-300 text-black shadow-lg shadow-emerald-500/30 active:scale-[0.99]"
                     : "bg-white/[0.04] text-white/40 cursor-not-allowed"
                 }`}
               >
-                <ArrowRightLeft style={{ width: 14, height: 14 }} />
-                {transferMutation.isPending
-                  ? "Processing…"
-                  : !numAmt
-                  ? "Enter Amount"
-                  : !valid
-                  ? "Insufficient Balance"
-                  : `Transfer $${numAmt.toFixed(2)}`}
+                {transferMutation.isPending ? (
+                  <>
+                    <span className="w-3.5 h-3.5 rounded-full border-2 border-black/30 border-t-black animate-spin" />
+                    Processing…
+                  </>
+                ) : !numAmt ? (
+                  "Enter Amount"
+                ) : !valid ? (
+                  "Insufficient Balance"
+                ) : (
+                  <>
+                    <ArrowRightLeft style={{ width: 14, height: 14 }} strokeWidth={2.5} />
+                    Transfer ${numAmt.toFixed(2)}
+                  </>
+                )}
               </button>
 
-              <div className="text-center text-[11px] text-white/45">
-                Internal transfers are settled instantly with zero fees
+              <div className="flex items-center justify-center gap-2 text-[11px] text-white/45">
+                <ShieldCheck className="w-3 h-3 text-emerald-400/70" />
+                Settled instantly · zero fees
               </div>
             </div>
           );
@@ -1288,7 +1315,7 @@ function BottomSheet({
 /* ─────────────── WalletCard helper (transfer modal) ─────────────── */
 
 function WalletCard({
-  badge, badgeTone, icon: Icon, iconTone, name, sub, amount,
+  badge, badgeTone, icon: Icon, iconTone, name, sub, amount, incoming,
 }: {
   badge: string;
   badgeTone: "emerald" | "cyan";
@@ -1297,38 +1324,46 @@ function WalletCard({
   name: string;
   sub: string;
   amount: number;
+  incoming?: number;
 }) {
   const tones = {
     emerald: {
       iconBg: "bg-emerald-500/15 border-emerald-400/30 text-emerald-400",
       badge: "border-emerald-400/40 bg-emerald-500/10 text-emerald-300",
-      ring: "border-emerald-500/25 bg-emerald-500/[0.04]",
+      ring: "border-emerald-500/25 bg-gradient-to-br from-emerald-500/[0.07] to-emerald-500/[0.02]",
     },
     cyan: {
       iconBg: "bg-cyan-500/15 border-cyan-400/30 text-cyan-400",
       badge: "border-cyan-400/40 bg-cyan-500/10 text-cyan-300",
-      ring: "border-cyan-500/25 bg-cyan-500/[0.04]",
+      ring: "border-cyan-500/25 bg-gradient-to-br from-cyan-500/[0.07] to-cyan-500/[0.02]",
     },
   };
   const t = tones[iconTone];
   const b = tones[badgeTone];
+  const showIncoming = !!incoming && incoming > 0;
   return (
     <div className={`rounded-2xl border ${t.ring} px-3.5 py-3 flex items-center gap-3`}>
-      <div className={`w-10 h-10 rounded-xl border flex items-center justify-center shrink-0 ${t.iconBg}`}>
-        <Icon style={{ width: 18, height: 18 }} />
+      <div className={`w-11 h-11 rounded-xl border flex items-center justify-center shrink-0 ${t.iconBg}`}>
+        <Icon style={{ width: 19, height: 19 }} strokeWidth={2.2} />
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-0.5">
           <span className={`text-[9px] font-bold tracking-wider px-1.5 py-0.5 rounded border ${b.badge}`}>{badge}</span>
           <span className="text-[14px] font-semibold text-white truncate">{name}</span>
         </div>
-        <div className="text-[11px] text-white/50">{sub}</div>
+        <div className="text-[11px] text-white/50 truncate">{sub}</div>
       </div>
       <div className="text-right shrink-0">
-        <div className="text-[15px] font-semibold tabular-nums text-white">
+        <div className="text-[15px] font-semibold tabular-nums text-white leading-none">
           ${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
         </div>
-        <div className="text-[10px] text-white/40 tabular-nums">USD</div>
+        {showIncoming ? (
+          <div className="text-[10px] tabular-nums text-emerald-400 font-semibold mt-1">
+            +${incoming!.toFixed(2)}
+          </div>
+        ) : (
+          <div className="text-[10px] text-white/40 tabular-nums mt-1">USD</div>
+        )}
       </div>
     </div>
   );
