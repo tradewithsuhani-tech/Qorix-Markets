@@ -206,21 +206,19 @@ export default function WithdrawPage() {
             <label className="text-[12px] text-white/55 shrink-0">
               Amount
             </label>
-            <div className="flex-1 flex items-baseline justify-end gap-1 min-w-0">
-              <span className={cn("text-[15px] font-semibold leading-none select-none", isUsdt ? "text-amber-300/80" : "text-emerald-300/80")}>
-                {symbol}
-              </span>
-              <input
-                ref={amountRef}
-                type="number"
-                inputMode="decimal"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                placeholder="0.00"
-                className="w-full bg-transparent border-0 outline-none text-[18px] font-semibold tracking-[-0.01em] tabular-nums placeholder:text-white/20 text-right min-w-0"
-                data-testid="input-amount"
-              />
-            </div>
+            <span className={cn("ml-auto text-[14px] font-semibold leading-none select-none", isUsdt ? "text-amber-300/80" : "text-emerald-300/80")}>
+              {symbol}
+            </span>
+            <input
+              ref={amountRef}
+              type="number"
+              inputMode="decimal"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              placeholder="0.00"
+              className="flex-1 max-w-[140px] bg-transparent border-0 outline-none text-[18px] font-semibold tracking-[-0.01em] tabular-nums placeholder:text-white/20 text-right min-w-0 -ml-1"
+              data-testid="input-amount"
+            />
             <button
               onClick={() => {
                 if (isUsdt) setAmount(String(sourceBalance.toFixed(2)));
