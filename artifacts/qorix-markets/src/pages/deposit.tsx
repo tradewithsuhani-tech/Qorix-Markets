@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useGetBlockchainDepositHistory } from "@workspace/api-client-react";
+import { useGetBlockchainDepositHistory, useGetWallet } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { getGetBlockchainDepositHistoryQueryKey } from "@workspace/api-client-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -44,6 +44,9 @@ const DEPOSIT_BANNERS = [
 ];
 
 const BASE_URL = import.meta.env.BASE_URL ?? "/";
+
+// USD → INR display rate (mirrors mobile's FX_RATE in lib/tx-mapper)
+const FX_RATE = 83.42;
 
 function getApiUrl(path: string) {
   return `${BASE_URL}api${path}`;
@@ -110,6 +113,15 @@ export default function DepositPage() {
   const qc = useQueryClient();
 
   const { toast } = useToast();
+
+  // Wallet for the "Current Balance" card (mobile parity)
+  const { data: walletData } = useGetWallet();
+  const mainBalanceUsd = Number((walletData as any)?.mainBalance) || 0;
+  const mainBalanceInr = mainBalanceUsd * FX_RATE;
+
+  // Currency tab — controlled so we can render dynamic header subtitle
+  const [currency, setCurrency] = useState<"usdt" | "inr">("usdt");
+  const isCrypto = currency === "usdt";
 
   // Deposit stepper state
   const [step, setStep] = useState<DepositStep>("amount");
@@ -271,12 +283,27 @@ export default function DepositPage() {
     <Layout>
       <div className="max-w-2xl mx-auto space-y-6">
 
-        {/* Header */}
+        {/* Header — mobile parity (Add Funds + dynamic subtitle) */}
         <div>
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight gradient-text">Deposit Funds</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Choose USDT (TRC20) for instant auto-credit, or INR (Bank/UPI) for admin-verified deposits.
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-white">Add Funds</h1>
+          <p className="text-sm text-muted-foreground mt-1 leading-relaxed">
+            {isCrypto
+              ? "Crypto deposits credited instantly after on-chain confirmation (~15s)."
+              : "INR deposits via UPI / Net Banking / IMPS · Razorpay secure gateway."}
           </p>
+        </div>
+
+        {/* Current Balance card — mobile parity */}
+        <div className="glass-card rounded-2xl px-4 py-3 flex items-center justify-between">
+          <span className="text-xs text-muted-foreground font-medium">Current Balance</span>
+          <div className="flex items-baseline gap-2">
+            <span className="text-base font-bold text-emerald-400">
+              ₹{Math.round(mainBalanceInr).toLocaleString("en-IN")}
+            </span>
+            <span className="text-[10px] text-muted-foreground font-mono">
+              ≈ ${mainBalanceUsd.toFixed(2)}
+            </span>
+          </div>
         </div>
 
         {/* Live rotating bonus offer — peak intent moment (user is already on deposit page).
@@ -290,11 +317,31 @@ export default function DepositPage() {
           maxWidth={640}
         />
 
-        <Tabs defaultValue="usdt" className="space-y-6">
-          <TabsList className="grid grid-cols-2 w-full">
-            <TabsTrigger value="usdt">USDT (TRC20)</TabsTrigger>
-            <TabsTrigger value="inr">INR (Bank/UPI)</TabsTrigger>
-          </TabsList>
+        <Tabs
+          value={currency}
+          onValueChange={(v) => setCurrency(v as "usdt" | "inr")}
+          className="space-y-6"
+        >
+          {/* Inline currency switcher pill — mirrors mobile's ₹ INR / ₮ USDT toggle */}
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-muted-foreground font-semibold uppercase tracking-wider">
+              Choose Currency
+            </span>
+            <TabsList className="bg-white/[0.03] border border-white/10 rounded-xl p-1 h-auto gap-1">
+              <TabsTrigger
+                value="inr"
+                className="text-xs font-bold px-3 py-1.5 rounded-lg data-[state=active]:bg-emerald-500/15 data-[state=active]:text-emerald-300 data-[state=active]:border data-[state=active]:border-emerald-500/40 data-[state=inactive]:text-muted-foreground"
+              >
+                ₹ INR
+              </TabsTrigger>
+              <TabsTrigger
+                value="usdt"
+                className="text-xs font-bold px-3 py-1.5 rounded-lg data-[state=active]:bg-emerald-500/15 data-[state=active]:text-emerald-300 data-[state=active]:border data-[state=active]:border-emerald-500/40 data-[state=inactive]:text-muted-foreground"
+              >
+                ₮ USDT
+              </TabsTrigger>
+            </TabsList>
+          </div>
 
           <TabsContent value="usdt" className="space-y-6 mt-0">
 
@@ -355,31 +402,48 @@ export default function DepositPage() {
                   transition={{ duration: 0.22 }}
                   className="space-y-4"
                 >
+                  {/* Amount — mobile-style large input with $ prefix + ≈₹ FX hint */}
                   <div>
-                    <label className="text-xs text-muted-foreground font-medium mb-1.5 block">Amount (USDT)</label>
-                    <input
-                      type="number"
-                      value={amount}
-                      onChange={(e) => setAmount(e.target.value)}
-                      className="field-input"
-                      placeholder="Enter amount"
-                      min="1"
-                    />
+                    <label className="text-xs text-muted-foreground font-medium mb-1.5 block">Deposit Amount</label>
+                    <div
+                      className={cn(
+                        "flex items-center gap-2 rounded-xl px-4 h-16 bg-white/[0.03] border transition-all",
+                        amount && Number(amount) >= 1
+                          ? "border-emerald-500/50 ring-1 ring-emerald-500/20"
+                          : "border-white/10",
+                      )}
+                    >
+                      <span className="text-2xl font-bold text-emerald-400 select-none">$</span>
+                      <input
+                        type="number"
+                        value={amount}
+                        onChange={(e) => setAmount(e.target.value)}
+                        className="flex-1 bg-transparent border-0 outline-none text-3xl font-bold text-white placeholder:text-muted-foreground/50 focus:outline-none focus:ring-0 min-w-0"
+                        placeholder="0"
+                        min="1"
+                      />
+                      {amount && Number(amount) > 0 && (
+                        <span className="text-[11px] text-muted-foreground font-medium font-mono whitespace-nowrap">
+                          ≈ ₹{Math.round(Number(amount) * FX_RATE).toLocaleString("en-IN")}
+                        </span>
+                      )}
+                    </div>
                   </div>
 
+                  {/* Quick amount chips — mobile parity */}
                   <div className="grid grid-cols-4 gap-2">
                     {[100, 500, 1000, 5000].map((amt) => (
                       <button
                         key={amt}
                         onClick={() => setAmount(String(amt))}
                         className={cn(
-                          "text-xs py-2 rounded-xl border font-medium transition-all",
+                          "text-xs py-2.5 rounded-xl border font-semibold transition-all",
                           amount === String(amt)
                             ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
-                            : "bg-white/5 hover:bg-emerald-500/15 hover:text-emerald-300 border-white/8 hover:border-emerald-500/25 text-muted-foreground"
+                            : "bg-white/[0.03] hover:bg-emerald-500/10 hover:text-emerald-300 border-white/10 hover:border-emerald-500/25 text-muted-foreground",
                         )}
                       >
-                        ${amt >= 1000 ? `${amt / 1000}k` : amt}
+                        ${amt >= 1000 ? `${amt / 1000}K` : amt}
                       </button>
                     ))}
                   </div>
