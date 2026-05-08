@@ -219,9 +219,7 @@ export default function DepositPage() {
                         <div className="text-[11px] text-muted-foreground truncate">{m.sub}</div>
                       </div>
                       {isLocked ? (
-                        <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-white/5 border border-white/10 text-white/50">
-                          Soon
-                        </span>
+                        <Lock className="w-4 h-4 text-white/40" />
                       ) : (
                         <ChevronRight className="w-4 h-4 text-muted-foreground" />
                       )}
