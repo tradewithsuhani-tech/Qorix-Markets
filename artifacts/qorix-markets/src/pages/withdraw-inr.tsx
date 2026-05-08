@@ -108,7 +108,7 @@ export default function WithdrawInrPage() {
               Payout Destination
             </h1>
           </div>
-          <p className="text-[13px] text-white/55 leading-relaxed">
+          <p className="text-[13px] text-white/55 leading-relaxed pl-12">
             ₹{numAmount.toLocaleString("en-IN")} to UPI or bank account
           </p>
         </div>

@@ -154,7 +154,7 @@ export default function WithdrawOtpPage() {
               Verify & Confirm
             </h1>
           </div>
-          <p className="text-[13px] text-white/55 leading-relaxed">
+          <p className="text-[13px] text-white/55 leading-relaxed pl-12">
             Enter the 6-digit code sent to your registered email.
           </p>
         </div>

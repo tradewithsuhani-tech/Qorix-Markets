@@ -125,7 +125,7 @@ export default function WithdrawPage() {
           </h1>
         </div>
         <div className="space-y-1.5 mb-5">
-          <p className="text-[13px] text-white/55 leading-relaxed">
+          <p className="text-[13px] text-white/55 leading-relaxed pl-12">
             {isUsdt
               ? `Send USDT to your TRC20 wallet. Reviewed within 24 hours.`
               : "INR payouts to your bank or UPI within 24 hours of approval."}

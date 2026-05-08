@@ -57,7 +57,7 @@ export default function WithdrawUsdtPage() {
             Destination Wallet
           </h1>
         </div>
-        <p className="text-[13px] text-white/55 leading-relaxed mb-5">
+        <p className="text-[13px] text-white/55 leading-relaxed mb-5 pl-12">
           ${numAmount.toFixed(2)} USDT · TRON (TRC20) network
         </p>
 
