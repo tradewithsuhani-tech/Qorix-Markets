@@ -1137,7 +1137,7 @@ export function QorixAssistant({ guestMode = false, hideTrigger = false }: { gue
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 20, scale: 0.95 }}
             transition={{ type: "spring", stiffness: 300, damping: 30 }}
-            className="fixed bottom-6 right-6 z-50 w-[380px] max-w-[calc(100vw-24px)] flex flex-col"
+            className="fixed bottom-6 right-6 z-[140] w-[380px] max-w-[calc(100vw-24px)] flex flex-col"
             style={{
               height: "min(600px, calc(100vh - 100px))",
               borderRadius: "20px",
