@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import { useGetWallet, useGetDashboardSummary } from "@workspace/api-client-react";
 import { useQuery } from "@tanstack/react-query";
 import { Layout } from "@/components/layout";
-import { ArrowLeft, ArrowRight, Shield, AlertTriangle } from "lucide-react";
+import { ArrowLeft, ArrowRight, Shield, AlertTriangle, Info } from "lucide-react";
 import { authFetch } from "@/lib/auth-fetch";
 import { newIdemKey, patchWithdrawState, readWithdrawState } from "@/lib/withdraw-flow-state";
 import { cn } from "@/lib/utils";
@@ -149,6 +149,20 @@ export default function WithdrawPage() {
           </div>
         </div>
 
+        {/* Compliance Rules */}
+        <div className="mb-4 rounded-xl border border-amber-500/25 bg-amber-500/[0.05] px-4 py-3">
+          <div className="flex items-center gap-2 mb-2">
+            <Info className="w-3.5 h-3.5 text-amber-400" />
+            <span className="text-[10px] font-bold tracking-[0.18em] text-amber-300">COMPLIANCE RULES</span>
+          </div>
+          <ul className="space-y-1.5 text-[12px] text-amber-100/80 leading-relaxed">
+            <li className="flex gap-2"><span className="text-amber-400 shrink-0">•</span><span>Minimum withdrawal: ₹500 (or $10 crypto equivalent)</span></li>
+            <li className="flex gap-2"><span className="text-amber-400 shrink-0">•</span><span>Daily limit: ₹2,00,000 · admin approval above ₹50,000</span></li>
+            <li className="flex gap-2"><span className="text-amber-400 shrink-0">•</span><span>Withdrawals processed within 24 hours · crypto on-chain</span></li>
+            <li className="flex gap-2"><span className="text-amber-400 shrink-0">•</span><span>Wallet holdings are unaffected by deployed capital</span></li>
+          </ul>
+        </div>
+
         {/* Withdrawal Amount label + currency toggle */}
         <div className="flex items-center justify-between mb-2">
           <span className="text-[13px] text-white/65">Withdrawal Amount</span>
@@ -183,7 +197,7 @@ export default function WithdrawPage() {
         {/* Amount box — big */}
         <div
           className={cn(
-            "rounded-xl border bg-white/[0.025] px-3.5 py-2.5 transition-colors flex items-center gap-2.5",
+            "rounded-2xl border bg-white/[0.025] px-4 py-4 transition-colors flex items-center gap-3",
             numAmount > 0 && !valid
               ? "border-rose-500/45"
               : valid
@@ -191,17 +205,17 @@ export default function WithdrawPage() {
               : "border-white/[0.10]"
           )}
         >
-          <span className={cn("text-[18px] font-semibold leading-none select-none shrink-0", isUsdt ? "text-amber-400" : "text-emerald-400")}>
+          <span className={cn("text-[28px] font-bold leading-none select-none shrink-0", isUsdt ? "text-amber-400" : "text-emerald-400")}>
             {symbol}
           </span>
           <input
             ref={amountRef}
-            type="number"
+            type="text"
             inputMode="decimal"
             value={amount}
-            onChange={(e) => setAmount(e.target.value)}
+            onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ""))}
             placeholder="0"
-            className="flex-1 bg-transparent border-0 outline-none text-[20px] font-semibold tracking-[-0.01em] tabular-nums placeholder:text-white/25 min-w-0"
+            className="flex-1 bg-transparent border-0 outline-none text-[30px] font-bold tracking-[-0.02em] tabular-nums placeholder:text-white/25 min-w-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
             data-testid="input-amount"
           />
           {numAmount > 0 && (
