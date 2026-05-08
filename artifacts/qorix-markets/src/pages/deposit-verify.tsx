@@ -204,8 +204,10 @@ export default function DepositVerifyPage() {
         amount: String(numAmount),
         utr: utrTrimmed,
       });
-      if (payee?.kind === "merchant") sp.set("merchantName", payee.shortName);
-      else if (payee?.kind === "agent") sp.set("agentId", payee.id);
+      if (payee?.kind === "merchant") {
+        sp.set("merchantName", payee.shortName);
+        sp.set("methodType", payee.type);
+      } else if (payee?.kind === "agent") sp.set("agentId", payee.id);
       else if (payee?.kind === "bank") sp.set("bankId", payee.id);
       navigate(`/deposit/success?${sp.toString()}`);
     },

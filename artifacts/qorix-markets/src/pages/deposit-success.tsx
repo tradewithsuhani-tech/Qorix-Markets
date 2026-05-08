@@ -25,6 +25,7 @@ export default function DepositSuccessPage() {
   const bankId = params.get("bankId") ?? "";
   const agentId = params.get("agentId") ?? "";
   const merchantNameParam = params.get("merchantName") ?? "";
+  const methodTypeParam = params.get("methodType") ?? "";
   const createdAtIso = useMemo(() => new Date().toISOString(), []);
 
   const bank = useMemo(() => (bankId ? BANKS.find((b) => b.id === bankId) ?? null : null), [bankId]);
@@ -35,9 +36,16 @@ export default function DepositSuccessPage() {
   const method = useMemo(() => {
     if (bank) return { color: bank.color, initial: bank.initial, label: `${bank.shortName} · NEFT/IMPS` };
     if (agent) return { color: agent.avatarColor, initial: agent.initial, label: `${agent.name} · UPI` };
-    if (merchantNameParam) return { color: "#10B981", initial: merchantNameParam.charAt(0).toUpperCase(), label: merchantNameParam };
+    if (merchantNameParam) {
+      const typeLabel = methodTypeParam === "upi" ? "UPI" : methodTypeParam === "bank" ? "Netbanking" : methodTypeParam === "imps" ? "IMPS" : "";
+      return {
+        color: "#10B981",
+        initial: merchantNameParam.charAt(0).toUpperCase(),
+        label: typeLabel ? `${merchantNameParam} · ${typeLabel}` : merchantNameParam,
+      };
+    }
     return null;
-  }, [bank, agent, merchantNameParam]);
+  }, [bank, agent, merchantNameParam, methodTypeParam]);
 
   const handleDownload = () => {
     const reference = refCode || (utr ? `QM-${utr.slice(-8).toUpperCase()}` : `QM-${Date.now().toString().slice(-8)}`);
