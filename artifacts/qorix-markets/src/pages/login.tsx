@@ -573,7 +573,7 @@ function TwoFactorPromptStep({
             <button
               type="button"
               onClick={goToTotp}
-              className="w-full text-sm text-blue-400 hover:text-blue-300 transition-colors py-3 mt-4"
+              className="w-full text-sm text-emerald-400 hover:text-emerald-300 transition-colors py-3 mt-4"
             >
               ← Back to authenticator app
             </button>
@@ -597,7 +597,7 @@ function TwoFactorPromptStep({
     ? { bg: "bg-amber-500/15", text: "text-amber-400", border: "focus:border-amber-500/50", icon: KeyRound, link: "text-amber-400 hover:text-amber-300" }
     : isEmail
       ? { bg: "bg-cyan-500/15", text: "text-cyan-300", border: "focus:border-cyan-500/50", icon: Mail, link: "text-cyan-300 hover:text-cyan-200" }
-      : { bg: "bg-blue-500/15", text: "text-blue-400", border: "focus:border-blue-500/50", icon: ShieldCheck, link: "text-amber-400 hover:text-amber-300" };
+      : { bg: "bg-emerald-500/15", text: "text-emerald-400", border: "focus:border-emerald-500/50", icon: ShieldCheck, link: "text-amber-400 hover:text-amber-300" };
   const AccentIcon = accent.icon;
 
   return (

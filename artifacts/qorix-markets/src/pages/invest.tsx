@@ -332,14 +332,14 @@ function CapitalProtectionPanel({
         <div className="flex items-center justify-between mb-5">
           <div className="flex items-center gap-2.5 min-w-0">
             <div
-              className="w-9 h-9 rounded-xl flex items-center justify-center border border-blue-400/30 shrink-0"
+              className="w-9 h-9 rounded-xl flex items-center justify-center border border-emerald-400/30 shrink-0"
               style={{
                 background:
                   "linear-gradient(135deg, rgba(59,130,246,0.22), rgba(59,130,246,0.06))",
                 boxShadow: "inset 0 1px 0 rgba(255,255,255,0.08), 0 0 18px -6px rgba(59,130,246,0.5)",
               }}
             >
-              <Shield style={{ width: 16, height: 16 }} className="text-blue-300" />
+              <Shield style={{ width: 16, height: 16 }} className="text-emerald-300" />
             </div>
             <div className="min-w-0">
               <h3 className="font-bold text-base text-white tracking-tight leading-tight">
@@ -537,7 +537,7 @@ function CapitalProtectionPanel({
                 exit={{ opacity: 0, height: 0 }}
                 onClick={() => setShowConfirm(true)}
                 disabled={isSaving}
-                className="w-full py-2.5 rounded-xl text-white text-sm font-semibold transition-all disabled:opacity-60 flex items-center justify-center gap-2 border border-blue-400/40"
+                className="w-full py-2.5 rounded-xl text-white text-sm font-semibold transition-all disabled:opacity-60 flex items-center justify-center gap-2 border border-emerald-400/40"
                 style={{
                   background:
                     "linear-gradient(180deg, rgba(59,130,246,0.9), rgba(37,99,235,0.95))",
@@ -610,7 +610,7 @@ function ProtectionConfirmModal({
       >
         <div className="flex items-center justify-between px-5 py-4 border-b border-white/5">
           <div className="flex items-center gap-2">
-            <Shield style={{ width: 16, height: 16 }} className="text-blue-400" />
+            <Shield style={{ width: 16, height: 16 }} className="text-emerald-400" />
             <h3 className="font-semibold">Confirm Protection Change</h3>
           </div>
           <button onClick={onCancel} className="p-1.5 rounded-lg hover:bg-white/5 text-muted-foreground hover:text-white transition-colors">
@@ -673,7 +673,7 @@ function ProtectionConfirmModal({
             <button
               onClick={onConfirm}
               disabled={isSaving}
-              className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
+              className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
             >
               {isSaving ? (
                 <><RefreshCw style={{ width: 13, height: 13 }} className="animate-spin" /> Applying…</>
@@ -756,11 +756,11 @@ function ProtectionTriggeredView({
                 -{drawdownFromPeak.toFixed(2)}% from peak
               </div>
             </div>
-            <div className={`p-3 rounded-xl border ${recoveryPct > 0 ? "bg-blue-500/8 border-blue-500/20" : "bg-emerald-500/8 border-emerald-500/20"}`}>
+            <div className={`p-3 rounded-xl border ${recoveryPct > 0 ? "bg-emerald-500/8 border-emerald-500/20" : "bg-emerald-500/8 border-emerald-500/20"}`}>
               <div className="text-[10px] text-muted-foreground mb-1 uppercase tracking-wider">Recovery Target</div>
               {recoveryPct > 0 ? (
                 <>
-                  <div className="text-base font-bold text-blue-400 tabular-nums">+{recoveryPct.toFixed(2)}%</div>
+                  <div className="text-base font-bold text-emerald-400 tabular-nums">+{recoveryPct.toFixed(2)}%</div>
                   <div className="text-[11px] text-muted-foreground mt-0.5">gain needed to reach peak</div>
                 </>
               ) : (
@@ -782,7 +782,7 @@ function ProtectionTriggeredView({
           <div className="flex flex-col sm:flex-row gap-3 pt-4 border-t border-white/8">
             <button
               onClick={onRestart}
-              className="flex-1 flex items-center justify-center gap-2 py-3 px-5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-semibold text-sm transition-all shadow-[0_0_20px_rgba(59,130,246,0.3)]"
+              className="flex-1 flex items-center justify-center gap-2 py-3 px-5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-semibold text-sm transition-all shadow-[0_0_20px_rgba(59,130,246,0.3)]"
             >
               <Play style={{ width: 14, height: 14 }} className="fill-current" />
               Restart Trading
@@ -800,7 +800,7 @@ function ProtectionTriggeredView({
         <h3 className="font-semibold text-sm mb-4 text-muted-foreground">What happened?</h3>
         <div className="space-y-3 text-sm">
           {[
-            { icon: TrendingUp, text: `You started trading with $${investment.amount.toFixed(2)} USD at ${activeProfile.label} risk. Peak balance reached: $${peakBalance.toFixed(2)}.`, color: "text-blue-400" },
+            { icon: TrendingUp, text: `You started trading with $${investment.amount.toFixed(2)} USD at ${activeProfile.label} risk. Peak balance reached: $${peakBalance.toFixed(2)}.`, color: "text-emerald-400" },
             { icon: AlertTriangle, text: `Market conditions caused a $${investment.drawdown.toFixed(2)} drawdown (${drawdownPct.toFixed(2)}% of your capital, -${drawdownFromPeak.toFixed(2)}% from peak).`, color: "text-orange-400" },
             { icon: Shield, text: `Your ${investment.drawdownLimit}% protection limit was reached, triggering an automatic stop.`, color: "text-red-400" },
             { icon: CheckCircle, text: `$${capitalPreserved.toFixed(2)} USD secured. ${recoveryPct > 0 ? `Restart and earn +${recoveryPct.toFixed(2)}% to return to your peak.` : "Your balance is at peak."}`, color: "text-green-400" },
@@ -967,7 +967,7 @@ export default function InvestPage() {
                   />
                   {/* Inner avatar */}
                   <div
-                    className="relative w-16 h-16 rounded-2xl flex items-center justify-center border border-blue-400/30"
+                    className="relative w-16 h-16 rounded-2xl flex items-center justify-center border border-emerald-400/30"
                     style={{
                       background:
                         "linear-gradient(135deg, rgba(59,130,246,0.18) 0%, rgba(139,92,246,0.10) 100%)",
@@ -975,7 +975,7 @@ export default function InvestPage() {
                         "inset 0 1px 0 rgba(255,255,255,0.08), 0 0 24px rgba(59,130,246,0.2)",
                     }}
                   >
-                    <Bot style={{ width: 28, height: 28 }} className="text-blue-200" />
+                    <Bot style={{ width: 28, height: 28 }} className="text-emerald-200" />
                   </div>
                   {/* Live status dot */}
                   <span className="absolute -top-0.5 -right-0.5 flex w-3.5 h-3.5">
@@ -1432,7 +1432,7 @@ export default function InvestPage() {
                       icon: TrendingUp,
                       value: `${meta.winRate}%`,
                       sub: `${meta.tradesPerDay} trades/d`,
-                      tone: "text-blue-300",
+                      tone: "text-emerald-300",
                       ringColor: "#10b981",
                       ringPct: meta.winRate,
                       glow: "rgba(16,185,129,0.22)",
@@ -1611,11 +1611,11 @@ export default function InvestPage() {
                       onCheckedChange={(checked) => compoundMutation.mutate({ data: { autoCompound: checked } })}
                     />
                     <span className="text-sm font-medium flex items-center gap-2">
-                      <RefreshCw style={{ width: 14, height: 14 }} className="text-blue-400" />
+                      <RefreshCw style={{ width: 14, height: 14 }} className="text-emerald-400" />
                       Auto-Compound Profits
                     </span>
                     {investment.autoCompound && (
-                      <span className="text-xs bg-blue-500/15 text-blue-400 border border-blue-500/25 px-2 py-0.5 rounded-full">ON</span>
+                      <span className="text-xs bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 px-2 py-0.5 rounded-full">ON</span>
                     )}
                   </div>
                   <AlertDialog>
@@ -2158,7 +2158,7 @@ export default function InvestPage() {
                   disabled={startMutation.isPending || !canDeploy}
                   className={`w-full mt-5 font-bold py-3.5 rounded-xl transition-all flex items-center justify-center gap-2 text-sm ${
                     canDeploy
-                      ? "bg-blue-600 hover:bg-blue-500 text-white shadow-[0_0_20px_rgba(59,130,246,0.35)]"
+                      ? "bg-emerald-600 hover:bg-emerald-500 text-white shadow-[0_0_20px_rgba(59,130,246,0.35)]"
                       : "bg-white/5 text-muted-foreground cursor-not-allowed border border-white/8"
                   }`}
                 >

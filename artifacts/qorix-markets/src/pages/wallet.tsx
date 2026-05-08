@@ -207,10 +207,10 @@ export default function WalletPage() {
         <motion.div variants={item} className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4">
           {/* Main Balance */}
           <div className="glass-card balance-card-blue p-5 rounded-2xl relative overflow-hidden">
-            <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-blue-500 to-blue-400 rounded-t-2xl" />
+            <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-emerald-500 to-emerald-400 rounded-t-2xl" />
             <div className="flex items-center justify-between mb-3">
               <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Main Balance</span>
-              <div className="p-1.5 rounded-lg bg-blue-500/15 text-blue-400">
+              <div className="p-1.5 rounded-lg bg-emerald-500/15 text-emerald-400">
                 <WalletIcon style={{ width: 14, height: 14 }} />
               </div>
             </div>
@@ -430,12 +430,12 @@ export default function WalletPage() {
                   onClick={() => { setWithdrawSource("main"); setWithdrawAmount(""); }}
                   className={`rounded-xl px-3 py-2.5 border text-left transition-all ${
                     withdrawSource === "main"
-                      ? "bg-blue-500/15 border-blue-500/50"
+                      ? "bg-emerald-500/15 border-emerald-500/50"
                       : "bg-white/[0.02] border-white/10 hover:bg-white/[0.04]"
                   }`}
                 >
                   <div className="text-[10px] uppercase tracking-wider text-muted-foreground">From Main</div>
-                  <div className={`text-sm font-bold ${withdrawSource === "main" ? "text-blue-400" : "text-white/80"}`}>
+                  <div className={`text-sm font-bold ${withdrawSource === "main" ? "text-emerald-400" : "text-white/80"}`}>
                     ${(wallet?.mainBalance || 0).toFixed(2)}
                   </div>
                 </button>
@@ -609,7 +609,7 @@ export default function WalletPage() {
                         <span className="font-mono text-white truncate" title={withdrawAddress}>{maskAddress(withdrawAddress)}</span>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 text-xs text-blue-400 bg-blue-500/10 border border-blue-500/20 rounded-xl px-3 py-2">
+                    <div className="flex items-center gap-2 text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-3 py-2">
                       <ShieldCheck style={{ width: 13, height: 13 }} />
                       Enter the 6-digit code sent to your email
                     </div>
@@ -687,7 +687,7 @@ export default function WalletPage() {
                       </button>
                       <a
                         href="/transactions"
-                        className="px-4 py-2.5 rounded-xl bg-blue-500/15 border border-blue-500/40 text-sm text-blue-300 hover:bg-blue-500/25 transition-colors text-center"
+                        className="px-4 py-2.5 rounded-xl bg-emerald-500/15 border border-emerald-500/40 text-sm text-emerald-300 hover:bg-emerald-500/25 transition-colors text-center"
                       >
                         View Transactions
                       </a>
@@ -704,8 +704,8 @@ export default function WalletPage() {
 
         {/* Info Banner */}
         <motion.div variants={item}>
-          <div className="flex items-start gap-3 px-4 py-3 rounded-xl bg-blue-500/8 border border-blue-500/15 text-xs text-muted-foreground">
-            <AlertCircle style={{ width: 14, height: 14 }} className="text-blue-400 shrink-0 mt-0.5" />
+          <div className="flex items-start gap-3 px-4 py-3 rounded-xl bg-emerald-500/8 border border-emerald-500/15 text-xs text-muted-foreground">
+            <AlertCircle style={{ width: 14, height: 14 }} className="text-emerald-400 shrink-0 mt-0.5" />
             {withdrawTab === "inr" ? (
               <span>INR withdrawals are processed within 24 hours after admin review. Double-check your UPI ID or bank account number &amp; IFSC — funds sent to wrong accounts cannot be recovered. Make sure the account holder name matches your KYC.</span>
             ) : (

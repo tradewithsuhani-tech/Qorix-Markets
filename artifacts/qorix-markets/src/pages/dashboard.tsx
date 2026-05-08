@@ -280,8 +280,8 @@ function CapitalProtectionWidget({
       {/* Header */}
       <div className="flex items-center justify-between gap-2 mb-5">
         <div className="flex items-center gap-2 min-w-0 flex-1">
-          <div className="w-8 h-8 shrink-0 rounded-xl bg-blue-500/15 border border-blue-500/25 flex items-center justify-center">
-            <Shield style={{ width: 14, height: 14 }} className="text-blue-400" />
+          <div className="w-8 h-8 shrink-0 rounded-xl bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center">
+            <Shield style={{ width: 14, height: 14 }} className="text-emerald-400" />
           </div>
           <div className="min-w-0">
             <div className="font-semibold text-sm truncate">Capital Protection System</div>
@@ -327,7 +327,7 @@ function CapitalProtectionWidget({
           <div className="grid grid-cols-3 gap-2">
             {[
               { label: "Used", value: `${drawdownPct.toFixed(2)}%`, sub: `$${drawdown.toFixed(2)}`, color: isTriggered ? "text-red-400" : "text-orange-400" },
-              { label: "Limit", value: `${drawdownLimit}%`, sub: `$${((amount * drawdownLimit) / 100).toFixed(2)}`, color: "text-blue-400" },
+              { label: "Limit", value: `${drawdownLimit}%`, sub: `$${((amount * drawdownLimit) / 100).toFixed(2)}`, color: "text-emerald-400" },
               { label: "Buffer Left", value: `$${bufferLeft.toFixed(2)}`, sub: "remaining", color: "text-green-400" },
             ].map(s => (
               <div key={s.label} className="p-2.5 rounded-xl bg-white/[0.03] border border-white/[0.05] text-center">
@@ -361,9 +361,9 @@ function CapitalProtectionWidget({
               </div>
               {!atPeak && (
                 <div className="flex items-center gap-1.5 text-muted-foreground">
-                  <ArrowUpRight style={{ width: 11, height: 11 }} className="text-blue-400" />
+                  <ArrowUpRight style={{ width: 11, height: 11 }} className="text-emerald-400" />
                   <span>Need</span>
-                  <span className="font-semibold text-blue-400 tabular-nums">+{recoveryPct.toFixed(2)}%</span>
+                  <span className="font-semibold text-emerald-400 tabular-nums">+{recoveryPct.toFixed(2)}%</span>
                   <span>to recover</span>
                 </div>
               )}
@@ -384,7 +384,7 @@ function CapitalProtectionWidget({
             ].map(({ pct, label, hint, color }) => {
               const active = selectedLimit === pct;
               const colorMap: Record<string, string> = {
-                blue: active ? "bg-blue-500/20 text-blue-400 border-blue-500/40 shadow-[0_0_12px_rgba(59,130,246,0.15)]" : "bg-white/3 text-muted-foreground border-white/8 hover:border-white/15 hover:text-white",
+                blue: active ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/40 shadow-[0_0_12px_rgba(59,130,246,0.15)]" : "bg-white/3 text-muted-foreground border-white/8 hover:border-white/15 hover:text-white",
                 indigo: active ? "bg-indigo-500/20 text-indigo-400 border-indigo-500/40 shadow-[0_0_12px_rgba(99,102,241,0.15)]" : "bg-white/3 text-muted-foreground border-white/8 hover:border-white/15 hover:text-white",
                 orange: active ? "bg-orange-500/20 text-orange-400 border-orange-500/40 shadow-[0_0_12px_rgba(249,115,22,0.15)]" : "bg-white/3 text-muted-foreground border-white/8 hover:border-white/15 hover:text-white",
               };
@@ -409,7 +409,7 @@ function CapitalProtectionWidget({
                 exit={{ opacity: 0, height: 0 }}
                 onClick={() => setShowConfirm(true)}
                 disabled={isSaving}
-                className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold transition-all disabled:opacity-60 flex items-center justify-center gap-2"
+                className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold transition-all disabled:opacity-60 flex items-center justify-center gap-2"
               >
                 <CheckCircle style={{ width: 13, height: 13 }} /> Review Change
               </motion.button>
@@ -443,7 +443,7 @@ function CapitalProtectionWidget({
             >
               <div className="flex items-center justify-between px-5 py-4 border-b border-white/5">
                 <div className="flex items-center gap-2">
-                  <Shield style={{ width: 16, height: 16 }} className="text-blue-400" />
+                  <Shield style={{ width: 16, height: 16 }} className="text-emerald-400" />
                   <h3 className="font-semibold">Confirm Protection Change</h3>
                 </div>
                 <button
@@ -509,7 +509,7 @@ function CapitalProtectionWidget({
                       setShowConfirm(false);
                     }}
                     disabled={isSaving}
-                    className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
+                    className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
                   >
                     {isSaving ? (
                       <><RefreshCw style={{ width: 13, height: 13 }} className="animate-spin" /> Applying…</>
@@ -862,7 +862,7 @@ export function DemoDashboardBody({
     {
       label: "Total Equity",
       // synced with Total AUM (Fund Transparency) — same value across both cards
-      icon: <Wallet style={{ width: 16, height: 16 }} className="text-blue-400" />,
+      icon: <Wallet style={{ width: 16, height: 16 }} className="text-emerald-400" />,
       value: <BigBalanceCounter value={(fundStats?.totalAUM ?? summary?.totalBalance ?? 0) + scalpBotPnl} className="text-lg sm:text-2xl md:text-3xl" />,
       sub: (
         <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-400">
@@ -968,7 +968,7 @@ export function DemoDashboardBody({
       return {
         label: "Avg Monthly Return",
         value: `+${monthlyReturn.toFixed(2)}%`,
-        icon: <Target style={{ width: 16, height: 16 }} className="text-blue-400" />,
+        icon: <Target style={{ width: 16, height: 16 }} className="text-emerald-400" />,
         sub: "Trailing 30-day average",
         color: "text-green-400",
         bar: ((monthlyReturn - 9) / 3) * 100,
@@ -999,9 +999,9 @@ export function DemoDashboardBody({
     {
       label: "Total AUM",
       value: fundLoading ? null : `$${aumDisplay.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-      icon: <Globe style={{ width: 16, height: 16 }} className="text-blue-400" />,
+      icon: <Globe style={{ width: 16, height: 16 }} className="text-emerald-400" />,
       sub: `${activeInvestorsDisplay} active investors`,
-      color: "text-blue-400",
+      color: "text-emerald-400",
     },
     {
       label: "Active Capital",
@@ -1371,7 +1371,7 @@ export function DemoDashboardBody({
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
-            className="relative overflow-hidden rounded-2xl md:rounded-3xl border border-blue-500/30 p-6 md:p-10"
+            className="relative overflow-hidden rounded-2xl md:rounded-3xl border border-emerald-500/30 p-6 md:p-10"
             style={{
               background:
                 "linear-gradient(135deg, rgba(20,28,68,0.65) 0%, rgba(40,22,82,0.55) 50%, rgba(15,15,45,0.65) 100%)",
@@ -1418,11 +1418,11 @@ export function DemoDashboardBody({
                   ],
                 }}
                 transition={{ duration: 2.6, repeat: Infinity, ease: "easeInOut" }}
-                className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-gradient-to-r from-blue-500/20 to-purple-500/20 border border-blue-400/40"
+                className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-gradient-to-r from-emerald-500/20 to-teal-500/20 border border-emerald-400/40"
               >
                 <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-400" />
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400" />
                 </span>
                 <span
                   className="text-[11px] font-bold uppercase tracking-[0.22em]"
@@ -1479,7 +1479,7 @@ export function DemoDashboardBody({
                   ],
                 }}
                 transition={{ boxShadow: { duration: 2.5, repeat: Infinity, ease: "easeInOut" } }}
-                className="group relative inline-flex items-center gap-2.5 px-8 md:px-10 py-4 md:py-5 rounded-2xl text-base md:text-lg font-bold text-white bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 hover:from-blue-500 hover:via-purple-500 hover:to-pink-500 transition-colors"
+                className="group relative inline-flex items-center gap-2.5 px-8 md:px-10 py-4 md:py-5 rounded-2xl text-base md:text-lg font-bold text-white bg-gradient-to-r from-emerald-600 via-green-600 to-teal-600 hover:from-emerald-500 hover:via-green-500 hover:to-teal-500 transition-colors"
               >
                 <Zap style={{ width: 18, height: 18 }} />
                 Start Live Trading
@@ -1684,8 +1684,8 @@ export function DemoDashboardBody({
                 decimals: 0,
                 suffix: "",
                 sub: undefined as string | undefined,
-                color: "text-blue-400",
-                bg: "bg-blue-500/5 border-blue-500/15",
+                color: "text-emerald-400",
+                bg: "bg-emerald-500/5 border-emerald-500/15",
               },
               {
                 icon: UserCheck,
@@ -1873,27 +1873,27 @@ export function DemoDashboardBody({
                   {/* Waiting for setup — animated with gradient highlight */}
                   <div className="flex-1 flex flex-col items-center justify-center py-4 relative overflow-hidden rounded-xl">
                     {/* Ambient gradient backdrop */}
-                    <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-blue-500/10 via-indigo-500/5 to-purple-500/10" />
-                    <div className="pointer-events-none absolute -top-16 -left-16 w-48 h-48 rounded-full bg-blue-500/20 blur-3xl animate-pulse" />
+                    <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-emerald-500/10 via-teal-500/5 to-green-500/10" />
+                    <div className="pointer-events-none absolute -top-16 -left-16 w-48 h-48 rounded-full bg-emerald-500/20 blur-3xl animate-pulse" />
                     <div className="pointer-events-none absolute -bottom-16 -right-16 w-48 h-48 rounded-full bg-purple-500/20 blur-3xl animate-pulse" style={{ animationDelay: "1s" }} />
 
                     {/* Icon with gradient ring */}
                     <div className="relative w-14 h-14 mb-3">
-                      <span className="absolute inset-0 rounded-full bg-gradient-to-br from-blue-500/40 to-purple-500/30 blur-md animate-ping" />
-                      <span className="absolute inset-1.5 rounded-full bg-gradient-to-br from-blue-400/30 to-cyan-400/20 animate-ping" style={{ animationDelay: "0.4s" }} />
-                      <div className="absolute inset-2 rounded-full bg-gradient-to-br from-slate-900 to-slate-950 border border-blue-400/30 flex items-center justify-center shadow-[0_0_24px_-4px_rgba(59,130,246,0.6)]">
-                        <Activity className="w-5 h-5 text-blue-300 animate-pulse" strokeWidth={2.25} />
+                      <span className="absolute inset-0 rounded-full bg-gradient-to-br from-emerald-500/40 to-teal-500/30 blur-md animate-ping" />
+                      <span className="absolute inset-1.5 rounded-full bg-gradient-to-br from-emerald-400/30 to-teal-400/20 animate-ping" style={{ animationDelay: "0.4s" }} />
+                      <div className="absolute inset-2 rounded-full bg-gradient-to-br from-slate-900 to-slate-950 border border-emerald-400/30 flex items-center justify-center shadow-[0_0_24px_-4px_rgba(59,130,246,0.6)]">
+                        <Activity className="w-5 h-5 text-emerald-300 animate-pulse" strokeWidth={2.25} />
                       </div>
                     </div>
 
-                    <p className="text-sm font-semibold bg-gradient-to-r from-blue-300 via-cyan-200 to-indigo-300 bg-clip-text text-transparent tracking-wide">
+                    <p className="text-sm font-semibold bg-gradient-to-r from-emerald-300 via-teal-200 to-green-300 bg-clip-text text-transparent tracking-wide">
                       Waiting for setup…
                     </p>
                     <p className="text-[11px] text-white/50 mt-1">Scanning markets for next signal</p>
 
                     {/* Animated progress dots */}
                     <div className="flex items-center gap-1.5 mt-2.5">
-                      <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                       <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" style={{ animationDelay: "0.2s" }} />
                       <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse" style={{ animationDelay: "0.4s" }} />
                     </div>
@@ -1977,7 +1977,7 @@ export function DemoDashboardBody({
                       initial={{ opacity: 0, x: 12 }}
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ delay: i * 0.04 }}
-                      className="flex items-center justify-between p-3 rounded-xl bg-white/[0.03] border border-white/[0.06] hover:border-blue-500/20 hover:bg-white/[0.05] transition-all duration-150"
+                      className="flex items-center justify-between p-3 rounded-xl bg-white/[0.03] border border-white/[0.06] hover:border-emerald-500/20 hover:bg-white/[0.05] transition-all duration-150"
                     >
                       <div className="flex items-center gap-2.5">
                         <div className={`w-1 h-9 rounded-full ${isBuy ? 'bg-green-500' : 'bg-red-500'}`} />
