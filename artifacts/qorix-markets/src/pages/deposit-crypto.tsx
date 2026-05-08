@@ -22,7 +22,7 @@ export default function DepositCryptoPage() {
 
   const baseCrypto = CRYPTO_METHODS.find((c) => c.id === id) ?? CRYPTO_METHODS[0];
   const crypto = useMemo(() => {
-    const a: any = depAddr;
+    const a = depAddr as { address?: string; network?: string } | undefined;
     return isUsdt && a?.address
       ? { ...baseCrypto, address: a.address, network: a.network ?? baseCrypto.network }
       : baseCrypto;
