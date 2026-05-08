@@ -1293,7 +1293,7 @@ function BottomSheet({
                 </button>
               </div>
             </div>
-            <div className="px-5 pb-6 pt-2">
+            <div className="px-5 pb-[max(120px,env(safe-area-inset-bottom))] pt-2">
               {children}
             </div>
           </motion.div>
