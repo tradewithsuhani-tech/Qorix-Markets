@@ -191,26 +191,11 @@ export default function WithdrawPage() {
           </div>
         </div>
 
-        {/* Amount — hero input */}
+        {/* Amount — inline row */}
         <div className="mb-3">
-          <div className="flex items-center justify-between mb-2">
-            <label className="text-[10px] uppercase tracking-[0.14em] text-white/40 font-semibold">
-              Amount in {isUsdt ? "USD" : "INR"}
-            </label>
-            <button
-              onClick={() => {
-                if (isUsdt) setAmount(String(sourceBalance.toFixed(2)));
-                else if (limits) setAmount(String(Math.floor(maxInr)));
-              }}
-              className="text-[10px] font-bold tracking-wider text-white/55 hover:text-white px-2 py-0.5 rounded-md border border-white/10 hover:border-white/25 transition-colors"
-              data-testid="button-max"
-            >
-              MAX
-            </button>
-          </div>
           <div
             className={cn(
-              "rounded-xl border bg-white/[0.025] px-3.5 py-2.5 transition-colors",
+              "rounded-xl border bg-white/[0.025] px-3.5 py-2.5 transition-colors flex items-center gap-3",
               numAmount > 0 && !valid
                 ? "border-rose-500/45"
                 : valid
@@ -218,8 +203,11 @@ export default function WithdrawPage() {
                 : "border-white/[0.07]"
             )}
           >
-            <div className="flex items-baseline gap-1.5">
-              <span className={cn("text-[20px] font-semibold leading-none select-none", isUsdt ? "text-amber-300/80" : "text-emerald-300/80")}>
+            <label className="text-[12px] text-white/55 shrink-0">
+              Amount
+            </label>
+            <div className="flex-1 flex items-baseline justify-end gap-1 min-w-0">
+              <span className={cn("text-[15px] font-semibold leading-none select-none", isUsdt ? "text-amber-300/80" : "text-emerald-300/80")}>
                 {symbol}
               </span>
               <input
@@ -229,20 +217,30 @@ export default function WithdrawPage() {
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 placeholder="0.00"
-                className="flex-1 bg-transparent border-0 outline-none text-[24px] font-semibold tracking-[-0.02em] tabular-nums placeholder:text-white/15 min-w-0"
+                className="w-full bg-transparent border-0 outline-none text-[18px] font-semibold tracking-[-0.01em] tabular-nums placeholder:text-white/20 text-right min-w-0"
                 data-testid="input-amount"
               />
             </div>
-            {numAmount > 0 && (
-              <div className="text-[11px] text-white/40 font-mono tabular-nums mt-1">
+            <button
+              onClick={() => {
+                if (isUsdt) setAmount(String(sourceBalance.toFixed(2)));
+                else if (limits) setAmount(String(Math.floor(maxInr)));
+              }}
+              className="text-[10px] font-bold tracking-wider text-white/55 hover:text-white px-2 py-0.5 rounded-md border border-white/10 hover:border-white/25 transition-colors shrink-0"
+              data-testid="button-max"
+            >
+              MAX
+            </button>
+          </div>
+          <div className="min-h-[14px] mt-1.5 flex items-center justify-between text-[11px]">
+            <span className="text-rose-400">{amountHint}</span>
+            {numAmount > 0 && !amountHint && (
+              <span className="text-white/40 font-mono tabular-nums ml-auto">
                 {isUsdt
                   ? `≈ ₹${Math.round(inrEquiv).toLocaleString("en-IN")}`
                   : `≈ $${usdEquiv.toFixed(2)}`}
-              </div>
+              </span>
             )}
-          </div>
-          <div className="min-h-[14px] mt-1.5 text-[11px] text-rose-400">
-            {amountHint}
           </div>
         </div>
 
