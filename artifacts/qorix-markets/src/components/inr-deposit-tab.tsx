@@ -23,7 +23,9 @@ import {
   Maximize2,
   Plus,
   Info,
+  Wallet,
 } from "lucide-react";
+import { useLocation } from "wouter";
 import { authFetch } from "@/lib/auth-fetch";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
@@ -255,6 +257,8 @@ export function InrDepositTab() {
   const [orderNo, setOrderNo] = useState<string>("");
   const [secsLeft, setSecsLeft] = useState(COUNTDOWN_SECS);
   const [submittedDepositId, setSubmittedDepositId] = useState<number | null>(null);
+  const [utrCopied, setUtrCopied] = useState(false);
+  const [, navigate] = useLocation();
   const [qrModalOpen, setQrModalOpen] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -1240,59 +1244,149 @@ export function InrDepositTab() {
         {step === "success" && (
           <motion.div
             key="success"
-            initial={{ opacity: 0, scale: 0.96 }}
-            animate={{ opacity: 1, scale: 1 }}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.96 }}
-            transition={{ duration: 0.25 }}
-            className="space-y-4"
+            transition={{ duration: 0.3 }}
+            className="space-y-5 max-w-md mx-auto"
           >
-            <div className="rounded-2xl bg-gradient-to-br from-emerald-500/15 to-teal-500/10 border border-emerald-500/25 p-6 text-center">
+            {/* Hero check with concentric rings */}
+            <div className="flex flex-col items-center pt-3 pb-1">
               <motion.div
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                transition={{ type: "spring", stiffness: 200, damping: 12 }}
-                className="w-16 h-16 mx-auto mb-3 rounded-full bg-emerald-500/20 flex items-center justify-center"
+                initial={{ scale: 0.6, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                transition={{ type: "spring", stiffness: 180, damping: 14 }}
+                className="relative w-32 h-32 flex items-center justify-center"
               >
-                <CheckCircle2 className="w-9 h-9 text-emerald-400" />
+                <span className="absolute inset-0 rounded-full border border-emerald-500/15" />
+                <span className="absolute inset-3 rounded-full border border-emerald-500/25" />
+                <span className="absolute inset-6 rounded-full border border-emerald-500/40" />
+                <motion.div
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  transition={{ type: "spring", stiffness: 220, damping: 14, delay: 0.05 }}
+                  className="w-20 h-20 rounded-full bg-emerald-500 flex items-center justify-center shadow-[0_0_40px_-6px_rgba(16,185,129,0.75)]"
+                >
+                  <CheckCircle2 className="w-11 h-11 text-white" strokeWidth={2.5} />
+                </motion.div>
               </motion.div>
-              <div className="text-lg font-bold text-white">Deposit Submitted</div>
-              <p className="text-xs text-muted-foreground mt-1">
-                Order <span className="text-white font-mono">{orderNo}</span>
-              </p>
-              <div className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10">
-                <ShieldCheck className="w-4 h-4 text-emerald-300" />
-                <span className="text-xs text-white">
-                  ₹{Number(amount).toLocaleString("en-IN")} → <span className="text-emerald-300 font-bold">{usdtPreview} USDT</span>
-                </span>
+              <div className="mt-5 text-[11px] tracking-[0.28em] font-bold text-emerald-400">
+                DEPOSIT SUBMITTED
               </div>
-              <p className="text-[11px] text-muted-foreground mt-4 leading-relaxed max-w-sm mx-auto">
-                Your deposit is queued for admin review. Verification usually takes 1-3 hours during business hours. You'll get a notification once approved.
-              </p>
+              <div className="mt-3 text-4xl font-bold text-white tabular-nums">
+                ₹{Number(amount).toLocaleString("en-IN")}
+              </div>
+              <div className="mt-2 text-xs text-muted-foreground text-center">
+                Queued for verification · approved in 1–3 hrs
+              </div>
             </div>
 
-            <div className="flex items-center gap-3">
-              <button
-                onClick={resetFlow}
-                className="flex-1 py-3 rounded-full border border-white/15 text-white/80 hover:text-white hover:border-white/30 font-semibold text-sm transition-all"
-              >
-                New Deposit
-              </button>
-              <button
-                onClick={() => {
-                  resetFlow();
-                  document.getElementById("inr-history")?.scrollIntoView({ behavior: "smooth" });
-                }}
-                className="flex-1 py-3 rounded-full bg-emerald-500/15 border border-emerald-500/40 text-emerald-200 font-bold text-sm hover:bg-emerald-500/25 hover:border-emerald-500/60 hover:text-emerald-100 shadow-[0_0_20px_-8px_rgba(16,185,129,0.45)] transition-all"
-              >
-                View History
-              </button>
+            {/* Verified-by-Qorix banner */}
+            <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 flex items-center gap-3">
+              <ShieldCheck className="w-4 h-4 text-emerald-300 shrink-0" />
+              <span className="text-xs text-white">
+                Secured by Qorix · <span className="font-semibold text-emerald-200">{usdtPreview} USDT</span> credited on approval
+              </span>
             </div>
 
-            {submittedDepositId && (
-              <p className="text-[10px] text-center text-muted-foreground">
-                Reference ID: #{submittedDepositId}
-              </p>
-            )}
+            {/* Transaction Details card */}
+            <div className="rounded-2xl border border-white/10 bg-white/[0.03] overflow-hidden">
+              <div className="px-5 pt-4 pb-3 text-[10px] tracking-[0.22em] font-bold text-white/55">
+                TRANSACTION DETAILS
+              </div>
+              <div className="px-5 pb-5 space-y-3">
+                <div className="flex items-center justify-between gap-3 border-t border-white/5 pt-3">
+                  <span className="text-xs text-white/55">Method</span>
+                  <span className="text-xs font-semibold text-white inline-flex items-center gap-2 min-w-0">
+                    <span className="w-6 h-6 rounded-md bg-amber-500/15 border border-amber-500/30 inline-flex items-center justify-center shrink-0">
+                      {selected?.type === "upi" ? (
+                        <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                      ) : (
+                        <Landmark className="w-3.5 h-3.5 text-amber-300" />
+                      )}
+                    </span>
+                    <span className="truncate">
+                      {selected?.displayName ?? (selected?.type === "upi" ? "UPI" : "Bank")}
+                    </span>
+                  </span>
+                </div>
+                <div className="flex items-center justify-between border-t border-white/5 pt-3">
+                  <span className="text-xs text-white/55">Amount Credited</span>
+                  <span className="text-xs font-bold text-emerald-300 tabular-nums">
+                    + ₹{Number(amount).toLocaleString("en-IN")}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-3 border-t border-white/5 pt-3">
+                  <span className="text-xs text-white/55 shrink-0">UTR / Ref</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(utr.trim()).then(() => {
+                        setUtrCopied(true);
+                        setTimeout(() => setUtrCopied(false), 1200);
+                      });
+                    }}
+                    className="text-xs font-mono font-semibold text-white inline-flex items-center gap-2 hover:text-emerald-300 transition-colors min-w-0"
+                  >
+                    <span className="truncate">{utr.trim()}</span>
+                    {utrCopied ? (
+                      <CheckCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                    ) : (
+                      <Copy className="w-3.5 h-3.5 text-white/50 shrink-0" />
+                    )}
+                  </button>
+                </div>
+                <div className="flex items-center justify-between border-t border-white/5 pt-3">
+                  <span className="text-xs text-white/55">Date &amp; Time</span>
+                  <span className="text-xs font-semibold text-white">
+                    {new Date().toLocaleString("en-IN", {
+                      day: "2-digit",
+                      month: "short",
+                      year: "numeric",
+                      hour: "numeric",
+                      minute: "2-digit",
+                      hour12: true,
+                    })}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between border-t border-white/5 pt-3">
+                  <span className="text-xs text-white/55">Status</span>
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/35 text-[11px] font-semibold text-emerald-300">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    Pending
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* CTA buttons */}
+            <button
+              type="button"
+              onClick={() => {
+                resetFlow();
+                navigate("/wallet");
+              }}
+              className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-bold text-sm hover:from-emerald-400 hover:to-teal-400 shadow-[0_0_28px_-6px_rgba(16,185,129,0.65)] transition-all inline-flex items-center justify-center gap-2"
+            >
+              <Wallet className="w-4 h-4" />
+              Back to Wallet
+            </button>
+            <button
+              type="button"
+              onClick={resetFlow}
+              className="w-full py-3.5 rounded-2xl border border-emerald-500/40 text-emerald-300 font-semibold text-sm hover:bg-emerald-500/10 hover:border-emerald-500/60 hover:text-emerald-200 transition-all inline-flex items-center justify-center gap-2"
+            >
+              <Plus className="w-4 h-4" />
+              Make Another Deposit
+            </button>
+
+            <p className="text-[10px] text-center text-white/45 leading-relaxed">
+              Receipt sent to your registered email · Need help?{" "}
+              <a href={`${BASE_URL}contact`} className="text-emerald-300 hover:text-emerald-200 underline-offset-2 hover:underline">
+                Contact
+              </a>
+              {submittedDepositId && <> · Ref #{submittedDepositId}</>}
+            </p>
           </motion.div>
         )}
       </AnimatePresence>
