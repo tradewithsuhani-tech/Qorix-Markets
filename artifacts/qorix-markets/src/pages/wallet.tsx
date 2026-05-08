@@ -1278,7 +1278,6 @@ function BottomSheet({
             transition={{ type: "spring", stiffness: 320, damping: 32 }}
             className="w-full sm:max-w-md max-h-[92vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl bg-card border border-white/10 shadow-2xl relative"
           >
-            <div className={`absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r ${palette.bar} rounded-t-3xl`} />
             {/* Drag handle (mobile) */}
             <div className="sm:hidden pt-2 flex justify-center">
               <div className="w-10 h-1 rounded-full bg-white/15" />
