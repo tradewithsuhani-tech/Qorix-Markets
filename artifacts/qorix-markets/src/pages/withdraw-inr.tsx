@@ -20,6 +20,7 @@ export default function WithdrawInrPage() {
   }, [state, navigate]);
 
   const [method, setMethod] = useState<"upi" | "bank">(state?.payoutMethod ?? "upi");
+  const lockedMethod = state?.payoutMethod === "bank" || state?.payoutMethod === "upi";
   const [upiId, setUpiId] = useState(state?.upiId ?? "");
   const [accountHolder, setAccountHolder] = useState(state?.accountHolder ?? "");
   const [accountNumber, setAccountNumber] = useState(state?.accountNumber ?? "");
@@ -113,41 +114,69 @@ export default function WithdrawInrPage() {
           </p>
         </div>
 
-        {/* Method picker */}
-        <div className="grid grid-cols-2 gap-2">
-          <button
-            onClick={() => setMethod("upi")}
-            className={cn(
-              "rounded-xl border p-3 text-left transition-all flex items-start gap-2.5",
-              method === "upi"
-                ? "bg-emerald-500/15 border-emerald-500/50"
-                : "bg-white/[0.02] border-white/10 hover:bg-white/[0.04]"
+        {/* Method picker — hidden when locked from previous step */}
+        {!lockedMethod && (
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={() => setMethod("upi")}
+              className={cn(
+                "rounded-xl border p-3 text-left transition-all flex items-start gap-2.5",
+                method === "upi"
+                  ? "bg-emerald-500/15 border-emerald-500/50"
+                  : "bg-white/[0.02] border-white/10 hover:bg-white/[0.04]"
+              )}
+              data-testid="method-upi"
+            >
+              <Smartphone className={cn("w-5 h-5 shrink-0 mt-0.5", method === "upi" ? "text-emerald-400" : "text-muted-foreground")} />
+              <div>
+                <div className={cn("text-sm font-bold", method === "upi" ? "text-emerald-400" : "text-white/90")}>UPI</div>
+                <div className="text-[11px] text-muted-foreground mt-0.5">Instant payout</div>
+              </div>
+            </button>
+            <button
+              onClick={() => setMethod("bank")}
+              className={cn(
+                "rounded-xl border p-3 text-left transition-all flex items-start gap-2.5",
+                method === "bank"
+                  ? "bg-emerald-500/15 border-emerald-500/50"
+                  : "bg-white/[0.02] border-white/10 hover:bg-white/[0.04]"
+              )}
+              data-testid="method-bank"
+            >
+              <Building2 className={cn("w-5 h-5 shrink-0 mt-0.5", method === "bank" ? "text-emerald-400" : "text-muted-foreground")} />
+              <div>
+                <div className={cn("text-sm font-bold", method === "bank" ? "text-emerald-400" : "text-white/90")}>Bank Account</div>
+                <div className="text-[11px] text-muted-foreground mt-0.5">NEFT / IMPS</div>
+              </div>
+            </button>
+          </div>
+        )}
+
+        {/* Locked method indicator */}
+        {lockedMethod && (
+          <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/[0.06] px-3.5 py-3 flex items-center gap-3">
+            {method === "upi" ? (
+              <Smartphone className="w-5 h-5 text-emerald-400 shrink-0" />
+            ) : (
+              <Building2 className="w-5 h-5 text-emerald-400 shrink-0" />
             )}
-            data-testid="method-upi"
-          >
-            <Smartphone className={cn("w-5 h-5 shrink-0 mt-0.5", method === "upi" ? "text-emerald-400" : "text-muted-foreground")} />
-            <div>
-              <div className={cn("text-sm font-bold", method === "upi" ? "text-emerald-400" : "text-white/90")}>UPI</div>
-              <div className="text-[11px] text-muted-foreground mt-0.5">Instant payout</div>
+            <div className="flex-1 min-w-0">
+              <div className="text-[13px] font-semibold text-emerald-300">
+                {method === "upi" ? "UPI Transfer" : "Bank Account"}
+              </div>
+              <div className="text-[11px] text-emerald-200/55 mt-0.5">
+                {method === "upi" ? "Instant · directly to your UPI ID" : "NEFT / IMPS · within 24 hours"}
+              </div>
             </div>
-          </button>
-          <button
-            onClick={() => setMethod("bank")}
-            className={cn(
-              "rounded-xl border p-3 text-left transition-all flex items-start gap-2.5",
-              method === "bank"
-                ? "bg-emerald-500/15 border-emerald-500/50"
-                : "bg-white/[0.02] border-white/10 hover:bg-white/[0.04]"
-            )}
-            data-testid="method-bank"
-          >
-            <Building2 className={cn("w-5 h-5 shrink-0 mt-0.5", method === "bank" ? "text-emerald-400" : "text-muted-foreground")} />
-            <div>
-              <div className={cn("text-sm font-bold", method === "bank" ? "text-emerald-400" : "text-white/90")}>Bank Account</div>
-              <div className="text-[11px] text-muted-foreground mt-0.5">NEFT / IMPS</div>
-            </div>
-          </button>
-        </div>
+            <button
+              onClick={() => navigate("/withdraw")}
+              className="text-[11px] font-semibold text-emerald-300 hover:text-emerald-200 px-2 py-1 rounded-md hover:bg-emerald-500/10 transition-colors shrink-0"
+              data-testid="change-method"
+            >
+              Change
+            </button>
+          </div>
+        )}
 
         {/* Fields */}
         {method === "upi" ? (
