@@ -242,7 +242,7 @@ export default function WalletPage() {
             vipTier={vipTier}
             onToggleHide={() => setHideBalance(h => !h)}
             onDeposit={() => navigate("/deposit")}
-            onWithdraw={() => setActiveModal("withdraw")}
+            onWithdraw={() => navigate("/withdraw")}
             onTransfer={() => setActiveModal("transfer")}
           />
         </motion.div>

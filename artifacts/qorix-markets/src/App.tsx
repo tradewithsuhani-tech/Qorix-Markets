@@ -31,6 +31,12 @@ import DepositNetBankingDetailsPage from "@/pages/deposit-netbanking-details";
 import DepositVerifyPage from "@/pages/deposit-verify";
 import DepositCryptoPage from "@/pages/deposit-crypto";
 import DepositSuccessPage from "@/pages/deposit-success";
+import WithdrawPage from "@/pages/withdraw";
+import WithdrawUsdtPage from "@/pages/withdraw-usdt";
+import WithdrawInrPage from "@/pages/withdraw-inr";
+import WithdrawReviewPage from "@/pages/withdraw-review";
+import WithdrawOtpPage from "@/pages/withdraw-otp";
+import WithdrawSuccessPage from "@/pages/withdraw-success";
 import InvestPage from "@/pages/invest";
 import SelfTradePage from "@/pages/self-trade";
 import PortfolioPage from "@/pages/portfolio";
@@ -218,6 +224,12 @@ function Router() {
       <Route path="/deposit/verify"><ProtectedRoute component={DepositVerifyPage} /></Route>
       <Route path="/deposit/crypto"><ProtectedRoute component={DepositCryptoPage} /></Route>
       <Route path="/deposit/success"><ProtectedRoute component={DepositSuccessPage} /></Route>
+      <Route path="/withdraw"><ProtectedRoute component={WithdrawPage} /></Route>
+      <Route path="/withdraw/usdt"><ProtectedRoute component={WithdrawUsdtPage} /></Route>
+      <Route path="/withdraw/inr"><ProtectedRoute component={WithdrawInrPage} /></Route>
+      <Route path="/withdraw/review"><ProtectedRoute component={WithdrawReviewPage} /></Route>
+      <Route path="/withdraw/otp"><ProtectedRoute component={WithdrawOtpPage} /></Route>
+      <Route path="/withdraw/success"><ProtectedRoute component={WithdrawSuccessPage} /></Route>
       <Route path="/invest"><ProtectedRoute component={InvestPage} /></Route>
       <Route path="/self-trade"><ProtectedRoute component={SelfTradePage} /></Route>
       <Route path="/portfolio"><ProtectedRoute component={PortfolioPage} /></Route>
