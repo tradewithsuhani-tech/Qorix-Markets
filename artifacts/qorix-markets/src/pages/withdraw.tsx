@@ -149,20 +149,6 @@ export default function WithdrawPage() {
           </div>
         </div>
 
-        {/* Compliance Rules */}
-        <div className="mb-4 rounded-xl border border-amber-500/25 bg-amber-500/[0.05] px-4 py-3">
-          <div className="flex items-center gap-2 mb-2">
-            <Info className="w-3.5 h-3.5 text-amber-400" />
-            <span className="text-[10px] font-bold tracking-[0.18em] text-amber-300">COMPLIANCE RULES</span>
-          </div>
-          <ul className="space-y-1.5 text-[12px] text-amber-100/80 leading-relaxed">
-            <li className="flex gap-2"><span className="text-amber-400 shrink-0">•</span><span>Minimum withdrawal: ₹500 (or $10 crypto equivalent)</span></li>
-            <li className="flex gap-2"><span className="text-amber-400 shrink-0">•</span><span>Daily limit: ₹2,00,000 · admin approval above ₹50,000</span></li>
-            <li className="flex gap-2"><span className="text-amber-400 shrink-0">•</span><span>Withdrawals processed within 24 hours · crypto on-chain</span></li>
-            <li className="flex gap-2"><span className="text-amber-400 shrink-0">•</span><span>Wallet holdings are unaffected by deployed capital</span></li>
-          </ul>
-        </div>
-
         {/* Withdrawal Amount label + currency toggle */}
         <div className="flex items-center justify-between mb-2">
           <span className="text-[13px] text-white/65">Withdrawal Amount</span>
