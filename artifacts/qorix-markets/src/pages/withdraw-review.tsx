@@ -96,7 +96,7 @@ export default function WithdrawReviewPage() {
               Review Withdrawal
             </h1>
           </div>
-          <p className="text-[13px] text-white/55 leading-relaxed">
+          <p className="text-[13px] text-white/55 leading-relaxed pl-12">
             Confirm the details. Funds sent incorrectly cannot be recovered.
           </p>
         </div>
