@@ -6,15 +6,7 @@ import {
   ArrowLeft, Zap, Globe, Send, ChevronRight, CheckCircle2, Shield,
 } from "lucide-react";
 import { CRYPTO_METHODS, FX_RATE } from "@/lib/deposit-flow-data";
-import { BannerCarousel } from "@/components/banner-carousel";
-import { PromoBonusBanner } from "@/components/promo-bonus-banner";
 import { cn } from "@/lib/utils";
-
-const DEPOSIT_BANNERS = [
-  { src: `${import.meta.env.BASE_URL}promo/banner-4-automate.png`, alt: "Automate. Invest. Grow." },
-  { src: `${import.meta.env.BASE_URL}promo/banner-5-smart-algo.png`, alt: "Smart Algo. Real Growth." },
-  { src: `${import.meta.env.BASE_URL}promo/banner-6-zero-fee.png`, alt: "Zero Trading Fee" },
-];
 
 const INR_METHODS = [
   { id: "upi", icon: Zap, label: "UPI", sub: "Instant · No charges" },
@@ -110,9 +102,6 @@ export default function DepositPage() {
             <span className="text-[10px] text-muted-foreground font-mono">≈ ${mainBalanceUsd.toFixed(2)}</span>
           </div>
         </div>
-
-        <PromoBonusBanner />
-        <BannerCarousel slides={DEPOSIT_BANNERS} intervalMs={4500} maxWidth={640} />
 
         <div>
           <div className="flex items-center justify-between mb-2">
