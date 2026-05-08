@@ -3,9 +3,10 @@ import { useLocation } from "wouter";
 import { motion } from "framer-motion";
 import { Layout } from "@/components/layout";
 import {
-  Check, Shield, CreditCard, PlusCircle, Copy,
+  Check, Shield, CreditCard, PlusCircle, Copy, Download,
 } from "lucide-react";
 import { BANKS, P2P_AGENTS } from "@/lib/deposit-flow-data";
+import { downloadReceiptPdf } from "@/lib/receipt-pdf";
 import { cn } from "@/lib/utils";
 
 type DetailKey = "utr" | "ref";
@@ -23,6 +24,8 @@ export default function DepositSuccessPage() {
   const refCode = params.get("refCode") ?? "";
   const bankId = params.get("bankId") ?? "";
   const agentId = params.get("agentId") ?? "";
+  const merchantNameParam = params.get("merchantName") ?? "";
+  const createdAtIso = useMemo(() => new Date().toISOString(), []);
 
   const bank = useMemo(() => (bankId ? BANKS.find((b) => b.id === bankId) ?? null : null), [bankId]);
   const agent = useMemo(
@@ -32,8 +35,25 @@ export default function DepositSuccessPage() {
   const method = useMemo(() => {
     if (bank) return { color: bank.color, initial: bank.initial, label: `${bank.shortName} · NEFT/IMPS` };
     if (agent) return { color: agent.avatarColor, initial: agent.initial, label: `${agent.name} · UPI` };
+    if (merchantNameParam) return { color: "#10B981", initial: merchantNameParam.charAt(0).toUpperCase(), label: merchantNameParam };
     return null;
-  }, [bank, agent]);
+  }, [bank, agent, merchantNameParam]);
+
+  const handleDownload = () => {
+    const reference = refCode || (utr ? `QM-${utr.slice(-8).toUpperCase()}` : `QM-${Date.now().toString().slice(-8)}`);
+    downloadReceiptPdf({
+      kind: "deposit",
+      reference,
+      status: "pending",
+      statusLabel: "Pending Verification",
+      headlineLabel: "DEPOSIT SUBMITTED",
+      amountInr: numAmount,
+      method: method?.label ?? "INR Deposit",
+      utrOrRef: utr || null,
+      utrLabel: "UTR / Ref",
+      createdAt: createdAtIso,
+    });
+  };
   const txnTime = useMemo(() => formatNow(), []);
 
   const [copied, setCopied] = useState<DetailKey | null>(null);
@@ -171,6 +191,15 @@ export default function DepositSuccessPage() {
               </span>
             </Row>
           </div>
+
+          <button
+            onClick={handleDownload}
+            className="w-full h-12 rounded-xl border border-emerald-500/45 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 font-bold flex items-center justify-center gap-2 transition-colors"
+            data-testid="button-download-receipt"
+          >
+            <Download className="w-4 h-4" />
+            Download Receipt
+          </button>
 
           <button
             onClick={() => navigate("/wallet")}
