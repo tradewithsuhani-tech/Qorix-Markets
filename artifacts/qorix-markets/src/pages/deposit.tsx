@@ -27,7 +27,7 @@ export default function DepositPage() {
 
   const isCrypto = currency === "USDT";
   const numAmount = parseFloat(amount.replace(/,/g, "")) || 0;
-  const minAmount = currency === "INR" ? 5000 : 60;
+  const minAmount = currency === "INR" ? 100 : 60;
   const hasAmount = numAmount >= minAmount;
   const symbol = currency === "INR" ? "₹" : "$";
   const quickAmounts = currency === "INR" ? [5000, 10000, 25000, 50000] : [60, 120, 300, 600];
