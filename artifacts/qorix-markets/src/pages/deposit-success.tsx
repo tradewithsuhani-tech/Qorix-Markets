@@ -193,15 +193,6 @@ export default function DepositSuccessPage() {
           </div>
 
           <button
-            onClick={handleDownload}
-            className="w-full h-12 rounded-xl border border-emerald-500/45 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 font-bold flex items-center justify-center gap-2 transition-colors"
-            data-testid="button-download-receipt"
-          >
-            <Download className="w-4 h-4" />
-            Download Receipt
-          </button>
-
-          <button
             onClick={() => navigate("/wallet")}
             className="w-full h-14 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-bold flex items-center justify-center gap-2 transition-colors"
             data-testid="button-wallet"
@@ -229,6 +220,15 @@ export default function DepositSuccessPage() {
               Need help? Contact support
             </button>
           </div>
+
+          <button
+            onClick={handleDownload}
+            className="mx-auto inline-flex items-center gap-1.5 text-[11px] text-emerald-400 font-semibold hover:underline"
+            data-testid="link-download-receipt"
+          >
+            <Download className="w-3.5 h-3.5" />
+            Download Receipt (PDF)
+          </button>
         </motion.div>
       </div>
     </Layout>
