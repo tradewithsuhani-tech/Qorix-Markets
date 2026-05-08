@@ -173,19 +173,6 @@ export default function DepositUpiPayPage() {
           <div className="bg-white p-3 rounded-xl">
             <canvas ref={canvasRef} />
           </div>
-          <div className="flex flex-wrap gap-1.5 justify-center">
-            {[
-              { l: "PhonePe", c: "#22D3EE", b: "rgba(34,211,238,0.15)", bo: "rgba(34,211,238,0.4)" },
-              { l: "GPay", c: "#60A5FA", b: "rgba(66,133,244,0.15)", bo: "rgba(66,133,244,0.4)" },
-              { l: "Paytm", c: "#38BDF8", b: "rgba(0,186,242,0.15)", bo: "rgba(0,186,242,0.4)" },
-              { l: "BHIM", c: "#FBBF24", b: "rgba(245,158,11,0.15)", bo: "rgba(245,158,11,0.4)" },
-            ].map((x) => (
-              <span key={x.l} className="px-2 py-1 rounded border text-[10px] font-bold tracking-wider"
-                style={{ color: x.c, backgroundColor: x.b, borderColor: x.bo }}>
-                {x.l}
-              </span>
-            ))}
-          </div>
         </div>
 
         <div className="flex items-center gap-2.5">
