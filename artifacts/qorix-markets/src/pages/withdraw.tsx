@@ -210,7 +210,7 @@ export default function WithdrawPage() {
           </div>
           <div
             className={cn(
-              "rounded-2xl border bg-white/[0.025] px-4 py-3.5 transition-colors",
+              "rounded-xl border bg-white/[0.025] px-3.5 py-2.5 transition-colors",
               numAmount > 0 && !valid
                 ? "border-rose-500/45"
                 : valid
@@ -218,8 +218,8 @@ export default function WithdrawPage() {
                 : "border-white/[0.07]"
             )}
           >
-            <div className="flex items-baseline gap-2">
-              <span className={cn("text-[26px] font-semibold leading-none select-none", isUsdt ? "text-amber-300/80" : "text-emerald-300/80")}>
+            <div className="flex items-baseline gap-1.5">
+              <span className={cn("text-[20px] font-semibold leading-none select-none", isUsdt ? "text-amber-300/80" : "text-emerald-300/80")}>
                 {symbol}
               </span>
               <input
@@ -229,12 +229,12 @@ export default function WithdrawPage() {
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 placeholder="0.00"
-                className="flex-1 bg-transparent border-0 outline-none text-[34px] font-semibold tracking-[-0.02em] tabular-nums placeholder:text-white/15 min-w-0"
+                className="flex-1 bg-transparent border-0 outline-none text-[24px] font-semibold tracking-[-0.02em] tabular-nums placeholder:text-white/15 min-w-0"
                 data-testid="input-amount"
               />
             </div>
             {numAmount > 0 && (
-              <div className="text-[11px] text-white/40 font-mono tabular-nums mt-1.5">
+              <div className="text-[11px] text-white/40 font-mono tabular-nums mt-1">
                 {isUsdt
                   ? `≈ ₹${Math.round(inrEquiv).toLocaleString("en-IN")}`
                   : `≈ $${usdEquiv.toFixed(2)}`}
