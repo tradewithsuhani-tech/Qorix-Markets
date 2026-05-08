@@ -178,52 +178,15 @@ export default function WithdrawSuccessPage() {
               </span>
             </Row>
 
-            {isUsdt && netAmount !== usdAmount && (
-              <>
-                <Divider />
-                <Row label="You'll Receive">
-                  <span className="text-[13px] font-bold text-emerald-400">${netAmount.toFixed(2)} USD</span>
-                </Row>
-              </>
-            )}
-
-            {!isUsdt && usdtEquiv > 0 && (
-              <>
-                <Divider />
-                <Row label="USDT Debited">
-                  <span className="text-[13px] font-bold text-amber-400">${usdtEquiv.toFixed(2)}</span>
-                </Row>
-                {rateUsed > 0 && (
-                  <>
-                    <Divider />
-                    <Row label="Rate">
-                      <span className="text-[13px] font-mono">1 USDT = ₹{rateUsed.toFixed(2)}</span>
-                    </Row>
-                  </>
-                )}
-              </>
-            )}
-
-            {isUsdt && data.source && (
-              <>
-                <Divider />
-                <Row label="From">
-                  <span className="text-[13px] font-semibold">
-                    {data.source === "main" ? "Main Balance" : "Profit Balance"}
-                  </span>
-                </Row>
-              </>
-            )}
-
             {isUsdt && data.walletAddress && (
               <>
                 <Divider />
                 <button
                   onClick={() => copy(data.walletAddress!, "address")}
-                  className="w-full flex items-center justify-between gap-3 hover:opacity-70 transition-opacity"
+                  className="w-full flex items-center justify-between gap-3 py-2.5 hover:opacity-70 transition-opacity"
                   data-testid="copy-address"
                 >
-                  <span className="text-xs font-medium text-muted-foreground shrink-0">To Address</span>
+                  <span className="text-[12px] font-medium text-white/55 shrink-0">To Address</span>
                   <span className="flex items-center gap-2 min-w-0">
                     <span className="text-[13px] font-bold font-mono truncate" title={data.walletAddress}>
                       {maskAddress(data.walletAddress)}
@@ -241,10 +204,10 @@ export default function WithdrawSuccessPage() {
                 <Divider />
                 <button
                   onClick={() => copy(data.upiId!, "upi")}
-                  className="w-full flex items-center justify-between gap-3 hover:opacity-70 transition-opacity"
+                  className="w-full flex items-center justify-between gap-3 py-2.5 hover:opacity-70 transition-opacity"
                   data-testid="copy-upi"
                 >
-                  <span className="text-xs font-medium text-muted-foreground">UPI ID</span>
+                  <span className="text-[12px] font-medium text-white/55">UPI ID</span>
                   <span className="flex items-center gap-2 min-w-0">
                     <span className="text-[13px] font-bold font-mono truncate">{data.upiId}</span>
                     {copied === "upi" ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5 text-emerald-400" />}
@@ -258,10 +221,10 @@ export default function WithdrawSuccessPage() {
                 <Divider />
                 <button
                   onClick={() => copy(`${data.accountNumber} · ${data.ifsc}`, "acct")}
-                  className="w-full flex items-center justify-between gap-3 hover:opacity-70 transition-opacity"
+                  className="w-full flex items-center justify-between gap-3 py-2.5 hover:opacity-70 transition-opacity"
                   data-testid="copy-acct"
                 >
-                  <span className="text-xs font-medium text-muted-foreground shrink-0">Account · IFSC</span>
+                  <span className="text-[12px] font-medium text-white/55 shrink-0">Account · IFSC</span>
                   <span className="flex items-center gap-2 min-w-0">
                     <span className="text-[13px] font-bold font-mono truncate">
                       ****{data.accountNumber.slice(-4)} · {data.ifsc}
@@ -269,29 +232,9 @@ export default function WithdrawSuccessPage() {
                     {copied === "acct" ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5 text-emerald-400" />}
                   </span>
                 </button>
-                {data.accountHolder && (
-                  <>
-                    <Divider />
-                    <Row label="Holder">
-                      <span className="text-[13px] font-semibold truncate">{data.accountHolder}</span>
-                    </Row>
-                  </>
-                )}
               </>
             )}
 
-            <Divider />
-            <button
-              onClick={() => copy(reference, "ref")}
-              className="w-full flex items-center justify-between gap-3 hover:opacity-70 transition-opacity"
-              data-testid="copy-ref"
-            >
-              <span className="text-xs font-medium text-muted-foreground">Reference</span>
-              <span className="flex items-center gap-2 min-w-0">
-                <span className="text-[13px] font-bold tracking-wider truncate">#{reference}</span>
-                {copied === "ref" ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5 text-emerald-400" />}
-              </span>
-            </button>
             <Divider />
             <Row label="Date & Time">
               <span className="text-[13px] font-semibold">{txnTime}</span>
