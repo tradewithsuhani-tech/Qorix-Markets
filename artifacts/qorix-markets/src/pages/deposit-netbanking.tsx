@@ -190,21 +190,12 @@ function BankRow({
 
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5 flex-wrap">
-          <div className="text-sm font-bold truncate">
+          <div className="text-base font-extrabold truncate uppercase">
             {method.merchantName ?? method.accountHolder ?? "Verified beneficiary"}
           </div>
           {method.isOnline !== false && (
             <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border bg-emerald-500/20 border-emerald-500/45 text-emerald-400 text-[9px] font-bold tracking-wider">
               <Check className="w-2.5 h-2.5" /> ONLINE
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground mt-0.5 truncate">
-          <Building2 className="w-3 h-3 shrink-0" />
-          <span className="truncate font-semibold text-foreground/80">{bankLabel}</span>
-          {method.accountNumber && (
-            <span className="font-mono">
-              ····{method.accountNumber.slice(-4)}
             </span>
           )}
         </div>

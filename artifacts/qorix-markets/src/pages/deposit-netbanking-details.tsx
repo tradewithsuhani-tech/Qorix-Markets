@@ -146,10 +146,7 @@ export default function DepositNetBankingDetailsPage() {
             )} />
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-sm font-bold truncate">{bankLabel}</div>
-            <div className="text-[11px] text-muted-foreground mt-0.5 truncate">
-              Transfer ₹{numAmount.toLocaleString("en-IN")} to {merchantLabel}
-            </div>
+            <div className="text-base font-extrabold truncate uppercase">{merchantLabel}</div>
           </div>
           <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full border bg-emerald-500/15 border-emerald-500/40 text-emerald-400 text-[9px] font-bold tracking-wider">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" /> LIVE
