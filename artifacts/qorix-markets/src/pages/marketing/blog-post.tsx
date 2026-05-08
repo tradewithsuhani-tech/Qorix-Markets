@@ -116,16 +116,12 @@ export default function BlogPostPage() {
             <span className="inline-flex items-center gap-1"><Clock size={12} /> {post.readMinutes} min read</span>
           </div>
 
-          <div className="relative aspect-video rounded-2xl mb-8 overflow-hidden" style={{ border: "1px solid rgba(16,185,129,0.18)" }}>
+          <div className="relative aspect-video rounded-2xl mb-8 overflow-hidden bg-black" style={{ border: "1px solid rgba(16,185,129,0.18)" }}>
             <img
               src={POST_IMAGES[post.slug] ?? post.featuredImage}
               alt={post.featuredImageAlt}
               loading="eager"
-              className="absolute inset-0 w-full h-full object-cover"
-            />
-            <div
-              className="absolute inset-0 pointer-events-none"
-              style={{ background: "linear-gradient(135deg, rgba(5,15,12,0.10), rgba(5,15,12,0.45))" }}
+              className="absolute inset-0 w-full h-full object-contain"
             />
           </div>
 
