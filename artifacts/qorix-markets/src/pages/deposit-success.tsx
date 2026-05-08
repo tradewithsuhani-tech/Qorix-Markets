@@ -3,13 +3,13 @@ import { useLocation } from "wouter";
 import { motion } from "framer-motion";
 import { Layout } from "@/components/layout";
 import {
-  Check, Shield, CreditCard, PlusCircle, Copy, Download,
+  Check, Shield, CreditCard, PlusCircle, Copy, Download, AtSign, Building2, Send,
 } from "lucide-react";
 import { BANKS, P2P_AGENTS } from "@/lib/deposit-flow-data";
 import { downloadReceiptPdf } from "@/lib/receipt-pdf";
 import { cn } from "@/lib/utils";
 
-type DetailKey = "utr" | "ref";
+type DetailKey = "utr" | "ref" | "upi" | "acct";
 
 function formatNow(): string {
   const d = new Date();
@@ -26,6 +26,9 @@ export default function DepositSuccessPage() {
   const agentId = params.get("agentId") ?? "";
   const merchantNameParam = params.get("merchantName") ?? "";
   const methodTypeParam = params.get("methodType") ?? "";
+  const upiIdParam = params.get("upiId") ?? "";
+  const accountNumberParam = params.get("accountNumber") ?? "";
+  const ifscParam = params.get("ifsc") ?? "";
   const createdAtIso = useMemo(() => new Date().toISOString(), []);
 
   const bank = useMemo(() => (bankId ? BANKS.find((b) => b.id === bankId) ?? null : null), [bankId]);
@@ -34,15 +37,12 @@ export default function DepositSuccessPage() {
     [bank, agentId]
   );
   const method = useMemo(() => {
-    if (bank) return { color: bank.color, initial: bank.initial, label: `${bank.shortName} · NEFT/IMPS` };
-    if (agent) return { color: agent.avatarColor, initial: agent.initial, label: `${agent.name} · UPI` };
-    if (merchantNameParam) {
-      const typeLabel = methodTypeParam === "upi" ? "UPI" : methodTypeParam === "bank" ? "Netbanking" : methodTypeParam === "imps" ? "IMPS" : "";
-      return {
-        color: "#10B981",
-        initial: merchantNameParam.charAt(0).toUpperCase(),
-        label: typeLabel ? `${merchantNameParam} · ${typeLabel}` : merchantNameParam,
-      };
+    if (bank) return { color: bank.color, icon: Building2, label: "Netbanking" };
+    if (agent) return { color: "#10B981", icon: AtSign, label: "UPI" };
+    if (merchantNameParam || methodTypeParam) {
+      if (methodTypeParam === "upi") return { color: "#10B981", icon: AtSign, label: "UPI" };
+      if (methodTypeParam === "imps") return { color: "#10B981", icon: Send, label: "IMPS" };
+      if (methodTypeParam === "bank") return { color: "#10B981", icon: Building2, label: "Netbanking" };
     }
     return null;
   }, [bank, agent, merchantNameParam, methodTypeParam]);
@@ -130,10 +130,10 @@ export default function DepositSuccessPage() {
                 <Row label="Method">
                   <div className="flex items-center gap-2 min-w-0">
                     <div
-                      className="w-5 h-5 rounded-md border flex items-center justify-center text-[9px] font-bold shrink-0"
+                      className="w-5 h-5 rounded-md border flex items-center justify-center shrink-0"
                       style={{ backgroundColor: method.color + "22", borderColor: method.color + "66", color: method.color }}
                     >
-                      {method.initial}
+                      <method.icon className="w-3 h-3" />
                     </div>
                     <span className="text-[13px] font-semibold truncate">{method.label}</span>
                   </div>
@@ -142,9 +142,53 @@ export default function DepositSuccessPage() {
               </>
             )}
 
-            <Row label="Amount Submitted">
+            <Row label="Amount">
               <span className="text-[13px] font-bold text-emerald-400">+ ₹{numAmount.toLocaleString("en-IN")}</span>
             </Row>
+
+            {upiIdParam && (
+              <>
+                <Divider />
+                <button
+                  onClick={() => copy(upiIdParam, "upi")}
+                  className="w-full flex items-center justify-between gap-3 hover:opacity-70 transition-opacity"
+                  data-testid="copy-upi-id"
+                >
+                  <span className="text-xs font-medium text-muted-foreground">UPI ID</span>
+                  <span className="flex items-center gap-2 min-w-0">
+                    <span className="text-[13px] font-bold font-mono truncate">{upiIdParam}</span>
+                    {copied === "upi" ? (
+                      <Check className="w-3.5 h-3.5 text-emerald-400" />
+                    ) : (
+                      <Copy className="w-3.5 h-3.5 text-emerald-400" />
+                    )}
+                  </span>
+                </button>
+              </>
+            )}
+
+            {!upiIdParam && accountNumberParam && (
+              <>
+                <Divider />
+                <button
+                  onClick={() => copy(accountNumberParam, "acct")}
+                  className="w-full flex items-center justify-between gap-3 hover:opacity-70 transition-opacity"
+                  data-testid="copy-account"
+                >
+                  <span className="text-xs font-medium text-muted-foreground">Account{ifscParam ? " / IFSC" : ""}</span>
+                  <span className="flex items-center gap-2 min-w-0">
+                    <span className="text-[13px] font-bold font-mono truncate">
+                      {accountNumberParam}{ifscParam ? ` · ${ifscParam}` : ""}
+                    </span>
+                    {copied === "acct" ? (
+                      <Check className="w-3.5 h-3.5 text-emerald-400" />
+                    ) : (
+                      <Copy className="w-3.5 h-3.5 text-emerald-400" />
+                    )}
+                  </span>
+                </button>
+              </>
+            )}
 
             {utr && (
               <>

@@ -207,6 +207,9 @@ export default function DepositVerifyPage() {
       if (payee?.kind === "merchant") {
         sp.set("merchantName", payee.shortName);
         sp.set("methodType", payee.type);
+        if (realMethod?.upiId) sp.set("upiId", realMethod.upiId);
+        if (realMethod?.accountNumber) sp.set("accountNumber", realMethod.accountNumber);
+        if (realMethod?.ifsc) sp.set("ifsc", realMethod.ifsc);
       } else if (payee?.kind === "agent") sp.set("agentId", payee.id);
       else if (payee?.kind === "bank") sp.set("bankId", payee.id);
       navigate(`/deposit/success?${sp.toString()}`);
