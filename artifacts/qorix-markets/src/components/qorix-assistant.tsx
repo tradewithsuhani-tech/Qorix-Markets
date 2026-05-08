@@ -427,7 +427,11 @@ export function QorixAssistant({ guestMode = false, hideTrigger = false }: { gue
   useEffect(() => {
     const onOpen = () => setIsOpen(true);
     window.addEventListener("qorix:open-support", onOpen);
-    return () => window.removeEventListener("qorix:open-support", onOpen);
+    (window as unknown as { qorixOpenSupport?: () => void }).qorixOpenSupport = onOpen;
+    return () => {
+      window.removeEventListener("qorix:open-support", onOpen);
+      delete (window as unknown as { qorixOpenSupport?: () => void }).qorixOpenSupport;
+    };
   }, []);
 
   const dismissNudge = (e: React.MouseEvent) => {

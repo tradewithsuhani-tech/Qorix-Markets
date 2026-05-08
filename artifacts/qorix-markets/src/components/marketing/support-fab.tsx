@@ -4,7 +4,12 @@ import { trackCta } from "@/lib/analytics";
 export function SupportFab() {
   const openChat = () => {
     trackCta("Support FAB open", "fab");
-    window.dispatchEvent(new CustomEvent("qorix:open-support"));
+    const w = window as unknown as { qorixOpenSupport?: () => void };
+    if (typeof w.qorixOpenSupport === "function") {
+      w.qorixOpenSupport();
+    } else {
+      window.dispatchEvent(new CustomEvent("qorix:open-support"));
+    }
   };
 
   return (
