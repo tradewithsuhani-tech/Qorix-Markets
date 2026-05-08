@@ -19,6 +19,7 @@ interface PaymentMethod {
   id: number;
   type: "upi" | "bank";
   displayName: string;
+  merchantName?: string | null;
   isAvailable?: boolean;
 }
 
@@ -30,11 +31,38 @@ export default function DepositVerifyPage() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const params = new URLSearchParams(window.location.search);
+  const methodIdParam = Number(params.get("methodId") ?? "0");
   const agentId = params.get("agentId") ?? "";
   const bankId = params.get("bankId") ?? "";
   const numAmount = parseFloat(params.get("amount") ?? "0") || 0;
 
+  // Fetch real merchant methods (capacity-aware) so we can both display the
+  // right payee and submit with a real paymentMethodId.
+  const { data: methodsResp } = useQuery<{ methods: PaymentMethod[]; rate: number }>({
+    queryKey: ["inr-payment-methods", "capacity", String(numAmount)],
+    queryFn: () => authFetch(getApiUrl(`/payment-methods?amount=${numAmount}`)),
+    enabled: numAmount > 0,
+  });
+  const realMethods = methodsResp?.methods ?? [];
+  const realMethod = useMemo(
+    () => realMethods.find((m) => m.id === methodIdParam) ?? null,
+    [realMethods, methodIdParam],
+  );
+
   const payee = useMemo(() => {
+    if (realMethod) {
+      const name = realMethod.merchantName ?? realMethod.displayName ?? "Merchant";
+      return {
+        kind: "merchant" as const,
+        id: String(realMethod.id),
+        shortName: name,
+        color: "#10B981",
+        initial: name.charAt(0).toUpperCase(),
+        statusSub: `Submit UTR & screenshot from your ${realMethod.type === "upi" ? "UPI" : "bank"} payment`,
+        verifyingLabel: name,
+        type: realMethod.type,
+      };
+    }
     if (agentId) {
       const a = P2P_AGENTS.find((x) => x.id === agentId);
       if (a) return {
@@ -52,16 +80,7 @@ export default function DepositVerifyPage() {
       };
     }
     return null;
-  }, [agentId, bankId]);
-
-  // Real backend: fetch capacity-aware payment methods so we can route the
-  // submission to a real merchant instead of the decorative agent/bank.
-  const { data: methodsResp } = useQuery<{ methods: PaymentMethod[]; rate: number }>({
-    queryKey: ["inr-payment-methods", "capacity", String(numAmount)],
-    queryFn: () => authFetch(getApiUrl(`/payment-methods?amount=${numAmount}`)),
-    enabled: numAmount > 0 && !!payee,
-  });
-  const realMethods = methodsResp?.methods ?? [];
+  }, [realMethod, agentId, bankId]);
 
   const [utr, setUtr] = useState("");
   const [utrError, setUtrError] = useState<string | null>(null);
@@ -159,8 +178,11 @@ export default function DepositVerifyPage() {
   const submit = useMutation({
     mutationFn: async () => {
       if (!payee) throw new Error("Invalid session");
-      // Pick a real merchant matching our flow type, fallback to first available.
-      const matched = realMethods.find((m) => m.type === payee.type && (m.isAvailable !== false))
+      // Prefer the real method the user selected upstream. Fallback to first
+      // available method matching the payee's type only for legacy decorative
+      // agent/bank flows.
+      const matched = realMethod
+        ?? realMethods.find((m) => m.type === payee.type && (m.isAvailable !== false))
         ?? realMethods.find((m) => m.isAvailable !== false)
         ?? realMethods[0];
       if (!matched) throw new Error("No payment merchant available right now. Please try again in a minute.");
@@ -181,8 +203,10 @@ export default function DepositVerifyPage() {
       const sp = new URLSearchParams({
         amount: String(numAmount),
         utr: utrTrimmed,
-        ...(payee?.kind === "agent" ? { agentId: payee.id } : { bankId: payee?.id ?? "" }),
       });
+      if (payee?.kind === "merchant") sp.set("merchantName", payee.shortName);
+      else if (payee?.kind === "agent") sp.set("agentId", payee.id);
+      else if (payee?.kind === "bank") sp.set("bankId", payee.id);
       navigate(`/deposit/success?${sp.toString()}`);
     },
     onError: (e: any) => {
