@@ -220,7 +220,14 @@ export default function DepositSuccessPage() {
           </button>
 
           <div className="text-[11px] text-muted-foreground text-center leading-relaxed">
-            Receipt sent to your registered email · Need help? Contact support
+            Receipt sent to your registered email ·{" "}
+            <button
+              onClick={() => navigate("/contact")}
+              className="text-emerald-400 font-semibold hover:underline"
+              data-testid="link-support"
+            >
+              Need help? Contact support
+            </button>
           </div>
         </motion.div>
       </div>
