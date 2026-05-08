@@ -111,10 +111,10 @@ export default function WithdrawInrPage() {
 
         <div className="space-y-1.5">
           <h1 className="text-[26px] font-semibold tracking-[-0.02em] leading-tight">
-            Where should we send it?
+            Payout Destination
           </h1>
           <p className="text-[13px] text-white/55 leading-relaxed">
-            ₹{numAmount.toLocaleString("en-IN")} direct to UPI or bank account
+            ₹{numAmount.toLocaleString("en-IN")} to UPI or bank account
           </p>
         </div>
 

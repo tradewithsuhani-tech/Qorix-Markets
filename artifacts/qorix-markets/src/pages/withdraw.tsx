@@ -130,12 +130,12 @@ export default function WithdrawPage() {
         {/* Title */}
         <div className="space-y-1.5 mb-5">
           <h1 className="text-[26px] font-semibold tracking-[-0.02em] leading-tight">
-            How much do you want to withdraw?
+            Withdraw Funds
           </h1>
           <p className="text-[13px] text-white/55 leading-relaxed">
             {isUsdt
-              ? `USDT to a TRC20 wallet · Network fee ${withdrawalFeePercent}% · 24 hr review`
-              : "INR direct to UPI or bank account · 24 hr review"}
+              ? `Send USDT to your TRC20 wallet. Reviewed within 24 hours.`
+              : "INR payouts to your bank or UPI within 24 hours of approval."}
           </p>
         </div>
 

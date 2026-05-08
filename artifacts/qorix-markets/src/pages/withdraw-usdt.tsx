@@ -61,10 +61,10 @@ export default function WithdrawUsdtPage() {
 
         <div className="space-y-1.5 mb-6">
           <h1 className="text-[26px] font-semibold tracking-[-0.02em] leading-tight">
-            Where should we send it?
+            Destination Wallet
           </h1>
           <p className="text-[13px] text-white/55 leading-relaxed">
-            ${numAmount.toFixed(2)} USDT on the TRON (TRC20) network
+            ${numAmount.toFixed(2)} USDT · TRON (TRC20) network
           </p>
         </div>
 

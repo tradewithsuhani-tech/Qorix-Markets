@@ -157,10 +157,10 @@ export default function WithdrawOtpPage() {
 
         <div className="space-y-1.5">
           <h1 className="text-[26px] font-semibold tracking-[-0.02em] leading-tight">
-            Confirm with email code
+            Verify & Confirm
           </h1>
           <p className="text-[13px] text-white/55 leading-relaxed">
-            We sent a 6-digit code to your registered email
+            Enter the 6-digit code sent to your registered email.
           </p>
         </div>
 

@@ -99,10 +99,10 @@ export default function WithdrawReviewPage() {
 
         <div className="space-y-1.5">
           <h1 className="text-[26px] font-semibold tracking-[-0.02em] leading-tight">
-            Review your withdrawal
+            Review Withdrawal
           </h1>
           <p className="text-[13px] text-white/55 leading-relaxed">
-            Double-check everything · funds can't be recovered if sent to the wrong place
+            Confirm the details. Funds sent incorrectly cannot be recovered.
           </p>
         </div>
 
