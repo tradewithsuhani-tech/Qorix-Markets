@@ -221,14 +221,17 @@ export default function DepositSuccessPage() {
             </button>
           </div>
 
-          <button
-            onClick={handleDownload}
-            className="w-full inline-flex items-center justify-center gap-1.5 text-[11px] text-emerald-400 font-semibold hover:underline"
-            data-testid="link-download-receipt"
-          >
-            <Download className="w-3.5 h-3.5" />
-            Download Receipt (PDF)
-          </button>
+          <div className="w-full text-center text-[11px] text-muted-foreground">
+            Download Receipt ·{" "}
+            <button
+              onClick={handleDownload}
+              className="inline-flex items-center gap-1 text-emerald-400 font-semibold hover:underline"
+              data-testid="link-download-receipt"
+            >
+              <Download className="w-3 h-3" />
+              Click here
+            </button>
+          </div>
         </motion.div>
       </div>
     </Layout>
