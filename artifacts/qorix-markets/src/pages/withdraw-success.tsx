@@ -149,8 +149,13 @@ export default function WithdrawSuccessPage() {
             <div className="text-xs font-semibold flex-1">Verified by Qorix · Reviewed within 24 hrs</div>
           </div>
 
-          <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3.5 space-y-3">
-            <div className="text-[10px] font-bold tracking-widest text-muted-foreground">TRANSACTION DETAILS</div>
+          <div className="rounded-2xl border border-white/10 bg-gradient-to-b from-white/[0.04] to-white/[0.02] overflow-hidden">
+            <div className="px-4 pt-3.5 pb-2.5 flex items-center justify-between">
+              <span className="text-[10px] font-bold tracking-[0.18em] text-white/45">TRANSACTION DETAILS</span>
+              <span className="text-[10px] font-mono text-white/30">#{reference}</span>
+            </div>
+            <div className="h-px bg-white/[0.07]" />
+            <div className="px-4 py-1">
 
             <Row label="Method">
               <div className="flex items-center gap-2 min-w-0">
@@ -293,11 +298,12 @@ export default function WithdrawSuccessPage() {
             </Row>
             <Divider />
             <Row label="Status">
-              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border bg-amber-500/15 border-amber-500/40">
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border bg-amber-500/15 border-amber-500/40">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
                 <span className="text-[10px] font-bold tracking-wide text-amber-400">Pending Approval</span>
               </span>
             </Row>
+            </div>
           </div>
 
           <button
@@ -348,11 +354,11 @@ export default function WithdrawSuccessPage() {
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="flex items-center justify-between gap-3">
-      <span className="text-xs font-medium text-muted-foreground">{label}</span>
-      <div className="min-w-0">{children}</div>
+    <div className="flex items-center justify-between gap-3 py-2.5">
+      <span className="text-[12px] font-medium text-white/55">{label}</span>
+      <div className="min-w-0 text-right">{children}</div>
     </div>
   );
 }
 
-function Divider() { return <div className="h-px bg-white/5" />; }
+function Divider() { return <div className="h-px bg-white/[0.06]" />; }
