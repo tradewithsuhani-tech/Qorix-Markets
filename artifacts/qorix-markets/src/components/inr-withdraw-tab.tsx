@@ -5,9 +5,10 @@ import { useQueryClient } from "@tanstack/react-query";
 import { getGetWalletQueryKey } from "@workspace/api-client-react";
 import {
   IndianRupee, Building2, Smartphone, AlertCircle, CheckCircle2, Clock, Loader2, ShieldCheck,
-  X, Sparkles, Hash, ArrowDownToLine, Copy, Check, Mail,
+  X, Sparkles, Hash, ArrowDownToLine, Copy, Check, Mail, Wallet,
 } from "lucide-react";
 import { REGEXP_ONLY_DIGITS } from "input-otp";
+import { useLocation } from "wouter";
 
 import { authFetch } from "@/lib/auth-fetch";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
@@ -742,6 +743,7 @@ function WithdrawalSuccessModal({
   onClose: () => void;
 }) {
   const [copied, setCopied] = useState(false);
+  const [, navigate] = useLocation();
 
   // Lock body scroll while modal is open so the celebratory animation gets the
   // user's full attention and the form below doesn't bleed through visually.
@@ -761,14 +763,15 @@ function WithdrawalSuccessModal({
 
   if (!receipt) return null;
 
-  const refCode = `QXW-${String(receipt.id).padStart(6, "0")}`;
-  const usdtHeld = receipt.amountUsdt;
+  const refCode = `WT-${String(receipt.id).padStart(6, "0")}`;
   const isUpi = receipt.payoutMethod === "upi";
-  const payoutLine = isUpi
-    ? receipt.upiId ?? "—"
-    : `${receipt.accountHolder ?? "—"} · ${receipt.bankName ?? "Bank"} · ****${(receipt.accountNumber ?? "").slice(-4)}`;
   const submittedAt = new Date(receipt.createdAt);
-  const etaAt = new Date(submittedAt.getTime() + 24 * 60 * 60 * 1000);
+
+  const maskAcc = (n: string | null): string => {
+    if (!n) return "—";
+    const last4 = n.slice(-4);
+    return `${"*".repeat(Math.max(4, n.length - 4))}${last4}`;
+  };
 
   const copyRef = async () => {
     try {
@@ -779,12 +782,9 @@ function WithdrawalSuccessModal({
     }
   };
 
-  const scrollToHistory = () => {
-    const el = document.getElementById("inr-withdraw-history");
+  const goToWallet = () => {
     onClose();
-    setTimeout(() => {
-      el?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 60);
+    setTimeout(() => navigate("/wallet"), 60);
   };
 
   return (
@@ -796,199 +796,159 @@ function WithdrawalSuccessModal({
         exit={{ opacity: 0 }}
         transition={{ duration: 0.2 }}
         onClick={onClose}
-        className="fixed inset-0 z-[120] flex items-center justify-center px-4 py-6 bg-black/75 backdrop-blur-sm"
+        className="fixed inset-0 z-[120] flex items-center justify-center px-4 py-6 bg-black/80 backdrop-blur-sm overflow-y-auto"
       >
         <motion.div
           key="card"
-          initial={{ opacity: 0, scale: 0.92, y: 12 }}
+          initial={{ opacity: 0, scale: 0.94, y: 12 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.96, y: 8 }}
           transition={{ type: "spring", stiffness: 260, damping: 24 }}
           onClick={(e) => e.stopPropagation()}
-          className="relative w-full max-w-sm overflow-hidden rounded-3xl border border-emerald-500/30 bg-gradient-to-b from-[#0b1f17] via-[#0a1814] to-[#070d0b] shadow-[0_24px_80px_rgba(16,185,129,0.35)]"
+          className="relative w-full max-w-md my-auto rounded-3xl border border-white/10 bg-gradient-to-b from-[#0c0d10] via-[#0a0b0e] to-[#06070a] shadow-[0_24px_80px_rgba(0,0,0,0.6)] p-5 sm:p-6 space-y-5"
         >
-          {/* Sparkle ribbon at top */}
-          <div className="absolute inset-x-0 top-0 h-[3px] bg-gradient-to-r from-transparent via-emerald-400/80 to-transparent" />
-          <div className="pointer-events-none absolute -top-12 left-1/2 -translate-x-1/2 h-40 w-40 rounded-full bg-emerald-500/25 blur-3xl" />
-
           {/* Close */}
           <button
             onClick={onClose}
-            className="absolute top-3 right-3 w-7 h-7 rounded-full flex items-center justify-center text-white/50 hover:text-white hover:bg-white/10 transition z-10"
+            className="absolute top-3 right-3 w-8 h-8 rounded-full flex items-center justify-center text-white/50 hover:text-white hover:bg-white/10 transition z-10"
             aria-label="Close"
           >
             <X className="w-4 h-4" />
           </button>
 
-          <div className="relative px-6 pt-7 pb-5 text-center">
-            {/* Animated check */}
+          {/* Hero clock with concentric rings */}
+          <div className="flex flex-col items-center pt-2 pb-1">
             <motion.div
-              initial={{ scale: 0, rotate: -45 }}
-              animate={{ scale: 1, rotate: 0 }}
-              transition={{ delay: 0.1, type: "spring", stiffness: 280, damping: 18 }}
-              className="relative mx-auto w-16 h-16 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center shadow-[0_8px_28px_rgba(16,185,129,0.45)]"
+              initial={{ scale: 0.6, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ type: "spring", stiffness: 180, damping: 14 }}
+              className="relative w-32 h-32 flex items-center justify-center"
             >
-              {/* Pulsing ring */}
-              <motion.span
-                className="absolute inset-0 rounded-full border-2 border-emerald-300/60"
-                initial={{ scale: 1, opacity: 0.7 }}
-                animate={{ scale: 1.7, opacity: 0 }}
-                transition={{ duration: 1.4, repeat: Infinity, ease: "easeOut" }}
-              />
-              <CheckCircle2 className="w-9 h-9 text-white" strokeWidth={2.5} />
+              <span className="absolute inset-0 rounded-full border border-amber-500/15" />
+              <span className="absolute inset-3 rounded-full border border-amber-500/25" />
+              <span className="absolute inset-6 rounded-full border border-amber-500/40" />
+              <motion.div
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                transition={{ type: "spring", stiffness: 220, damping: 14, delay: 0.05 }}
+                className="w-20 h-20 rounded-full bg-amber-500 flex items-center justify-center shadow-[0_0_40px_-6px_rgba(245,158,11,0.7)]"
+              >
+                <Clock className="w-10 h-10 text-white" strokeWidth={2.5} />
+              </motion.div>
             </motion.div>
-
-            <motion.div
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.25 }}
-              className="mt-4 inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-500/15 text-emerald-300 border border-emerald-500/30"
-            >
-              <Sparkles className="w-3 h-3" /> Submitted
-            </motion.div>
-
-            <motion.h3
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.3 }}
-              className="mt-3 text-xl font-bold text-white"
-            >
-              Withdrawal Request Placed
-            </motion.h3>
-            <motion.p
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.35 }}
-              className="mt-1 text-[13px] text-white/60"
-            >
-              Funds are safely held — payout on its way.
-            </motion.p>
-
-            {/* Big amount */}
-            <motion.div
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.4 }}
-              className="mt-5 rounded-2xl border border-white/10 bg-black/30 px-4 py-4"
-            >
-              <div className="text-[10px] uppercase tracking-wider text-white/50 font-semibold">Amount Requested</div>
-              <div className="mt-1 text-3xl font-extrabold text-white tabular-nums">
-                ₹{receipt.amountInr.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </div>
-              <div className="mt-1 text-[11px] text-emerald-300/90 inline-flex items-center gap-1">
-                <ArrowDownToLine className="w-3 h-3" />
-                ${usdtHeld.toFixed(2)} USDT held from Main Balance
-                {receipt.rateUsed > 0 && (
-                  <span className="text-white/40 ml-1">@ ₹{receipt.rateUsed.toFixed(2)}</span>
-                )}
-              </div>
-            </motion.div>
+            <div className="mt-5 text-[11px] tracking-[0.28em] font-bold text-amber-400">
+              WITHDRAWAL SUBMITTED
+            </div>
+            <div className="mt-3 text-4xl font-bold text-white tabular-nums">
+              ₹{receipt.amountInr.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+            </div>
+            <div className="mt-2 text-xs text-muted-foreground text-center px-4">
+              Pending compliance review · NEFT/IMPS within 24 hours
+            </div>
           </div>
 
-          {/* Receipt rows */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.45 }}
-            className="px-6 pb-5 space-y-2.5"
-          >
-            <ReceiptRow
-              icon={isUpi ? <Smartphone className="w-3.5 h-3.5" /> : <Building2 className="w-3.5 h-3.5" />}
-              label={isUpi ? "Payout to UPI" : "Payout to Bank"}
-              value={payoutLine}
-              mono={!isUpi}
-            />
-            <ReceiptRow
-              icon={<Hash className="w-3.5 h-3.5" />}
-              label="Reference"
-              value={
-                <button
-                  onClick={copyRef}
-                  className="inline-flex items-center gap-1 font-mono text-[12px] text-emerald-300 hover:text-emerald-200 transition"
-                >
-                  {refCode}
-                  {copied ? (
-                    <Check className="w-3 h-3 text-emerald-400" />
+          {/* Compliance banner */}
+          <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 flex items-center gap-3">
+            <ShieldCheck className="w-4 h-4 text-amber-300 shrink-0" />
+            <span className="text-xs text-white">
+              Queued for compliance review · You'll be notified on credit
+            </span>
+          </div>
+
+          {/* Withdrawal Details card */}
+          <div className="rounded-2xl border border-white/10 bg-white/[0.03] overflow-hidden">
+            <div className="px-5 pt-4 pb-3 text-[10px] tracking-[0.22em] font-bold text-white/55">
+              WITHDRAWAL DETAILS
+            </div>
+            <div className="px-5 pb-5 space-y-3">
+              <div className="flex items-center justify-between gap-3 border-t border-white/5 pt-3">
+                <span className="text-xs text-white/55">Method</span>
+                <span className="text-xs font-semibold text-white inline-flex items-center gap-2 min-w-0">
+                  <span className="w-6 h-6 rounded-md bg-emerald-500/15 border border-emerald-500/30 inline-flex items-center justify-center shrink-0 text-[10px] font-bold text-emerald-300">
+                    {isUpi ? <Smartphone className="w-3.5 h-3.5" /> : <Building2 className="w-3.5 h-3.5" />}
+                  </span>
+                  <span className="truncate">
+                    {isUpi ? "UPI Transfer" : "Bank Account · NEFT/IMPS"}
+                  </span>
+                </span>
+              </div>
+              <div className="flex items-center justify-between border-t border-white/5 pt-3">
+                <span className="text-xs text-white/55">Amount Debited</span>
+                <span className="text-xs font-bold text-rose-400 tabular-nums">
+                  − ₹{receipt.amountInr.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-3 border-t border-white/5 pt-3">
+                <span className="text-xs text-white/55 shrink-0">Beneficiary</span>
+                <span className="text-xs font-semibold text-white text-right min-w-0 truncate">
+                  {isUpi ? (
+                    <span className="font-mono">{receipt.upiId ?? "—"}</span>
                   ) : (
-                    <Copy className="w-3 h-3 opacity-60" />
+                    <>
+                      {receipt.accountHolder ?? "—"}
+                      <span className="text-white/55 font-mono ml-1">· {maskAcc(receipt.accountNumber)}</span>
+                    </>
+                  )}
+                </span>
+              </div>
+              {!isUpi && receipt.ifsc && (
+                <div className="flex items-center justify-between border-t border-white/5 pt-3">
+                  <span className="text-xs text-white/55">IFSC</span>
+                  <span className="text-xs font-mono font-semibold text-white">{receipt.ifsc}</span>
+                </div>
+              )}
+              <div className="flex items-center justify-between gap-3 border-t border-white/5 pt-3">
+                <span className="text-xs text-white/55 shrink-0">Reference</span>
+                <button
+                  type="button"
+                  onClick={copyRef}
+                  className="text-xs font-mono font-semibold text-white inline-flex items-center gap-2 hover:text-emerald-300 transition-colors min-w-0"
+                >
+                  <span className="truncate">{refCode}</span>
+                  {copied ? (
+                    <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                  ) : (
+                    <Copy className="w-3.5 h-3.5 text-white/50 shrink-0" />
                   )}
                 </button>
-              }
-            />
-            <ReceiptRow
-              icon={<Clock className="w-3.5 h-3.5" />}
-              label="Expected By"
-              value={
-                <span>
-                  {etaAt.toLocaleString(undefined, {
-                    day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit",
+              </div>
+              <div className="flex items-center justify-between border-t border-white/5 pt-3">
+                <span className="text-xs text-white/55">Date &amp; Time</span>
+                <span className="text-xs font-semibold text-white">
+                  {submittedAt.toLocaleString("en-IN", {
+                    day: "2-digit",
+                    month: "short",
+                    year: "numeric",
+                    hour: "numeric",
+                    minute: "2-digit",
+                    hour12: true,
                   })}
-                  <span className="text-white/40 ml-1">(within 24h)</span>
                 </span>
-              }
-            />
-          </motion.div>
+              </div>
+              <div className="flex items-center justify-between border-t border-white/5 pt-3">
+                <span className="text-xs text-white/55">Status</span>
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/15 border border-amber-500/35 text-[11px] font-semibold text-amber-300">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                  Pending
+                </span>
+              </div>
+            </div>
+          </div>
 
-          {/* Reassurance footer */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.55 }}
-            className="mx-6 mb-5 flex items-start gap-2 rounded-xl border border-amber-500/20 bg-amber-500/8 px-3 py-2.5 text-[11px] text-amber-200/90"
+          {/* CTA */}
+          <button
+            type="button"
+            onClick={goToWallet}
+            className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-bold text-sm hover:from-emerald-400 hover:to-teal-400 shadow-[0_0_28px_-6px_rgba(16,185,129,0.65)] transition-all inline-flex items-center justify-center gap-2"
           >
-            <ShieldCheck className="w-3.5 h-3.5 mt-0.5 shrink-0 text-amber-300" />
-            <span className="leading-snug">
-              If rejected for any reason, the held amount is automatically refunded to your Main Balance.
-            </span>
-          </motion.div>
-
-          {/* CTAs */}
-          <motion.div
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.6 }}
-            className="px-6 pb-6 grid grid-cols-2 gap-2.5"
-          >
-            <button
-              onClick={scrollToHistory}
-              className="rounded-xl px-3 py-2.5 text-sm font-semibold text-white/90 bg-white/[0.06] border border-white/10 hover:bg-white/[0.1] transition"
-            >
-              View History
-            </button>
-            <button
-              onClick={onClose}
-              className="rounded-xl px-3 py-2.5 text-sm font-bold text-white shadow-[0_4px_18px_rgba(16,185,129,0.35)] transition hover:brightness-110"
-              style={{ background: "linear-gradient(135deg,#10b981,#059669)" }}
-            >
-              Done
-            </button>
-          </motion.div>
+            <Wallet className="w-4 h-4" />
+            Back to Wallet
+          </button>
+          <p className="text-[10px] text-center text-white/45 leading-relaxed -mt-1">
+            If rejected, the held amount auto-refunds to your Main Balance.
+          </p>
         </motion.div>
       </motion.div>
     </AnimatePresence>
-  );
-}
-
-function ReceiptRow({
-  icon,
-  label,
-  value,
-  mono,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: React.ReactNode;
-  mono?: boolean;
-}) {
-  return (
-    <div className="flex items-start justify-between gap-3 rounded-xl border border-white/8 bg-white/[0.02] px-3 py-2.5">
-      <div className="flex items-center gap-2 text-[11px] text-white/55 font-medium shrink-0">
-        <span className="text-emerald-300/70">{icon}</span>
-        {label}
-      </div>
-      <div className={`text-right text-[12px] text-white/90 ${mono ? "font-mono" : ""} break-all`}>
-        {value}
-      </div>
-    </div>
   );
 }
