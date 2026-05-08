@@ -1013,28 +1013,28 @@ function PortfolioBalanceHero({
         </div>
 
         {/* PNL row */}
-        <div className="mt-4 flex items-center gap-2">
-          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border"
+        <div className="mt-4 flex items-center gap-2 min-w-0">
+          <div className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border whitespace-nowrap shrink-0"
             style={{
               backgroundColor: `${trendColor}1F`,
               borderColor: `${trendColor}66`,
             }}
           >
             {isUp
-              ? <TrendingUp style={{ width: 11, height: 11, color: trendColor }} />
-              : <TrendingDown style={{ width: 11, height: 11, color: trendColor }} />}
-            <span className="text-xs font-bold" style={{ color: trendColor }}>
+              ? <TrendingUp style={{ width: 10, height: 10, color: trendColor }} />
+              : <TrendingDown style={{ width: 10, height: 10, color: trendColor }} />}
+            <span className="text-[11px] font-bold tabular-nums" style={{ color: trendColor }}>
               {isHidden
                 ? "••••"
                 : `${isUp ? "+" : ""}₹${Math.abs(pnlInr).toLocaleString("en-IN", { maximumFractionDigits: 0 })}`}
             </span>
-            <span className="text-[11px] font-bold" style={{ color: trendColor }}>
+            <span className="text-[10px] font-bold opacity-80 tabular-nums" style={{ color: trendColor }}>
               {isUp ? "+" : ""}{pnlPct.toFixed(2)}%
             </span>
           </div>
-          <span className="text-[11px] text-muted-foreground">Today's PNL</span>
-          <div className="ml-auto">
-            <MiniSparkline width={84} height={32} color={trendColor} isUp={isUp} />
+          <span className="text-[10px] text-muted-foreground whitespace-nowrap shrink-0">Today's PNL</span>
+          <div className="ml-auto shrink-0">
+            <MiniSparkline width={64} height={28} color={trendColor} isUp={isUp} />
           </div>
         </div>
 
