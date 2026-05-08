@@ -27,14 +27,15 @@ function RootLayoutNav() {
   const segments = useSegments();
   const router = useRouter();
 
-  const inAuthGroup = segments[0] === "(auth)";
+  const segmentsArr = segments as readonly string[];
+  const inAuthGroup = segmentsArr[0] === "(auth)";
 
   useEffect(() => {
     if (isLoading) return;
 
     // Not authenticated → push to login (or OTP if mid-signup)
     if (!isAuthenticated) {
-      if (pendingOtpFor && segments[1] !== "otp") {
+      if (pendingOtpFor && segmentsArr[1] !== "otp") {
         router.replace({ pathname: "/(auth)/otp", params: { email: pendingOtpFor } });
       } else if (!inAuthGroup) {
         router.replace("/(auth)/login");
@@ -44,7 +45,7 @@ function RootLayoutNav() {
 
     // Authenticated but no KYC → push to KYC
     if (user && user.kycStatus === "none") {
-      if (segments[1] !== "kyc") {
+      if (segmentsArr[1] !== "kyc") {
         router.replace("/(auth)/kyc");
       }
       return;

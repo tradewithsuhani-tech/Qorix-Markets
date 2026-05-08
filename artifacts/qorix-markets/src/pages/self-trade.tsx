@@ -1044,7 +1044,7 @@ export default function SelfTradePage() {
               {[0, 50, 100, 200, 500].map((v) => (
                 <button
                   key={`sl-${v}`}
-                  onClick={() => setSlPts(v)}
+                  onClick={() => setSlPx(v === 0 ? "" : (mid - v * pair.pip).toFixed(pair.digits))}
                   className={`flex-1 min-w-[40px] py-1 rounded-md text-[9.5px] font-mono tabular-nums border ${
                     slPts === v
                       ? "border-rose-400/50 bg-rose-500/10 text-rose-300"
@@ -1059,7 +1059,7 @@ export default function SelfTradePage() {
               {[0, 50, 100, 200, 500].map((v) => (
                 <button
                   key={`tp-${v}`}
-                  onClick={() => setTpPts(v)}
+                  onClick={() => setTpPx(v === 0 ? "" : (mid + v * pair.pip).toFixed(pair.digits))}
                   className={`flex-1 min-w-[40px] py-1 rounded-md text-[9.5px] font-mono tabular-nums border ${
                     tpPts === v
                       ? "border-emerald-400/50 bg-emerald-500/10 text-emerald-300"
