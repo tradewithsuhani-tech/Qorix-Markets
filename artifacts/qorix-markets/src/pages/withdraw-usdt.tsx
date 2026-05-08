@@ -44,21 +44,27 @@ export default function WithdrawUsdtPage() {
 
   return (
     <Layout>
-      <div className="max-w-2xl mx-auto px-4 pt-6 pb-24 space-y-5">
-        <button
-          onClick={() => navigate("/withdraw")}
-          className="w-10 h-10 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 flex items-center justify-center"
-          data-testid="button-back"
-        >
-          <ArrowLeft className="w-5 h-5" />
-        </button>
+      <div className="max-w-md mx-auto px-5 pt-5 pb-28">
+        <div className="flex items-center justify-between mb-6">
+          <button
+            onClick={() => navigate("/withdraw")}
+            className="w-9 h-9 rounded-full border border-white/10 bg-white/[0.04] hover:bg-white/[0.08] flex items-center justify-center transition-colors"
+            data-testid="button-back"
+          >
+            <ArrowLeft className="w-4 h-4" />
+          </button>
+          <div className="text-[10px] font-semibold tracking-[0.18em] text-white/45 uppercase">
+            Withdraw · 2 / 4
+          </div>
+          <div className="w-9" />
+        </div>
 
-        <div className="space-y-1.5">
-          <div className="text-[10px] font-bold tracking-[0.16em] text-amber-400">STEP 2 OF 4</div>
-          <h1 className="text-2xl font-bold tracking-tight">Destination Wallet</h1>
-          <p className="text-sm text-muted-foreground leading-relaxed">
-            Send <span className="text-emerald-400 font-bold">${numAmount.toFixed(2)} USDT</span> on the
-            <span className="text-amber-400 font-bold"> TRON (TRC20)</span> network.
+        <div className="space-y-1.5 mb-6">
+          <h1 className="text-[26px] font-semibold tracking-[-0.02em] leading-tight">
+            Where should we send it?
+          </h1>
+          <p className="text-[13px] text-white/55 leading-relaxed">
+            ${numAmount.toFixed(2)} USDT on the TRON (TRC20) network
           </p>
         </div>
 

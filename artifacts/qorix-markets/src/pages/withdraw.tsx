@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
+import { motion } from "framer-motion";
 import { useGetWallet, useGetDashboardSummary } from "@workspace/api-client-react";
 import { useQuery } from "@tanstack/react-query";
 import { Layout } from "@/components/layout";
-import { ArrowLeft, ArrowUpFromLine, Shield, AlertCircle, CheckCircle2, Loader2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, Shield, AlertTriangle, TrendingUp, Wallet as WalletIcon } from "lucide-react";
 import { authFetch } from "@/lib/auth-fetch";
 import { newIdemKey, patchWithdrawState, readWithdrawState } from "@/lib/withdraw-flow-state";
 import { cn } from "@/lib/utils";
@@ -47,7 +48,7 @@ export default function WithdrawPage() {
   });
   const kycApproved = !kycData ? true : kycData.kycStatus === "approved";
 
-  // INR limits — only fetched if needed for display/validation
+  // INR limits
   const { data: limits } = useQuery<Limits>({
     queryKey: ["withdrawal-limits"],
     queryFn: () => apiFetch("/withdrawal-limits"),
@@ -69,25 +70,15 @@ export default function WithdrawPage() {
       : false;
 
   const valid =
-    numAmount >= min &&
-    !exceedsBalance &&
-    !exceedsCap &&
-    !exceedsMain;
+    numAmount >= min && !exceedsBalance && !exceedsCap && !exceedsMain;
 
   useEffect(() => {
     if (valid && showAmtError) setShowAmtError(false);
   }, [valid, showAmtError]);
 
   const handleContinue = () => {
-    if (!kycApproved) {
-      navigate("/kyc");
-      return;
-    }
-    if (!valid) {
-      setShowAmtError(true);
-      amountRef.current?.focus();
-      return;
-    }
+    if (!kycApproved) { navigate("/kyc"); return; }
+    if (!valid) { setShowAmtError(true); amountRef.current?.focus(); return; }
     const next = patchWithdrawState({
       currency,
       source: currency === "usdt" ? source : "main",
@@ -101,156 +92,170 @@ export default function WithdrawPage() {
       ifsc: undefined,
       bankName: undefined,
       usePoints: false,
+      pointsToSpend: 0,
     });
     if (next.currency === "usdt") navigate("/withdraw/usdt");
     else navigate("/withdraw/inr");
   };
 
-  const symbol = currency === "usdt" ? "$" : "₹";
-  const inrEquiv = currency === "usdt" ? numAmount * FX_RATE : 0;
-  const usdEquiv = currency === "inr" && limits ? numAmount / (limits.rate || FX_RATE) : 0;
+  const isUsdt = currency === "usdt";
+  const symbol = isUsdt ? "$" : "₹";
+  const inrEquiv = isUsdt ? numAmount * FX_RATE : 0;
+  const usdEquiv = !isUsdt && limits ? numAmount / (limits.rate || FX_RATE) : 0;
+  const quick = isUsdt ? [10, 50, 100, 500] : [500, 2000, 10000, 25000];
 
-  const quick = currency === "usdt" ? [10, 50, 100, 500] : [500, 2000, 10000, 25000];
+  let amountHint = "";
+  if (numAmount > 0 && numAmount < min) amountHint = `Minimum ${symbol}${min.toLocaleString(isUsdt ? "en-US" : "en-IN")}`;
+  else if (exceedsBalance) amountHint = `Above ${source} balance of $${sourceBalance.toFixed(2)}`;
+  else if (exceedsMain) amountHint = `Not enough USDT in main balance`;
+  else if (exceedsCap) amountHint = `Above your INR channel cap`;
 
   return (
     <Layout>
-      <div className="max-w-2xl mx-auto px-4 pt-6 pb-24 space-y-4">
-        <button
-          onClick={() => navigate("/wallet")}
-          className="w-10 h-10 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 flex items-center justify-center"
-          data-testid="button-back"
-        >
-          <ArrowLeft className="w-5 h-5" />
-        </button>
+      <div className="max-w-md mx-auto px-5 pt-5 pb-28">
+        {/* Header bar */}
+        <div className="flex items-center justify-between mb-6">
+          <button
+            onClick={() => navigate("/wallet")}
+            className="w-9 h-9 rounded-full border border-white/10 bg-white/[0.04] hover:bg-white/[0.08] flex items-center justify-center transition-colors"
+            data-testid="button-back"
+          >
+            <ArrowLeft className="w-4 h-4" />
+          </button>
+          <div className="text-[10px] font-semibold tracking-[0.18em] text-white/45 uppercase">
+            Withdraw · 1 / 4
+          </div>
+          <div className="w-9" />
+        </div>
 
-        <div className="space-y-1.5">
-          <h1 className="text-2xl font-bold tracking-tight">Withdraw Funds</h1>
-          <p className="text-sm text-muted-foreground leading-relaxed">
-            {currency === "usdt"
-              ? "Send USDT to your TRC20 wallet. Reviewed within 24 hours."
-              : "Receive INR directly to your UPI ID or bank account."}
+        {/* Title */}
+        <div className="space-y-1.5 mb-5">
+          <h1 className="text-[26px] font-semibold tracking-[-0.02em] leading-tight">
+            How much do you want to withdraw?
+          </h1>
+          <p className="text-[13px] text-white/55 leading-relaxed">
+            {isUsdt
+              ? `USDT to a TRC20 wallet · Network fee ${withdrawalFeePercent}% · 24 hr review`
+              : "INR direct to UPI or bank account · 24 hr review"}
           </p>
         </div>
 
+        {/* KYC pill — slim, only when needed */}
         {!kycApproved && (
-          <div className="flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-xs text-amber-300">
-            <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <div className="font-semibold">KYC required</div>
-              <div className="text-amber-200/80 mt-0.5">Complete KYC verification to enable withdrawals.</div>
-            </div>
-            <button
-              onClick={() => navigate("/kyc")}
-              className="text-amber-200 font-bold underline shrink-0"
-            >
-              Complete now
-            </button>
-          </div>
+          <button
+            onClick={() => navigate("/kyc")}
+            className="w-full mb-5 flex items-center gap-2.5 rounded-xl border border-amber-500/25 bg-amber-500/[0.06] px-3.5 py-2.5 hover:bg-amber-500/[0.10] transition-colors text-left"
+            data-testid="kyc-banner"
+          >
+            <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+            <span className="flex-1 text-[12px] text-amber-100/90">
+              <span className="font-semibold text-amber-300">KYC required</span>
+              <span className="text-amber-200/60"> · finish verification to unlock withdrawals</span>
+            </span>
+            <ArrowRight className="w-3.5 h-3.5 text-amber-300 shrink-0" />
+          </button>
         )}
 
-        {/* Currency toggle */}
-        <div className="grid grid-cols-2 gap-2 p-1 rounded-2xl border border-white/10 bg-white/5">
+        {/* Currency segmented control */}
+        <div className="relative grid grid-cols-2 p-1 rounded-2xl border border-white/[0.07] bg-white/[0.025] mb-5">
+          <motion.div
+            layout
+            transition={{ type: "spring", stiffness: 480, damping: 36 }}
+            className={cn(
+              "absolute top-1 bottom-1 w-[calc(50%-4px)] rounded-xl",
+              isUsdt ? "left-1 bg-amber-400/[0.14] border border-amber-400/35" : "left-[calc(50%+1px)] bg-emerald-400/[0.14] border border-emerald-400/35"
+            )}
+            style={{
+              boxShadow: isUsdt
+                ? "inset 0 1px 0 rgba(245,158,11,0.18)"
+                : "inset 0 1px 0 rgba(16,185,129,0.18)",
+            }}
+          />
           <button
             onClick={() => setCurrency("usdt")}
             className={cn(
-              "flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-sm font-bold transition-all",
-              currency === "usdt"
-                ? "bg-amber-500/90 text-amber-950 shadow"
-                : "text-white/70 hover:bg-white/5"
+              "relative z-10 flex items-center justify-center gap-1.5 py-2.5 text-[12.5px] font-semibold transition-colors",
+              isUsdt ? "text-amber-200" : "text-white/55 hover:text-white/80"
             )}
             data-testid="tab-usdt"
           >
-            <span className="text-base">$</span> USDT (TRC20)
+            <span className="text-[14px] leading-none">$</span>
+            <span>USDT</span>
+            <span className="text-[10px] font-medium opacity-60">TRC20</span>
           </button>
           <button
             onClick={() => setCurrency("inr")}
             className={cn(
-              "flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-sm font-bold transition-all",
-              currency === "inr"
-                ? "bg-emerald-500/90 text-emerald-950 shadow"
-                : "text-white/70 hover:bg-white/5"
+              "relative z-10 flex items-center justify-center gap-1.5 py-2.5 text-[12.5px] font-semibold transition-colors",
+              !isUsdt ? "text-emerald-200" : "text-white/55 hover:text-white/80"
             )}
             data-testid="tab-inr"
           >
-            <span className="text-base">₹</span> INR (UPI / Bank)
+            <span className="text-[14px] leading-none">₹</span>
+            <span>INR</span>
+            <span className="text-[10px] font-medium opacity-60">UPI · Bank</span>
           </button>
         </div>
 
         {/* Source picker — USDT only */}
-        {currency === "usdt" && (
-          <div>
-            <div className="text-xs font-medium text-muted-foreground mb-2">From</div>
+        {isUsdt && (
+          <div className="mb-5">
+            <div className="text-[10px] uppercase tracking-[0.14em] text-white/40 font-semibold mb-2">From</div>
             <div className="grid grid-cols-2 gap-2">
-              <button
+              <SourceCard
+                active={source === "profit"}
                 onClick={() => { setSource("profit"); setAmount(""); }}
-                className={cn(
-                  "rounded-xl px-3 py-2.5 border text-left transition-all",
-                  source === "profit"
-                    ? "bg-emerald-500/15 border-emerald-500/50"
-                    : "bg-white/[0.02] border-white/10 hover:bg-white/[0.04]"
-                )}
-                data-testid="source-profit"
-              >
-                <div className="text-[10px] uppercase tracking-wider text-muted-foreground">From Profit</div>
-                <div className={cn("text-sm font-bold", source === "profit" ? "text-emerald-400" : "text-white/80")}>
-                  ${profitBal.toFixed(2)}
-                </div>
-              </button>
-              <button
+                icon={<TrendingUp className="w-3.5 h-3.5" />}
+                label="Profit"
+                balance={profitBal}
+                testId="source-profit"
+              />
+              <SourceCard
+                active={source === "main"}
                 onClick={() => { setSource("main"); setAmount(""); }}
-                className={cn(
-                  "rounded-xl px-3 py-2.5 border text-left transition-all",
-                  source === "main"
-                    ? "bg-emerald-500/15 border-emerald-500/50"
-                    : "bg-white/[0.02] border-white/10 hover:bg-white/[0.04]"
-                )}
-                data-testid="source-main"
-              >
-                <div className="text-[10px] uppercase tracking-wider text-muted-foreground">From Main</div>
-                <div className={cn("text-sm font-bold", source === "main" ? "text-emerald-400" : "text-white/80")}>
-                  ${mainBal.toFixed(2)}
-                </div>
-              </button>
+                icon={<WalletIcon className="w-3.5 h-3.5" />}
+                label="Main"
+                balance={mainBal}
+                testId="source-main"
+              />
             </div>
           </div>
         )}
 
         {/* Available — INR */}
-        {currency === "inr" && (
-          <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 space-y-1.5">
+        {!isUsdt && (
+          <div className="mb-5 rounded-xl border border-white/[0.07] bg-white/[0.025] p-3.5">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-[11px] text-white/55">Main balance</span>
+              <span className="text-[13px] font-semibold tabular-nums">${mainBal.toFixed(2)}</span>
+            </div>
+            <div className="h-px bg-white/[0.05] my-2" />
             <div className="flex items-center justify-between">
-              <span className="text-xs text-muted-foreground">Main Balance</span>
-              <span className="text-sm font-bold text-emerald-400">${mainBal.toFixed(2)}</span>
+              <span className="text-[11px] text-white/55">Available in INR</span>
+              <span className="text-[13px] font-semibold text-emerald-300 tabular-nums">
+                {limits ? `₹${maxInr.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : "—"}
+              </span>
             </div>
             {limits && (
-              <>
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-muted-foreground">Available to withdraw (INR)</span>
-                  <span className="font-bold text-white">
-                    ₹{maxInr.toLocaleString(undefined, { maximumFractionDigits: 2 })}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between text-[10px] text-muted-foreground font-mono">
-                  <span>Rate</span>
-                  <span>1 USDT = ₹{limits.rate.toFixed(2)}</span>
-                </div>
-              </>
+              <div className="text-[10px] text-white/35 font-mono mt-1.5 text-right tabular-nums">
+                1 USDT = ₹{limits.rate.toFixed(2)}
+              </div>
             )}
           </div>
         )}
 
-        {/* Amount */}
-        <div>
+        {/* Amount — hero input */}
+        <div className="mb-3">
           <div className="flex items-center justify-between mb-2">
-            <label className="text-xs font-medium text-muted-foreground">
-              Amount ({currency === "usdt" ? "USD" : "INR"})
+            <label className="text-[10px] uppercase tracking-[0.14em] text-white/40 font-semibold">
+              Amount in {isUsdt ? "USD" : "INR"}
             </label>
             <button
               onClick={() => {
-                if (currency === "usdt") setAmount(String(sourceBalance.toFixed(2)));
+                if (isUsdt) setAmount(String(sourceBalance.toFixed(2)));
                 else if (limits) setAmount(String(Math.floor(maxInr)));
               }}
-              className="text-[11px] text-amber-200 font-bold px-2 py-1 bg-amber-500/15 rounded-lg hover:bg-amber-500/25 transition"
+              className="text-[10px] font-bold tracking-wider text-white/55 hover:text-white px-2 py-0.5 rounded-md border border-white/10 hover:border-white/25 transition-colors"
               data-testid="button-max"
             >
               MAX
@@ -258,111 +263,123 @@ export default function WithdrawPage() {
           </div>
           <div
             className={cn(
-              "flex items-center gap-2 rounded-xl px-4 h-16 bg-white/5 border transition-colors",
+              "rounded-2xl border bg-white/[0.025] px-4 py-3.5 transition-colors",
               numAmount > 0 && !valid
-                ? "border-rose-500"
+                ? "border-rose-500/45"
                 : valid
-                ? "border-emerald-500"
-                : "border-white/10"
+                ? isUsdt ? "border-amber-400/40" : "border-emerald-400/40"
+                : "border-white/[0.07]"
             )}
           >
-            <span className="text-2xl font-bold text-emerald-400 select-none">{symbol}</span>
-            <input
-              ref={amountRef}
-              type="number"
-              inputMode="decimal"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              placeholder="0"
-              className="flex-1 bg-transparent border-0 outline-none text-3xl font-bold placeholder:text-muted-foreground/50 min-w-0"
-              data-testid="input-amount"
-            />
-            {numAmount > 0 && currency === "usdt" && (
-              <span className="text-[11px] text-muted-foreground font-mono whitespace-nowrap">
-                ≈ ₹{Math.round(inrEquiv).toLocaleString("en-IN")}
+            <div className="flex items-baseline gap-2">
+              <span className={cn("text-[26px] font-semibold leading-none select-none", isUsdt ? "text-amber-300/80" : "text-emerald-300/80")}>
+                {symbol}
               </span>
-            )}
-            {numAmount > 0 && currency === "inr" && limits && (
-              <span className="text-[11px] text-muted-foreground font-mono whitespace-nowrap">
-                ≈ ${usdEquiv.toFixed(2)}
-              </span>
+              <input
+                ref={amountRef}
+                type="number"
+                inputMode="decimal"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                placeholder="0.00"
+                className="flex-1 bg-transparent border-0 outline-none text-[34px] font-semibold tracking-[-0.02em] tabular-nums placeholder:text-white/15 min-w-0"
+                data-testid="input-amount"
+              />
+            </div>
+            {numAmount > 0 && (
+              <div className="text-[11px] text-white/40 font-mono tabular-nums mt-1.5">
+                {isUsdt
+                  ? `≈ ₹${Math.round(inrEquiv).toLocaleString("en-IN")}`
+                  : `≈ $${usdEquiv.toFixed(2)}`}
+              </div>
             )}
           </div>
-
-          <div className="mt-1.5 min-h-[16px] text-[11px]">
-            {numAmount > 0 && numAmount < min && (
-              <span className="text-rose-400">
-                Minimum is {symbol}{min.toLocaleString(currency === "inr" ? "en-IN" : "en-US")}.
-              </span>
-            )}
-            {exceedsBalance && (
-              <span className="text-rose-400">Amount exceeds your {source} balance (${sourceBalance.toFixed(2)}).</span>
-            )}
-            {exceedsMain && !exceedsBalance && (
-              <span className="text-rose-400">Not enough USDT in main balance for this INR amount.</span>
-            )}
-            {exceedsCap && !exceedsMain && (
-              <span className="text-rose-400">
-                Above your INR cap (₹{maxInr.toLocaleString(undefined, { maximumFractionDigits: 0 })}).
-              </span>
-            )}
+          <div className="min-h-[14px] mt-1.5 text-[11px] text-rose-400">
+            {amountHint}
           </div>
         </div>
 
-        <div className="grid grid-cols-4 gap-2">
+        {/* Quick amounts */}
+        <div className="grid grid-cols-4 gap-1.5 mb-6">
           {quick.map((a) => {
-            const ok = currency === "usdt" ? a <= sourceBalance : a <= (maxInr || a);
+            const ok = isUsdt ? a <= sourceBalance : a <= (maxInr || a);
             return (
               <button
                 key={a}
                 onClick={() => setAmount(String(a))}
                 disabled={!ok}
-                className="text-xs py-2.5 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 font-semibold text-muted-foreground hover:text-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                className="text-[11px] py-2 rounded-lg border border-white/[0.07] bg-white/[0.025] hover:bg-white/[0.06] hover:border-white/15 font-semibold text-white/65 hover:text-white transition-colors disabled:opacity-25 disabled:cursor-not-allowed disabled:hover:bg-white/[0.025] disabled:hover:border-white/[0.07] tabular-nums"
                 data-testid={`quick-${a}`}
               >
-                {currency === "usdt" ? `$${a}` : `₹${(a / 1000).toFixed(0)}K`}
+                {isUsdt ? `$${a}` : a >= 1000 ? `₹${a / 1000}K` : `₹${a}`}
               </button>
             );
           })}
         </div>
 
-        <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-[11px] text-muted-foreground flex items-center gap-2">
-          <Shield className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+        {/* Trust strip */}
+        <div className="flex items-center gap-2 text-[11px] text-white/45 mb-5">
+          <Shield className="w-3 h-3 text-emerald-400/80" />
           <span>
-            {currency === "usdt"
-              ? `Network fee ${withdrawalFeePercent}% (${vip?.label ?? "Standard"}). Reviewed within 24 hrs.`
-              : "Direct INR payout · Capped per channel · OTP-confirmed"}
+            {isUsdt
+              ? `${vip?.label ?? "Standard"} tier · ${withdrawalFeePercent}% fee · OTP confirmed`
+              : "Capped per channel · OTP confirmed · 24 hr review"}
           </span>
         </div>
 
+        {/* CTA */}
         <button
           onClick={handleContinue}
           disabled={!kycApproved || !valid}
-          className="w-full h-14 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-          style={{
-            background:
-              currency === "usdt"
-                ? "linear-gradient(135deg,#f59e0b,#d97706)"
-                : "linear-gradient(135deg,#10b981,#059669)",
-            color: currency === "usdt" ? "#0b0b0b" : "#fff",
-            boxShadow:
-              currency === "usdt"
-                ? "0 6px 22px rgba(245,158,11,0.30)"
-                : "0 6px 22px rgba(16,185,129,0.30)",
-          }}
+          className={cn(
+            "w-full h-12 rounded-xl text-[13px] font-semibold flex items-center justify-center gap-2 transition-all",
+            "disabled:opacity-40 disabled:cursor-not-allowed",
+            isUsdt
+              ? "bg-amber-400 hover:bg-amber-300 text-black shadow-[0_4px_18px_-4px_rgba(245,158,11,0.55)]"
+              : "bg-emerald-500 hover:bg-emerald-400 text-black shadow-[0_4px_18px_-4px_rgba(16,185,129,0.55)]"
+          )}
           data-testid="button-continue"
         >
-          {!kycApproved ? "Complete KYC for Withdrawal" : "Continue"}
-          <ArrowUpFromLine className="w-4 h-4" />
+          {!kycApproved ? "Complete KYC to continue" : "Continue"}
+          {kycApproved && <ArrowRight className="w-3.5 h-3.5" />}
         </button>
-
-        {showAmtError && !valid && (
-          <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl border border-rose-500/30 bg-rose-500/10 text-[11px] text-rose-300">
-            <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-            Enter a valid amount to continue.
-          </div>
-        )}
       </div>
     </Layout>
+  );
+}
+
+function SourceCard({
+  active, onClick, icon, label, balance, testId,
+}: {
+  active: boolean; onClick: () => void; icon: React.ReactNode; label: string; balance: number; testId: string;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        "rounded-xl border p-3 text-left transition-all relative",
+        active
+          ? "bg-emerald-400/[0.08] border-emerald-400/40"
+          : "bg-white/[0.025] border-white/[0.07] hover:border-white/15"
+      )}
+      data-testid={testId}
+    >
+      <div className="flex items-center justify-between mb-1.5">
+        <span className={cn(
+          "w-6 h-6 rounded-md flex items-center justify-center",
+          active ? "bg-emerald-400/15 text-emerald-300" : "bg-white/[0.04] text-white/50"
+        )}>{icon}</span>
+        {active && (
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.6)]" />
+        )}
+      </div>
+      <div className="text-[10px] uppercase tracking-[0.12em] text-white/45 font-semibold">{label}</div>
+      <div className={cn(
+        "text-[15px] font-semibold tabular-nums mt-0.5",
+        active ? "text-emerald-300" : "text-white/85"
+      )}>
+        ${balance.toFixed(2)}
+      </div>
+    </button>
   );
 }
