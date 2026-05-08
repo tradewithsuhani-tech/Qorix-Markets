@@ -160,7 +160,7 @@ export default function DepositUpiPayPage() {
             />
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-base font-extrabold truncate">{name}</div>
+            <div className="text-base font-extrabold truncate uppercase">{name}</div>
           </div>
           <span className="inline-flex items-center gap-1 px-2 py-1 rounded border bg-emerald-500/15 border-emerald-500/40 text-emerald-400 text-[9px] font-bold tracking-wider">
             <Shield className="w-2.5 h-2.5" /> ESCROW

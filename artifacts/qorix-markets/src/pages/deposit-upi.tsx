@@ -146,7 +146,7 @@ export default function DepositUpiPage() {
 
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5 flex-wrap">
-                      <div className="text-base font-extrabold truncate">{name}</div>
+                      <div className="text-base font-extrabold truncate uppercase">{name}</div>
                       {m.isOnline !== false && (
                         <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border bg-emerald-500/20 border-emerald-500/45 text-emerald-400 text-[9px] font-bold tracking-wider">
                           <Check className="w-2.5 h-2.5" /> ONLINE
