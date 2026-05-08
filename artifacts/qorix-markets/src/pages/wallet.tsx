@@ -1058,36 +1058,20 @@ function ActionTile({
   onClick?: () => void;
 }) {
   const palette = {
-    emerald: { hex: "#22c55e", ringTop: "rgba(34,197,94,0.30)", ringBot: "rgba(34,197,94,0.06)" },
-    amber:   { hex: "#f59e0b", ringTop: "rgba(245,158,11,0.30)", ringBot: "rgba(245,158,11,0.06)" },
-    cyan:    { hex: "#06b6d4", ringTop: "rgba(6,182,212,0.30)", ringBot: "rgba(6,182,212,0.06)" },
+    emerald: { fg: "text-emerald-300", iconBg: "bg-emerald-500/12", iconBorder: "border-emerald-400/25", hover: "hover:border-emerald-400/40" },
+    amber:   { fg: "text-amber-300",   iconBg: "bg-amber-500/12",   iconBorder: "border-amber-400/25",   hover: "hover:border-amber-400/40" },
+    cyan:    { fg: "text-cyan-300",    iconBg: "bg-cyan-500/12",    iconBorder: "border-cyan-400/25",    hover: "hover:border-cyan-400/40" },
   }[color];
 
   return (
     <button
       onClick={onClick}
-      className="group flex flex-col items-center gap-2 outline-none"
+      className={`group flex items-center justify-center gap-2 px-3 py-3 rounded-xl bg-white/[0.03] border border-white/[0.08] ${palette.hover} hover:bg-white/[0.06] active:scale-[0.98] transition-all outline-none`}
     >
-      <div className="relative">
-        <div
-          className="absolute inset-0 rounded-full opacity-25 blur-md group-hover:opacity-50 transition-opacity"
-          style={{ backgroundColor: palette.hex }}
-        />
-        <div
-          className="relative w-14 h-14 rounded-full flex items-center justify-center border transition-transform group-active:scale-95 group-hover:scale-[1.04]"
-          style={{
-            background: `linear-gradient(155deg, ${palette.ringTop}, ${palette.ringBot})`,
-            borderColor: palette.hex,
-            boxShadow: `0 6px 18px ${palette.hex}55`,
-          }}
-        >
-          {/* Glossy highlight */}
-          <div className="absolute top-0.5 left-0.5 right-0.5 h-6 rounded-full pointer-events-none"
-            style={{ background: "linear-gradient(180deg, rgba(255,255,255,0.30), rgba(255,255,255,0))" }} />
-          <Icon className="w-5 h-5 text-white relative" />
-        </div>
-      </div>
-      <span className="text-xs font-semibold text-white/85 tracking-wide">{label}</span>
+      <span className={`w-8 h-8 rounded-lg ${palette.iconBg} border ${palette.iconBorder} flex items-center justify-center shrink-0`}>
+        <Icon className={`w-4 h-4 ${palette.fg}`} />
+      </span>
+      <span className="text-[13px] font-semibold text-white/90 tracking-tight">{label}</span>
     </button>
   );
 }
