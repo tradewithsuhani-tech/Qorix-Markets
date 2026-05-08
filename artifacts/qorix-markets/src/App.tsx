@@ -34,6 +34,7 @@ import DepositSuccessPage from "@/pages/deposit-success";
 import WithdrawPage from "@/pages/withdraw";
 import WithdrawUsdtPage from "@/pages/withdraw-usdt";
 import WithdrawInrPage from "@/pages/withdraw-inr";
+import WithdrawUserTransferPage from "@/pages/withdraw-user-transfer";
 import WithdrawReviewPage from "@/pages/withdraw-review";
 import WithdrawOtpPage from "@/pages/withdraw-otp";
 import WithdrawSuccessPage from "@/pages/withdraw-success";
@@ -227,6 +228,7 @@ function Router() {
       <Route path="/withdraw"><ProtectedRoute component={WithdrawPage} /></Route>
       <Route path="/withdraw/usdt"><ProtectedRoute component={WithdrawUsdtPage} /></Route>
       <Route path="/withdraw/inr"><ProtectedRoute component={WithdrawInrPage} /></Route>
+      <Route path="/withdraw/user-transfer"><ProtectedRoute component={WithdrawUserTransferPage} /></Route>
       <Route path="/withdraw/review"><ProtectedRoute component={WithdrawReviewPage} /></Route>
       <Route path="/withdraw/otp"><ProtectedRoute component={WithdrawOtpPage} /></Route>
       <Route path="/withdraw/success"><ProtectedRoute component={WithdrawSuccessPage} /></Route>

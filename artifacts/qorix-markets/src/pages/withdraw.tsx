@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import { useGetWallet, useGetDashboardSummary } from "@workspace/api-client-react";
 import { useQuery } from "@tanstack/react-query";
 import { Layout } from "@/components/layout";
-import { ArrowLeft, ArrowRight, Shield, AlertTriangle, Info, Landmark, Zap, ShieldCheck } from "lucide-react";
+import { ArrowLeft, ArrowRight, Shield, AlertTriangle, Info, Landmark, Zap, ShieldCheck, Users } from "lucide-react";
 import { authFetch } from "@/lib/auth-fetch";
 import { newIdemKey, patchWithdrawState, readWithdrawState } from "@/lib/withdraw-flow-state";
 import { cn } from "@/lib/utils";
@@ -289,6 +289,20 @@ export default function WithdrawPage() {
                 <div className="flex-1 min-w-0">
                   <div className="text-[14px] font-semibold text-white leading-tight">UPI Transfer</div>
                   <div className="text-[11.5px] text-white/50 mt-0.5">Instant · directly to your UPI ID</div>
+                </div>
+                <ArrowRight className="w-4 h-4 text-white/40 shrink-0" />
+              </button>
+              <button
+                onClick={() => navigate("/withdraw/user-transfer")}
+                className="w-full flex items-center gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.025] hover:bg-white/[0.05] hover:border-emerald-400/30 px-4 py-3.5 transition-colors text-left"
+                data-testid="payout-user-transfer"
+              >
+                <div className="w-10 h-10 rounded-xl bg-emerald-500/12 border border-emerald-400/25 flex items-center justify-center shrink-0">
+                  <Users className="w-4.5 h-4.5 text-emerald-300" style={{ width: 18, height: 18 }} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-[14px] font-semibold text-white leading-tight">User ID Transfer</div>
+                  <div className="text-[11.5px] text-white/50 mt-0.5">Instant · send to another Qorix user · zero fee</div>
                 </div>
                 <ArrowRight className="w-4 h-4 text-white/40 shrink-0" />
               </button>

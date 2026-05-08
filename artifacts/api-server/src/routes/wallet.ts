@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { db, walletsTable, transactionsTable, investmentsTable, usersTable } from "@workspace/db";
-import { eq, and, gte, sql } from "drizzle-orm";
+import { eq, and, gte, sql, or } from "drizzle-orm";
+import { z } from "zod";
 import { authMiddleware, type AuthRequest } from "../middlewares/auth";
 import { DepositBody, WithdrawBody, TransferToTradingBody } from "@workspace/api-zod";
 import { createNotification } from "../lib/notifications";
@@ -785,6 +786,292 @@ router.post("/wallet/transfer", async (req: AuthRequest, res) => {
         error:
           "Transfer could not be completed. Please try again or contact support if this keeps happening.",
       });
+    }
+  }
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// User-to-User Internal Transfer
+// ────────────────────────────────────────────────────────────────────────────
+//
+// Allows a user to send USDT directly from their `mainBalance` to another
+// Qorix user's `mainBalance` using the recipient's referralCode, numeric ID,
+// or email. Atomic: either both wallets update + both transactions get
+// recorded + ledger journal posts, or nothing does.
+
+const TransferToUserBody = z.object({
+  recipientCode: z.string().min(1).max(120),
+  amount: z.number().positive().min(1).max(100000),
+  note: z.string().max(140).optional(),
+  idempotencyKey: z.string().min(8).max(80).optional(),
+});
+
+// In-memory idempotency cache (per-process). Keys live for 10 minutes — long
+// enough to absorb retry storms after a network blip, short enough that the
+// process restart will not balloon memory. For HA we'd push this into Redis,
+// but the volume of P2P transfers is low and the journal_id path provides
+// strong ledger-level guarantees against true duplicates.
+const idemCache = new Map<string, { txId: number; expiresAt: number }>();
+function idemGet(key: string): number | null {
+  const entry = idemCache.get(key);
+  if (!entry) return null;
+  if (entry.expiresAt < Date.now()) {
+    idemCache.delete(key);
+    return null;
+  }
+  return entry.txId;
+}
+function idemSet(key: string, txId: number) {
+  idemCache.set(key, { txId, expiresAt: Date.now() + 10 * 60_000 });
+  // Sweep expired entries opportunistically to keep the map bounded.
+  if (idemCache.size > 5000) {
+    const now = Date.now();
+    for (const [k, v] of idemCache) if (v.expiresAt < now) idemCache.delete(k);
+  }
+}
+
+async function findRecipient(senderId: number, code: string) {
+  const trimmed = code.trim();
+  if (!trimmed) return null;
+  // Try numeric ID first, then referralCode (case-insensitive), then email
+  const asNum = Number.parseInt(trimmed, 10);
+  const conditions = [
+    sql`lower(${usersTable.referralCode}) = lower(${trimmed})`,
+    sql`lower(${usersTable.email}) = lower(${trimmed})`,
+  ];
+  if (Number.isFinite(asNum) && asNum > 0) {
+    conditions.unshift(eq(usersTable.id, asNum));
+  }
+  const [row] = await db
+    .select({
+      id: usersTable.id,
+      fullName: usersTable.fullName,
+      email: usersTable.email,
+      referralCode: usersTable.referralCode,
+    })
+    .from(usersTable)
+    .where(or(...conditions))
+    .limit(1);
+  if (!row || row.id === senderId) return null;
+  return row;
+}
+
+function maskName(name: string | null): string {
+  if (!name) return "Qorix User";
+  const trimmed = name.trim();
+  if (trimmed.length <= 2) return trimmed[0] + "•";
+  const parts = trimmed.split(/\s+/);
+  if (parts.length === 1) {
+    return trimmed[0]! + "•".repeat(Math.min(trimmed.length - 1, 6));
+  }
+  return parts.map((p, i) => i === 0 ? p : (p[0]! + "•".repeat(Math.min(p.length - 1, 4)))).join(" ");
+}
+
+router.get("/wallet/lookup-user", async (req: AuthRequest, res) => {
+  const code = String(req.query.code || "").trim();
+  if (!code) {
+    res.status(400).json({ error: "code required" });
+    return;
+  }
+  const recipient = await findRecipient(req.userId!, code);
+  if (!recipient) {
+    res.status(404).json({ found: false });
+    return;
+  }
+  res.json({
+    found: true,
+    recipientId: recipient.id,
+    name: maskName(recipient.fullName),
+    referralCode: recipient.referralCode,
+  });
+});
+
+router.post("/wallet/transfer-to-user", async (req: AuthRequest, res) => {
+  try {
+    const result = TransferToUserBody.safeParse(req.body);
+    if (!result.success) {
+      res.status(400).json({ error: "Invalid request" });
+      return;
+    }
+    if (await blockSmokeTestRealMoney(req.userId!, res, "transfer")) return;
+
+    const { recipientCode, amount, note, idempotencyKey } = result.data;
+
+    // Idempotency: replay-safe key scoped per sender.
+    const idemKey = idempotencyKey ? `u2u:${req.userId!}:${idempotencyKey}` : null;
+    if (idemKey) {
+      const cached = idemGet(idemKey);
+      if (cached) {
+        res.json({ success: true, transactionId: cached, replay: true });
+        return;
+      }
+    }
+
+    // KYC gate — same standard as INR/USDT withdrawals.
+    const [senderRow] = await db
+      .select({ kycStatus: usersTable.kycStatus })
+      .from(usersTable)
+      .where(eq(usersTable.id, req.userId!))
+      .limit(1);
+    if (!senderRow || senderRow.kycStatus !== "approved") {
+      res.status(403).json({ error: "kyc_required", message: "Complete KYC verification to send funds." });
+      return;
+    }
+
+    const recipient = await findRecipient(req.userId!, recipientCode);
+    if (!recipient) {
+      res.status(404).json({ error: "Recipient not found" });
+      return;
+    }
+    if (recipient.id === req.userId!) {
+      res.status(400).json({ error: "Cannot transfer to yourself" });
+      return;
+    }
+
+    const amountStr = amount.toFixed(8);
+    let result2:
+      | { senderTxId: number; recipientTxId: number; senderWallet: typeof walletsTable.$inferSelect }
+      | undefined;
+
+    try {
+      result2 = await db.transaction(async (tx) => {
+        await ensureUserAccounts(req.userId!, tx);
+        await ensureUserAccounts(recipient.id, tx);
+
+        // Atomic debit on sender main balance with gte guard
+        const debitedRows = await tx
+          .update(walletsTable)
+          .set({
+            mainBalance: sql`${walletsTable.mainBalance} - ${amountStr}::numeric`,
+            updatedAt: new Date(),
+          })
+          .where(and(eq(walletsTable.userId, req.userId!), gte(walletsTable.mainBalance, amountStr)))
+          .returning();
+        if (debitedRows.length === 0) {
+          const [exists] = await tx
+            .select({ id: walletsTable.id })
+            .from(walletsTable)
+            .where(eq(walletsTable.userId, req.userId!))
+            .limit(1);
+          throw new Error(exists ? "INSUFFICIENT_BALANCE" : "WALLET_NOT_FOUND");
+        }
+        const senderWallet = debitedRows[0]!;
+
+        // Credit recipient main balance (ensureUserAccounts guarantees wallet exists)
+        await tx
+          .update(walletsTable)
+          .set({
+            mainBalance: sql`${walletsTable.mainBalance} + ${amountStr}::numeric`,
+            updatedAt: new Date(),
+          })
+          .where(eq(walletsTable.userId, recipient.id));
+
+        // Create transaction records for both users
+        const noteSuffix = note ? ` · ${note.slice(0, 80)}` : "";
+        const [senderTxn] = await tx
+          .insert(transactionsTable)
+          .values({
+            userId: req.userId!,
+            type: "transfer",
+            amount: amount.toString(),
+            status: "completed",
+            description: `Sent $${amount.toFixed(2)} to user ${recipient.referralCode}${noteSuffix}`,
+          })
+          .returning();
+        const [recipientTxn] = await tx
+          .insert(transactionsTable)
+          .values({
+            userId: recipient.id,
+            type: "transfer",
+            amount: amount.toString(),
+            status: "completed",
+            description: `Received $${amount.toFixed(2)} from user ${req.userId!}${noteSuffix}`,
+          })
+          .returning();
+
+        // Journal entry — sender:main → recipient:main (single balanced journal)
+        await postJournalEntry(
+          journalForTransaction(senderTxn!.id),
+          [
+            {
+              accountCode: `user:${req.userId!}:main`,
+              entryType: "debit",
+              amount,
+              description: `P2P transfer to user ${recipient.id}`,
+            },
+            {
+              accountCode: `user:${recipient.id}:main`,
+              entryType: "credit",
+              amount,
+              description: `P2P transfer from user ${req.userId!}`,
+            },
+          ],
+          senderTxn!.id,
+          tx,
+        );
+
+        return { senderTxId: senderTxn!.id, recipientTxId: recipientTxn!.id, senderWallet };
+      });
+    } catch (err: any) {
+      if (err?.message === "INSUFFICIENT_BALANCE") {
+        res.status(400).json({ error: "Insufficient main balance" });
+        return;
+      }
+      if (err?.message === "WALLET_NOT_FOUND") {
+        res.status(404).json({ error: "Wallet not found" });
+        return;
+      }
+      throw err;
+    }
+
+    if (idemKey) idemSet(idemKey, result2!.senderTxId);
+
+    transactionLogger.info(
+      {
+        event: "transfer_to_user",
+        senderId: req.userId!,
+        recipientId: recipient.id,
+        amount,
+        senderTxId: result2!.senderTxId,
+        recipientTxId: result2!.recipientTxId,
+      },
+      "P2P internal transfer completed",
+    );
+
+    // Notify recipient
+    try {
+      await createNotification(
+        recipient.id,
+        "deposit",
+        "Funds received",
+        `You received $${amount.toFixed(2)} USDT from another Qorix user${note ? ` — "${note.slice(0, 80)}"` : ""}.`,
+      );
+    } catch {
+      /* non-critical */
+    }
+
+    res.json({
+      success: true,
+      transactionId: result2!.senderTxId,
+      amount,
+      recipient: {
+        name: maskName(recipient.fullName),
+        referralCode: recipient.referralCode,
+      },
+      wallet: formatWallet(result2!.senderWallet),
+    });
+  } catch (err) {
+    errorLogger.error(
+      {
+        err,
+        event: "transfer_to_user_failed",
+        userId: req.userId ?? null,
+        message: err instanceof Error ? err.message : String(err),
+      },
+      "User-to-user transfer failed",
+    );
+    if (!res.headersSent) {
+      res.status(500).json({ error: "Transfer could not be completed. Please try again." });
     }
   }
 });
