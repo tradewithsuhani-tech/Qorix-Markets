@@ -792,19 +792,6 @@ export default function WalletPage() {
                       </span>
                     )}
                   </div>
-                  <div className="border-t border-white/[0.06] grid grid-cols-4">
-                    {[25, 50, 75, 100].map((p, i) => (
-                      <button
-                        key={p}
-                        onClick={() => setPct(p)}
-                        className={`py-2 text-[11px] font-semibold text-white/65 hover:text-emerald-300 hover:bg-emerald-500/[0.06] transition-colors ${
-                          i > 0 ? "border-l border-white/[0.06]" : ""
-                        }`}
-                      >
-                        {p === 100 ? "MAX" : `${p}%`}
-                      </button>
-                    ))}
-                  </div>
                 </div>
                 {numAmt > fromBal && (
                   <div className="mt-1.5 text-[11px] text-rose-400 flex items-center gap-1">
