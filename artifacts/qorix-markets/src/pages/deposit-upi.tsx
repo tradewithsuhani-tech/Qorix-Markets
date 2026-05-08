@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Layout } from "@/components/layout";
 import {
-  ArrowLeft, Shield, Check, ChevronRight, Users, Loader2, AlertCircle, Wallet,
+  ArrowLeft, Shield, Check, ChevronRight, Users, Loader2, AlertCircle,
 } from "lucide-react";
 import { authFetch } from "@/lib/auth-fetch";
 import { cn } from "@/lib/utils";
@@ -119,9 +119,6 @@ export default function DepositUpiPage() {
               const color = colorFor(m.merchantId ?? m.id);
               const name = m.merchantName ?? m.displayName ?? "Merchant";
               const initial = name.charAt(0).toUpperCase();
-              const available = typeof m.merchantAvailable === "string"
-                ? parseFloat(m.merchantAvailable)
-                : m.merchantAvailable ?? null;
               return (
                 <div
                   key={m.id}
@@ -166,12 +163,6 @@ export default function DepositUpiPage() {
                           {formatLimit(minN)} – {formatLimit(maxN)}
                         </span>
                       </div>
-                      {available != null && (
-                        <div className="inline-flex items-center gap-1 text-[10px] text-emerald-400 font-bold tracking-wider">
-                          <Wallet className="w-2.5 h-2.5" />
-                          {formatLimit(available)} free
-                        </div>
-                      )}
                     </div>
                   </div>
 

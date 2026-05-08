@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Layout } from "@/components/layout";
 import {
-  ArrowLeft, Lock, Search, X, ChevronRight, Info, Loader2, AlertCircle, Wallet, Check, Building2,
+  ArrowLeft, Lock, Search, X, ChevronRight, Info, Loader2, AlertCircle, Check, Building2,
 } from "lucide-react";
 import { authFetch } from "@/lib/auth-fetch";
 import { cn } from "@/lib/utils";
@@ -164,9 +164,6 @@ function BankRow({
   const color = colorFor(method.merchantId ?? method.id);
   const bankLabel = method.bankName ?? method.displayName ?? "Bank";
   const initial = bankLabel.charAt(0).toUpperCase();
-  const available = typeof method.merchantAvailable === "string"
-    ? parseFloat(method.merchantAvailable)
-    : method.merchantAvailable ?? null;
 
   return (
     <button
@@ -218,12 +215,6 @@ function BankRow({
               {formatLimit(minN)} – {formatLimit(maxN)}
             </span>
           </div>
-          {available != null && (
-            <div className="inline-flex items-center gap-1 text-[10px] text-emerald-400 font-bold tracking-wider">
-              <Wallet className="w-2.5 h-2.5" />
-              {formatLimit(available)} free
-            </div>
-          )}
         </div>
       </div>
 
