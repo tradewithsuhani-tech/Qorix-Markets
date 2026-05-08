@@ -30,14 +30,13 @@ export default function WithdrawPage() {
 
   const prev = useMemo(() => readWithdrawState(), []);
   const [currency, setCurrency] = useState<"usdt" | "inr">(prev?.currency ?? "usdt");
-  const [source, setSource] = useState<"main" | "profit">(prev?.source ?? "profit");
+  const source: "main" = "main";
   const [amount, setAmount] = useState<string>(prev?.amount ?? "");
   const [showAmtError, setShowAmtError] = useState(false);
   const amountRef = useRef<HTMLInputElement>(null);
 
   const mainBal = Number(wallet?.mainBalance) || 0;
-  const profitBal = Number(wallet?.profitBalance) || 0;
-  const sourceBalance = source === "main" ? mainBal : profitBal;
+  const sourceBalance = mainBal;
 
   // KYC
   const { data: kycData } = useQuery<any>({
@@ -81,7 +80,7 @@ export default function WithdrawPage() {
     if (!valid) { setShowAmtError(true); amountRef.current?.focus(); return; }
     const next = patchWithdrawState({
       currency,
-      source: currency === "usdt" ? source : "main",
+      source: "main",
       amount,
       idempotencyKey: newIdemKey(),
       walletAddress: undefined,
@@ -106,7 +105,7 @@ export default function WithdrawPage() {
 
   let amountHint = "";
   if (numAmount > 0 && numAmount < min) amountHint = `Minimum ${symbol}${min.toLocaleString(isUsdt ? "en-US" : "en-IN")}`;
-  else if (exceedsBalance) amountHint = `Above ${source} balance of $${sourceBalance.toFixed(2)}`;
+  else if (exceedsBalance) amountHint = `Above main balance of $${sourceBalance.toFixed(2)}`;
   else if (exceedsMain) amountHint = `Not enough USDT in main balance`;
   else if (exceedsCap) amountHint = `Above your INR channel cap`;
 
@@ -197,50 +196,22 @@ export default function WithdrawPage() {
           </button>
         </div>
 
-        {/* Source picker — USDT only */}
-        {isUsdt && (
-          <div className="mb-5">
-            <div className="text-[10px] uppercase tracking-[0.14em] text-white/40 font-semibold mb-2">From</div>
-            <div className="grid grid-cols-2 gap-2">
-              <SourceCard
-                active={source === "profit"}
-                onClick={() => { setSource("profit"); setAmount(""); }}
-                label="Profit"
-                balance={profitBal}
-                testId="source-profit"
-              />
-              <SourceCard
-                active={source === "main"}
-                onClick={() => { setSource("main"); setAmount(""); }}
-                label="Main"
-                balance={mainBal}
-                testId="source-main"
-              />
+        {/* Available balance — single card */}
+        <div className="mb-5 rounded-xl border border-white/[0.07] bg-white/[0.025] px-3.5 py-3 flex items-center justify-between">
+          <span className="text-[12px] text-white/55">Available balance</span>
+          <div className="text-right">
+            <div className={cn("text-[15px] font-semibold tabular-nums", isUsdt ? "text-white" : "text-emerald-300")}>
+              {isUsdt
+                ? `$${mainBal.toFixed(2)}`
+                : limits ? `₹${maxInr.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : "—"}
             </div>
-          </div>
-        )}
-
-        {/* Available — INR */}
-        {!isUsdt && (
-          <div className="mb-5 rounded-xl border border-white/[0.07] bg-white/[0.025] p-3.5">
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="text-[11px] text-white/55">Main balance</span>
-              <span className="text-[13px] font-semibold tabular-nums">${mainBal.toFixed(2)}</span>
-            </div>
-            <div className="h-px bg-white/[0.05] my-2" />
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] text-white/55">Available in INR</span>
-              <span className="text-[13px] font-semibold text-emerald-300 tabular-nums">
-                {limits ? `₹${maxInr.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : "—"}
-              </span>
-            </div>
-            {limits && (
-              <div className="text-[10px] text-white/35 font-mono mt-1.5 text-right tabular-nums">
-                1 USDT = ₹{limits.rate.toFixed(2)}
+            {!isUsdt && limits && (
+              <div className="text-[10px] text-white/40 tabular-nums mt-0.5">
+                ≈ ${mainBal.toFixed(2)} · 1 USDT = ₹{limits.rate.toFixed(2)}
               </div>
             )}
           </div>
-        )}
+        </div>
 
         {/* Amount — hero input */}
         <div className="mb-3">
@@ -346,39 +317,3 @@ export default function WithdrawPage() {
   );
 }
 
-function SourceCard({
-  active, onClick, label, balance, testId,
-}: {
-  active: boolean;
-  onClick: () => void;
-  label: string;
-  balance: number;
-  testId: string;
-}) {
-  const empty = balance <= 0;
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      className={cn(
-        "rounded-xl border px-3 py-2.5 text-left transition-colors",
-        "focus:outline-none focus-visible:ring-1 focus-visible:ring-emerald-400/40",
-        active
-          ? "bg-emerald-400/[0.06] border-emerald-400/40"
-          : "bg-white/[0.02] border-white/[0.07] hover:border-white/15"
-      )}
-      data-testid={testId}
-    >
-      <div className="text-[11px] text-white/50">{label}</div>
-      <div
-        className={cn(
-          "text-[15px] font-semibold tabular-nums mt-0.5",
-          empty ? "text-white/40" : "text-white"
-        )}
-      >
-        ${balance.toFixed(2)}
-      </div>
-    </button>
-  );
-}
