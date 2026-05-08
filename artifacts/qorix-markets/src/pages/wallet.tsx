@@ -759,9 +759,12 @@ export default function WalletPage() {
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-[10px] font-bold tracking-[0.18em] text-white/45">TRANSFER AMOUNT</span>
-                  <span className="text-[10px] text-white/40 tabular-nums">
-                    Max: ${fromBal.toFixed(2)}
-                  </span>
+                  <button
+                    onClick={() => setPct(100)}
+                    className="text-[10px] font-bold tracking-wide text-emerald-300 hover:text-emerald-200 px-2 py-0.5 rounded-md bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-400/30 transition-colors"
+                  >
+                    MAX · ${fromBal.toFixed(2)}
+                  </button>
                 </div>
                 <div
                   className={`rounded-2xl border bg-white/[0.025] transition-colors overflow-hidden ${
