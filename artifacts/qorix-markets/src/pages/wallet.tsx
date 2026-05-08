@@ -1066,12 +1066,12 @@ function ActionTile({
   return (
     <button
       onClick={onClick}
-      className={`group flex items-center justify-center gap-2 px-3 py-3 rounded-xl bg-white/[0.03] border border-white/[0.08] ${palette.hover} hover:bg-white/[0.06] active:scale-[0.98] transition-all outline-none`}
+      className={`group flex flex-col items-center justify-center gap-1.5 px-2 py-3 rounded-xl bg-white/[0.03] border border-white/[0.08] ${palette.hover} hover:bg-white/[0.06] active:scale-[0.98] transition-all outline-none min-w-0`}
     >
-      <span className={`w-8 h-8 rounded-lg ${palette.iconBg} border ${palette.iconBorder} flex items-center justify-center shrink-0`}>
+      <span className={`w-9 h-9 rounded-lg ${palette.iconBg} border ${palette.iconBorder} flex items-center justify-center shrink-0`}>
         <Icon className={`w-4 h-4 ${palette.fg}`} />
       </span>
-      <span className="text-[13px] font-semibold text-white/90 tracking-tight">{label}</span>
+      <span className="text-[12px] font-semibold text-white/90 tracking-tight leading-none">{label}</span>
     </button>
   );
 }
