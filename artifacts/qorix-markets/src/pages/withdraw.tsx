@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import { useGetWallet, useGetDashboardSummary } from "@workspace/api-client-react";
 import { useQuery } from "@tanstack/react-query";
 import { Layout } from "@/components/layout";
-import { ArrowLeft, ArrowRight, Shield, AlertTriangle, Info } from "lucide-react";
+import { ArrowLeft, ArrowRight, Shield, AlertTriangle, Info, Landmark, Zap, ShieldCheck } from "lucide-react";
 import { authFetch } from "@/lib/auth-fetch";
 import { newIdemKey, patchWithdrawState, readWithdrawState } from "@/lib/withdraw-flow-state";
 import { cn } from "@/lib/utils";
@@ -74,7 +74,7 @@ export default function WithdrawPage() {
     if (valid && showAmtError) setShowAmtError(false);
   }, [valid, showAmtError]);
 
-  const handleContinue = () => {
+  const handleContinue = (preset?: "bank" | "upi") => {
     if (!kycApproved) { navigate("/kyc"); return; }
     if (!valid) { setShowAmtError(true); amountRef.current?.focus(); return; }
     const next = patchWithdrawState({
@@ -83,7 +83,7 @@ export default function WithdrawPage() {
       amount,
       idempotencyKey: newIdemKey(),
       walletAddress: undefined,
-      payoutMethod: undefined,
+      payoutMethod: preset,
       upiId: undefined,
       accountHolder: undefined,
       accountNumber: undefined,
@@ -241,16 +241,6 @@ export default function WithdrawPage() {
           ))}
         </div>
 
-        {/* Trust strip */}
-        <div className="flex items-center gap-2 text-[11px] text-white/45 mb-5">
-          <Shield className="w-3 h-3 text-emerald-400/80" />
-          <span>
-            {isUsdt
-              ? `${vip?.label ?? "Standard"} tier · ${withdrawalFeePercent}% fee · OTP confirmed`
-              : "Capped per channel · OTP confirmed · 24 hr review"}
-          </span>
-        </div>
-
         {/* KYC pill — shown above CTA when needed */}
         {!kycApproved && (
           <button
@@ -267,22 +257,75 @@ export default function WithdrawPage() {
           </button>
         )}
 
-        {/* CTA */}
-        <button
-          onClick={handleContinue}
-          disabled={!kycApproved || !valid}
-          className={cn(
-            "w-full h-12 rounded-xl text-[13px] font-semibold flex items-center justify-center gap-2 transition-all",
-            "disabled:opacity-40 disabled:cursor-not-allowed",
-            isUsdt
-              ? "bg-amber-400 hover:bg-amber-300 text-black shadow-[0_4px_18px_-4px_rgba(245,158,11,0.55)]"
-              : "bg-emerald-500 hover:bg-emerald-400 text-black shadow-[0_4px_18px_-4px_rgba(16,185,129,0.55)]"
-          )}
-          data-testid="button-continue"
-        >
-          {!kycApproved ? "Complete KYC to continue" : "Continue"}
-          {kycApproved && <ArrowRight className="w-3.5 h-3.5" />}
-        </button>
+        {/* Payout Method (INR) */}
+        {!isUsdt && kycApproved && (
+          <div className="mb-4">
+            <div className="text-[13px] text-white/65 mb-2">Payout Method</div>
+            <div className="space-y-2.5">
+              <button
+                onClick={() => handleContinue("bank")}
+                disabled={!valid}
+                className="w-full flex items-center gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.025] hover:bg-white/[0.05] hover:border-emerald-400/30 px-4 py-3.5 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white/[0.025] disabled:hover:border-white/[0.08]"
+                data-testid="payout-bank"
+              >
+                <div className="w-10 h-10 rounded-xl bg-emerald-500/12 border border-emerald-400/25 flex items-center justify-center shrink-0">
+                  <Landmark className="w-4.5 h-4.5 text-emerald-300" style={{ width: 18, height: 18 }} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-[14px] font-semibold text-white leading-tight">Bank Transfer</div>
+                  <div className="text-[11.5px] text-white/50 mt-0.5">NEFT / IMPS · within 24 hours</div>
+                </div>
+                <ArrowRight className="w-4 h-4 text-white/40 shrink-0" />
+              </button>
+              <button
+                onClick={() => handleContinue("upi")}
+                disabled={!valid}
+                className="w-full flex items-center gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.025] hover:bg-white/[0.05] hover:border-emerald-400/30 px-4 py-3.5 transition-colors text-left disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white/[0.025] disabled:hover:border-white/[0.08]"
+                data-testid="payout-upi"
+              >
+                <div className="w-10 h-10 rounded-xl bg-emerald-500/12 border border-emerald-400/25 flex items-center justify-center shrink-0">
+                  <Zap className="w-4.5 h-4.5 text-emerald-300" style={{ width: 18, height: 18 }} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-[14px] font-semibold text-white leading-tight">UPI Transfer</div>
+                  <div className="text-[11.5px] text-white/50 mt-0.5">Instant · directly to your UPI ID</div>
+                </div>
+                <ArrowRight className="w-4 h-4 text-white/40 shrink-0" />
+              </button>
+            </div>
+            <div className="mt-3 rounded-xl border border-white/[0.07] bg-white/[0.02] px-3.5 py-2.5 flex items-center gap-2.5">
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400/80 shrink-0" />
+              <span className="text-[11px] text-white/55 leading-snug">
+                All withdrawals reviewed by compliance · 2FA verified · Anti-money-laundering checks
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* CTA — USDT only */}
+        {isUsdt && (
+          <button
+            onClick={() => handleContinue()}
+            disabled={!kycApproved || !valid}
+            className={cn(
+              "w-full h-12 rounded-xl text-[13px] font-semibold flex items-center justify-center gap-2 transition-all",
+              "disabled:opacity-40 disabled:cursor-not-allowed",
+              "bg-amber-400 hover:bg-amber-300 text-black shadow-[0_4px_18px_-4px_rgba(245,158,11,0.55)]"
+            )}
+            data-testid="button-continue"
+          >
+            {!kycApproved ? "Complete KYC to continue" : "Continue"}
+            {kycApproved && <ArrowRight className="w-3.5 h-3.5" />}
+          </button>
+        )}
+
+        {/* Trust strip (USDT only — INR has its own footer) */}
+        {isUsdt && (
+          <div className="flex items-center gap-2 text-[11px] text-white/45 mt-3">
+            <Shield className="w-3 h-3 text-emerald-400/80" />
+            <span>{vip?.label ?? "Standard"} tier · {withdrawalFeePercent}% fee · OTP confirmed</span>
+          </div>
+        )}
       </div>
     </Layout>
   );
