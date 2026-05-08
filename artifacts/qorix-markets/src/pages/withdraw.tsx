@@ -113,7 +113,7 @@ export default function WithdrawPage() {
     <Layout>
       <div className="max-w-md mx-auto px-5 pt-5 pb-28">
         {/* Header bar */}
-        <div className="flex items-center justify-between mb-6">
+        <div className="mb-6">
           <button
             onClick={() => navigate("/wallet")}
             className="w-9 h-9 rounded-full border border-white/10 bg-white/[0.04] hover:bg-white/[0.08] flex items-center justify-center transition-colors"
@@ -121,10 +121,6 @@ export default function WithdrawPage() {
           >
             <ArrowLeft className="w-4 h-4" />
           </button>
-          <div className="text-[10px] font-semibold tracking-[0.18em] text-white/45 uppercase">
-            Withdraw · 1 / 4
-          </div>
-          <div className="w-9" />
         </div>
 
         {/* Title */}
