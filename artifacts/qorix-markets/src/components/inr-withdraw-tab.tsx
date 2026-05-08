@@ -44,6 +44,7 @@ type Withdrawal = {
   adminNote: string | null;
   payoutReference: string | null;
   createdAt: string;
+  reviewedAt?: string | null;
 };
 
 export function InrWithdrawTab({ kycApproved, onKycRequired }: { kycApproved: boolean; onKycRequired: () => void }) {
@@ -52,6 +53,11 @@ export function InrWithdrawTab({ kycApproved, onKycRequired }: { kycApproved: bo
 
   const [limits, setLimits] = useState<Limits | null>(null);
   const [history, setHistory] = useState<Withdrawal[]>([]);
+  // Receipt modal — opens when user taps any row in their INR withdrawal
+  // history. Same celebratory layout as the post-submit success modal but
+  // with status-aware colours (emerald=paid, amber=pending, rose=rejected).
+  // Designed to be screenshot-friendly so users can share for social proof.
+  const [receiptWithdrawal, setReceiptWithdrawal] = useState<Withdrawal | null>(null);
   const [loading, setLoading] = useState(true);
 
   const [method, setMethod] = useState<"upi" | "bank">("upi");
@@ -668,18 +674,30 @@ export function InrWithdrawTab({ kycApproved, onKycRequired }: { kycApproved: bo
         onClose={() => setSuccessReceipt(null)}
       />
 
+      {/* History receipt modal — opens when a row in "Recent INR Withdrawals"
+          is tapped. Mirrors the post-submit success layout but adapts colours
+          and copy to the actual status (pending/approved/rejected) so users
+          can screenshot and share for any state. */}
+      <WithdrawalReceiptModal
+        receipt={receiptWithdrawal}
+        onClose={() => setReceiptWithdrawal(null)}
+      />
+
       {/* History */}
       {history.length > 0 && (
         <div id="inr-withdraw-history" className="space-y-2">
           <div className="text-xs uppercase tracking-wider text-muted-foreground font-semibold pt-2">Recent INR Withdrawals</div>
           <AnimatePresence initial={false}>
             {history.slice(0, 5).map((w) => (
-              <motion.div
+              <motion.button
                 key={w.id}
+                type="button"
+                onClick={() => setReceiptWithdrawal(w)}
                 initial={{ opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0 }}
-                className="rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 text-xs space-y-1"
+                className="w-full text-left rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 text-xs space-y-1 hover:bg-white/[0.04] active:bg-white/[0.06] transition-colors cursor-pointer"
+                aria-label={`View receipt for ₹${w.amountInr} withdrawal`}
               >
                 <div className="flex items-center justify-between">
                   <span className="font-bold text-white">
@@ -699,7 +717,7 @@ export function InrWithdrawTab({ kycApproved, onKycRequired }: { kycApproved: bo
                 {w.adminNote && (
                   <div className="text-[10px] text-amber-300/80">Note: {w.adminNote}</div>
                 )}
-              </motion.div>
+              </motion.button>
             ))}
           </AnimatePresence>
         </div>
@@ -946,6 +964,292 @@ function WithdrawalSuccessModal({
           </button>
           <p className="text-[10px] text-center text-white/45 leading-relaxed -mt-1">
             If rejected, the held amount auto-refunds to your Main Balance.
+          </p>
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>
+  );
+}
+
+/**
+ * WithdrawalReceiptModal — opened when the user taps any row in their INR
+ * withdrawal history. Mirrors the post-submit success layout with colour /
+ * copy adapted to the actual status:
+ *
+ *   pending  → amber clock     · "WITHDRAWAL SUBMITTED"
+ *   approved → emerald check   · "WITHDRAWAL PAID"
+ *   rejected → rose cross      · "WITHDRAWAL REJECTED" (held funds refunded)
+ *
+ * Designed to be screenshot-friendly so users can share their receipt for
+ * social proof / community marketing.
+ */
+function WithdrawalReceiptModal({
+  receipt,
+  onClose,
+}: {
+  receipt: Withdrawal | null;
+  onClose: () => void;
+}) {
+  const [copied, setCopied] = useState(false);
+  const [, navigate] = useLocation();
+
+  useEffect(() => {
+    if (!receipt) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = prev; };
+  }, [receipt]);
+
+  useEffect(() => {
+    if (!copied) return;
+    const t = setTimeout(() => setCopied(false), 1400);
+    return () => clearTimeout(t);
+  }, [copied]);
+
+  if (!receipt) return null;
+
+  const refCode = `WT-${String(receipt.id).padStart(6, "0")}`;
+  const isUpi = receipt.payoutMethod === "upi";
+
+  const maskAcc = (n: string | null): string => {
+    if (!n) return "—";
+    const last4 = n.slice(-4);
+    return `${"*".repeat(Math.max(4, n.length - 4))}${last4}`;
+  };
+
+  const submittedAt = new Date(receipt.createdAt);
+  const reviewedAt = receipt.reviewedAt ? new Date(receipt.reviewedAt) : null;
+  const dateToShow = receipt.status !== "pending" && reviewedAt ? reviewedAt : submittedAt;
+  const dateLabel = receipt.status === "pending" ? "Submitted" : receipt.status === "approved" ? "Paid On" : "Reviewed";
+
+  const theme =
+    receipt.status === "approved"
+      ? {
+          ring: "border-emerald-500/15",
+          ring2: "border-emerald-500/25",
+          ring3: "border-emerald-500/40",
+          hub: "bg-emerald-500 shadow-[0_0_40px_-6px_rgba(16,185,129,0.75)]",
+          label: "WITHDRAWAL PAID",
+          labelText: "text-emerald-400",
+          subtitle: receipt.payoutReference
+            ? `Sent via ${isUpi ? "UPI" : "NEFT/IMPS"} · Ref ${receipt.payoutReference}`
+            : `Sent to your ${isUpi ? "UPI" : "bank account"}`,
+          banner: "border-emerald-500/30 bg-emerald-500/10",
+          bannerIcon: "text-emerald-300",
+          bannerText: <>Paid by Qorix · <span className="font-semibold text-emerald-200">₹{receipt.amountInr.toLocaleString("en-IN", { maximumFractionDigits: 0 })}</span> credited to beneficiary</>,
+          pillBg: "bg-emerald-500/15 border-emerald-500/35 text-emerald-300",
+          pillDot: "bg-emerald-400",
+          pillLabel: "Paid",
+          icon: <CheckCircle2 className="w-9 h-9 sm:w-11 sm:h-11 text-white" strokeWidth={2.5} />,
+          amountColor: "text-rose-400",
+          amountLabel: "Amount Debited",
+        }
+      : receipt.status === "rejected"
+      ? {
+          ring: "border-rose-500/15",
+          ring2: "border-rose-500/25",
+          ring3: "border-rose-500/40",
+          hub: "bg-rose-500 shadow-[0_0_40px_-6px_rgba(244,63,94,0.7)]",
+          label: "WITHDRAWAL REJECTED",
+          labelText: "text-rose-400",
+          subtitle: receipt.adminNote
+            ? `Reviewed · ${receipt.adminNote}`
+            : "Held amount auto-refunded to your Main Balance",
+          banner: "border-rose-500/30 bg-rose-500/10",
+          bannerIcon: "text-rose-300",
+          bannerText: <>Refunded · <span className="font-semibold text-rose-200">₹{receipt.amountInr.toLocaleString("en-IN", { maximumFractionDigits: 0 })}</span> returned to Main Balance</>,
+          pillBg: "bg-rose-500/15 border-rose-500/35 text-rose-300",
+          pillDot: "bg-rose-400",
+          pillLabel: "Rejected",
+          icon: <AlertCircle className="w-9 h-9 sm:w-11 sm:h-11 text-white" strokeWidth={2.5} />,
+          amountColor: "text-white",
+          amountLabel: "Amount Requested",
+        }
+      : {
+          ring: "border-amber-500/15",
+          ring2: "border-amber-500/25",
+          ring3: "border-amber-500/40",
+          hub: "bg-amber-500 shadow-[0_0_40px_-6px_rgba(245,158,11,0.7)]",
+          label: "WITHDRAWAL SUBMITTED",
+          labelText: "text-amber-400",
+          subtitle: "Pending compliance review · NEFT/IMPS within 24 hours",
+          banner: "border-amber-500/30 bg-amber-500/10",
+          bannerIcon: "text-amber-300",
+          bannerText: <>Queued for compliance review · You'll be notified on credit</>,
+          pillBg: "bg-amber-500/15 border-amber-500/35 text-amber-300",
+          pillDot: "bg-amber-400",
+          pillLabel: "Pending",
+          icon: <Clock className="w-9 h-9 sm:w-11 sm:h-11 text-white" strokeWidth={2.5} />,
+          amountColor: "text-rose-400",
+          amountLabel: "Amount Debited",
+        };
+
+  const copyRef = () => {
+    navigator.clipboard.writeText(refCode).then(() => setCopied(true)).catch(() => {});
+  };
+
+  const goToWallet = () => { onClose(); setTimeout(() => navigate("/wallet"), 60); };
+
+  return (
+    <AnimatePresence>
+      <motion.div
+        key="wreceipt-backdrop"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.2 }}
+        onClick={onClose}
+        className="fixed inset-0 z-[120] flex items-start sm:items-center justify-center px-4 py-6 bg-black/80 backdrop-blur-sm overflow-y-auto"
+      >
+        <motion.div
+          key="wreceipt-card"
+          initial={{ opacity: 0, scale: 0.94, y: 12 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.96, y: 8 }}
+          transition={{ type: "spring", stiffness: 260, damping: 24 }}
+          onClick={(e) => e.stopPropagation()}
+          className="relative w-full max-w-md my-auto rounded-3xl border border-white/10 bg-gradient-to-b from-[#0c0d10] via-[#0a0b0e] to-[#06070a] shadow-[0_24px_80px_rgba(0,0,0,0.6)] p-5 sm:p-6 space-y-4 sm:space-y-5"
+        >
+          <button
+            onClick={onClose}
+            className="absolute top-3 right-3 w-8 h-8 rounded-full flex items-center justify-center text-white/50 hover:text-white hover:bg-white/10 transition z-10"
+            aria-label="Close"
+          >
+            <X className="w-4 h-4" />
+          </button>
+
+          {/* Hero icon with concentric rings */}
+          <div className="flex flex-col items-center pt-1 sm:pt-2">
+            <motion.div
+              initial={{ scale: 0.6, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ type: "spring", stiffness: 180, damping: 14 }}
+              className="relative w-24 h-24 sm:w-32 sm:h-32 flex items-center justify-center"
+            >
+              <span className={`absolute inset-0 rounded-full border ${theme.ring}`} />
+              <span className={`absolute inset-3 rounded-full border ${theme.ring2}`} />
+              <span className={`absolute inset-6 rounded-full border ${theme.ring3}`} />
+              <motion.div
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                transition={{ type: "spring", stiffness: 220, damping: 14, delay: 0.05 }}
+                className={`w-16 h-16 sm:w-20 sm:h-20 rounded-full flex items-center justify-center ${theme.hub}`}
+              >
+                {theme.icon}
+              </motion.div>
+            </motion.div>
+            <div className={`mt-3 sm:mt-5 text-[11px] tracking-[0.28em] font-bold ${theme.labelText}`}>
+              {theme.label}
+            </div>
+            <div className="mt-2 sm:mt-3 text-3xl sm:text-4xl font-bold text-white tabular-nums">
+              ₹{receipt.amountInr.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+            </div>
+            <div className="mt-1.5 sm:mt-2 text-xs text-muted-foreground text-center px-2">
+              {theme.subtitle}
+            </div>
+          </div>
+
+          {/* Banner */}
+          <div className={`rounded-2xl border ${theme.banner} px-4 py-3 flex items-start gap-3`}>
+            <ShieldCheck className={`w-4 h-4 mt-0.5 shrink-0 ${theme.bannerIcon}`} />
+            <span className="text-xs text-white leading-relaxed">{theme.bannerText}</span>
+          </div>
+
+          {/* Withdrawal Details card */}
+          <div className="rounded-2xl border border-white/10 bg-white/[0.03] overflow-hidden">
+            <div className="px-5 pt-4 pb-3 text-[10px] tracking-[0.22em] font-bold text-white/55">
+              WITHDRAWAL DETAILS
+            </div>
+            <div className="px-5 pb-5 space-y-3">
+              <div className="flex items-center justify-between gap-3 border-t border-white/5 pt-3">
+                <span className="text-xs text-white/55">Method</span>
+                <span className="text-xs font-semibold text-white inline-flex items-center gap-2 min-w-0">
+                  <span className="w-6 h-6 rounded-md bg-emerald-500/15 border border-emerald-500/30 inline-flex items-center justify-center shrink-0">
+                    {isUpi ? <Smartphone className="w-3.5 h-3.5 text-emerald-300" /> : <Building2 className="w-3.5 h-3.5 text-emerald-300" />}
+                  </span>
+                  <span className="truncate">{isUpi ? "UPI Transfer" : "Bank Account · NEFT/IMPS"}</span>
+                </span>
+              </div>
+              <div className="flex items-center justify-between border-t border-white/5 pt-3">
+                <span className="text-xs text-white/55">{theme.amountLabel}</span>
+                <span className={`text-xs font-bold tabular-nums ${theme.amountColor}`}>
+                  − ₹{receipt.amountInr.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-3 border-t border-white/5 pt-3">
+                <span className="text-xs text-white/55 shrink-0">Beneficiary</span>
+                <span className="text-xs font-semibold text-white text-right min-w-0 truncate">
+                  {isUpi ? (
+                    <span className="font-mono">{receipt.upiId ?? "—"}</span>
+                  ) : (
+                    <>
+                      {receipt.accountHolder ?? "—"}
+                      <span className="text-white/55 font-mono ml-1">· {maskAcc(receipt.accountNumber)}</span>
+                    </>
+                  )}
+                </span>
+              </div>
+              {!isUpi && receipt.ifsc && (
+                <div className="flex items-center justify-between border-t border-white/5 pt-3">
+                  <span className="text-xs text-white/55">IFSC</span>
+                  <span className="text-xs font-mono font-semibold text-white">{receipt.ifsc}</span>
+                </div>
+              )}
+              {receipt.payoutReference && receipt.status === "approved" && (
+                <div className="flex items-center justify-between gap-3 border-t border-white/5 pt-3">
+                  <span className="text-xs text-white/55 shrink-0">Payout Ref</span>
+                  <span className="text-xs font-mono font-semibold text-emerald-300 truncate">{receipt.payoutReference}</span>
+                </div>
+              )}
+              <div className="flex items-center justify-between gap-3 border-t border-white/5 pt-3">
+                <span className="text-xs text-white/55 shrink-0">Reference</span>
+                <button
+                  type="button"
+                  onClick={copyRef}
+                  className="text-xs font-mono font-semibold text-white inline-flex items-center gap-2 hover:text-emerald-300 transition-colors min-w-0"
+                >
+                  <span className="truncate">{refCode}</span>
+                  {copied ? (
+                    <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                  ) : (
+                    <Copy className="w-3.5 h-3.5 text-white/50 shrink-0" />
+                  )}
+                </button>
+              </div>
+              <div className="flex items-center justify-between border-t border-white/5 pt-3">
+                <span className="text-xs text-white/55">{dateLabel}</span>
+                <span className="text-xs font-semibold text-white">
+                  {dateToShow.toLocaleString("en-IN", {
+                    day: "2-digit",
+                    month: "short",
+                    year: "numeric",
+                    hour: "numeric",
+                    minute: "2-digit",
+                    hour12: true,
+                  })}
+                </span>
+              </div>
+              <div className="flex items-center justify-between border-t border-white/5 pt-3">
+                <span className="text-xs text-white/55">Status</span>
+                <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-semibold ${theme.pillBg}`}>
+                  <span className={`w-1.5 h-1.5 rounded-full ${theme.pillDot} ${receipt.status === "pending" ? "animate-pulse" : ""}`} />
+                  {theme.pillLabel}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* CTA */}
+          <button
+            type="button"
+            onClick={goToWallet}
+            className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-bold text-sm hover:from-emerald-400 hover:to-teal-400 shadow-[0_0_28px_-6px_rgba(16,185,129,0.65)] transition-all inline-flex items-center justify-center gap-2"
+          >
+            <Wallet className="w-4 h-4" />
+            Back to Wallet
+          </button>
+          <p className="text-[10px] text-center text-white/45 leading-relaxed -mt-1">
+            Receipt {refCode} · Tap reference to copy · Share this screen for proof
           </p>
         </motion.div>
       </motion.div>
