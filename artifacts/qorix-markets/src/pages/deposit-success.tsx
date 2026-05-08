@@ -225,7 +225,7 @@ export default function DepositSuccessPage() {
             Download Receipt ·{" "}
             <button
               onClick={handleDownload}
-              className="inline-flex items-center gap-1 text-emerald-400 font-semibold hover:underline"
+              className="inline-flex items-center gap-1 text-sky-400 font-semibold hover:underline"
               data-testid="link-download-receipt"
             >
               <Download className="w-3 h-3" />
