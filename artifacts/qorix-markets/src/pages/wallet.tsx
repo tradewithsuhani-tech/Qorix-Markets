@@ -689,98 +689,151 @@ export default function WalletPage() {
         </div>
       </BottomSheet>
 
-      {/* Transfer Modal */}
+      {/* Transfer Modal — Internal Transfer redesign */}
       <BottomSheet
         open={activeModal === "transfer"}
         onClose={closeModal}
-        title={transferDirection === "toTrading" ? "Transfer to Trading" : "Transfer to Main"}
-        subtitle={transferDirection === "toTrading"
-          ? "Fund your Trading balance"
-          : "Move Trading funds back to Main"}
-        accent="cyan"
+        title="Internal Transfer"
+        subtitle="Move funds between wallets"
+        accent="emerald"
         icon={ArrowRightLeft}
+        rightSlot={
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full border border-emerald-400/40 bg-emerald-500/10 text-[10px] font-bold tracking-wide text-emerald-300">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+            INSTANT
+          </span>
+        }
       >
-        <div className="space-y-4">
-          {/* Direction toggle */}
-          <div className="grid grid-cols-2 gap-1 p-1 bg-black/30 rounded-xl">
-            <button
-              onClick={() => { setTransferDirection("toTrading"); setTransferAmount(""); }}
-              className={`px-3 py-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5 ${
-                transferDirection === "toTrading"
-                  ? "bg-emerald-500/20 text-emerald-300 shadow-sm"
-                  : "text-muted-foreground hover:text-white"
-              }`}
-            >
-              Main <ArrowRightLeft style={{ width: 11, height: 11 }} /> Trading
-            </button>
-            <button
-              onClick={() => { setTransferDirection("toMain"); setTransferAmount(""); }}
-              className={`px-3 py-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5 ${
-                transferDirection === "toMain"
-                  ? "bg-cyan-500/20 text-cyan-300 shadow-sm"
-                  : "text-muted-foreground hover:text-white"
-              }`}
-            >
-              Trading <ArrowRightLeft style={{ width: 11, height: 11 }} /> Main
-            </button>
-          </div>
-
-          <div className="space-y-3">
-            <div>
-              <label className="text-xs text-muted-foreground font-medium mb-1.5 block">Amount (USD)</label>
-              <div className="relative">
-                <input
-                  type="number"
-                  value={transferAmount}
-                  onChange={(e) => setTransferAmount(e.target.value)}
-                  className="field-input pr-14"
-                  placeholder="500"
-                  min="0"
-                  autoFocus
+        {(() => {
+          const fromIsMain = transferDirection === "toTrading";
+          const fromBal = fromIsMain ? mainBal : tradingBal;
+          const toBal = fromIsMain ? tradingBal : mainBal;
+          const numAmt = Number(transferAmount) || 0;
+          const valid = numAmt > 0 && numAmt <= fromBal;
+          const swap = () => {
+            setTransferDirection(fromIsMain ? "toMain" : "toTrading");
+            setTransferAmount("");
+          };
+          const setPct = (pct: number) => {
+            const v = (fromBal * pct) / 100;
+            setTransferAmount(v > 0 ? v.toFixed(2) : "");
+          };
+          return (
+            <div className="space-y-4">
+              {/* FROM / TO cards with swap */}
+              <div className="relative space-y-2">
+                <WalletCard
+                  badge="FROM"
+                  badgeTone="emerald"
+                  icon={fromIsMain ? WalletIcon : TrendingUp}
+                  iconTone="emerald"
+                  name={fromIsMain ? "Main Wallet" : "Trading Wallet"}
+                  sub={fromIsMain ? "Withdrawable balance" : "Deployed capital"}
+                  amount={fromBal}
                 />
-                <button
-                  onClick={() => setTransferAmount(String(
-                    transferDirection === "toTrading" ? mainBal : tradingBal,
-                  ))}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-emerald-300 font-bold px-2 py-1 bg-emerald-500/10 rounded-lg hover:bg-emerald-500/20 transition"
+                <div className="flex justify-center -my-1">
+                  <button
+                    onClick={swap}
+                    aria-label="Swap direction"
+                    className="relative z-10 w-9 h-9 rounded-full bg-emerald-500 hover:bg-emerald-400 text-black flex items-center justify-center shadow-lg shadow-emerald-500/30 transition-colors"
+                  >
+                    <ArrowRightLeft style={{ width: 14, height: 14 }} />
+                  </button>
+                </div>
+                <WalletCard
+                  badge="TO"
+                  badgeTone="cyan"
+                  icon={fromIsMain ? TrendingUp : WalletIcon}
+                  iconTone="cyan"
+                  name={fromIsMain ? "Trading Wallet" : "Main Wallet"}
+                  sub={fromIsMain ? "Deployed capital" : "Withdrawable balance"}
+                  amount={toBal}
+                />
+              </div>
+
+              {/* Transfer amount */}
+              <div>
+                <div className="text-[10px] font-bold tracking-[0.18em] text-white/45 mb-2">TRANSFER AMOUNT</div>
+                <div
+                  className={`rounded-2xl border bg-white/[0.025] px-4 py-3.5 transition-colors ${
+                    numAmt > 0 && !valid
+                      ? "border-rose-500/45"
+                      : valid
+                      ? "border-emerald-400/45"
+                      : "border-white/[0.10]"
+                  }`}
                 >
-                  MAX
-                </button>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[22px] font-semibold leading-none text-emerald-400 shrink-0 select-none">$</span>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      value={transferAmount}
+                      onChange={(e) => setTransferAmount(e.target.value)}
+                      placeholder="0"
+                      min="0"
+                      autoFocus
+                      className="flex-1 bg-transparent border-0 outline-none text-[24px] font-semibold tracking-[-0.01em] tabular-nums placeholder:text-white/25 min-w-0"
+                    />
+                  </div>
+                  <div className="grid grid-cols-4 gap-1.5 mt-3">
+                    {[25, 50, 75, 100].map((p) => (
+                      <button
+                        key={p}
+                        onClick={() => setPct(p)}
+                        className="py-1.5 rounded-lg border border-white/[0.07] bg-white/[0.025] hover:bg-white/[0.06] text-[11px] font-semibold text-white/75 transition-colors"
+                      >
+                        {p === 100 ? "MAX" : `${p}%`}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {numAmt > fromBal && (
+                  <div className="mt-1.5 text-[11px] text-rose-400">Exceeds available balance</div>
+                )}
+              </div>
+
+              {/* Info card */}
+              <div className="flex items-start gap-2.5 rounded-xl border border-emerald-500/20 bg-emerald-500/[0.06] px-3.5 py-2.5">
+                <Info className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
+                <p className="text-[12px] text-white/70 leading-relaxed">
+                  {fromIsMain
+                    ? "Funds moved to Trading are deployed to your active bot and will participate in the next trade cycle."
+                    : "Funds moved to Main are immediately available for withdrawal or external transfer."}
+                </p>
+              </div>
+
+              {/* CTA */}
+              <button
+                onClick={() => transferMutation.mutate({
+                  data: {
+                    amount: numAmt,
+                    direction: fromIsMain ? "to_trading" : "to_main",
+                  },
+                })}
+                disabled={transferMutation.isPending || !valid}
+                className={`w-full h-12 rounded-2xl text-[14px] font-bold flex items-center justify-center gap-2 transition-all ${
+                  valid
+                    ? "bg-emerald-500 hover:bg-emerald-400 text-black shadow-lg shadow-emerald-500/25"
+                    : "bg-white/[0.04] text-white/40 cursor-not-allowed"
+                }`}
+              >
+                <ArrowRightLeft style={{ width: 14, height: 14 }} />
+                {transferMutation.isPending
+                  ? "Processing…"
+                  : !numAmt
+                  ? "Enter Amount"
+                  : !valid
+                  ? "Insufficient Balance"
+                  : `Transfer $${numAmt.toFixed(2)}`}
+              </button>
+
+              <div className="text-center text-[11px] text-white/45">
+                Internal transfers are settled instantly with zero fees
               </div>
             </div>
-            {wallet && (
-              <div className="flex items-center justify-between text-xs text-muted-foreground px-1">
-                <span>
-                  Available {transferDirection === "toTrading" ? "(Main)" : "(Trading)"}
-                </span>
-                <span className="font-medium text-white">
-                  ${(transferDirection === "toTrading" ? mainBal : tradingBal).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD
-                </span>
-              </div>
-            )}
-            <button
-              onClick={() => transferMutation.mutate({
-                data: {
-                  amount: Number(transferAmount),
-                  direction: transferDirection === "toTrading" ? "to_trading" : "to_main",
-                },
-              })}
-              disabled={transferMutation.isPending || !transferAmount || Number(transferAmount) <= 0}
-              className="w-full px-4 py-3 rounded-xl text-sm font-bold disabled:opacity-50"
-              style={{
-                background: "linear-gradient(135deg,#10b981,#22c55e)",
-                color: "#0b0b0b",
-                boxShadow: "0 6px 22px rgba(16,185,129,0.30)",
-              }}
-            >
-              {transferMutation.isPending
-                ? "Processing…"
-                : transferDirection === "toTrading"
-                  ? "Transfer to Trading"
-                  : "Transfer to Main"}
-            </button>
-          </div>
-        </div>
+          );
+        })()}
       </BottomSheet>
 
       {/* KYC required popup */}
@@ -1229,6 +1282,55 @@ function BottomSheet({
         </motion.div>
       )}
     </AnimatePresence>
+  );
+}
+
+/* ─────────────── WalletCard helper (transfer modal) ─────────────── */
+
+function WalletCard({
+  badge, badgeTone, icon: Icon, iconTone, name, sub, amount,
+}: {
+  badge: string;
+  badgeTone: "emerald" | "cyan";
+  icon: React.ElementType;
+  iconTone: "emerald" | "cyan";
+  name: string;
+  sub: string;
+  amount: number;
+}) {
+  const tones = {
+    emerald: {
+      iconBg: "bg-emerald-500/15 border-emerald-400/30 text-emerald-400",
+      badge: "border-emerald-400/40 bg-emerald-500/10 text-emerald-300",
+      ring: "border-emerald-500/25 bg-emerald-500/[0.04]",
+    },
+    cyan: {
+      iconBg: "bg-cyan-500/15 border-cyan-400/30 text-cyan-400",
+      badge: "border-cyan-400/40 bg-cyan-500/10 text-cyan-300",
+      ring: "border-cyan-500/25 bg-cyan-500/[0.04]",
+    },
+  };
+  const t = tones[iconTone];
+  const b = tones[badgeTone];
+  return (
+    <div className={`rounded-2xl border ${t.ring} px-3.5 py-3 flex items-center gap-3`}>
+      <div className={`w-10 h-10 rounded-xl border flex items-center justify-center shrink-0 ${t.iconBg}`}>
+        <Icon style={{ width: 18, height: 18 }} />
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 mb-0.5">
+          <span className={`text-[9px] font-bold tracking-wider px-1.5 py-0.5 rounded border ${b.badge}`}>{badge}</span>
+          <span className="text-[14px] font-semibold text-white truncate">{name}</span>
+        </div>
+        <div className="text-[11px] text-white/50">{sub}</div>
+      </div>
+      <div className="text-right shrink-0">
+        <div className="text-[15px] font-semibold tabular-nums text-white">
+          ${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+        </div>
+        <div className="text-[10px] text-white/40 tabular-nums">USD</div>
+      </div>
+    </div>
   );
 }
 
