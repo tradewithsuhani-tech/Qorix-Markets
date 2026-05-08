@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import { useGetWallet, useGetDashboardSummary } from "@workspace/api-client-react";
 import { useQuery } from "@tanstack/react-query";
 import { Layout } from "@/components/layout";
-import { ArrowLeft, ArrowRight, Shield, AlertTriangle, AlertCircle } from "lucide-react";
+import { ArrowLeft, ArrowRight, Shield, AlertTriangle } from "lucide-react";
 import { authFetch } from "@/lib/auth-fetch";
 import { newIdemKey, patchWithdrawState, readWithdrawState } from "@/lib/withdraw-flow-state";
 import { cn } from "@/lib/utils";
@@ -147,22 +147,6 @@ export default function WithdrawPage() {
               </div>
             )}
           </div>
-        </div>
-
-        {/* Compliance Rules card */}
-        <div className="mb-5 rounded-xl border border-amber-500/30 bg-amber-500/[0.06] px-4 py-3">
-          <div className="flex items-center gap-2 mb-2">
-            <AlertCircle className="w-3.5 h-3.5 text-amber-400" />
-            <span className="text-[11px] font-bold tracking-[0.14em] text-amber-400 uppercase">
-              Compliance Rules
-            </span>
-          </div>
-          <ul className="space-y-1 text-[12px] text-white/70 leading-relaxed">
-            <li className="flex gap-2"><span className="text-amber-400/70">•</span><span>Minimum withdrawal: ₹500 (or $10 crypto equivalent)</span></li>
-            <li className="flex gap-2"><span className="text-amber-400/70">•</span><span>Daily limit: ₹2,00,000 · admin approval above ₹50,000</span></li>
-            <li className="flex gap-2"><span className="text-amber-400/70">•</span><span>Withdrawals processed within 24 hours · crypto on-chain</span></li>
-            <li className="flex gap-2"><span className="text-amber-400/70">•</span><span>Wallet holdings are unaffected by deployed capital</span></li>
-          </ul>
         </div>
 
         {/* Withdrawal Amount label + currency toggle */}
