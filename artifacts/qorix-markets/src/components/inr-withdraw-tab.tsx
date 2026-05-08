@@ -346,12 +346,12 @@ export function InrWithdrawTab({ kycApproved, onKycRequired }: { kycApproved: bo
         <button
           onClick={() => setMethod("upi")}
           className={`rounded-xl px-3 py-2.5 border text-left transition-all ${
-            method === "upi" ? "bg-violet-500/15 border-violet-500/50" : "bg-white/[0.02] border-white/10 hover:bg-white/[0.04]"
+            method === "upi" ? "bg-amber-500/15 border-amber-500/50" : "bg-white/[0.02] border-white/10 hover:bg-white/[0.04]"
           }`}
         >
           <div className="flex items-center gap-1.5">
-            <Smartphone style={{ width: 13, height: 13 }} className={method === "upi" ? "text-violet-300" : "text-muted-foreground"} />
-            <span className={`text-sm font-semibold ${method === "upi" ? "text-violet-300" : "text-white/80"}`}>UPI</span>
+            <Smartphone style={{ width: 13, height: 13 }} className={method === "upi" ? "text-amber-300" : "text-muted-foreground"} />
+            <span className={`text-sm font-semibold ${method === "upi" ? "text-amber-300" : "text-white/80"}`}>UPI</span>
           </div>
           <div className="text-[10px] text-muted-foreground mt-0.5">Instant · GPay/PhonePe/Paytm</div>
         </button>
