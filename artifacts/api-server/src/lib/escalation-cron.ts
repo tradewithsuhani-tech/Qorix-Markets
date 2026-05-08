@@ -11,6 +11,7 @@ import { and, asc, eq, isNull, isNotNull, sql, inArray } from "drizzle-orm";
 import { logger } from "./logger";
 import { placeEscalationCall, placeEscalationCallAndAwaitOutcome } from "./voice-call-service";
 import { sendEmail } from "./email-service";
+import { buildMerchantAlertHtml } from "./email-template";
 
 // Thresholds — kept here as constants so we can dial them in without chasing
 // hard-coded magic numbers. Match the user's spec: 10 min → call merchant,
@@ -136,6 +137,7 @@ export async function notifyOwnerMerchantOfNewDeposit(depositId: number): Promis
         .select({
           deposit: inrDepositsTable,
           merchant: merchantsTable,
+          method: paymentMethodsTable,
         })
         .from(inrDepositsTable)
         .leftJoin(paymentMethodsTable, eq(paymentMethodsTable.id, inrDepositsTable.paymentMethodId))
@@ -144,11 +146,28 @@ export async function notifyOwnerMerchantOfNewDeposit(depositId: number): Promis
         .limit(1);
       const row = rows[0];
       if (!row || !row.merchant || !row.merchant.isActive) return;
-      await notifyMerchantByEmail(
-        row.merchant.email,
-        `New INR deposit pending — ₹${row.deposit.amountInr}`,
-        `A user just submitted an INR deposit of ₹${row.deposit.amountInr} (UTR ${row.deposit.utr}) on your payment method. Please review and approve within 10 minutes.`,
-      );
+      const d = row.deposit;
+      const methodLabel =
+        (row.method?.displayName as string | undefined) ??
+        (row.method?.type as string | undefined) ??
+        "Bank Transfer";
+      const built = buildMerchantAlertHtml({
+        kind: "deposit",
+        reference: `QM-${String(d.id).padStart(6, "0")}`,
+        amountInr: Number(d.amountInr),
+        amountUsdt: d.amountUsdt != null ? Number(d.amountUsdt) : null,
+        rateUsed: d.rateUsed != null ? Number(d.rateUsed) : null,
+        method: methodLabel,
+        utr: d.utr,
+        createdAt: d.createdAt instanceof Date ? d.createdAt : new Date(d.createdAt as unknown as string),
+        ctaUrl: `https://qorixmarkets.com/merchant?focus=deposit&id=${d.id}`,
+        slaMinutes: MERCHANT_ESCALATION_MIN,
+      });
+      try {
+        await sendEmail(row.merchant.email, built.subject, built.text, built.html);
+      } catch (err) {
+        logger.warn({ err: (err as Error).message, merchantEmail: row.merchant.email }, "[escalation] merchant email failed");
+      }
     } catch (err) {
       logger.warn({ err: (err as Error).message, depositId }, "[escalation] new-deposit notify failed");
     }
@@ -171,14 +190,31 @@ export async function notifyAllActiveMerchantsOfNewWithdrawal(
         .select()
         .from(merchantsTable)
         .where(eq(merchantsTable.isActive, true));
+      const isUpi = w.payoutMethod === "upi";
+      const beneficiary = isUpi
+        ? (w.upiId ?? "—")
+        : `${w.accountHolder ?? "—"} · ${w.accountNumber ? "****" + String(w.accountNumber).slice(-4) : "—"}`;
+      const built = buildMerchantAlertHtml({
+        kind: "withdrawal",
+        reference: `WT-${String(w.id).padStart(6, "0")}`,
+        amountInr: Number(w.amountInr),
+        amountUsdt: w.amountUsdt != null ? Number(w.amountUsdt) : null,
+        rateUsed: w.rateUsed != null ? Number(w.rateUsed) : null,
+        method: isUpi ? "UPI Transfer" : `${w.bankName ?? "Bank"} · NEFT/IMPS`,
+        beneficiary,
+        ifsc: !isUpi ? w.ifsc : null,
+        createdAt: w.createdAt instanceof Date ? w.createdAt : new Date(w.createdAt as unknown as string),
+        ctaUrl: `https://qorixmarkets.com/merchant?focus=withdrawal&id=${w.id}`,
+        slaMinutes: MERCHANT_ESCALATION_MIN,
+      });
       await Promise.all(
-        merchants.map((m) =>
-          notifyMerchantByEmail(
-            m.email,
-            `New INR withdrawal pending — ₹${w.amountInr}`,
-            `A user has requested an INR withdrawal of ₹${w.amountInr}. First merchant to claim it from the panel becomes the owner.`,
-          ),
-        ),
+        merchants.map(async (m) => {
+          try {
+            await sendEmail(m.email, built.subject, built.text, built.html);
+          } catch (err) {
+            logger.warn({ err: (err as Error).message, merchantEmail: m.email }, "[escalation] merchant email failed");
+          }
+        }),
       );
     } catch (err) {
       logger.warn(

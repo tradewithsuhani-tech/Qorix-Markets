@@ -1,3 +1,277 @@
+// ─────────────────────────────────────────────────────────────────────────
+// Merchant operational alert email (bank-grade)
+// ─────────────────────────────────────────────────────────────────────────
+//
+// Used for "New INR deposit/withdrawal pending" merchant notifications.
+// Designed to look like a premium bank transactional alert because
+// merchants frequently screenshot & share these (community marketing
+// channel). Inline CSS, table layout, mobile responsive.
+
+export type MerchantAlertKind = "deposit" | "withdrawal";
+
+export interface MerchantAlertInput {
+  kind: MerchantAlertKind;
+  reference: string;             // QM-000022 / WT-000017
+  amountInr: number;             // e.g. 96500
+  amountUsdt?: number | null;
+  rateUsed?: number | null;
+  method?: string | null;        // method display (deposit) or "UPI" / "Bank · NEFT/IMPS"
+  beneficiary?: string | null;   // for withdrawals
+  ifsc?: string | null;
+  utr?: string | null;           // for deposits
+  createdAt: Date;
+  ctaUrl: string;                // merchant panel deep link
+  slaMinutes?: number;           // 10 by default — used in compliance pill
+  noteToMerchant?: string;       // 1-line context line under the headline
+}
+
+function _fmtINR(n: number): string {
+  return n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function _fmtTime(d: Date): string {
+  return d.toLocaleString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+}
+
+export function buildMerchantAlertHtml(opts: MerchantAlertInput): { subject: string; text: string; html: string } {
+  const isDeposit = opts.kind === "deposit";
+  const sla = opts.slaMinutes ?? 10;
+  const action = isDeposit ? "DEPOSIT" : "WITHDRAWAL";
+  const verb = isDeposit ? "submitted" : "requested";
+  const subject = `[Action Required] New INR ${opts.kind} pending — ₹${_fmtINR(opts.amountInr)} · ${opts.reference}`;
+
+  const headline = isDeposit
+    ? `A user just ${verb} an INR deposit of ₹${_fmtINR(opts.amountInr)}.`
+    : `A user just ${verb} an INR withdrawal of ₹${_fmtINR(opts.amountInr)}.`;
+  const subline = isDeposit
+    ? `Verify the UTR on your bank statement and approve to credit USDT to the user's wallet.`
+    : `First merchant to claim from the panel becomes the owner. Process the payout within ${sla} minutes to avoid escalation.`;
+  const note = opts.noteToMerchant ? escapeHtml(opts.noteToMerchant) : escapeHtml(subline);
+
+  // Build details rows (tableized for max email-client compat).
+  const rows: Array<[string, string]> = [];
+  rows.push(["Reference ID", opts.reference]);
+  rows.push([isDeposit ? "Amount to Credit" : "Amount to Pay Out", `₹${_fmtINR(opts.amountInr)}`]);
+  if (opts.amountUsdt != null) {
+    const rateStr = opts.rateUsed && opts.rateUsed > 0 ? ` @ ₹${opts.rateUsed.toFixed(2)}/USDT` : "";
+    rows.push(["USDT Equivalent", `${opts.amountUsdt.toFixed(2)} USDT${rateStr}`]);
+  }
+  if (opts.method) rows.push(["Method", opts.method]);
+  if (opts.utr) rows.push(["UTR / Bank Ref", opts.utr]);
+  if (opts.beneficiary) rows.push(["Beneficiary", opts.beneficiary]);
+  if (opts.ifsc) rows.push(["IFSC Code", opts.ifsc]);
+  rows.push(["Submitted At", _fmtTime(opts.createdAt)]);
+  rows.push(["SLA", `Process within ${sla} minutes`]);
+
+  const detailsRowsHtml = rows.map(([label, value], i) => {
+    const border = i === 0 ? "" : "border-top:1px solid rgba(255,255,255,0.06);";
+    return `
+      <tr>
+        <td style="${border}padding:14px 20px;color:#94A3B8;font-size:12.5px;letter-spacing:0.3px;font-weight:500;width:42%;">${escapeHtml(label)}</td>
+        <td align="right" style="${border}padding:14px 20px;color:#FFFFFF;font-size:13px;font-weight:700;font-family:-apple-system,BlinkMacSystemFont,'SF Mono',Menlo,Consolas,monospace;word-break:break-word;">${escapeHtml(value)}</td>
+      </tr>`;
+  }).join("");
+
+  // Plain-text fallback (also used as the SES Text body).
+  const text = [
+    `${action} PENDING — ₹${_fmtINR(opts.amountInr)} · ${opts.reference}`,
+    "",
+    headline,
+    subline,
+    "",
+    "Transaction details:",
+    ...rows.map(([k, v]) => `  • ${k}: ${v}`),
+    "",
+    `Review & ${isDeposit ? "approve" : "claim"} now: ${opts.ctaUrl}`,
+    "",
+    "— Qorix Markets · Operations Desk",
+  ].join("\n");
+
+  const preheader = `₹${_fmtINR(opts.amountInr)} ${opts.kind} awaiting your review · Ref ${opts.reference} · SLA ${sla} min`;
+
+  const html = `<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="x-apple-disable-message-reformatting" />
+<meta name="color-scheme" content="dark light" />
+<meta name="supported-color-schemes" content="dark light" />
+<title>${escapeHtml(subject)}</title>
+<style type="text/css">
+  @media only screen and (max-width:480px) {
+    .ma-outer { padding:16px 8px !important; }
+    .ma-card { border-radius:18px !important; }
+    .ma-hero-pad { padding:26px 18px 22px !important; }
+    .ma-amount { font-size:32px !important; }
+    .ma-headline { font-size:14px !important; }
+    .ma-detail-pad { padding:0 !important; }
+    .ma-cta-btn { padding:15px 28px !important; font-size:14px !important; }
+    .ma-foot-pad { padding:18px !important; }
+    .ma-section-pad { padding:0 18px !important; }
+  }
+</style>
+</head>
+<body style="margin:0;padding:0;background:#05070D;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;">
+<div style="display:none;max-height:0;overflow:hidden;font-size:1px;line-height:1px;color:#05070D;opacity:0;">${escapeHtml(preheader)}</div>
+<div style="display:none;max-height:0;overflow:hidden;">&#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847;</div>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="ma-outer" style="background:#05070D;padding:32px 16px;">
+  <tr><td align="center">
+
+    <!-- MAIN CARD -->
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="ma-card" style="max-width:600px;background:#0A0F1C;border:1px solid rgba(16,185,129,0.18);border-radius:24px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,0.6);">
+
+      <!-- TOP ACCENT BAR -->
+      <tr><td height="6" style="height:6px;line-height:6px;font-size:1px;background:linear-gradient(90deg,#10B981 0%,#14B8A6 50%,#06B6D4 100%);">&nbsp;</td></tr>
+
+      <!-- LOGO BAR -->
+      <tr>
+        <td align="left" style="padding:18px 24px 8px 28px;background:#0A0F1C;">
+          <img src="cid:${BRAND_LOGO_CID}" alt="Qorix Markets" width="220" height="150" style="display:block;width:220px;max-width:70%;height:auto;border:0;outline:none;text-decoration:none;margin:0;" />
+        </td>
+      </tr>
+
+      <!-- HERO -->
+      <tr>
+        <td class="ma-hero-pad" style="padding:8px 32px 28px;background:#0A0F1C;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+            <tr>
+              <td>
+                <div style="display:inline-block;padding:6px 12px;border-radius:999px;background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.4);font-size:10.5px;letter-spacing:1.6px;color:#FCD34D;font-weight:800;text-transform:uppercase;">
+                  ⚠ Action Required · ${escapeHtml(action)}
+                </div>
+              </td>
+              <td align="right" style="vertical-align:top;">
+                <div style="display:inline-block;padding:6px 12px;border-radius:999px;background:rgba(16,185,129,0.10);border:1px solid rgba(16,185,129,0.35);font-size:10.5px;letter-spacing:1.4px;color:#6EE7B7;font-weight:800;text-transform:uppercase;font-family:-apple-system,BlinkMacSystemFont,'SF Mono',Menlo,Consolas,monospace;">
+                  ${escapeHtml(opts.reference)}
+                </div>
+              </td>
+            </tr>
+          </table>
+          <div class="ma-amount" style="margin-top:22px;font-size:44px;line-height:1.05;font-weight:800;color:#FFFFFF;letter-spacing:-1px;">
+            ₹${_fmtINR(opts.amountInr)}
+          </div>
+          <div style="margin-top:6px;font-size:11.5px;letter-spacing:1.5px;color:#10B981;text-transform:uppercase;font-weight:700;">
+            ${isDeposit ? "INR Deposit · Pending Verification" : "INR Withdrawal · Pending Payout"}
+          </div>
+          <div class="ma-headline" style="margin-top:18px;font-size:15px;line-height:1.6;color:#E2E8F0;font-weight:500;">
+            ${escapeHtml(headline)}
+          </div>
+          <div style="margin-top:8px;font-size:13px;line-height:1.65;color:#94A3B8;">
+            ${note}
+          </div>
+        </td>
+      </tr>
+
+      <!-- DETAILS CARD -->
+      <tr>
+        <td class="ma-section-pad" style="padding:0 28px 8px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:rgba(255,255,255,0.025);border:1px solid rgba(255,255,255,0.07);border-radius:16px;">
+            <tr>
+              <td style="padding:14px 20px 8px;">
+                <div style="font-size:10.5px;letter-spacing:2px;color:#64748B;font-weight:800;text-transform:uppercase;">Transaction Details</div>
+              </td>
+            </tr>
+            ${detailsRowsHtml}
+          </table>
+        </td>
+      </tr>
+
+      <!-- CTA -->
+      <tr>
+        <td align="center" style="padding:28px 32px 8px;">
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto;">
+            <tr>
+              <td align="center" style="border-radius:14px;background:linear-gradient(135deg,#10B981 0%,#14B8A6 50%,#06B6D4 100%);box-shadow:0 14px 40px rgba(16,185,129,0.4);">
+                <a href="${opts.ctaUrl}" target="_blank" class="ma-cta-btn" style="display:inline-block;padding:16px 38px;color:#FFFFFF;text-decoration:none;font-weight:800;font-size:14.5px;letter-spacing:0.4px;border-radius:14px;">
+                  ${isDeposit ? "Review &amp; Approve" : "Claim &amp; Process Payout"}&nbsp;&nbsp;→
+                </a>
+              </td>
+            </tr>
+          </table>
+          <div style="margin-top:12px;font-size:11px;color:#64748B;letter-spacing:0.4px;">
+            Or sign in: <a href="${opts.ctaUrl}" style="color:#7DD3FC;text-decoration:none;border-bottom:1px solid rgba(125,211,252,0.4);">qorixmarkets.com/merchant</a>
+          </div>
+        </td>
+      </tr>
+
+      <!-- SLA WARNING -->
+      <tr>
+        <td class="ma-section-pad" style="padding:24px 28px 8px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:linear-gradient(90deg,rgba(245,158,11,0.08) 0%,rgba(244,63,94,0.06) 100%);border:1px solid rgba(245,158,11,0.25);border-radius:14px;">
+            <tr>
+              <td style="padding:14px 18px;">
+                <div style="font-size:11px;letter-spacing:1.6px;color:#FCD34D;font-weight:800;text-transform:uppercase;margin-bottom:4px;">⏱ Service Level Agreement</div>
+                <div style="font-size:12.5px;color:#CBD5E1;line-height:1.6;">
+                  Auto-escalation triggers in <strong style="color:#FFFFFF;">${sla} minutes</strong>. Unclaimed requests will be routed to admin and may impact your merchant score.
+                </div>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+
+      <!-- TRUST PILLS -->
+      <tr>
+        <td class="ma-section-pad" style="padding:18px 28px 24px;">
+          <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.05);border-radius:12px;padding:12px 10px;text-align:center;line-height:1.9;">
+            <span style="display:inline-block;color:#6EE7B7;font-size:10.5px;letter-spacing:1.8px;font-weight:700;text-transform:uppercase;margin:0 8px;white-space:nowrap;">SSL · 256-bit</span>
+            <span style="display:inline-block;color:#67E8F9;font-size:10.5px;letter-spacing:1.8px;font-weight:700;text-transform:uppercase;margin:0 8px;white-space:nowrap;">Audited Ledger</span>
+            <span style="display:inline-block;color:#FCD34D;font-size:10.5px;letter-spacing:1.8px;font-weight:700;text-transform:uppercase;margin:0 8px;white-space:nowrap;">Merchant · Tier 1</span>
+          </div>
+        </td>
+      </tr>
+
+      <!-- FOOTER -->
+      <tr>
+        <td class="ma-foot-pad" style="padding:22px 28px 28px;background:#06090F;border-top:1px solid rgba(255,255,255,0.05);">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+            <tr>
+              <td align="center" style="padding-bottom:10px;">
+                <div style="font-size:13px;letter-spacing:5px;color:#94A3B8;font-weight:800;">QORIX&nbsp;MARKETS</div>
+                <div style="font-size:10.5px;color:#475569;margin-top:3px;letter-spacing:0.5px;">Operations Desk · Merchant Network</div>
+              </td>
+            </tr>
+            <tr>
+              <td align="center" style="padding:6px 0;line-height:1.9;">
+                <a href="https://qorixmarkets.com/merchant" style="color:#7DD3FC;text-decoration:none;font-size:11.5px;font-weight:600;margin:0 8px;white-space:nowrap;">Merchant Panel</a>
+                <span style="color:#334155;">·</span>
+                <a href="mailto:support@qorixmarkets.com" style="color:#7DD3FC;text-decoration:none;font-size:11.5px;font-weight:600;margin:0 8px;white-space:nowrap;">Support</a>
+                <span style="color:#334155;">·</span>
+                <a href="https://qorixmarkets.com/merchant/sla" style="color:#7DD3FC;text-decoration:none;font-size:11.5px;font-weight:600;margin:0 8px;white-space:nowrap;">SLA Policy</a>
+              </td>
+            </tr>
+            <tr>
+              <td align="center" style="padding-top:12px;border-top:1px solid rgba(255,255,255,0.04);">
+                <div style="font-size:10.5px;color:#475569;line-height:1.7;padding-top:12px;">
+                  © ${new Date().getFullYear()} Qorix Markets · Operations · This alert is sent only to active merchants on your tier.<br/>
+                  Do not share this email with end users. Process via the merchant panel only.
+                </div>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+
+    </table>
+
+    <div style="height:24px;line-height:24px;font-size:1px;">&nbsp;</div>
+  </td></tr>
+</table>
+</body>
+</html>`;
+
+  return { subject, text, html };
+}
+
 export function escapeHtml(s: string): string {
   return s
     .replace(/&/g, "&amp;")
