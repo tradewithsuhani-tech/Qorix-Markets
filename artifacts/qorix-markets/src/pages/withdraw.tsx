@@ -111,23 +111,21 @@ export default function WithdrawPage() {
 
   return (
     <Layout>
-      <div className="max-w-md mx-auto px-5 pt-5 pb-28">
-        {/* Header bar */}
-        <div className="mb-6">
+      <div className="max-w-md mx-auto px-5 pt-3 pb-28">
+        {/* Header + Title */}
+        <div className="flex items-center gap-3 mb-1.5">
           <button
             onClick={() => navigate("/wallet")}
-            className="w-9 h-9 rounded-full border border-white/10 bg-white/[0.04] hover:bg-white/[0.08] flex items-center justify-center transition-colors"
+            className="w-9 h-9 rounded-full border border-white/10 bg-white/[0.04] hover:bg-white/[0.08] flex items-center justify-center transition-colors shrink-0"
             data-testid="button-back"
           >
             <ArrowLeft className="w-4 h-4" />
           </button>
-        </div>
-
-        {/* Title */}
-        <div className="space-y-1.5 mb-5">
-          <h1 className="text-[26px] font-semibold tracking-[-0.02em] leading-tight">
+          <h1 className="text-[22px] font-semibold tracking-[-0.02em] leading-tight">
             Withdraw Funds
           </h1>
+        </div>
+        <div className="space-y-1.5 mb-5">
           <p className="text-[13px] text-white/55 leading-relaxed">
             {isUsdt
               ? `Send USDT to your TRC20 wallet. Reviewed within 24 hours.`

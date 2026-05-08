@@ -44,25 +44,22 @@ export default function WithdrawUsdtPage() {
 
   return (
     <Layout>
-      <div className="max-w-md mx-auto px-5 pt-5 pb-28">
-        <div className="mb-6">
+      <div className="max-w-md mx-auto px-5 pt-3 pb-28">
+        <div className="flex items-center gap-3 mb-1.5">
           <button
             onClick={() => navigate("/withdraw")}
-            className="w-9 h-9 rounded-full border border-white/10 bg-white/[0.04] hover:bg-white/[0.08] flex items-center justify-center transition-colors"
+            className="w-9 h-9 rounded-full border border-white/10 bg-white/[0.04] hover:bg-white/[0.08] flex items-center justify-center transition-colors shrink-0"
             data-testid="button-back"
           >
             <ArrowLeft className="w-4 h-4" />
           </button>
-        </div>
-
-        <div className="space-y-1.5 mb-6">
-          <h1 className="text-[26px] font-semibold tracking-[-0.02em] leading-tight">
+          <h1 className="text-[22px] font-semibold tracking-[-0.02em] leading-tight">
             Destination Wallet
           </h1>
-          <p className="text-[13px] text-white/55 leading-relaxed">
-            ${numAmount.toFixed(2)} USDT · TRON (TRC20) network
-          </p>
         </div>
+        <p className="text-[13px] text-white/55 leading-relaxed mb-5">
+          ${numAmount.toFixed(2)} USDT · TRON (TRC20) network
+        </p>
 
         <div className="rounded-2xl border border-amber-500/25 bg-amber-500/10 px-3.5 py-3 flex items-start gap-2.5">
           <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />

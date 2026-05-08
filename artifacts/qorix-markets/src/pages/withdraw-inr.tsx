@@ -94,21 +94,20 @@ export default function WithdrawInrPage() {
 
   return (
     <Layout>
-      <div className="max-w-md mx-auto px-5 pt-5 pb-28 space-y-5">
-        <div className="-mb-1">
-          <button
-            onClick={() => navigate("/withdraw")}
-            className="w-9 h-9 rounded-full border border-white/10 bg-white/[0.04] hover:bg-white/[0.08] flex items-center justify-center transition-colors"
-            data-testid="button-back"
-          >
-            <ArrowLeft className="w-4 h-4" />
-          </button>
-        </div>
-
-        <div className="space-y-1.5">
-          <h1 className="text-[26px] font-semibold tracking-[-0.02em] leading-tight">
-            Payout Destination
-          </h1>
+      <div className="max-w-md mx-auto px-5 pt-3 pb-28 space-y-5">
+        <div>
+          <div className="flex items-center gap-3 mb-1.5">
+            <button
+              onClick={() => navigate("/withdraw")}
+              className="w-9 h-9 rounded-full border border-white/10 bg-white/[0.04] hover:bg-white/[0.08] flex items-center justify-center transition-colors shrink-0"
+              data-testid="button-back"
+            >
+              <ArrowLeft className="w-4 h-4" />
+            </button>
+            <h1 className="text-[22px] font-semibold tracking-[-0.02em] leading-tight">
+              Payout Destination
+            </h1>
+          </div>
           <p className="text-[13px] text-white/55 leading-relaxed">
             ₹{numAmount.toLocaleString("en-IN")} to UPI or bank account
           </p>
