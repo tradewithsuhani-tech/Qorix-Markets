@@ -348,7 +348,7 @@ const NUDGE_MESSAGES = [
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-export function QorixAssistant({ guestMode = false }: { guestMode?: boolean } = {}) {
+export function QorixAssistant({ guestMode = false, hideTrigger = false }: { guestMode?: boolean; hideTrigger?: boolean } = {}) {
   const { user, token } = useAuth();
   const [, navigate] = useLocation();
   const [isOpen, setIsOpen] = useState(false);
@@ -1101,7 +1101,7 @@ export function QorixAssistant({ guestMode = false }: { guestMode?: boolean } = 
           "bg-gradient-to-br from-emerald-600 to-teal-700",
           "flex items-center justify-center",
           "hover:scale-105 active:scale-95 transition-transform",
-          isOpen && "hidden"
+          (isOpen || hideTrigger) && "hidden"
         )}
         initial={{ scale: 0, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
