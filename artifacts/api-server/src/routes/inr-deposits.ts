@@ -216,13 +216,28 @@ router.get("/payment-methods", authMiddleware, async (req: AuthRequest, res) => 
 });
 
 router.get("/inr-deposits/mine", authMiddleware, async (req: AuthRequest, res) => {
+  // Join payment_methods so the receipt modal in the wallet can show the
+  // human-readable merchant name (e.g. "Small Shark") and method type
+  // (upi/bank) for any past deposit — without these, historical rows have
+  // only a numeric paymentMethodId which isn't user-presentable.
   const rows = await db
-    .select()
+    .select({
+      d: inrDepositsTable,
+      methodDisplayName: paymentMethodsTable.displayName,
+      methodType: paymentMethodsTable.type,
+    })
     .from(inrDepositsTable)
+    .leftJoin(paymentMethodsTable, eq(paymentMethodsTable.id, inrDepositsTable.paymentMethodId))
     .where(eq(inrDepositsTable.userId, req.userId!))
     .orderBy(desc(inrDepositsTable.createdAt))
     .limit(50);
-  res.json({ deposits: rows.map(formatInrDeposit) });
+  res.json({
+    deposits: rows.map((r) => ({
+      ...formatInrDeposit(r.d),
+      methodDisplayName: r.methodDisplayName ?? null,
+      methodType: r.methodType ?? null,
+    })),
+  });
 });
 
 router.post("/inr-deposits", authMiddleware, async (req: AuthRequest, res) => {

@@ -81,6 +81,11 @@ interface InrDeposit {
   adminNote: string | null;
   proofImageBase64: string | null;
   createdAt: string;
+  // Enriched by the backend `/inr-deposits/mine` join so the receipt modal
+  // can label the method even for historical rows.
+  methodDisplayName?: string | null;
+  methodType?: "upi" | "bank" | null;
+  reviewedAt?: string | null;
 }
 
 const COUNTDOWN_SECS = 15 * 60;
@@ -208,6 +213,11 @@ export function InrDepositTab() {
   const { user } = useAuth();
 
   const [step, setStep] = useState<Step>("start");
+  // Receipt modal — opens when user taps any row in their INR deposit
+  // history. Shows the same celebratory layout as the post-submit success
+  // step, but with status-aware colours (emerald=approved, amber=pending,
+  // rose=rejected). Designed to be screenshot-friendly so users can share.
+  const [receiptDeposit, setReceiptDeposit] = useState<InrDeposit | null>(null);
   // Scroll the page to the top whenever we enter the success step so the
   // celebratory hero is fully visible — without this, on smaller phones the
   // user lands mid-receipt and the CTAs sit hidden under the floating bottom
@@ -1446,11 +1456,14 @@ export function InrDepositTab() {
           <div className="divide-y divide-white/5">
             <AnimatePresence>
               {(historyResp?.deposits ?? []).map((d) => (
-                <motion.div
+                <motion.button
                   key={d.id}
+                  type="button"
+                  onClick={() => setReceiptDeposit(d)}
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
-                  className="px-5 py-3 flex items-center gap-3"
+                  className="w-full text-left px-5 py-3 flex items-center gap-3 hover:bg-white/[0.03] active:bg-white/[0.06] transition-colors cursor-pointer"
+                  aria-label={`View receipt for ₹${Number(d.amountInr).toLocaleString("en-IN")} deposit`}
                 >
                   <div className="w-9 h-9 rounded-lg bg-white/5 flex items-center justify-center shrink-0">
                     {d.proofImageBase64 ? (
@@ -1476,7 +1489,7 @@ export function InrDepositTab() {
                     )}
                   </div>
                   <StatusPill status={d.status} />
-                </motion.div>
+                </motion.button>
               ))}
             </AnimatePresence>
           </div>
@@ -1557,6 +1570,15 @@ export function InrDepositTab() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* History receipt modal — opens when a row in "Your INR deposits" is
+          tapped. Mirrors the post-submit success layout but adapts colours
+          and copy to the deposit's actual status so the user can screenshot
+          and share for any state (pending/approved/rejected). */}
+      <DepositReceiptModal
+        deposit={receiptDeposit}
+        onClose={() => setReceiptDeposit(null)}
+      />
     </div>
   );
 }
@@ -1670,5 +1692,268 @@ function Row({
         </button>
       </div>
     </div>
+  );
+}
+
+/**
+ * DepositReceiptModal — opened when the user taps any row in their INR
+ * deposit history. Mirrors the celebratory post-submit success layout but
+ * adapts colours and copy to the deposit's current status:
+ *
+ *   pending  → amber clock     · "DEPOSIT SUBMITTED"
+ *   approved → emerald check   · "DEPOSIT APPROVED"
+ *   rejected → rose cross      · "DEPOSIT REJECTED"
+ *
+ * Designed to be screenshot-friendly so users can share their receipt for
+ * social proof / community marketing.
+ */
+function DepositReceiptModal({
+  deposit,
+  onClose,
+}: {
+  deposit: InrDeposit | null;
+  onClose: () => void;
+}) {
+  const [, navigate] = useLocation();
+  const [utrCopied, setUtrCopied] = useState(false);
+
+  // Lock body scroll while modal is open so the receipt stays in focus on
+  // mobile and the page below doesn't scroll-jack the gesture.
+  useEffect(() => {
+    if (!deposit) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = prev; };
+  }, [deposit]);
+
+  useEffect(() => {
+    if (!utrCopied) return;
+    const t = setTimeout(() => setUtrCopied(false), 1400);
+    return () => clearTimeout(t);
+  }, [utrCopied]);
+
+  if (!deposit) return null;
+
+  // Status-driven theme tokens — keeps the JSX free of conditional branches
+  // and ensures every colour-bearing element stays in sync with the status.
+  const theme =
+    deposit.status === "approved"
+      ? {
+          accent: "emerald",
+          ring: "border-emerald-500/15",
+          ring2: "border-emerald-500/25",
+          ring3: "border-emerald-500/40",
+          hub: "bg-emerald-500 shadow-[0_0_40px_-6px_rgba(16,185,129,0.75)]",
+          label: "DEPOSIT APPROVED",
+          labelText: "text-emerald-400",
+          subtitle: `Credited · ${Number(deposit.amountUsdt).toFixed(2)} USDT in your Trading Balance`,
+          banner: "border-emerald-500/30 bg-emerald-500/10",
+          bannerIcon: "text-emerald-300",
+          bannerText: <>Approved by Qorix · <span className="font-semibold text-emerald-200">{Number(deposit.amountUsdt).toFixed(2)} USDT</span> credited</>,
+          pillBg: "bg-emerald-500/15 border-emerald-500/35 text-emerald-300",
+          pillDot: "bg-emerald-400",
+          pillLabel: "Approved",
+          icon: <CheckCircle2 className="w-9 h-9 sm:w-11 sm:h-11 text-white" strokeWidth={2.5} />,
+        }
+      : deposit.status === "rejected"
+      ? {
+          accent: "rose",
+          ring: "border-rose-500/15",
+          ring2: "border-rose-500/25",
+          ring3: "border-rose-500/40",
+          hub: "bg-rose-500 shadow-[0_0_40px_-6px_rgba(244,63,94,0.7)]",
+          label: "DEPOSIT REJECTED",
+          labelText: "text-rose-400",
+          subtitle: deposit.adminNote
+            ? `Reviewed · ${deposit.adminNote}`
+            : "Reviewed by compliance · No funds debited",
+          banner: "border-rose-500/30 bg-rose-500/10",
+          bannerIcon: "text-rose-300",
+          bannerText: <>Rejected · {deposit.adminNote ?? "Contact support if you believe this is a mistake."}</>,
+          pillBg: "bg-rose-500/15 border-rose-500/35 text-rose-300",
+          pillDot: "bg-rose-400",
+          pillLabel: "Rejected",
+          icon: <XCircle className="w-9 h-9 sm:w-11 sm:h-11 text-white" strokeWidth={2.5} />,
+        }
+      : {
+          accent: "amber",
+          ring: "border-amber-500/15",
+          ring2: "border-amber-500/25",
+          ring3: "border-amber-500/40",
+          hub: "bg-amber-500 shadow-[0_0_40px_-6px_rgba(245,158,11,0.7)]",
+          label: "DEPOSIT SUBMITTED",
+          labelText: "text-amber-400",
+          subtitle: "Queued for verification · approved in 1–3 hrs",
+          banner: "border-amber-500/30 bg-amber-500/10",
+          bannerIcon: "text-amber-300",
+          bannerText: <>Secured by Qorix · <span className="font-semibold text-amber-200">{Number(deposit.amountUsdt).toFixed(2)} USDT</span> credited on approval</>,
+          pillBg: "bg-amber-500/15 border-amber-500/35 text-amber-300",
+          pillDot: "bg-amber-400",
+          pillLabel: "Pending",
+          icon: <Clock className="w-9 h-9 sm:w-11 sm:h-11 text-white" strokeWidth={2.5} />,
+        };
+
+  const isUpi = deposit.methodType === "upi";
+  const methodName =
+    deposit.methodDisplayName ??
+    (deposit.methodType === "upi" ? "UPI Transfer" : deposit.methodType === "bank" ? "Bank Transfer" : "Bank/UPI");
+  const submittedAt = new Date(deposit.createdAt);
+  const reviewedAt = deposit.reviewedAt ? new Date(deposit.reviewedAt) : null;
+  const dateToShow = deposit.status !== "pending" && reviewedAt ? reviewedAt : submittedAt;
+  const dateLabel = deposit.status === "pending" ? "Submitted" : "Reviewed";
+
+  const copyUtr = () => {
+    navigator.clipboard.writeText(deposit.utr).then(() => setUtrCopied(true)).catch(() => {});
+  };
+
+  return (
+    <AnimatePresence>
+      <motion.div
+        key="receipt-backdrop"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.2 }}
+        onClick={onClose}
+        className="fixed inset-0 z-[120] flex items-start sm:items-center justify-center px-4 py-6 bg-black/80 backdrop-blur-sm overflow-y-auto"
+      >
+        <motion.div
+          key="receipt-card"
+          initial={{ opacity: 0, scale: 0.94, y: 12 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.96, y: 8 }}
+          transition={{ type: "spring", stiffness: 260, damping: 24 }}
+          onClick={(e) => e.stopPropagation()}
+          className="relative w-full max-w-md my-auto rounded-3xl border border-white/10 bg-gradient-to-b from-[#0c0d10] via-[#0a0b0e] to-[#06070a] shadow-[0_24px_80px_rgba(0,0,0,0.6)] p-5 sm:p-6 space-y-4 sm:space-y-5"
+        >
+          <button
+            onClick={onClose}
+            className="absolute top-3 right-3 w-8 h-8 rounded-full flex items-center justify-center text-white/50 hover:text-white hover:bg-white/10 transition z-10"
+            aria-label="Close"
+          >
+            <X className="w-4 h-4" />
+          </button>
+
+          {/* Hero icon with concentric rings */}
+          <div className="flex flex-col items-center pt-1 sm:pt-2">
+            <motion.div
+              initial={{ scale: 0.6, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ type: "spring", stiffness: 180, damping: 14 }}
+              className="relative w-24 h-24 sm:w-32 sm:h-32 flex items-center justify-center"
+            >
+              <span className={`absolute inset-0 rounded-full border ${theme.ring}`} />
+              <span className={`absolute inset-3 rounded-full border ${theme.ring2}`} />
+              <span className={`absolute inset-6 rounded-full border ${theme.ring3}`} />
+              <motion.div
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                transition={{ type: "spring", stiffness: 220, damping: 14, delay: 0.05 }}
+                className={`w-16 h-16 sm:w-20 sm:h-20 rounded-full flex items-center justify-center ${theme.hub}`}
+              >
+                {theme.icon}
+              </motion.div>
+            </motion.div>
+            <div className={`mt-3 sm:mt-5 text-[11px] tracking-[0.28em] font-bold ${theme.labelText}`}>
+              {theme.label}
+            </div>
+            <div className="mt-2 sm:mt-3 text-3xl sm:text-4xl font-bold text-white tabular-nums">
+              ₹{Number(deposit.amountInr).toLocaleString("en-IN")}
+            </div>
+            <div className="mt-1.5 sm:mt-2 text-xs text-muted-foreground text-center px-2">
+              {theme.subtitle}
+            </div>
+          </div>
+
+          {/* Status banner */}
+          <div className={`rounded-2xl border ${theme.banner} px-4 py-3 flex items-start gap-3`}>
+            <ShieldCheck className={`w-4 h-4 mt-0.5 shrink-0 ${theme.bannerIcon}`} />
+            <span className="text-xs text-white leading-relaxed">{theme.bannerText}</span>
+          </div>
+
+          {/* Transaction details card */}
+          <div className="rounded-2xl border border-white/10 bg-white/[0.03] overflow-hidden">
+            <div className="px-5 pt-4 pb-3 text-[10px] tracking-[0.22em] font-bold text-white/55">
+              TRANSACTION DETAILS
+            </div>
+            <div className="px-5 pb-5 space-y-3">
+              <div className="flex items-center justify-between gap-3 border-t border-white/5 pt-3">
+                <span className="text-xs text-white/55">Method</span>
+                <span className="text-xs font-semibold text-white inline-flex items-center gap-2 min-w-0">
+                  <span className="w-6 h-6 rounded-md bg-amber-500/15 border border-amber-500/30 inline-flex items-center justify-center shrink-0">
+                    {isUpi ? (
+                      <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                    ) : (
+                      <Landmark className="w-3.5 h-3.5 text-amber-300" />
+                    )}
+                  </span>
+                  <span className="truncate">{methodName}</span>
+                </span>
+              </div>
+              <div className="flex items-center justify-between border-t border-white/5 pt-3">
+                <span className="text-xs text-white/55">
+                  {deposit.status === "rejected" ? "Amount Requested" : "Amount Credited"}
+                </span>
+                <span className={`text-xs font-bold tabular-nums ${deposit.status === "rejected" ? "text-rose-300" : "text-emerald-300"}`}>
+                  {deposit.status === "rejected" ? "" : "+ "}₹{Number(deposit.amountInr).toLocaleString("en-IN")}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-3 border-t border-white/5 pt-3">
+                <span className="text-xs text-white/55 shrink-0">UTR / Ref</span>
+                <button
+                  type="button"
+                  onClick={copyUtr}
+                  className="text-xs font-mono font-semibold text-white inline-flex items-center gap-2 hover:text-emerald-300 transition-colors min-w-0"
+                >
+                  <span className="truncate">{deposit.utr}</span>
+                  {utrCopied ? (
+                    <CheckCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                  ) : (
+                    <Copy className="w-3.5 h-3.5 text-white/50 shrink-0" />
+                  )}
+                </button>
+              </div>
+              <div className="flex items-center justify-between border-t border-white/5 pt-3">
+                <span className="text-xs text-white/55">{dateLabel}</span>
+                <span className="text-xs font-semibold text-white">
+                  {dateToShow.toLocaleString("en-IN", {
+                    day: "2-digit",
+                    month: "short",
+                    year: "numeric",
+                    hour: "numeric",
+                    minute: "2-digit",
+                    hour12: true,
+                  })}
+                </span>
+              </div>
+              <div className="flex items-center justify-between border-t border-white/5 pt-3">
+                <span className="text-xs text-white/55">Status</span>
+                <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-semibold ${theme.pillBg}`}>
+                  <span className={`w-1.5 h-1.5 rounded-full ${theme.pillDot} ${deposit.status === "pending" ? "animate-pulse" : ""}`} />
+                  {theme.pillLabel}
+                </span>
+              </div>
+              <div className="flex items-center justify-between border-t border-white/5 pt-3">
+                <span className="text-xs text-white/55">Reference</span>
+                <span className="text-xs font-mono font-semibold text-white">QM-{String(deposit.id).padStart(6, "0")}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* CTA */}
+          <button
+            type="button"
+            onClick={() => { onClose(); setTimeout(() => navigate("/wallet"), 60); }}
+            className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-bold text-sm hover:from-emerald-400 hover:to-teal-400 shadow-[0_0_28px_-6px_rgba(16,185,129,0.65)] transition-all inline-flex items-center justify-center gap-2"
+          >
+            <Wallet className="w-4 h-4" />
+            Back to Wallet
+          </button>
+          <p className="text-[10px] text-center text-white/45 leading-relaxed -mt-1">
+            Receipt #{deposit.id} · Tap UTR to copy · Share this screen for proof
+          </p>
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>
   );
 }
