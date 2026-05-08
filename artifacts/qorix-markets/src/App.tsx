@@ -360,7 +360,7 @@ function AppContent() {
       {showSplash && <SplashScreen onDone={onSplashDone} />}
       <Router />
       {!isAdminArea && !isPublicArea && <HighImpactNotificationBanner />}
-      {!isAdminArea && <QorixAssistant />}
+      {!isAdminArea && <QorixAssistant guestMode={isPublicArea} hideTrigger={isPublicArea} />}
       {!isAdminArea && <PWAInstallPrompt />}
       <UpdateBanner />
       <MaintenanceBanner />
