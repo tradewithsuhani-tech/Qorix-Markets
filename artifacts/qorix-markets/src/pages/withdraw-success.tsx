@@ -133,8 +133,8 @@ export default function WithdrawSuccessPage() {
             <div className="text-4xl font-bold tracking-tight">
               {isUsdt ? `$${netAmount.toFixed(2)}` : `₹${inrAmount.toLocaleString("en-IN")}`}
             </div>
-            <div className="text-[13px] text-muted-foreground">
-              Pending review · Funds arrive within 24 hrs after approval
+            <div className="text-[12px] text-muted-foreground whitespace-nowrap">
+              Pending review · Arrives within 24 hrs
             </div>
           </motion.div>
         </div>
