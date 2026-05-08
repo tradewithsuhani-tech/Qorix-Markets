@@ -191,73 +191,68 @@ export default function WithdrawPage() {
           </div>
         </div>
 
-        {/* Amount — inline row */}
-        <div className="mb-3">
-          <div
-            className={cn(
-              "rounded-xl border bg-white/[0.025] px-3.5 py-2.5 transition-colors flex items-center gap-3",
-              numAmount > 0 && !valid
-                ? "border-rose-500/45"
-                : valid
-                ? isUsdt ? "border-amber-400/40" : "border-emerald-400/40"
-                : "border-white/[0.07]"
-            )}
-          >
-            <label className="text-[12px] text-white/55 shrink-0">
-              Amount
-            </label>
-            <span className={cn("ml-auto text-[14px] font-semibold leading-none select-none", isUsdt ? "text-amber-300/80" : "text-emerald-300/80")}>
-              {symbol}
+        {/* Amount label */}
+        <div className="text-[12px] text-white/55 mb-2">Withdrawal Amount</div>
+
+        {/* Amount box — symbol + number left, equiv right */}
+        <div
+          className={cn(
+            "rounded-xl border bg-white/[0.025] px-4 py-3.5 transition-colors flex items-center gap-2",
+            numAmount > 0 && !valid
+              ? "border-rose-500/45"
+              : valid
+              ? isUsdt ? "border-amber-400/40" : "border-emerald-400/40"
+              : "border-white/[0.07]"
+          )}
+        >
+          <span className={cn("text-[22px] font-semibold leading-none select-none shrink-0", isUsdt ? "text-amber-300" : "text-emerald-300")}>
+            {symbol}
+          </span>
+          <input
+            ref={amountRef}
+            type="number"
+            inputMode="decimal"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            placeholder="0"
+            className="flex-1 bg-transparent border-0 outline-none text-[24px] font-semibold tracking-[-0.01em] tabular-nums placeholder:text-white/20 min-w-0"
+            data-testid="input-amount"
+          />
+          {numAmount > 0 && (
+            <span className="text-[11px] text-white/45 font-mono tabular-nums shrink-0">
+              {isUsdt
+                ? `≈ ₹${Math.round(inrEquiv).toLocaleString("en-IN")}`
+                : `≈ $${usdEquiv.toFixed(2)}`}
             </span>
-            <input
-              ref={amountRef}
-              type="number"
-              inputMode="decimal"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              placeholder="0.00"
-              className="flex-1 max-w-[140px] bg-transparent border-0 outline-none text-[18px] font-semibold tracking-[-0.01em] tabular-nums placeholder:text-white/20 text-right min-w-0 -ml-1"
-              data-testid="input-amount"
-            />
-            <button
-              onClick={() => {
-                if (isUsdt) setAmount(String(sourceBalance.toFixed(2)));
-                else if (limits) setAmount(String(Math.floor(maxInr)));
-              }}
-              className="text-[10px] font-bold tracking-wider text-white/55 hover:text-white px-2 py-0.5 rounded-md border border-white/10 hover:border-white/25 transition-colors shrink-0"
-              data-testid="button-max"
-            >
-              MAX
-            </button>
-          </div>
-          <div className="min-h-[14px] mt-1.5 flex items-center justify-between text-[11px]">
-            <span className="text-rose-400">{amountHint}</span>
-            {numAmount > 0 && !amountHint && (
-              <span className="text-white/40 font-mono tabular-nums ml-auto">
-                {isUsdt
-                  ? `≈ ₹${Math.round(inrEquiv).toLocaleString("en-IN")}`
-                  : `≈ $${usdEquiv.toFixed(2)}`}
-              </span>
-            )}
-          </div>
+          )}
+        </div>
+        <div className="min-h-[14px] mt-1.5 text-[11px] text-rose-400">
+          {amountHint}
         </div>
 
-        {/* Quick amounts */}
-        <div className="grid grid-cols-4 gap-1.5 mb-6">
-          {quick.map((a) => {
-            const ok = isUsdt ? a <= sourceBalance : a <= (maxInr || a);
-            return (
-              <button
-                key={a}
-                onClick={() => setAmount(String(a))}
-                disabled={!ok}
-                className="text-[11px] py-2 rounded-lg border border-white/[0.07] bg-white/[0.025] hover:bg-white/[0.06] hover:border-white/15 font-semibold text-white/65 hover:text-white transition-colors disabled:opacity-25 disabled:cursor-not-allowed disabled:hover:bg-white/[0.025] disabled:hover:border-white/[0.07] tabular-nums"
-                data-testid={`quick-${a}`}
-              >
-                {isUsdt ? `$${a}` : a >= 1000 ? `₹${a / 1000}K` : `₹${a}`}
-              </button>
-            );
-          })}
+        {/* Percentage chips */}
+        <div className="grid grid-cols-4 gap-1.5 mb-6 mt-2">
+          {[
+            { label: "25%", pct: 0.25 },
+            { label: "50%", pct: 0.5 },
+            { label: "75%", pct: 0.75 },
+            { label: "MAX", pct: 1 },
+          ].map((q) => (
+            <button
+              key={q.label}
+              onClick={() => {
+                const base = isUsdt ? sourceBalance : (limits ? maxInr : 0);
+                if (base <= 0) return;
+                const v = base * q.pct;
+                setAmount(isUsdt ? v.toFixed(2) : String(Math.floor(v)));
+              }}
+              disabled={isUsdt ? sourceBalance <= 0 : !limits || maxInr <= 0}
+              className="text-[12px] py-2.5 rounded-lg border border-white/[0.07] bg-white/[0.025] hover:bg-white/[0.06] hover:border-white/20 font-semibold text-white/70 hover:text-white transition-colors disabled:opacity-25 disabled:cursor-not-allowed disabled:hover:bg-white/[0.025] disabled:hover:border-white/[0.07]"
+              data-testid={`pct-${q.label}`}
+            >
+              {q.label}
+            </button>
+          ))}
         </div>
 
         {/* Trust strip */}
