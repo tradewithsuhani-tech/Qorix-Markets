@@ -45,6 +45,23 @@ function statusColor(status: StatusKey): [number, number, number] {
   return BRAND.amber;
 }
 
+// Mask an email so only the first 2 and last 2 chars of the local-part
+// remain visible (e.g. `looxprem@gmail.com` → `lo****em@gmail.com`).
+// Privacy-first: receipts are screenshot-shared to community channels
+// and we don't want to leak full identities.
+function maskEmail(email: string): string {
+  const at = email.lastIndexOf("@");
+  if (at < 1) return email;
+  const local = email.slice(0, at);
+  const domain = email.slice(at);
+  if (local.length <= 4) {
+    const first = local.slice(0, 1);
+    const last = local.slice(-1);
+    return `${first}${"*".repeat(Math.max(2, local.length - 2))}${last}${domain}`;
+  }
+  return `${local.slice(0, 2)}${"*".repeat(local.length - 4)}${local.slice(-2)}${domain}`;
+}
+
 function fmtINR(n: number): string {
   return `INR ${n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
@@ -212,7 +229,7 @@ export function downloadReceiptPdf(r: ReceiptInput): string {
     if (r.user.fullName) { doc.text(r.user.fullName, M, y); y += 14; }
     if (r.user.email) {
       doc.setTextColor(...BRAND.muted);
-      doc.text(r.user.email, M, y);
+      doc.text(maskEmail(r.user.email), M, y);
       y += 14;
     }
     if (r.user.id) {
