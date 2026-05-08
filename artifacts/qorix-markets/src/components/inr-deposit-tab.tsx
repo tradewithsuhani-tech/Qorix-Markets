@@ -208,6 +208,19 @@ export function InrDepositTab() {
   const { user } = useAuth();
 
   const [step, setStep] = useState<Step>("start");
+  // Scroll the page to the top whenever we enter the success step so the
+  // celebratory hero is fully visible — without this, on smaller phones the
+  // user lands mid-receipt and the CTAs sit hidden under the floating bottom
+  // nav, requiring an extra scroll to find "Back to Wallet".
+  useEffect(() => {
+    if (step !== "success") return;
+    const scroller = document.querySelector<HTMLElement>(".scroll-smooth-ios");
+    if (scroller) {
+      scroller.scrollTo({ top: 0, behavior: "smooth" });
+    } else {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  }, [step]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [amount, setAmount] = useState("");
   // The amount we actually committed to fetch merchants for. Locked once user
@@ -1248,15 +1261,17 @@ export function InrDepositTab() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.96 }}
             transition={{ duration: 0.3 }}
-            className="space-y-5 max-w-md mx-auto"
+            className="space-y-4 sm:space-y-5 max-w-md mx-auto"
           >
-            {/* Hero check with concentric rings */}
-            <div className="flex flex-col items-center pt-3 pb-1">
+            {/* Hero check with concentric rings — sized down on small screens
+                so the entire receipt fits above the floating bottom nav on
+                iPhone-class viewports without forcing the user to scroll. */}
+            <div className="flex flex-col items-center pt-1 sm:pt-3 pb-0 sm:pb-1">
               <motion.div
                 initial={{ scale: 0.6, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 transition={{ type: "spring", stiffness: 180, damping: 14 }}
-                className="relative w-32 h-32 flex items-center justify-center"
+                className="relative w-24 h-24 sm:w-32 sm:h-32 flex items-center justify-center"
               >
                 <span className="absolute inset-0 rounded-full border border-emerald-500/15" />
                 <span className="absolute inset-3 rounded-full border border-emerald-500/25" />
@@ -1265,18 +1280,18 @@ export function InrDepositTab() {
                   initial={{ scale: 0 }}
                   animate={{ scale: 1 }}
                   transition={{ type: "spring", stiffness: 220, damping: 14, delay: 0.05 }}
-                  className="w-20 h-20 rounded-full bg-emerald-500 flex items-center justify-center shadow-[0_0_40px_-6px_rgba(16,185,129,0.75)]"
+                  className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-emerald-500 flex items-center justify-center shadow-[0_0_40px_-6px_rgba(16,185,129,0.75)]"
                 >
-                  <CheckCircle2 className="w-11 h-11 text-white" strokeWidth={2.5} />
+                  <CheckCircle2 className="w-9 h-9 sm:w-11 sm:h-11 text-white" strokeWidth={2.5} />
                 </motion.div>
               </motion.div>
-              <div className="mt-5 text-[11px] tracking-[0.28em] font-bold text-emerald-400">
+              <div className="mt-3 sm:mt-5 text-[11px] tracking-[0.28em] font-bold text-emerald-400">
                 DEPOSIT SUBMITTED
               </div>
-              <div className="mt-3 text-4xl font-bold text-white tabular-nums">
+              <div className="mt-2 sm:mt-3 text-3xl sm:text-4xl font-bold text-white tabular-nums">
                 ₹{Number(amount).toLocaleString("en-IN")}
               </div>
-              <div className="mt-2 text-xs text-muted-foreground text-center">
+              <div className="mt-1.5 sm:mt-2 text-xs text-muted-foreground text-center">
                 Queued for verification · approved in 1–3 hrs
               </div>
             </div>
