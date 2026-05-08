@@ -156,7 +156,7 @@ export default function WithdrawReviewPage() {
           {!isUsdt && (
             <>
               {limits && (
-                <Row label={`Rate · ≈ USDT`} value={`1 USDT = ₹${limits.rate.toFixed(2)} · $${usdtEquivForInr.toFixed(2)}`} />
+                <Row label="Rate" value={`$1 = ₹${limits.rate.toFixed(2)}`} />
               )}
               <Row label="Method" value={state.payoutMethod === "upi" ? "UPI" : "Bank Account"} />
               {state.payoutMethod === "upi" ? (
