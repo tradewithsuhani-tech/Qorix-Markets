@@ -102,7 +102,7 @@ async function pageAdminWorkerDown(lastBeatAt: Date | null): Promise<void> {
     ? `The worker has not reported a heartbeat for ${ageMin} minutes.`
     : `The worker has not reported any heartbeat.`;
 
-  await runAdminCascade((adminName) => {
+  await runAdminCascade((adminName: string) => {
     const ssmlBody = [
       `Hello ${escape(adminName)}.`,
       `<break time="400ms"/>`,

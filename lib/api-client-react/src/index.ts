@@ -4,6 +4,7 @@ export {
   setBaseUrl,
   setAuthTokenGetter,
   setMaintenanceHandler,
+  setPendingCaptchaToken,
   customFetch,
   ApiError,
   ResponseParseError,

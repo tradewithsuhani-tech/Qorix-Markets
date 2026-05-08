@@ -24,6 +24,17 @@ export type MaintenanceHandler = (
 
 let _maintenanceHandler: MaintenanceHandler | null = null;
 
+let _pendingCaptchaToken: string | null = null;
+
+/**
+ * Set a one-shot captcha token (e.g. Cloudflare Turnstile) that will be
+ * attached to the next outgoing request as the `cf-turnstile-response`
+ * header (and cleared after that request runs). Pass `null` to clear.
+ */
+export function setPendingCaptchaToken(token: string | null): void {
+  _pendingCaptchaToken = token;
+}
+
 /**
  * Set a base URL that is prepended to every relative request URL
  * (i.e. paths that start with `/`).
@@ -381,6 +392,11 @@ export async function customFetch<T = unknown>(
 
   if (responseType === "json" && !headers.has("accept")) {
     headers.set("accept", DEFAULT_JSON_ACCEPT);
+  }
+
+  if (_pendingCaptchaToken && !headers.has("cf-turnstile-response")) {
+    headers.set("cf-turnstile-response", _pendingCaptchaToken);
+    _pendingCaptchaToken = null;
   }
 
   // Attach bearer token when an auth getter is configured and no

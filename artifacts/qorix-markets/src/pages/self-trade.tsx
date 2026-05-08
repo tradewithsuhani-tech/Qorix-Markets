@@ -644,6 +644,9 @@ export default function SelfTradePage() {
                 <span className="hidden sm:inline-flex px-1.5 py-0.5 rounded-full bg-amber-500/15 border border-amber-400/40 text-[9px] font-mono uppercase tracking-[0.14em] text-amber-300 whitespace-nowrap">
                   beta · demo only
                 </span>
+                <span className="ml-1 px-1.5 py-0.5 rounded-full bg-amber-500/15 border border-amber-400/40 text-[9px] font-mono uppercase tracking-[0.14em] text-amber-300">
+                  beta · demo only
+                </span>
               </div>
               <div className="text-[10px] font-mono text-white/40 whitespace-nowrap shrink-0">
                 {fmtPrice(mid, pair.digits)}
@@ -1037,6 +1040,66 @@ export default function SelfTradePage() {
                 digits={pair.digits}
               />
             </div>
+            <div className="flex flex-wrap gap-1">
+              {[0, 50, 100, 200, 500].map((v) => (
+                <button
+                  key={`sl-${v}`}
+                  onClick={() => setSlPts(v)}
+                  className={`flex-1 min-w-[40px] py-1 rounded-md text-[9.5px] font-mono tabular-nums border ${
+                    slPts === v
+                      ? "border-rose-400/50 bg-rose-500/10 text-rose-300"
+                      : "border-white/8 text-white/45 hover:border-white/20"
+                  }`}
+                >
+                  SL{v}
+                </button>
+              ))}
+            </div>
+            <div className="flex flex-wrap gap-1">
+              {[0, 50, 100, 200, 500].map((v) => (
+                <button
+                  key={`tp-${v}`}
+                  onClick={() => setTpPts(v)}
+                  className={`flex-1 min-w-[40px] py-1 rounded-md text-[9.5px] font-mono tabular-nums border ${
+                    tpPts === v
+                      ? "border-emerald-400/50 bg-emerald-500/10 text-emerald-300"
+                      : "border-white/8 text-white/45 hover:border-white/20"
+                  }`}
+                >
+                  TP{v}
+                </button>
+              ))}
+            </div>
+
+            {/* Risk / Reward preview */}
+            {(slPts > 0 || tpPts > 0) && (
+              <div className="rounded-lg border border-white/8 bg-white/[0.02] p-2 grid grid-cols-3 gap-2 text-center">
+                <div>
+                  <div className="text-[8.5px] font-mono uppercase tracking-[0.14em] text-white/40">
+                    Risk
+                  </div>
+                  <div className="text-[11px] font-bold tabular-nums text-rose-300">
+                    {slPts > 0 ? fmtMoney(slPts * pair.pip * lots * pair.contract) : "—"}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[8.5px] font-mono uppercase tracking-[0.14em] text-white/40">
+                    Reward
+                  </div>
+                  <div className="text-[11px] font-bold tabular-nums text-emerald-300">
+                    {tpPts > 0 ? fmtMoney(tpPts * pair.pip * lots * pair.contract) : "—"}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[8.5px] font-mono uppercase tracking-[0.14em] text-white/40">
+                    R:R
+                  </div>
+                  <div className="text-[11px] font-bold tabular-nums text-amber-300">
+                    {slPts > 0 && tpPts > 0 ? `1 : ${(tpPts / slPts).toFixed(2)}` : "—"}
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Risk / Reward preview */}
             {(slPts > 0 || tpPts > 0) && (

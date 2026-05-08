@@ -12,6 +12,8 @@ import { REGEXP_ONLY_DIGITS } from "input-otp";
 import { authFetch } from "@/lib/auth-fetch";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 
+import { authFetch } from "@/lib/auth-fetch";
+
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
 function apiUrl(path: string) { return `${BASE_URL}/api${path}`; }
 async function apiFetch(path: string, options: RequestInit = {}) {

@@ -57,6 +57,41 @@ export interface LoginBody {
   password: string;
 }
 
+export interface ForgotPasswordBody {
+  email: string;
+}
+
+export interface VerifyResetOtpBody {
+  email: string;
+  /** 6-digit OTP from the forgot-password email */
+  otp: string;
+}
+
+export interface VerifyResetOtpResponse {
+  success: boolean;
+  /** Freshly re-issued single-use OTP. The client MUST forward this
+value to /auth/reset-password — the original OTP from the email
+has been consumed. Valid for the same 10-minute window.
+ */
+  otp: string;
+}
+
+export interface ResetPasswordBody {
+  email: string;
+  /** Fresh OTP from /auth/verify-reset-otp response */
+  otp: string;
+  /**
+   * @minLength 8
+   * @maxLength 128
+   */
+  newPassword: string;
+}
+
+export interface SuccessMessage {
+  success: boolean;
+  message: string;
+}
+
 export interface User {
   id: number;
   email: string;

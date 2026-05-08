@@ -67,6 +67,72 @@ export const LoginResponse = zod.object({
 });
 
 /**
+ * Sends a 6-digit OTP to the user's email if an account exists. Always
+returns a generic 200 success response to avoid leaking which emails
+are registered. Rate-limited per IP.
+
+ * @summary Request a password-reset OTP via email
+ */
+export const ForgotPasswordBody = zod.object({
+  email: zod.string().email(),
+});
+
+export const ForgotPasswordResponse = zod.object({
+  success: zod.boolean(),
+  message: zod.string(),
+});
+
+/**
+ * Two-step reset flow step 2 of 3. Verifies the OTP from
+/auth/forgot-password, consumes it, and re-issues a fresh OTP that
+the client must present to /auth/reset-password. Lets the UI show a
+"code accepted, enter new password" screen without holding the
+original code.
+
+ * @summary Verify a password-reset OTP and obtain a fresh single-use code
+ */
+export const VerifyResetOtpBody = zod.object({
+  email: zod.string().email(),
+  otp: zod.string().describe("6-digit OTP from the forgot-password email"),
+});
+
+export const VerifyResetOtpResponse = zod.object({
+  success: zod.boolean(),
+  otp: zod
+    .string()
+    .describe(
+      "Freshly re-issued single-use OTP. The client MUST forward this\nvalue to \/auth\/reset-password — the original OTP from the email\nhas been consumed. Valid for the same 10-minute window.\n",
+    ),
+});
+
+/**
+ * Final step of the reset flow. Requires the fresh OTP returned by
+/auth/verify-reset-otp. New password must be 8–128 chars. On
+success, `passwordChangedAt` is stamped which freezes withdrawals
+for the configured cool-down window (anti-account-takeover).
+
+ * @summary Reset password using a verified OTP
+ */
+export const resetPasswordBodyNewPasswordMin = 8;
+export const resetPasswordBodyNewPasswordMax = 128;
+
+export const ResetPasswordBody = zod.object({
+  email: zod.string().email(),
+  otp: zod
+    .string()
+    .describe("Fresh OTP from \/auth\/verify-reset-otp response"),
+  newPassword: zod
+    .string()
+    .min(resetPasswordBodyNewPasswordMin)
+    .max(resetPasswordBodyNewPasswordMax),
+});
+
+export const ResetPasswordResponse = zod.object({
+  success: zod.boolean(),
+  message: zod.string(),
+});
+
+/**
  * @summary Get current user
  */
 export const GetMeResponse = zod.object({

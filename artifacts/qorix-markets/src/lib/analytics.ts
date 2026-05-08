@@ -59,6 +59,6 @@ export function trackEvent(name: string, params?: Record<string, unknown>) {
 }
 
 /** Convenience helper for CTA clicks across the marketing site. */
-export function trackCta(label: string, location: string) {
+export function trackCta(label: string, location?: string) {
   trackEvent("cta_click", { cta_label: label, cta_location: location });
 }

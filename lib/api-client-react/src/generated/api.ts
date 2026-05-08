@@ -46,6 +46,7 @@ import type {
   DepositBody,
   EquityPoint,
   ErrorResponse,
+  ForgotPasswordBody,
   FundStats,
   GenerateReportBody,
   GenerateReportResponse,
@@ -81,9 +82,11 @@ import type {
   Referral,
   ReferredUser,
   RegisterBody,
+  ResetPasswordBody,
   SetDailyProfitBody,
   SetInvestorSlotsBody,
   StartInvestmentBody,
+  SuccessMessage,
   SuccessResponse,
   Trade,
   TraderList,
@@ -93,6 +96,8 @@ import type {
   TransferBody,
   User,
   VerifyReportResponse,
+  VerifyResetOtpBody,
+  VerifyResetOtpResponse,
   Wallet,
   WithdrawBody,
   WithdrawalRequest,
@@ -429,6 +434,279 @@ export const useLogin = <
   TContext
 > => {
   return useMutation(getLoginMutationOptions(options));
+};
+
+/**
+ * Sends a 6-digit OTP to the user's email if an account exists. Always
+returns a generic 200 success response to avoid leaking which emails
+are registered. Rate-limited per IP.
+
+ * @summary Request a password-reset OTP via email
+ */
+export const getForgotPasswordUrl = () => {
+  return `/api/auth/forgot-password`;
+};
+
+export const forgotPassword = async (
+  forgotPasswordBody: ForgotPasswordBody,
+  options?: RequestInit,
+): Promise<SuccessMessage> => {
+  return customFetch<SuccessMessage>(getForgotPasswordUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(forgotPasswordBody),
+  });
+};
+
+export const getForgotPasswordMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof forgotPassword>>,
+    TError,
+    { data: BodyType<ForgotPasswordBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof forgotPassword>>,
+  TError,
+  { data: BodyType<ForgotPasswordBody> },
+  TContext
+> => {
+  const mutationKey = ["forgotPassword"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof forgotPassword>>,
+    { data: BodyType<ForgotPasswordBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return forgotPassword(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ForgotPasswordMutationResult = NonNullable<
+  Awaited<ReturnType<typeof forgotPassword>>
+>;
+export type ForgotPasswordMutationBody = BodyType<ForgotPasswordBody>;
+export type ForgotPasswordMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Request a password-reset OTP via email
+ */
+export const useForgotPassword = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof forgotPassword>>,
+    TError,
+    { data: BodyType<ForgotPasswordBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof forgotPassword>>,
+  TError,
+  { data: BodyType<ForgotPasswordBody> },
+  TContext
+> => {
+  return useMutation(getForgotPasswordMutationOptions(options));
+};
+
+/**
+ * Two-step reset flow step 2 of 3. Verifies the OTP from
+/auth/forgot-password, consumes it, and re-issues a fresh OTP that
+the client must present to /auth/reset-password. Lets the UI show a
+"code accepted, enter new password" screen without holding the
+original code.
+
+ * @summary Verify a password-reset OTP and obtain a fresh single-use code
+ */
+export const getVerifyResetOtpUrl = () => {
+  return `/api/auth/verify-reset-otp`;
+};
+
+export const verifyResetOtp = async (
+  verifyResetOtpBody: VerifyResetOtpBody,
+  options?: RequestInit,
+): Promise<VerifyResetOtpResponse> => {
+  return customFetch<VerifyResetOtpResponse>(getVerifyResetOtpUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(verifyResetOtpBody),
+  });
+};
+
+export const getVerifyResetOtpMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof verifyResetOtp>>,
+    TError,
+    { data: BodyType<VerifyResetOtpBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof verifyResetOtp>>,
+  TError,
+  { data: BodyType<VerifyResetOtpBody> },
+  TContext
+> => {
+  const mutationKey = ["verifyResetOtp"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof verifyResetOtp>>,
+    { data: BodyType<VerifyResetOtpBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return verifyResetOtp(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type VerifyResetOtpMutationResult = NonNullable<
+  Awaited<ReturnType<typeof verifyResetOtp>>
+>;
+export type VerifyResetOtpMutationBody = BodyType<VerifyResetOtpBody>;
+export type VerifyResetOtpMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Verify a password-reset OTP and obtain a fresh single-use code
+ */
+export const useVerifyResetOtp = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof verifyResetOtp>>,
+    TError,
+    { data: BodyType<VerifyResetOtpBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof verifyResetOtp>>,
+  TError,
+  { data: BodyType<VerifyResetOtpBody> },
+  TContext
+> => {
+  return useMutation(getVerifyResetOtpMutationOptions(options));
+};
+
+/**
+ * Final step of the reset flow. Requires the fresh OTP returned by
+/auth/verify-reset-otp. New password must be 8–128 chars. On
+success, `passwordChangedAt` is stamped which freezes withdrawals
+for the configured cool-down window (anti-account-takeover).
+
+ * @summary Reset password using a verified OTP
+ */
+export const getResetPasswordUrl = () => {
+  return `/api/auth/reset-password`;
+};
+
+export const resetPassword = async (
+  resetPasswordBody: ResetPasswordBody,
+  options?: RequestInit,
+): Promise<SuccessMessage> => {
+  return customFetch<SuccessMessage>(getResetPasswordUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(resetPasswordBody),
+  });
+};
+
+export const getResetPasswordMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof resetPassword>>,
+    TError,
+    { data: BodyType<ResetPasswordBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof resetPassword>>,
+  TError,
+  { data: BodyType<ResetPasswordBody> },
+  TContext
+> => {
+  const mutationKey = ["resetPassword"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof resetPassword>>,
+    { data: BodyType<ResetPasswordBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return resetPassword(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ResetPasswordMutationResult = NonNullable<
+  Awaited<ReturnType<typeof resetPassword>>
+>;
+export type ResetPasswordMutationBody = BodyType<ResetPasswordBody>;
+export type ResetPasswordMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Reset password using a verified OTP
+ */
+export const useResetPassword = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof resetPassword>>,
+    TError,
+    { data: BodyType<ResetPasswordBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof resetPassword>>,
+  TError,
+  { data: BodyType<ResetPasswordBody> },
+  TContext
+> => {
+  return useMutation(getResetPasswordMutationOptions(options));
 };
 
 /**
