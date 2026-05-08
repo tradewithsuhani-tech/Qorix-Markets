@@ -135,22 +135,6 @@ export default function WithdrawPage() {
           </p>
         </div>
 
-        {/* KYC pill — slim, only when needed */}
-        {!kycApproved && (
-          <button
-            onClick={() => navigate("/kyc")}
-            className="w-full mb-5 flex items-center gap-2.5 rounded-xl border border-amber-500/25 bg-amber-500/[0.06] px-3.5 py-2.5 hover:bg-amber-500/[0.10] transition-colors text-left"
-            data-testid="kyc-banner"
-          >
-            <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-            <span className="flex-1 text-[12px] text-amber-100/90">
-              <span className="font-semibold text-amber-300">KYC required</span>
-              <span className="text-amber-200/60"> · finish verification to unlock withdrawals</span>
-            </span>
-            <ArrowRight className="w-3.5 h-3.5 text-amber-300 shrink-0" />
-          </button>
-        )}
-
         {/* Currency segmented control */}
         <div className="relative grid grid-cols-2 p-1 rounded-2xl border border-white/[0.07] bg-white/[0.025] mb-5">
           <motion.div
@@ -291,6 +275,22 @@ export default function WithdrawPage() {
               : "Capped per channel · OTP confirmed · 24 hr review"}
           </span>
         </div>
+
+        {/* KYC pill — shown above CTA when needed */}
+        {!kycApproved && (
+          <button
+            onClick={() => navigate("/kyc")}
+            className="w-full mb-3 flex items-center gap-2.5 rounded-xl border border-amber-500/25 bg-amber-500/[0.06] px-3.5 py-2.5 hover:bg-amber-500/[0.10] transition-colors text-left"
+            data-testid="kyc-banner"
+          >
+            <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+            <span className="flex-1 text-[12px] text-amber-100/90">
+              <span className="font-semibold text-amber-300">KYC required</span>
+              <span className="text-amber-200/60"> · finish verification to unlock withdrawals</span>
+            </span>
+            <ArrowRight className="w-3.5 h-3.5 text-amber-300 shrink-0" />
+          </button>
+        )}
 
         {/* CTA */}
         <button
