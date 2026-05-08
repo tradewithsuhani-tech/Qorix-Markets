@@ -5,6 +5,7 @@ import { motion, AnimatePresence, type Variants } from "framer-motion";
 import {
   ArrowDownCircle, ArrowUpCircle, ArrowRightLeft, TrendingUp,
   Clock, CheckCircle2, XCircle, Filter, DollarSign, X, ArrowLeft,
+  ShieldCheck, Wallet,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
@@ -242,109 +243,189 @@ function TxDetailModal({ tx, onClose }: { tx: Tx; onClose: () => void }) {
   const sourceMatch = tx.description?.match(/from\s+(main|profit)/i);
   const source = sourceMatch ? sourceMatch[1]!.toLowerCase() : null;
 
+  // Theme by status (matches live deposit-receipt modal)
+  const isRejected = tx.status.toLowerCase() === "rejected" || tx.status.toLowerCase() === "failed";
+  const theme = isApproved
+    ? {
+        ring: "border-emerald-500/15", ring2: "border-emerald-500/25", ring3: "border-emerald-500/40",
+        hub: "bg-emerald-500 shadow-[0_0_40px_-6px_rgba(16,185,129,0.7)]",
+        labelText: "text-emerald-400",
+        banner: "border-emerald-500/30 bg-emerald-500/10", bannerIcon: "text-emerald-300",
+        pillBg: "bg-emerald-500/15 border-emerald-500/35 text-emerald-300", pillDot: "bg-emerald-400",
+      }
+    : isRejected
+      ? {
+          ring: "border-rose-500/15", ring2: "border-rose-500/25", ring3: "border-rose-500/40",
+          hub: "bg-rose-500 shadow-[0_0_40px_-6px_rgba(244,63,94,0.7)]",
+          labelText: "text-rose-400",
+          banner: "border-rose-500/30 bg-rose-500/10", bannerIcon: "text-rose-300",
+          pillBg: "bg-rose-500/15 border-rose-500/35 text-rose-300", pillDot: "bg-rose-400",
+        }
+      : {
+          ring: "border-amber-500/15", ring2: "border-amber-500/25", ring3: "border-amber-500/40",
+          hub: "bg-amber-500 shadow-[0_0_40px_-6px_rgba(245,158,11,0.7)]",
+          labelText: "text-amber-400",
+          banner: "border-amber-500/30 bg-amber-500/10", bannerIcon: "text-amber-300",
+          pillBg: "bg-amber-500/15 border-amber-500/35 text-amber-300", pillDot: "bg-amber-400",
+        };
+
+  const headlineLabel = `${meta.label.toUpperCase()} ${isApproved ? "COMPLETED" : isRejected ? "REJECTED" : "SUBMITTED"}`;
+  const subtitle = isApproved
+    ? "Processed successfully · funds settled"
+    : isRejected
+      ? "Request was rejected · amount refunded"
+      : "Queued for verification · approved in 1–3 hrs";
+  const HeroIcon = isApproved ? CheckCircle2 : isRejected ? XCircle : Clock;
+
+  const FX_RATE = 83.42;
+  const inrAmount = tx.amount * FX_RATE;
+  const isOut = isWithdrawal || tx.type === "fee";
+  const sign = isOut ? "− " : "+ ";
+
+  const [, navigate] = useLocation();
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-[90] bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4"
+      transition={{ duration: 0.2 }}
+      className="fixed inset-0 z-[120] flex items-start sm:items-center justify-center px-4 py-6 bg-black/80 backdrop-blur-sm overflow-y-auto"
       onClick={onClose}
     >
       <motion.div
-        initial={{ y: 40, opacity: 0, scale: 0.98 }}
-        animate={{ y: 0, opacity: 1, scale: 1 }}
-        exit={{ y: 40, opacity: 0 }}
+        initial={{ opacity: 0, scale: 0.94, y: 12 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.96, y: 8 }}
         transition={{ type: "spring", stiffness: 260, damping: 24 }}
         onClick={(e) => e.stopPropagation()}
-        className="w-full sm:max-w-md bg-[#0b1020] border-t sm:border border-white/10 sm:rounded-2xl rounded-t-3xl shadow-2xl overflow-hidden"
+        className="relative w-full max-w-md my-auto rounded-3xl border border-white/10 bg-gradient-to-b from-[#0c0d10] via-[#0a0b0e] to-[#06070a] shadow-[0_24px_80px_rgba(0,0,0,0.6)] p-5 sm:p-6 space-y-4 sm:space-y-5"
       >
-        {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-white/5">
-          <div className="flex items-center gap-3">
-            <div className={`p-2 rounded-xl border ${meta.bg}`}>
-              <Icon style={{ width: 18, height: 18 }} className={meta.color} />
-            </div>
-            <div>
-              <div className="text-base font-bold">{meta.label} Details</div>
-              <div className="text-[11px] text-muted-foreground">Ref #{tx.type.slice(0, 2).toUpperCase()}-{tx.id}</div>
-            </div>
+        <button
+          onClick={onClose}
+          className="absolute top-3 right-3 w-8 h-8 rounded-full flex items-center justify-center text-white/50 hover:text-white hover:bg-white/10 transition z-10"
+          aria-label="Close"
+        >
+          <X className="w-4 h-4" />
+        </button>
+
+        {/* Hero icon with concentric rings */}
+        <div className="flex flex-col items-center pt-1 sm:pt-2">
+          <motion.div
+            initial={{ scale: 0.6, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ type: "spring", stiffness: 180, damping: 14 }}
+            className="relative w-24 h-24 sm:w-32 sm:h-32 flex items-center justify-center"
+          >
+            <span className={`absolute inset-0 rounded-full border ${theme.ring}`} />
+            <span className={`absolute inset-3 rounded-full border ${theme.ring2}`} />
+            <span className={`absolute inset-6 rounded-full border ${theme.ring3}`} />
+            <motion.div
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              transition={{ type: "spring", stiffness: 220, damping: 14, delay: 0.05 }}
+              className={`w-16 h-16 sm:w-20 sm:h-20 rounded-full flex items-center justify-center ${theme.hub}`}
+            >
+              <HeroIcon className="w-9 h-9 sm:w-11 sm:h-11 text-white" strokeWidth={2.5} />
+            </motion.div>
+          </motion.div>
+          <div className={`mt-3 sm:mt-5 text-[11px] tracking-[0.28em] font-bold ${theme.labelText}`}>
+            {headlineLabel}
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-white/5 text-muted-foreground hover:text-white transition-colors">
-            <X style={{ width: 16, height: 16 }} />
-          </button>
+          <div className="mt-2 sm:mt-3 text-3xl sm:text-4xl font-bold text-white tabular-nums">
+            ₹{inrAmount.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+          </div>
+          <div className="mt-1.5 sm:mt-2 text-xs text-muted-foreground text-center px-2">
+            {subtitle}
+          </div>
         </div>
 
-        {/* Body */}
-        <div className="p-4 space-y-4">
-          {/* Amount hero */}
-          <div className="text-center py-3">
-            <div className={`text-3xl font-bold font-mono tabular-nums ${
-              isWithdrawal ? "text-red-400" : tx.type === "deposit" || tx.type === "profit" ? "text-emerald-400" : "text-white"
-            }`}>
-              {isWithdrawal ? "−" : ""}${tx.amount.toFixed(2)}
-            </div>
-            <span className={`mt-2 inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full border ${
-              statusMeta.color === "text-emerald-400"
-                ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
-                : statusMeta.color === "text-amber-400"
-                  ? "bg-amber-500/10 border-amber-500/20 text-amber-400"
-                  : "bg-red-500/10 border-red-500/20 text-red-400"
-            }`}>
-              <StatusIcon style={{ width: 10, height: 10 }} />
-              {statusMeta.label}
-            </span>
-          </div>
+        {/* Status banner */}
+        <div className={`rounded-2xl border ${theme.banner} px-4 py-3 flex items-start gap-3`}>
+          <ShieldCheck className={`w-4 h-4 mt-0.5 shrink-0 ${theme.bannerIcon}`} />
+          <span className="text-xs text-white leading-relaxed">
+            Secured by Qorix · <span className="font-semibold">${tx.amount.toFixed(2)} USDT</span>{" "}
+            {isApproved ? "settled" : isRejected ? "refunded" : "pending review"}
+          </span>
+        </div>
 
-          {/* Details card */}
-          <div className="rounded-xl border border-white/10 bg-black/25 divide-y divide-white/5 text-xs">
-            <DetailRow label="Reference ID" value={`#${tx.type.slice(0, 2).toUpperCase()}-${tx.id}`} mono />
-            <DetailRow label="Type" value={meta.label} />
-            {source && <DetailRow label="From" value={source === "main" ? "Main Balance" : "Profit Balance"} />}
-            {fee > 0 && <DetailRow label="Network Fee" value={`$${fee.toFixed(2)}`} />}
-            {isWithdrawal && fee > 0 && (
-              <DetailRow label="You'll Receive" value={`$${(tx.amount).toFixed(2)} USD`} highlight />
-            )}
-            {tx.walletAddress && (
-              <div className="flex items-center justify-between px-3 py-2.5 gap-2">
-                <span className="text-muted-foreground">To Address</span>
-                <AddressDisplay address={tx.walletAddress} />
-              </div>
-            )}
-            <DetailRow label="Submitted" value={format(new Date(tx.createdAt), "dd/MM/yyyy, HH:mm:ss")} />
+        {/* Transaction details card */}
+        <div className="rounded-2xl border border-white/10 bg-white/[0.03] overflow-hidden">
+          <div className="px-5 pt-4 pb-3 text-[10px] tracking-[0.22em] font-bold text-white/55">
+            TRANSACTION DETAILS
           </div>
-
-          {/* Status-based callout for withdrawal */}
-          {isWithdrawal && isPending && (
-            <div className="flex items-start gap-2 rounded-xl border border-amber-500/20 bg-amber-500/5 px-3 py-2.5 text-xs text-amber-300/90">
-              <Clock className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-              <span>Your withdrawal request has been <b>submitted</b> and is awaiting admin review (usually within 24 hours).</span>
-            </div>
-          )}
-          {isWithdrawal && isApproved && (
-            <div className="flex items-start gap-2 rounded-xl border border-emerald-500/25 bg-emerald-500/8 px-3 py-2.5 text-xs text-emerald-300/95">
-              <CheckCircle2 className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-              <span>
-                Withdrawal request <b>approved</b>. Funds have been dispatched via our payment partner and will arrive at your wallet
-                within <b>30 minutes to 3 working days</b>.
+          <div className="px-5 pb-5 space-y-3">
+            <div className="flex items-center justify-between gap-3 border-t border-white/5 pt-3">
+              <span className="text-xs text-white/55">Type</span>
+              <span className="text-xs font-semibold text-white inline-flex items-center gap-2 min-w-0">
+                <span className={`w-6 h-6 rounded-md inline-flex items-center justify-center shrink-0 border ${meta.bg}`}>
+                  <Icon className={`w-3.5 h-3.5 ${meta.color}`} />
+                </span>
+                <span className="truncate">{meta.label}</span>
               </span>
             </div>
-          )}
-          {isWithdrawal && tx.status.toLowerCase() === "rejected" && (
-            <div className="flex items-start gap-2 rounded-xl border border-red-500/25 bg-red-500/8 px-3 py-2.5 text-xs text-red-300/95">
-              <XCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-              <span>This withdrawal was rejected. The amount has been refunded to your balance. Please contact support for more info.</span>
+            <div className="flex items-center justify-between border-t border-white/5 pt-3">
+              <span className="text-xs text-white/55">{isOut ? "Amount Debited" : "Amount Credited"}</span>
+              <span className={`text-xs font-bold tabular-nums ${isOut ? "text-rose-300" : "text-emerald-300"}`}>
+                {sign}₹{inrAmount.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+              </span>
             </div>
-          )}
+            {source && (
+              <div className="flex items-center justify-between border-t border-white/5 pt-3">
+                <span className="text-xs text-white/55">From</span>
+                <span className="text-xs font-semibold text-white">
+                  {source === "main" ? "Main Balance" : "Profit Balance"}
+                </span>
+              </div>
+            )}
+            {fee > 0 && (
+              <div className="flex items-center justify-between border-t border-white/5 pt-3">
+                <span className="text-xs text-white/55">Network Fee</span>
+                <span className="text-xs font-semibold text-white tabular-nums">${fee.toFixed(2)}</span>
+              </div>
+            )}
+            {tx.walletAddress && (
+              <div className="flex items-center justify-between gap-3 border-t border-white/5 pt-3">
+                <span className="text-xs text-white/55 shrink-0">To Address</span>
+                <div className="min-w-0 max-w-[60%]">
+                  <AddressDisplay address={tx.walletAddress} />
+                </div>
+              </div>
+            )}
+            <div className="flex items-center justify-between border-t border-white/5 pt-3">
+              <span className="text-xs text-white/55">Submitted</span>
+              <span className="text-xs font-semibold text-white">
+                {format(new Date(tx.createdAt), "dd MMM yyyy, hh:mm a")}
+              </span>
+            </div>
+            <div className="flex items-center justify-between border-t border-white/5 pt-3">
+              <span className="text-xs text-white/55">Status</span>
+              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-semibold ${theme.pillBg}`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${theme.pillDot} ${isPending ? "animate-pulse" : ""}`} />
+                {statusMeta.label}
+              </span>
+            </div>
+            <div className="flex items-center justify-between border-t border-white/5 pt-3">
+              <span className="text-xs text-white/55">Reference</span>
+              <span className="text-xs font-mono font-semibold text-white">
+                QM-{String(tx.id).padStart(6, "0")}
+              </span>
+            </div>
+          </div>
         </div>
 
-        <div className="p-4 pt-0">
-          <button
-            onClick={onClose}
-            className="w-full px-4 py-2.5 rounded-xl bg-white/5 border border-white/10 text-sm text-white hover:bg-white/10 transition-colors"
-          >
-            Close
-          </button>
-        </div>
+        {/* CTA */}
+        <button
+          type="button"
+          onClick={() => { onClose(); setTimeout(() => navigate("/wallet"), 60); }}
+          className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-bold text-sm hover:from-emerald-400 hover:to-teal-400 shadow-[0_0_28px_-6px_rgba(16,185,129,0.65)] transition-all inline-flex items-center justify-center gap-2"
+        >
+          <Wallet className="w-4 h-4" />
+          Back to Wallet
+        </button>
+        <p className="text-[10px] text-center text-white/45 leading-relaxed -mt-1">
+          Receipt #{tx.id} · Share this screen for proof
+        </p>
       </motion.div>
     </motion.div>
   );
