@@ -772,17 +772,19 @@ export default function WalletPage() {
                       : "border-white/[0.10]"
                   }`}
                 >
-                  <div className="px-4 pt-3.5 pb-3 flex items-center gap-2">
-                    <span className="text-[24px] font-semibold leading-none text-emerald-400 shrink-0 select-none">$</span>
+                  <div className="px-3.5 py-2 flex items-center gap-2">
+                    <span className="text-[18px] font-semibold leading-none text-emerald-400 shrink-0 select-none">$</span>
                     <input
-                      type="number"
+                      type="text"
                       inputMode="decimal"
                       value={transferAmount}
-                      onChange={(e) => setTransferAmount(e.target.value)}
+                      onChange={(e) => {
+                        const v = e.target.value.replace(/[^0-9.]/g, "");
+                        setTransferAmount(v);
+                      }}
                       placeholder="0"
-                      min="0"
                       autoFocus
-                      className="flex-1 bg-transparent border-0 outline-none text-[26px] font-semibold tracking-[-0.01em] tabular-nums placeholder:text-white/25 min-w-0"
+                      className="flex-1 bg-transparent border-0 outline-none text-[20px] font-semibold tracking-[-0.01em] tabular-nums placeholder:text-white/25 min-w-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                     />
                     {numAmt > 0 && (
                       <span className="text-[11px] text-white/45 font-mono tabular-nums shrink-0">
@@ -795,7 +797,7 @@ export default function WalletPage() {
                       <button
                         key={p}
                         onClick={() => setPct(p)}
-                        className={`py-2.5 text-[11px] font-semibold text-white/65 hover:text-emerald-300 hover:bg-emerald-500/[0.06] transition-colors ${
+                        className={`py-2 text-[11px] font-semibold text-white/65 hover:text-emerald-300 hover:bg-emerald-500/[0.06] transition-colors ${
                           i > 0 ? "border-l border-white/[0.06]" : ""
                         }`}
                       >
