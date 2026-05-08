@@ -852,7 +852,7 @@ async function findRecipient(senderId: number, code: string) {
     .from(usersTable)
     .where(or(...conditions))
     .limit(1);
-  if (!row || row.id === senderId) return null;
+  if (!row) return null;
   return row;
 }
 
@@ -873,16 +873,20 @@ router.get("/wallet/lookup-user", async (req: AuthRequest, res) => {
     res.status(400).json({ error: "code required" });
     return;
   }
-  const recipient = await findRecipient(req.userId!, code);
-  if (!recipient) {
+  const match = await findRecipient(req.userId!, code);
+  if (!match) {
     res.status(404).json({ found: false });
+    return;
+  }
+  if (match.id === req.userId!) {
+    res.status(400).json({ found: false, self: true });
     return;
   }
   res.json({
     found: true,
-    recipientId: recipient.id,
-    name: maskName(recipient.fullName),
-    referralCode: recipient.referralCode,
+    recipientId: match.id,
+    name: maskName(match.fullName),
+    referralCode: match.referralCode,
   });
 });
 

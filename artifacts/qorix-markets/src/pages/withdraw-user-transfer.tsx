@@ -50,7 +50,7 @@ export default function WithdrawUserTransferPage() {
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
 
-  const [lookupState, setLookupState] = useState<"idle" | "loading" | "found" | "notfound">("idle");
+  const [lookupState, setLookupState] = useState<"idle" | "loading" | "found" | "notfound" | "self">("idle");
   const [recipient, setRecipient] = useState<Recipient | null>(null);
 
   const [showConfirm, setShowConfirm] = useState(false);
@@ -76,13 +76,23 @@ export default function WithdrawUserTransferPage() {
         if ((res as any)?.found) {
           setRecipient(res as Recipient);
           setLookupState("found");
+        } else if ((res as any)?.self) {
+          setRecipient(null);
+          setLookupState("self");
         } else {
           setRecipient(null);
           setLookupState("notfound");
         }
-      } catch {
-        setRecipient(null);
-        setLookupState("notfound");
+      } catch (e: any) {
+        // authFetch throws an Error whose message is the JSON body for non-2xx
+        const msg = String(e?.message || "");
+        if (/"self"\s*:\s*true/.test(msg)) {
+          setRecipient(null);
+          setLookupState("self");
+        } else {
+          setRecipient(null);
+          setLookupState("notfound");
+        }
       }
     }, 450);
     return () => { if (lookupTimer.current) clearTimeout(lookupTimer.current); };
@@ -215,6 +225,7 @@ export default function WithdrawUserTransferPage() {
               "rounded-2xl border bg-white/[0.025] px-3.5 py-3 flex items-center gap-3 transition-colors",
               lookupState === "found" ? "border-emerald-400/45" :
               lookupState === "notfound" ? "border-rose-500/45" :
+              lookupState === "self" ? "border-amber-500/45" :
               "border-white/[0.10]"
             )}
           >
@@ -232,6 +243,7 @@ export default function WithdrawUserTransferPage() {
             {lookupState === "loading" && <Loader2 className="w-4 h-4 text-white/50 animate-spin shrink-0" />}
             {lookupState === "found" && <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />}
             {lookupState === "notfound" && <X className="w-4 h-4 text-rose-400 shrink-0" />}
+            {lookupState === "self" && <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />}
           </div>
 
           {/* Recipient preview card */}
@@ -250,7 +262,16 @@ export default function WithdrawUserTransferPage() {
           {lookupState === "notfound" && (
             <div className="mt-2 text-[11px] text-rose-400 flex items-center gap-1.5">
               <AlertTriangle className="w-3 h-3" />
-              No matching user found. Check the ID/code and try again.
+              No matching Qorix user found. Check the ID/code and try again.
+            </div>
+          )}
+          {lookupState === "self" && (
+            <div className="mt-2.5 rounded-xl border border-amber-500/30 bg-amber-500/[0.08] px-3.5 py-2.5 flex items-start gap-2">
+              <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+              <span className="text-[11.5px] text-amber-100/90 leading-snug">
+                <span className="font-semibold text-amber-300">Yeh aapka apna ID hai.</span>{" "}
+                You can&apos;t transfer funds to yourself — enter another Qorix user&apos;s ID.
+              </span>
             </div>
           )}
         </div>
