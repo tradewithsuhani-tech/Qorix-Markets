@@ -6,7 +6,7 @@ import {
   ArrowDownCircle, ArrowUpCircle, ArrowRightLeft, TrendingUp,
   Clock, CheckCircle2, XCircle, Filter, DollarSign, X, ArrowLeft,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { AddressDisplay, maskAddress } from "@/components/address-display";
 
@@ -73,6 +73,21 @@ export default function TransactionsPage() {
   const [selected, setSelected] = useState<Tx | null>(null);
   const { data: transactionsData, isLoading } = useGetTransactions({ limit: 100 });
   const transactions = (transactionsData?.data || []) as Tx[];
+
+  // Auto-open detail modal when arriving with ?focus=<id> from wallet
+  useEffect(() => {
+    if (!transactions.length) return;
+    const params = new URLSearchParams(window.location.search);
+    const focusId = params.get("focus");
+    if (!focusId) return;
+    const tx = transactions.find((t) => String(t.id) === focusId);
+    if (tx) {
+      setSelected(tx);
+      const url = new URL(window.location.href);
+      url.searchParams.delete("focus");
+      window.history.replaceState({}, "", url.pathname + (url.search ? url.search : ""));
+    }
+  }, [transactions]);
 
   const filtered = filter === "All"
     ? transactions

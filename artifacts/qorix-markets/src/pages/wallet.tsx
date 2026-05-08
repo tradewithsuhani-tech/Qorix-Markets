@@ -1176,7 +1176,10 @@ function TxRow({ tx }: { tx: any }) {
       : "text-amber-400";
 
   return (
-    <div className="flex items-center gap-3 px-4 py-3 hover:bg-white/[0.02] transition-colors">
+    <Link
+      href={`/transactions?focus=${tx.id}`}
+      className="flex items-center gap-3 px-4 py-3 hover:bg-white/[0.04] active:bg-white/[0.06] transition-colors cursor-pointer"
+    >
       <div className={`shrink-0 w-10 h-10 rounded-xl border flex items-center justify-center ${meta.bg}`}>
         <Icon className={`w-4 h-4 ${meta.color}`} />
       </div>
@@ -1186,7 +1189,7 @@ function TxRow({ tx }: { tx: any }) {
           {tx.createdAt ? format(new Date(tx.createdAt), "dd MMM yyyy · hh:mm a") : ""}
         </div>
       </div>
-      <div className="text-right">
+      <div className="text-right shrink-0">
         <div className={`text-sm font-bold ${isOut ? "text-rose-400" : "text-emerald-400"}`}>
           {sign}₹{inr.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
         </div>
@@ -1194,7 +1197,8 @@ function TxRow({ tx }: { tx: any }) {
           {tx.status}
         </div>
       </div>
-    </div>
+      <ChevronRight className="w-3.5 h-3.5 text-white/30 shrink-0 ml-1" />
+    </Link>
   );
 }
 
