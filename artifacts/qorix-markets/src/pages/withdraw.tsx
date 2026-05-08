@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 import { useGetWallet, useGetDashboardSummary } from "@workspace/api-client-react";
 import { useQuery } from "@tanstack/react-query";
 import { Layout } from "@/components/layout";
-import { ArrowLeft, ArrowRight, Shield, AlertTriangle, TrendingUp, Wallet as WalletIcon } from "lucide-react";
+import { ArrowLeft, ArrowRight, Shield, AlertTriangle, TrendingUp, Wallet as WalletIcon, Check } from "lucide-react";
 import { authFetch } from "@/lib/auth-fetch";
 import { newIdemKey, patchWithdrawState, readWithdrawState } from "@/lib/withdraw-flow-state";
 import { cn } from "@/lib/utils";
@@ -200,13 +200,19 @@ export default function WithdrawPage() {
         {/* Source picker — USDT only */}
         {isUsdt && (
           <div className="mb-5">
-            <div className="text-[10px] uppercase tracking-[0.14em] text-white/40 font-semibold mb-2">From</div>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[10px] uppercase tracking-[0.14em] text-white/40 font-semibold">From account</span>
+              <span className="text-[10px] text-white/35 tabular-nums">
+                Total ${(mainBal + profitBal).toFixed(2)}
+              </span>
+            </div>
             <div className="grid grid-cols-2 gap-2">
               <SourceCard
                 active={source === "profit"}
                 onClick={() => { setSource("profit"); setAmount(""); }}
                 icon={<TrendingUp className="w-3.5 h-3.5" />}
                 label="Profit"
+                caption="Trading earnings"
                 balance={profitBal}
                 testId="source-profit"
               />
@@ -215,6 +221,7 @@ export default function WithdrawPage() {
                 onClick={() => { setSource("main"); setAmount(""); }}
                 icon={<WalletIcon className="w-3.5 h-3.5" />}
                 label="Main"
+                caption="Deposit balance"
                 balance={mainBal}
                 testId="source-main"
               />
@@ -349,36 +356,70 @@ export default function WithdrawPage() {
 }
 
 function SourceCard({
-  active, onClick, icon, label, balance, testId,
+  active, onClick, icon, label, caption, balance, testId,
 }: {
-  active: boolean; onClick: () => void; icon: React.ReactNode; label: string; balance: number; testId: string;
+  active: boolean;
+  onClick: () => void;
+  icon: React.ReactNode;
+  label: string;
+  caption: string;
+  balance: number;
+  testId: string;
 }) {
+  const empty = balance <= 0;
   return (
     <button
+      type="button"
       onClick={onClick}
+      aria-pressed={active}
       className={cn(
-        "rounded-xl border p-3 text-left transition-all relative",
+        "group relative rounded-xl border p-3 text-left transition-all overflow-hidden",
+        "focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/40",
         active
-          ? "bg-emerald-400/[0.08] border-emerald-400/40"
-          : "bg-white/[0.025] border-white/[0.07] hover:border-white/15"
+          ? "bg-gradient-to-b from-emerald-400/[0.10] to-emerald-400/[0.04] border-emerald-400/45"
+          : "bg-white/[0.025] border-white/[0.07] hover:border-white/20 hover:bg-white/[0.04]"
       )}
       data-testid={testId}
     >
-      <div className="flex items-center justify-between mb-1.5">
-        <span className={cn(
-          "w-6 h-6 rounded-md flex items-center justify-center",
-          active ? "bg-emerald-400/15 text-emerald-300" : "bg-white/[0.04] text-white/50"
-        )}>{icon}</span>
-        {active && (
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.6)]" />
-        )}
+      {/* Top row: icon + selection check */}
+      <div className="flex items-center justify-between mb-2.5">
+        <span
+          className={cn(
+            "w-7 h-7 rounded-lg flex items-center justify-center transition-colors",
+            active
+              ? "bg-emerald-400/15 text-emerald-300 ring-1 ring-emerald-400/30"
+              : "bg-white/[0.05] text-white/55 group-hover:text-white/75"
+          )}
+        >
+          {icon}
+        </span>
+        <span
+          className={cn(
+            "w-4 h-4 rounded-full flex items-center justify-center transition-all",
+            active
+              ? "bg-emerald-400 text-black"
+              : "border border-white/15 bg-transparent"
+          )}
+        >
+          {active && <Check className="w-2.5 h-2.5" strokeWidth={3.5} />}
+        </span>
       </div>
-      <div className="text-[10px] uppercase tracking-[0.12em] text-white/45 font-semibold">{label}</div>
-      <div className={cn(
-        "text-[15px] font-semibold tabular-nums mt-0.5",
-        active ? "text-emerald-300" : "text-white/85"
-      )}>
-        ${balance.toFixed(2)}
+
+      {/* Label + caption */}
+      <div className="text-[12.5px] font-semibold text-white/90 leading-tight">{label}</div>
+      <div className="text-[10.5px] text-white/40 mt-0.5 truncate">{caption}</div>
+
+      {/* Balance */}
+      <div className="mt-2.5 pt-2.5 border-t border-white/[0.06] flex items-baseline gap-1">
+        <span
+          className={cn(
+            "text-[16px] font-semibold tabular-nums tracking-[-0.01em]",
+            empty ? "text-white/35" : active ? "text-white" : "text-white/85"
+          )}
+        >
+          ${balance.toFixed(2)}
+        </span>
+        <span className="text-[10px] text-white/35 font-medium uppercase tracking-wider">USD</span>
       </div>
     </button>
   );
