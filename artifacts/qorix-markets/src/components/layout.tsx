@@ -580,7 +580,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/invest", label: "Trade", icon: TrendingUp, featured: true },
     { href: "/portfolio", label: "Portfolio", icon: PieChart },
     { href: "/self-trade", label: "Self Trade", icon: Activity },
-    { href: "/deposit", label: "Deposit", icon: ArrowDownCircle },
     { href: "/market-insights", label: "Market Insights", icon: Globe },
     { href: "/transactions", label: "History", icon: History },
     { href: "/referral", label: "Referrals", icon: Users },
