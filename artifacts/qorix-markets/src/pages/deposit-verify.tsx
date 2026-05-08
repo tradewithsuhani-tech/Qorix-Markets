@@ -21,6 +21,9 @@ interface PaymentMethod {
   displayName: string;
   merchantName?: string | null;
   isAvailable?: boolean;
+  upiId?: string | null;
+  accountNumber?: string | null;
+  ifsc?: string | null;
 }
 
 const UTR_MIN = 12;
