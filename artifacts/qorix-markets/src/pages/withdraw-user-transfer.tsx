@@ -192,7 +192,7 @@ export default function WithdrawUserTransferPage() {
             <ArrowLeft className="w-4 h-4" />
           </button>
           <h1 className="text-[22px] font-semibold tracking-[-0.02em] leading-tight">
-            Transfer to User
+            Transfer to Qorix User
           </h1>
         </div>
         <p className="text-[13px] text-white/55 leading-relaxed pl-12 mb-5">
@@ -223,7 +223,7 @@ export default function WithdrawUserTransferPage() {
               type="text"
               value={code}
               onChange={(e) => setCode(e.target.value)}
-              placeholder="Enter User ID, Referral Code or Email"
+              placeholder="Enter Qorix User ID, Referral Code or Email"
               className="flex-1 bg-transparent border-0 outline-none text-[14px] placeholder:text-white/30 min-w-0"
               autoCapitalize="off"
               autoCorrect="off"

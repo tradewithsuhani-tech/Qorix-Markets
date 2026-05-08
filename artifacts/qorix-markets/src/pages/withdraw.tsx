@@ -301,7 +301,7 @@ export default function WithdrawPage() {
                   <Users className="w-4.5 h-4.5 text-emerald-300" style={{ width: 18, height: 18 }} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-[14px] font-semibold text-white leading-tight">User ID Transfer</div>
+                  <div className="text-[14px] font-semibold text-white leading-tight">Qorix User Transfer</div>
                   <div className="text-[11.5px] text-white/50 mt-0.5">Instant · send to another Qorix user · zero fee</div>
                 </div>
                 <ArrowRight className="w-4 h-4 text-white/40 shrink-0" />
