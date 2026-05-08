@@ -4,9 +4,10 @@ import { format } from "date-fns";
 import { motion, AnimatePresence, type Variants } from "framer-motion";
 import {
   ArrowDownCircle, ArrowUpCircle, ArrowRightLeft, TrendingUp,
-  Clock, CheckCircle2, XCircle, Filter, DollarSign, X,
+  Clock, CheckCircle2, XCircle, Filter, DollarSign, X, ArrowLeft,
 } from "lucide-react";
 import { useState } from "react";
+import { useLocation } from "wouter";
 import { AddressDisplay, maskAddress } from "@/components/address-display";
 
 type Tx = {
@@ -67,6 +68,7 @@ function cleanDescription(desc: string | null | undefined, addr: string | null |
 }
 
 export default function TransactionsPage() {
+  const [, setLocation] = useLocation();
   const [filter, setFilter] = useState("All");
   const [selected, setSelected] = useState<Tx | null>(null);
   const { data: transactionsData, isLoading } = useGetTransactions({ limit: 100 });
@@ -85,15 +87,24 @@ export default function TransactionsPage() {
         className="space-y-5 md:space-y-6"
       >
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <h1 className="text-2xl md:text-3xl font-bold tracking-tight gradient-text">Transactions</h1>
-            <p className="text-muted-foreground text-sm mt-0.5">
-              Complete history of your account activity. Tap any row for details.
-            </p>
+        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <button
+              onClick={() => setLocation("/wallet")}
+              aria-label="Back"
+              className="shrink-0 w-9 h-9 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-center text-white/80 hover:text-white transition-colors mt-0.5"
+            >
+              <ArrowLeft style={{ width: 18, height: 18 }} />
+            </button>
+            <div>
+              <h1 className="text-2xl md:text-3xl font-bold tracking-tight gradient-text">Transactions</h1>
+              <p className="text-muted-foreground text-sm mt-0.5">
+                Complete history of your account activity. Tap any row for details.
+              </p>
+            </div>
           </div>
           {!isLoading && (
-            <div className="text-xs text-muted-foreground bg-white/5 border border-white/8 px-3 py-1.5 rounded-full">
+            <div className="text-xs text-muted-foreground bg-white/5 border border-white/8 px-3 py-1.5 rounded-full self-start sm:self-auto ml-12 sm:ml-0">
               {filtered.length} record{filtered.length !== 1 ? "s" : ""}
             </div>
           )}
