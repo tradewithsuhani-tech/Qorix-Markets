@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import { useGetWallet } from "@workspace/api-client-react";
 import { Layout } from "@/components/layout";
 import {
-  ArrowLeft, Zap, Globe, Send, ChevronRight, CheckCircle2, Shield,
+  ArrowLeft, Zap, Globe, Send, ChevronRight, CheckCircle2, Shield, Lock,
 } from "lucide-react";
 import { CRYPTO_METHODS, FX_RATE } from "@/lib/deposit-flow-data";
 import { cn } from "@/lib/utils";
@@ -186,26 +186,48 @@ export default function DepositPage() {
           </div>
           <div className="space-y-2">
             {isCrypto
-              ? CRYPTO_METHODS.map((m) => (
-                  <button
-                    key={m.id}
-                    onClick={() => handleCryptoSelect(m.id)}
-                    className="w-full flex items-center gap-3 p-3.5 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 transition-colors text-left"
-                    data-testid={`method-${m.id}`}
-                  >
-                    <div
-                      className="w-9 h-9 rounded-full border flex items-center justify-center text-lg font-bold shrink-0"
-                      style={{ backgroundColor: m.color + "22", borderColor: m.color + "55", color: m.color }}
+              ? CRYPTO_METHODS.map((m) => {
+                  const isLocked = m.id !== "usdt";
+                  return (
+                    <button
+                      key={m.id}
+                      onClick={() => { if (!isLocked) handleCryptoSelect(m.id); }}
+                      disabled={isLocked}
+                      aria-disabled={isLocked}
+                      className={cn(
+                        "w-full flex items-center gap-3 p-3.5 rounded-xl border text-left transition-colors",
+                        isLocked
+                          ? "border-white/5 bg-white/[0.02] cursor-not-allowed opacity-60"
+                          : "border-white/10 bg-white/5 hover:bg-white/10",
+                      )}
+                      data-testid={`method-${m.id}`}
                     >
-                      {m.symbol}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-semibold truncate">{m.label}</div>
-                      <div className="text-[11px] text-muted-foreground truncate">{m.sub}</div>
-                    </div>
-                    <ChevronRight className="w-4 h-4 text-muted-foreground" />
-                  </button>
-                ))
+                      <div
+                        className={cn(
+                          "w-9 h-9 rounded-full border flex items-center justify-center text-lg font-bold shrink-0",
+                          isLocked && "grayscale",
+                        )}
+                        style={{ backgroundColor: m.color + "22", borderColor: m.color + "55", color: m.color }}
+                      >
+                        {m.symbol}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-semibold truncate flex items-center gap-1.5">
+                          {m.label}
+                          {isLocked && <Lock className="w-3 h-3 text-white/40" />}
+                        </div>
+                        <div className="text-[11px] text-muted-foreground truncate">{m.sub}</div>
+                      </div>
+                      {isLocked ? (
+                        <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-white/5 border border-white/10 text-white/50">
+                          Soon
+                        </span>
+                      ) : (
+                        <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                      )}
+                    </button>
+                  );
+                })
               : INR_METHODS.map((m) => {
                   const Icon = m.icon;
                   return (
