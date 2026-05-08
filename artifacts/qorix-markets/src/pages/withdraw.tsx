@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
-import { motion } from "framer-motion";
 import { useGetWallet, useGetDashboardSummary } from "@workspace/api-client-react";
 import { useQuery } from "@tanstack/react-query";
 import { Layout } from "@/components/layout";
-import { ArrowLeft, ArrowRight, Shield, AlertTriangle } from "lucide-react";
+import { ArrowLeft, ArrowRight, Shield, AlertTriangle, AlertCircle } from "lucide-react";
 import { authFetch } from "@/lib/auth-fetch";
 import { newIdemKey, patchWithdrawState, readWithdrawState } from "@/lib/withdraw-flow-state";
 import { cn } from "@/lib/utils";
@@ -133,79 +132,82 @@ export default function WithdrawPage() {
           </p>
         </div>
 
-        {/* Currency segmented control */}
-        <div className="relative grid grid-cols-2 p-1 rounded-2xl border border-white/[0.07] bg-white/[0.025] mb-5">
-          <motion.div
-            layout
-            transition={{ type: "spring", stiffness: 480, damping: 36 }}
-            className={cn(
-              "absolute top-1 bottom-1 w-[calc(50%-4px)] rounded-xl",
-              isUsdt ? "left-1 bg-amber-400/[0.14] border border-amber-400/35" : "left-[calc(50%+1px)] bg-emerald-400/[0.14] border border-emerald-400/35"
-            )}
-            style={{
-              boxShadow: isUsdt
-                ? "inset 0 1px 0 rgba(245,158,11,0.18)"
-                : "inset 0 1px 0 rgba(16,185,129,0.18)",
-            }}
-          />
-          <button
-            onClick={() => setCurrency("usdt")}
-            className={cn(
-              "relative z-10 flex items-center justify-center gap-1.5 py-2.5 text-[12.5px] font-semibold transition-colors",
-              isUsdt ? "text-amber-200" : "text-white/55 hover:text-white/80"
-            )}
-            data-testid="tab-usdt"
-          >
-            <span className="text-[14px] leading-none">$</span>
-            <span>USDT</span>
-            <span className="text-[10px] font-medium opacity-60">TRC20</span>
-          </button>
-          <button
-            onClick={() => setCurrency("inr")}
-            className={cn(
-              "relative z-10 flex items-center justify-center gap-1.5 py-2.5 text-[12.5px] font-semibold transition-colors",
-              !isUsdt ? "text-emerald-200" : "text-white/55 hover:text-white/80"
-            )}
-            data-testid="tab-inr"
-          >
-            <span className="text-[14px] leading-none">₹</span>
-            <span>INR</span>
-            <span className="text-[10px] font-medium opacity-60">UPI · Bank</span>
-          </button>
-        </div>
-
-        {/* Available balance — single card */}
-        <div className="mb-5 rounded-xl border border-white/[0.07] bg-white/[0.025] px-3.5 py-3 flex items-center justify-between">
-          <span className="text-[12px] text-white/55">Available balance</span>
+        {/* Available Balance card */}
+        <div className="mb-4 rounded-xl border border-white/[0.07] bg-white/[0.025] px-4 py-3.5 flex items-center justify-between">
+          <span className="text-[14px] text-white/65">Available Balance</span>
           <div className="text-right">
-            <div className={cn("text-[15px] font-semibold tabular-nums", isUsdt ? "text-white" : "text-emerald-300")}>
+            <div className={cn("text-[18px] font-semibold tabular-nums", isUsdt ? "text-white" : "text-emerald-400")}>
               {isUsdt
                 ? `$${mainBal.toFixed(2)}`
-                : limits ? `₹${maxInr.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : "—"}
+                : limits ? `₹${maxInr.toLocaleString("en-IN", { maximumFractionDigits: 3 })}` : "—"}
             </div>
             {!isUsdt && limits && (
-              <div className="text-[10px] text-white/40 tabular-nums mt-0.5">
-                ≈ ${mainBal.toFixed(2)} · 1 USDT = ₹{limits.rate.toFixed(2)}
+              <div className="text-[11px] text-white/45 tabular-nums mt-0.5">
+                ≈ ${mainBal.toFixed(2)}
               </div>
             )}
           </div>
         </div>
 
-        {/* Amount label */}
-        <div className="text-[12px] text-white/55 mb-2">Withdrawal Amount</div>
+        {/* Compliance Rules card */}
+        <div className="mb-5 rounded-xl border border-amber-500/30 bg-amber-500/[0.06] px-4 py-3">
+          <div className="flex items-center gap-2 mb-2">
+            <AlertCircle className="w-3.5 h-3.5 text-amber-400" />
+            <span className="text-[11px] font-bold tracking-[0.14em] text-amber-400 uppercase">
+              Compliance Rules
+            </span>
+          </div>
+          <ul className="space-y-1 text-[12px] text-white/70 leading-relaxed">
+            <li className="flex gap-2"><span className="text-amber-400/70">•</span><span>Minimum withdrawal: ₹500 (or $10 crypto equivalent)</span></li>
+            <li className="flex gap-2"><span className="text-amber-400/70">•</span><span>Daily limit: ₹2,00,000 · admin approval above ₹50,000</span></li>
+            <li className="flex gap-2"><span className="text-amber-400/70">•</span><span>Withdrawals processed within 24 hours · crypto on-chain</span></li>
+            <li className="flex gap-2"><span className="text-amber-400/70">•</span><span>Wallet holdings are unaffected by deployed capital</span></li>
+          </ul>
+        </div>
 
-        {/* Amount box — symbol + number left, equiv right */}
+        {/* Withdrawal Amount label + currency toggle */}
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-[13px] text-white/65">Withdrawal Amount</span>
+          <div className="flex items-center gap-1 p-0.5 rounded-lg bg-white/[0.04] border border-white/[0.07]">
+            <button
+              onClick={() => setCurrency("inr")}
+              className={cn(
+                "px-2.5 py-1 rounded-md text-[11px] font-semibold flex items-center gap-1 transition-colors",
+                !isUsdt
+                  ? "bg-emerald-500/15 text-emerald-300 border border-emerald-400/40"
+                  : "text-white/55 hover:text-white/80 border border-transparent"
+              )}
+              data-testid="tab-inr"
+            >
+              <span>₹</span><span>INR</span>
+            </button>
+            <button
+              onClick={() => setCurrency("usdt")}
+              className={cn(
+                "px-2.5 py-1 rounded-md text-[11px] font-semibold flex items-center gap-1 transition-colors",
+                isUsdt
+                  ? "bg-amber-500/15 text-amber-300 border border-amber-400/40"
+                  : "text-white/55 hover:text-white/80 border border-transparent"
+              )}
+              data-testid="tab-usdt"
+            >
+              <span>₮</span><span>USDT</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Amount box — big */}
         <div
           className={cn(
-            "rounded-xl border bg-white/[0.025] px-4 py-3.5 transition-colors flex items-center gap-2",
+            "rounded-xl border bg-white/[0.025] px-4 py-4 transition-colors flex items-center gap-3",
             numAmount > 0 && !valid
               ? "border-rose-500/45"
               : valid
-              ? isUsdt ? "border-amber-400/40" : "border-emerald-400/40"
-              : "border-white/[0.07]"
+              ? isUsdt ? "border-amber-400/45" : "border-emerald-400/45"
+              : "border-white/[0.10]"
           )}
         >
-          <span className={cn("text-[22px] font-semibold leading-none select-none shrink-0", isUsdt ? "text-amber-300" : "text-emerald-300")}>
+          <span className={cn("text-[26px] font-semibold leading-none select-none shrink-0", isUsdt ? "text-amber-400" : "text-emerald-400")}>
             {symbol}
           </span>
           <input
@@ -215,11 +217,11 @@ export default function WithdrawPage() {
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
             placeholder="0"
-            className="flex-1 bg-transparent border-0 outline-none text-[24px] font-semibold tracking-[-0.01em] tabular-nums placeholder:text-white/20 min-w-0"
+            className="flex-1 bg-transparent border-0 outline-none text-[28px] font-semibold tracking-[-0.01em] tabular-nums placeholder:text-white/20 min-w-0"
             data-testid="input-amount"
           />
           {numAmount > 0 && (
-            <span className="text-[11px] text-white/45 font-mono tabular-nums shrink-0">
+            <span className="text-[12px] text-white/45 font-mono tabular-nums shrink-0">
               {isUsdt
                 ? `≈ ₹${Math.round(inrEquiv).toLocaleString("en-IN")}`
                 : `≈ $${usdEquiv.toFixed(2)}`}
@@ -231,7 +233,7 @@ export default function WithdrawPage() {
         </div>
 
         {/* Percentage chips */}
-        <div className="grid grid-cols-4 gap-1.5 mb-6 mt-2">
+        <div className="grid grid-cols-4 gap-2 mb-6 mt-2">
           {[
             { label: "25%", pct: 0.25 },
             { label: "50%", pct: 0.5 },
