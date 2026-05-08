@@ -132,7 +132,11 @@ export default function DepositCryptoPage() {
               )}
               data-testid="copy-address"
             >
-              <span className="flex-1 min-w-0 text-xs font-medium truncate text-left">{crypto.address}</span>
+              <span className="flex-1 min-w-0 text-xs font-medium truncate text-left font-mono tracking-tight">
+                {crypto.address.length > 20
+                  ? `${crypto.address.slice(0, 10)}……${crypto.address.slice(-8)}`
+                  : crypto.address}
+              </span>
               <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-400">
                 {copied === "address" ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
                 {copied === "address" ? "Copied" : "Copy"}
