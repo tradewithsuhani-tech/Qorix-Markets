@@ -24,6 +24,13 @@ import AdminLoginPage from "@/pages/admin-login";
 import Dashboard from "@/pages/dashboard";
 import WalletPage from "@/pages/wallet";
 import DepositPage from "@/pages/deposit";
+import DepositUpiPage from "@/pages/deposit-upi";
+import DepositUpiPayPage from "@/pages/deposit-upi-pay";
+import DepositNetBankingPage from "@/pages/deposit-netbanking";
+import DepositNetBankingDetailsPage from "@/pages/deposit-netbanking-details";
+import DepositVerifyPage from "@/pages/deposit-verify";
+import DepositCryptoPage from "@/pages/deposit-crypto";
+import DepositSuccessPage from "@/pages/deposit-success";
 import InvestPage from "@/pages/invest";
 import SelfTradePage from "@/pages/self-trade";
 import PortfolioPage from "@/pages/portfolio";
@@ -204,6 +211,13 @@ function Router() {
       <Route path="/demo-dashboard">{() => { window.location.replace("/dashboard"); return null; }}</Route>
       <Route path="/wallet"><ProtectedRoute component={WalletPage} /></Route>
       <Route path="/deposit"><ProtectedRoute component={DepositPage} /></Route>
+      <Route path="/deposit/upi"><ProtectedRoute component={DepositUpiPage} /></Route>
+      <Route path="/deposit/upi/pay"><ProtectedRoute component={DepositUpiPayPage} /></Route>
+      <Route path="/deposit/netbanking"><ProtectedRoute component={DepositNetBankingPage} /></Route>
+      <Route path="/deposit/netbanking/details"><ProtectedRoute component={DepositNetBankingDetailsPage} /></Route>
+      <Route path="/deposit/verify"><ProtectedRoute component={DepositVerifyPage} /></Route>
+      <Route path="/deposit/crypto"><ProtectedRoute component={DepositCryptoPage} /></Route>
+      <Route path="/deposit/success"><ProtectedRoute component={DepositSuccessPage} /></Route>
       <Route path="/invest"><ProtectedRoute component={InvestPage} /></Route>
       <Route path="/self-trade"><ProtectedRoute component={SelfTradePage} /></Route>
       <Route path="/portfolio"><ProtectedRoute component={PortfolioPage} /></Route>
