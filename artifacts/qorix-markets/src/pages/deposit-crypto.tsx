@@ -33,14 +33,17 @@ export default function DepositCryptoPage() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
-    if (canvasRef.current && crypto.address) {
-      QRCode.toCanvas(canvasRef.current, crypto.address, {
-        width: 172,
-        margin: 1,
-        color: { dark: "#0F172A", light: "#FFFFFF" },
-      }).catch(() => {});
-    }
-  }, [crypto.address]);
+    const canvas = canvasRef.current;
+    if (!canvas || !crypto.address) return;
+    QRCode.toCanvas(canvas, crypto.address, {
+      width: 172,
+      margin: 1,
+      color: { dark: "#0F172A", light: "#FFFFFF" },
+    }).catch((err) => {
+      // eslint-disable-next-line no-console
+      console.error("[deposit] QR render failed", err);
+    });
+  }, [crypto.address, depLoading]);
 
   const copy = async (text: string, kind: "address" | "tag") => {
     await navigator.clipboard.writeText(text);
@@ -106,15 +109,14 @@ export default function DepositCryptoPage() {
           )}
 
           <div className="flex flex-col items-center gap-2.5 py-1">
-            {isUsdt && depLoading ? (
-              <div className="w-[196px] h-[196px] rounded-2xl bg-white/5 flex items-center justify-center">
-                <Loader2 className="w-6 h-6 animate-spin text-emerald-400" />
-              </div>
-            ) : (
-              <div className="bg-white p-3 rounded-2xl">
-                <canvas ref={canvasRef} />
-              </div>
-            )}
+            <div className="relative bg-white p-3 rounded-2xl">
+              <canvas ref={canvasRef} width={172} height={172} className="block" />
+              {isUsdt && depLoading && (
+                <div className="absolute inset-0 rounded-2xl bg-white/90 flex items-center justify-center">
+                  <Loader2 className="w-6 h-6 animate-spin text-emerald-600" />
+                </div>
+              )}
+            </div>
             <div className="text-[11px] text-muted-foreground">
               {isUsdt && depLoading ? "Generating your unique address..." : "Scan with your wallet app"}
             </div>
