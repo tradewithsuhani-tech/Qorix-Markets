@@ -5,11 +5,13 @@ import { useQueryClient } from "@tanstack/react-query";
 import { getGetWalletQueryKey } from "@workspace/api-client-react";
 import {
   IndianRupee, Building2, Smartphone, AlertCircle, CheckCircle2, Clock, Loader2, ShieldCheck,
-  X, Sparkles, Hash, ArrowDownToLine, Copy, Check, Mail, Wallet,
+  X, Sparkles, Hash, ArrowDownToLine, Copy, Check, Mail, Wallet, FileDown,
 } from "lucide-react";
 import { REGEXP_ONLY_DIGITS } from "input-otp";
 import { useLocation } from "wouter";
 
+import { useAuth } from "@/hooks/use-auth";
+import { downloadReceiptPdf } from "@/lib/receipt-pdf";
 import { authFetch } from "@/lib/auth-fetch";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 
@@ -992,6 +994,7 @@ function WithdrawalReceiptModal({
 }) {
   const [copied, setCopied] = useState(false);
   const [, navigate] = useLocation();
+  const { user } = useAuth();
 
   useEffect(() => {
     if (!receipt) return;
@@ -1239,15 +1242,50 @@ function WithdrawalReceiptModal({
             </div>
           </div>
 
-          {/* CTA */}
-          <button
-            type="button"
-            onClick={goToWallet}
-            className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-bold text-sm hover:from-emerald-400 hover:to-teal-400 shadow-[0_0_28px_-6px_rgba(16,185,129,0.65)] transition-all inline-flex items-center justify-center gap-2"
-          >
-            <Wallet className="w-4 h-4" />
-            Back to Wallet
-          </button>
+          {/* CTAs */}
+          <div className="grid grid-cols-2 gap-2.5">
+            <button
+              type="button"
+              onClick={() => {
+                const beneficiary = isUpi
+                  ? receipt.upiId ?? "—"
+                  : `${receipt.accountHolder ?? "—"} · ${maskAcc(receipt.accountNumber)}`;
+                downloadReceiptPdf({
+                  kind: "withdrawal",
+                  reference: refCode,
+                  status: receipt.status,
+                  statusLabel: theme.pillLabel,
+                  headlineLabel: theme.label,
+                  amountInr: receipt.amountInr,
+                  amountUsdt: receipt.amountUsdt,
+                  rateUsed: receipt.rateUsed,
+                  method: isUpi ? "UPI Transfer" : "Bank Account · NEFT/IMPS",
+                  beneficiary,
+                  ifsc: !isUpi ? receipt.ifsc : null,
+                  utrOrRef: receipt.payoutReference ?? null,
+                  utrLabel: "Payout Reference",
+                  createdAt: receipt.createdAt,
+                  reviewedAt: receipt.reviewedAt ?? null,
+                  adminNote: receipt.adminNote,
+                  user: user
+                    ? { fullName: user.fullName ?? null, email: user.email ?? null, id: user.id ?? null }
+                    : undefined,
+                });
+              }}
+              className="py-3.5 rounded-2xl border border-emerald-500/40 text-emerald-300 font-semibold text-sm hover:bg-emerald-500/10 hover:border-emerald-500/60 hover:text-emerald-200 transition-all inline-flex items-center justify-center gap-2"
+            >
+              <FileDown className="w-4 h-4" />
+              Download PDF
+            </button>
+            <button
+              type="button"
+              onClick={goToWallet}
+              className="py-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-bold text-sm hover:from-emerald-400 hover:to-teal-400 shadow-[0_0_28px_-6px_rgba(16,185,129,0.65)] transition-all inline-flex items-center justify-center gap-2"
+            >
+              <Wallet className="w-4 h-4" />
+              Back to Wallet
+            </button>
+          </div>
           <p className="text-[10px] text-center text-white/45 leading-relaxed -mt-1">
             Receipt {refCode} · Tap reference to copy · Share this screen for proof
           </p>

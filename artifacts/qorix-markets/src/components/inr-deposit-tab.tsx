@@ -24,7 +24,9 @@ import {
   Plus,
   Info,
   Wallet,
+  FileDown,
 } from "lucide-react";
+import { downloadReceiptPdf } from "@/lib/receipt-pdf";
 import { useLocation } from "wouter";
 import { authFetch } from "@/lib/auth-fetch";
 import { useToast } from "@/hooks/use-toast";
@@ -1715,6 +1717,7 @@ function DepositReceiptModal({
   onClose: () => void;
 }) {
   const [, navigate] = useLocation();
+  const { user } = useAuth();
   const [utrCopied, setUtrCopied] = useState(false);
 
   // Lock body scroll while modal is open so the receipt stays in focus on
@@ -1940,15 +1943,45 @@ function DepositReceiptModal({
             </div>
           </div>
 
-          {/* CTA */}
-          <button
-            type="button"
-            onClick={() => { onClose(); setTimeout(() => navigate("/wallet"), 60); }}
-            className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-bold text-sm hover:from-emerald-400 hover:to-teal-400 shadow-[0_0_28px_-6px_rgba(16,185,129,0.65)] transition-all inline-flex items-center justify-center gap-2"
-          >
-            <Wallet className="w-4 h-4" />
-            Back to Wallet
-          </button>
+          {/* CTAs */}
+          <div className="grid grid-cols-2 gap-2.5">
+            <button
+              type="button"
+              onClick={() => {
+                downloadReceiptPdf({
+                  kind: "deposit",
+                  reference: `QM-${String(deposit.id).padStart(6, "0")}`,
+                  status: deposit.status,
+                  statusLabel: theme.pillLabel,
+                  headlineLabel: theme.label,
+                  amountInr: Number(deposit.amountInr),
+                  amountUsdt: Number(deposit.amountUsdt),
+                  rateUsed: Number(deposit.rateUsed),
+                  method: methodName,
+                  utrOrRef: deposit.utr,
+                  utrLabel: "UTR / Bank Ref",
+                  createdAt: deposit.createdAt,
+                  reviewedAt: deposit.reviewedAt ?? null,
+                  adminNote: deposit.adminNote,
+                  user: user
+                    ? { fullName: user.fullName ?? null, email: user.email ?? null, id: user.id ?? null }
+                    : undefined,
+                });
+              }}
+              className="py-3.5 rounded-2xl border border-emerald-500/40 text-emerald-300 font-semibold text-sm hover:bg-emerald-500/10 hover:border-emerald-500/60 hover:text-emerald-200 transition-all inline-flex items-center justify-center gap-2"
+            >
+              <FileDown className="w-4 h-4" />
+              Download PDF
+            </button>
+            <button
+              type="button"
+              onClick={() => { onClose(); setTimeout(() => navigate("/wallet"), 60); }}
+              className="py-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-bold text-sm hover:from-emerald-400 hover:to-teal-400 shadow-[0_0_28px_-6px_rgba(16,185,129,0.65)] transition-all inline-flex items-center justify-center gap-2"
+            >
+              <Wallet className="w-4 h-4" />
+              Back to Wallet
+            </button>
+          </div>
           <p className="text-[10px] text-center text-white/45 leading-relaxed -mt-1">
             Receipt #{deposit.id} · Tap UTR to copy · Share this screen for proof
           </p>
