@@ -176,6 +176,19 @@ function useSynthQuotes(realQuotes: BotQuote[]): BotQuote[] {
       stateRef.current.forEach((s, code) => {
         const ref = reals.find((q) => q.code === code);
         if (!ref || !Number.isFinite(ref.mid) || ref.mid <= 0) return;
+        // Market closed → freeze synth at the last real close. No
+        // drift, no noise, no new candles. Bot stays paused and the
+        // chart pins to the closing price (e.g. XAU/USD weekend).
+        if (ref.marketOpen === false) {
+          if (s.current !== ref.mid) {
+            s.base = ref.mid;
+            s.target = ref.mid;
+            s.current = ref.mid;
+            s.targetAt = now;
+            dirty = true;
+          }
+          return;
+        }
         const elapsed = now - s.targetAt;
         const progress = Math.min(1, elapsed / SYNTH_WINDOW_MS);
         const path = s.base + (s.target - s.base) * progress;
@@ -202,6 +215,17 @@ function useSynthQuotes(realQuotes: BotQuote[]): BotQuote[] {
     const s = stateRef.current.get(q.code);
     const synthMid = s?.current ?? q.mid;
     const halfSpread = Math.abs(q.ask - q.bid) / 2;
+    // Closed market: pass real quote through with a STABLE asOf so
+    // the candle aggregator's [quote.mid, quote.asOf] effect stops
+    // re-firing → chart pins at the closing price.
+    if (q.marketOpen === false) {
+      return {
+        ...q,
+        mid: q.mid,
+        bid: q.mid - halfSpread,
+        ask: q.mid + halfSpread,
+      };
+    }
     return {
       ...q,
       mid: synthMid,
