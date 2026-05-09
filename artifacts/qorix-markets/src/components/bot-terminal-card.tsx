@@ -1636,7 +1636,9 @@ function usePrintTape(quote: BotQuote | undefined): TapePrint[] {
     let cancelled = false;
     const tick = () => {
       const q = quoteRef.current;
-      if (q && Number.isFinite(q.mid)) {
+      // Skip print generation when the underlying market is closed —
+      // no fake BUY/SELL prints should appear against a frozen quote.
+      if (q && Number.isFinite(q.mid) && q.marketOpen !== false) {
         const n = 2 + Math.floor(Math.random() * 2); // 2-3 prints / burst
         const fresh: TapePrint[] = [];
         for (let i = 0; i < n; i++) {
@@ -1705,11 +1707,18 @@ function LiveTapeStrip({
       )}
     >
       <div className="text-[10px] font-semibold tracking-wider text-muted-foreground mb-1.5 flex items-center gap-2 shrink-0">
-        <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
-        <span>LIVE TAPE</span>
+        <span
+          className={cn(
+            "size-1.5 rounded-full",
+            quote?.marketOpen === false
+              ? "bg-slate-500"
+              : "bg-emerald-400 animate-pulse",
+          )}
+        />
+        <span>{quote?.marketOpen === false ? "TAPE PAUSED" : "LIVE TAPE"}</span>
         <span className="text-foreground/70 font-mono">{pairLabel}</span>
         <span className="hidden sm:inline text-muted-foreground/40 normal-case font-normal tracking-normal italic">
-          indicative · feed only
+          {quote?.marketOpen === false ? "market closed" : "indicative · feed only"}
         </span>
         <span className="ml-auto font-mono text-muted-foreground/40 normal-case font-normal tracking-normal">
           {prints.length}
@@ -1885,18 +1894,21 @@ const BOT_STATUS_PHRASES = [
   "Polling liquidity venues…",
 ];
 
-function BotThinkingTicker() {
+function BotThinkingTicker({ marketOpen = true }: { marketOpen?: boolean }) {
   const [idx, setIdx] = useState(0);
   const [latencyMs, setLatencyMs] = useState(12);
   useEffect(() => {
+    if (!marketOpen) return;
     const id = setInterval(() => {
       setIdx((i) => (i + 1) % BOT_STATUS_PHRASES.length);
       // Pseudo-random latency 8-22ms so the status line feels alive
       setLatencyMs(8 + Math.floor(Math.random() * 15));
     }, 2800);
     return () => clearInterval(id);
-  }, []);
-  const phrase = BOT_STATUS_PHRASES[idx];
+  }, [marketOpen]);
+  const phrase = marketOpen
+    ? BOT_STATUS_PHRASES[idx]
+    : "Market closed — bot paused until session reopens";
   return (
     <div className="px-3 sm:px-4 py-1.5 border-b bg-background/30 flex items-center gap-2.5 text-[10.5px] font-mono text-muted-foreground overflow-hidden">
       <span className="relative flex h-1.5 w-1.5 shrink-0">
@@ -2442,13 +2454,22 @@ export function BotTerminalCard({
           <span className="text-[13px] sm:text-sm font-semibold tracking-wider truncate">
             BOT TERMINAL
           </span>
-          <Badge
-            variant="outline"
-            className="h-5 shrink-0 border-emerald-500/30 bg-emerald-500/10 text-emerald-400 text-[10px] gap-1 px-1.5"
-          >
-            <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            LIVE
-          </Badge>
+          {featuredMarketOpen ? (
+            <Badge
+              variant="outline"
+              className="h-5 shrink-0 border-emerald-500/30 bg-emerald-500/10 text-emerald-400 text-[10px] gap-1 px-1.5"
+            >
+              <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              LIVE
+            </Badge>
+          ) : (
+            <Badge
+              variant="outline"
+              className="h-5 shrink-0 border-slate-500/30 bg-slate-500/10 text-slate-400 text-[10px] gap-1 px-1.5"
+            >
+              CLOSED
+            </Badge>
+          )}
           <div
             className={cn(
               "h-6 shrink-0 rounded-md border flex items-center gap-1.5 px-2 text-[11px] sm:text-xs font-bold tabular-nums transition-colors",
@@ -2491,7 +2512,7 @@ export function BotTerminalCard({
       {activeTab === "charts" && (
         <>
           <ChartHeader quote={featured} />
-          <BotThinkingTicker />
+          <BotThinkingTicker marketOpen={featuredMarketOpen} />
           {scalpEvents.length > 0 && (
             <div className="px-3 py-1 flex items-center gap-1.5 text-[10px] font-mono border-t bg-background/30 overflow-hidden">
               <span className="text-muted-foreground/60 shrink-0 tracking-wider font-semibold">
