@@ -234,6 +234,7 @@ export default function WalletPage() {
             balanceInr={totalInr}
             balanceUsd={totalUsd}
             pnlInr={dailyPnlInr}
+            pnlUsd={dailyPnlUsd}
             pnlPct={dailyPnlPct}
             isUp={isUp}
             isHidden={hideBalance}
@@ -917,12 +918,13 @@ export default function WalletPage() {
 /* ─────────────── PortfolioBalanceHero (web port of mobile BalanceCardPro) ─────────────── */
 
 function PortfolioBalanceHero({
-  balanceInr, balanceUsd, pnlInr, pnlPct, isUp, isHidden, isLoading,
+  balanceInr, balanceUsd, pnlInr, pnlUsd, pnlPct, isUp, isHidden, isLoading,
   onToggleHide, onDeposit, onWithdraw, onTransfer,
 }: {
   balanceInr: number;
   balanceUsd: number;
   pnlInr: number;
+  pnlUsd: number;
   pnlPct: number;
   isUp: boolean;
   isHidden: boolean;
@@ -934,6 +936,19 @@ function PortfolioBalanceHero({
   onTransfer: () => void;
 }) {
   const trendColor = isUp ? "#22c55e" : "#f43f5e"; // emerald / rose
+  // Default USD, user can toggle to INR
+  const [ccy, setCcy] = useState<"USD" | "INR">("USD");
+  const [openCcy, setOpenCcy] = useState(false);
+  const isInr = ccy === "INR";
+  const heroValue = isInr ? balanceInr : balanceUsd;
+  const heroPrefix = isInr ? "₹" : "$";
+  const subValue = isInr
+    ? `≈ $${balanceUsd.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+    : `≈ ₹${balanceInr.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
+  const pnlAbs = isInr ? Math.abs(pnlInr) : Math.abs(pnlUsd);
+  const pnlStr = isInr
+    ? `${isUp ? "+" : "-"}₹${pnlAbs.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`
+    : `${isUp ? "+" : "-"}$${pnlAbs.toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
 
   return (
     <div className="relative overflow-hidden rounded-3xl border border-white/10 p-6 md:p-7"
@@ -986,10 +1001,39 @@ function PortfolioBalanceHero({
               ? <EyeOff className="w-3 h-3 text-muted-foreground" />
               : <Eye className="w-3 h-3 text-muted-foreground" />}
           </button>
-          <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-white/5 border border-white/10">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-            <span className="text-[10px] font-bold tracking-wider text-white">INR</span>
-            <ChevronDown className="w-2.5 h-2.5 text-muted-foreground" />
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setOpenCcy(o => !o)}
+              className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-white/5 border border-white/10 hover:bg-white/10 transition-colors"
+              aria-haspopup="listbox"
+              aria-expanded={openCcy}
+              data-testid="button-currency-toggle"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+              <span className="text-[10px] font-bold tracking-wider text-white">{ccy}</span>
+              <ChevronDown className={`w-2.5 h-2.5 text-muted-foreground transition-transform ${openCcy ? "rotate-180" : ""}`} />
+            </button>
+            {openCcy && (
+              <>
+                <div className="fixed inset-0 z-20" onClick={() => setOpenCcy(false)} />
+                <div className="absolute z-30 mt-1 left-0 min-w-[88px] rounded-md border border-white/10 bg-[#0c0d10] shadow-xl overflow-hidden">
+                  {(["USD", "INR"] as const).map((c) => (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() => { setCcy(c); setOpenCcy(false); }}
+                      className={`w-full px-3 py-1.5 text-left text-[11px] font-bold tracking-wider transition-colors ${
+                        ccy === c ? "bg-emerald-500/15 text-emerald-300" : "text-white hover:bg-white/5"
+                      }`}
+                      data-testid={`option-currency-${c.toLowerCase()}`}
+                    >
+                      {c}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         </div>
 
@@ -1001,13 +1045,13 @@ function PortfolioBalanceHero({
             <div className="text-4xl md:text-5xl font-extrabold tracking-tight text-white">••••••••</div>
           ) : (
             <div className="text-4xl md:text-5xl font-extrabold tracking-tight text-white">
-              <AnimatedCounter value={balanceInr} prefix="₹" decimals={2} />
+              <AnimatedCounter value={heroValue} prefix={heroPrefix} decimals={2} />
             </div>
           )}
           <p className="mt-1 text-[11px] text-muted-foreground">
             {isHidden
-              ? "≈ $•••• · Updated just now"
-              : `≈ $${balanceUsd.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} · Updated just now`}
+              ? `≈ ${isInr ? "$" : "₹"}•••• · Updated just now`
+              : `${subValue} · Updated just now`}
           </p>
         </div>
 
@@ -1023,9 +1067,7 @@ function PortfolioBalanceHero({
               ? <TrendingUp style={{ width: 10, height: 10, color: trendColor }} />
               : <TrendingDown style={{ width: 10, height: 10, color: trendColor }} />}
             <span className="text-[11px] font-bold tabular-nums" style={{ color: trendColor }}>
-              {isHidden
-                ? "••••"
-                : `${isUp ? "+" : ""}₹${Math.abs(pnlInr).toLocaleString("en-IN", { maximumFractionDigits: 0 })}`}
+              {isHidden ? "••••" : pnlStr}
             </span>
             <span className="text-[10px] font-bold opacity-80 tabular-nums" style={{ color: trendColor }}>
               {isUp ? "+" : ""}{pnlPct.toFixed(2)}%
