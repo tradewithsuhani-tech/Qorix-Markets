@@ -337,6 +337,11 @@ function useCandleSeries(
 
   useEffect(() => {
     if (!quote || !Number.isFinite(quote.mid)) return;
+    // Market closed → freeze the candle buffer at its last state.
+    // Without this, the underlying realQuote.asOf still ticks every
+    // poll cycle, which fires this effect and appends flat candles
+    // (visible as a flat-line crawl to the right).
+    if (quote.marketOpen === false) return;
     const price = quote.mid;
     const nowSec = Math.floor(Date.now() / 1000);
     const bucket = Math.floor(nowSec / CANDLE_SECONDS) * CANDLE_SECONDS;
@@ -423,7 +428,7 @@ function useCandleSeries(
       };
       return [...working.slice(0, -1), updated];
     });
-  }, [quote?.mid, quote?.asOf]);
+  }, [quote?.mid, quote?.asOf, quote?.marketOpen]);
 
   // Persist on a 2s heartbeat + on tab unload + on cleanup. Reading
   // through a ref avoids restarting the heartbeat every time the
