@@ -6,8 +6,9 @@ import {
   ArrowLeft, Copy, Check, ArrowRight, Shield, AlertTriangle, Loader2,
 } from "lucide-react";
 import QRCode from "qrcode";
-import { CRYPTO_METHODS, FX_RATE } from "@/lib/deposit-flow-data";
+import { CRYPTO_METHODS } from "@/lib/deposit-flow-data";
 import { cn } from "@/lib/utils";
+import { useInrRate } from "@/hooks/use-inr-rate";
 
 export default function DepositCryptoPage() {
   const [, navigate] = useLocation();
@@ -15,6 +16,7 @@ export default function DepositCryptoPage() {
   const id = (params.get("id") ?? "usdt").toLowerCase();
   const numAmount = parseFloat(params.get("amount") ?? "0") || 0;
   const isUsdt = id === "usdt";
+  const FX_RATE = useInrRate();
 
   const { data: depAddr, isLoading: depLoading } = useGetDepositAddress({
     query: { enabled: isUsdt, staleTime: 5 * 60 * 1000 },

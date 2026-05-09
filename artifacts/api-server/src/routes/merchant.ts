@@ -28,7 +28,7 @@ import {
 const router = Router();
 
 const INR_RATE_KEY = "inr_to_usdt_rate";
-const DEFAULT_INR_RATE = "85.0";
+const DEFAULT_INR_RATE = "99";
 
 // ─── Auth ───────────────────────────────────────────────────────────────────
 // Login is the ONLY public merchant endpoint. There is no signup, no forgot-

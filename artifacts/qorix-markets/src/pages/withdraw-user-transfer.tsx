@@ -9,12 +9,11 @@ import {
 } from "lucide-react";
 import { authFetch } from "@/lib/auth-fetch";
 import { cn } from "@/lib/utils";
+import { useInrRate } from "@/hooks/use-inr-rate";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
 const apiUrl = (p: string) => `${BASE_URL}/api${p}`;
 const apiFetch = (p: string, init?: RequestInit) => authFetch(apiUrl(p), init);
-
-const FX_RATE = 83.42;
 
 type Recipient = {
   found: boolean;
@@ -27,6 +26,7 @@ export default function WithdrawUserTransferPage() {
   const [, navigate] = useLocation();
   const { data: wallet, refetch: refetchWallet } = useGetWallet();
   const mainBal = Number(wallet?.mainBalance) || 0;
+  const FX_RATE = useInrRate();
 
   // KYC gate — same standard as the rest of withdraw flow
   const { data: kycData } = useQuery<any>({

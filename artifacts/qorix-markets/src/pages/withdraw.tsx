@@ -7,12 +7,11 @@ import { ArrowLeft, ArrowRight, Shield, AlertTriangle, Info, Landmark, Zap, Shie
 import { authFetch } from "@/lib/auth-fetch";
 import { newIdemKey, patchWithdrawState, readWithdrawState } from "@/lib/withdraw-flow-state";
 import { cn } from "@/lib/utils";
+import { useInrRate } from "@/hooks/use-inr-rate";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
 const apiUrl = (p: string) => `${BASE_URL}/api${p}`;
 const apiFetch = (p: string, init?: RequestInit) => authFetch(apiUrl(p), init);
-
-const FX_RATE = 83.42;
 
 type Limits = {
   rate: number;
@@ -24,6 +23,7 @@ export default function WithdrawPage() {
   const [, navigate] = useLocation();
   const { data: wallet } = useGetWallet();
   const { data: summary } = useGetDashboardSummary();
+  const FX_RATE = useInrRate();
   const vip = (summary as any)?.vip;
   const withdrawalFeePercent = (((vip?.withdrawalFee ?? 0.02) as number) * 100).toFixed(1);
 

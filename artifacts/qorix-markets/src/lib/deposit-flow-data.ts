@@ -74,4 +74,6 @@ export const CRYPTO_METHODS: CryptoMethod[] = [
   { id: "xrp", symbol: "✕", label: "XRP", sub: "Ripple · XRPL", color: "#00AAE4", network: "XRP Ledger", address: "rEb8TK3gBgk5auZkwc6sHnwrGVJH8DuaLh", tag: "1284507" },
 ];
 
-export const FX_RATE = 83.42;
+// Fallback only — UI must call useInrRate() so all screens display the
+// merchant's live INR↔USDT rate. Kept in sync with backend DEFAULT_INR_RATE.
+export const FX_RATE = 99;

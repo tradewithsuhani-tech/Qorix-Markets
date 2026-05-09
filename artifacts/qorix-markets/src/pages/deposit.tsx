@@ -5,8 +5,9 @@ import { Layout } from "@/components/layout";
 import {
   ArrowLeft, Zap, Globe, Send, ChevronRight, CheckCircle2, Shield, Lock,
 } from "lucide-react";
-import { CRYPTO_METHODS, FX_RATE } from "@/lib/deposit-flow-data";
+import { CRYPTO_METHODS } from "@/lib/deposit-flow-data";
 import { cn } from "@/lib/utils";
+import { useInrRate } from "@/hooks/use-inr-rate";
 
 const INR_METHODS = [
   { id: "upi", icon: Zap, label: "UPI", sub: "Instant · No charges" },
@@ -17,6 +18,7 @@ const INR_METHODS = [
 export default function DepositPage() {
   const [, navigate] = useLocation();
   const { data: wallet } = useGetWallet();
+  const FX_RATE = useInrRate();
   const mainBalanceUsd = Number((wallet as any)?.mainBalance) || 0;
   const balanceInr = mainBalanceUsd * FX_RATE;
 

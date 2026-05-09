@@ -25,7 +25,7 @@ import { checkWithdrawDeviceCooldown } from "../lib/withdraw-device-cooldown";
 const router = Router();
 
 const INR_RATE_KEY = "inr_to_usdt_rate";
-const DEFAULT_INR_RATE = "85.0";
+const DEFAULT_INR_RATE = "99";
 
 async function getInrRate(): Promise<number> {
   const rows = await db

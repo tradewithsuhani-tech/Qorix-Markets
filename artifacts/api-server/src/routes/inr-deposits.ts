@@ -22,7 +22,7 @@ import { notifyOwnerMerchantOfNewDeposit } from "../lib/escalation-cron";
 const router = Router();
 
 const INR_RATE_KEY = "inr_to_usdt_rate";
-const DEFAULT_INR_RATE = "85.0";
+const DEFAULT_INR_RATE = "99";
 
 async function getInrRate(): Promise<number> {
   const rows = await db
@@ -34,6 +34,15 @@ async function getInrRate(): Promise<number> {
   const n = Number(raw);
   return Number.isFinite(n) && n > 0 ? n : Number(DEFAULT_INR_RATE);
 }
+
+// Public INR rate endpoint — used by all user-facing pages so wallet/deposit/
+// withdraw/transfer screens display the SAME rate the merchant uses when
+// crediting INR deposits. No auth required; rate is non-sensitive.
+router.get("/inr-rate", async (_req, res) => {
+  const rate = await getInrRate();
+  res.set("Cache-Control", "public, max-age=30");
+  res.json({ rate });
+});
 
 function publicMethod(m: typeof paymentMethodsTable.$inferSelect) {
   return {

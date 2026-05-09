@@ -10,6 +10,7 @@ import {
 import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { AddressDisplay, maskAddress } from "@/components/address-display";
+import { useInrRate } from "@/hooks/use-inr-rate";
 
 type Tx = {
   id: number;
@@ -277,7 +278,7 @@ function TxDetailModal({ tx, onClose }: { tx: Tx; onClose: () => void }) {
       : "Queued for verification · approved in 1–3 hrs";
   const HeroIcon = isApproved ? CheckCircle2 : isRejected ? XCircle : Clock;
 
-  const FX_RATE = 83.42;
+  const FX_RATE = useInrRate();
   const inrAmount = tx.amount * FX_RATE;
   const isOut = isWithdrawal || tx.type === "fee";
   const sign = isOut ? "− " : "+ ";

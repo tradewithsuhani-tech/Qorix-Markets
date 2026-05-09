@@ -18,15 +18,13 @@ import { AddressDisplay, maskAddress } from "@/components/address-display";
 import { InrWithdrawTab } from "@/components/inr-withdraw-tab";
 import { authFetch } from "@/lib/auth-fetch";
 import { format } from "date-fns";
+import { useInrRate } from "@/hooks/use-inr-rate";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
 function apiUrl(path: string) { return `${BASE_URL}/api${path}`; }
 async function apiFetch(path: string, options: RequestInit = {}) {
   return authFetch(apiUrl(path), options);
 }
-
-// USD → INR display rate (mirrors mobile's FX_RATE in lib/tx-mapper)
-const FX_RATE = 83.42;
 
 const container: Variants = {
   hidden: {},
@@ -45,6 +43,7 @@ export default function WalletPage() {
   const { data: txData, isLoading: txLoading } = useGetTransactions({ page: 1, limit: 6 });
   const queryClient = useQueryClient();
   const [, navigate] = useLocation();
+  const FX_RATE = useInrRate();
 
   const vip = summary?.vip;
   const vipTier = (vip?.tier ?? "none") as "none" | "silver" | "gold" | "platinum";
@@ -325,7 +324,7 @@ export default function WalletPage() {
                 <p className="text-sm">No transactions yet</p>
               </div>
             ) : (
-              transactions.slice(0, 6).map((tx: any) => <TxRow key={tx.id} tx={tx} />)
+              transactions.slice(0, 6).map((tx: any) => <TxRow key={tx.id} tx={tx} fxRate={FX_RATE} />)
             )}
           </div>
         </motion.div>
@@ -1161,11 +1160,11 @@ const TX_ICON: Record<string, { icon: React.ElementType; color: string; bg: stri
   investment:     { icon: TrendingUp,      color: "text-teal-300",    bg: "bg-teal-500/12 border-teal-500/25",       label: "Investment" },
 };
 
-function TxRow({ tx }: { tx: any }) {
+function TxRow({ tx, fxRate }: { tx: any; fxRate: number }) {
   const meta = TX_ICON[tx.type] || { icon: Clock, color: "text-muted-foreground", bg: "bg-white/5 border-white/10", label: tx.type };
   const Icon = meta.icon;
   const amount = Math.abs(Number(tx.amount) || 0);
-  const inr = amount * FX_RATE;
+  const inr = amount * fxRate;
   const isOut = tx.type === "withdrawal" || tx.type === "fee";
   const sign = isOut ? "−" : "+";
   const sStatus = String(tx.status || "").toLowerCase();
