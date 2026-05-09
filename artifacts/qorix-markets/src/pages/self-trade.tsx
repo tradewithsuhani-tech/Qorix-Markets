@@ -244,9 +244,38 @@ function pnl(p: Position, mid: number) {
 // ─────────────────────────────────────────────────────────────────────
 // Page
 // ─────────────────────────────────────────────────────────────────────
+// Forex/metals follow CME-style hours: closed Sat all day, Fri after 22 UTC,
+// Sun before 22 UTC, and Mon-Thu 21 UTC maintenance window. Crypto trades 24/7.
+function isForexMarketOpen(at: Date = new Date()): boolean {
+  const day = at.getUTCDay();
+  const hour = at.getUTCHours();
+  if (day === 6) return false;
+  if (day === 5 && hour >= 22) return false;
+  if (day === 0 && hour < 22) return false;
+  if (day >= 1 && day <= 4 && hour === 21) return false;
+  return true;
+}
+function isCryptoPair(symbol: string): boolean {
+  return symbol === "BTC/USD" || symbol === "ETH/USD";
+}
+
 export default function SelfTradePage() {
   const [symbol, setSymbol] = useState<string>("XAU/USD");
   const pair = useMemo(() => PAIRS.find((p) => p.symbol === symbol)!, [symbol]);
+
+  // Live market-open state, refreshed every 30s. Crypto pairs are always
+  // open; forex/metals follow weekend + maintenance hours. When closed
+  // we freeze all candle generation and pin to the last close.
+  const [marketOpen, setMarketOpen] = useState(() =>
+    isCryptoPair(pair.symbol) ? true : isForexMarketOpen(),
+  );
+  useEffect(() => {
+    const update = () =>
+      setMarketOpen(isCryptoPair(pair.symbol) ? true : isForexMarketOpen());
+    update();
+    const id = window.setInterval(update, 30_000);
+    return () => clearInterval(id);
+  }, [pair.symbol]);
 
   const [history, setHistory] = useState<Candle[]>(() => buildHistory(pair));
   const [tick, setTick] = useState(0);
@@ -285,6 +314,7 @@ export default function SelfTradePage() {
   // Bot-scalp style: real-time per-trade ticks → 5s candle aggregator
   useEffect(() => {
     if (!pair.binance) return;
+    if (!marketOpen) return;
     let cancelled = false;
     const sym = pair.binance;
     let ws: WebSocket | null = null;
@@ -309,11 +339,12 @@ export default function SelfTradePage() {
       try { ws?.close(); } catch {}
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pair]);
+  }, [pair, marketOpen]);
 
   // ── LIVE feed via gold-api for XAU/USD (free, no key, CORS-enabled) ──
   useEffect(() => {
     if (pair.symbol !== "XAU/USD") return;
+    if (!marketOpen) return;
     let cancelled = false;
     const poll = async () => {
       try {
@@ -329,13 +360,14 @@ export default function SelfTradePage() {
     const id = window.setInterval(poll, 1500);
     return () => { cancelled = true; clearInterval(id); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pair.symbol, pair.digits]);
+  }, [pair.symbol, pair.digits, marketOpen]);
 
   // ── Synthetic price tick for unmapped pairs (GBP/USD, USD/JPY) ──
   // 200ms ticks fed into the 1s aggregator → bot-scalp feel
   useEffect(() => {
     if (pair.binance) return;
     if (pair.symbol === "XAU/USD") return;
+    if (!marketOpen) return;
     const id = window.setInterval(() => {
       setHistory((h) => {
         const last = h[h.length - 1];
@@ -347,7 +379,7 @@ export default function SelfTradePage() {
       });
     }, 200);
     return () => clearInterval(id);
-  }, [pair.binance, pair.symbol, pair.base, pair.vol, pair.digits, baseUnit]);
+  }, [pair.binance, pair.symbol, pair.base, pair.vol, pair.digits, baseUnit, marketOpen]);
 
   // ── Heartbeat for LIVE pairs (XAU + Binance) ──
   // Even when real ticks pause briefly (between gold-api polls, low-trade
@@ -356,6 +388,7 @@ export default function SelfTradePage() {
   // Real ticks always overwrite jitter on the next message.
   useEffect(() => {
     if (!pair.binance && pair.symbol !== "XAU/USD") return;
+    if (!marketOpen) return;
     const id = window.setInterval(() => {
       if (!liveSeededRef.current) return; // wait for first real tick to anchor
       setHistory((h) => {
@@ -368,7 +401,7 @@ export default function SelfTradePage() {
       });
     }, 200);
     return () => clearInterval(id);
-  }, [pair.binance, pair.symbol, pair.digits, baseUnit]);
+  }, [pair.binance, pair.symbol, pair.digits, baseUnit, marketOpen]);
 
   const mid = history.length ? history[history.length - 1].c : pair.base;
   const bid = +(mid - pair.spread / 2).toFixed(pair.digits);
