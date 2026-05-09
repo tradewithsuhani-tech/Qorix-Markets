@@ -2062,13 +2062,20 @@ export function BotTerminalCard({
   // / device / user computes the SAME number — no localStorage
   // drift, no per-user variation. Ticks once a second so the
   // pill animates smoothly.
+  // Market-open gate for the featured pair. When the underlying market
+  // is closed (e.g. forex/metals on weekends), the scalp simulator must
+  // be silent — no new entries, no P&L grind, no live tape — otherwise
+  // users see the bot "trading" against a frozen quote which is wrong.
+  const featuredMarketOpen = featured?.marketOpen !== false;
+
   const [scalpState, setScalpState] = useState(() => computeGlobalScalpState(totalAum));
   useEffect(() => {
+    if (!featuredMarketOpen) return;
     const tick = () => setScalpState(computeGlobalScalpState(totalAum));
     tick();
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
-  }, [totalAum]);
+  }, [totalAum, featuredMarketOpen]);
   const scalpTotalPnl = scalpState.pnl;
   const dailyTargetHit = scalpState.targetHit;
   const lastMidRef = useRef<number | null>(null);
@@ -2083,9 +2090,20 @@ export function BotTerminalCard({
     return () => clearInterval(id);
   }, []);
 
+  // When market closes (or the gate flips), drop any open scalps + clear
+  // the live tape so the chart immediately shows an idle bot.
+  useEffect(() => {
+    if (featuredMarketOpen) return;
+    setScalps([]);
+    setScalpEvents([]);
+    lastMidRef.current = null;
+  }, [featuredMarketOpen]);
+
   useEffect(() => {
     const mid = featuredMid;
     if (!Number.isFinite(mid)) return;
+    // Hard gate: don't run the scalp engine when the market is closed.
+    if (!featuredMarketOpen) return;
     const m = mid as number;
     const now = Date.now();
     const prev = lastMidRef.current;
@@ -2251,7 +2269,7 @@ export function BotTerminalCard({
 
       return next;
     });
-  }, [featuredMid]);
+  }, [featuredMid, featuredMarketOpen]);
 
   // Convert open scalps into BotStateOpenPosition shape so the chart
   // can render them with the existing chip/tag/dashed-line code path.
