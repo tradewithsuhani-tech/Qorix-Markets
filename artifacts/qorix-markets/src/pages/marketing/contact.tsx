@@ -1,15 +1,22 @@
 import { useState } from "react";
 import { MarketingShell, MarketingHero } from "@/components/marketing/marketing-shell";
-import { useSeo } from "@/lib/seo";
+import { useSeo, SITE_URL } from "@/lib/seo";
 import { Mail, MessageCircle, Send, Clock, MapPin } from "lucide-react";
 
 export default function ContactPage() {
   useSeo({
-    title: "Contact Qorix Markets — Support and Sales",
+    title: "Contact Qorix Markets — Support, Sales & Partnerships",
     description:
-      "Get in touch with the Qorix Markets team. Email support, live chat, and partnership inquiries answered within 24 hours.",
+      "Get in touch with the Qorix Markets team for support, sales, or partnership inquiries on our automated AI trading platform. Email support@qorixmarkets.com — answered within 24 hours.",
     canonical: "/contact",
-    keywords: "contact qorix markets, support, sales, partnerships",
+    keywords: "contact qorix markets, qorix markets support, qorix markets email, partnerships",
+    jsonLd: {
+      "@context": "https://schema.org",
+      "@type": "ContactPage",
+      url: `${SITE_URL}/contact`,
+      name: "Contact Qorix Markets",
+      isPartOf: { "@type": "WebSite", url: SITE_URL, name: "Qorix Markets" },
+    },
   });
 
   const [sent, setSent] = useState(false);

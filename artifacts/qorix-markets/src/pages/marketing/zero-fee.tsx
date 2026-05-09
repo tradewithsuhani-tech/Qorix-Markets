@@ -1,15 +1,24 @@
 import { MarketingShell, MarketingHero } from "@/components/marketing/marketing-shell";
 import { FeatureGrid, FaqSection, StatsSection, CtaBand } from "@/components/marketing/marketing-blocks";
-import { useSeo } from "@/lib/seo";
+import { useSeo, SITE_URL } from "@/lib/seo";
 import { CircleDollarSign, ShieldCheck, Wallet, Repeat, Eye, Handshake } from "lucide-react";
 
 export default function ZeroFeePage() {
   useSeo({
-    title: "Zero Trading Fees — Qorix Markets",
+    title: "Zero Trading Fees — Automated AI Trading | Qorix Markets",
     description:
-      "Trade with zero commissions, zero deposit fees, and zero account fees on Qorix Markets. See exactly how we make money so you can keep more of yours.",
+      "Automated AI trading platform with zero commissions, zero deposit fees, and zero account fees. Trade Forex, Gold and Crypto and keep every dollar your capital earns.",
     canonical: "/zero-trading-fee",
-    keywords: "zero trading fee, no commission trading, no deposit fee, qorix fees",
+    keywords:
+      "zero trading fee, no commission trading, no deposit fee, automated ai trading platform, zero fee forex broker, qorix fees",
+    jsonLd: {
+      "@context": "https://schema.org",
+      "@type": "BreadcrumbList",
+      itemListElement: [
+        { "@type": "ListItem", position: 1, name: "Home", item: `${SITE_URL}/` },
+        { "@type": "ListItem", position: 2, name: "Zero Trading Fee", item: `${SITE_URL}/zero-trading-fee` },
+      ],
+    },
   });
 
   return (

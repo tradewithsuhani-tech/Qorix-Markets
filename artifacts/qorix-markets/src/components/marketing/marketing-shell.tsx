@@ -162,7 +162,8 @@ export function MarketingFooter() {
             <span className="font-black text-white">Qorix Markets</span>
           </div>
           <p className="text-slate-500 leading-relaxed text-xs">
-            AI-managed USDT trading. Zero fees. Start with $10. Trusted by
+            Automated AI trading platform for Forex, Gold and Crypto. Zero
+            fees. Instant USDT withdrawals. Start with $10. Trusted by
             thousands of investors worldwide.
           </p>
           <div className="mt-4 flex items-center gap-2">
@@ -211,6 +212,7 @@ export function MarketingFooter() {
             <li><Link href="/terms" className="hover:text-emerald-300">Terms &amp; Conditions</Link></li>
             <li><Link href="/legal/risk-disclosure" className="hover:text-emerald-300">Risk Disclosure</Link></li>
             <li><Link href="/legal/aml-kyc" className="hover:text-emerald-300">AML / KYC</Link></li>
+            <li><Link href="/legal/regulation" className="hover:text-emerald-300">Regulation</Link></li>
           </ul>
         </div>
       </div>

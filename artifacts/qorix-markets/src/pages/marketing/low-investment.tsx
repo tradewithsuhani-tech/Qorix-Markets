@@ -1,15 +1,24 @@
 import { MarketingShell, MarketingHero } from "@/components/marketing/marketing-shell";
 import { FeatureGrid, FaqSection, StatsSection, TestimonialsSection, CtaBand } from "@/components/marketing/marketing-blocks";
-import { useSeo } from "@/lib/seo";
+import { useSeo, SITE_URL } from "@/lib/seo";
 import { Sparkles, Wallet, Zap, ShieldCheck, TrendingUp, Smartphone } from "lucide-react";
 
 export default function LowInvestmentPage() {
   useSeo({
-    title: "Low Investment Trading — Start From $10 on Qorix Markets",
+    title: "Low Investment Trading — Start From $10 | Qorix Markets",
     description:
-      "Start a real managed trading portfolio with as little as $10 of USDT. No fees, no minimums beyond $10, and your capital is in trading within minutes.",
+      "Start an automated AI trading portfolio with as little as $10 of USDT. Trade Forex, Gold and Crypto with no fees, no minimums beyond $10, and capital deployed within minutes.",
     canonical: "/low-investment-trading",
-    keywords: "low investment trading, start with 10 dollars, micro investing, small budget trading",
+    keywords:
+      "low investment trading, start with 10 dollars, micro investing, small budget trading, automated ai trading platform",
+    jsonLd: {
+      "@context": "https://schema.org",
+      "@type": "BreadcrumbList",
+      itemListElement: [
+        { "@type": "ListItem", position: 1, name: "Home", item: `${SITE_URL}/` },
+        { "@type": "ListItem", position: 2, name: "Low Investment Trading", item: `${SITE_URL}/low-investment-trading` },
+      ],
+    },
   });
 
   return (

@@ -5,21 +5,33 @@ import { Brain, Zap, ShieldCheck, Activity, LineChart, Target } from "lucide-rea
 
 export default function AiTradingPage() {
   useSeo({
-    title: "AI Trading Platform — Automated USDT Trading by Qorix",
+    title: "Automated AI Trading Platform — Forex, Gold & Crypto | Qorix Markets",
     description:
-      "Qorix Markets is an AI trading platform that scans forex, gold, indices, and crypto in real time and executes risk-managed trades for you. Start from $10.",
+      "Automated AI trading platform that scans Forex, Gold, Indices and Crypto in real time and executes risk-managed trades for you. Hard drawdown caps, instant USDT withdrawals. Start from $10.",
     canonical: "/ai-trading-platform",
-    keywords: "ai trading platform, automated trading, ai trading bot, algo trading",
-    jsonLd: {
-      "@context": "https://schema.org",
-      "@type": "Product",
-      name: "Qorix AI Trading Platform",
-      description: "AI-managed multi-asset trading platform with zero commissions.",
-      brand: { "@type": "Brand", name: "Qorix Markets" },
-      url: `${SITE_URL}/ai-trading-platform`,
-      offers: { "@type": "Offer", price: "10", priceCurrency: "USD" },
-      aggregateRating: { "@type": "AggregateRating", ratingValue: "4.8", reviewCount: "1240" },
-    },
+    keywords:
+      "automated ai trading platform, automated forex trading platform, ai trading bot, forex trading bot, gold trading bot, crypto trading bot, algo trading",
+    jsonLd: [
+      {
+        "@context": "https://schema.org",
+        "@type": "Product",
+        name: "Qorix Markets — Automated AI Trading Platform",
+        description:
+          "Automated AI trading platform for Forex, Gold, Indices and Crypto with hard risk caps and zero commissions.",
+        brand: { "@type": "Brand", name: "Qorix Markets" },
+        url: `${SITE_URL}/ai-trading-platform`,
+        offers: { "@type": "Offer", price: "10", priceCurrency: "USD", availability: "https://schema.org/InStock" },
+        aggregateRating: { "@type": "AggregateRating", ratingValue: "4.8", reviewCount: "1240", bestRating: "5", worstRating: "1" },
+      },
+      {
+        "@context": "https://schema.org",
+        "@type": "BreadcrumbList",
+        itemListElement: [
+          { "@type": "ListItem", position: 1, name: "Home", item: `${SITE_URL}/` },
+          { "@type": "ListItem", position: 2, name: "AI Trading Platform", item: `${SITE_URL}/ai-trading-platform` },
+        ],
+      },
+    ],
   });
 
   return (
