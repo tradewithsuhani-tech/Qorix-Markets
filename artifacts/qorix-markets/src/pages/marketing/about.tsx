@@ -1,16 +1,22 @@
 import { MarketingShell, MarketingHero } from "@/components/marketing/marketing-shell";
 import { StatsSection, FeatureGrid, CtaBand } from "@/components/marketing/marketing-blocks";
-import { useSeo, SITE_URL, orgJsonLd } from "@/lib/seo";
+import { useSeo, SITE_URL } from "@/lib/seo";
 import { ShieldCheck, Brain, Rocket, Heart } from "lucide-react";
 
 export default function AboutPage() {
   useSeo({
     title: "About Qorix Markets — Our Mission and Team",
     description:
-      "Qorix Markets is a global AI-managed USDT trading platform built for everyday investors. Learn about our mission, team, and approach to risk.",
+      "Qorix Markets is a global automated AI trading platform for Forex, Gold and Crypto, built for everyday investors. Learn about our mission, team, and approach to risk.",
     canonical: "/about",
     keywords: "about qorix markets, ai trading company, qorix team",
-    jsonLd: { ...orgJsonLd, url: `${SITE_URL}/about` },
+    jsonLd: {
+      "@context": "https://schema.org",
+      "@type": "AboutPage",
+      url: `${SITE_URL}/about`,
+      name: "About Qorix Markets",
+      isPartOf: { "@type": "WebSite", url: SITE_URL, name: "Qorix Markets" },
+    },
   });
 
   return (

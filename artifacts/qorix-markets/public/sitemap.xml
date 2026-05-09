@@ -86,6 +86,21 @@
     <priority>0.7</priority>
   </url>
   <url>
+    <loc>https://qorixmarkets.com/legal/regulation</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://qorixmarkets.com/legal/risk-disclosure</loc>
+    <changefreq>yearly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://qorixmarkets.com/legal/aml-kyc</loc>
+    <changefreq>yearly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
     <loc>https://qorixmarkets.com/privacy</loc>
     <changefreq>yearly</changefreq>
     <priority>0.4</priority>

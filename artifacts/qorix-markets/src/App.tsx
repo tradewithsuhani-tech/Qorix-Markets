@@ -88,6 +88,7 @@ import TermsPage from "@/pages/legal/terms";
 import PrivacyPage from "@/pages/legal/privacy";
 import RiskDisclosurePage from "@/pages/legal/risk-disclosure";
 import AmlKycPage from "@/pages/legal/aml-kyc";
+import RegulationPage from "@/pages/legal/regulation";
 // Public marketing / SEO pages — separate from the authenticated app shell
 // so they keep clean URLs (no /m/ prefix) and a marketing-only header.
 import AboutPage from "@/pages/marketing/about";
@@ -284,6 +285,7 @@ function Router() {
       <Route path="/legal/privacy" component={PrivacyPage} />
       <Route path="/legal/risk-disclosure" component={RiskDisclosurePage} />
       <Route path="/legal/aml-kyc" component={AmlKycPage} />
+      <Route path="/legal/regulation" component={RegulationPage} />
       {/* SEO marketing routes (public, indexable) */}
       <Route path="/about" component={AboutPage} />
       <Route path="/contact" component={ContactPage} />

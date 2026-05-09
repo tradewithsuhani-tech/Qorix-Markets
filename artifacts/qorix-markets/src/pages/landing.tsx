@@ -23,7 +23,7 @@ import {
 import { useGetMarketIndicators } from "@workspace/api-client-react";
 import { QorixLogo } from "@/components/qorix-logo";
 import { QorixAssistant } from "@/components/qorix-assistant";
-import { useSeo, SITE_URL, orgJsonLd } from "@/lib/seo";
+import { useSeo } from "@/lib/seo";
 
 /* ───────────────────────── Helpers ───────────────────────── */
 
@@ -541,13 +541,14 @@ export default function Landing() {
 
   // SEO: home page is the highest-value indexable URL on the site.
   useSeo({
-    title: "Qorix Markets — AI Trading Platform with Zero Fees, From $10",
+    title: "Qorix Markets — Automated AI Trading Platform | Forex, Gold & Crypto",
     description:
-      "Qorix Markets is an AI-managed USDT trading platform. Zero commissions, start from $10, withdraw anytime. Trusted by 12,000+ investors worldwide.",
+      "Qorix Markets is an automated AI trading platform for Forex, Gold, Indices and Crypto majors. Zero commissions, hard risk caps, instant USDT withdrawals — start from $10. Trusted by 12,400+ investors.",
     canonical: "/",
     keywords:
-      "ai trading platform, zero fee trading, low investment trading, usdt trading, automated trading, qorix markets",
-    jsonLd: { ...orgJsonLd, url: `${SITE_URL}/` },
+      "automated ai trading platform, automated forex trading platform, ai trading bot, forex auto trading, gold trading bot, crypto trading bot, zero fee trading, low investment trading, qorix markets",
+    // Organization + WebSite JSON-LD is emitted globally from index.html
+    // (pre-hydration), so we don't re-inject it here to avoid duplicates.
   });
 
   const investors = indicators?.activeInvestors || 124;

@@ -105,14 +105,36 @@ export const orgJsonLd = {
   "@context": "https://schema.org",
   "@type": "Organization",
   name: "Qorix Markets",
+  alternateName: ["QorixMarkets", "Qorix"],
   url: SITE_URL,
   logo: `${SITE_URL}/qorix-logo.png`,
+  image: `${SITE_URL}/og-share-1200.png`,
+  slogan: "Smarter Trading. Better Living.",
+  foundingDate: "2024",
   sameAs: [
     "https://twitter.com/qorixmarkets",
     "https://t.me/qorixmarkets",
   ],
   description:
-    "Qorix Markets is a professionally managed AI-driven USDT trading platform with zero commissions and entry from just $10.",
+    "Qorix Markets is an automated AI trading platform for Forex, Gold, Indices and Crypto majors. Hard risk caps, transparent execution and instant USDT withdrawals — start from $10.",
+  contactPoint: [{
+    "@type": "ContactPoint",
+    contactType: "customer support",
+    email: "support@qorixmarkets.com",
+    availableLanguage: ["English", "Hindi"],
+  }],
+};
+
+export const websiteJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  name: "Qorix Markets",
+  url: SITE_URL,
+  potentialAction: {
+    "@type": "SearchAction",
+    target: `${SITE_URL}/blog?q={search_term_string}`,
+    "query-input": "required name=search_term_string",
+  },
 };
 
 export function faqJsonLd(items: { q: string; a: string }[]) {

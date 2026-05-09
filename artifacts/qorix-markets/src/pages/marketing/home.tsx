@@ -667,7 +667,7 @@ export default function HomePage() {
   useSeo({
     title: "Qorix Markets — Automated Trading. Real Results. Zero Manual Effort.",
     description:
-      "Premium AI-managed USDT trading platform. 24/7 trading desk with hard risk limits, transparent execution and monthly payouts. Start at $10. No lock-in.",
+      "Automated AI trading platform for Forex, Gold, Indices and Crypto. 24/7 trading desks with hard risk limits, transparent execution and instant USDT payouts. Start at $10. No lock-in.",
     canonical: "/",
     keywords: "qorix markets, ai trading, automated trading, usdt trading, zero fee broker",
     jsonLd: {
