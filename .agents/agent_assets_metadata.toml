@@ -65,3 +65,9 @@ id = "QwcpVpfkMJMP2MNQTcMd6"
 uri = "file://QORIX_DESIGN_SPEC.md"
 type = "text"
 title = "Qorix Markets — Design Spec for Flutter Dev"
+
+[[outputs]]
+id = "USqXj9jAPXl-0l6c8744f"
+uri = "file://ARCHITECTURE_ANALYSIS.md"
+type = "text"
+title = "Qorix Markets — Complete Architecture Analysis (Flutter Reference)"
