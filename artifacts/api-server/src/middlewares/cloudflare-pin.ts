@@ -37,10 +37,19 @@
 //                                        before user has set up
 //                                        Cloudflare in front of the
 //                                        API).
-//   - CLOUDFLARE_ORIGIN_SECRET set    -> require X-Origin-Auth
-//                                        header to match exactly.
-//                                        Mismatch / missing -> 403
-//                                        ORIGIN_PIN_REQUIRED.
+//   - CLOUDFLARE_ORIGIN_SECRET set    -> only enforce X-Origin-Auth
+//                                        when the Host header is the
+//                                        custom domain (api.qorixmarkets.com).
+//                                        Requests arriving via the raw
+//                                        fly.dev hostname are permitted
+//                                        while the legacy frontend build
+//                                        (VITE_API_URL=qorix-api.fly.dev)
+//                                        is still in production. Once the
+//                                        frontend is redeployed with
+//                                        VITE_API_URL=https://api.qorixmarkets.com
+//                                        the fly.dev bypass can be closed
+//                                        by adding "qorix-api.fly.dev" to
+//                                        PINNED_HOSTS below.
 //
 // Path exemptions (CRITICAL — do NOT remove without coordinating
 // with Fly LB config):
@@ -83,6 +92,14 @@ const PATH_EXEMPTIONS = new Set<string>([
   "/api/version.json",
 ]);
 
+// Hosts for which X-Origin-Auth is REQUIRED. Requests arriving via any
+// other hostname (e.g. qorix-api.fly.dev used by the legacy frontend
+// build) are allowed through so that existing users are not locked out
+// while the frontend is being redeployed.
+// Once the new frontend (VITE_API_URL=https://api.qorixmarkets.com) is
+// live, add "qorix-api.fly.dev" here to fully close the fly.dev bypass.
+const PINNED_HOSTS = new Set<string>(["api.qorixmarkets.com"]);
+
 export function cloudflarePin(req: Request, res: Response, next: NextFunction): void {
   const secret = process.env["CLOUDFLARE_ORIGIN_SECRET"]?.trim();
 
@@ -98,6 +115,17 @@ export function cloudflarePin(req: Request, res: Response, next: NextFunction): 
   // and cannot add X-Origin-Auth. Letting them through unconditionally
   // is what keeps Fly health checks green even with the pin enabled.
   if (PATH_EXEMPTIONS.has(req.path)) {
+    next();
+    return;
+  }
+
+  // Only enforce the pin for requests arriving on the pinned custom domain.
+  // Requests via the raw fly.dev hostname are allowed through — the legacy
+  // production frontend (VITE_API_URL=https://qorix-api.fly.dev) still uses
+  // that URL. Once the frontend is redeployed with the custom API domain,
+  // add "qorix-api.fly.dev" to PINNED_HOSTS to close this bypass.
+  const host = (req.headers["host"] as string | undefined)?.split(":")[0]?.trim() ?? "";
+  if (!PINNED_HOSTS.has(host)) {
     next();
     return;
   }
