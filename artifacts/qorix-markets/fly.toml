@@ -34,7 +34,7 @@ primary_region = "bom"
     VITE_API_URL            = "https://api.qorixmarkets.com"
     BASE_PATH               = "/"
     VITE_RECAPTCHA_SITE_KEY = ""
-    VITE_TURNSTILE_SITE_KEY = ""
+    VITE_TURNSTILE_SITE_KEY = "0x4AAAAAADF7hL3-sNctEdTJ"
     VITE_CAPTCHA_PROVIDER   = "turnstile"
 
 # ─── Runtime env ────────────────────────────────────────────────────────────
