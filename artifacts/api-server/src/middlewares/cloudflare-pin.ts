@@ -81,6 +81,13 @@ const PATH_EXEMPTIONS = new Set<string>([
   "/api/worker-healthz",
   "/api/version",
   "/api/version.json",
+  // Google OAuth callback — Google's servers redirect the user's browser here
+  // directly (not through Cloudflare), so they cannot carry X-Origin-Auth.
+  // The callback is safe to exempt: the OAuth code is one-time-use + short-lived,
+  // the state param prevents CSRF, and the final JWT is only delivered to the
+  // frontend (qorixmarkets.com) via redirect — never exposed in this response.
+  "/auth/google/callback",
+  "/api/auth/google/callback",
 ]);
 
 export function cloudflarePin(req: Request, res: Response, next: NextFunction): void {
