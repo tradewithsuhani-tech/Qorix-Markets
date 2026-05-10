@@ -4,10 +4,15 @@ import * as schema from "./schema";
 
 const { Pool } = pg;
 
-if (!process.env.DATABASE_URL) {
+// NEON_DATABASE_URL overrides DATABASE_URL in development so the Replit
+// built-in local Postgres can be bypassed in favour of the production Neon DB.
+if (!process.env.NEON_DATABASE_URL && !process.env.DATABASE_URL) {
   throw new Error(
     "DATABASE_URL must be set. Did you forget to provision a database?",
   );
+}
+if (process.env.NEON_DATABASE_URL) {
+  process.env.DATABASE_URL = process.env.NEON_DATABASE_URL;
 }
 
 // Managed Postgres (Neon, Supabase, RDS, Render) requires TLS. We detect SSL
