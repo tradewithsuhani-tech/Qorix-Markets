@@ -107,6 +107,17 @@ export default defineConfig({
         target: process.env.API_PROXY_TARGET ?? "http://localhost:8080",
         changeOrigin: true,
         secure: true,
+        // When proxying to fly.io, rewrite Origin/Referer so the server's
+        // origin-guard accepts the request (dev-only; the proxy owns the
+        // connection to the API, the browser never talks to fly directly).
+        ...(process.env.API_PROXY_TARGET
+          ? {
+              headers: {
+                Origin: "https://qorixmarkets.com",
+                Referer: "https://qorixmarkets.com/",
+              },
+            }
+          : {}),
       },
     },
     fs: {
