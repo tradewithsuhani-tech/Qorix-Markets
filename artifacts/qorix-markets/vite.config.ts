@@ -101,11 +101,12 @@ export default defineConfig({
     allowedHosts: true,
     proxy: {
       // All backend traffic (auth, OTP, forgot-password, deposits, admin, etc.)
-      // is consolidated into the api-server on PORT 8080.
+      // API_PROXY_TARGET lets you point at the live fly.io API server instead
+      // of the local dev server. Set to https://qorix-api.fly.dev to use prod.
       "/api": {
-        target: "http://localhost:8080",
+        target: process.env.API_PROXY_TARGET ?? "http://localhost:8080",
         changeOrigin: true,
-        secure: false,
+        secure: true,
       },
     },
     fs: {

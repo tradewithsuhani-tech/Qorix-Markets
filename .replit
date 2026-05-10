@@ -150,6 +150,7 @@ CAPTCHA_PROVIDER = "none"
 VITE_CAPTCHA_PROVIDER = "none"
 LOGIN_DEVICE_GATE_DISABLED = "true"
 NEON_DATABASE_URL = "postgresql://neondb_owner:npg_DsGodh9IK4Vc@ep-ancient-glitter-aoozk2mb-pooler.c-2.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
+API_PROXY_TARGET = "https://qorix-api.fly.dev"
 
 [userenv.production]
 CAPTCHA_PROVIDER = "turnstile"
