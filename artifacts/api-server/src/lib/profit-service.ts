@@ -11,7 +11,7 @@ import {
   monthlyPerformanceTable,
   signalTradeDistributionsTable,
 } from "@workspace/db";
-import { eq, gt, and, isNull, sql, inArray } from "drizzle-orm";
+import { eq, gt, and, isNull, sql, inArray, gte, lt } from "drizzle-orm";
 import { logger } from "./logger";
 import { createNotification } from "./notifications";
 import { getVipInfo } from "./vip";
@@ -489,8 +489,10 @@ export async function distributeDailyProfit(
 
 /**
  * Auto daily profit — credits every active investment its fixed
- * per-risk monthly target / 22 forex days. No admin input required.
- * Idempotent per user/day via equity_history (date,user_id) row check.
+ * per-risk daily rate: monthlyTarget / workingDaysInMonth.
+ * No catchup for missed days or new investors — each run credits exactly
+ * one day. Profit starts the NEXT working day after investment starts.
+ * Idempotent per user/day via profit transaction check.
  */
 export async function distributeAutoDailyProfit(): Promise<DistributeProfitResult> {
   let investorsAffected = 0;
@@ -511,18 +513,28 @@ export async function distributeAutoDailyProfit(): Promise<DistributeProfitResul
     );
 
     for (const inv of activeInvestments) {
-      // Idempotency guard — skip if today's row already exists for this user.
-      const already = await tx
-        .select({ id: equityHistoryTable.id })
-        .from(equityHistoryTable)
+      // Skip if investment started today or later — profit begins the NEXT working day.
+      const startedDateStr = inv.startedAt
+        ? new Date(inv.startedAt).toISOString().split("T")[0]!
+        : todayStr;
+      if (startedDateStr >= todayStr) continue;
+
+      // Idempotency guard — skip if a profit transaction was already credited today.
+      const todayStart = new Date(todayStr + "T00:00:00.000Z");
+      const todayEnd = new Date(todayStr + "T23:59:59.999Z");
+      const alreadyPaid = await tx
+        .select({ id: transactionsTable.id })
+        .from(transactionsTable)
         .where(
           and(
-            eq(equityHistoryTable.userId, inv.userId),
-            eq(equityHistoryTable.date, todayStr),
+            eq(transactionsTable.userId, inv.userId),
+            eq(transactionsTable.type, "profit"),
+            gte(transactionsTable.createdAt, todayStart),
+            lt(transactionsTable.createdAt, todayEnd),
           ),
         )
         .limit(1);
-      if (already.length > 0) continue;
+      if (alreadyPaid.length > 0) continue;
 
       await ensureUserAccounts(inv.userId, tx);
 
@@ -533,32 +545,11 @@ export async function distributeAutoDailyProfit(): Promise<DistributeProfitResul
       const monthlyPct = MONTHLY_PROFIT_TARGET_PCT[riskKey] ?? MONTHLY_PROFIT_TARGET_PCT.medium!;
       const monthlyTargetAmount = amount * (monthlyPct / 100);
 
-      // Hard-cap to the FIXED monthly target — never more, never less.
-      // Spread is monthlyTarget * (tradingDayIdx / totalTradingDays) and
-      // we credit the gap vs whatever was paid earlier this month.
+      // Simple flat daily rate: monthly target divided by working days in the month.
+      // No catchup for missed days or new investors — exactly one day per cron run.
       const nowDate = new Date();
-      const { totalN, idxToday } = forexWorkingDayInfo(nowDate);
-      const targetToDate = totalN > 0 ? monthlyTargetAmount * (idxToday / totalN) : 0;
-
-      const yearMonthStr = todayStr.slice(0, 7)!;
-      const monthRows = await tx
-        .select({ totalProfit: monthlyPerformanceTable.totalProfit })
-        .from(monthlyPerformanceTable)
-        .where(
-          and(
-            eq(monthlyPerformanceTable.userId, inv.userId),
-            eq(monthlyPerformanceTable.yearMonth, yearMonthStr),
-          ),
-        )
-        .limit(1);
-      const paidThisMonth = monthRows[0]
-        ? parseFloat(monthRows[0].totalProfit as unknown as string)
-        : 0;
-
-      // Clamp: never exceed monthly target, never go negative.
-      const remainingThisMonth = Math.max(0, monthlyTargetAmount - paidThisMonth);
-      const owedToDate = Math.max(0, targetToDate - paidThisMonth);
-      const dailyProfitAmount = Math.min(owedToDate, remainingThisMonth);
+      const { totalN } = forexWorkingDayInfo(nowDate);
+      const dailyProfitAmount = totalN > 0 ? monthlyTargetAmount / totalN : 0;
       if (dailyProfitAmount <= 0) continue;
       const dailyPct = amount > 0 ? (dailyProfitAmount / amount) * 100 : 0;
       // VIP bonus intentionally skipped here — fixed monthly target is
