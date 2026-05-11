@@ -139,9 +139,9 @@ export default function WithdrawPage() {
             <div className={cn("text-[18px] font-semibold tabular-nums", isUsdt ? "text-white" : "text-emerald-400")}>
               {isUsdt
                 ? `$${mainBal.toFixed(2)}`
-                : limits ? `₹${maxInr.toLocaleString("en-IN", { maximumFractionDigits: 3 })}` : "—"}
+                : `₹${Math.round(mainBal * FX_RATE).toLocaleString("en-IN")}`}
             </div>
-            {!isUsdt && limits && (
+            {!isUsdt && (
               <div className="text-[11px] text-white/45 tabular-nums mt-0.5">
                 ≈ ${mainBal.toFixed(2)}
               </div>
@@ -227,12 +227,12 @@ export default function WithdrawPage() {
             <button
               key={q.label}
               onClick={() => {
-                const base = isUsdt ? sourceBalance : (limits ? maxInr : 0);
+                const base = isUsdt ? sourceBalance : Math.round(mainBal * FX_RATE);
                 if (base <= 0) return;
                 const v = base * q.pct;
                 setAmount(isUsdt ? v.toFixed(2) : String(Math.floor(v)));
               }}
-              disabled={isUsdt ? sourceBalance <= 0 : !limits || maxInr <= 0}
+              disabled={isUsdt ? sourceBalance <= 0 : mainBal <= 0}
               className="text-[12px] py-2.5 rounded-lg border border-white/[0.07] bg-white/[0.025] hover:bg-white/[0.06] hover:border-white/20 font-semibold text-white/70 hover:text-white transition-colors disabled:opacity-25 disabled:cursor-not-allowed disabled:hover:bg-white/[0.025] disabled:hover:border-white/[0.07]"
               data-testid={`pct-${q.label}`}
             >
