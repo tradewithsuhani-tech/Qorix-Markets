@@ -4,6 +4,7 @@ import { useGetDepositAddress } from "@workspace/api-client-react";
 import { Layout } from "@/components/layout";
 import {
   ArrowLeft, Copy, Check, ArrowRight, Shield, AlertTriangle, Loader2,
+  Clock, CheckCircle2, History,
 } from "lucide-react";
 import QRCode from "qrcode";
 import { CRYPTO_METHODS } from "@/lib/deposit-flow-data";
@@ -32,6 +33,7 @@ export default function DepositCryptoPage() {
 
   const amountInr = numAmount * FX_RATE;
   const [copied, setCopied] = useState<"address" | "tag" | null>(null);
+  const [sent, setSent] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -42,7 +44,6 @@ export default function DepositCryptoPage() {
       margin: 1,
       color: { dark: "#0F172A", light: "#FFFFFF" },
     }).catch((err) => {
-      // eslint-disable-next-line no-console
       console.error("[deposit] QR render failed", err);
     });
   }, [crypto.address, depLoading]);
@@ -52,6 +53,75 @@ export default function DepositCryptoPage() {
     setCopied(kind);
     setTimeout(() => setCopied(null), 1500);
   };
+
+  if (sent) {
+    return (
+      <Layout>
+        <div className="max-w-md mx-auto px-5 pt-10 pb-28 flex flex-col items-center text-center">
+          <div className="relative w-24 h-24 flex items-center justify-center mb-5">
+            <span className="absolute inset-0 rounded-full border border-emerald-500/15 animate-ping" style={{ animationDuration: "2.5s" }} />
+            <span className="absolute inset-2 rounded-full border border-emerald-500/25" />
+            <span className="absolute inset-5 rounded-full border border-emerald-500/40" />
+            <div className="w-14 h-14 rounded-full bg-emerald-500/15 border border-emerald-500/40 flex items-center justify-center">
+              <Clock className="w-7 h-7 text-emerald-400" />
+            </div>
+          </div>
+
+          <div className="text-[11px] tracking-[0.28em] font-bold text-emerald-400 mb-2">MONITORING BLOCKCHAIN</div>
+          <h2 className="text-2xl font-bold text-white mb-2">Tracking your deposit</h2>
+          <p className="text-[13px] text-white/55 leading-relaxed max-w-xs">
+            Your transfer is being monitored on-chain. Balance will update automatically within a few minutes of the first blockchain confirmation.
+          </p>
+
+          <div className="mt-6 w-full rounded-2xl border border-white/[0.07] bg-white/[0.025] divide-y divide-white/[0.06]">
+            <div className="flex items-center justify-between px-4 py-3">
+              <span className="text-[12px] text-white/50">Network</span>
+              <span className="text-[12px] font-semibold text-white">{crypto.network}</span>
+            </div>
+            {numAmount > 0 && (
+              <div className="flex items-center justify-between px-4 py-3">
+                <span className="text-[12px] text-white/50">Amount sent</span>
+                <span className="text-[12px] font-semibold text-white">{numAmount} {crypto.label}</span>
+              </div>
+            )}
+            <div className="flex items-center justify-between px-4 py-3">
+              <span className="text-[12px] text-white/50">Address</span>
+              <span className="text-[11px] font-mono text-white/80">
+                {crypto.address.slice(0, 8)}…{crypto.address.slice(-6)}
+              </span>
+            </div>
+            <div className="flex items-center justify-between px-4 py-3">
+              <span className="text-[12px] text-white/50">Confirmations needed</span>
+              <span className="text-[12px] font-semibold text-emerald-400">1</span>
+            </div>
+          </div>
+
+          <div className="mt-4 w-full rounded-xl border border-amber-500/25 bg-amber-500/[0.06] px-3.5 py-2.5 flex items-start gap-2 text-left">
+            <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+            <span className="text-[11.5px] text-amber-100/85 leading-snug">
+              Do <b>not</b> close this app. Keep it open or check your wallet balance in a few minutes. If balance doesn't update within 30 minutes, contact support.
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2.5 w-full mt-5">
+            <button
+              onClick={() => navigate("/deposit")}
+              className="py-3.5 rounded-2xl border border-white/15 bg-white/[0.04] text-white font-semibold text-sm hover:bg-white/[0.08] transition-all"
+            >
+              Back to Deposit
+            </button>
+            <button
+              onClick={() => navigate("/history")}
+              className="py-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-bold text-sm hover:from-emerald-400 hover:to-teal-400 shadow-[0_0_28px_-6px_rgba(16,185,129,0.65)] transition-all flex items-center justify-center gap-1.5"
+            >
+              <History className="w-4 h-4" />
+              View History
+            </button>
+          </div>
+        </div>
+      </Layout>
+    );
+  }
 
   return (
     <Layout>
@@ -68,7 +138,7 @@ export default function DepositCryptoPage() {
           <h1 className="text-2xl font-bold">Deposit {crypto.label}</h1>
           <p className="text-sm text-muted-foreground leading-relaxed">
             Send {numAmount > 0 ? `${numAmount} ${crypto.label}` : crypto.label} to the address below.
-            Your wallet will credit ₹{Math.round(amountInr).toLocaleString("en-IN")} after on-chain confirmation.
+            {numAmount > 0 && ` Your wallet will credit ₹${Math.round(amountInr).toLocaleString("en-IN")} after on-chain confirmation.`}
           </p>
         </div>
 
@@ -182,6 +252,21 @@ export default function DepositCryptoPage() {
             Funded via on-chain transfer · Verified after 1 confirmation · Auto-converted to INR
           </div>
         </div>
+
+        <button
+          onClick={() => setSent(true)}
+          disabled={isUsdt && (depLoading || !crypto.address)}
+          className={cn(
+            "w-full h-14 rounded-2xl text-[14px] font-bold flex items-center justify-center gap-2 transition-all",
+            "disabled:opacity-40 disabled:cursor-not-allowed",
+            "shadow-[0_6px_24px_-6px_rgba(16,185,129,0.55)]"
+          )}
+          style={{ background: "linear-gradient(135deg,#10b981,#059669)", color: "#fff" }}
+          data-testid="button-sent"
+        >
+          <CheckCircle2 className="w-5 h-5" />
+          I've sent the {crypto.label}
+        </button>
       </div>
     </Layout>
   );
