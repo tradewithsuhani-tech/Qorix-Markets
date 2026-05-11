@@ -25,8 +25,8 @@ router.get("/deposit/address", async (req: AuthRequest, res) => {
   const tronAddress = users[0]?.tronAddress ?? null;
 
   res.json({
-    // Frontend reads this as the address shown in the QR / copy box.
-    platformAddress: userDepositAddress,
+    // Frontend reads this field as "address" (matches DepositAddressResponse schema).
+    address: userDepositAddress,
     // The user's *own* registered external wallet (where they're sending FROM).
     userTronAddress: tronAddress,
     network: "TRC20",
