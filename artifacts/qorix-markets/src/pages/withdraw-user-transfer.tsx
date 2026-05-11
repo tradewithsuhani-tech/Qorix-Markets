@@ -290,28 +290,29 @@ export default function WithdrawUserTransferPage() {
         </div>
         <div
           className={cn(
-            "rounded-2xl border bg-white/[0.025] px-4 py-4 transition-colors flex items-center gap-3",
+            "rounded-xl border bg-white/[0.025] px-3.5 py-2.5 transition-colors flex items-center gap-2",
             numAmount > 0 && !validAmount ? "border-rose-500/45" :
             validAmount ? "border-emerald-400/45" :
             "border-white/[0.10]"
           )}
         >
-          <span className="text-[28px] font-bold leading-none select-none shrink-0 text-emerald-400">$</span>
+          <span className="text-[15px] font-semibold select-none shrink-0 text-emerald-400">USDT</span>
+          <span className="w-px h-4 bg-white/10 shrink-0" />
           <input
             type="text"
             inputMode="decimal"
             value={amount}
             onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ""))}
-            placeholder="0"
-            className="flex-1 bg-transparent border-0 outline-none text-[30px] font-bold tracking-[-0.02em] tabular-nums placeholder:text-white/25 min-w-0"
+            placeholder="0.00"
+            className="flex-1 bg-transparent border-0 outline-none text-[15px] font-semibold tracking-[-0.01em] tabular-nums placeholder:text-white/25 min-w-0"
           />
           {numAmount > 0 && (
-            <span className="text-[12px] text-white/45 font-mono tabular-nums shrink-0">
+            <span className="text-[11px] text-white/40 font-mono tabular-nums shrink-0">
               ≈ ₹{Math.round(inrEquiv).toLocaleString("en-IN")}
             </span>
           )}
         </div>
-        <div className="min-h-[14px] mt-1.5 text-[11px] text-rose-400">
+        <div className="min-h-[14px] mt-1 text-[11px] text-rose-400">
           {numAmount > 0 && numAmount < min && `Minimum $${min.toFixed(2)}`}
           {exceedsBal && `Above main balance of $${mainBal.toFixed(2)}`}
         </div>

@@ -41,7 +41,7 @@ primary_region = "bom"
     # build context (.dockerignore); the Dockerfile runtime stage copies them
     # from this image instead so every deploy stays fast.
     # Override per-deploy: flyctl deploy --build-arg PREV_IMAGE=registry.fly.io/qorix-markets-web:<tag>
-    PREV_IMAGE              = "registry.fly.io/qorix-markets-web:deployment-01KRA6GQ74JHKY4ZRNHMEWKCCC"
+    PREV_IMAGE              = "registry.fly.io/qorix-markets-web:deployment-01KRA7ZQ14PYSTEMHVKH18648F"
 
 # ─── Runtime env ────────────────────────────────────────────────────────────
 [env]
