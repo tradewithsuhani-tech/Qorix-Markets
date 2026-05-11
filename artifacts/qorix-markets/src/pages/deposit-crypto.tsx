@@ -111,7 +111,7 @@ export default function DepositCryptoPage() {
               Back to Deposit
             </button>
             <button
-              onClick={() => navigate("/history")}
+              onClick={() => navigate("/transactions")}
               className="py-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-bold text-sm hover:from-emerald-400 hover:to-teal-400 shadow-[0_0_28px_-6px_rgba(16,185,129,0.65)] transition-all flex items-center justify-center gap-1.5"
             >
               <History className="w-4 h-4" />
