@@ -833,8 +833,10 @@ function idemSet(key: string, txId: number) {
 async function findRecipient(senderId: number, code: string) {
   const trimmed = code.trim();
   if (!trimmed) return null;
+  // Strip QORIX- prefix (e.g. "QORIX-000172" → "172") before numeric parse
+  const stripped = trimmed.replace(/^QORIX-0*/i, "");
   // Try numeric ID first, then referralCode (case-insensitive), then email
-  const asNum = Number.parseInt(trimmed, 10);
+  const asNum = Number.parseInt(stripped || trimmed, 10);
   const conditions = [
     sql`lower(${usersTable.referralCode}) = lower(${trimmed})`,
     sql`lower(${usersTable.email}) = lower(${trimmed})`,
