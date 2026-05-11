@@ -50,6 +50,24 @@ if (flyProcessGroup === "worker") {
   process.env["RUN_BACKGROUND_JOBS"] = "false";
 }
 
+// WORKER RESILIENCE: Register unhandled-rejection / uncaught-exception
+// handlers IMMEDIATELY at module load — before main() runs — so that a
+// Redis commandTimeout firing during BullMQ's startup Lua-script registration
+// (which happens before app.listen) cannot crash the worker process.
+// Without this, the ioredis commandTimeout (1 500 ms) that fires while
+// Upstash is slow to handshake on a cold BOM machine kills the worker
+// before it ever starts cron, causing daily profit to stop running.
+// Narrowed to FLY_PROCESS_GROUP === "worker" only so web replicas keep
+// their default fail-fast semantics.
+if (flyProcessGroup === "worker") {
+  process.on("unhandledRejection", (reason) => {
+    console.error("[worker] Unhandled promise rejection — keeping worker alive:", reason);
+  });
+  process.on("uncaughtException", (err) => {
+    console.error("[worker] Uncaught exception — keeping worker alive:", err);
+  });
+}
+
 async function main() {
   await ensureRedisRunning();
   await initSystemAccounts();

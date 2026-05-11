@@ -76,9 +76,17 @@ export function newBullMQConnection(): IORedis {
     maxRetriesPerRequest: null,
     // Match the shared client: BullMQ doesn't need the ioredis ready handshake.
     enableReadyCheck: false,
-    // Same fail-fast connect timeout as the shared client — Upstash from
-    // BOM/SIN is sub-50ms so 5s is generous.
-    connectTimeout: 5_000,
+    // Generous connect timeout for cold-start from BOM/SIN → Upstash.
+    // 5s was occasionally too tight on worker cold-starts, causing the
+    // worker process to crash before BullMQ could register its Lua scripts.
+    connectTimeout: 15_000,
+    // Retry strategy: exponential back-off capped at 5s, up to 20 attempts.
+    // This prevents the worker process from dying on a transient Upstash
+    // blip or slow cold-start TCP handshake.
+    retryStrategy(times) {
+      if (times > 20) return null; // give up after ~20 attempts (~60s total)
+      return Math.min(times * 250, 5_000);
+    },
     // No commandTimeout: BullMQ blocking pulls are designed to wait until a
     // job arrives, and a low timeout would just churn the worker loop.
   });
