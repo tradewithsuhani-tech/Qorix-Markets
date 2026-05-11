@@ -19,6 +19,16 @@ ARG NODE_VERSION=24-bookworm-slim
 # `pnpm@latest` silently jumping to a future major that changes install or
 # build behavior. Bump deliberately when the api-server Dockerfile bumps.
 ARG PNPM_VERSION=10
+# PREV_IMAGE: tag of the most-recently-deployed qorix-markets-web image.
+# Must be declared at global scope (before all FROM) so it can be used in
+# a FROM instruction. Large static assets (banners ~90 MB, promo ~12 MB)
+# are excluded from the build context (.dockerignore) to keep uploads fast;
+# the runtime stage copies them from this image instead.
+# Pass at deploy time:
+#   flyctl deploy --build-arg PREV_IMAGE=registry.fly.io/qorix-markets-web:<tag>
+# Defaults to the public nginx image (no /banners) so the first-ever deploy
+# still works — the COPY is a no-op for missing source paths.
+ARG PREV_IMAGE="nginx:1.27-alpine"
 
 # ─── Build stage: install + vite build ─────────────────────────────────────
 FROM node:${NODE_VERSION} AS build
@@ -61,10 +71,18 @@ RUN pnpm install --frozen-lockfile --filter "@workspace/qorix-markets..."
 RUN pnpm --filter @workspace/qorix-markets run build
 
 # ─── Runtime stage: nginx serving the static bundle ────────────────────────
+FROM ${PREV_IMAGE} AS prev_static
+
 FROM nginx:1.27-alpine AS runtime
 
 # Vite outputs to dist/public per artifacts/qorix-markets/vite.config.ts
 COPY --from=build /workspace/artifacts/qorix-markets/dist/public /usr/share/nginx/html
+# Restore large static assets from the previous deployment.
+# These files are excluded from the build context to keep uploads fast.
+# The --link flag makes this a no-op if the source path doesn't exist in
+# prev_static (e.g. on the very first deploy when PREV_IMAGE=nginx:alpine).
+COPY --from=prev_static --link /usr/share/nginx/html/banners /usr/share/nginx/html/banners
+COPY --from=prev_static --link /usr/share/nginx/html/promo /usr/share/nginx/html/promo
 COPY artifacts/qorix-markets/nginx.conf /etc/nginx/conf.d/default.conf
 
 EXPOSE 8080

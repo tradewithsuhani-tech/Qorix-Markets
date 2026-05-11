@@ -7,9 +7,20 @@ export type ErrorType<T = unknown> = ApiError<T>;
 export type BodyType<T> = T;
 
 export type AuthTokenGetter = () => Promise<string | null> | string | null;
+export type CsrfHeadersGetter = () => Promise<Record<string, string>>;
+export type CsrfInvalidator = () => void;
 
 const NO_BODY_STATUS = new Set([204, 205, 304]);
 const DEFAULT_JSON_ACCEPT = "application/json, application/problem+json";
+const STATE_CHANGING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+const CSRF_ERROR_CODES = new Set([
+  "CSRF_REQUIRED",
+  "CSRF_INVALID",
+  "CSRF_EXPIRED",
+  "CSRF_BAD_SIG",
+  "CSRF_UA_MISMATCH",
+  "CSRF_MALFORMED",
+]);
 
 // ---------------------------------------------------------------------------
 // Module-level configuration
@@ -17,6 +28,8 @@ const DEFAULT_JSON_ACCEPT = "application/json, application/problem+json";
 
 let _baseUrl: string | null = null;
 let _authTokenGetter: AuthTokenGetter | null = null;
+let _csrfHeadersGetter: CsrfHeadersGetter | null = null;
+let _csrfInvalidator: CsrfInvalidator | null = null;
 export type MaintenanceHandler = (
   message: string | undefined,
   endsAt?: string | undefined,
@@ -44,6 +57,24 @@ export function setPendingCaptchaToken(token: string | null): void {
  */
 export function setBaseUrl(url: string | null): void {
   _baseUrl = url ? url.replace(/\/+$/, "") : null;
+}
+
+/**
+ * Register a getter that returns CSRF headers (e.g. `{ "X-CSRF-Token": "..." }`)
+ * to attach to every state-changing request. Pass `null` to clear.
+ * When set, customFetch will call this before every POST/PUT/PATCH/DELETE.
+ */
+export function setCsrfHeadersGetter(getter: CsrfHeadersGetter | null): void {
+  _csrfHeadersGetter = getter;
+}
+
+/**
+ * Register a callback that invalidates the CSRF token cache. Called when the
+ * server returns a 403 with a CSRF_* error code so the next retry fetches
+ * a fresh token. Pass `null` to clear.
+ */
+export function setCsrfInvalidator(invalidator: CsrfInvalidator | null): void {
+  _csrfInvalidator = invalidator;
 }
 
 /**
@@ -420,9 +451,38 @@ export async function customFetch<T = unknown>(
     }
   }
 
+  // B30 CSRF: attach HMAC anti-replay token on state-changing methods.
+  // getCsrfHeaders() returns {} when CSRF is disabled server-side, so
+  // this is a no-op until the operator opts in via CSRF_HMAC_SECRET.
+  const isStateChanging = STATE_CHANGING_METHODS.has(method);
+  if (isStateChanging && _csrfHeadersGetter) {
+    const csrfHeaders = await _csrfHeadersGetter();
+    for (const [k, v] of Object.entries(csrfHeaders)) {
+      headers.set(k, v);
+    }
+  }
+
   const requestInfo = { method, url: resolveUrl(input) };
 
-  const response = await fetch(input, { ...init, method, headers });
+  let response = await fetch(input, { ...init, method, headers });
+
+  // B30 CSRF retry: on a CSRF_* 403, invalidate the cache and retry once.
+  // Two-attempt cap prevents infinite loops if the server keeps rejecting.
+  if (isStateChanging && response.status === 403 && _csrfHeadersGetter) {
+    const errorPeek = await parseErrorBody(response.clone(), method);
+    const code = errorPeek && typeof errorPeek === "object"
+      ? (errorPeek as { code?: unknown }).code
+      : undefined;
+    if (typeof code === "string" && CSRF_ERROR_CODES.has(code)) {
+      if (_csrfInvalidator) _csrfInvalidator();
+      const freshCsrfHeaders = await _csrfHeadersGetter();
+      const retryHeaders = new Headers(headers);
+      for (const [k, v] of Object.entries(freshCsrfHeaders)) {
+        retryHeaders.set(k, v);
+      }
+      response = await fetch(input, { ...init, method, headers: retryHeaders });
+    }
+  }
 
   if (!response.ok) {
     const errorData = await parseErrorBody(response, method);

@@ -31,6 +31,13 @@ backup.sql.b64
 otp-server
 artifacts/mockup-sandbox
 
+# Large static image assets that are already in the deployed image.
+# Excluded from build context to keep uploads fast (banners ~90MB, promo ~12MB).
+# The Dockerfile runtime stage copies them from the previous deployed image via
+# the PREV_IMAGE build arg. On first-ever deploy, provide a fallback image tag.
+artifacts/qorix-markets/public/banners
+artifacts/qorix-markets/public/promo
+
 **/.DS_Store
 Thumbs.db
 .idea

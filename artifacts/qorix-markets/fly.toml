@@ -36,6 +36,12 @@ primary_region = "bom"
     VITE_RECAPTCHA_SITE_KEY = ""
     VITE_TURNSTILE_SITE_KEY = "0x4AAAAAADF7hL3-sNctEdTJ"
     VITE_CAPTCHA_PROVIDER   = "turnstile"
+    # Tag of the last deployed image — updated after each successful deploy.
+    # Large static assets (banners ~90 MB, promo ~12 MB) are excluded from the
+    # build context (.dockerignore); the Dockerfile runtime stage copies them
+    # from this image instead so every deploy stays fast.
+    # Override per-deploy: flyctl deploy --build-arg PREV_IMAGE=registry.fly.io/qorix-markets-web:<tag>
+    PREV_IMAGE              = "registry.fly.io/qorix-markets-web:deployment-01KRA6GQ74JHKY4ZRNHMEWKCCC"
 
 # ─── Runtime env ────────────────────────────────────────────────────────────
 [env]

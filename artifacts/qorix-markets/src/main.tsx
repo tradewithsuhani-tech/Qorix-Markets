@@ -1,6 +1,7 @@
 import { createRoot } from "react-dom/client";
-import { setBaseUrl, setMaintenanceHandler } from "@workspace/api-client-react";
+import { setBaseUrl, setMaintenanceHandler, setCsrfHeadersGetter, setCsrfInvalidator } from "@workspace/api-client-react";
 import { notifyMaintenance } from "@/lib/maintenance-state";
+import { getCsrfHeaders, invalidateCsrfToken } from "@/lib/csrf-token";
 import { captureReferralFromUrl } from "@/lib/referral";
 import { initAnalytics } from "@/lib/analytics";
 import App from "./App";
@@ -41,6 +42,12 @@ try {
 // X-Maintenance-Mode header) into the global maintenance store so the
 // inline banner shows up automatically during the Mumbai-DB cutover.
 setMaintenanceHandler((message) => notifyMaintenance(message));
+
+// B30 CSRF: wire the shared token cache into the orval-generated client so
+// every mutation (register, login, deposit, withdraw, etc.) automatically
+// carries the X-CSRF-Token header — matching what authFetch already does.
+setCsrfHeadersGetter(getCsrfHeaders);
+setCsrfInvalidator(invalidateCsrfToken);
 
 // ─── API base URL wiring ────────────────────────────────────────────────────
 // In Replit dev, the Vite dev server proxies /api → localhost:8080, so

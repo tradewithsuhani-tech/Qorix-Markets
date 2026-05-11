@@ -5,12 +5,16 @@ export {
   setAuthTokenGetter,
   setMaintenanceHandler,
   setPendingCaptchaToken,
+  setCsrfHeadersGetter,
+  setCsrfInvalidator,
   customFetch,
   ApiError,
   ResponseParseError,
 } from "./custom-fetch";
 export type {
   AuthTokenGetter,
+  CsrfHeadersGetter,
+  CsrfInvalidator,
   CustomFetchOptions,
   ErrorType,
   BodyType,
