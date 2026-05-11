@@ -850,6 +850,7 @@ async function findRecipient(senderId: number, code: string) {
       fullName: usersTable.fullName,
       email: usersTable.email,
       referralCode: usersTable.referralCode,
+      kycStatus: usersTable.kycStatus,
     })
     .from(usersTable)
     .where(or(...conditions))
@@ -884,8 +885,13 @@ router.get("/wallet/lookup-user", async (req: AuthRequest, res) => {
     res.status(400).json({ found: false, self: true });
     return;
   }
+  if (match.kycStatus !== "approved") {
+    res.status(200).json({ found: true, kycNotDone: true, name: maskName(match.fullName), referralCode: match.referralCode });
+    return;
+  }
   res.json({
     found: true,
+    kycNotDone: false,
     recipientId: match.id,
     name: maskName(match.fullName),
     referralCode: match.referralCode,
@@ -931,6 +937,10 @@ router.post("/wallet/transfer-to-user", async (req: AuthRequest, res) => {
     }
     if (recipient.id === req.userId!) {
       res.status(400).json({ error: "Cannot transfer to yourself" });
+      return;
+    }
+    if (recipient.kycStatus !== "approved") {
+      res.status(403).json({ error: "recipient_kyc_required", message: "Recipient KYC not completed. They must finish verification before receiving transfers." });
       return;
     }
 

@@ -50,7 +50,7 @@ export default function WithdrawUserTransferPage() {
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
 
-  const [lookupState, setLookupState] = useState<"idle" | "loading" | "found" | "notfound" | "self">("idle");
+  const [lookupState, setLookupState] = useState<"idle" | "loading" | "found" | "notfound" | "self" | "kyc_not_done">("idle");
   const [recipient, setRecipient] = useState<Recipient | null>(null);
 
   const [showConfirm, setShowConfirm] = useState(false);
@@ -73,7 +73,10 @@ export default function WithdrawUserTransferPage() {
     lookupTimer.current = setTimeout(async () => {
       try {
         const res = await apiFetch(`/wallet/lookup-user?code=${encodeURIComponent(trimmed)}`);
-        if ((res as any)?.found) {
+        if ((res as any)?.found && (res as any)?.kycNotDone) {
+          setRecipient(res as Recipient);
+          setLookupState("kyc_not_done");
+        } else if ((res as any)?.found) {
           setRecipient(res as Recipient);
           setLookupState("found");
         } else if ((res as any)?.self) {
@@ -102,7 +105,7 @@ export default function WithdrawUserTransferPage() {
   const min = 1;
   const exceedsBal = numAmount > mainBal;
   const validAmount = numAmount >= min && !exceedsBal;
-  const canContinue = lookupState === "found" && validAmount;
+  const canContinue = lookupState === "found" && validAmount && recipient != null;
 
   const inrEquiv = numAmount * FX_RATE;
 
@@ -226,6 +229,7 @@ export default function WithdrawUserTransferPage() {
               lookupState === "found" ? "border-emerald-400/45" :
               lookupState === "notfound" ? "border-rose-500/45" :
               lookupState === "self" ? "border-amber-500/45" :
+              lookupState === "kyc_not_done" ? "border-amber-500/45" :
               "border-white/[0.10]"
             )}
           >
@@ -244,6 +248,7 @@ export default function WithdrawUserTransferPage() {
             {lookupState === "found" && <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />}
             {lookupState === "notfound" && <X className="w-4 h-4 text-rose-400 shrink-0" />}
             {lookupState === "self" && <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />}
+            {lookupState === "kyc_not_done" && <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />}
           </div>
 
           {/* Recipient preview card */}
@@ -271,6 +276,15 @@ export default function WithdrawUserTransferPage() {
               <span className="text-[11.5px] text-amber-100/90 leading-snug">
                 <span className="font-semibold text-amber-300">Yeh aapka apna ID hai.</span>{" "}
                 You can&apos;t transfer funds to yourself — enter another Qorix user&apos;s ID.
+              </span>
+            </div>
+          )}
+          {lookupState === "kyc_not_done" && recipient && (
+            <div className="mt-2.5 rounded-xl border border-amber-500/30 bg-amber-500/[0.08] px-3.5 py-2.5 flex items-start gap-2">
+              <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+              <span className="text-[11.5px] text-amber-100/90 leading-snug">
+                <span className="font-semibold text-amber-300">{recipient.name} — Receiver KYC not completed.</span>{" "}
+                This user must finish KYC verification before they can receive transfers.
               </span>
             </div>
           )}
