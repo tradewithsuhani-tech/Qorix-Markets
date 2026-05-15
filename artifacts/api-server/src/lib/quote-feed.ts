@@ -9,12 +9,11 @@
  * Design goals:
  *  - "Reality feel" — terminal must visibly tick between upstream
  *    refreshes (every 1.5s frontend poll). We anchor to a real
- *    upstream quote (Coinbase spot for BTC, Stooq for forex/metals/
- *    oil) cached 30s in Redis, then apply a small smooth-ish jitter
- *    on each request so consecutive ticks differ by ~1 pip without
- *    looking like white noise.
- *  - Zero new secrets — all upstream sources are public/free APIs
- *    already used by auto-signal-engine.ts.
+ *    upstream quote (Yahoo Finance for metals/forex/oil, Coinbase
+ *    spot for BTC) cached 30s in Redis, then apply a small smooth-ish
+ *    jitter on each request so consecutive ticks differ by ~1 pip
+ *    without looking like white noise.
+ *  - Zero new secrets — Yahoo Finance is a public free API.
  *  - Zero schema change — anchors and prev-day reference values
  *    live in Redis, no DB tables touched.
  *  - Graceful degradation — if every upstream fails, we fall back
@@ -23,9 +22,7 @@
  *
  * NOTE: this module deliberately does NOT touch auto-signal-engine.
  * The engine has its own `getEntryAnchor` that uses 5-minute Kraken
- * OHLC candles (correct for trade ENTRY anchoring — that's a
- * "what was the actual market price at slot fire time" answer).
- * The terminal needs LIVE feel which means spot, not delayed OHLC.
+ * OHLC candles. The terminal needs LIVE feel which means spot.
  * Keeping these separate avoids regressing the engine.
  */
 
@@ -39,7 +36,7 @@ export type PairCfg = {
   precision: number;   // decimals to round to
   spreadPips: number;  // total spread (bid→ask) in pips
   base: number;        // hard fallback if all sources fail
-  liveSource: string;  // "coinbase:BTC-USD" | "stooq:xauusd" | …
+  yahooSymbol: string; // Yahoo Finance symbol for spot + prevClose
 };
 
 /**
@@ -48,10 +45,10 @@ export type PairCfg = {
  * the bid/ask split looks realistic.
  */
 export const BOT_PAIRS: PairCfg[] = [
-  { code: "XAUUSD", display: "XAU/USD", pipSize: 0.01,   precision: 2, spreadPips: 25, base: 3320,  liveSource: "stooq:xauusd"     },
-  { code: "EURUSD", display: "EUR/USD", pipSize: 0.0001, precision: 5, spreadPips: 8,  base: 1.082, liveSource: "stooq:eurusd"     },
-  { code: "BTCUSD", display: "BTC/USD", pipSize: 1,      precision: 2, spreadPips: 5,  base: 78000, liveSource: "coinbase:BTC-USD" },
-  { code: "USOIL",  display: "USOIL",   pipSize: 0.01,   precision: 2, spreadPips: 12, base: 71.80, liveSource: "stooq:cl.f"       },
+  { code: "XAUUSD", display: "XAU/USD", pipSize: 0.01,   precision: 2, spreadPips: 25, base: 4600,  yahooSymbol: "GC=F"      },
+  { code: "EURUSD", display: "EUR/USD", pipSize: 0.0001, precision: 5, spreadPips: 8,  base: 1.165, yahooSymbol: "EURUSD=X"  },
+  { code: "BTCUSD", display: "BTC/USD", pipSize: 1,      precision: 2, spreadPips: 5,  base: 80000, yahooSymbol: "BTC-USD"   },
+  { code: "USOIL",  display: "USOIL",   pipSize: 0.01,   precision: 2, spreadPips: 12, base: 103.0, yahooSymbol: "CL=F"      },
 ];
 
 const PAIR_BY_CODE: Record<string, PairCfg> = BOT_PAIRS.reduce(
@@ -70,15 +67,58 @@ export type Quote = {
   spreadPips: number;
   precision: number;
   pipSize: number;
-  source: string;          // upstream that won the race ("coinbase" | "stooq" | "synthetic")
+  source: string;          // upstream that won the race
   asOf: string;            // ISO of this quote's tick
   marketOpen: boolean;     // pair-specific (BTC always true)
 };
 
 /* ─────────────────────────────────────────────────────────────────
- * Upstream fetchers — all wrapped in try/catch so a single failing
- * provider can never throw out of the route handler.
+ * Upstream fetchers
  * ───────────────────────────────────────────────────────────────── */
+
+/**
+ * Yahoo Finance chart API — returns { price, prevClose } for spot
+ * price and previous-session close. Free, no API key needed.
+ * Works reliably from server IPs unlike stooq.com.
+ */
+async function fetchYahooFinance(
+  symbol: string,
+): Promise<{ price: number; prevClose: number } | null> {
+  try {
+    const url =
+      `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}` +
+      `?interval=1m&range=1d`;
+    const res = await fetch(url, {
+      headers: { "User-Agent": "Mozilla/5.0" },
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!res.ok) return null;
+    const j = (await res.json()) as {
+      chart?: {
+        result?: Array<{
+          meta?: {
+            regularMarketPrice?: number;
+            chartPreviousClose?: number;
+          };
+        }>;
+        error?: unknown;
+      };
+    };
+    if (j.chart?.error) return null;
+    const meta = j.chart?.result?.[0]?.meta;
+    const price = meta?.regularMarketPrice;
+    const prevClose = meta?.chartPreviousClose;
+    if (!price || !Number.isFinite(price) || price <= 0) return null;
+    const prev =
+      prevClose && Number.isFinite(prevClose) && prevClose > 0
+        ? prevClose
+        : price; // fallback: use current price (change = 0) rather than crash
+    return { price, prevClose: prev };
+  } catch (err: any) {
+    logger.warn({ err: err?.message ?? err, symbol }, "[quote-feed] yahoo failed");
+    return null;
+  }
+}
 
 async function fetchCoinbaseSpot(pair: string): Promise<number | null> {
   try {
@@ -96,106 +136,65 @@ async function fetchCoinbaseSpot(pair: string): Promise<number | null> {
   }
 }
 
-async function fetchKrakenSpot(krakenPair: string): Promise<number | null> {
+async function fetchCoinbase24hOpen(): Promise<number | null> {
   try {
-    // Ticker endpoint returns LAST trade price (`c[0]`) — true spot,
-    // not the 5-min OHLC delayed close that auto-signal-engine uses.
     const res = await fetch(
-      `https://api.kraken.com/0/public/Ticker?pair=${krakenPair}`,
+      "https://api.exchange.coinbase.com/products/BTC-USD/stats",
       { signal: AbortSignal.timeout(4000) },
     );
     if (!res.ok) return null;
-    const j = (await res.json()) as { error?: string[]; result?: Record<string, { c?: string[] }> };
-    if (j.error && j.error.length > 0) return null;
-    const result = j.result ?? {};
-    const k = Object.keys(result).find((kk) => kk !== "last");
-    if (!k) return null;
-    const c = result[k]?.c?.[0];
-    const p = parseFloat(c ?? "");
+    const j = (await res.json()) as { open?: string };
+    const p = parseFloat(j.open ?? "");
     return Number.isFinite(p) && p > 0 ? p : null;
   } catch (err: any) {
-    logger.warn({ err: err?.message ?? err, krakenPair }, "[quote-feed] kraken failed");
+    logger.warn({ err: err?.message ?? err }, "[quote-feed] coinbase-stats failed");
     return null;
   }
 }
 
-async function fetchStooqLast(stooqSymbol: string): Promise<number | null> {
-  try {
-    const res = await fetch(
-      `https://stooq.com/q/l/?s=${stooqSymbol}&f=sd2t2ohlcv&h&e=csv`,
-      { signal: AbortSignal.timeout(4000) },
-    );
-    if (!res.ok) return null;
-    const txt = await res.text();
-    const lines = txt.trim().split(/\r?\n/);
-    if (lines.length < 2) return null;
-    const cols = lines[1]!.split(",");
-    // CSV columns: Symbol,Date,Time,Open,High,Low,Close,Volume → close = idx 6
-    const close = parseFloat(cols[6] ?? "");
-    return Number.isFinite(close) && close > 0 ? close : null;
-  } catch (err: any) {
-    logger.warn({ err: err?.message ?? err, stooqSymbol }, "[quote-feed] stooq failed");
-    return null;
+/** Fetch anchor + prevClose for a pair. */
+async function fetchAnchorWithPrev(
+  pair: PairCfg,
+): Promise<{ price: number; prevClose: number; source: string } | null> {
+  // Primary: Yahoo Finance (works from server, returns prevClose too)
+  const yahoo = await fetchYahooFinance(pair.yahooSymbol);
+  if (yahoo) {
+    return { price: yahoo.price, prevClose: yahoo.prevClose, source: "yahoo" };
   }
-}
 
-async function fetchAnchor(pair: PairCfg): Promise<{ price: number; source: string } | null> {
-  const [provider, sym] = pair.liveSource.split(":");
-  if (!provider || !sym) return null;
-  if (provider === "coinbase") {
-    const p = await fetchCoinbaseSpot(sym);
-    if (p) return { price: p, source: "coinbase" };
-  }
-  if (provider === "kraken") {
-    const p = await fetchKrakenSpot(sym);
-    if (p) return { price: p, source: "kraken" };
-    // BTC fallback → coinbase spot
-    if (sym === "XBTUSD") {
-      const p2 = await fetchCoinbaseSpot("BTC-USD");
-      if (p2) return { price: p2, source: "coinbase" };
+  // BTC fallback: Coinbase spot + 24h open
+  if (pair.code === "BTCUSD") {
+    const price = await fetchCoinbaseSpot("BTC-USD");
+    if (price) {
+      const open = (await fetchCoinbase24hOpen()) ?? price;
+      return { price, prevClose: open, source: "coinbase" };
     }
   }
-  if (provider === "stooq") {
-    const p = await fetchStooqLast(sym);
-    if (p) return { price: p, source: "stooq" };
-  }
+
   return null;
 }
 
 /* ─────────────────────────────────────────────────────────────────
- * Market-hours gate — mirrors the gate in auto-signal-engine.ts so
- * the terminal "MARKETS CLOSED" overlay agrees with the engine's
- * trade-firing schedule.
+ * Market-hours gate
  * ───────────────────────────────────────────────────────────────── */
 export function isForexMarketOpen(at: Date = new Date()): boolean {
-  const day = at.getUTCDay();   // 0=Sun … 6=Sat
+  const day = at.getUTCDay();
   const hour = at.getUTCHours();
-  if (day === 6) return false;                       // Saturday: closed all day
-  if (day === 5 && hour >= 22) return false;         // Friday: closed after 22 UTC
-  if (day === 0 && hour < 22) return false;          // Sunday: closed until 22 UTC
-  if (day >= 1 && day <= 4 && hour === 21) return false; // Mon–Thu CME maintenance
+  if (day === 6) return false;
+  if (day === 5 && hour >= 22) return false;
+  if (day === 0 && hour < 22) return false;
+  if (day >= 1 && day <= 4 && hour === 21) return false;
   return true;
 }
 
-/** BTC trades 24/7; everything else follows forex hours. */
 function isPairOpen(code: string, at: Date = new Date()): boolean {
   if (code === "BTCUSD") return true;
   return isForexMarketOpen(at);
 }
 
 /* ─────────────────────────────────────────────────────────────────
- * Live tick layer
- *
- * The cached anchor refreshes every 30s — but the terminal polls
- * /quotes every ~1.5s. Without jitter, 20 consecutive polls would
- * see the EXACT same number frozen on screen — which kills the
- * "live" illusion. We add a deterministic-ish jitter on top of the
- * anchor:
- *   - Two slow sine waves (periods ~13s and ~7s) drive smooth
- *     wave-like movement → looks like real price action, not noise
- *   - A tiny random component layered on top → micro-volatility
- *   - All scaled to ±~1.5 pips so the ticker visibly moves but
- *     never drifts unrealistically far from the upstream anchor
+ * Live tick jitter — makes the terminal visibly tick between
+ * upstream refreshes (every 30s) so it doesn't look frozen.
  * ───────────────────────────────────────────────────────────────── */
 function tickJitterPips(): number {
   const t = Date.now() / 1000;
@@ -207,7 +206,7 @@ function tickJitterPips(): number {
 const ANCHOR_KEY = (code: string) => `bot:quote-anchor:${code}`;
 const PREV_DAY_KEY = (code: string) => `bot:quote-prev-day:${code}`;
 const ANCHOR_TTL_SEC = 30;
-const PREV_DAY_TTL_SEC = 6 * 3600; // 6h — refreshed by first call after expiry
+const PREV_DAY_TTL_SEC = 6 * 3600; // 6h — refreshed after expiry
 
 /* ─────────────────────────────────────────────────────────────────
  * Public API
@@ -229,32 +228,31 @@ export async function getQuote(code: string): Promise<Quote | null> {
       }
     }
   } catch (err: any) {
-    // Redis blip — fall through to upstream fetch. Bot terminal
-    // must NEVER 500 because of an Upstash wobble.
     logger.debug({ err: err?.message ?? err, code }, "[quote-feed] anchor read failed");
   }
 
   // 2. Refresh upstream if cache miss/expired
+  let freshPrevClose: number | null = null;
   if (!anchor) {
-    anchor = await fetchAnchor(pair);
-    if (!anchor) {
-      // Total upstream failure — last-resort fallback so the
-      // terminal stays alive. Operator sees source='synthetic'
-      // in the response and knows to investigate.
+    const upstream = await fetchAnchorWithPrev(pair);
+    if (upstream) {
+      anchor = { price: upstream.price, source: upstream.source };
+      freshPrevClose = upstream.prevClose;
+    } else {
+      // Total upstream failure — synthetic fallback
       anchor = { price: pair.base, source: "synthetic" };
+      freshPrevClose = pair.base;
     }
     try {
       await redis.set(ANCHOR_KEY(pair.code), JSON.stringify(anchor), "EX", ANCHOR_TTL_SEC);
     } catch {
-      /* best-effort cache write */
+      /* best-effort */
     }
   }
 
-  // 3. Previous-day reference for change24h. Lazy-seeded on first
-  //    call so we don't need a cron — first poll of the day stamps
-  //    the anchor price as "yesterday's close" and 6h later it
-  //    rolls forward. Imperfect vs a real prev-day close but
-  //    realistic enough for terminal UX.
+  // 3. Previous-day reference for change24h.
+  // When the key doesn't exist, seed it from the real upstream prevClose
+  // (not the current price) so change24h reflects a meaningful delta.
   let prevDay = anchor.price;
   try {
     const cachedPrev = await redis.get(PREV_DAY_KEY(pair.code));
@@ -262,7 +260,12 @@ export async function getQuote(code: string): Promise<Quote | null> {
       const v = parseFloat(cachedPrev);
       if (Number.isFinite(v) && v > 0) prevDay = v;
     } else {
-      await redis.set(PREV_DAY_KEY(pair.code), String(anchor.price), "EX", PREV_DAY_TTL_SEC);
+      // Seed with real previous-close if we just fetched it, else use current anchor.
+      // Using current anchor here means change = 0 initially, but only until
+      // the next cache expiry (6h) when a real prevClose is fetched.
+      const seedValue = freshPrevClose ?? anchor.price;
+      prevDay = seedValue;
+      await redis.set(PREV_DAY_KEY(pair.code), String(seedValue), "EX", PREV_DAY_TTL_SEC);
     }
   } catch {
     /* prev-day is non-critical */
@@ -295,9 +298,6 @@ export async function getQuote(code: string): Promise<Quote | null> {
 }
 
 export async function getAllQuotes(): Promise<Quote[]> {
-  // Parallel — each pair's upstream is independent. Worst case
-  // one pair times out at 4s while others return instantly; we
-  // accept the slowest pair's latency as the bound.
   const quotes = await Promise.all(BOT_PAIRS.map((p) => getQuote(p.code)));
   return quotes.filter((q): q is Quote => q !== null);
 }
