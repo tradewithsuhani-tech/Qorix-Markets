@@ -13,6 +13,8 @@ primary_region = 'bom'
   CORS_ORIGIN = 'https://qorixmarkets.com,https://www.qorixmarkets.com,https://qorix-markets-web.fly.dev'
   NODE_ENV = 'production'
   PORT = '8080'
+  ADMIN_TELEGRAM_CHAT = '@qorixmarketschat'
+  ADMIN_ALERT_EMAIL = 'looxprem@gmail.com'
   # RUN_BACKGROUND_JOBS is intentionally NOT set here. src/index.ts derives
   # it from FLY_PROCESS_GROUP (auto-set by Fly per process group below):
   #   app    → false  (web HTTP traffic only)

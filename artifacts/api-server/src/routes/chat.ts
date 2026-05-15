@@ -26,6 +26,7 @@ import {
 } from "../lib/chat-llm";
 import { isLLMAvailable } from "../lib/openai-client";
 import { sendTelegramMessage } from "../lib/telegram";
+import { sendEmail } from "../lib/email-service";
 import {
   getChatSettings,
   invalidateChatSettings,
@@ -520,8 +521,26 @@ async function notifyAdminsOfExpertRequest(
         { sessionId, userId, sharedChat, ok: r.ok },
         "[chat/expert] shared-channel telegram notify dispatched",
       );
-      return;
     }
+
+    // Always send email alert to the configured admin email address.
+    const alertEmail = (process.env.ADMIN_ALERT_EMAIL ?? "").trim();
+    if (alertEmail) {
+      const emailSubject = `🚨 New Expert Chat Request — ${u.fullName}`;
+      const emailText =
+        `Someone needs expert help in the support chat!\n\n` +
+        `User: ${u.fullName} (${u.email})\n` +
+        `Last message: "${lastMsg}"\n\n` +
+        `👉 Open chat: https://qorixmarkets.com/admin/chats?id=${sessionId}`;
+      try {
+        await sendEmail(alertEmail, emailSubject, emailText);
+        logger.info({ sessionId, alertEmail }, "[chat/expert] admin email alert sent");
+      } catch (err) {
+        logger.warn({ err: (err as Error).message }, "[chat/expert] admin email alert failed");
+      }
+    }
+
+    if (sharedChat) return;
 
     // FALLBACK: when ADMIN_TELEGRAM_CHAT isn't set, fan-out to every
     // admin who has personally bound Telegram. Keeps backward-compat
