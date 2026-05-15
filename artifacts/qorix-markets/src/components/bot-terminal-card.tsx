@@ -689,9 +689,7 @@ function LiveCandleChart({
   const totalOpenPnl = useMemo(() => {
     if (!quote?.mid || !Number.isFinite(quote.mid)) return 0;
     let sum = 0;
-    const sizeBuckets = [
-      0.01, 0.01, 0.01, 0.01, 0.02, 0.01, 0.01, 0.05, 0.01, 0.01,
-    ];
+    const sizeBuckets = [0.01];
     for (const p of positions) {
       if (!Number.isFinite(p.entryPrice)) continue;
       const isBuy = p.direction.toUpperCase() === "BUY";
@@ -1088,10 +1086,7 @@ function LiveCandleChart({
             // Synthetic lot size — deterministic per position id so it
             // stays stable across re-renders. Mostly 0.01 Lots, with
             // occasional 0.02/0.05 for variety.
-            const sizeBuckets = [
-              0.01, 0.01, 0.02, 0.01, 0.03, 0.01, 0.02, 0.01, 0.05, 0.01,
-              0.01, 0.02, 0.03, 0.01, 0.01, 0.02, 0.01, 0.10, 0.01, 0.02,
-            ];
+            const sizeBuckets = [0.01];
             const lots =
               sizeBuckets[Math.abs(p.id) % sizeBuckets.length];
 
