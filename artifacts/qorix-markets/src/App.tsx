@@ -18,35 +18,154 @@ import { useLocation } from "wouter";
 import { useEffect, useState } from "react";
 
 function OfflineScreen() {
+  const [dots, setDots] = useState(0);
+  const [retrying, setRetrying] = useState(false);
+
+  useEffect(() => {
+    const id = setInterval(() => setDots((d) => (d + 1) % 4), 600);
+    return () => clearInterval(id);
+  }, []);
+
+  const handleRetry = () => {
+    setRetrying(true);
+    setTimeout(() => window.location.reload(), 800);
+  };
+
   return (
-    <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-[#0a0e1a]">
-      <div className="flex flex-col items-center gap-6 px-8 text-center max-w-sm">
-        <div className="w-20 h-20 rounded-2xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center">
-          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="1" y1="1" x2="23" y2="23"/>
-            <path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/>
-            <path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/>
-            <path d="M10.71 5.05A16 16 0 0 1 22.56 9"/>
-            <path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"/>
-            <path d="M8.53 16.11a6 6 0 0 1 6.95 0"/>
-            <line x1="12" y1="20" x2="12.01" y2="20"/>
-          </svg>
+    <>
+      <style>{`
+        @keyframes qx-float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-12px)} }
+        @keyframes qx-pulse-ring { 0%{transform:scale(1);opacity:.6} 100%{transform:scale(2.4);opacity:0} }
+        @keyframes qx-grid-fade { 0%,100%{opacity:.03} 50%{opacity:.07} }
+        @keyframes qx-orb1 { 0%,100%{transform:translate(0,0)} 33%{transform:translate(40px,-30px)} 66%{transform:translate(-20px,20px)} }
+        @keyframes qx-orb2 { 0%,100%{transform:translate(0,0)} 33%{transform:translate(-50px,20px)} 66%{transform:translate(30px,-40px)} }
+        @keyframes qx-shimmer { 0%{background-position:200% center} 100%{background-position:-200% center} }
+        .qx-float { animation: qx-float 3.5s ease-in-out infinite; }
+        .qx-ring { animation: qx-pulse-ring 2s ease-out infinite; }
+        .qx-ring-2 { animation: qx-pulse-ring 2s ease-out infinite .7s; }
+        .qx-grid { animation: qx-grid-fade 4s ease-in-out infinite; }
+        .qx-orb1 { animation: qx-orb1 12s ease-in-out infinite; }
+        .qx-orb2 { animation: qx-orb2 15s ease-in-out infinite; }
+        .qx-shimmer-text {
+          background: linear-gradient(90deg, #60a5fa 0%, #a78bfa 40%, #38bdf8 60%, #60a5fa 100%);
+          background-size: 200% auto;
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+          background-clip: text;
+          animation: qx-shimmer 3s linear infinite;
+        }
+      `}</style>
+
+      <div className="fixed inset-0 z-[9999] flex items-center justify-center overflow-hidden bg-[#060912]">
+
+        {/* Ambient orbs */}
+        <div className="qx-orb1 absolute top-[-10%] left-[-5%] w-[500px] h-[500px] rounded-full"
+          style={{ background: "radial-gradient(circle, rgba(59,130,246,0.12) 0%, transparent 70%)" }} />
+        <div className="qx-orb2 absolute bottom-[-15%] right-[-5%] w-[600px] h-[600px] rounded-full"
+          style={{ background: "radial-gradient(circle, rgba(139,92,246,0.10) 0%, transparent 70%)" }} />
+
+        {/* Subtle grid */}
+        <div className="qx-grid absolute inset-0 pointer-events-none"
+          style={{
+            backgroundImage: "linear-gradient(rgba(59,130,246,1) 1px, transparent 1px), linear-gradient(90deg, rgba(59,130,246,1) 1px, transparent 1px)",
+            backgroundSize: "60px 60px",
+          }} />
+
+        {/* Card */}
+        <div className="relative flex flex-col items-center gap-8 px-10 py-12 text-center max-w-sm w-full mx-6"
+          style={{
+            background: "linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)",
+            border: "1px solid rgba(255,255,255,0.07)",
+            borderRadius: "24px",
+            backdropFilter: "blur(24px)",
+            boxShadow: "0 0 0 1px rgba(59,130,246,0.08), 0 32px 80px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.06)",
+          }}>
+
+          {/* Top accent line */}
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-24 h-px"
+            style={{ background: "linear-gradient(90deg, transparent, rgba(99,179,250,0.6), transparent)" }} />
+
+          {/* Icon with pulse rings */}
+          <div className="qx-float relative flex items-center justify-center w-24 h-24">
+            {/* Pulse rings */}
+            <div className="qx-ring absolute inset-0 rounded-full border border-blue-500/30" />
+            <div className="qx-ring-2 absolute inset-0 rounded-full border border-blue-500/20" />
+            {/* Icon container */}
+            <div className="relative w-20 h-20 rounded-2xl flex items-center justify-center"
+              style={{
+                background: "linear-gradient(135deg, rgba(59,130,246,0.15), rgba(139,92,246,0.10))",
+                border: "1px solid rgba(99,179,250,0.2)",
+                boxShadow: "0 0 30px rgba(59,130,246,0.15), inset 0 1px 0 rgba(255,255,255,0.08)",
+              }}>
+              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
+                style={{ stroke: "url(#qx-grad)", filter: "drop-shadow(0 0 8px rgba(99,179,250,0.5))" }}>
+                <defs>
+                  <linearGradient id="qx-grad" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%" stopColor="#60a5fa"/>
+                    <stop offset="100%" stopColor="#a78bfa"/>
+                  </linearGradient>
+                </defs>
+                <line x1="1" y1="1" x2="23" y2="23"/>
+                <path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/>
+                <path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/>
+                <path d="M10.71 5.05A16 16 0 0 1 22.56 9"/>
+                <path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"/>
+                <path d="M8.53 16.11a6 6 0 0 1 6.95 0"/>
+                <line x1="12" y1="20" x2="12.01" y2="20"/>
+              </svg>
+            </div>
+          </div>
+
+          {/* Text */}
+          <div className="space-y-3">
+            <h1 className="text-2xl font-bold tracking-tight">
+              <span className="qx-shimmer-text">Connection Lost</span>
+            </h1>
+            <p className="text-sm leading-relaxed" style={{ color: "rgba(255,255,255,0.45)" }}>
+              Your trading session is paused. Qorix Markets requires a live connection to protect your portfolio.
+            </p>
+          </div>
+
+          {/* Reconnecting status */}
+          <div className="flex items-center gap-2 px-4 py-2 rounded-full"
+            style={{ background: "rgba(59,130,246,0.08)", border: "1px solid rgba(59,130,246,0.15)" }}>
+            <div className="flex gap-1">
+              {[0,1,2].map((i) => (
+                <div key={i} className="w-1.5 h-1.5 rounded-full transition-all duration-300"
+                  style={{ background: dots > i ? "#60a5fa" : "rgba(99,179,250,0.2)" }} />
+              ))}
+            </div>
+            <span className="text-xs font-medium" style={{ color: "rgba(99,179,250,0.7)" }}>
+              Monitoring connection
+            </span>
+          </div>
+
+          {/* Retry button */}
+          <button
+            onClick={handleRetry}
+            disabled={retrying}
+            className="relative w-full py-3 rounded-xl text-sm font-semibold text-white overflow-hidden transition-all duration-200 disabled:opacity-60"
+            style={{
+              background: retrying
+                ? "rgba(59,130,246,0.3)"
+                : "linear-gradient(135deg, #2563eb, #4f46e5)",
+              boxShadow: retrying ? "none" : "0 0 20px rgba(59,130,246,0.3), inset 0 1px 0 rgba(255,255,255,0.1)",
+              border: "1px solid rgba(99,179,250,0.2)",
+            }}>
+            {retrying ? "Reconnecting…" : "Retry Connection"}
+          </button>
+
+          {/* Brand footer */}
+          <div className="flex items-center gap-2 mt-1">
+            <div className="w-4 h-4 rounded-md flex items-center justify-center"
+              style={{ background: "linear-gradient(135deg, #2563eb, #4f46e5)" }}>
+              <span className="text-[7px] font-black text-white">Q</span>
+            </div>
+            <span className="text-xs font-medium" style={{ color: "rgba(255,255,255,0.2)" }}>Qorix Markets</span>
+          </div>
         </div>
-        <div className="space-y-2">
-          <h1 className="text-xl font-bold text-white">No Internet Connection</h1>
-          <p className="text-sm text-white/50 leading-relaxed">
-            Please check your network and try again. Qorix Markets requires an active connection to function.
-          </p>
-        </div>
-        <button
-          onClick={() => window.location.reload()}
-          className="mt-2 px-6 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium transition-colors"
-        >
-          Retry
-        </button>
-        <p className="text-xs text-white/25">Qorix Markets</p>
       </div>
-    </div>
+    </>
   );
 }
 
