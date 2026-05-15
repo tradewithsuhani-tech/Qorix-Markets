@@ -257,12 +257,24 @@ export default function AdminChatsPage() {
   // "settings" (Task 145 Batch C — AI prompt + model + CTA copy editor).
   const [tab, setTab] = useState<AdminChatsTab>("conversations");
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const isUserScrolledUp = useRef(false);
 
-  const scrollToBottom = useCallback(() => {
+  const scrollToBottom = useCallback((force = false) => {
+    if (!force && isUserScrolledUp.current) return;
     setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
   }, []);
 
+  // Track if user has scrolled away from the bottom
+  const handleMessagesScroll = useCallback(() => {
+    const el = messagesContainerRef.current;
+    if (!el) return;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    isUserScrolledUp.current = distanceFromBottom > 80;
+  }, []);
+
+  // Auto-scroll only when user is near the bottom
   useEffect(() => { scrollToBottom(); }, [messages]);
 
   async function loadSessions() {
@@ -307,10 +319,12 @@ export default function AdminChatsPage() {
   }, [selectedSession]);
 
   async function handleSelectSession(session: Session) {
+    isUserScrolledUp.current = false;
     setSelectedSession(session);
     setMessages([]);
     setLead(null);
     await loadMessages(session.id);
+    scrollToBottom(true);
     setTimeout(() => inputRef.current?.focus(), 200);
   }
 
@@ -321,8 +335,10 @@ export default function AdminChatsPage() {
     setSending(true);
     try {
       await apiPost(`/admin/chats/${selectedSession.id}/reply`, { content });
+      isUserScrolledUp.current = false;
       await loadMessages(selectedSession.id);
       await loadSessions();
+      scrollToBottom(true);
     } catch { } finally {
       setSending(false);
     }
@@ -631,7 +647,7 @@ export default function AdminChatsPage() {
                 <SessionInsightStrip session={selectedSession} events={events} lead={lead} />
 
                 {/* Messages */}
-                <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
+                <div ref={messagesContainerRef} onScroll={handleMessagesScroll} className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
                   <AnimatePresence initial={false}>
                     {messages.map((msg) => {
                       const isUser = msg.senderType === "user";
