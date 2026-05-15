@@ -6,6 +6,7 @@ import {
   Wrench,
   TrendingUp,
   ShieldCheck,
+  Send,
   type LucideIcon,
 } from "lucide-react";
 
@@ -123,6 +124,38 @@ export const EMAIL_TEMPLATES: EmailTemplate[] = [
       "   • Priority support\n" +
       "   • Exclusive verified-only promotions\n\n" +
       "Need help? Reply to this email and our compliance team will guide you personally.\n\n" +
+      "Qorix Markets\n" +
+      "AI-Powered Trading System",
+  },
+  {
+    id: "telegram_invite",
+    icon: Send,
+    label: "Telegram Channel",
+    color: "text-sky-400 bg-sky-500/10",
+    defaultTitle: "📢 Join the Official Qorix Markets Telegram Channel",
+    defaultMessage:
+      "Dear Investor,\n\n" +
+      "We've launched our official Telegram channel — and we want you to be part of it.\n\n" +
+      "👉 Join here: https://t.me/qorixmarkets\n\n" +
+      "━━━━━━━━━━━━━━━━━━━━━\n" +
+      "🎁 WHY YOU SHOULD JOIN\n" +
+      "━━━━━━━━━━━━━━━━━━━━━\n\n" +
+      "📊  Live Trade Alerts\n" +
+      "   Get notified the moment a trade executes — before the profit is booked.\n\n" +
+      "💰  Exclusive Member Promotions\n" +
+      "   Bonus offers, deposit matches, and early-access deals — only for channel members.\n\n" +
+      "📈  Daily Market Insights\n" +
+      "   Gold, Forex, Oil, Crypto — our team shares signals and analysis every day.\n\n" +
+      "🔔  Instant Platform Updates\n" +
+      "   Maintenance windows, new features, and payout confirmations — first on Telegram.\n\n" +
+      "🏆  Community Rankings\n" +
+      "   Weekly top-performer shoutouts and referral leaderboard updates.\n\n" +
+      "🛡  Direct Support Access\n" +
+      "   Raise issues and get responses faster through our dedicated support thread.\n\n" +
+      "━━━━━━━━━━━━━━━━━━━━━\n\n" +
+      "It's free. It takes 5 seconds. And it keeps you one step ahead.\n\n" +
+      "👉 Tap to join: https://t.me/qorixmarkets\n\n" +
+      "See you inside,\n\n" +
       "Qorix Markets\n" +
       "AI-Powered Trading System",
   },
