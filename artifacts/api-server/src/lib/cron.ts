@@ -33,12 +33,13 @@ async function expireStalePromoRedemptions(): Promise<number> {
 }
 
 export async function initCronJobs(): Promise<void> {
-  // Auto daily profit accrual — runs every weekday (Mon–Fri) at 00:00 UTC
-  // and credits each active investment its per-risk monthly target / 22
-  // forex days (Conservative 4%, Balanced 6%, Aggressive 8%). No admin
+  // Auto daily profit accrual — runs every weekday (Mon–Fri) at 00:05 UTC
+  // (5 min past midnight avoids node-cron "missed execution" at boundary).
+  // Credits each active investment its per-risk monthly target / 21
+  // working days (Conservative 4%, Balanced 6%, Aggressive 8%). No admin
   // input required. If an admin override % is configured we still honour
   // it via the legacy distribute path; otherwise auto-credit kicks in.
-  cron.schedule("0 0 * * 1-5", async () => {
+  cron.schedule("5 0 * * 1-5", async () => {
     profitLogger.info("Cron: daily profit accrual — starting");
     try {
       const adminPct = await getLastDailyProfitPercent();
