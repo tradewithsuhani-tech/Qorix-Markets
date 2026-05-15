@@ -1,7 +1,8 @@
 import type { Request } from "express";
+import crypto from "crypto";
 import { db, userDevicesTable } from "@workspace/db";
-import { and, eq } from "drizzle-orm";
-import { computeDeviceFingerprint } from "../middlewares/auth.js";
+import { and, eq, or } from "drizzle-orm";
+import { computeDeviceFingerprint, parseClientDeviceId } from "../middlewares/auth.js";
 
 /**
  * B7 — 24h new-device withdrawal cooldown.
@@ -104,13 +105,31 @@ export async function checkWithdrawDeviceCooldown(
     };
   }
 
+  // When the request carries a valid X-Device-Id (UUID-based fingerprint),
+  // also compute the legacy User-Agent hash. Older device rows were created
+  // before the X-Device-Id feature shipped and carry the UA hash as their
+  // fingerprint. Accepting either lets long-standing users withdraw without
+  // a forced re-login just because their localStorage now holds a UUID.
+  const hasUuid = !!parseClientDeviceId(req);
+  const ua = (req.headers["user-agent"] ?? "") as string;
+  const uaFingerprint = hasUuid
+    ? crypto.createHash("sha256").update(ua).digest("hex").slice(0, 32)
+    : null;
+
+  const fingerprintCondition = uaFingerprint
+    ? or(
+        eq(userDevicesTable.deviceFingerprint, fingerprint),
+        eq(userDevicesTable.deviceFingerprint, uaFingerprint),
+      )
+    : eq(userDevicesTable.deviceFingerprint, fingerprint);
+
   const rows = await db
     .select({ firstSeenAt: userDevicesTable.firstSeenAt })
     .from(userDevicesTable)
     .where(
       and(
         eq(userDevicesTable.userId, userId),
-        eq(userDevicesTable.deviceFingerprint, fingerprint),
+        fingerprintCondition,
       ),
     )
     .limit(1);
