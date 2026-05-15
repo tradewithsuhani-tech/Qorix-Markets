@@ -1089,7 +1089,8 @@ function LiveCandleChart({
             // stays stable across re-renders. Mostly 0.01 Lots, with
             // occasional 0.02/0.05 for variety.
             const sizeBuckets = [
-              0.01, 0.01, 0.01, 0.01, 0.02, 0.01, 0.01, 0.05, 0.01, 0.01,
+              0.01, 0.01, 0.02, 0.01, 0.03, 0.01, 0.02, 0.01, 0.05, 0.01,
+              0.01, 0.02, 0.03, 0.01, 0.01, 0.02, 0.01, 0.10, 0.01, 0.02,
             ];
             const lots =
               sizeBuckets[Math.abs(p.id) % sizeBuckets.length];
@@ -1592,12 +1593,14 @@ type TapePrint = {
   price: number;
   pnl: number;
   at: number;
+  exchange: string;
+  orderType: "MKT" | "LMT";
 };
 
-const TAPE_MIN_DELAY_MS = 4000;
-const TAPE_MAX_DELAY_MS = 10000;
+const TAPE_MIN_DELAY_MS = 1800;
+const TAPE_MAX_DELAY_MS = 4500;
 const TAPE_MAX = 60;
-const TAPE_VISIBLE = 6;
+const TAPE_VISIBLE = 7;
 
 function randomTapeSize(code: string): number {
   if (code === "BTCUSD") {
@@ -1644,13 +1647,22 @@ function usePrintTape(quote: BotQuote | undefined): TapePrint[] {
       // Skip print generation when the underlying market is closed —
       // no fake BUY/SELL prints should appear against a frozen quote.
       if (q && Number.isFinite(q.mid) && q.marketOpen !== false) {
-        const n = 2 + Math.floor(Math.random() * 2); // 2-3 prints / burst
+        const EXCHANGES_BY_PAIR: Record<string, string[]> = {
+          XAUUSD: ["COMEX", "LBMA", "OTC", "ECN"],
+          EURUSD: ["ECN", "STP", "OTC", "LP"],
+          BTCUSD: ["Binance", "Coinbase", "Kraken", "OKX"],
+          USOIL: ["NYMEX", "ICE", "OTC", "ECN"],
+        };
+        const exchanges = EXCHANGES_BY_PAIR[q.code] ?? ["ECN", "OTC", "LP"];
+        const n = 2 + Math.floor(Math.random() * 3); // 2-4 prints / burst
         const fresh: TapePrint[] = [];
         for (let i = 0; i < n; i++) {
           const side: "BUY" | "SELL" = Math.random() > 0.5 ? "BUY" : "SELL";
           const jitter = (Math.random() - 0.5) * 2 * q.pipSize * 6;
           const pnl =
             Math.round((Math.random() * 0.25 - 0.05 + (Math.random() - 0.5) * 0.04) * 100) / 100;
+          const exchange = exchanges[Math.floor(Math.random() * exchanges.length)];
+          const orderType: "MKT" | "LMT" = Math.random() > 0.35 ? "MKT" : "LMT";
           fresh.push({
             id: idRef.current++,
             side,
@@ -1658,6 +1670,8 @@ function usePrintTape(quote: BotQuote | undefined): TapePrint[] {
             price: q.mid + jitter,
             pnl,
             at: Date.now() + i,
+            exchange,
+            orderType,
           });
         }
         setPrints((prev) => {
@@ -1750,38 +1764,38 @@ function LiveTapeStrip({
               animate={
                 expanded
                   ? { opacity: 1, x: 0 }
-                  : { opacity: 1 - idx * 0.13, x: 0, y: idx * 22 }
+                  : { opacity: 1 - idx * 0.12, x: 0, y: idx * 22 }
               }
               exit={{ opacity: 0 }}
               transition={{
-                opacity: { duration: 0.18, ease: "easeOut" },
-                x: { duration: 0.18, ease: "easeOut" },
-                y: { duration: 0.22, ease: "easeOut" },
+                opacity: { duration: 0.15, ease: "easeOut" },
+                x: { duration: 0.15, ease: "easeOut" },
+                y: { duration: 0.18, ease: "easeOut" },
               }}
               className={cn(
-                "flex items-center gap-2 sm:gap-3 tabular-nums leading-[22px] h-[22px]",
+                "flex items-center gap-1.5 sm:gap-2 tabular-nums leading-[22px] h-[22px]",
                 expanded
                   ? "border-b border-border/30 py-px"
                   : "absolute inset-x-0 top-0",
               )}
             >
-              <span className="text-muted-foreground/60 w-[68px] sm:w-[72px] shrink-0">
+              <span className="text-muted-foreground/50 w-[60px] sm:w-[68px] shrink-0 text-[11px]">
                 {new Date(p.at).toLocaleTimeString("en-US", { hour12: false })}
               </span>
               <span
                 className={cn(
-                  "w-9 sm:w-10 font-bold shrink-0",
+                  "w-8 sm:w-9 font-bold shrink-0 text-[11.5px]",
                   p.side === "BUY" ? "text-emerald-400" : "text-rose-400",
                 )}
               >
                 {p.side}
               </span>
-              <span className="w-12 sm:w-14 text-foreground/80 shrink-0">
+              <span className="w-10 sm:w-12 text-foreground/75 shrink-0 text-[11px]">
                 {quote ? formatTapeSize(quote.code, p.size) : p.size}
               </span>
               <span
                 className={cn(
-                  "tabular-nums shrink-0",
+                  "tabular-nums shrink-0 text-[11px]",
                   p.side === "BUY"
                     ? "text-emerald-400/85"
                     : "text-rose-400/85",
@@ -1789,9 +1803,19 @@ function LiveTapeStrip({
               >
                 {p.price.toFixed(precision)}
               </span>
+              {"exchange" in p && (
+                <span className="hidden sm:inline text-muted-foreground/40 text-[10px] shrink-0">
+                  {(p as TapePrint).exchange}
+                </span>
+              )}
+              {"orderType" in p && (
+                <span className="hidden sm:inline text-muted-foreground/35 text-[9.5px] shrink-0 font-semibold tracking-wide">
+                  {(p as TapePrint).orderType}
+                </span>
+              )}
               <span
                 className={cn(
-                  "tabular-nums shrink-0 ml-auto pr-1 font-semibold",
+                  "tabular-nums shrink-0 ml-auto pr-1 font-semibold text-[11px]",
                   p.pnl >= 0 ? "text-emerald-400" : "text-rose-400",
                 )}
               >
@@ -1888,34 +1912,60 @@ function JustFilledToast({ fill }: { fill: BotStateClosedTrade | null }) {
 // crossfade. Adds an "always working" presence without being noisy.
 
 const BOT_STATUS_PHRASES = [
-  "Scanning markets…",
-  "Computing risk…",
-  "Watching liquidity…",
-  "Probing depth…",
-  "Reading order flow…",
-  "Calibrating signals…",
-  "Sizing positions…",
-  "Modeling volatility…",
-  "Polling liquidity venues…",
+  "Scanning momentum — XAU/USD",
+  "Order book imbalance detected — evaluating…",
+  "Computing optimal entry zone…",
+  "Watching liquidity clusters…",
+  "Calibrating EMA crossover signal…",
+  "Reading institutional order flow…",
+  "Sizing position — risk within limits",
+  "Modeling volatility expansion…",
+  "Polling liquidity venues — 4 feeds active",
+  "Divergence confirmed — signal pending",
+  "Trailing stop advanced to breakeven",
+  "Resistance sweep in progress…",
+  "ATR within acceptable range — proceeding",
+  "VWAP cross detected — evaluating entry",
+  "Probing key support level…",
+  "High-frequency scan active — 12ms latency",
+  "Momentum shift detected — adjusting bias",
+  "RSI oversold — contrarian setup forming",
+  "Spread normalizing — entry window open",
+  "Scalp TP locked — managing open position",
+  "Volume spike — liquidity absorption check",
+  "Micro-structure shift — re-calibrating…",
 ];
 
-function BotThinkingTicker({ marketOpen = true }: { marketOpen?: boolean }) {
+function BotThinkingTicker({
+  marketOpen = true,
+  quote,
+}: {
+  marketOpen?: boolean;
+  quote?: BotQuote;
+}) {
   const [idx, setIdx] = useState(0);
-  const [latencyMs, setLatencyMs] = useState(12);
+  const [latencyMs, setLatencyMs] = useState(11);
+  const [signalStrength, setSignalStrength] = useState(72);
   useEffect(() => {
     if (!marketOpen) return;
     const id = setInterval(() => {
       setIdx((i) => (i + 1) % BOT_STATUS_PHRASES.length);
-      // Pseudo-random latency 8-22ms so the status line feels alive
-      setLatencyMs(8 + Math.floor(Math.random() * 15));
-    }, 2800);
+      setLatencyMs(6 + Math.floor(Math.random() * 18));
+      setSignalStrength(58 + Math.floor(Math.random() * 38));
+    }, 2200);
     return () => clearInterval(id);
   }, [marketOpen]);
+
   const phrase = marketOpen
     ? BOT_STATUS_PHRASES[idx]
     : "Market closed — bot paused until session reopens";
+  const priceTag =
+    marketOpen && quote
+      ? quote.mid.toFixed(quote.precision)
+      : null;
+
   return (
-    <div className="px-3 sm:px-4 py-1.5 border-b bg-background/30 flex items-center gap-2.5 text-[10.5px] font-mono text-muted-foreground overflow-hidden">
+    <div className="px-3 sm:px-4 py-1.5 border-b bg-background/30 flex items-center gap-2 text-[10.5px] font-mono text-muted-foreground overflow-hidden">
       <span className="relative flex h-1.5 w-1.5 shrink-0">
         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-70" />
         <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-400" />
@@ -1931,19 +1981,26 @@ function BotThinkingTicker({ marketOpen = true }: { marketOpen?: boolean }) {
             initial={{ opacity: 0, y: 4 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -4 }}
-            transition={{ duration: 0.24, ease: "easeOut" }}
+            transition={{ duration: 0.2, ease: "easeOut" }}
             className="absolute inset-0 truncate text-foreground/70"
           >
             {phrase}
           </motion.span>
         </AnimatePresence>
       </div>
+      {priceTag && (
+        <span className="hidden sm:inline shrink-0 font-bold text-amber-400/80 tabular-nums text-[9.5px]">
+          @{priceTag}
+        </span>
+      )}
+      <span className="hidden sm:inline shrink-0 text-muted-foreground/30">·</span>
+      <span className="hidden sm:inline shrink-0 text-emerald-400/60 tabular-nums text-[9.5px]">
+        {signalStrength}%
+      </span>
       <span className="hidden xs:inline shrink-0 text-muted-foreground/50 tabular-nums text-[9.5px]">
         {latencyMs}ms
       </span>
-      <span className="hidden sm:inline shrink-0 text-muted-foreground/30">
-        ·
-      </span>
+      <span className="hidden sm:inline shrink-0 text-muted-foreground/30">·</span>
       <span className="hidden sm:inline shrink-0 text-muted-foreground/40 tracking-[0.18em] text-[9.5px] font-semibold">
         AUTOPILOT
       </span>
@@ -2517,7 +2574,7 @@ export function BotTerminalCard({
       {activeTab === "charts" && (
         <>
           <ChartHeader quote={featured} />
-          <BotThinkingTicker marketOpen={featuredMarketOpen} />
+          <BotThinkingTicker marketOpen={featuredMarketOpen} quote={featured} />
           {scalpEvents.length > 0 && (
             <div className="px-3 py-1 flex items-center gap-1.5 text-[10px] font-mono border-t bg-background/30 overflow-hidden">
               <span className="text-muted-foreground/60 shrink-0 tracking-wider font-semibold">
@@ -2710,7 +2767,73 @@ function TerminalTabBar({
 
 const QUOTES_PRIORITY = ["XAUUSD", "EURUSD", "BTCUSD", "USOIL", "GBPUSD", "USDJPY"];
 
+/** Mini depth ladder — 4 ask + 4 bid levels around current mid */
+function MiniDepth({ q }: { q: BotQuote }) {
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setTick((t) => (t + 1) & 0xffff), 1200);
+    return () => clearInterval(id);
+  }, []);
+
+  const levels = 4;
+  const step = q.pipSize * q.spreadPips * 0.6;
+  const rows: { price: number; vol: number; side: "ask" | "bid" }[] = [];
+
+  for (let i = levels; i >= 1; i--) {
+    const price = q.ask + step * i * (0.8 + Math.random() * 0.4);
+    const vol = Math.round(10 + Math.random() * 190);
+    rows.push({ price, vol, side: "ask" });
+  }
+  for (let i = 1; i <= levels; i++) {
+    const price = q.bid - step * i * (0.8 + Math.random() * 0.4);
+    const vol = Math.round(10 + Math.random() * 190);
+    rows.push({ price, vol, side: "bid" });
+  }
+  const maxVol = Math.max(...rows.map((r) => r.vol));
+
+  return (
+    <div className="mt-1.5 font-mono text-[10px]">
+      {rows.slice(0, levels).map((r, i) => (
+        <div key={`a${i}`} className="flex items-center gap-1.5 h-[16px] relative">
+          <div
+            className="absolute right-0 top-0 h-full bg-rose-500/10 rounded-sm"
+            style={{ width: `${(r.vol / maxVol) * 55}%` }}
+          />
+          <span className="text-rose-400/70 w-[70px] tabular-nums text-right z-[1]">
+            {r.price.toFixed(q.precision)}
+          </span>
+          <span className="text-muted-foreground/50 tabular-nums w-[36px] text-right z-[1]">
+            {r.vol}
+          </span>
+        </div>
+      ))}
+      <div className="flex items-center gap-1.5 h-[18px] my-0.5">
+        <span className="text-amber-400 font-bold w-[70px] tabular-nums text-right">
+          {formatPrice(q.mid, q.precision)}
+        </span>
+        <span className="text-muted-foreground/40 text-[9px]">MID</span>
+      </div>
+      {rows.slice(levels).map((r, i) => (
+        <div key={`b${i}`} className="flex items-center gap-1.5 h-[16px] relative">
+          <div
+            className="absolute right-0 top-0 h-full bg-emerald-500/10 rounded-sm"
+            style={{ width: `${(r.vol / maxVol) * 55}%` }}
+          />
+          <span className="text-emerald-400/70 w-[70px] tabular-nums text-right z-[1]">
+            {r.price.toFixed(q.precision)}
+          </span>
+          <span className="text-muted-foreground/50 tabular-nums w-[36px] text-right z-[1]">
+            {r.vol}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function QuotesPanel({ quotes }: { quotes: BotQuote[] }) {
+  const [expandedCode, setExpandedCode] = useState<string | null>("XAUUSD");
+
   const sorted = useMemo(() => {
     const idx = (c: string) => {
       const i = QUOTES_PRIORITY.indexOf(c);
@@ -2736,43 +2859,65 @@ function QuotesPanel({ quotes }: { quotes: BotQuote[] }) {
       </div>
       {sorted.map((q) => {
         const up = q.change24h >= 0;
+        const isExpanded = expandedCode === q.code;
         return (
           <div
             key={q.code}
-            className="grid grid-cols-[1fr_auto_auto] gap-3 px-3 py-2.5 items-center"
+            className="px-3 py-2 cursor-pointer select-none"
+            onClick={() => setExpandedCode(isExpanded ? null : q.code)}
           >
-            <div className="min-w-0">
-              <div className="font-bold text-[13px] tracking-wide truncate">
-                {q.display ?? q.code}
-              </div>
-              <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-                <span
-                  className={cn(
-                    "tabular-nums font-semibold",
-                    up ? "text-emerald-400" : "text-rose-400",
+            <div className="grid grid-cols-[1fr_auto_auto] gap-3 items-center">
+              <div className="min-w-0">
+                <div className="font-bold text-[13px] tracking-wide truncate flex items-center gap-1.5">
+                  {q.display ?? q.code}
+                  <span className="text-muted-foreground/30 text-[10px] font-normal">
+                    {isExpanded ? "▲" : "▼"}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+                  <span
+                    className={cn(
+                      "tabular-nums font-semibold",
+                      up ? "text-emerald-400" : "text-rose-400",
+                    )}
+                  >
+                    {up ? "▲" : "▼"} {Math.abs(q.change24h).toFixed(2)}%
+                  </span>
+                  <span className="opacity-60">spread {q.spreadPips.toFixed(1)}p</span>
+                  {!q.marketOpen && (
+                    <span className="text-slate-400 opacity-70">CLOSED</span>
                   )}
-                >
-                  {up ? "▲" : "▼"} {Math.abs(q.change24h).toFixed(2)}%
-                </span>
-                <span className="opacity-60">spread {q.spreadPips.toFixed(1)}p</span>
+                </div>
+              </div>
+              <div
+                className={cn(
+                  "tabular-nums font-bold text-[13px] text-right",
+                  up ? "text-emerald-400" : "text-rose-400",
+                )}
+              >
+                {formatPrice(q.bid, q.precision)}
+              </div>
+              <div
+                className={cn(
+                  "tabular-nums font-bold text-[13px] text-right",
+                  up ? "text-emerald-400" : "text-rose-400",
+                )}
+              >
+                {formatPrice(q.ask, q.precision)}
               </div>
             </div>
-            <div
-              className={cn(
-                "tabular-nums font-bold text-[13px] text-right",
-                up ? "text-emerald-400" : "text-rose-400",
-              )}
-            >
-              {formatPrice(q.bid, q.precision)}
-            </div>
-            <div
-              className={cn(
-                "tabular-nums font-bold text-[13px] text-right",
-                up ? "text-emerald-400" : "text-rose-400",
-              )}
-            >
-              {formatPrice(q.ask, q.precision)}
-            </div>
+            {isExpanded && q.marketOpen && (
+              <div className="mt-1 pb-1">
+                <div className="text-[9px] uppercase tracking-wider text-muted-foreground/50 mb-1 flex items-center gap-1.5">
+                  <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  Market Depth
+                  <span className="text-muted-foreground/30 ml-auto normal-case tracking-normal font-normal">
+                    indicative
+                  </span>
+                </div>
+                <MiniDepth q={q} />
+              </div>
+            )}
           </div>
         );
       })}
