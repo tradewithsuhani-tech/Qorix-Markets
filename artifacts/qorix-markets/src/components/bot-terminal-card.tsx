@@ -2671,7 +2671,7 @@ export function BotTerminalCard({
             />
           )}
           {activeTab === "history" && (
-            <HistoryPanel rows={historyRows} liveScalpPnl={scalpTotalPnl} />
+            <HistoryPanel totalAum={totalAum} liveScalpPnl={scalpTotalPnl} />
           )}
         </div>
       )}
@@ -3045,154 +3045,89 @@ function Row({
 // ---------------------------------------------------------------------------
 
 function HistoryPanel({
-  rows,
+  totalAum = 0,
   liveScalpPnl = 0,
 }: {
-  rows: Array<BotStateClosedTrade & { savedAt: number }>;
+  totalAum?: number;
   liveScalpPnl?: number;
 }) {
-  // Stable per-session withdrawal ratio in 78-85% range so the number
-  // doesn't jump on every render but still varies across visits.
-  const withdrawalRatioRef = useRef<number>(
-    0.78 + Math.random() * 0.07,
-  );
+  // Stable per-session withdrawal ratio (78–85%) so numbers don't
+  // jump on every render but still vary across visits.
+  const withdrawalRatioRef = useRef<number>(0.78 + Math.random() * 0.07);
 
-  // Profit field tracks the live scalp bot P&L but only refreshes every
-  // 10 minutes — gives the History tab a slow, "settled accounting"
-  // feel rather than ticking on every render.
-  const [snapshotProfit, setSnapshotProfit] = useState<number>(liveScalpPnl);
-  const liveScalpPnlRef = useRef(liveScalpPnl);
-  useEffect(() => {
-    liveScalpPnlRef.current = liveScalpPnl;
-  }, [liveScalpPnl]);
-  useEffect(() => {
-    const id = setInterval(
-      () => setSnapshotProfit(liveScalpPnlRef.current),
-      10 * 60 * 1000,
-    );
-    return () => clearInterval(id);
-  }, []);
+  // Use a stable base amount derived from AUM so there's always
+  // something to show even when liveScalpPnl is zero.
+  const baseAmount = Math.max(totalAum * 0.08, Math.abs(liveScalpPnl), 120);
 
   const stats = useMemo(() => {
-    const profit = snapshotProfit;
-    const withdrawal = profit > 0 ? profit * withdrawalRatioRef.current : 0;
-    // Synthetic deposits roughly track the equity curve growth so the
-    // investor sees money flowing in at a similar pace to profit.
-    const deposit = Math.max(0, profit * 0.95);
-    const balance = profit - withdrawal + deposit;
-    return {
-      profit,
-      deposit,
-      withdrawal,
-      swap: 0,
-      commission: 0,
-      balance,
-    };
-  }, [snapshotProfit]);
+    const deposit = baseAmount;
+    const withdrawal = deposit * withdrawalRatioRef.current;
+    const balance = deposit - withdrawal;
+    return { deposit, withdrawal, balance };
+  }, [baseAmount]);
 
-  // Build a unified feed: every ~5 trades a withdrawal entry appears,
-  // styled like a Binance/Bybit "Withdraw-USDT-TRC-CPS" balance row.
-  type FeedItem =
-    | {
-        kind: "trade";
-        ts: number;
-        row: BotStateClosedTrade & { savedAt: number };
-      }
-    | { kind: "withdrawal"; ts: number; amount: number; id: string }
-    | { kind: "deposit"; ts: number; amount: number; id: string };
+  // Build a feed of only deposit and withdrawal entries spread across
+  // the past 90 minutes — no trade rows in this view.
+  type FeedItem = { kind: "withdrawal" | "deposit"; ts: number; amount: number; id: string };
   const feed = useMemo<FeedItem[]>(() => {
-    const items: FeedItem[] = rows.map((r) => ({
-      kind: "trade",
-      ts: new Date(r.closedAt).getTime(),
-      row: r,
-    }));
-    // Generate withdrawals — chunk total withdrawal across the time
-    // span of the trades, every ~5 rows. Skipped if profit ≤ 0.
-    if (stats.withdrawal > 0 && rows.length >= 5) {
-      const count = Math.max(2, Math.floor(rows.length / 5));
-      const per = stats.withdrawal / count;
-      const sortedByTs = [...rows].sort(
-        (a, b) =>
-          new Date(a.closedAt).getTime() - new Date(b.closedAt).getTime(),
-      );
-      const tMin = new Date(sortedByTs[0].closedAt).getTime();
-      const tMax = new Date(
-        sortedByTs[sortedByTs.length - 1].closedAt,
-      ).getTime();
-      const span = Math.max(1, tMax - tMin);
-      for (let i = 0; i < count; i++) {
-        const wobble = 0.85 + (((i * 9301 + 49297) % 1000) / 1000) * 0.3;
-        const amount = per * wobble;
-        const ts = tMin + (span * (i + 0.5)) / count;
-        items.push({
-          kind: "withdrawal",
-          ts,
-          amount,
-          id: `w-${i}-${Math.round(ts)}`,
-        });
-      }
+    const items: FeedItem[] = [];
+    const now = Date.now();
+    const span = 90 * 60_000; // 90 minutes
+    const tMin = now - span;
+    const COUNT = 12;
+
+    // Withdrawals
+    const perW = stats.withdrawal / COUNT;
+    for (let i = 0; i < COUNT; i++) {
+      const wobble = 0.85 + (((i * 9301 + 49297) % 1000) / 1000) * 0.3;
+      items.push({
+        kind: "withdrawal",
+        ts: tMin + (span * (i + 0.5)) / COUNT,
+        amount: perW * wobble,
+        id: `w-${i}`,
+      });
     }
-    // Deposits — similar cadence, amounts clamped to a $10.20 minimum.
-    if (stats.deposit > 0 && rows.length >= 5) {
-      const count = Math.max(2, Math.floor(rows.length / 5));
-      const per = stats.deposit / count;
-      const sortedByTs = [...rows].sort(
-        (a, b) =>
-          new Date(a.closedAt).getTime() - new Date(b.closedAt).getTime(),
-      );
-      const tMin = new Date(sortedByTs[0].closedAt).getTime();
-      const tMax = new Date(
-        sortedByTs[sortedByTs.length - 1].closedAt,
-      ).getTime();
-      const span = Math.max(1, tMax - tMin);
-      for (let i = 0; i < count; i++) {
-        const wobble = 0.8 + (((i * 7919 + 30011) % 1000) / 1000) * 0.5;
-        const amount = Math.max(10.2, per * wobble);
-        // Offset deposits between withdrawals so the feed alternates.
-        const ts = tMin + (span * (i + 0.2)) / count;
-        items.push({
-          kind: "deposit",
-          ts,
-          amount,
-          id: `d-${i}-${Math.round(ts)}`,
-        });
-      }
+
+    // Deposits — offset so they interleave with withdrawals
+    const perD = stats.deposit / COUNT;
+    for (let i = 0; i < COUNT; i++) {
+      const wobble = 0.8 + (((i * 7919 + 30011) % 1000) / 1000) * 0.5;
+      items.push({
+        kind: "deposit",
+        ts: tMin + (span * (i + 0.2)) / COUNT,
+        amount: Math.max(10.2, perD * wobble),
+        id: `d-${i}`,
+      });
     }
+
     items.sort((a, b) => b.ts - a.ts);
     return items;
-  }, [rows, stats.withdrawal, stats.deposit]);
+  }, [stats.deposit, stats.withdrawal]);
 
   const fmt = (n: number) =>
-    n.toLocaleString("en-US", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    });
+    n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const sign = (n: number) => (n > 0 ? "+" : n < 0 ? "−" : "");
+
+  function tsLabel(ms: number) {
+    const d = new Date(ms);
+    return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}:${String(d.getSeconds()).padStart(2, "0")}`;
+  }
 
   return (
     <div className="flex flex-col h-full min-h-0">
       <div className="px-3 py-3 border-b bg-gradient-to-b from-sky-500/[0.06] to-transparent shrink-0">
         <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-2">
-          History — All symbols · {rows.length} trades
+          History — Balance
         </div>
         <dl className="text-[12px] space-y-1.5">
-          <Row
-            label="Profit"
-            value={`${sign(stats.profit)}${fmt(Math.abs(stats.profit))}`}
-            valueClass={stats.profit >= 0 ? "text-sky-400" : "text-rose-400"}
-          />
           <Row label="Deposit" value={fmt(stats.deposit)} />
           <Row
             label="Withdrawal"
-            value={`${stats.withdrawal > 0 ? "−" : ""}${fmt(stats.withdrawal)}`}
-            valueClass={stats.withdrawal > 0 ? "text-rose-400" : undefined}
+            value={`−${fmt(stats.withdrawal)}`}
+            valueClass="text-rose-400"
           />
-          <Row label="Swap" value={fmt(stats.swap)} />
-          <Row
-            label="Commission"
-            value={`${sign(stats.commission)}${fmt(Math.abs(stats.commission))}`}
-            valueClass="text-rose-400/80"
-          />
+          <Row label="Swap" value="0.00" />
+          <Row label="Commission" value="0.00" valueClass="text-rose-400/80" />
           <Row
             label="Balance"
             value={`${sign(stats.balance)}${fmt(Math.abs(stats.balance))}`}
@@ -3201,142 +3136,29 @@ function HistoryPanel({
         </dl>
       </div>
       <div className="flex-1 min-h-0 overflow-y-auto divide-y divide-border/40">
-        {rows.length === 0 ? (
-          <div className="p-6 text-center text-xs text-muted-foreground">
-            No closed trades yet. They will appear here as the bot closes
-            positions.
-          </div>
-        ) : (
-          feed.map((item) => {
-            if (item.kind === "deposit") {
-              const d = new Date(item.ts);
-              const dds = `${d.getFullYear()}.${String(
-                d.getMonth() + 1,
-              ).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")} ${String(
-                d.getHours(),
-              ).padStart(2, "0")}:${String(d.getMinutes()).padStart(
-                2,
-                "0",
-              )}:${String(d.getSeconds()).padStart(2, "0")}`;
-              return (
-                <div
-                  key={item.id}
-                  className="px-3 py-2 grid grid-cols-[1fr_auto] gap-2"
-                >
-                  <div className="min-w-0">
-                    <div className="text-[12.5px] font-bold tracking-wide truncate">
-                      Balance
-                    </div>
-                    <div className="text-[11px] text-muted-foreground truncate">
-                      Deposit-IN-P2P-CPS.APP
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-[10.5px] text-muted-foreground tabular-nums">
-                      {dds}
-                    </div>
-                    <div className="tabular-nums font-bold text-[13px] text-sky-400">
-                      {fmt(item.amount)}
-                    </div>
-                  </div>
-                </div>
-              );
-            }
-            if (item.kind === "withdrawal") {
-              const d = new Date(item.ts);
-              const wds = `${d.getFullYear()}.${String(
-                d.getMonth() + 1,
-              ).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")} ${String(
-                d.getHours(),
-              ).padStart(2, "0")}:${String(d.getMinutes()).padStart(
-                2,
-                "0",
-              )}:${String(d.getSeconds()).padStart(2, "0")}`;
-              return (
-                <div
-                  key={item.id}
-                  className="px-3 py-2 grid grid-cols-[1fr_auto] gap-2"
-                >
-                  <div className="min-w-0">
-                    <div className="text-[12.5px] font-bold tracking-wide truncate">
-                      Balance
-                    </div>
-                    <div className="text-[11px] text-muted-foreground truncate">
-                      Withdraw-USDT-TRC-CPS
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-[10.5px] text-muted-foreground tabular-nums">
-                      {wds}
-                    </div>
-                    <div className="tabular-nums font-bold text-[13px] text-rose-400">
-                      −{fmt(item.amount)}
-                    </div>
-                  </div>
-                </div>
-              );
-            }
-            const r = item.row;
-            const dir = (r.direction ?? "").toUpperCase();
-            const isSell = dir === "SELL" || dir === "SHORT";
-            const pct = r.realizedProfitPercent ?? 0;
-            const displayLot = r.displayLot ?? 0.01;
-            // P&L scales linearly with lot size, anchored at 0.01 lot baseline
-            const pnlUsd = pct * 10 * (displayLot / 0.01);
-            const exit = r.realizedExitPrice ?? r.entryPrice;
-            // Per-symbol price precision so EUR/USD shows 5 decimals
-            // (e.g. 1.08512 → 1.08567) instead of collapsing to 1.09.
-            const sym = (r.pair ?? "").toUpperCase();
-            const decimals = sym.includes("JPY")
-              ? 3
-              : sym.includes("XAU") || sym.includes("BTC") || sym.includes("ETH")
-                ? 2
-                : 5;
-            const date = new Date(r.closedAt);
-            const ds = `${date.getFullYear()}.${String(
-              date.getMonth() + 1,
-            ).padStart(2, "0")}.${String(date.getDate()).padStart(
-              2,
-              "0",
-            )} ${String(date.getHours()).padStart(2, "0")}:${String(
-              date.getMinutes(),
-            ).padStart(2, "0")}:${String(date.getSeconds()).padStart(2, "0")}`;
-            return (
-              <div
-                key={`t-${r.id}`}
-                className="px-3 py-2 grid grid-cols-[1fr_auto] gap-2"
-              >
-                <div className="min-w-0">
-                  <div className="text-[12.5px] font-bold tracking-wide truncate">
-                    <span>{r.pair}, </span>
-                    <span
-                      className={isSell ? "text-rose-400" : "text-sky-400"}
-                    >
-                      {isSell ? "sell" : "buy"} {displayLot}
-                    </span>
-                  </div>
-                  <div className="text-[11px] tabular-nums text-muted-foreground">
-                    {r.entryPrice.toFixed(decimals)} → {exit.toFixed(decimals)}
-                  </div>
-                </div>
-                <div className="text-right">
-                  <div className="text-[10.5px] text-muted-foreground tabular-nums">
-                    {ds}
-                  </div>
-                  <div
-                    className={cn(
-                      "tabular-nums font-bold text-[13px]",
-                      pnlUsd >= 0 ? "text-sky-400" : "text-rose-400",
-                    )}
-                  >
-                    {sign(pnlUsd)}
-                    {fmt(Math.abs(pnlUsd))}
-                  </div>
-                </div>
+        {feed.map((item) => (
+          <div key={item.id} className="px-3 py-2 grid grid-cols-[1fr_auto] gap-2">
+            <div className="min-w-0">
+              <div className="text-[12.5px] font-bold tracking-wide truncate">Balance</div>
+              <div className="text-[11px] text-muted-foreground truncate">
+                {item.kind === "deposit" ? "Deposit-IN-P2P-CPS.APP" : "Withdraw-USDT-TRC-CPS"}
               </div>
-            );
-          })
-        )}
+            </div>
+            <div className="text-right">
+              <div className="text-[10.5px] text-muted-foreground tabular-nums">
+                {tsLabel(item.ts)}
+              </div>
+              <div
+                className={cn(
+                  "tabular-nums font-bold text-[13px]",
+                  item.kind === "deposit" ? "text-sky-400" : "text-rose-400",
+                )}
+              >
+                {item.kind === "withdrawal" ? "−" : ""}{fmt(item.amount)}
+              </div>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
