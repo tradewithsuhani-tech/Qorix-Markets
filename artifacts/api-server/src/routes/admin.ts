@@ -386,6 +386,8 @@ router.get("/admin/users", async (req, res) => {
         isTrading: inv?.isActive ?? false,
         referralCode: u.referralCode,
         createdAt: u.createdAt.toISOString(),
+        telegramChatId: u.telegramChatId ?? null,
+        phoneNumber: u.phoneNumber ?? null,
       };
     }),
   );

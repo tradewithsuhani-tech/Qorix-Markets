@@ -1057,6 +1057,14 @@ export function AdminUsersPage() {
                       <div className="font-semibold text-white">{u.fullName}</div>
                       <div className="text-xs text-muted-foreground">{u.email}</div>
                       <div className="text-xs text-muted-foreground/60 font-mono">ID #{u.id}</div>
+                      {u.phoneNumber && (
+                        <div className="text-xs text-cyan-400/80 font-mono mt-0.5">📱 {u.phoneNumber}</div>
+                      )}
+                      {u.telegramChatId ? (
+                        <div className="text-xs text-sky-400/90 font-mono mt-0.5">✈ TG: {u.telegramChatId}</div>
+                      ) : (
+                        <div className="text-xs text-muted-foreground/40 mt-0.5">No Telegram</div>
+                      )}
                     </td>
                     <td className="p-4">
                       <div><StatusBadge value={u.kycStatus ?? "not_submitted"} /></div>
