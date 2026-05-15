@@ -1061,7 +1061,17 @@ export function AdminUsersPage() {
                         <div className="text-xs text-cyan-400/80 font-mono mt-0.5">📱 {u.phoneNumber}</div>
                       )}
                       {u.telegramChatId ? (
-                        <div className="text-xs text-sky-400/90 font-mono mt-0.5">✈ TG: {u.telegramChatId}</div>
+                        <a
+                          href={`tg://user?id=${u.telegramChatId}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-sky-400 font-mono mt-0.5 flex items-center gap-1 hover:text-sky-300 transition-colors"
+                          title="Open in Telegram"
+                        >
+                          <span>✈</span>
+                          <span>@ID:{u.telegramChatId}</span>
+                          <span className="text-sky-500/60">↗</span>
+                        </a>
                       ) : (
                         <div className="text-xs text-muted-foreground/40 mt-0.5">No Telegram</div>
                       )}
