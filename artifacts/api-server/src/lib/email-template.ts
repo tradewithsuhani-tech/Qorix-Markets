@@ -501,9 +501,8 @@ export function buildTelegramInviteHtml(channelUrl = "https://t.me/Qorixmarketsa
                       <a href="https://linkedin.com/company/qorixmarkets" target="_blank" style="display:block;text-decoration:none;">
                         <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
                           <td align="center" valign="middle" class="tg-soc-ico"
-                            style="width:46px;height:46px;border-radius:14px;background:#131C2F;border:1px solid rgba(255,255,255,0.1);">
-                            <img src="https://cdn.simpleicons.org/linkedin/CBD5E1" width="22" height="22" alt="LinkedIn"
-                              style="display:block;border:0;outline:none;margin:0 auto;" />
+                            style="width:46px;height:46px;border-radius:14px;background:#131C2F;border:1px solid rgba(255,255,255,0.1);font-size:15px;font-weight:700;color:#CBD5E1;font-family:Arial,Helvetica,sans-serif;letter-spacing:-0.5px;">
+                            in
                           </td>
                         </tr></table>
                       </a>
