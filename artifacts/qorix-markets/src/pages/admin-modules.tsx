@@ -1058,20 +1058,22 @@ export function AdminUsersPage() {
                       <div className="text-xs text-muted-foreground">{u.email}</div>
                       <div className="text-xs text-muted-foreground/60 font-mono">ID #{u.id}</div>
                       {u.phoneNumber && (
-                        <div className="text-xs text-cyan-400/80 font-mono mt-0.5">📱 {u.phoneNumber}</div>
-                      )}
-                      {u.telegramChatId ? (
                         <a
-                          href={`tg://user?id=${u.telegramChatId}`}
+                          href={`https://t.me/+${u.phoneNumber.replace(/\D/g, "")}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-xs text-sky-400 font-mono mt-0.5 flex items-center gap-1 hover:text-sky-300 transition-colors"
-                          title="Open in Telegram"
+                          className="text-xs text-cyan-400 font-mono mt-0.5 flex items-center gap-1 hover:text-cyan-300 transition-colors"
+                          title="Message on Telegram"
                         >
-                          <span>✈</span>
-                          <span>@ID:{u.telegramChatId}</span>
-                          <span className="text-sky-500/60">↗</span>
+                          <span>📱</span>
+                          <span>{u.phoneNumber}</span>
+                          <span className="text-cyan-500/60">↗</span>
                         </a>
+                      )}
+                      {u.telegramChatId ? (
+                        <div className="text-xs text-sky-400/80 font-mono mt-0.5">
+                          ✈ Bot ID: {u.telegramChatId}
+                        </div>
                       ) : (
                         <div className="text-xs text-muted-foreground/40 mt-0.5">No Telegram</div>
                       )}
