@@ -118,7 +118,7 @@ export default function AdminCommunicationPage() {
     if (!emailForm.title || !emailForm.message) return;
     setEmailLoading(true);
     try {
-      const result = await adminFetch("/admin/broadcast", { method: "POST", body: JSON.stringify({ ...emailForm, channel: "email" }) });
+      const result = await adminFetch("/admin/broadcast", { method: "POST", body: JSON.stringify({ ...emailForm, channel: "email", templateId: selectedTemplate }) });
       toast({
         title: "Email broadcast sent",
         description: `${result.emailsSent ?? 0} email(s) sent${result.emailsFailed ? `, ${result.emailsFailed} failed` : ""} (out of ${result.recipients} recipients).`,

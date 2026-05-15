@@ -303,6 +303,157 @@ export function messageToBodyHtml(message: string): string {
   return linkified.replace(/\n/g, "<br/>");
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// Premium Telegram channel invite email — dark, short, high-impact.
+// No body copy; all impact comes from the hero, 3 benefit pills, and one
+// large sky-blue CTA. Same shell (logo, footer) as the branded template.
+// ─────────────────────────────────────────────────────────────────────────
+export function buildTelegramInviteHtml(channelUrl = "https://t.me/qorixmarkets"): string {
+  const year = new Date().getFullYear();
+  return `<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="x-apple-disable-message-reformatting" />
+<meta name="color-scheme" content="dark light" />
+<title>Join Qorix Markets on Telegram</title>
+<!--[if mso]><style>body,table,td,a{font-family:Arial,Helvetica,sans-serif !important;}</style><![endif]-->
+<style>
+  @media only screen and (max-width:480px){
+    .tg-outer{padding:18px 10px !important;}
+    .tg-card{border-radius:18px !important;}
+    .tg-hero{padding:36px 20px 30px !important;}
+    .tg-eyebrow{font-size:10px !important;padding:6px 14px !important;}
+    .tg-headline{font-size:26px !important;}
+    .tg-sub{font-size:14px !important;}
+    .tg-pills{padding:20px 16px !important;}
+    .tg-pill-td{display:block !important;width:100% !important;padding:5px 0 !important;}
+    .tg-pill{padding:14px 10px !important;}
+    .tg-pill-icon{font-size:22px !important;}
+    .tg-pill-title{font-size:12px !important;}
+    .tg-cta-wrap{padding:24px 20px 28px !important;}
+    .tg-cta-btn{padding:17px 32px !important;font-size:15px !important;}
+  }
+</style>
+</head>
+<body style="margin:0;padding:0;background:#05070D;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;">
+<!-- preheader -->
+<div style="display:none;max-height:0;overflow:hidden;font-size:1px;line-height:1px;color:#05070D;opacity:0;">Your Qorix community is live. Join for trade alerts, offers &amp; daily insights. Free. Instant access.</div>
+<div style="display:none;max-height:0;overflow:hidden;">&#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847; &#847;</div>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="tg-outer" style="background:#05070D;padding:32px 16px;">
+  <tr><td align="center">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="tg-card" style="max-width:600px;background:#0A0F1C;border:1px solid rgba(14,165,233,0.22);border-radius:24px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,0.65);">
+
+      <!-- LOGO BAR -->
+      <tr>
+        <td style="padding:18px 24px 0 28px;background-image:linear-gradient(135deg,#020B18 0%,#051525 50%,#091F38 100%);">
+          <img src="cid:${BRAND_LOGO_CID}" alt="Qorix Markets" width="280" height="190" style="display:block;width:280px;max-width:80%;height:auto;border:0;" />
+        </td>
+      </tr>
+
+      <!-- HERO -->
+      <tr>
+        <td align="center" class="tg-hero" style="padding:40px 36px 34px;background-image:linear-gradient(160deg,#020B18 0%,#051E3A 45%,#072440 75%,#041828 100%);">
+          <div class="tg-eyebrow" style="display:inline-block;padding:7px 18px;border-radius:999px;background:rgba(14,165,233,0.14);border:1px solid rgba(14,165,233,0.4);font-size:11px;letter-spacing:2px;color:#38BDF8;font-weight:700;text-transform:uppercase;margin-bottom:22px;">
+            Official Channel — Now Live
+          </div>
+          <div class="tg-headline" style="font-size:32px;line-height:1.18;font-weight:800;color:#FFFFFF;letter-spacing:-0.6px;margin:0 auto;max-width:420px;">
+            Your edge starts<br/>inside the channel.
+          </div>
+          <div class="tg-sub" style="font-size:15px;color:#7DD3FC;margin-top:16px;letter-spacing:0.2px;font-weight:500;">
+            Trade alerts · Exclusive offers · Daily insights
+          </div>
+          <div style="width:52px;height:3px;background:linear-gradient(90deg,#0EA5E9 0%,#38BDF8 50%,#7DD3FC 100%);margin:24px auto 0;border-radius:999px;"></div>
+        </td>
+      </tr>
+
+      <!-- 3 BENEFIT PILLS -->
+      <tr>
+        <td class="tg-pills" style="padding:28px 24px 8px;background:#070E1C;border-top:1px solid rgba(14,165,233,0.1);">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+            <tr>
+              <td width="33%" valign="top" class="tg-pill-td" style="padding:6px;">
+                <div class="tg-pill" style="background:rgba(14,165,233,0.07);border:1px solid rgba(14,165,233,0.18);border-radius:16px;padding:18px 12px;text-align:center;">
+                  <div class="tg-pill-icon" style="font-size:26px;margin-bottom:8px;">📊</div>
+                  <div class="tg-pill-title" style="font-size:12.5px;font-weight:700;color:#FFFFFF;letter-spacing:0.2px;">Live Trade Alerts</div>
+                  <div style="font-size:11px;color:#64748B;margin-top:4px;line-height:1.4;">First to know, every time</div>
+                </div>
+              </td>
+              <td width="34%" valign="top" class="tg-pill-td" style="padding:6px;">
+                <div class="tg-pill" style="background:rgba(14,165,233,0.07);border:1px solid rgba(14,165,233,0.18);border-radius:16px;padding:18px 12px;text-align:center;">
+                  <div class="tg-pill-icon" style="font-size:26px;margin-bottom:8px;">💎</div>
+                  <div class="tg-pill-title" style="font-size:12.5px;font-weight:700;color:#FFFFFF;letter-spacing:0.2px;">Member-Only Offers</div>
+                  <div style="font-size:11px;color:#64748B;margin-top:4px;line-height:1.4;">Bonuses &amp; promotions</div>
+                </div>
+              </td>
+              <td width="33%" valign="top" class="tg-pill-td" style="padding:6px;">
+                <div class="tg-pill" style="background:rgba(14,165,233,0.07);border:1px solid rgba(14,165,233,0.18);border-radius:16px;padding:18px 12px;text-align:center;">
+                  <div class="tg-pill-icon" style="font-size:26px;margin-bottom:8px;">🔔</div>
+                  <div class="tg-pill-title" style="font-size:12.5px;font-weight:700;color:#FFFFFF;letter-spacing:0.2px;">Instant Updates</div>
+                  <div style="font-size:11px;color:#64748B;margin-top:4px;line-height:1.4;">Payouts &amp; announcements</div>
+                </div>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+
+      <!-- CTA -->
+      <tr>
+        <td align="center" class="tg-cta-wrap" style="padding:30px 36px 36px;background:#070E1C;">
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+            <tr>
+              <td align="center" style="border-radius:14px;background:linear-gradient(135deg,#0284C7 0%,#0EA5E9 50%,#38BDF8 100%);box-shadow:0 14px 48px rgba(14,165,233,0.5);">
+                <a href="${channelUrl}" target="_blank" class="tg-cta-btn" style="display:inline-block;padding:18px 52px;color:#FFFFFF;text-decoration:none;font-weight:800;font-size:16px;letter-spacing:0.3px;border-radius:14px;white-space:nowrap;">
+                  Join @qorixmarkets&nbsp;&nbsp;→
+                </a>
+              </td>
+            </tr>
+          </table>
+          <div style="margin-top:14px;font-size:11.5px;color:#475569;letter-spacing:0.5px;">
+            Free &nbsp;·&nbsp; 5 seconds &nbsp;·&nbsp; Instant access
+          </div>
+        </td>
+      </tr>
+
+      <!-- FOOTER -->
+      <tr>
+        <td style="padding:22px 32px 28px;background:#06090F;border-top:1px solid rgba(255,255,255,0.05);">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+            <tr>
+              <td align="center" style="padding-bottom:12px;">
+                <div style="font-size:13px;letter-spacing:5px;color:#94A3B8;font-weight:700;">QORIX&nbsp;MARKETS</div>
+                <div style="font-size:11px;color:#475569;margin-top:4px;">AI-Powered Trading · Built for Performance</div>
+              </td>
+            </tr>
+            <tr>
+              <td align="center" style="padding:8px 0;line-height:1.9;">
+                <a href="https://qorixmarkets.com" style="color:#7DD3FC;text-decoration:none;font-size:12px;font-weight:600;margin:0 10px;">Website</a>
+                <span style="color:#334155;">·</span>
+                <a href="mailto:support@qorixmarkets.com" style="color:#7DD3FC;text-decoration:none;font-size:12px;font-weight:600;margin:0 10px;">Support</a>
+              </td>
+            </tr>
+            <tr>
+              <td align="center" style="padding-top:14px;border-top:1px solid rgba(255,255,255,0.04);">
+                <div style="font-size:11px;color:#475569;line-height:1.7;padding-top:14px;">
+                  © ${year} Qorix Markets. All rights reserved.<br/>
+                  <span style="color:#334155;">You're receiving this because you have an account at Qorix Markets.</span>
+                </div>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+    <div style="height:24px;"></div>
+  </td></tr>
+</table>
+</body>
+</html>`;
+}
+
 // High-end branded email — institutional dark theme, gradient hero,
 // trust badges, stat grid, feature pills, premium CTA, footer.
 // Email-client safe: table-based layout, inline CSS, web-safe fonts,

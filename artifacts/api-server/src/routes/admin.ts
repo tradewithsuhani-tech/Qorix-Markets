@@ -981,11 +981,12 @@ router.post("/admin/settings", async (req: AuthRequest, res) => {
 });
 
 router.post("/admin/broadcast", async (req: AuthRequest, res) => {
-  const { title, message, audience = "all", channel = "notification" } = req.body as {
+  const { title, message, audience = "all", channel = "notification", templateId } = req.body as {
     title?: string;
     message?: string;
     audience?: string;
     channel?: "notification" | "email" | "both";
+    templateId?: string;
   };
   if (!title || !message) {
     res.status(400).json({ error: "Title and message are required" });
@@ -1023,7 +1024,9 @@ router.post("/admin/broadcast", async (req: AuthRequest, res) => {
   // Email broadcast — send sequentially with a small batch delay to stay
   // well within SES throughput limits. Plain-text + lightweight HTML wrapper.
   if (channel === "email" || channel === "both") {
-    const html = buildBroadcastHtml(title!, message!);
+    const html = templateId === "telegram_invite"
+      ? buildTelegramInviteHtml()
+      : buildBroadcastHtml(title!, message!);
 
     for (const u of recipients) {
       if (!u.email) continue;
@@ -1059,7 +1062,7 @@ router.post("/admin/broadcast", async (req: AuthRequest, res) => {
   });
 });
 
-import { buildBrandedEmailHtml, messageToBodyHtml, escapeHtml } from "../lib/email-template";
+import { buildBrandedEmailHtml, buildTelegramInviteHtml, messageToBodyHtml, escapeHtml } from "../lib/email-template";
 
 const buildBroadcastHtml = buildBrandedEmailHtml;
 
