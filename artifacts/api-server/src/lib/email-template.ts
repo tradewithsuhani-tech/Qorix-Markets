@@ -433,43 +433,79 @@ export function buildTelegramInviteHtml(channelUrl = "https://t.me/Qorixmarketsa
 
             <!-- SOCIAL MEDIA ICONS -->
             <tr>
-              <td align="center" style="padding:14px 0 10px;">
+              <td align="center" style="padding:16px 0 12px;">
                 <table role="presentation" cellpadding="0" cellspacing="0" border="0">
                   <tr>
                     <!-- Telegram -->
                     <td class="tg-soc-td" style="padding:4px 5px;">
-                      <a href="https://t.me/qorixmarkets" target="_blank" style="display:block;text-decoration:none;">
-                        <div class="tg-soc-ico" style="width:42px;height:42px;border-radius:12px;background:#131B2E;border:1px solid rgba(255,255,255,0.08);text-align:center;line-height:42px;font-size:16px;color:#CBD5E1;">✈</div>
+                      <a href="https://t.me/Qorixmarketsalerts" target="_blank" style="display:block;text-decoration:none;">
+                        <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+                          <td align="center" valign="middle" class="tg-soc-ico"
+                            style="width:46px;height:46px;border-radius:14px;background:#131C2F;border:1px solid rgba(255,255,255,0.1);">
+                            <img src="https://cdn.simpleicons.org/telegram/CBD5E1" width="22" height="22" alt="Telegram"
+                              style="display:block;border:0;outline:none;margin:0 auto;" />
+                          </td>
+                        </tr></table>
                       </a>
                     </td>
                     <!-- X / Twitter -->
                     <td class="tg-soc-td" style="padding:4px 5px;">
                       <a href="https://x.com/qorixmarkets" target="_blank" style="display:block;text-decoration:none;">
-                        <div class="tg-soc-ico" style="width:42px;height:42px;border-radius:12px;background:#131B2E;border:1px solid rgba(255,255,255,0.08);text-align:center;line-height:42px;font-size:14px;font-weight:800;color:#CBD5E1;font-family:Arial,sans-serif;">𝕏</div>
+                        <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+                          <td align="center" valign="middle" class="tg-soc-ico"
+                            style="width:46px;height:46px;border-radius:14px;background:#131C2F;border:1px solid rgba(255,255,255,0.1);">
+                            <img src="https://cdn.simpleicons.org/x/CBD5E1" width="20" height="20" alt="X"
+                              style="display:block;border:0;outline:none;margin:0 auto;" />
+                          </td>
+                        </tr></table>
                       </a>
                     </td>
                     <!-- Instagram -->
                     <td class="tg-soc-td" style="padding:4px 5px;">
                       <a href="https://instagram.com/qorixmarkets" target="_blank" style="display:block;text-decoration:none;">
-                        <div class="tg-soc-ico" style="width:42px;height:42px;border-radius:12px;background:#131B2E;border:1px solid rgba(255,255,255,0.08);text-align:center;line-height:42px;font-size:16px;color:#CBD5E1;">◎</div>
+                        <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+                          <td align="center" valign="middle" class="tg-soc-ico"
+                            style="width:46px;height:46px;border-radius:14px;background:#131C2F;border:1px solid rgba(255,255,255,0.1);">
+                            <img src="https://cdn.simpleicons.org/instagram/CBD5E1" width="22" height="22" alt="Instagram"
+                              style="display:block;border:0;outline:none;margin:0 auto;" />
+                          </td>
+                        </tr></table>
                       </a>
                     </td>
                     <!-- YouTube -->
                     <td class="tg-soc-td" style="padding:4px 5px;">
                       <a href="https://youtube.com/@qorixmarkets" target="_blank" style="display:block;text-decoration:none;">
-                        <div class="tg-soc-ico" style="width:42px;height:42px;border-radius:12px;background:#131B2E;border:1px solid rgba(255,255,255,0.08);text-align:center;line-height:42px;font-size:16px;color:#CBD5E1;">▶</div>
+                        <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+                          <td align="center" valign="middle" class="tg-soc-ico"
+                            style="width:46px;height:46px;border-radius:14px;background:#131C2F;border:1px solid rgba(255,255,255,0.1);">
+                            <img src="https://cdn.simpleicons.org/youtube/CBD5E1" width="24" height="24" alt="YouTube"
+                              style="display:block;border:0;outline:none;margin:0 auto;" />
+                          </td>
+                        </tr></table>
                       </a>
                     </td>
                     <!-- Facebook -->
                     <td class="tg-soc-td" style="padding:4px 5px;">
                       <a href="https://facebook.com/qorixmarkets" target="_blank" style="display:block;text-decoration:none;">
-                        <div class="tg-soc-ico" style="width:42px;height:42px;border-radius:12px;background:#131B2E;border:1px solid rgba(255,255,255,0.08);text-align:center;line-height:42px;font-size:15px;font-weight:700;color:#CBD5E1;font-family:Arial,sans-serif;">f</div>
+                        <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+                          <td align="center" valign="middle" class="tg-soc-ico"
+                            style="width:46px;height:46px;border-radius:14px;background:#131C2F;border:1px solid rgba(255,255,255,0.1);">
+                            <img src="https://cdn.simpleicons.org/facebook/CBD5E1" width="22" height="22" alt="Facebook"
+                              style="display:block;border:0;outline:none;margin:0 auto;" />
+                          </td>
+                        </tr></table>
                       </a>
                     </td>
                     <!-- LinkedIn -->
                     <td class="tg-soc-td" style="padding:4px 5px;">
                       <a href="https://linkedin.com/company/qorixmarkets" target="_blank" style="display:block;text-decoration:none;">
-                        <div class="tg-soc-ico" style="width:42px;height:42px;border-radius:12px;background:#131B2E;border:1px solid rgba(255,255,255,0.08);text-align:center;line-height:42px;font-size:12px;font-weight:700;color:#CBD5E1;font-family:Arial,sans-serif;">in</div>
+                        <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+                          <td align="center" valign="middle" class="tg-soc-ico"
+                            style="width:46px;height:46px;border-radius:14px;background:#131C2F;border:1px solid rgba(255,255,255,0.1);">
+                            <img src="https://cdn.simpleicons.org/linkedin/CBD5E1" width="22" height="22" alt="LinkedIn"
+                              style="display:block;border:0;outline:none;margin:0 auto;" />
+                          </td>
+                        </tr></table>
                       </a>
                     </td>
                   </tr>
