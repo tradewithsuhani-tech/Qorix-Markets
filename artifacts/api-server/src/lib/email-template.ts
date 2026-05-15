@@ -308,7 +308,7 @@ export function messageToBodyHtml(message: string): string {
 // Hero + 3 benefit pills + single CTA. Social media icons in footer.
 // Table-based layout, inline CSS, email-client safe.
 // ─────────────────────────────────────────────────────────────────────────
-export function buildTelegramInviteHtml(channelUrl = "https://t.me/qorixmarkets"): string {
+export function buildTelegramInviteHtml(channelUrl = "https://t.me/Qorixmarketsalerts"): string {
   const year = new Date().getFullYear();
   return `<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml">
@@ -477,13 +477,6 @@ export function buildTelegramInviteHtml(channelUrl = "https://t.me/qorixmarkets"
               </td>
             </tr>
 
-            <tr>
-              <td align="center" style="padding:8px 0;line-height:1.9;">
-                <a href="https://qorixmarkets.com" style="color:#7DD3FC;text-decoration:none;font-size:12px;font-weight:600;margin:0 10px;">Website</a>
-                <span style="color:#334155;">·</span>
-                <a href="mailto:support@qorixmarkets.com" style="color:#7DD3FC;text-decoration:none;font-size:12px;font-weight:600;margin:0 10px;">Support</a>
-              </td>
-            </tr>
             <tr>
               <td align="center" style="padding-top:14px;border-top:1px solid rgba(255,255,255,0.04);">
                 <div style="font-size:11px;color:#475569;line-height:1.7;padding-top:14px;">
