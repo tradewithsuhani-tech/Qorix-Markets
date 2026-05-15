@@ -2671,7 +2671,7 @@ export function BotTerminalCard({
             />
           )}
           {activeTab === "history" && (
-            <HistoryPanel totalAum={totalAum} liveScalpPnl={scalpTotalPnl} />
+            <HistoryPanel rows={historyRows} liveScalpPnl={scalpTotalPnl} />
           )}
         </div>
       )}
@@ -3045,64 +3045,60 @@ function Row({
 // ---------------------------------------------------------------------------
 
 function HistoryPanel({
-  totalAum = 0,
+  rows,
   liveScalpPnl = 0,
 }: {
-  totalAum?: number;
+  rows: Array<BotStateClosedTrade & { savedAt: number }>;
   liveScalpPnl?: number;
 }) {
-  // Stable per-session withdrawal ratio (78–85%) so numbers don't
-  // jump on every render but still vary across visits.
   const withdrawalRatioRef = useRef<number>(0.78 + Math.random() * 0.07);
 
-  // Use a stable base amount derived from AUM so there's always
-  // something to show even when liveScalpPnl is zero.
-  const baseAmount = Math.max(totalAum * 0.08, Math.abs(liveScalpPnl), 120);
+  const [snapshotProfit, setSnapshotProfit] = useState<number>(liveScalpPnl);
+  const liveScalpPnlRef = useRef(liveScalpPnl);
+  useEffect(() => { liveScalpPnlRef.current = liveScalpPnl; }, [liveScalpPnl]);
+  useEffect(() => {
+    const id = setInterval(() => setSnapshotProfit(liveScalpPnlRef.current), 10 * 60 * 1000);
+    return () => clearInterval(id);
+  }, []);
 
   const stats = useMemo(() => {
-    const deposit = baseAmount;
-    const withdrawal = deposit * withdrawalRatioRef.current;
-    const balance = deposit - withdrawal;
-    return { deposit, withdrawal, balance };
-  }, [baseAmount]);
+    const profit = snapshotProfit;
+    const withdrawal = profit > 0 ? profit * withdrawalRatioRef.current : 0;
+    const deposit = Math.max(0, profit * 0.95);
+    const balance = profit - withdrawal + deposit;
+    return { profit, deposit, withdrawal, swap: 0, commission: 0, balance };
+  }, [snapshotProfit]);
 
-  // Build a feed of only deposit and withdrawal entries spread across
-  // the past 90 minutes — no trade rows in this view.
   type FeedItem = { kind: "withdrawal" | "deposit"; ts: number; amount: number; id: string };
   const feed = useMemo<FeedItem[]>(() => {
     const items: FeedItem[] = [];
-    const now = Date.now();
-    const span = 90 * 60_000; // 90 minutes
-    const tMin = now - span;
-    const COUNT = 12;
-
-    // Withdrawals
-    const perW = stats.withdrawal / COUNT;
-    for (let i = 0; i < COUNT; i++) {
-      const wobble = 0.85 + (((i * 9301 + 49297) % 1000) / 1000) * 0.3;
-      items.push({
-        kind: "withdrawal",
-        ts: tMin + (span * (i + 0.5)) / COUNT,
-        amount: perW * wobble,
-        id: `w-${i}`,
-      });
+    if (stats.withdrawal > 0 && rows.length >= 5) {
+      const count = Math.max(2, Math.floor(rows.length / 5));
+      const per = stats.withdrawal / count;
+      const sorted = [...rows].sort((a, b) => new Date(a.closedAt).getTime() - new Date(b.closedAt).getTime());
+      const tMin = new Date(sorted[0].closedAt).getTime();
+      const tMax = new Date(sorted[sorted.length - 1].closedAt).getTime();
+      const span = Math.max(1, tMax - tMin);
+      for (let i = 0; i < count; i++) {
+        const wobble = 0.85 + (((i * 9301 + 49297) % 1000) / 1000) * 0.3;
+        items.push({ kind: "withdrawal", ts: tMin + (span * (i + 0.5)) / count, amount: per * wobble, id: `w-${i}-${Math.round(tMin)}` });
+      }
     }
-
-    // Deposits — offset so they interleave with withdrawals
-    const perD = stats.deposit / COUNT;
-    for (let i = 0; i < COUNT; i++) {
-      const wobble = 0.8 + (((i * 7919 + 30011) % 1000) / 1000) * 0.5;
-      items.push({
-        kind: "deposit",
-        ts: tMin + (span * (i + 0.2)) / COUNT,
-        amount: Math.max(10.2, perD * wobble),
-        id: `d-${i}`,
-      });
+    if (stats.deposit > 0 && rows.length >= 5) {
+      const count = Math.max(2, Math.floor(rows.length / 5));
+      const per = stats.deposit / count;
+      const sorted = [...rows].sort((a, b) => new Date(a.closedAt).getTime() - new Date(b.closedAt).getTime());
+      const tMin = new Date(sorted[0].closedAt).getTime();
+      const tMax = new Date(sorted[sorted.length - 1].closedAt).getTime();
+      const span = Math.max(1, tMax - tMin);
+      for (let i = 0; i < count; i++) {
+        const wobble = 0.8 + (((i * 7919 + 30011) % 1000) / 1000) * 0.5;
+        items.push({ kind: "deposit", ts: tMin + (span * (i + 0.2)) / count, amount: Math.max(10.2, per * wobble), id: `d-${i}-${Math.round(tMin)}` });
+      }
     }
-
     items.sort((a, b) => b.ts - a.ts);
     return items;
-  }, [stats.deposit, stats.withdrawal]);
+  }, [rows, stats.withdrawal, stats.deposit]);
 
   const fmt = (n: number) =>
     n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -3117,48 +3113,40 @@ function HistoryPanel({
     <div className="flex flex-col h-full min-h-0">
       <div className="px-3 py-3 border-b bg-gradient-to-b from-sky-500/[0.06] to-transparent shrink-0">
         <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-2">
-          History — Balance
+          History — All symbols · {rows.length} trades
         </div>
         <dl className="text-[12px] space-y-1.5">
+          <Row label="Profit" value={`${sign(stats.profit)}${fmt(Math.abs(stats.profit))}`} valueClass={stats.profit >= 0 ? "text-sky-400" : "text-rose-400"} />
           <Row label="Deposit" value={fmt(stats.deposit)} />
-          <Row
-            label="Withdrawal"
-            value={`−${fmt(stats.withdrawal)}`}
-            valueClass="text-rose-400"
-          />
-          <Row label="Swap" value="0.00" />
-          <Row label="Commission" value="0.00" valueClass="text-rose-400/80" />
-          <Row
-            label="Balance"
-            value={`${sign(stats.balance)}${fmt(Math.abs(stats.balance))}`}
-            valueClass={stats.balance >= 0 ? "text-sky-300" : "text-rose-400"}
-          />
+          <Row label="Withdrawal" value={`${stats.withdrawal > 0 ? "−" : ""}${fmt(stats.withdrawal)}`} valueClass={stats.withdrawal > 0 ? "text-rose-400" : undefined} />
+          <Row label="Swap" value={fmt(stats.swap)} />
+          <Row label="Commission" value={`${sign(stats.commission)}${fmt(Math.abs(stats.commission))}`} valueClass="text-rose-400/80" />
+          <Row label="Balance" value={`${sign(stats.balance)}${fmt(Math.abs(stats.balance))}`} valueClass={stats.balance >= 0 ? "text-sky-300" : "text-rose-400"} />
         </dl>
       </div>
       <div className="flex-1 min-h-0 overflow-y-auto divide-y divide-border/40">
-        {feed.map((item) => (
-          <div key={item.id} className="px-3 py-2 grid grid-cols-[1fr_auto] gap-2">
-            <div className="min-w-0">
-              <div className="text-[12.5px] font-bold tracking-wide truncate">Balance</div>
-              <div className="text-[11px] text-muted-foreground truncate">
-                {item.kind === "deposit" ? "Deposit-IN-P2P-CPS.APP" : "Withdraw-USDT-TRC-CPS"}
-              </div>
-            </div>
-            <div className="text-right">
-              <div className="text-[10.5px] text-muted-foreground tabular-nums">
-                {tsLabel(item.ts)}
-              </div>
-              <div
-                className={cn(
-                  "tabular-nums font-bold text-[13px]",
-                  item.kind === "deposit" ? "text-sky-400" : "text-rose-400",
-                )}
-              >
-                {item.kind === "withdrawal" ? "−" : ""}{fmt(item.amount)}
-              </div>
-            </div>
+        {feed.length === 0 ? (
+          <div className="p-6 text-center text-xs text-muted-foreground">
+            No balance history yet.
           </div>
-        ))}
+        ) : (
+          feed.map((item) => (
+            <div key={item.id} className="px-3 py-2 grid grid-cols-[1fr_auto] gap-2">
+              <div className="min-w-0">
+                <div className="text-[12.5px] font-bold tracking-wide truncate">Balance</div>
+                <div className="text-[11px] text-muted-foreground truncate">
+                  {item.kind === "deposit" ? "Deposit-IN-P2P-CPS.APP" : "Withdraw-USDT-TRC-CPS"}
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-[10.5px] text-muted-foreground tabular-nums">{tsLabel(item.ts)}</div>
+                <div className={cn("tabular-nums font-bold text-[13px]", item.kind === "deposit" ? "text-sky-400" : "text-rose-400")}>
+                  {item.kind === "withdrawal" ? "−" : ""}{fmt(item.amount)}
+                </div>
+              </div>
+            </div>
+          ))
+        )}
       </div>
     </div>
   );
