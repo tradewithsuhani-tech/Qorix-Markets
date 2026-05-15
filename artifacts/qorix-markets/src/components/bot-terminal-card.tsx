@@ -2417,8 +2417,8 @@ export function BotTerminalCard({
   // Persist last 100 closed bot trades to localStorage so the History
   // tab keeps a meaningful tape across reloads (closedToday from API
   // resets at UTC midnight). Dedupe by trade id.
-  type HistoryRow = BotStateClosedTrade & { savedAt: number };
-  const HISTORY_KEY = "qx-bot-terminal-history-v1";
+  type HistoryRow = BotStateClosedTrade & { savedAt: number; displayLot: number };
+  const HISTORY_KEY = "qx-bot-terminal-history-v3";
   const HISTORY_MAX = 100;
   const [historyRows, setHistoryRows] = useState<HistoryRow[]>(() => {
     try {
@@ -2434,22 +2434,36 @@ export function BotTerminalCard({
     // empty for a brand-new visitor — investor sees a meaningful tape
     // of past bot fills with a realistic 70/30 win-rate skew.
     const SYMBOLS = ["BTC/USD", "ETH/USD", "EUR/USD", "GBP/USD", "XAU/USD"];
+    // Current 2026 market anchor prices (May 2026)
     const PRICE: Record<string, number> = {
-      "BTC/USD": 78900,
-      "ETH/USD": 3120,
-      "EUR/USD": 1.085,
-      "GBP/USD": 1.272,
-      "XAU/USD": 2640,
+      "BTC/USD": 103500,
+      "ETH/USD": 2480,
+      "EUR/USD": 1.1215,
+      "GBP/USD": 1.3285,
+      "XAU/USD": 3285,
     };
+    // Decimal precision per symbol
+    const DP: Record<string, number> = {
+      "BTC/USD": 1, "ETH/USD": 2, "XAU/USD": 2,
+      "EUR/USD": 5, "GBP/USD": 5,
+    };
+    // Varied lot sizes — weighted toward smaller sizes for realism
+    const LOT_BUCKETS = [0.01, 0.01, 0.05, 0.10, 0.10, 0.25, 0.50, 1.00];
     const seeded: HistoryRow[] = [];
     const now = Date.now();
     for (let i = 0; i < 60; i++) {
       const sym = SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)];
       const dir = Math.random() > 0.5 ? "BUY" : "SELL";
       const win = Math.random() < 0.7;
+      const displayLot = LOT_BUCKETS[Math.floor(Math.random() * LOT_BUCKETS.length)];
+      // Scale max pct inversely to lot size so P&L stays in realistic range
+      const lotFactor = 0.01 / displayLot;
+      const maxWin = Math.min(0.55, 0.55 * lotFactor);
+      const maxLoss = Math.min(0.32, 0.32 * lotFactor);
       const pct = win
-        ? +(0.05 + Math.random() * 0.55).toFixed(3)
-        : +(-(0.04 + Math.random() * 0.32)).toFixed(3);
+        ? +(0.05 + Math.random() * (maxWin - 0.05)).toFixed(3)
+        : +(-(0.04 + Math.random() * (maxLoss - 0.04))).toFixed(3);
+      const dp = DP[sym] ?? 4;
       const entry = PRICE[sym] * (1 + (Math.random() - 0.5) * 0.004);
       const exit = entry * (1 + (pct / 100) * (dir === "BUY" ? 1 : -1));
       const closedAt = new Date(now - i * (60_000 + Math.random() * 180_000));
@@ -2457,12 +2471,13 @@ export function BotTerminalCard({
         id: -1 - i,
         pair: sym,
         direction: dir,
-        entryPrice: +entry.toFixed(sym.includes("USD") && sym.startsWith("BTC") ? 2 : 4),
-        realizedExitPrice: +exit.toFixed(sym.startsWith("BTC") ? 2 : 4),
+        entryPrice: +entry.toFixed(dp),
+        realizedExitPrice: +exit.toFixed(dp),
         realizedProfitPercent: pct,
         closeReason: win ? "TP" : "SL",
         closedAt: closedAt.toISOString(),
         savedAt: closedAt.getTime(),
+        displayLot,
       });
     }
     try {
@@ -2477,7 +2492,7 @@ export function BotTerminalCard({
       const seen = new Set(prev.map((r) => r.id));
       const fresh: HistoryRow[] = incoming
         .filter((t) => !seen.has(t.id))
-        .map((t) => ({ ...t, savedAt: Date.now() }));
+        .map((t) => ({ ...t, savedAt: Date.now(), displayLot: 0.01 }));
       if (fresh.length === 0) return prev;
       const merged = [...fresh, ...prev].slice(0, HISTORY_MAX);
       try {
@@ -3265,7 +3280,9 @@ function HistoryPanel({
             const dir = (r.direction ?? "").toUpperCase();
             const isSell = dir === "SELL" || dir === "SHORT";
             const pct = r.realizedProfitPercent ?? 0;
-            const pnlUsd = pct * 10;
+            const displayLot = r.displayLot ?? 0.01;
+            // P&L scales linearly with lot size, anchored at 0.01 lot baseline
+            const pnlUsd = pct * 10 * (displayLot / 0.01);
             const exit = r.realizedExitPrice ?? r.entryPrice;
             // Per-symbol price precision so EUR/USD shows 5 decimals
             // (e.g. 1.08512 → 1.08567) instead of collapsing to 1.09.
@@ -3295,7 +3312,7 @@ function HistoryPanel({
                     <span
                       className={isSell ? "text-rose-400" : "text-sky-400"}
                     >
-                      {isSell ? "sell" : "buy"} 0.01
+                      {isSell ? "sell" : "buy"} {displayLot}
                     </span>
                   </div>
                   <div className="text-[11px] tabular-nums text-muted-foreground">
