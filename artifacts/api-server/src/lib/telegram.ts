@@ -23,6 +23,25 @@ export function isTelegramConfigured(): boolean {
   return token() !== undefined;
 }
 
+/** Returns the promo channel/group invite link from env, or null if not set. */
+export function getPromoChannelLink(): string | null {
+  const link = process.env.TELEGRAM_CHANNEL_INVITE_LINK;
+  return link && link.trim() ? link.trim() : null;
+}
+
+/**
+ * Returns the numeric group/supergroup chat ID from env (TELEGRAM_PROMO_GROUP_ID).
+ * When set, the bot will attempt to add newly-linked users directly to the group.
+ * This only works for groups/supergroups where the bot is an admin with
+ * "Add Members" permission. For broadcast channels, use TELEGRAM_CHANNEL_INVITE_LINK.
+ */
+export function getPromoGroupId(): number | null {
+  const id = process.env.TELEGRAM_PROMO_GROUP_ID;
+  if (!id || !id.trim()) return null;
+  const n = parseInt(id.trim(), 10);
+  return isNaN(n) ? null : n;
+}
+
 /** Lazy fetch bot username from getMe. Cached after first success. */
 export async function getBotUsername(): Promise<string | null> {
   if (cachedBotUsername) return cachedBotUsername;
@@ -79,8 +98,6 @@ export async function sendTelegramMessage(
 ): Promise<{ ok: boolean; blocked?: boolean }> {
   const t = token();
   if (!t) return { ok: false };
-  // Use HTML parse mode for bold title + body. Escape user-supplied content
-  // so a stray "<" doesn't break Telegram parsing.
   const text = `<b>${escapeHtml(title)}</b>\n${escapeHtml(body)}`;
   try {
     const res = await fetch(`${TG_API_BASE}${t}/sendMessage`, {
@@ -99,7 +116,6 @@ export async function sendTelegramMessage(
       description?: string;
     };
     if (json.ok) return { ok: true };
-    // 403 = bot blocked by user, 400 = chat not found / chat deleted
     const blocked = json.error_code === 403 || json.error_code === 400;
     logger.warn(
       { chatId, code: json.error_code, desc: json.description },
@@ -108,6 +124,101 @@ export async function sendTelegramMessage(
     return { ok: false, blocked };
   } catch (err) {
     logger.warn({ err: (err as Error).message, chatId }, "[telegram] sendMessage threw");
+    return { ok: false };
+  }
+}
+
+/**
+ * Send a Telegram message with inline keyboard buttons.
+ * `buttons` is a 2D array: outer = rows, inner = buttons per row.
+ * Each button: { text, url } for URL buttons.
+ * Never throws.
+ */
+export async function sendTelegramMessageWithButtons(
+  chatId: number | string,
+  title: string,
+  body: string,
+  buttons: Array<Array<{ text: string; url: string }>>,
+): Promise<{ ok: boolean; blocked?: boolean }> {
+  const t = token();
+  if (!t) return { ok: false };
+  const text = `<b>${escapeHtml(title)}</b>\n${escapeHtml(body)}`;
+  const inline_keyboard = buttons.map((row) =>
+    row.map((btn) => ({ text: btn.text, url: btn.url })),
+  );
+  try {
+    const res = await fetch(`${TG_API_BASE}${t}/sendMessage`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text,
+        parse_mode: "HTML",
+        disable_web_page_preview: true,
+        reply_markup: { inline_keyboard },
+      }),
+    });
+    const json = (await res.json().catch(() => ({}))) as {
+      ok?: boolean;
+      error_code?: number;
+      description?: string;
+    };
+    if (json.ok) return { ok: true };
+    const blocked = json.error_code === 403 || json.error_code === 400;
+    logger.warn(
+      { chatId, code: json.error_code, desc: json.description },
+      "[telegram] sendMessageWithButtons failed",
+    );
+    return { ok: false, blocked };
+  } catch (err) {
+    logger.warn({ err: (err as Error).message, chatId }, "[telegram] sendMessageWithButtons threw");
+    return { ok: false };
+  }
+}
+
+/**
+ * Attempt to add a user (by their Telegram user ID) to a group or supergroup.
+ * This only works when:
+ *   1. The bot is an admin of the group with "Add Members" permission.
+ *   2. The target is a group/supergroup (NOT a broadcast channel).
+ * Returns { ok: true } on success, { ok: false, alreadyMember } if the user
+ * is already in the group, or { ok: false } on any other failure.
+ * Never throws.
+ */
+export async function addChatMember(
+  groupChatId: number | string,
+  userTelegramId: number,
+): Promise<{ ok: boolean; alreadyMember?: boolean }> {
+  const t = token();
+  if (!t) return { ok: false };
+  try {
+    const res = await fetch(`${TG_API_BASE}${t}/addChatMember`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ chat_id: groupChatId, user_id: userTelegramId }),
+    });
+    const json = (await res.json().catch(() => ({}))) as {
+      ok?: boolean;
+      error_code?: number;
+      description?: string;
+    };
+    if (json.ok) return { ok: true };
+    // 400 with "USER_ALREADY_PARTICIPANT" — not an error for us
+    const alreadyMember =
+      json.error_code === 400 &&
+      typeof json.description === "string" &&
+      json.description.includes("USER_ALREADY_PARTICIPANT");
+    if (alreadyMember) return { ok: true, alreadyMember: true };
+    logger.warn(
+      { groupChatId, userTelegramId, code: json.error_code, desc: json.description },
+      "[telegram] addChatMember failed",
+    );
+    return { ok: false };
+  } catch (err) {
+    logger.warn(
+      { err: (err as Error).message, groupChatId, userTelegramId },
+      "[telegram] addChatMember threw",
+    );
     return { ok: false };
   }
 }

@@ -14,7 +14,14 @@
 import { db, usersTable } from "@workspace/db";
 import { and, eq, gt, isNull } from "drizzle-orm";
 import { logger } from "./logger";
-import { isTelegramConfigured, sendTelegramMessage } from "./telegram";
+import {
+  isTelegramConfigured,
+  sendTelegramMessage,
+  sendTelegramMessageWithButtons,
+  addChatMember,
+  getPromoChannelLink,
+  getPromoGroupId,
+} from "./telegram";
 
 const TG_API_BASE = "https://api.telegram.org/bot";
 const POLL_TIMEOUT_SECONDS = 30;
@@ -233,11 +240,45 @@ async function tryLinkUser(chatId: number, username: string | null, code: string
   }
 
   logger.info({ userId: target.id, chatId, username }, "[telegram-poller] User linked");
-  await sendTelegramMessage(
-    chatId,
-    `Linked, ${target.fullName.split(" ")[0]}!`,
-    "Your Qorix Markets account is now connected. You'll receive alerts here for deposits, withdrawals, promos, milestones and important updates. You can mute these any time from Settings → Telegram Alerts.",
-  );
+
+  // ── Step A: If a promo group ID is configured, try to add the user directly.
+  // This works for groups/supergroups where the bot is an admin with
+  // "Add Members" permission. Fails silently for broadcast channels.
+  const promoGroupId = getPromoGroupId();
+  if (promoGroupId) {
+    const addResult = await addChatMember(promoGroupId, chatId);
+    if (addResult.ok) {
+      logger.info(
+        { userId: target.id, chatId, promoGroupId, alreadyMember: addResult.alreadyMember },
+        "[telegram-poller] User added to promo group",
+      );
+    } else {
+      logger.warn(
+        { userId: target.id, chatId, promoGroupId },
+        "[telegram-poller] addChatMember failed — will send invite link instead",
+      );
+    }
+  }
+
+  // ── Step B: Send welcome message.
+  // If a promo channel invite link is configured, include it as an inline button.
+  const channelLink = getPromoChannelLink();
+  if (channelLink) {
+    await sendTelegramMessageWithButtons(
+      chatId,
+      `Linked, ${target.fullName.split(" ")[0]}! 🎉`,
+      "Your Qorix Markets account is now connected. You'll receive alerts here for deposits, withdrawals, promos, milestones and important updates.\n\nJoin our official channel below to stay updated with market insights, promotions and announcements.",
+      [
+        [{ text: "📢 Join Qorix Markets Channel", url: channelLink }],
+      ],
+    );
+  } else {
+    await sendTelegramMessage(
+      chatId,
+      `Linked, ${target.fullName.split(" ")[0]}!`,
+      "Your Qorix Markets account is now connected. You'll receive alerts here for deposits, withdrawals, promos, milestones and important updates. You can mute these any time from Settings → Telegram Alerts.",
+    );
+  }
 }
 
 function sleep(ms: number): Promise<void> {
