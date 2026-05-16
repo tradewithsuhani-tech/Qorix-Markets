@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Layout } from "@/components/layout";
 import {
-  ArrowLeft, Shield, Copy, Check, AtSign, DollarSign, Hash,
+  ArrowLeft, Shield, Copy, Check, AtSign, DollarSign,
   AlertTriangle, CheckCircle2, ArrowRight, Info, AlertCircle, Loader2,
 } from "lucide-react";
 import QRCode from "qrcode";
@@ -183,15 +183,13 @@ export default function DepositUpiPayPage() {
         <div className="rounded-2xl border border-white/10 bg-white/5 px-3 divide-y divide-white/5">
           <DetailRow icon={<AtSign className="w-3.5 h-3.5 text-emerald-400" />} label="UPI ID" value={method.upiId} ck="upi" copied={copied} onCopy={copy} mono />
           <DetailRow icon={<DollarSign className="w-3.5 h-3.5 text-emerald-400" />} label="Amount" value={`₹${numAmount.toLocaleString("en-IN")}`} ck="amount" copied={copied} onCopy={(_, k) => copy(String(numAmount), k)} mono />
-          <DetailRow icon={<Hash className="w-3.5 h-3.5 text-emerald-400" />} label="Reference" value={refCode} ck="ref" copied={copied} onCopy={copy} mono />
         </div>
 
         <div className="flex items-start gap-2 px-3 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/35">
           <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
           <div className="text-xs">
             Pay <span className="font-bold">exactly ₹{numAmount.toLocaleString("en-IN")}</span>
-            {"  ·  "}
-            <span className="text-muted-foreground">Add {refCode} in payment note for instant credit</span>
+            <span className="text-muted-foreground"> · Do not add any note or remarks while paying</span>
           </div>
         </div>
 
@@ -199,7 +197,7 @@ export default function DepositUpiPayPage() {
           <div className="text-[10px] font-bold tracking-widest text-muted-foreground">HOW IT WORKS</div>
           {[
             "Scan QR or paste UPI ID in any UPI app",
-            "Pay the exact amount with reference code",
+            "Pay the exact amount — no remarks needed",
             "Submit UTR + screenshot · funds credited in 2 mins",
           ].map((t, i) => (
             <div key={i} className="flex items-center gap-2.5">
