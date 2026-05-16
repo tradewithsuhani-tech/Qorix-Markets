@@ -17,7 +17,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Shield, Zap, BarChart2, Play, Square, RefreshCw,
   TrendingUp, AlertTriangle, CheckCircle, ChevronRight,
-  ArrowUpRight, Info, X, Wallet, Bot, Cpu, Activity, Terminal, Sparkles
+  ArrowUpRight, Info, X, Wallet, Bot, Cpu, Activity, Terminal, Sparkles, Plus
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
