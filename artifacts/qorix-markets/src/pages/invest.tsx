@@ -1583,6 +1583,101 @@ export default function InvestPage() {
                   ))}
                 </div>
 
+                {/* ── Action Row: Compounding + Top Up + Stop Trading ── */}
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-4 mb-5 border-t border-white/8">
+                  <div className="flex items-center gap-3">
+                    <Switch
+                      checked={investment.autoCompound}
+                      onCheckedChange={(checked) => compoundMutation.mutate({ data: { autoCompound: checked } })}
+                    />
+                    <span className="text-sm font-medium flex items-center gap-2">
+                      <RefreshCw style={{ width: 14, height: 14 }} className="text-emerald-400" />
+                      Auto-Compound Profits
+                    </span>
+                    {investment.autoCompound && (
+                      <span className="text-xs bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 px-2 py-0.5 rounded-full">ON</span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setShowTopupModal(true)}
+                      className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-500/10 text-blue-400 hover:bg-blue-500/15 border border-blue-500/25 rounded-xl font-medium transition-all text-sm"
+                    >
+                      <Plus style={{ width: 14, height: 14 }} />
+                      Top Up
+                    </button>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <button
+                        disabled={stopMutation.isPending}
+                        className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 bg-red-500/10 text-red-400 hover:bg-red-500/15 border border-red-500/25 rounded-xl font-medium transition-all text-sm disabled:opacity-50"
+                      >
+                        <Square style={{ width: 14, height: 14 }} />
+                        {stopMutation.isPending ? "Stopping..." : "Stop Trading"}
+                      </button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent
+                      className="max-w-md border-red-500/30 bg-[#0a0d12] rounded-2xl p-0 gap-0 overflow-hidden shadow-[0_0_60px_-15px_rgba(239,68,68,0.35)]"
+                    >
+                      <div
+                        aria-hidden
+                        className="pointer-events-none absolute -top-16 -right-16 w-48 h-48 rounded-full bg-red-500/15 blur-3xl"
+                      />
+                      <div className="relative p-6 pb-5">
+                        <AlertDialogHeader className="space-y-0">
+                          <div className="flex items-start gap-3.5">
+                            <div className="w-12 h-12 rounded-xl bg-red-500/15 border border-red-500/40 flex items-center justify-center shrink-0 shadow-[0_0_16px_-4px_rgba(239,68,68,0.4)]">
+                              <Square style={{ width: 18, height: 18 }} className="text-red-300" />
+                            </div>
+                            <div className="flex-1 min-w-0 pt-0.5">
+                              <AlertDialogTitle className="text-xl font-bold text-white tracking-tight">
+                                Stop Trading?
+                              </AlertDialogTitle>
+                              <p className="text-[11px] uppercase tracking-[0.18em] text-red-300/80 font-semibold mt-1">
+                                This will halt your active strategy
+                              </p>
+                            </div>
+                          </div>
+                          <AlertDialogDescription className="pt-5 text-sm text-white/65 leading-relaxed">
+                            Daily profits will stop being credited from the next cycle.
+                            Your capital is{" "}
+                            <span className="text-white font-medium">never locked</span>
+                            {" "}— you can resume or redeploy anytime.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <div className="mt-4 rounded-xl border border-emerald-500/25 bg-emerald-500/[0.04] p-3.5">
+                          <div className="flex items-center gap-3">
+                            <div className="w-9 h-9 rounded-lg bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center shrink-0">
+                              <Shield style={{ width: 15, height: 15 }} className="text-emerald-300" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-[10px] uppercase tracking-[0.18em] text-emerald-300/80 font-semibold">
+                                Capital Safe
+                              </p>
+                              <p className="text-sm text-white font-semibold mt-0.5 tabular-nums">
+                                ${investment.amount.toFixed(2)}{" "}
+                                <span className="text-white/50 font-normal">stays in trading balance</span>
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <AlertDialogFooter className="!flex-row !justify-stretch gap-2.5 px-6 pb-6 pt-4 sm:!space-x-0 border-t border-white/5 bg-white/[0.015]">
+                        <AlertDialogCancel className="!mt-0 flex-1 h-11 border-white/10 bg-white/[0.04] text-white/85 hover:bg-white/[0.08] hover:text-white hover:border-white/20 rounded-xl font-semibold transition-all">
+                          Cancel
+                        </AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={() => stopMutation.mutate()}
+                          className="flex-1 h-11 bg-gradient-to-b from-red-500 to-red-600 text-white border border-red-400/40 hover:from-red-400 hover:to-red-500 rounded-xl font-semibold transition-all shadow-[0_0_20px_-6px_rgba(239,68,68,0.55)] flex items-center justify-center gap-2"
+                        >
+                          <Square style={{ width: 13, height: 13 }} />
+                          Stop Trading
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                  </div>
+                </div>
 
                 {/* Risk Meter */}
                 <div className="mb-5">
@@ -1622,106 +1717,6 @@ export default function InvestPage() {
                   </div>
                 </div>
 
-                <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-white/8">
-                  <div className="flex items-center gap-3">
-                    <Switch
-                      checked={investment.autoCompound}
-                      onCheckedChange={(checked) => compoundMutation.mutate({ data: { autoCompound: checked } })}
-                    />
-                    <span className="text-sm font-medium flex items-center gap-2">
-                      <RefreshCw style={{ width: 14, height: 14 }} className="text-emerald-400" />
-                      Auto-Compound Profits
-                    </span>
-                    {investment.autoCompound && (
-                      <span className="text-xs bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 px-2 py-0.5 rounded-full">ON</span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <button
-                      onClick={() => setShowTopupModal(true)}
-                      className="flex items-center gap-2 px-5 py-2.5 bg-blue-500/10 text-blue-400 hover:bg-blue-500/15 border border-blue-500/25 rounded-xl font-medium transition-all text-sm"
-                    >
-                      <Plus style={{ width: 14, height: 14 }} />
-                      Top Up
-                    </button>
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <button
-                        disabled={stopMutation.isPending}
-                        className="flex items-center gap-2 px-5 py-2.5 bg-red-500/10 text-red-400 hover:bg-red-500/15 border border-red-500/25 rounded-xl font-medium transition-all text-sm disabled:opacity-50"
-                      >
-                        <Square style={{ width: 14, height: 14 }} />
-                        {stopMutation.isPending ? "Stopping..." : "Stop Trading"}
-                      </button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent
-                      className="max-w-md border-red-500/30 bg-[#0a0d12] rounded-2xl p-0 gap-0 overflow-hidden shadow-[0_0_60px_-15px_rgba(239,68,68,0.35)]"
-                    >
-                      {/* Decorative red ambient glow — top-right corner */}
-                      <div
-                        aria-hidden
-                        className="pointer-events-none absolute -top-16 -right-16 w-48 h-48 rounded-full bg-red-500/15 blur-3xl"
-                      />
-
-                      <div className="relative p-6 pb-5">
-                        <AlertDialogHeader className="space-y-0">
-                          <div className="flex items-start gap-3.5">
-                            <div className="w-12 h-12 rounded-xl bg-red-500/15 border border-red-500/40 flex items-center justify-center shrink-0 shadow-[0_0_16px_-4px_rgba(239,68,68,0.4)]">
-                              <Square style={{ width: 18, height: 18 }} className="text-red-300" />
-                            </div>
-                            <div className="flex-1 min-w-0 pt-0.5">
-                              <AlertDialogTitle className="text-xl font-bold text-white tracking-tight">
-                                Stop Trading?
-                              </AlertDialogTitle>
-                              <p className="text-[11px] uppercase tracking-[0.18em] text-red-300/80 font-semibold mt-1">
-                                This will halt your active strategy
-                              </p>
-                            </div>
-                          </div>
-
-                          <AlertDialogDescription className="pt-5 text-sm text-white/65 leading-relaxed">
-                            Daily profits will stop being credited from the next cycle.
-                            Your capital is{" "}
-                            <span className="text-white font-medium">never locked</span>
-                            {" "}— you can resume or redeploy anytime.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-
-                        {/* Capital-safety info card */}
-                        <div className="mt-4 rounded-xl border border-emerald-500/25 bg-emerald-500/[0.04] p-3.5">
-                          <div className="flex items-center gap-3">
-                            <div className="w-9 h-9 rounded-lg bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center shrink-0">
-                              <Shield style={{ width: 15, height: 15 }} className="text-emerald-300" />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-[10px] uppercase tracking-[0.18em] text-emerald-300/80 font-semibold">
-                                Capital Safe
-                              </p>
-                              <p className="text-sm text-white font-semibold mt-0.5 tabular-nums">
-                                ${investment.amount.toFixed(2)}{" "}
-                                <span className="text-white/50 font-normal">stays in trading balance</span>
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      <AlertDialogFooter className="!flex-row !justify-stretch gap-2.5 px-6 pb-6 pt-4 sm:!space-x-0 border-t border-white/5 bg-white/[0.015]">
-                        <AlertDialogCancel className="!mt-0 flex-1 h-11 border-white/10 bg-white/[0.04] text-white/85 hover:bg-white/[0.08] hover:text-white hover:border-white/20 rounded-xl font-semibold transition-all">
-                          Cancel
-                        </AlertDialogCancel>
-                        <AlertDialogAction
-                          onClick={() => stopMutation.mutate()}
-                          className="flex-1 h-11 bg-gradient-to-b from-red-500 to-red-600 text-white border border-red-400/40 hover:from-red-400 hover:to-red-500 rounded-xl font-semibold transition-all shadow-[0_0_20px_-6px_rgba(239,68,68,0.55)] flex items-center justify-center gap-2"
-                        >
-                          <Square style={{ width: 13, height: 13 }} />
-                          Stop Trading
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
-                  </div>
-                </div>
               </div>
             </motion.div>
               );
