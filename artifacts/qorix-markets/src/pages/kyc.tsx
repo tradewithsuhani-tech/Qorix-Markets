@@ -227,6 +227,7 @@ export default function KycPage() {
   const [otpCode, setOtpCode] = useState("");
   const [otpExpiresAt, setOtpExpiresAt] = useState<number | null>(null);
   const [otpCooldownUntil, setOtpCooldownUntil] = useState<number | null>(null);
+  const [smsSentAt, setSmsSentAt] = useState<number | null>(null);
   const [otpTickNow, setOtpTickNow] = useState(Date.now());
 
   const phoneStatus = useQuery<{
@@ -263,13 +264,20 @@ export default function KycPage() {
   const phoneVerified = !!phoneStatus.data?.verified;
 
   const sendOtp = useMutation({
-    mutationFn: () =>
+    mutationFn: (channel: "sms" | "voice" = "sms") =>
       authFetch("/api/phone-otp/send", {
         method: "POST",
-        body: JSON.stringify({ phone }),
+        body: JSON.stringify({ phone, channel }),
       }),
     onSuccess: (data: any) => {
-      toast({ title: "Voice OTP sent", description: "You will get a call in a few seconds. Pick up & note the digits." });
+      const isSms = data?.channel !== "voice";
+      if (isSms) {
+        toast({ title: "SMS OTP sent", description: "Check your SMS inbox for the OTP code." });
+        setSmsSentAt(Date.now());
+      } else {
+        toast({ title: "Voice OTP sent", description: "You will get a call in a few seconds. Note the digits." });
+        setSmsSentAt(null);
+      }
       setOtpExpiresAt(data?.expiresAt ? new Date(data.expiresAt).getTime() : Date.now() + 5 * 60 * 1000);
       setOtpCooldownUntil(Date.now() + (data?.cooldownSec ?? 60) * 1000);
       setOtpCode("");
@@ -613,21 +621,21 @@ export default function KycPage() {
                                 <button
                                   type="button"
                                   disabled={!indianPhoneOk || sendOtp.isPending || cooldownSecLeft > 0}
-                                  onClick={() => sendOtp.mutate()}
+                                  onClick={() => sendOtp.mutate("sms")}
                                   className="w-full sm:w-auto px-4 py-3 sm:py-2.5 rounded-xl bg-blue-500/15 border border-blue-500/30 text-blue-300 text-sm sm:text-xs font-semibold disabled:opacity-40 hover:bg-blue-500/25 transition-all whitespace-nowrap"
                                 >
-                                  {sendOtp.isPending ? "Calling…" :
+                                  {sendOtp.isPending ? "Sending…" :
                                    cooldownSecLeft > 0 ? `Resend in ${cooldownSecLeft}s` :
-                                   otpExpiresAt ? "Resend Call" : "Send Voice OTP"}
+                                   otpExpiresAt ? "Resend SMS" : "Send OTP"}
                                 </button>
                               )}
                             </div>
                             {!phoneVerified && !otpExpiresAt && (
                               <p className="text-[11px] text-muted-foreground">
                                 {phone && phoneDigitsOk ? (
-                                  <>We will place an automated voice call to <span className="font-mono text-white/80">{countryCode} {phone}</span> with a 6-digit OTP.</>
+                                  <>We will send an SMS OTP to <span className="font-mono text-white/80">{countryCode} {phone}</span>.</>
                                 ) : (
-                                  <>Pick your country, then enter your mobile number. We will call you with a 6-digit OTP.</>
+                                  <>Pick your country, then enter your mobile number. We will send you an OTP via SMS.</>
                                 )}
                               </p>
                             )}
@@ -636,7 +644,8 @@ export default function KycPage() {
                             {!phoneVerified && otpExpiresAt && otpSecondsLeft > 0 && (
                               <div className="rounded-xl bg-blue-500/[0.06] border border-blue-500/20 p-3 space-y-2">
                                 <div className="text-[11px] text-blue-200 leading-snug">
-                                  📞 Pick up the call & enter the digits the bot speaks. Code expires in <span className="font-semibold">{Math.floor(otpSecondsLeft / 60)}:{String(otpSecondsLeft % 60).padStart(2, "0")}</span>.
+                                  {smsSentAt ? "💬 Enter the OTP sent to your mobile via SMS." : "📞 Pick up the call & enter the digits the bot speaks."}{" "}
+                                  Code expires in <span className="font-semibold">{Math.floor(otpSecondsLeft / 60)}:{String(otpSecondsLeft % 60).padStart(2, "0")}</span>.
                                 </div>
                                 <div className="flex gap-2">
                                   <input
@@ -656,11 +665,30 @@ export default function KycPage() {
                                     {verifyOtp.isPending ? "Verifying…" : "Verify"}
                                   </button>
                                 </div>
+                                {/* Voice OTP fallback — show after 30s if SMS was sent */}
+                                {smsSentAt && (otpTickNow - smsSentAt) >= 30_000 && cooldownSecLeft === 0 && (
+                                  <div className="flex items-center justify-between pt-1">
+                                    <span className="text-[11px] text-white/45">Didn't receive the SMS?</span>
+                                    <button
+                                      type="button"
+                                      disabled={sendOtp.isPending}
+                                      onClick={() => sendOtp.mutate("voice")}
+                                      className="text-[11px] text-amber-300 hover:text-amber-200 font-semibold underline underline-offset-2 disabled:opacity-40 transition-colors"
+                                    >
+                                      {sendOtp.isPending ? "Calling…" : "Try Voice Call"}
+                                    </button>
+                                  </div>
+                                )}
+                                {smsSentAt && (otpTickNow - smsSentAt) < 30_000 && (
+                                  <div className="text-[11px] text-white/40">
+                                    Voice call option in {30 - Math.floor((otpTickNow - smsSentAt) / 1000)}s if SMS not received
+                                  </div>
+                                )}
                               </div>
                             )}
                             {!phoneVerified && otpExpiresAt && otpSecondsLeft === 0 && (
                               <div className="text-[11px] text-rose-300 flex items-center gap-1.5">
-                                <AlertCircle className="w-3 h-3" /> OTP expired. Click Resend Call.
+                                <AlertCircle className="w-3 h-3" /> OTP expired. Click Resend SMS.
                               </div>
                             )}
                           </div>

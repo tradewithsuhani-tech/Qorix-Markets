@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
-import { Phone, Loader2, ArrowRight, RefreshCw, X, ShieldCheck, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { Phone, Loader2, ArrowRight, RefreshCw, X, ShieldCheck, AlertTriangle, CheckCircle2, PhoneCall } from "lucide-react";
 import { authFetch } from "@/lib/auth-fetch";
 import { useToast } from "@/hooks/use-toast";
 
@@ -45,6 +45,15 @@ export function PhoneChangeCard() {
   const [open, setOpen] = useState(false);
   const [otp, setOtp] = useState("");
   const [newPhone, setNewPhone] = useState("");
+  const [oldSmsSentAt, setOldSmsSentAt] = useState<number | null>(null);
+  const [newSmsSentAt, setNewSmsSentAt] = useState<number | null>(null);
+  const [tick, setTick] = useState(Date.now());
+
+  useEffect(() => {
+    if (!oldSmsSentAt && !newSmsSentAt) return;
+    const t = setInterval(() => setTick(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [oldSmsSentAt, newSmsSentAt]);
 
   const { data: status, isLoading } = useQuery<ChangeStatus>({
     queryKey: ["phone-change-status"],
@@ -74,11 +83,17 @@ export function PhoneChangeCard() {
   };
 
   const startMut = useMutation({
-    mutationFn: async () => {
-      return await authFetch<{ sentTo: string }>(api("/phone-change/start"), { method: "POST", body: JSON.stringify({}) });
+    mutationFn: async (channel: "sms" | "voice" = "sms") => {
+      return await authFetch<{ sentTo: string; channel: string }>(api("/phone-change/start"), { method: "POST", body: JSON.stringify({ channel }) });
     },
     onSuccess: (d: any) => {
-      toast({ title: "Voice call placed", description: `OTP sent to ${d.sentTo}` });
+      if (d?.channel === "voice") {
+        toast({ title: "Voice call placed", description: `OTP call sent to ${d.sentTo}` });
+        setOldSmsSentAt(null);
+      } else {
+        toast({ title: "SMS OTP sent", description: `OTP sent to ${d.sentTo}` });
+        setOldSmsSentAt(Date.now());
+      }
       qc.invalidateQueries({ queryKey: ["phone-change-status"] });
     },
     onError: handleApiError,
@@ -97,11 +112,17 @@ export function PhoneChangeCard() {
   });
 
   const sendNewMut = useMutation({
-    mutationFn: async () => {
-      return await authFetch<{ newPhone: string }>(api("/phone-change/send-new"), { method: "POST", body: JSON.stringify({ phone: newPhone }) });
+    mutationFn: async (channel: "sms" | "voice" = "sms") => {
+      return await authFetch<{ newPhone: string; channel: string }>(api("/phone-change/send-new"), { method: "POST", body: JSON.stringify({ phone: newPhone, channel }) });
     },
     onSuccess: (d: any) => {
-      toast({ title: "Voice call placed", description: `OTP sent to your new number ${maskPhone(d.newPhone)}` });
+      if (d?.channel === "voice") {
+        toast({ title: "Voice call placed", description: `OTP call sent to ${maskPhone(d.newPhone)}` });
+        setNewSmsSentAt(null);
+      } else {
+        toast({ title: "SMS OTP sent", description: `OTP sent to your new number ${maskPhone(d.newPhone)}` });
+        setNewSmsSentAt(Date.now());
+      }
       qc.invalidateQueries({ queryKey: ["phone-change-status"] });
     },
     onError: handleApiError,
@@ -157,7 +178,7 @@ export function PhoneChangeCard() {
               <div className="text-sm font-medium font-mono">{maskPhone(status?.currentPhone)}</div>
               <div className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1.5">
                 {status?.currentVerified ? (
-                  <><ShieldCheck className="w-3 h-3 text-emerald-400" /> Verified via voice OTP</>
+                  <><ShieldCheck className="w-3 h-3 text-emerald-400" /> Verified</>
                 ) : (
                   <><AlertTriangle className="w-3 h-3 text-amber-400" /> Not verified yet</>
                 )}
@@ -214,12 +235,12 @@ export function PhoneChangeCard() {
               {(step === "idle" || step === "awaiting_old_otp") && (
                 <div className="space-y-3">
                   <div className="text-sm">
-                    We will place a voice call to your current verified number{" "}
+                    We will send an SMS OTP to your current verified number{" "}
                     <span className="font-mono font-semibold">{maskPhone(status?.currentPhone)}</span>.
                   </div>
                   {step === "idle" ? (
                     <button
-                      onClick={() => startMut.mutate()}
+                      onClick={() => startMut.mutate("sms")}
                       disabled={startMut.isPending}
                       className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-sm font-medium flex items-center justify-center gap-2"
                     >
@@ -229,7 +250,7 @@ export function PhoneChangeCard() {
                   ) : (
                     <>
                       <div className="flex items-center justify-between text-xs text-muted-foreground">
-                        <span>Enter the digits you heard</span>
+                        <span>{oldSmsSentAt ? "Enter the SMS OTP" : "Enter the digits you heard"}</span>
                         <span>{otpExpiresIn > 0 ? `${otpExpiresIn}s remaining` : "expired"}</span>
                       </div>
                       <input
@@ -242,11 +263,11 @@ export function PhoneChangeCard() {
                       />
                       <div className="flex gap-2">
                         <button
-                          onClick={() => startMut.mutate()}
+                          onClick={() => startMut.mutate("sms")}
                           disabled={startMut.isPending}
                           className="flex-1 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-xs flex items-center justify-center gap-2"
                         >
-                          <RefreshCw className="w-3 h-3" /> Resend
+                          <RefreshCw className="w-3 h-3" /> Resend SMS
                         </button>
                         <button
                           onClick={() => verifyOldMut.mutate()}
@@ -257,6 +278,24 @@ export function PhoneChangeCard() {
                           Verify old number
                         </button>
                       </div>
+                      {/* Voice fallback after 30s */}
+                      {oldSmsSentAt && (tick - oldSmsSentAt) >= 30_000 && (
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-white/45">Didn't receive the SMS?</span>
+                          <button
+                            onClick={() => startMut.mutate("voice")}
+                            disabled={startMut.isPending}
+                            className="text-amber-300 hover:text-amber-200 font-semibold flex items-center gap-1 disabled:opacity-40"
+                          >
+                            <PhoneCall className="w-3 h-3" /> Try Voice Call
+                          </button>
+                        </div>
+                      )}
+                      {oldSmsSentAt && (tick - oldSmsSentAt) < 30_000 && (
+                        <div className="text-xs text-white/35">
+                          Voice call option in {30 - Math.floor((tick - oldSmsSentAt) / 1000)}s
+                        </div>
+                      )}
                     </>
                   )}
                 </div>
@@ -279,12 +318,12 @@ export function PhoneChangeCard() {
                     className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-base font-mono tracking-wider focus:ring-1 focus:ring-emerald-500/50"
                   />
                   <button
-                    onClick={() => sendNewMut.mutate()}
+                    onClick={() => sendNewMut.mutate("sms")}
                     disabled={!newPhoneValid || sendNewMut.isPending}
                     className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-sm font-medium flex items-center justify-center gap-2"
                   >
                     {sendNewMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Phone className="w-4 h-4" />}
-                    Send OTP to new number
+                    Send SMS OTP to new number
                   </button>
                 </div>
               )}
@@ -294,10 +333,10 @@ export function PhoneChangeCard() {
                 <div className="space-y-3">
                   <div className="flex items-start gap-2 text-xs text-emerald-300 bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-2.5">
                     <CheckCircle2 className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-                    <span>Voice call placed to <span className="font-mono">{maskPhone(status?.pendingNewPhone)}</span></span>
+                    <span>{newSmsSentAt ? "SMS OTP sent to" : "Voice call placed to"} <span className="font-mono">{maskPhone(status?.pendingNewPhone)}</span></span>
                   </div>
                   <div className="flex items-center justify-between text-xs text-muted-foreground">
-                    <span>Enter the digits you heard on the new number</span>
+                    <span>{newSmsSentAt ? "Enter the SMS OTP" : "Enter the digits you heard"}</span>
                     <span>{otpExpiresIn > 0 ? `${otpExpiresIn}s remaining` : "expired"}</span>
                   </div>
                   <input
@@ -310,11 +349,11 @@ export function PhoneChangeCard() {
                   />
                   <div className="flex gap-2">
                     <button
-                      onClick={() => sendNewMut.mutate()}
+                      onClick={() => sendNewMut.mutate("sms")}
                       disabled={sendNewMut.isPending}
                       className="flex-1 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-xs flex items-center justify-center gap-2"
                     >
-                      <RefreshCw className="w-3 h-3" /> Resend
+                      <RefreshCw className="w-3 h-3" /> Resend SMS
                     </button>
                     <button
                       onClick={() => verifyNewMut.mutate()}
@@ -325,6 +364,24 @@ export function PhoneChangeCard() {
                       Confirm change
                     </button>
                   </div>
+                  {/* Voice fallback after 30s */}
+                  {newSmsSentAt && (tick - newSmsSentAt) >= 30_000 && (
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-white/45">Didn't receive the SMS?</span>
+                      <button
+                        onClick={() => sendNewMut.mutate("voice")}
+                        disabled={sendNewMut.isPending}
+                        className="text-amber-300 hover:text-amber-200 font-semibold flex items-center gap-1 disabled:opacity-40"
+                      >
+                        <PhoneCall className="w-3 h-3" /> Try Voice Call
+                      </button>
+                    </div>
+                  )}
+                  {newSmsSentAt && (tick - newSmsSentAt) < 30_000 && (
+                    <div className="text-xs text-white/35">
+                      Voice call option in {30 - Math.floor((tick - newSmsSentAt) / 1000)}s
+                    </div>
+                  )}
                 </div>
               )}
             </motion.div>

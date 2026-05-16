@@ -46,20 +46,25 @@ function normalizePhone(raw: string): string | null {
 }
 
 type TwoFactorResp = { Status?: string; Details?: string };
+type OtpChannel = "sms" | "voice";
 
-async function callVoiceAutogen(phone: string): Promise<{ ok: boolean; sessionId?: string; error?: string }> {
+async function send2FactorOtp(phone: string, channel: OtpChannel): Promise<{ ok: boolean; sessionId?: string; error?: string }> {
   try {
-    const url = `https://2factor.in/API/V1/${encodeURIComponent(TWO_FACTOR_KEY)}/VOICE/${encodeURIComponent(phone)}/AUTOGEN`;
+    const ch = channel === "voice" ? "VOICE" : "SMS";
+    const url = `https://2factor.in/API/V1/${encodeURIComponent(TWO_FACTOR_KEY)}/${ch}/${encodeURIComponent(phone)}/AUTOGEN`;
     const r = await fetch(url);
     const data = (await r.json().catch(() => ({}))) as TwoFactorResp;
     if (!r.ok || data?.Status !== "Success" || !data?.Details) {
-      return { ok: false, error: data?.Details || `voice send failed (${r.status})` };
+      return { ok: false, error: data?.Details || `${ch} OTP send failed (${r.status})` };
     }
     return { ok: true, sessionId: String(data.Details) };
   } catch (err: any) {
     return { ok: false, error: err?.message || "network error" };
   }
 }
+
+// Keep backward-compat alias — used by start/send-new routes below
+function callVoiceAutogen(phone: string) { return send2FactorOtp(phone, "voice"); }
 
 async function verifySessionOtp(sessionId: string, otp: string): Promise<{ ok: boolean; expired: boolean; details: string }> {
   // Same dual-channel verifier as /phone-otp/verify — try unified SMS path
@@ -135,9 +140,12 @@ router.post("/phone-change/start", authMiddleware, async (req: AuthRequest, res)
   });
   if (budget) { res.status(budget.status).json(budget.body); return; }
 
-  const r = await callVoiceAutogen(user.phoneNumber);
+  const rawCh = String((req.body as any)?.channel ?? "sms").toLowerCase();
+  const channel: OtpChannel = rawCh === "voice" ? "voice" : "sms";
+
+  const r = await send2FactorOtp(user.phoneNumber, channel);
   if (!r.ok) {
-    res.status(502).json({ error: "otp_send_failed", message: r.error || "Could not place voice call. Try again." });
+    res.status(502).json({ error: "otp_send_failed", message: r.error || `Could not send ${channel} OTP. Try again.` });
     return;
   }
 
@@ -157,12 +165,13 @@ router.post("/phone-change/start", authMiddleware, async (req: AuthRequest, res)
     .where(eq(usersTable.id, req.userId!));
 
   // Mask the old number in the response — UI only needs to show last-4 to
-  // remind the user where the call is going.
+  // remind the user where the OTP is going.
   const masked = user.phoneNumber.length >= 4
     ? "******" + user.phoneNumber.slice(-4)
     : user.phoneNumber;
   res.json({
     success: true,
+    channel,
     expiresAt: expiresAt.toISOString(),
     cooldownSec: RESEND_COOLDOWN_MS / 1000,
     sentTo: masked,
@@ -294,9 +303,12 @@ router.post("/phone-change/send-new", authMiddleware, async (req: AuthRequest, r
   });
   if (budget) { res.status(budget.status).json(budget.body); return; }
 
-  const r = await callVoiceAutogen(newNorm);
+  const rawCh2 = String((req.body as any)?.channel ?? "sms").toLowerCase();
+  const channel2: OtpChannel = rawCh2 === "voice" ? "voice" : "sms";
+
+  const r = await send2FactorOtp(newNorm, channel2);
   if (!r.ok) {
-    res.status(502).json({ error: "otp_send_failed", message: r.error || "Could not place voice call. Try again." });
+    res.status(502).json({ error: "otp_send_failed", message: r.error || `Could not send ${channel2} OTP. Try again.` });
     return;
   }
 
@@ -314,6 +326,7 @@ router.post("/phone-change/send-new", authMiddleware, async (req: AuthRequest, r
 
   res.json({
     success: true,
+    channel: channel2,
     expiresAt: expiresAt.toISOString(),
     cooldownSec: RESEND_COOLDOWN_MS / 1000,
     newPhone: newNorm,

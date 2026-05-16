@@ -11,6 +11,23 @@ const OTP_EXPIRY_MS = 5 * 60 * 1000; // 5 min
 const RESEND_COOLDOWN_MS = 60 * 1000; // 60 sec
 const MAX_SENDS_PER_DAY = 8;
 
+type OtpChannel = "sms" | "voice";
+
+async function send2FactorOtp(phone: string, channel: OtpChannel): Promise<{ ok: boolean; sessionId?: string; error?: string }> {
+  try {
+    const ch = channel === "voice" ? "VOICE" : "SMS";
+    const url = `https://2factor.in/API/V1/${encodeURIComponent(TWO_FACTOR_KEY)}/${ch}/${encodeURIComponent(phone)}/AUTOGEN`;
+    const r = await fetch(url);
+    const data: any = await r.json().catch(() => ({}));
+    if (!r.ok || data?.Status !== "Success" || !data?.Details) {
+      return { ok: false, error: data?.Details || `${ch} OTP send failed (${r.status})` };
+    }
+    return { ok: true, sessionId: String(data.Details) };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || "network error" };
+  }
+}
+
 // Normalize Indian phone — accept "+91", "91", or 10-digit and return clean 10-digit
 function normalizePhone(raw: string): string | null {
   const digits = String(raw ?? "").replace(/\D/g, "");
@@ -104,21 +121,22 @@ router.post("/phone-otp/send", authMiddleware, async (req: AuthRequest, res) => 
     return;
   }
 
-  // Call 2Factor.in Voice OTP API
+  // Default channel is SMS; frontend can pass channel:"voice" as explicit fallback
+  const rawChannel = String(req.body?.channel ?? "sms").toLowerCase();
+  const channel: OtpChannel = rawChannel === "voice" ? "voice" : "sms";
+
   let sessionId: string;
   try {
-    const url = `https://2factor.in/API/V1/${encodeURIComponent(TWO_FACTOR_KEY)}/VOICE/${encodeURIComponent(normalized)}/AUTOGEN`;
-    const r = await fetch(url);
-    const data: any = await r.json().catch(() => ({}));
-    if (!r.ok || data?.Status !== "Success" || !data?.Details) {
-      console.warn("[phone-otp] 2Factor send failed", { status: r.status, data });
-      res.status(502).json({ error: "otp_send_failed", message: data?.Details || "Could not place voice call. Try again." });
+    const result = await send2FactorOtp(normalized, channel);
+    if (!result.ok) {
+      console.warn("[phone-otp] 2Factor send failed", { channel, error: result.error });
+      res.status(502).json({ error: "otp_send_failed", message: result.error || `Could not send ${channel === "voice" ? "voice" : "SMS"} OTP. Try again.` });
       return;
     }
-    sessionId = String(data.Details);
+    sessionId = result.sessionId!;
   } catch (err: any) {
     console.error("[phone-otp] 2Factor network error", err?.message);
-    res.status(502).json({ error: "otp_network_error", message: "Network error contacting voice OTP service" });
+    res.status(502).json({ error: "otp_network_error", message: "Network error contacting OTP service" });
     return;
   }
 
@@ -136,6 +154,7 @@ router.post("/phone-otp/send", authMiddleware, async (req: AuthRequest, res) => 
 
   res.json({
     success: true,
+    channel,
     expiresAt: expiresAt.toISOString(),
     cooldownSec: RESEND_COOLDOWN_MS / 1000,
     sendsRemaining: Math.max(0, MAX_SENDS_PER_DAY - ((user.phoneOtpSendCount ?? 0) + 1)),
@@ -303,7 +322,7 @@ router.post("/phone-otp/verify", authMiddleware, async (req: AuthRequest, res) =
     return;
   }
 
-  await createNotification(req.userId!, "system", "Phone verified", "Your mobile number has been verified via voice OTP.");
+  await createNotification(req.userId!, "system", "Phone verified", "Your mobile number has been successfully verified.");
   res.json({ success: true, verified: true });
 });
 
