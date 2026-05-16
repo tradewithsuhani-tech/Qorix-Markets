@@ -1199,7 +1199,8 @@ const TX_ICON: Record<string, { icon: React.ElementType; color: string; bg: stri
   profit:         { icon: TrendingUp,      color: "text-emerald-400", bg: "bg-emerald-500/12 border-emerald-500/25", label: "Profit" },
   fee:            { icon: DollarSign,      color: "text-rose-400",    bg: "bg-rose-500/12 border-rose-500/25",       label: "Fee" },
   referral_bonus: { icon: DollarSign,      color: "text-teal-300",    bg: "bg-teal-500/12 border-teal-500/25",       label: "Referral" },
-  investment:     { icon: TrendingUp,      color: "text-teal-300",    bg: "bg-teal-500/12 border-teal-500/25",       label: "Investment" },
+  investment:     { icon: TrendingUp,      color: "text-teal-300",    bg: "bg-teal-500/12 border-teal-500/25",       label: "Capital Deployed" },
+  topup:          { icon: TrendingUp,      color: "text-teal-300",    bg: "bg-teal-500/12 border-teal-500/25",       label: "Capital Added" },
 };
 
 function TxRow({ tx, fxRate }: { tx: any; fxRate: number }) {

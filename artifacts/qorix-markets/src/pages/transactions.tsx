@@ -30,7 +30,8 @@ const TX_META: Record<string, { label: string; icon: React.ElementType; color: s
   profit:        { label: "Profit",        icon: TrendingUp,       color: "text-emerald-400", bg: "bg-emerald-500/12 border-emerald-500/20" },
   fee:           { label: "Fee",           icon: DollarSign,       color: "text-red-400",     bg: "bg-red-500/12 border-red-500/20" },
   referral_bonus:{ label: "Referral",      icon: DollarSign,       color: "text-teal-300",    bg: "bg-teal-500/12 border-teal-500/20" },
-  investment:    { label: "Investment",    icon: TrendingUp,       color: "text-teal-300",    bg: "bg-teal-500/12 border-teal-500/20" },
+  investment:    { label: "Capital Deployed", icon: TrendingUp,    color: "text-teal-300",    bg: "bg-teal-500/12 border-teal-500/20" },
+  topup:         { label: "Capital Added",    icon: TrendingUp,    color: "text-teal-300",    bg: "bg-teal-500/12 border-teal-500/20" },
   system:        { label: "System",        icon: Clock,            color: "text-muted-foreground", bg: "bg-white/5 border-white/8" },
 };
 

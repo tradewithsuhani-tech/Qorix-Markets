@@ -140,7 +140,7 @@ router.post("/investment/start", async (req: AuthRequest, res) => {
       type: "investment",
       amount: amount.toString(),
       status: "completed",
-      description: `Started auto trading with $${amount.toFixed(2)} at ${riskKey} risk (${drawdownLimit}% protection)`,
+      description: `Capital Deployed: $${amount.toFixed(2)} at ${riskKey} risk (${drawdownLimit}% protection)`,
     });
 
     // ── One-time referral signup bonus (3% of first activation amount) ──
@@ -311,10 +311,10 @@ router.post("/investment/topup", async (req: AuthRequest, res) => {
 
     await tx.insert(transactionsTable).values({
       userId: req.userId!,
-      type: "investment",
+      type: "topup",
       amount: amount.toString(),
       status: "completed",
-      description: `Top-up: added $${amount.toFixed(2)} to active investment (new total: $${newAmount.toFixed(2)})`,
+      description: `Capital Added: $${amount.toFixed(2)} to active strategy (new total: $${newAmount.toFixed(2)})`,
     });
 
     return updatedInv!;
