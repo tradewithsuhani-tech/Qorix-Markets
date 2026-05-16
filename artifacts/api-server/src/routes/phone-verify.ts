@@ -10,10 +10,13 @@ const TWO_FACTOR_KEY = process.env.TWO_FACTOR_API_KEY ?? "";
 const OTP_EXPIRY_MS = 5 * 60 * 1000; // 5 min
 const RESEND_COOLDOWN_MS = 60 * 1000; // 60 sec
 const MAX_SENDS_PER_DAY = 8;
+const WA_TEMPLATE_SID = "HXbdd9475d6e8e6f4f6222133c37310ea1";
+// Prefix stored in phoneOtpSessionId when OTP was sent via WhatsApp (we own the code)
+const WA_PREFIX = "wa:";
 
-type OtpChannel = "sms" | "voice";
+type OtpChannel = "sms" | "voice" | "whatsapp";
 
-async function send2FactorOtp(phone: string, channel: OtpChannel): Promise<{ ok: boolean; sessionId?: string; error?: string }> {
+async function send2FactorOtp(phone: string, channel: "sms" | "voice"): Promise<{ ok: boolean; sessionId?: string; error?: string }> {
   try {
     const ch = channel === "voice" ? "VOICE" : "SMS";
     const url = `https://2factor.in/API/V1/${encodeURIComponent(TWO_FACTOR_KEY)}/${ch}/${encodeURIComponent(phone)}/AUTOGEN`;
@@ -28,6 +31,41 @@ async function send2FactorOtp(phone: string, channel: OtpChannel): Promise<{ ok:
   }
 }
 
+// ─── WhatsApp OTP via Twilio Content Template ─────────────────────────────────
+async function sendWhatsAppOtp(phone: string): Promise<{ ok: boolean; otp?: string; error?: string }> {
+  const sid  = process.env.TWILIO_ACCOUNT_SID ?? "";
+  const auth = process.env.TWILIO_AUTH_TOKEN  ?? "";
+  const from = process.env.TWILIO_WHATSAPP_FROM ?? "";
+  if (!sid || !auth || !from) return { ok: false, error: "WhatsApp OTP not configured (missing env vars)" };
+  const otp = String(Math.floor(100000 + Math.random() * 900000));
+  const body = new URLSearchParams({
+    From: `whatsapp:${from}`,
+    To: `whatsapp:+91${phone}`,
+    ContentSid: WA_TEMPLATE_SID,
+    ContentVariables: JSON.stringify({ "1": otp }),
+  });
+  try {
+    const r = await fetch(
+      `https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Basic ${Buffer.from(`${sid}:${auth}`).toString("base64")}`,
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: body.toString(),
+      },
+    );
+    if (!r.ok) {
+      const err: any = await r.json().catch(() => ({}));
+      return { ok: false, error: err?.message || `WhatsApp send failed (${r.status})` };
+    }
+    return { ok: true, otp };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || "network error" };
+  }
+}
+
 // Normalize Indian phone — accept "+91", "91", or 10-digit and return clean 10-digit
 function normalizePhone(raw: string): string | null {
   const digits = String(raw ?? "").replace(/\D/g, "");
@@ -37,10 +75,13 @@ function normalizePhone(raw: string): string | null {
   return null;
 }
 
-// POST /api/phone-otp/send  body: { phone }
+// POST /api/phone-otp/send  body: { phone, channel? }
 router.post("/phone-otp/send", authMiddleware, async (req: AuthRequest, res) => {
-  if (!TWO_FACTOR_KEY) {
-    res.status(500).json({ error: "otp_not_configured", message: "Voice OTP service not configured" });
+  const rawChannel = String(req.body?.channel ?? "sms").toLowerCase();
+  const channel: OtpChannel = rawChannel === "voice" ? "voice" : rawChannel === "whatsapp" ? "whatsapp" : "sms";
+
+  if (channel !== "whatsapp" && !TWO_FACTOR_KEY) {
+    res.status(500).json({ error: "otp_not_configured", message: "OTP service not configured" });
     return;
   }
   const { phone } = req.body ?? {};
@@ -121,23 +162,29 @@ router.post("/phone-otp/send", authMiddleware, async (req: AuthRequest, res) => 
     return;
   }
 
-  // Default channel is SMS; frontend can pass channel:"voice" as explicit fallback
-  const rawChannel = String(req.body?.channel ?? "sms").toLowerCase();
-  const channel: OtpChannel = rawChannel === "voice" ? "voice" : "sms";
-
   let sessionId: string;
-  try {
-    const result = await send2FactorOtp(normalized, channel);
+  if (channel === "whatsapp") {
+    const result = await sendWhatsAppOtp(normalized);
     if (!result.ok) {
-      console.warn("[phone-otp] 2Factor send failed", { channel, error: result.error });
-      res.status(502).json({ error: "otp_send_failed", message: result.error || `Could not send ${channel === "voice" ? "voice" : "SMS"} OTP. Try again.` });
+      console.warn("[phone-otp] WhatsApp send failed", { error: result.error });
+      res.status(502).json({ error: "otp_send_failed", message: result.error || "Could not send WhatsApp OTP. Try again." });
       return;
     }
-    sessionId = result.sessionId!;
-  } catch (err: any) {
-    console.error("[phone-otp] 2Factor network error", err?.message);
-    res.status(502).json({ error: "otp_network_error", message: "Network error contacting OTP service" });
-    return;
+    sessionId = WA_PREFIX + result.otp!;
+  } else {
+    try {
+      const result = await send2FactorOtp(normalized, channel);
+      if (!result.ok) {
+        console.warn("[phone-otp] 2Factor send failed", { channel, error: result.error });
+        res.status(502).json({ error: "otp_send_failed", message: result.error || `Could not send ${channel} OTP. Try again.` });
+        return;
+      }
+      sessionId = result.sessionId!;
+    } catch (err: any) {
+      console.error("[phone-otp] 2Factor network error", err?.message);
+      res.status(502).json({ error: "otp_network_error", message: "Network error contacting OTP service" });
+      return;
+    }
   }
 
   const expiresAt = new Date(Date.now() + OTP_EXPIRY_MS);
@@ -148,7 +195,7 @@ router.post("/phone-otp/send", authMiddleware, async (req: AuthRequest, res) => 
       phoneOtpExpiresAt: expiresAt,
       phoneOtpSendCount: (user.phoneOtpSendCount ?? 0) + 1,
       phoneOtpLastSentAt: new Date(),
-      phoneNumber: normalized, // tentative — only marked verified after OTP confirmed
+      phoneNumber: normalized,
     })
     .where(eq(usersTable.id, req.userId!));
 
@@ -205,15 +252,24 @@ router.post("/phone-otp/verify", authMiddleware, async (req: AuthRequest, res) =
   }
 
   if (!user.phoneOtpSessionId) {
-    res.status(400).json({ error: "no_active_otp", message: "Request a voice OTP first" });
+    res.status(400).json({ error: "no_active_otp", message: "Request an OTP first" });
     return;
   }
   if (user.phoneOtpExpiresAt && new Date(user.phoneOtpExpiresAt).getTime() < Date.now()) {
     await db.update(usersTable).set({ phoneOtpSessionId: null, phoneOtpExpiresAt: null }).where(eq(usersTable.id, req.userId!));
-    res.status(400).json({ error: "otp_expired", message: "Voice OTP expired. Request a new one." });
+    res.status(400).json({ error: "otp_expired", message: "OTP expired. Request a new one." });
     return;
   }
 
+  // WhatsApp OTP — we generated and stored the code ourselves; compare directly.
+  if (user.phoneOtpSessionId.startsWith(WA_PREFIX)) {
+    const storedOtp = user.phoneOtpSessionId.slice(WA_PREFIX.length);
+    if (cleanOtp !== storedOtp) {
+      res.status(400).json({ error: "otp_mismatch", message: "Wrong OTP. Check your WhatsApp and re-enter." });
+      return;
+    }
+    // WhatsApp verified — fall through to success block below (skip 2Factor API call)
+  } else {
   // Verify with 2Factor.in.
   // 2Factor exposes /SMS/VERIFY/{sessionId}/{otp} as the unified session-based
   // verifier (works for both SMS and Voice channels). Some accounts/plans
@@ -234,7 +290,6 @@ router.post("/phone-otp/verify", authMiddleware, async (req: AuthRequest, res) =
     const primary = await tryVerify("SMS");
     let final = primary;
     if (!primary.ok) {
-      // Fallback to VOICE channel verifier
       const fallback = await tryVerify("VOICE");
       if (fallback.ok) {
         console.log("[phone-otp] verify ok via VOICE fallback", { userId: req.userId, sessionId: user.phoneOtpSessionId });
@@ -251,7 +306,7 @@ router.post("/phone-otp/verify", authMiddleware, async (req: AuthRequest, res) =
         const isExpired = /expir/i.test(details);
         res.status(400).json({
           error: "otp_mismatch",
-          message: isExpired ? "OTP expired. Request a new voice call." : "Wrong OTP. Listen to the call again and re-enter.",
+          message: isExpired ? "OTP expired. Request a new one." : "Wrong OTP. Re-enter the code.",
         });
         return;
       }
@@ -262,6 +317,7 @@ router.post("/phone-otp/verify", authMiddleware, async (req: AuthRequest, res) =
     res.status(502).json({ error: "otp_network_error", message: "Network error verifying OTP" });
     return;
   }
+  } // end else (2Factor path)
 
   // Re-fetch the current phone the user submitted (set by /send) and final
   // race-condition guard: between /send and /verify another account could

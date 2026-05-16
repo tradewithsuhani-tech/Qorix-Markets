@@ -32,10 +32,9 @@ const TWO_FACTOR_KEY = process.env.TWO_FACTOR_API_KEY ?? "";
 const OTP_EXPIRY_MS = 5 * 60 * 1000;
 const RESEND_COOLDOWN_MS = 60 * 1000;
 const MAX_SENDS_PER_DAY = 8;
-// After old-phone OTP is verified the user has 10 minutes to submit the new
-// number + new-phone OTP before they have to start over. Bounds the window
-// during which a hijacked session could push through a phone change.
 const OLD_VERIFIED_WINDOW_MS = 10 * 60 * 1000;
+const WA_TEMPLATE_SID = "HXbdd9475d6e8e6f4f6222133c37310ea1";
+const WA_PREFIX = "wa:";
 
 function normalizePhone(raw: string): string | null {
   const digits = String(raw ?? "").replace(/\D/g, "");
@@ -46,9 +45,44 @@ function normalizePhone(raw: string): string | null {
 }
 
 type TwoFactorResp = { Status?: string; Details?: string };
-type OtpChannel = "sms" | "voice";
+type OtpChannel = "sms" | "voice" | "whatsapp";
 
-async function send2FactorOtp(phone: string, channel: OtpChannel): Promise<{ ok: boolean; sessionId?: string; error?: string }> {
+// ─── WhatsApp OTP via Twilio Content Template ─────────────────────────────────
+async function sendWhatsAppOtp(phone: string): Promise<{ ok: boolean; otp?: string; error?: string }> {
+  const sid  = process.env.TWILIO_ACCOUNT_SID ?? "";
+  const auth = process.env.TWILIO_AUTH_TOKEN  ?? "";
+  const from = process.env.TWILIO_WHATSAPP_FROM ?? "";
+  if (!sid || !auth || !from) return { ok: false, error: "WhatsApp OTP not configured (missing env vars)" };
+  const otp = String(Math.floor(100000 + Math.random() * 900000));
+  const body = new URLSearchParams({
+    From: `whatsapp:${from}`,
+    To: `whatsapp:+91${phone}`,
+    ContentSid: WA_TEMPLATE_SID,
+    ContentVariables: JSON.stringify({ "1": otp }),
+  });
+  try {
+    const r = await fetch(
+      `https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Basic ${Buffer.from(`${sid}:${auth}`).toString("base64")}`,
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: body.toString(),
+      },
+    );
+    if (!r.ok) {
+      const err: any = await r.json().catch(() => ({}));
+      return { ok: false, error: err?.message || `WhatsApp send failed (${r.status})` };
+    }
+    return { ok: true, otp };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || "network error" };
+  }
+}
+
+async function send2FactorOtp(phone: string, channel: "sms" | "voice"): Promise<{ ok: boolean; sessionId?: string; error?: string }> {
   try {
     const ch = channel === "voice" ? "VOICE" : "SMS";
     const url = `https://2factor.in/API/V1/${encodeURIComponent(TWO_FACTOR_KEY)}/${ch}/${encodeURIComponent(phone)}/AUTOGEN`;
@@ -67,8 +101,14 @@ async function send2FactorOtp(phone: string, channel: OtpChannel): Promise<{ ok:
 function callVoiceAutogen(phone: string) { return send2FactorOtp(phone, "voice"); }
 
 async function verifySessionOtp(sessionId: string, otp: string): Promise<{ ok: boolean; expired: boolean; details: string }> {
-  // Same dual-channel verifier as /phone-otp/verify — try unified SMS path
-  // first (works for both channels in most plans), fall back to VOICE path.
+  // WhatsApp OTPs are stored locally with a "wa:" prefix — compare directly.
+  if (sessionId.startsWith(WA_PREFIX)) {
+    const stored = sessionId.slice(WA_PREFIX.length);
+    return stored === otp
+      ? { ok: true, expired: false, details: "" }
+      : { ok: false, expired: false, details: "OTP mismatch" };
+  }
+  // SMS / Voice OTPs — verify via 2Factor.in dual-channel path.
   const tryOne = async (path: "SMS" | "VOICE") => {
     const url = `https://2factor.in/API/V1/${encodeURIComponent(TWO_FACTOR_KEY)}/${path}/VERIFY/${encodeURIComponent(sessionId)}/${encodeURIComponent(otp)}`;
     const r = await fetch(url);
@@ -102,7 +142,9 @@ function checkSendBudget(user: { phoneOtpLastSentAt: Date | null; phoneOtpSendCo
 
 // ─── 1. Start: send OTP to OLD verified phone ─────────────────────────────────
 router.post("/phone-change/start", authMiddleware, async (req: AuthRequest, res) => {
-  if (!TWO_FACTOR_KEY) { res.status(500).json({ error: "otp_not_configured" }); return; }
+  const rawCh0 = String((req.body as any)?.channel ?? "sms").toLowerCase();
+  const channel0: OtpChannel = rawCh0 === "voice" ? "voice" : rawCh0 === "whatsapp" ? "whatsapp" : "sms";
+  if (channel0 !== "whatsapp" && !TWO_FACTOR_KEY) { res.status(500).json({ error: "otp_not_configured" }); return; }
 
   const [user] = await db
     .select({
@@ -140,39 +182,43 @@ router.post("/phone-change/start", authMiddleware, async (req: AuthRequest, res)
   });
   if (budget) { res.status(budget.status).json(budget.body); return; }
 
-  const rawCh = String((req.body as any)?.channel ?? "sms").toLowerCase();
-  const channel: OtpChannel = rawCh === "voice" ? "voice" : "sms";
-
-  const r = await send2FactorOtp(user.phoneNumber, channel);
-  if (!r.ok) {
-    res.status(502).json({ error: "otp_send_failed", message: r.error || `Could not send ${channel} OTP. Try again.` });
-    return;
+  let sessionId0: string;
+  if (channel0 === "whatsapp") {
+    const waResult = await sendWhatsAppOtp(user.phoneNumber);
+    if (!waResult.ok) {
+      res.status(502).json({ error: "otp_send_failed", message: waResult.error || "Could not send WhatsApp OTP. Try again." });
+      return;
+    }
+    sessionId0 = WA_PREFIX + waResult.otp!;
+  } else {
+    const r = await send2FactorOtp(user.phoneNumber, channel0);
+    if (!r.ok) {
+      res.status(502).json({ error: "otp_send_failed", message: r.error || `Could not send ${channel0} OTP. Try again.` });
+      return;
+    }
+    sessionId0 = r.sessionId!;
   }
 
-  const expiresAt = new Date(Date.now() + OTP_EXPIRY_MS);
+  const expiresAt0 = new Date(Date.now() + OTP_EXPIRY_MS);
   await db
     .update(usersTable)
     .set({
-      phoneOtpSessionId: r.sessionId!,
-      phoneOtpExpiresAt: expiresAt,
+      phoneOtpSessionId: sessionId0,
+      phoneOtpExpiresAt: expiresAt0,
       phoneOtpSendCount: (user.phoneOtpSendCount ?? 0) + 1,
       phoneOtpLastSentAt: new Date(),
-      // Wipe any prior change-flow state so we can't accidentally reuse a
-      // stale "old verified" window from a previous abandoned attempt.
       phoneChangeNewPhone: null,
       phoneChangeOldVerifiedAt: null,
     })
     .where(eq(usersTable.id, req.userId!));
 
-  // Mask the old number in the response — UI only needs to show last-4 to
-  // remind the user where the OTP is going.
   const masked = user.phoneNumber.length >= 4
     ? "******" + user.phoneNumber.slice(-4)
     : user.phoneNumber;
   res.json({
     success: true,
-    channel,
-    expiresAt: expiresAt.toISOString(),
+    channel: channel0,
+    expiresAt: expiresAt0.toISOString(),
     cooldownSec: RESEND_COOLDOWN_MS / 1000,
     sentTo: masked,
     step: "awaiting_old_otp",
@@ -238,7 +284,9 @@ router.post("/phone-change/verify-old", authMiddleware, async (req: AuthRequest,
 
 // ─── 3. Send OTP to NEW candidate phone ───────────────────────────────────────
 router.post("/phone-change/send-new", authMiddleware, async (req: AuthRequest, res) => {
-  if (!TWO_FACTOR_KEY) { res.status(500).json({ error: "otp_not_configured" }); return; }
+  const rawCh2 = String((req.body as any)?.channel ?? "sms").toLowerCase();
+  const channel2: OtpChannel = rawCh2 === "voice" ? "voice" : rawCh2 === "whatsapp" ? "whatsapp" : "sms";
+  if (channel2 !== "whatsapp" && !TWO_FACTOR_KEY) { res.status(500).json({ error: "otp_not_configured" }); return; }
 
   const newNorm = normalizePhone(req.body?.phone);
   if (!newNorm) {
@@ -303,21 +351,29 @@ router.post("/phone-change/send-new", authMiddleware, async (req: AuthRequest, r
   });
   if (budget) { res.status(budget.status).json(budget.body); return; }
 
-  const rawCh2 = String((req.body as any)?.channel ?? "sms").toLowerCase();
-  const channel2: OtpChannel = rawCh2 === "voice" ? "voice" : "sms";
-
-  const r = await send2FactorOtp(newNorm, channel2);
-  if (!r.ok) {
-    res.status(502).json({ error: "otp_send_failed", message: r.error || `Could not send ${channel2} OTP. Try again.` });
-    return;
+  let sessionId2: string;
+  if (channel2 === "whatsapp") {
+    const waResult = await sendWhatsAppOtp(newNorm);
+    if (!waResult.ok) {
+      res.status(502).json({ error: "otp_send_failed", message: waResult.error || "Could not send WhatsApp OTP. Try again." });
+      return;
+    }
+    sessionId2 = WA_PREFIX + waResult.otp!;
+  } else {
+    const r = await send2FactorOtp(newNorm, channel2);
+    if (!r.ok) {
+      res.status(502).json({ error: "otp_send_failed", message: r.error || `Could not send ${channel2} OTP. Try again.` });
+      return;
+    }
+    sessionId2 = r.sessionId!;
   }
 
-  const expiresAt = new Date(Date.now() + OTP_EXPIRY_MS);
+  const expiresAt2 = new Date(Date.now() + OTP_EXPIRY_MS);
   await db
     .update(usersTable)
     .set({
-      phoneOtpSessionId: r.sessionId!,
-      phoneOtpExpiresAt: expiresAt,
+      phoneOtpSessionId: sessionId2,
+      phoneOtpExpiresAt: expiresAt2,
       phoneOtpSendCount: (user.phoneOtpSendCount ?? 0) + 1,
       phoneOtpLastSentAt: new Date(),
       phoneChangeNewPhone: newNorm,
@@ -327,7 +383,7 @@ router.post("/phone-change/send-new", authMiddleware, async (req: AuthRequest, r
   res.json({
     success: true,
     channel: channel2,
-    expiresAt: expiresAt.toISOString(),
+    expiresAt: expiresAt2.toISOString(),
     cooldownSec: RESEND_COOLDOWN_MS / 1000,
     newPhone: newNorm,
     step: "awaiting_new_otp",

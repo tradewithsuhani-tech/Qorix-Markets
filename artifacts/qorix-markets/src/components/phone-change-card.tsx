@@ -83,13 +83,17 @@ export function PhoneChangeCard() {
   };
 
   const startMut = useMutation({
-    mutationFn: async (channel: "sms" | "voice" = "sms") => {
+    mutationFn: async (channel: "sms" | "voice" | "whatsapp" = "sms") => {
       return await authFetch<{ sentTo: string; channel: string }>(api("/phone-change/start"), { method: "POST", body: JSON.stringify({ channel }) });
     },
     onSuccess: (d: any) => {
-      if (d?.channel === "voice") {
+      const ch = d?.channel as string | undefined;
+      if (ch === "voice") {
         toast({ title: "Voice call placed", description: `OTP call sent to ${d.sentTo}` });
         setOldSmsSentAt(null);
+      } else if (ch === "whatsapp") {
+        toast({ title: "WhatsApp OTP sent", description: `OTP sent to ${d.sentTo} via WhatsApp` });
+        setOldSmsSentAt(-1);
       } else {
         toast({ title: "SMS OTP sent", description: `OTP sent to ${d.sentTo}` });
         setOldSmsSentAt(Date.now());
@@ -112,13 +116,17 @@ export function PhoneChangeCard() {
   });
 
   const sendNewMut = useMutation({
-    mutationFn: async (channel: "sms" | "voice" = "sms") => {
+    mutationFn: async (channel: "sms" | "voice" | "whatsapp" = "sms") => {
       return await authFetch<{ newPhone: string; channel: string }>(api("/phone-change/send-new"), { method: "POST", body: JSON.stringify({ phone: newPhone, channel }) });
     },
     onSuccess: (d: any) => {
-      if (d?.channel === "voice") {
+      const ch = d?.channel as string | undefined;
+      if (ch === "voice") {
         toast({ title: "Voice call placed", description: `OTP call sent to ${maskPhone(d.newPhone)}` });
         setNewSmsSentAt(null);
+      } else if (ch === "whatsapp") {
+        toast({ title: "WhatsApp OTP sent", description: `OTP sent to ${maskPhone(d.newPhone)} via WhatsApp` });
+        setNewSmsSentAt(-1);
       } else {
         toast({ title: "SMS OTP sent", description: `OTP sent to your new number ${maskPhone(d.newPhone)}` });
         setNewSmsSentAt(Date.now());
@@ -235,22 +243,34 @@ export function PhoneChangeCard() {
               {(step === "idle" || step === "awaiting_old_otp") && (
                 <div className="space-y-3">
                   <div className="text-sm">
-                    We will send an SMS OTP to your current verified number{" "}
+                    Send an OTP to your current verified number{" "}
                     <span className="font-mono font-semibold">{maskPhone(status?.currentPhone)}</span>.
                   </div>
                   {step === "idle" ? (
-                    <button
-                      onClick={() => startMut.mutate("sms")}
-                      disabled={startMut.isPending}
-                      className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-sm font-medium flex items-center justify-center gap-2"
-                    >
-                      {startMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Phone className="w-4 h-4" />}
-                      Send OTP to old number
-                    </button>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => startMut.mutate("sms")}
+                        disabled={startMut.isPending}
+                        className="flex-1 py-2.5 rounded-xl bg-blue-500/15 border border-blue-500/30 text-blue-300 hover:bg-blue-500/25 disabled:opacity-50 text-xs font-semibold flex items-center justify-center gap-1.5"
+                      >
+                        {startMut.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Phone className="w-3 h-3" />}
+                        SMS OTP
+                      </button>
+                      <button
+                        onClick={() => startMut.mutate("whatsapp")}
+                        disabled={startMut.isPending}
+                        className="flex-1 py-2.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/25 disabled:opacity-50 text-xs font-semibold flex items-center justify-center gap-1.5"
+                      >
+                        {startMut.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Phone className="w-3 h-3" />}
+                        WhatsApp OTP
+                      </button>
+                    </div>
                   ) : (
                     <>
                       <div className="flex items-center justify-between text-xs text-muted-foreground">
-                        <span>{oldSmsSentAt ? "Enter the SMS OTP" : "Enter the digits you heard"}</span>
+                        <span>
+                          {oldSmsSentAt === null ? "Enter the digits you heard" : oldSmsSentAt === -1 ? "Enter the WhatsApp OTP" : "Enter the SMS OTP"}
+                        </span>
                         <span>{otpExpiresIn > 0 ? `${otpExpiresIn}s remaining` : "expired"}</span>
                       </div>
                       <input
@@ -265,9 +285,16 @@ export function PhoneChangeCard() {
                         <button
                           onClick={() => startMut.mutate("sms")}
                           disabled={startMut.isPending}
-                          className="flex-1 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-xs flex items-center justify-center gap-2"
+                          className="flex-1 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-xs flex items-center justify-center gap-1.5"
                         >
-                          <RefreshCw className="w-3 h-3" /> Resend SMS
+                          <RefreshCw className="w-3 h-3" /> SMS
+                        </button>
+                        <button
+                          onClick={() => startMut.mutate("whatsapp")}
+                          disabled={startMut.isPending}
+                          className="flex-1 py-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 text-xs flex items-center justify-center gap-1.5"
+                        >
+                          <RefreshCw className="w-3 h-3" /> WhatsApp
                         </button>
                         <button
                           onClick={() => verifyOldMut.mutate()}
@@ -275,25 +302,21 @@ export function PhoneChangeCard() {
                           className="flex-[2] py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-sm font-medium flex items-center justify-center gap-2"
                         >
                           {verifyOldMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
-                          Verify old number
+                          Verify
                         </button>
                       </div>
-                      {/* Voice fallback after 30s */}
-                      {oldSmsSentAt && (tick - oldSmsSentAt) >= 30_000 && (
+                      {/* Voice fallback after 30s (only when non-null sentinel) */}
+                      {oldSmsSentAt !== null && (tick - Math.abs(oldSmsSentAt)) >= 30_000 && (
                         <div className="flex items-center justify-between text-xs">
-                          <span className="text-white/45">Didn't receive the SMS?</span>
-                          <button
-                            onClick={() => startMut.mutate("voice")}
-                            disabled={startMut.isPending}
-                            className="text-amber-300 hover:text-amber-200 font-semibold flex items-center gap-1 disabled:opacity-40"
-                          >
+                          <span className="text-white/45">Still not received?</span>
+                          <button onClick={() => startMut.mutate("voice")} disabled={startMut.isPending} className="text-amber-300 hover:text-amber-200 font-semibold flex items-center gap-1 disabled:opacity-40">
                             <PhoneCall className="w-3 h-3" /> Try Voice Call
                           </button>
                         </div>
                       )}
-                      {oldSmsSentAt && (tick - oldSmsSentAt) < 30_000 && (
+                      {oldSmsSentAt !== null && (tick - Math.abs(oldSmsSentAt)) < 30_000 && (
                         <div className="text-xs text-white/35">
-                          Voice call option in {30 - Math.floor((tick - oldSmsSentAt) / 1000)}s
+                          Voice call option in {30 - Math.floor((tick - Math.abs(oldSmsSentAt)) / 1000)}s
                         </div>
                       )}
                     </>
@@ -317,14 +340,24 @@ export function PhoneChangeCard() {
                     inputMode="numeric"
                     className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-base font-mono tracking-wider focus:ring-1 focus:ring-emerald-500/50"
                   />
-                  <button
-                    onClick={() => sendNewMut.mutate("sms")}
-                    disabled={!newPhoneValid || sendNewMut.isPending}
-                    className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-sm font-medium flex items-center justify-center gap-2"
-                  >
-                    {sendNewMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Phone className="w-4 h-4" />}
-                    Send SMS OTP to new number
-                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => sendNewMut.mutate("sms")}
+                      disabled={!newPhoneValid || sendNewMut.isPending}
+                      className="flex-1 py-2.5 rounded-xl bg-blue-500/15 border border-blue-500/30 text-blue-300 hover:bg-blue-500/25 disabled:opacity-50 text-xs font-semibold flex items-center justify-center gap-1.5"
+                    >
+                      {sendNewMut.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Phone className="w-3 h-3" />}
+                      SMS OTP
+                    </button>
+                    <button
+                      onClick={() => sendNewMut.mutate("whatsapp")}
+                      disabled={!newPhoneValid || sendNewMut.isPending}
+                      className="flex-1 py-2.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/25 disabled:opacity-50 text-xs font-semibold flex items-center justify-center gap-1.5"
+                    >
+                      {sendNewMut.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Phone className="w-3 h-3" />}
+                      WhatsApp OTP
+                    </button>
+                  </div>
                 </div>
               )}
 
@@ -333,10 +366,15 @@ export function PhoneChangeCard() {
                 <div className="space-y-3">
                   <div className="flex items-start gap-2 text-xs text-emerald-300 bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-2.5">
                     <CheckCircle2 className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-                    <span>{newSmsSentAt ? "SMS OTP sent to" : "Voice call placed to"} <span className="font-mono">{maskPhone(status?.pendingNewPhone)}</span></span>
+                    <span>
+                      {newSmsSentAt === null ? "Voice call placed to" : newSmsSentAt === -1 ? "WhatsApp OTP sent to" : "SMS OTP sent to"}{" "}
+                      <span className="font-mono">{maskPhone(status?.pendingNewPhone)}</span>
+                    </span>
                   </div>
                   <div className="flex items-center justify-between text-xs text-muted-foreground">
-                    <span>{newSmsSentAt ? "Enter the SMS OTP" : "Enter the digits you heard"}</span>
+                    <span>
+                      {newSmsSentAt === null ? "Enter the digits you heard" : newSmsSentAt === -1 ? "Enter the WhatsApp OTP" : "Enter the SMS OTP"}
+                    </span>
                     <span>{otpExpiresIn > 0 ? `${otpExpiresIn}s remaining` : "expired"}</span>
                   </div>
                   <input
@@ -351,9 +389,16 @@ export function PhoneChangeCard() {
                     <button
                       onClick={() => sendNewMut.mutate("sms")}
                       disabled={sendNewMut.isPending}
-                      className="flex-1 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-xs flex items-center justify-center gap-2"
+                      className="flex-1 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-xs flex items-center justify-center gap-1.5"
                     >
-                      <RefreshCw className="w-3 h-3" /> Resend SMS
+                      <RefreshCw className="w-3 h-3" /> SMS
+                    </button>
+                    <button
+                      onClick={() => sendNewMut.mutate("whatsapp")}
+                      disabled={sendNewMut.isPending}
+                      className="flex-1 py-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 text-xs flex items-center justify-center gap-1.5"
+                    >
+                      <RefreshCw className="w-3 h-3" /> WhatsApp
                     </button>
                     <button
                       onClick={() => verifyNewMut.mutate()}
@@ -365,9 +410,9 @@ export function PhoneChangeCard() {
                     </button>
                   </div>
                   {/* Voice fallback after 30s */}
-                  {newSmsSentAt && (tick - newSmsSentAt) >= 30_000 && (
+                  {newSmsSentAt !== null && (tick - Math.abs(newSmsSentAt)) >= 30_000 && (
                     <div className="flex items-center justify-between text-xs">
-                      <span className="text-white/45">Didn't receive the SMS?</span>
+                      <span className="text-white/45">Still not received?</span>
                       <button
                         onClick={() => sendNewMut.mutate("voice")}
                         disabled={sendNewMut.isPending}
@@ -377,9 +422,9 @@ export function PhoneChangeCard() {
                       </button>
                     </div>
                   )}
-                  {newSmsSentAt && (tick - newSmsSentAt) < 30_000 && (
+                  {newSmsSentAt !== null && (tick - Math.abs(newSmsSentAt)) < 30_000 && (
                     <div className="text-xs text-white/35">
-                      Voice call option in {30 - Math.floor((tick - newSmsSentAt) / 1000)}s
+                      Voice call option in {30 - Math.floor((tick - Math.abs(newSmsSentAt)) / 1000)}s
                     </div>
                   )}
                 </div>
