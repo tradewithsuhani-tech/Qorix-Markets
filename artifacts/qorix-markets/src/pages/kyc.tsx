@@ -679,16 +679,6 @@ export default function KycPage() {
                                 <div className="flex gap-2">
                                   <button type="button" disabled={sendOtp.isPending || cooldownSecLeft > 0} onClick={() => sendOtp.mutate("sms")} className="text-[11px] text-blue-300 hover:text-blue-200 font-semibold underline underline-offset-2 disabled:opacity-40">Resend OTP</button>
                                 </div>
-                                {/* Voice fallback after 30s */}
-                                {smsSentAt !== null && (otpTickNow - Math.abs(smsSentAt)) >= 30_000 && cooldownSecLeft === 0 && (
-                                  <div className="flex items-center justify-between pt-1">
-                                    <span className="text-[11px] text-white/45">Still not received?</span>
-                                    <button type="button" disabled={sendOtp.isPending} onClick={() => sendOtp.mutate("voice")} className="text-[11px] text-amber-300 hover:text-amber-200 font-semibold underline underline-offset-2 disabled:opacity-40">Try Voice Call</button>
-                                  </div>
-                                )}
-                                {smsSentAt !== null && (otpTickNow - Math.abs(smsSentAt)) < 30_000 && (
-                                  <div className="text-[11px] text-white/35">Voice call option in {30 - Math.floor((otpTickNow - Math.abs(smsSentAt)) / 1000)}s</div>
-                                )}
                               </div>
                             )}
                             {!phoneVerified && otpExpiresAt && otpSecondsLeft === 0 && (

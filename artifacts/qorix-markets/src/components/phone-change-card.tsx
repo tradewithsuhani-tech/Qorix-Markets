@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
-import { Phone, Loader2, ArrowRight, RefreshCw, X, ShieldCheck, AlertTriangle, CheckCircle2, PhoneCall } from "lucide-react";
+import { Phone, Loader2, ArrowRight, RefreshCw, X, ShieldCheck, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { authFetch } from "@/lib/auth-fetch";
 import { useToast } from "@/hooks/use-toast";
 
@@ -290,20 +290,6 @@ export function PhoneChangeCard() {
                           Verify
                         </button>
                       </div>
-                      {/* Voice fallback after 30s (only when non-null sentinel) */}
-                      {oldSmsSentAt !== null && (tick - Math.abs(oldSmsSentAt)) >= 30_000 && (
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="text-white/45">Still not received?</span>
-                          <button onClick={() => startMut.mutate("voice")} disabled={startMut.isPending} className="text-amber-300 hover:text-amber-200 font-semibold flex items-center gap-1 disabled:opacity-40">
-                            <PhoneCall className="w-3 h-3" /> Try Voice Call
-                          </button>
-                        </div>
-                      )}
-                      {oldSmsSentAt !== null && (tick - Math.abs(oldSmsSentAt)) < 30_000 && (
-                        <div className="text-xs text-white/35">
-                          Voice call option in {30 - Math.floor((tick - Math.abs(oldSmsSentAt)) / 1000)}s
-                        </div>
-                      )}
                     </>
                   )}
                 </div>
@@ -379,24 +365,6 @@ export function PhoneChangeCard() {
                       Confirm change
                     </button>
                   </div>
-                  {/* Voice fallback after 30s */}
-                  {newSmsSentAt !== null && (tick - Math.abs(newSmsSentAt)) >= 30_000 && (
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-white/45">Still not received?</span>
-                      <button
-                        onClick={() => sendNewMut.mutate("voice")}
-                        disabled={sendNewMut.isPending}
-                        className="text-amber-300 hover:text-amber-200 font-semibold flex items-center gap-1 disabled:opacity-40"
-                      >
-                        <PhoneCall className="w-3 h-3" /> Try Voice Call
-                      </button>
-                    </div>
-                  )}
-                  {newSmsSentAt !== null && (tick - Math.abs(newSmsSentAt)) < 30_000 && (
-                    <div className="text-xs text-white/35">
-                      Voice call option in {30 - Math.floor((tick - Math.abs(newSmsSentAt)) / 1000)}s
-                    </div>
-                  )}
                 </div>
               )}
             </motion.div>
