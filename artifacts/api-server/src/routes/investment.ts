@@ -288,21 +288,22 @@ router.post("/investment/topup", async (req: AuthRequest, res) => {
   }
 
   const tradingBalance = parseFloat(wallet.tradingBalance as string);
-  if (amount > tradingBalance) {
-    res.status(400).json({ error: "Insufficient trading balance" });
+  const currentAmount = parseFloat(inv.amount as string);
+
+  // Available = total trading pool minus already-deployed investment amount
+  const available = tradingBalance - currentAmount;
+  if (amount > available || available <= 0) {
+    res.status(400).json({ error: "Insufficient available trading balance" });
     return;
   }
 
-  const currentAmount = parseFloat(inv.amount as string);
   const newAmount = currentAmount + amount;
   const currentPeak = parseFloat(inv.peakBalance as string);
   const newPeak = Math.max(currentPeak, newAmount);
 
+  // trading_balance is the total pool and is NOT reduced on top-up;
+  // only investment.amount grows (it is the "deployed" slice of the pool).
   const updated = await db.transaction(async (tx) => {
-    await tx.update(walletsTable)
-      .set({ tradingBalance: (tradingBalance - amount).toString(), updatedAt: new Date() })
-      .where(eq(walletsTable.userId, req.userId!));
-
     const [updatedInv] = await tx.update(investmentsTable)
       .set({ amount: newAmount.toString(), peakBalance: newPeak.toString() })
       .where(eq(investmentsTable.userId, req.userId!))

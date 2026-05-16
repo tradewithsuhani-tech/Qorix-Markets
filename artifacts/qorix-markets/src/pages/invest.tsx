@@ -2298,9 +2298,9 @@ export default function InvestPage() {
                     </span>
                   </div>
                   <div className="flex justify-between items-center text-sm mt-2">
-                    <span className="text-white/50">Available in trading</span>
+                    <span className="text-white/50">Available to top-up</span>
                     <span className="font-semibold text-emerald-400 tabular-nums">
-                      ${(wallet?.tradingBalance ?? 0).toFixed(2)}
+                      ${Math.max(0, (wallet?.tradingBalance ?? 0) - (investment?.amount ?? 0)).toFixed(2)}
                     </span>
                   </div>
                 </div>
@@ -2325,7 +2325,7 @@ export default function InvestPage() {
                   {/* Quick amount buttons */}
                   <div className="flex gap-2 mt-2">
                     {[25, 50, 100].map((pct) => {
-                      const available = wallet?.tradingBalance ?? 0;
+                      const available = Math.max(0, (wallet?.tradingBalance ?? 0) - (investment?.amount ?? 0));
                       const val = +(available * pct / 100).toFixed(2);
                       return (
                         <button
@@ -2338,7 +2338,10 @@ export default function InvestPage() {
                       );
                     })}
                     <button
-                      onClick={() => setTopupAmount((wallet?.tradingBalance ?? 0) > 0 ? (wallet!.tradingBalance).toFixed(2) : "")}
+                      onClick={() => {
+                        const available = Math.max(0, (wallet?.tradingBalance ?? 0) - (investment?.amount ?? 0));
+                        setTopupAmount(available > 0 ? available.toFixed(2) : "");
+                      }}
                       className="flex-1 py-1.5 rounded-lg text-[11px] font-semibold text-white/60 hover:text-blue-300 bg-white/[0.03] hover:bg-blue-500/10 border border-white/8 hover:border-blue-500/30 transition-all"
                     >
                       Max
