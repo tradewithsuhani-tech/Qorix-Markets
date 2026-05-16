@@ -2,6 +2,7 @@ import {
   useGetInvestment,
   useStartInvestment,
   useStopInvestment,
+  useTopupInvestment,
   useToggleCompounding,
   useUpdateProtection,
   useGetWallet,
@@ -826,6 +827,8 @@ export default function InvestPage() {
   const [amount, setAmount] = useState("");
   const [riskLevel, setRiskLevel] = useState("MEDIUM");
   const [pendingLimit, setPendingLimit] = useState<number | null>(null);
+  const [topupAmount, setTopupAmount] = useState("");
+  const [showTopupModal, setShowTopupModal] = useState(false);
 
   const selectedProfile = useMemo(
     () => RISK_PROFILES.find(p => p.id === riskLevel) ?? RISK_PROFILES[1]!,
@@ -862,6 +865,21 @@ export default function InvestPage() {
       },
       onError: (err: any) => {
         toast({ title: "Failed to stop", description: err.message, variant: "destructive" });
+      },
+    },
+  });
+
+  const topupMutation = useTopupInvestment({
+    mutation: {
+      onSuccess: () => {
+        toast({ title: "Top-Up Successful", description: "Funds added to your active investment." });
+        queryClient.invalidateQueries({ queryKey: getGetInvestmentQueryKey() });
+        queryClient.invalidateQueries({ queryKey: getGetWalletQueryKey() });
+        setTopupAmount("");
+        setShowTopupModal(false);
+      },
+      onError: (err: any) => {
+        toast({ title: "Top-Up Failed", description: err.message, variant: "destructive" });
       },
     },
   });
@@ -1618,6 +1636,14 @@ export default function InvestPage() {
                       <span className="text-xs bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 px-2 py-0.5 rounded-full">ON</span>
                     )}
                   </div>
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => setShowTopupModal(true)}
+                      className="flex items-center gap-2 px-5 py-2.5 bg-blue-500/10 text-blue-400 hover:bg-blue-500/15 border border-blue-500/25 rounded-xl font-medium transition-all text-sm"
+                    >
+                      <Plus style={{ width: 14, height: 14 }} />
+                      Top Up
+                    </button>
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
                       <button
@@ -1694,6 +1720,7 @@ export default function InvestPage() {
                       </AlertDialogFooter>
                     </AlertDialogContent>
                   </AlertDialog>
+                  </div>
                 </div>
               </div>
             </motion.div>
@@ -2210,6 +2237,174 @@ export default function InvestPage() {
           </div>
         )}
       </motion.div>
+
+      {/* ── Top Up Modal ─────────────────────────────────────────── */}
+      <AnimatePresence>
+        {showTopupModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            style={{ background: "rgba(0,0,0,0.75)", backdropFilter: "blur(6px)" }}
+            onClick={() => { setShowTopupModal(false); setTopupAmount(""); }}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.94, y: 12 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.94, y: 12 }}
+              transition={{ duration: 0.22 }}
+              onClick={(e) => e.stopPropagation()}
+              className="relative w-full max-w-sm rounded-2xl overflow-hidden border border-blue-500/25"
+              style={{
+                background: "linear-gradient(160deg, #0a0f1e 0%, #060912 100%)",
+                boxShadow: "0 30px 60px -20px rgba(0,0,0,0.8), 0 0 40px -15px rgba(59,130,246,0.2)",
+              }}
+            >
+              {/* Top accent */}
+              <div
+                className="absolute top-0 left-0 right-0 h-px"
+                style={{ background: "linear-gradient(90deg, transparent, rgba(59,130,246,0.6), transparent)" }}
+              />
+              <div className="p-6">
+                {/* Header */}
+                <div className="flex items-center justify-between mb-5">
+                  <div className="flex items-center gap-3">
+                    <div
+                      className="w-10 h-10 rounded-xl flex items-center justify-center border border-blue-500/30"
+                      style={{ background: "linear-gradient(135deg, rgba(59,130,246,0.22), rgba(59,130,246,0.08))" }}
+                    >
+                      <Plus style={{ width: 18, height: 18 }} className="text-blue-400" />
+                    </div>
+                    <div>
+                      <div className="font-bold text-white text-base leading-tight">Top Up Investment</div>
+                      <div className="text-[11px] text-white/45 mt-0.5">Add funds to active investment</div>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => { setShowTopupModal(false); setTopupAmount(""); }}
+                    className="w-8 h-8 rounded-lg flex items-center justify-center bg-white/5 hover:bg-white/10 border border-white/8 transition-all"
+                  >
+                    <X style={{ width: 14, height: 14 }} className="text-white/60" />
+                  </button>
+                </div>
+
+                {/* Current investment info */}
+                <div className="mb-4 p-3.5 rounded-xl border border-white/8 bg-white/[0.02]">
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-white/50">Current invested</span>
+                    <span className="font-semibold text-white tabular-nums">
+                      ${investment?.amount?.toFixed(2) ?? "0.00"}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center text-sm mt-2">
+                    <span className="text-white/50">Available in trading</span>
+                    <span className="font-semibold text-emerald-400 tabular-nums">
+                      ${(wallet?.tradingBalance ?? 0).toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Amount input */}
+                <div className="mb-1">
+                  <label className="text-[11px] font-mono uppercase tracking-wider text-white/45 mb-2 block">
+                    Top-Up Amount (USDT)
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-white/40 font-semibold text-sm">$</span>
+                    <input
+                      type="number"
+                      value={topupAmount}
+                      onChange={(e) => setTopupAmount(e.target.value)}
+                      placeholder="0.00"
+                      min="0"
+                      step="any"
+                      className="w-full pl-7 pr-4 py-3 rounded-xl bg-white/[0.04] border border-white/10 text-white font-semibold text-sm placeholder:text-white/25 focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20 transition-all"
+                    />
+                  </div>
+                  {/* Quick amount buttons */}
+                  <div className="flex gap-2 mt-2">
+                    {[25, 50, 100].map((pct) => {
+                      const available = wallet?.tradingBalance ?? 0;
+                      const val = +(available * pct / 100).toFixed(2);
+                      return (
+                        <button
+                          key={pct}
+                          onClick={() => setTopupAmount(val > 0 ? val.toString() : "")}
+                          className="flex-1 py-1.5 rounded-lg text-[11px] font-semibold text-white/60 hover:text-blue-300 bg-white/[0.03] hover:bg-blue-500/10 border border-white/8 hover:border-blue-500/30 transition-all"
+                        >
+                          {pct}%
+                        </button>
+                      );
+                    })}
+                    <button
+                      onClick={() => setTopupAmount((wallet?.tradingBalance ?? 0) > 0 ? (wallet!.tradingBalance).toFixed(2) : "")}
+                      className="flex-1 py-1.5 rounded-lg text-[11px] font-semibold text-white/60 hover:text-blue-300 bg-white/[0.03] hover:bg-blue-500/10 border border-white/8 hover:border-blue-500/30 transition-all"
+                    >
+                      Max
+                    </button>
+                  </div>
+                </div>
+
+                {/* New total preview */}
+                {parseFloat(topupAmount) > 0 && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="mt-3 p-3 rounded-xl border border-blue-500/20 bg-blue-500/[0.05]"
+                  >
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-white/55">New total invested</span>
+                      <span className="font-bold text-blue-300 tabular-nums">
+                        ${((investment?.amount ?? 0) + (parseFloat(topupAmount) || 0)).toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="text-[10px] text-white/35 mt-1">
+                      ROI will be calculated on the new total from next distribution
+                    </div>
+                  </motion.div>
+                )}
+
+                {/* Action buttons */}
+                <div className="flex gap-3 mt-5">
+                  <button
+                    onClick={() => { setShowTopupModal(false); setTopupAmount(""); }}
+                    className="flex-1 h-11 rounded-xl border border-white/10 bg-white/[0.03] text-white/70 hover:bg-white/[0.07] font-semibold text-sm transition-all"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => {
+                      const amt = parseFloat(topupAmount);
+                      if (!amt || amt <= 0) return;
+                      topupMutation.mutate({ data: { amount: amt } });
+                    }}
+                    disabled={
+                      topupMutation.isPending ||
+                      !parseFloat(topupAmount) ||
+                      parseFloat(topupAmount) <= 0 ||
+                      parseFloat(topupAmount) > (wallet?.tradingBalance ?? 0)
+                    }
+                    className="flex-1 h-11 rounded-xl bg-gradient-to-b from-blue-500 to-blue-600 text-white font-semibold text-sm hover:from-blue-400 hover:to-blue-500 transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-[0_0_20px_-6px_rgba(59,130,246,0.5)]"
+                  >
+                    {topupMutation.isPending ? (
+                      <>
+                        <RefreshCw style={{ width: 13, height: 13 }} className="animate-spin" />
+                        Adding…
+                      </>
+                    ) : (
+                      <>
+                        <Plus style={{ width: 14, height: 14 }} />
+                        Confirm Top Up
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </Layout>
   );
 }

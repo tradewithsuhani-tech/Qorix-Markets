@@ -195,6 +195,10 @@ export interface Investment {
   pausedAt?: string | null;
 }
 
+export interface TopupInvestmentBody {
+  amount: number;
+}
+
 export interface StartInvestmentBody {
   amount: number;
   riskLevel: string;

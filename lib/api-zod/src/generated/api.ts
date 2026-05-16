@@ -276,6 +276,13 @@ export const GetInvestmentResponse = zod.object({
 });
 
 /**
+ * @summary Top up an active investment
+ */
+export const TopupInvestmentBody = zod.object({
+  amount: zod.number(),
+});
+
+/**
  * @summary Start auto trading investment
  */
 export const StartInvestmentBody = zod.object({

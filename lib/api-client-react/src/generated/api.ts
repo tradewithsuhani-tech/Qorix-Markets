@@ -86,6 +86,7 @@ import type {
   SetDailyProfitBody,
   SetInvestorSlotsBody,
   StartInvestmentBody,
+  TopupInvestmentBody,
   SuccessMessage,
   SuccessResponse,
   Trade,
@@ -1429,6 +1430,91 @@ export const useStopInvestment = <
   TContext
 > => {
   return useMutation(getStopInvestmentMutationOptions(options));
+};
+
+/**
+ * @summary Top up an active investment
+ */
+export const getTopupInvestmentUrl = () => {
+  return `/api/investment/topup`;
+};
+
+export const topupInvestment = async (
+  topupInvestmentBody: TopupInvestmentBody,
+  options?: RequestInit,
+): Promise<Investment> => {
+  return customFetch<Investment>(getTopupInvestmentUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(topupInvestmentBody),
+  });
+};
+
+export const getTopupInvestmentMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof topupInvestment>>,
+    TError,
+    { data: BodyType<TopupInvestmentBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof topupInvestment>>,
+  TError,
+  { data: BodyType<TopupInvestmentBody> },
+  TContext
+> => {
+  const mutationKey = ["topupInvestment"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof topupInvestment>>,
+    { data: BodyType<TopupInvestmentBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+    return topupInvestment(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type TopupInvestmentMutationResult = NonNullable<
+  Awaited<ReturnType<typeof topupInvestment>>
+>;
+export type TopupInvestmentMutationBody = BodyType<TopupInvestmentBody>;
+export type TopupInvestmentMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Top up an active investment
+ */
+export const useTopupInvestment = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof topupInvestment>>,
+    TError,
+    { data: BodyType<TopupInvestmentBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof topupInvestment>>,
+  TError,
+  { data: BodyType<TopupInvestmentBody> },
+  TContext
+> => {
+  return useMutation(getTopupInvestmentMutationOptions(options));
 };
 
 /**

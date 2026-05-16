@@ -266,6 +266,62 @@ router.post("/investment/start", async (req: AuthRequest, res) => {
   res.json(formatInvestment(updated));
 });
 
+router.post("/investment/topup", async (req: AuthRequest, res) => {
+  const { amount } = req.body ?? {};
+  if (typeof amount !== "number" || amount <= 0) {
+    res.status(400).json({ error: "Amount must be a positive number" });
+    return;
+  }
+
+  const invs = await db.select().from(investmentsTable).where(eq(investmentsTable.userId, req.userId!)).limit(1);
+  const inv = invs[0];
+  if (!inv || !inv.isActive) {
+    res.status(400).json({ error: "No active investment found. Start an investment first.", code: "NO_ACTIVE_INVESTMENT" });
+    return;
+  }
+
+  const wallets = await db.select().from(walletsTable).where(eq(walletsTable.userId, req.userId!)).limit(1);
+  const wallet = wallets[0];
+  if (!wallet) {
+    res.status(404).json({ error: "Wallet not found" });
+    return;
+  }
+
+  const tradingBalance = parseFloat(wallet.tradingBalance as string);
+  if (amount > tradingBalance) {
+    res.status(400).json({ error: "Insufficient trading balance" });
+    return;
+  }
+
+  const currentAmount = parseFloat(inv.amount as string);
+  const newAmount = currentAmount + amount;
+  const currentPeak = parseFloat(inv.peakBalance as string);
+  const newPeak = Math.max(currentPeak, newAmount);
+
+  const updated = await db.transaction(async (tx) => {
+    await tx.update(walletsTable)
+      .set({ tradingBalance: (tradingBalance - amount).toString(), updatedAt: new Date() })
+      .where(eq(walletsTable.userId, req.userId!));
+
+    const [updatedInv] = await tx.update(investmentsTable)
+      .set({ amount: newAmount.toString(), peakBalance: newPeak.toString() })
+      .where(eq(investmentsTable.userId, req.userId!))
+      .returning();
+
+    await tx.insert(transactionsTable).values({
+      userId: req.userId!,
+      type: "investment",
+      amount: amount.toString(),
+      status: "completed",
+      description: `Top-up: added $${amount.toFixed(2)} to active investment (new total: $${newAmount.toFixed(2)})`,
+    });
+
+    return updatedInv!;
+  });
+
+  res.json(formatInvestment(updated));
+});
+
 router.post("/investment/stop", async (req: AuthRequest, res) => {
   const invs = await db.select().from(investmentsTable).where(eq(investmentsTable.userId, req.userId!)).limit(1);
   const inv = invs[0];
