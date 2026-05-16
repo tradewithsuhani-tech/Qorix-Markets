@@ -650,6 +650,21 @@ router.post("/wallet/transfer", async (req: AuthRequest, res) => {
     logMessage = "Transfer to trading balance completed";
   } else {
     // direction === "to_main" — reverse transfer (Trading → Main)
+    // Block this if user has an active investment — trading balance is the
+    // investment principal and must stay locked while auto-trading is running.
+    const [activeInv] = await db
+      .select({ id: investmentsTable.id, amount: investmentsTable.amount })
+      .from(investmentsTable)
+      .where(and(eq(investmentsTable.userId, req.userId!), eq(investmentsTable.isActive, true)))
+      .limit(1);
+    if (activeInv) {
+      res.status(400).json({
+        error: "Cannot withdraw from trading balance while auto-trading is active. Stop your investment first, then transfer.",
+        code: "INVESTMENT_ACTIVE",
+      });
+      return;
+    }
+
     txnDescription = `Transfer $${amount.toFixed(2)} to main balance`;
     debitAccountCode = `user:${req.userId!}:trading`;
     creditAccountCode = `user:${req.userId!}:main`;
