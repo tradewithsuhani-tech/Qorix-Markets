@@ -628,15 +628,7 @@ export default function KycPage() {
                                     onClick={() => sendOtp.mutate("sms")}
                                     className="flex-1 sm:flex-none px-3 py-3 sm:py-2.5 rounded-xl bg-blue-500/15 border border-blue-500/30 text-blue-300 text-xs font-semibold disabled:opacity-40 hover:bg-blue-500/25 transition-all"
                                   >
-                                    {sendOtp.isPending ? "…" : "SMS OTP"}
-                                  </button>
-                                  <button
-                                    type="button"
-                                    disabled={!indianPhoneOk || sendOtp.isPending}
-                                    onClick={() => sendOtp.mutate("whatsapp")}
-                                    className="flex-1 sm:flex-none px-3 py-3 sm:py-2.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs font-semibold disabled:opacity-40 hover:bg-emerald-500/25 transition-all"
-                                  >
-                                    {sendOtp.isPending ? "…" : "WhatsApp OTP"}
+                                    {sendOtp.isPending ? "…" : "Send OTP"}
                                   </button>
                                 </div>
                               )}
@@ -685,9 +677,7 @@ export default function KycPage() {
                                 </div>
                                 {/* Resend buttons */}
                                 <div className="flex gap-2">
-                                  <button type="button" disabled={sendOtp.isPending || cooldownSecLeft > 0} onClick={() => sendOtp.mutate("sms")} className="text-[11px] text-blue-300 hover:text-blue-200 font-semibold underline underline-offset-2 disabled:opacity-40">Resend SMS</button>
-                                  <span className="text-[11px] text-white/20">|</span>
-                                  <button type="button" disabled={sendOtp.isPending || cooldownSecLeft > 0} onClick={() => sendOtp.mutate("whatsapp")} className="text-[11px] text-emerald-300 hover:text-emerald-200 font-semibold underline underline-offset-2 disabled:opacity-40">Resend WhatsApp</button>
+                                  <button type="button" disabled={sendOtp.isPending || cooldownSecLeft > 0} onClick={() => sendOtp.mutate("sms")} className="text-[11px] text-blue-300 hover:text-blue-200 font-semibold underline underline-offset-2 disabled:opacity-40">Resend OTP</button>
                                 </div>
                                 {/* Voice fallback after 30s */}
                                 {smsSentAt !== null && (otpTickNow - Math.abs(smsSentAt)) >= 30_000 && cooldownSecLeft === 0 && (

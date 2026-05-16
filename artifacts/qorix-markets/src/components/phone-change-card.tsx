@@ -254,22 +254,14 @@ export function PhoneChangeCard() {
                         className="flex-1 py-2.5 rounded-xl bg-blue-500/15 border border-blue-500/30 text-blue-300 hover:bg-blue-500/25 disabled:opacity-50 text-xs font-semibold flex items-center justify-center gap-1.5"
                       >
                         {startMut.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Phone className="w-3 h-3" />}
-                        SMS OTP
-                      </button>
-                      <button
-                        onClick={() => startMut.mutate("whatsapp")}
-                        disabled={startMut.isPending}
-                        className="flex-1 py-2.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/25 disabled:opacity-50 text-xs font-semibold flex items-center justify-center gap-1.5"
-                      >
-                        {startMut.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Phone className="w-3 h-3" />}
-                        WhatsApp OTP
+                        Send OTP
                       </button>
                     </div>
                   ) : (
                     <>
                       <div className="flex items-center justify-between text-xs text-muted-foreground">
                         <span>
-                          {oldSmsSentAt === null ? "Enter the digits you heard" : oldSmsSentAt === -1 ? "Enter the WhatsApp OTP" : "Enter the SMS OTP"}
+                          {oldSmsSentAt === null ? "Enter the digits you heard" : "Enter the OTP"}
                         </span>
                         <span>{otpExpiresIn > 0 ? `${otpExpiresIn}s remaining` : "expired"}</span>
                       </div>
@@ -287,14 +279,7 @@ export function PhoneChangeCard() {
                           disabled={startMut.isPending}
                           className="flex-1 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-xs flex items-center justify-center gap-1.5"
                         >
-                          <RefreshCw className="w-3 h-3" /> SMS
-                        </button>
-                        <button
-                          onClick={() => startMut.mutate("whatsapp")}
-                          disabled={startMut.isPending}
-                          className="flex-1 py-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 text-xs flex items-center justify-center gap-1.5"
-                        >
-                          <RefreshCw className="w-3 h-3" /> WhatsApp
+                          <RefreshCw className="w-3 h-3" /> Resend OTP
                         </button>
                         <button
                           onClick={() => verifyOldMut.mutate()}
@@ -347,15 +332,7 @@ export function PhoneChangeCard() {
                       className="flex-1 py-2.5 rounded-xl bg-blue-500/15 border border-blue-500/30 text-blue-300 hover:bg-blue-500/25 disabled:opacity-50 text-xs font-semibold flex items-center justify-center gap-1.5"
                     >
                       {sendNewMut.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Phone className="w-3 h-3" />}
-                      SMS OTP
-                    </button>
-                    <button
-                      onClick={() => sendNewMut.mutate("whatsapp")}
-                      disabled={!newPhoneValid || sendNewMut.isPending}
-                      className="flex-1 py-2.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/25 disabled:opacity-50 text-xs font-semibold flex items-center justify-center gap-1.5"
-                    >
-                      {sendNewMut.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Phone className="w-3 h-3" />}
-                      WhatsApp OTP
+                      Send OTP
                     </button>
                   </div>
                 </div>
@@ -367,13 +344,13 @@ export function PhoneChangeCard() {
                   <div className="flex items-start gap-2 text-xs text-emerald-300 bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-2.5">
                     <CheckCircle2 className="w-3.5 h-3.5 shrink-0 mt-0.5" />
                     <span>
-                      {newSmsSentAt === null ? "Voice call placed to" : newSmsSentAt === -1 ? "WhatsApp OTP sent to" : "SMS OTP sent to"}{" "}
+                      {newSmsSentAt === null ? "Voice call placed to" : "OTP sent to"}{" "}
                       <span className="font-mono">{maskPhone(status?.pendingNewPhone)}</span>
                     </span>
                   </div>
                   <div className="flex items-center justify-between text-xs text-muted-foreground">
                     <span>
-                      {newSmsSentAt === null ? "Enter the digits you heard" : newSmsSentAt === -1 ? "Enter the WhatsApp OTP" : "Enter the SMS OTP"}
+                      {newSmsSentAt === null ? "Enter the digits you heard" : "Enter the OTP"}
                     </span>
                     <span>{otpExpiresIn > 0 ? `${otpExpiresIn}s remaining` : "expired"}</span>
                   </div>
@@ -391,14 +368,7 @@ export function PhoneChangeCard() {
                       disabled={sendNewMut.isPending}
                       className="flex-1 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-xs flex items-center justify-center gap-1.5"
                     >
-                      <RefreshCw className="w-3 h-3" /> SMS
-                    </button>
-                    <button
-                      onClick={() => sendNewMut.mutate("whatsapp")}
-                      disabled={sendNewMut.isPending}
-                      className="flex-1 py-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 text-xs flex items-center justify-center gap-1.5"
-                    >
-                      <RefreshCw className="w-3 h-3" /> WhatsApp
+                      <RefreshCw className="w-3 h-3" /> Resend OTP
                     </button>
                     <button
                       onClick={() => verifyNewMut.mutate()}
