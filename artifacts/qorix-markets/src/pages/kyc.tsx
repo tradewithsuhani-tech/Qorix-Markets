@@ -628,7 +628,7 @@ export default function KycPage() {
                                     onClick={() => sendOtp.mutate("sms")}
                                     className="flex-1 sm:flex-none px-3 py-3 sm:py-2.5 rounded-xl bg-blue-500/15 border border-blue-500/30 text-blue-300 text-xs font-semibold disabled:opacity-40 hover:bg-blue-500/25 transition-all"
                                   >
-                                    {sendOtp.isPending ? "…" : "SMS OTP"}
+                                    {sendOtp.isPending ? "…" : "Call OTP"}
                                   </button>
                                 </div>
                               )}
