@@ -1,4 +1,4 @@
-import { useGetWallet, useTransferToTrading, useGetDashboardSummary, useGetTransactions } from "@workspace/api-client-react";
+import { useGetWallet, useTransferToTrading, useGetDashboardSummary, useGetTransactions, useGetInvestment } from "@workspace/api-client-react";
 import { Layout } from "@/components/layout";
 import { AnimatedCounter } from "@/components/animated-counter";
 import { useEffect, useMemo, useState } from "react";
@@ -41,6 +41,7 @@ export default function WalletPage() {
   const { data: wallet, isLoading } = useGetWallet();
   const { data: summary } = useGetDashboardSummary();
   const { data: txData, isLoading: txLoading } = useGetTransactions({ page: 1, limit: 6 });
+  const { data: investment } = useGetInvestment();
   const queryClient = useQueryClient();
   const [, navigate] = useLocation();
   const FX_RATE = useInrRate();
@@ -706,17 +707,17 @@ export default function WalletPage() {
       >
         {(() => {
           const fromIsMain = transferDirection === "toTrading";
-          const fromBal = fromIsMain ? mainBal : tradingBal;
+          const deployedAmt = (investment?.isActive && !fromIsMain) ? (Number(investment.amount) || 0) : 0;
+          const freeCapital = Math.max(0, tradingBal - deployedAmt);
+          // When going toMain with active investment, only free capital is transferable
+          const fromBal = fromIsMain ? mainBal : freeCapital;
           const toBal = fromIsMain ? tradingBal : mainBal;
           const numAmt = Number(transferAmount) || 0;
           const valid = numAmt > 0 && numAmt <= fromBal;
+          const hasActiveInv = !!investment?.isActive && !fromIsMain && deployedAmt > 0;
           const swap = () => {
             setTransferDirection(fromIsMain ? "toMain" : "toTrading");
             setTransferAmount("");
-          };
-          const setPct = (pct: number) => {
-            const v = (fromBal * pct) / 100;
-            setTransferAmount(v > 0 ? v.toFixed(2) : "");
           };
           const inrEquiv = numAmt * FX_RATE;
           return (
@@ -730,7 +731,7 @@ export default function WalletPage() {
                   iconTone="emerald"
                   name={fromIsMain ? "Main Wallet" : "Trading Wallet"}
                   sub={fromIsMain ? "Withdrawable balance" : "Deployed capital"}
-                  amount={fromBal}
+                  amount={fromIsMain ? mainBal : tradingBal}
                 />
                 {/* Connecting line */}
                 <div className="relative h-7 flex items-center justify-center">
@@ -755,12 +756,32 @@ export default function WalletPage() {
                 />
               </div>
 
+              {/* Capital breakdown when active investment and going toMain */}
+              {hasActiveInv && (
+                <div className="rounded-xl border border-white/8 bg-white/[0.025] divide-y divide-white/6 text-[12px]">
+                  <div className="flex items-center justify-between px-3.5 py-2.5">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-teal-400 shrink-0" />
+                      <span className="text-white/60">Active Strategy (locked)</span>
+                    </div>
+                    <span className="font-semibold tabular-nums text-white/50">${deployedAmt.toFixed(2)}</span>
+                  </div>
+                  <div className="flex items-center justify-between px-3.5 py-2.5">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
+                      <span className="text-white/60">Free Capital (transferable)</span>
+                    </div>
+                    <span className="font-semibold tabular-nums text-emerald-400">${freeCapital.toFixed(2)}</span>
+                  </div>
+                </div>
+              )}
+
               {/* Transfer amount */}
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-[10px] font-bold tracking-[0.18em] text-white/45">TRANSFER AMOUNT</span>
                   <button
-                    onClick={() => setPct(100)}
+                    onClick={() => setTransferAmount(fromBal > 0 ? fromBal.toFixed(2) : "")}
                     className="text-[10px] font-bold tracking-wide text-emerald-300 hover:text-emerald-200 px-2 py-0.5 rounded-md bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-400/30 transition-colors"
                   >
                     MAX · ${fromBal.toFixed(2)}
@@ -799,7 +820,11 @@ export default function WalletPage() {
                 {numAmt > fromBal && (
                   <div className="mt-1.5 text-[11px] text-rose-400 flex items-center gap-1">
                     <AlertCircle className="w-3 h-3" />
-                    Exceeds available balance
+                    {hasActiveInv && freeCapital <= 0
+                      ? "No free capital — all funds are locked in your active strategy"
+                      : hasActiveInv
+                      ? `Only $${freeCapital.toFixed(2)} free capital available to transfer`
+                      : "Exceeds available balance"}
                   </div>
                 )}
               </div>
@@ -810,6 +835,8 @@ export default function WalletPage() {
                 <p className="text-[12px] text-white/70 leading-relaxed">
                   {fromIsMain
                     ? "Funds moved to Trading are deployed to your active bot in the next cycle."
+                    : hasActiveInv
+                    ? "Only free capital (not deployed in bot) can be transferred. Stop the strategy to move all funds."
                     : "Funds moved to Main are immediately available for withdrawal."}
                 </p>
               </div>

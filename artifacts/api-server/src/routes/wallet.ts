@@ -650,19 +650,32 @@ router.post("/wallet/transfer", async (req: AuthRequest, res) => {
     logMessage = "Transfer to trading balance completed";
   } else {
     // direction === "to_main" — reverse transfer (Trading → Main)
-    // Block this if user has an active investment — trading balance is the
-    // investment principal and must stay locked while auto-trading is running.
+    // Only the FREE portion of the trading balance (trading_balance − investment.amount)
+    // can be transferred while a strategy is active. The deployed capital stays locked.
     const [activeInv] = await db
       .select({ id: investmentsTable.id, amount: investmentsTable.amount })
       .from(investmentsTable)
       .where(and(eq(investmentsTable.userId, req.userId!), eq(investmentsTable.isActive, true)))
       .limit(1);
     if (activeInv) {
-      res.status(400).json({
-        error: "Cannot withdraw from trading balance while auto-trading is active. Stop your investment first, then transfer.",
-        code: "INVESTMENT_ACTIVE",
-      });
-      return;
+      const [walletRow] = await db
+        .select({ tradingBalance: walletsTable.tradingBalance })
+        .from(walletsTable)
+        .where(eq(walletsTable.userId, req.userId!))
+        .limit(1);
+      const tradingBal = parseFloat((walletRow?.tradingBalance ?? "0") as string);
+      const deployedAmt = parseFloat(activeInv.amount as string);
+      const freeCapital = Math.max(0, tradingBal - deployedAmt);
+      if (amount > freeCapital) {
+        res.status(400).json({
+          error: freeCapital <= 0
+            ? "No free capital available — your entire trading balance is deployed in the active strategy."
+            : `Only $${freeCapital.toFixed(2)} is available to transfer. The rest is locked in your active strategy.`,
+          code: "INVESTMENT_ACTIVE",
+          freeCapital,
+        });
+        return;
+      }
     }
 
     txnDescription = `Transfer $${amount.toFixed(2)} to main balance`;
