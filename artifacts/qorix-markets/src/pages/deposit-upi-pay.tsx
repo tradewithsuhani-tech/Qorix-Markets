@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Layout } from "@/components/layout";
 import {
-  ArrowLeft, Shield, Copy, Check, AtSign, DollarSign, User,
+  ArrowLeft, Shield, Copy, Check, AtSign, DollarSign, User, Hash,
   AlertTriangle, CheckCircle2, ArrowRight, Info, AlertCircle, Loader2,
 } from "lucide-react";
 import QRCode from "qrcode";
@@ -187,6 +187,7 @@ export default function DepositUpiPayPage() {
           )}
           <DetailRow icon={<AtSign className="w-3.5 h-3.5 text-emerald-400" />} label="UPI ID" value={method.upiId} ck="upi" copied={copied} onCopy={copy} mono />
           <DetailRow icon={<DollarSign className="w-3.5 h-3.5 text-emerald-400" />} label="Amount" value={`₹${numAmount.toLocaleString("en-IN")}`} ck="amount" copied={copied} onCopy={(_, k) => copy(String(numAmount), k)} mono />
+          <DetailRow icon={<Hash className="w-3.5 h-3.5 text-emerald-400" />} label="Reference No." value={refCode} ck="ref" copied={copied} onCopy={copy} mono />
         </div>
 
         <div className="flex items-start gap-2 px-3 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/35">
