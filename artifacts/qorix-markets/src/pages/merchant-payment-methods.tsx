@@ -398,6 +398,12 @@ function MethodFormModal({
             {editing.type === "upi" ? (
               <>
                 <InputField
+                  label="Account Holder Name"
+                  value={editing.accountHolder ?? ""}
+                  onChange={(v) => setEditing({ ...editing, accountHolder: v })}
+                  placeholder="e.g. Rahul Sharma"
+                />
+                <InputField
                   label="UPI ID"
                   value={editing.upiId ?? ""}
                   onChange={(v) => setEditing({ ...editing, upiId: v })}
