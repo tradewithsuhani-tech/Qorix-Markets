@@ -192,6 +192,10 @@ function MethodForm({
       {m.type === "upi" && (
         <div className="space-y-3">
           <div>
+            <label className="text-xs text-muted-foreground mb-1 block">Account Holder Name</label>
+            <input className="field-input" value={m.accountHolder ?? ""} onChange={(e) => set("accountHolder", e.target.value)} placeholder="e.g. Rahul Sharma" />
+          </div>
+          <div>
             <label className="text-xs text-muted-foreground mb-1 block">UPI ID</label>
             <input className="field-input" value={m.upiId ?? ""} onChange={(e) => set("upiId", e.target.value)} placeholder="example@oksbi" />
           </div>

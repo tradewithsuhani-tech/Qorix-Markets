@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Layout } from "@/components/layout";
 import {
-  ArrowLeft, Shield, Copy, Check, AtSign, DollarSign,
+  ArrowLeft, Shield, Copy, Check, AtSign, DollarSign, User,
   AlertTriangle, CheckCircle2, ArrowRight, Info, AlertCircle, Loader2,
 } from "lucide-react";
 import QRCode from "qrcode";
@@ -13,13 +13,14 @@ import { cn } from "@/lib/utils";
 const BASE_URL = import.meta.env.BASE_URL ?? "/";
 const getApiUrl = (path: string) => `${BASE_URL}api${path}`;
 
-type CopyKey = "upi" | "amount" | "ref";
+type CopyKey = "upi" | "amount" | "ref" | "holder";
 
 interface PaymentMethod {
   id: number;
   type: "bank" | "upi";
   displayName: string;
   upiId: string | null;
+  accountHolder: string | null;
   minAmount: string;
   maxAmount: string;
   merchantId?: number | null;
@@ -181,6 +182,9 @@ export default function DepositUpiPayPage() {
         </div>
 
         <div className="rounded-2xl border border-white/10 bg-white/5 px-3 divide-y divide-white/5">
+          {method.accountHolder && (
+            <DetailRow icon={<User className="w-3.5 h-3.5 text-emerald-400" />} label="Account Holder" value={method.accountHolder} ck="holder" copied={copied} onCopy={copy} />
+          )}
           <DetailRow icon={<AtSign className="w-3.5 h-3.5 text-emerald-400" />} label="UPI ID" value={method.upiId} ck="upi" copied={copied} onCopy={copy} mono />
           <DetailRow icon={<DollarSign className="w-3.5 h-3.5 text-emerald-400" />} label="Amount" value={`₹${numAmount.toLocaleString("en-IN")}`} ck="amount" copied={copied} onCopy={(_, k) => copy(String(numAmount), k)} mono />
         </div>
