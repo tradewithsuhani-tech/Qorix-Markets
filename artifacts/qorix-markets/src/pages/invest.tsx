@@ -98,9 +98,9 @@ const RISK_PROFILES = [
   },
   {
     id: "HIGH",
-    label: "Aggressive",
+    label: "Growth",
     tagline: "Maximum yield strategy",
-    description: "Higher returns with elevated market exposure. Suitable for risk-tolerant investors.",
+    description: "Higher returns with active market participation. Ideal for growth-focused investors.",
     icon: Zap,
     multiplier: 1.5,
     minDailyPct: 0.75,
@@ -108,7 +108,7 @@ const RISK_PROFILES = [
     monthlyMinPct: 5,
     monthlyMaxPct: 8,
     drawdownLimit: 10,
-    volatility: "High",
+    volatility: "Active",
     score: 5,
     color: "text-orange-400",
     gradientFrom: "from-orange-500/20",
@@ -123,7 +123,7 @@ const RISK_PROFILES = [
     features: [
       "Max 10% drawdown protection",
       "5–8% monthly target return",
-      "High market exposure",
+      "Active market participation",
     ],
   },
 ];
