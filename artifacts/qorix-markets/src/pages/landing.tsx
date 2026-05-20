@@ -1077,7 +1077,78 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ════════════════ 8. FINAL CTA ════════════════ */}
+      {/* ════════════════ 8. TRUSTED PARTNERS ════════════════ */}
+      <section className="py-16 sm:py-20 px-4 sm:px-6">
+        <div className="max-w-5xl mx-auto">
+          <FadeIn className="text-center mb-10">
+            <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-emerald-400 mb-3">
+              Trusted Partnerships
+            </div>
+            <h2 className="text-2xl sm:text-3xl font-bold tracking-tight mb-3">
+              Stronger Together
+            </h2>
+            <p className="text-slate-400 text-sm sm:text-base max-w-xl mx-auto">
+              Qorix Markets is proud to collaborate with industry-leading trading firms, expanding opportunities for our investors.
+            </p>
+          </FadeIn>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 max-w-3xl mx-auto">
+            {/* WinProFX */}
+            <FadeIn delay={0.05}>
+              <div className="relative h-full rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/5 to-transparent hover:border-emerald-500/40 hover:from-emerald-500/8 transition-all duration-300 p-6 flex flex-col gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 rounded-xl bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center shrink-0">
+                    <TrendingUp className="w-5 h-5 text-emerald-400" />
+                  </div>
+                  <div>
+                    <div className="font-bold text-white text-base leading-tight">WinProFX</div>
+                    <div className="text-[11px] text-emerald-400 font-semibold uppercase tracking-wider">Trade. Win. Prosper.</div>
+                  </div>
+                </div>
+                <p className="text-sm text-slate-400 leading-relaxed flex-1">
+                  A globally recognised forex & CFD broker providing advanced trading infrastructure, liquidity, and professional execution — powering Qorix Markets' trading desk.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {["Advanced Execution", "Global Liquidity", "Professional Desk"].map((tag) => (
+                    <span key={tag} className="text-[11px] px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 font-medium">{tag}</span>
+                  ))}
+                </div>
+              </div>
+            </FadeIn>
+
+            {/* Star Trader */}
+            <FadeIn delay={0.1}>
+              <div className="relative h-full rounded-2xl border border-amber-500/20 bg-gradient-to-br from-amber-500/5 to-transparent hover:border-amber-500/40 hover:from-amber-500/8 transition-all duration-300 p-6 flex flex-col gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 rounded-xl bg-amber-500/15 border border-amber-500/25 flex items-center justify-center shrink-0">
+                    <Sparkles className="w-5 h-5 text-amber-400" />
+                  </div>
+                  <div>
+                    <div className="font-bold text-white text-base leading-tight">Star Trader</div>
+                    <div className="text-[11px] text-amber-400 font-semibold uppercase tracking-wider">Elite Trading Solutions</div>
+                  </div>
+                </div>
+                <p className="text-sm text-slate-400 leading-relaxed flex-1">
+                  An elite proprietary trading firm bringing institutional strategies, signal expertise, and market intelligence that directly benefits Qorix Markets investors.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {["Institutional Signals", "Market Intelligence", "Elite Strategies"].map((tag) => (
+                    <span key={tag} className="text-[11px] px-2.5 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-300 font-medium">{tag}</span>
+                  ))}
+                </div>
+              </div>
+            </FadeIn>
+          </div>
+
+          <FadeIn delay={0.2} className="text-center mt-8">
+            <p className="text-xs text-slate-500">
+              These partnerships enable Qorix Markets to deliver consistent results, deeper liquidity, and a stronger trading edge for every investor.
+            </p>
+          </FadeIn>
+        </div>
+      </section>
+
+      {/* ════════════════ 9. FINAL CTA ════════════════ */}
       <section className="py-20 sm:py-28 px-4 sm:px-6">
         <div className="max-w-5xl mx-auto">
           <FadeIn>
