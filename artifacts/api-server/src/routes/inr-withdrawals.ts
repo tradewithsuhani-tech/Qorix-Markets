@@ -638,6 +638,31 @@ router.post("/admin/inr-withdrawals/:id/approve", async (req: AuthRequest, res) 
     res.status(500).json({ error: "Approve handler reached an inconsistent state" });
     return;
   }
+
+  // Safety net: if the in-transaction LIKE update was missed for any reason
+  // (edge-case race, journal error that was swallowed, etc.), ensure the
+  // linked transactions row is marked completed so the user never sees
+  // a stale "Pending" status in their transaction history.
+  const wdTagSafe = `[INR-WD:${id}]`;
+  const amountUsdtSafe = parseFloat(row.amountUsdt as string);
+  await db
+    .update(transactionsTable)
+    .set({
+      status: "completed",
+      description:
+        `${wdTagSafe} INR withdrawal paid — ₹${parseFloat(row.amountInr as string).toFixed(2)} ` +
+        `(≈$${amountUsdtSafe.toFixed(2)} USDT) via ${row.payoutMethod.toUpperCase()}` +
+        (payoutReference ? ` — ref ${payoutReference}` : ""),
+    })
+    .where(
+      and(
+        eq(transactionsTable.userId, row.userId),
+        eq(transactionsTable.type, "withdrawal"),
+        eq(transactionsTable.status, "pending"),
+        like(transactionsTable.description, `${wdTagSafe}%`),
+      ),
+    );
+
   await createNotification(
     row.userId,
     "withdrawal",
