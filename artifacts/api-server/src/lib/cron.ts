@@ -1,5 +1,5 @@
 import cron from "node-cron";
-import { db } from "@workspace/db";
+import { db, dailyProfitRunsTable } from "@workspace/db";
 import {
   promoRedemptionsTable,
 } from "@workspace/db/schema";
@@ -166,4 +166,51 @@ export async function initCronJobs(): Promise<void> {
   );
   // Touch sql import so it isn't dropped by tooling — kept for future hourly maintenance jobs.
   void sql;
+
+  // ── Startup catch-up: run today's profit if server restarted after 00:05 UTC ──
+  // node-cron only fires at the scheduled wall-clock time. If the server
+  // restarts (deploy, OOM, Fly machine migration) after 00:05 UTC on a
+  // weekday, the scheduled tick is missed for that day. This catch-up runs
+  // once at startup: if today is Mon–Fri, current UTC time is past 00:05,
+  // and no daily_profit_runs row exists for today, it distributes profit
+  // automatically — exactly as the cron would have done.
+  void catchUpTodaysProfitIfMissed();
+}
+
+async function catchUpTodaysProfitIfMissed(): Promise<void> {
+  try {
+    const now = new Date();
+    const dayOfWeek = now.getUTCDay(); // 0=Sun, 6=Sat
+    if (dayOfWeek === 0 || dayOfWeek === 6) return;
+
+    const utcHour = now.getUTCHours();
+    const utcMinute = now.getUTCMinutes();
+    // Only catch up if the 00:05 UTC cron window has already passed
+    if (utcHour === 0 && utcMinute < 5) return;
+
+    const todayStr = now.toISOString().split("T")[0]!;
+
+    const existing = await db
+      .select({ id: dailyProfitRunsTable.id })
+      .from(dailyProfitRunsTable)
+      .where(eq(dailyProfitRunsTable.runDate, todayStr))
+      .limit(1);
+
+    if (existing.length > 0) {
+      profitLogger.info({ runDate: todayStr }, "Startup catch-up: today's profit already distributed — skipping");
+      return;
+    }
+
+    profitLogger.info({ runDate: todayStr }, "Startup catch-up: today's profit was missed — distributing now");
+    const adminPct = await getLastDailyProfitPercent();
+    if (adminPct !== 0) {
+      await emitProfitDistribution({ profitPercent: adminPct, triggeredBy: "cron" });
+      profitLogger.info({ profitPercent: adminPct }, "Startup catch-up: admin-overridden profit enqueued");
+      return;
+    }
+    const result = await distributeAutoDailyProfit();
+    profitLogger.info(result, "Startup catch-up: auto daily profit distribution complete");
+  } catch (err) {
+    errorLogger.error({ err }, "Startup catch-up: failed to run daily profit distribution");
+  }
 }
