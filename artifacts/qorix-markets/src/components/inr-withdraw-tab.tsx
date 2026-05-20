@@ -161,7 +161,17 @@ export function InrWithdrawTab({ kycApproved, onKycRequired }: { kycApproved: bo
     }
   };
 
+  // Initial load
   useEffect(() => { refresh(); }, []);
+
+  // Poll every 15s while any withdrawal is still pending so the status
+  // updates automatically after admin approval — no manual page refresh needed.
+  useEffect(() => {
+    const hasPending = history.some((w) => w.status === "pending");
+    if (!hasPending) return;
+    const id = setInterval(() => { refresh(); }, 15_000);
+    return () => clearInterval(id);
+  }, [history]);
 
   const amount = Number(amountInr) || 0;
   const usdtEquivalent = limits ? +(amount / limits.rate).toFixed(6) : 0;
