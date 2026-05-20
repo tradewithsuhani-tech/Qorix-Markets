@@ -309,6 +309,7 @@ function EditProfileModal({ user, onClose, onDone }: { user: any; onClose: () =>
   const [fullName, setFullName] = useState<string>(user.fullName ?? "");
   const [email, setEmail] = useState<string>(user.email ?? "");
   const [phoneNumber, setPhoneNumber] = useState<string>(user.phoneNumber ?? "");
+  const [referralCode, setReferralCode] = useState<string>(user.referralCode ?? "");
   const [saving, setSaving] = useState(false);
 
   async function submit() {
@@ -320,6 +321,8 @@ function EditProfileModal({ user, onClose, onDone }: { user: any; onClose: () =>
       const cleanPhone = phoneNumber.replace(/\D/g, "");
       const currentPhone = user.phoneNumber ?? "";
       if (cleanPhone !== currentPhone) body.phoneNumber = cleanPhone === "" ? null : cleanPhone;
+      const cleanCode = referralCode.trim().toUpperCase();
+      if (cleanCode !== (user.referralCode ?? "").toUpperCase()) body.referralCode = cleanCode;
 
       if (Object.keys(body).length === 0) {
         toast({ title: "Nothing to save", description: "No fields changed." });
@@ -375,6 +378,15 @@ function EditProfileModal({ user, onClose, onDone }: { user: any; onClose: () =>
               inputMode="numeric"
               placeholder="9XXXXXXXXX"
               className="mt-1 w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-sm font-mono tracking-wider focus:ring-1 focus:ring-blue-500/50"
+            />
+          </label>
+          <label className="block">
+            <span className="text-xs text-muted-foreground">Referral Code (4–20 alphanumeric, auto-uppercased)</span>
+            <input
+              value={referralCode}
+              onChange={(e) => setReferralCode(e.target.value.replace(/[^a-zA-Z0-9]/g, "").slice(0, 20))}
+              placeholder="e.g. JOHN123"
+              className="mt-1 w-full bg-black/40 border border-amber-500/20 rounded-xl px-3 py-2 text-sm font-mono tracking-wider uppercase focus:ring-1 focus:ring-amber-500/50"
             />
           </label>
         </div>
@@ -1076,6 +1088,13 @@ export function AdminUsersPage() {
                         </div>
                       ) : (
                         <div className="text-xs text-muted-foreground/40 mt-0.5">No Telegram</div>
+                      )}
+                      {u.referredByEmail ? (
+                        <div className="text-xs mt-1 px-2 py-0.5 rounded-md bg-violet-500/10 border border-violet-500/20 text-violet-300 font-mono truncate max-w-[200px]" title={`Referred by: ${u.referredByName || u.referredByEmail} (ID #${u.sponsorId}) — code: ${u.referredByCode}`}>
+                          👥 via {u.referredByCode} · #{u.sponsorId}
+                        </div>
+                      ) : (
+                        <div className="text-xs text-muted-foreground/30 mt-1">No referrer</div>
                       )}
                     </td>
                     <td className="p-4">

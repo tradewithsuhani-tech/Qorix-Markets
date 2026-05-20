@@ -355,6 +355,25 @@ router.get("/admin/users", async (req, res) => {
     .limit(limit)
     .offset(offset);
 
+  // Batch-fetch referrer info for all users in one query.
+  // sponsorId == u.id means self-sponsored (admin default) — treat as no referrer.
+  const sponsorIds = [...new Set(
+    allUsers
+      .map((u) => u.sponsorId)
+      .filter((sid): sid is number => typeof sid === "number" && sid > 0),
+  )];
+  // Build a map of sponsorId → {email, fullName, referralCode} for quick lookup.
+  const sponsorMap = new Map<number, { email: string; fullName: string; referralCode: string }>();
+  if (sponsorIds.length > 0) {
+    const sponsorRows = await db
+      .select({ id: usersTable.id, email: usersTable.email, fullName: usersTable.fullName, referralCode: usersTable.referralCode })
+      .from(usersTable)
+      .where(inArray(usersTable.id, sponsorIds));
+    for (const r of sponsorRows) {
+      sponsorMap.set(r.id, { email: r.email, fullName: r.fullName ?? "", referralCode: r.referralCode });
+    }
+  }
+
   const data = await Promise.all(
     allUsers.map(async (u) => {
       const wallets = await db
@@ -369,6 +388,10 @@ router.get("/admin/users", async (req, res) => {
         .limit(1);
       const wallet = wallets[0];
       const inv = invs[0];
+      // Attach referrer info — hide it when user is self-sponsored.
+      const referrer = (u.sponsorId && u.sponsorId !== u.id)
+        ? (sponsorMap.get(u.sponsorId) ?? null)
+        : null;
       return {
         id: u.id,
         email: u.email,
@@ -385,6 +408,10 @@ router.get("/admin/users", async (req, res) => {
         riskLevel: inv?.riskLevel ?? "low",
         isTrading: inv?.isActive ?? false,
         referralCode: u.referralCode,
+        sponsorId: u.sponsorId ?? null,
+        referredByEmail: referrer?.email ?? null,
+        referredByName: referrer?.fullName ?? null,
+        referredByCode: referrer?.referralCode ?? null,
         createdAt: u.createdAt.toISOString(),
         telegramChatId: u.telegramChatId ?? null,
         phoneNumber: u.phoneNumber ?? null,
@@ -557,7 +584,7 @@ router.patch("/admin/users/:id/profile", async (req: AuthRequest, res) => {
     res.status(400).json({ error: "invalid_user_id" });
     return;
   }
-  const body = (req.body ?? {}) as { fullName?: string; email?: string; phoneNumber?: string | null };
+  const body = (req.body ?? {}) as { fullName?: string; email?: string; phoneNumber?: string | null; referralCode?: string };
 
   const [existing] = await db.select().from(usersTable).where(eq(usersTable.id, id)).limit(1);
   if (!existing) { res.status(404).json({ error: "user_not_found" }); return; }
@@ -644,8 +671,30 @@ router.patch("/admin/users/:id/profile", async (req: AuthRequest, res) => {
     }
   }
 
+  // Referral code: uppercase, alphanumeric only, 4-20 chars, unique.
+  if (typeof body.referralCode === "string") {
+    const normalized = body.referralCode.trim().toUpperCase();
+    if (!/^[A-Z0-9]{4,20}$/.test(normalized)) {
+      res.status(400).json({ error: "invalid_referral_code", message: "Referral code must be 4–20 alphanumeric characters." });
+      return;
+    }
+    if (normalized !== existing.referralCode) {
+      const dupes = await db
+        .select({ id: usersTable.id })
+        .from(usersTable)
+        .where(and(eq(usersTable.referralCode, normalized), ne(usersTable.id, id)))
+        .limit(1);
+      if (dupes.length > 0) {
+        res.status(409).json({ error: "referral_code_in_use", message: "That referral code is already taken." });
+        return;
+      }
+      updates.referralCode = normalized;
+      changes.referralCode = { from: existing.referralCode, to: normalized };
+    }
+  }
+
   if (Object.keys(updates).length === 0) {
-    res.json({ id: existing.id, fullName: existing.fullName, email: existing.email, phoneNumber: existing.phoneNumber, changed: false });
+    res.json({ id: existing.id, fullName: existing.fullName, email: existing.email, phoneNumber: existing.phoneNumber, referralCode: existing.referralCode, changed: false });
     return;
   }
 
