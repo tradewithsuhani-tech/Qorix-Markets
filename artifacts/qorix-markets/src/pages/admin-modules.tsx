@@ -310,7 +310,14 @@ function EditProfileModal({ user, onClose, onDone }: { user: any; onClose: () =>
   const [email, setEmail] = useState<string>(user.email ?? "");
   const [phoneNumber, setPhoneNumber] = useState<string>(user.phoneNumber ?? "");
   const [referralCode, setReferralCode] = useState<string>(user.referralCode ?? "");
+  // New sponsor code — empty means "no change", "CLEAR" means remove sponsor
+  const [newSponsorCode, setNewSponsorCode] = useState<string>("");
   const [saving, setSaving] = useState(false);
+
+  // Current sponsor display string
+  const currentSponsor = user.referredByCode
+    ? `${user.referredByName || user.referredByEmail || "?"} (${user.referredByCode}) · ID #${user.sponsorId}`
+    : "None";
 
   async function submit() {
     setSaving(true);
@@ -323,6 +330,11 @@ function EditProfileModal({ user, onClose, onDone }: { user: any; onClose: () =>
       if (cleanPhone !== currentPhone) body.phoneNumber = cleanPhone === "" ? null : cleanPhone;
       const cleanCode = referralCode.trim().toUpperCase();
       if (cleanCode !== (user.referralCode ?? "").toUpperCase()) body.referralCode = cleanCode;
+      // Include sponsor change if admin typed something (or explicitly cleared)
+      const trimmedSponsor = newSponsorCode.trim();
+      if (trimmedSponsor !== "") {
+        body.newSponsorCode = trimmedSponsor.toUpperCase() === "CLEAR" ? null : trimmedSponsor.toUpperCase();
+      }
 
       if (Object.keys(body).length === 0) {
         toast({ title: "Nothing to save", description: "No fields changed." });
@@ -351,7 +363,7 @@ function EditProfileModal({ user, onClose, onDone }: { user: any; onClose: () =>
       <motion.div
         initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }}
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-md glass-card rounded-2xl p-5 space-y-4"
+        className="w-full max-w-md glass-card rounded-2xl p-5 space-y-4 max-h-[90vh] overflow-y-auto"
       >
         <div className="flex items-start justify-between">
           <div>
@@ -381,13 +393,34 @@ function EditProfileModal({ user, onClose, onDone }: { user: any; onClose: () =>
             />
           </label>
           <label className="block">
-            <span className="text-xs text-muted-foreground">Referral Code (4–20 alphanumeric, auto-uppercased)</span>
+            <span className="text-xs text-muted-foreground">My Referral Code (user's own code, 4–20 alphanumeric)</span>
             <input
               value={referralCode}
               onChange={(e) => setReferralCode(e.target.value.replace(/[^a-zA-Z0-9]/g, "").slice(0, 20))}
               placeholder="e.g. JOHN123"
               className="mt-1 w-full bg-black/40 border border-amber-500/20 rounded-xl px-3 py-2 text-sm font-mono tracking-wider uppercase focus:ring-1 focus:ring-amber-500/50"
             />
+          </label>
+        </div>
+
+        {/* Sponsor (IB) change section */}
+        <div className="pt-3 border-t border-white/8 space-y-2">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-violet-300 uppercase tracking-wider">Change Sponsor (IB Transfer)</span>
+          </div>
+          <div className="px-3 py-2 rounded-xl bg-violet-500/8 border border-violet-500/20 text-xs text-muted-foreground">
+            <span className="text-violet-300 font-medium">Current: </span>
+            <span className="font-mono">{currentSponsor}</span>
+          </div>
+          <label className="block">
+            <span className="text-xs text-muted-foreground">New Sponsor's Referral Code <span className="text-violet-400">(enter their code to reassign)</span></span>
+            <input
+              value={newSponsorCode}
+              onChange={(e) => setNewSponsorCode(e.target.value.replace(/[^a-zA-Z0-9]/g, "").slice(0, 20))}
+              placeholder="e.g. B's referral code"
+              className="mt-1 w-full bg-black/40 border border-violet-500/30 rounded-xl px-3 py-2 text-sm font-mono tracking-wider uppercase focus:ring-1 focus:ring-violet-500/50"
+            />
+            <p className="mt-1 text-[11px] text-muted-foreground/60">Leave blank to keep current sponsor. Server validates that the code exists.</p>
           </label>
         </div>
 

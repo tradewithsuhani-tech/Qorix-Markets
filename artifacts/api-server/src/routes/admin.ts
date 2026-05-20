@@ -584,7 +584,7 @@ router.patch("/admin/users/:id/profile", async (req: AuthRequest, res) => {
     res.status(400).json({ error: "invalid_user_id" });
     return;
   }
-  const body = (req.body ?? {}) as { fullName?: string; email?: string; phoneNumber?: string | null; referralCode?: string };
+  const body = (req.body ?? {}) as { fullName?: string; email?: string; phoneNumber?: string | null; referralCode?: string; newSponsorCode?: string | null };
 
   const [existing] = await db.select().from(usersTable).where(eq(usersTable.id, id)).limit(1);
   if (!existing) { res.status(404).json({ error: "user_not_found" }); return; }
@@ -667,6 +667,43 @@ router.patch("/admin/users/:id/profile", async (req: AuthRequest, res) => {
         updates.phoneNumber = normalized;
         updates.phoneVerifiedAt = new Date(); // admin vouches → immediately verified
         changes.phoneNumber = { from: existing.phoneNumber, to: normalized };
+      }
+    }
+  }
+
+  // Sponsor (IB) change: admin supplies the new sponsor's referral code.
+  // Pass null / empty string to clear the sponsor (self-sponsor).
+  if ("newSponsorCode" in body) {
+    const raw = body.newSponsorCode;
+    if (raw === null || raw === undefined || String(raw).trim() === "") {
+      // Clear sponsor — set to self (same semantics as no referrer)
+      if (existing.sponsorId !== existing.id) {
+        (updates as any).sponsorId = existing.id;
+        changes.sponsorId = { from: existing.sponsorId, to: existing.id };
+      }
+    } else {
+      const codeUp = String(raw).trim().toUpperCase();
+      const [newSponsor] = await db
+        .select({ id: usersTable.id, fullName: usersTable.fullName, email: usersTable.email, referralCode: usersTable.referralCode })
+        .from(usersTable)
+        .where(eq(usersTable.referralCode, codeUp))
+        .limit(1);
+      if (!newSponsor) {
+        res.status(404).json({ error: "sponsor_not_found", message: `No user found with referral code "${codeUp}".` });
+        return;
+      }
+      if (newSponsor.id === id) {
+        res.status(400).json({ error: "sponsor_self", message: "A user cannot be their own sponsor." });
+        return;
+      }
+      if (newSponsor.id !== existing.sponsorId) {
+        (updates as any).sponsorId = newSponsor.id;
+        changes.sponsorId = {
+          from: existing.sponsorId,
+          to: newSponsor.id,
+          toName: newSponsor.fullName,
+          toCode: newSponsor.referralCode,
+        };
       }
     }
   }
