@@ -30,6 +30,7 @@ import {
 import { MarketingShell } from "@/components/marketing/marketing-shell";
 import {
   StatsSection,
+  PartnersSection,
   TestimonialsSection,
   FaqSection,
   CtaBand,
@@ -1425,6 +1426,7 @@ export default function HomePage() {
 
       <DemoSandbox open={demoOpen} onOpenChange={setDemoOpen} />
       <StatsSection />
+      <PartnersSection />
       <TestimonialsSection />
 
       <FaqSection

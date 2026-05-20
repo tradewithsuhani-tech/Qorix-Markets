@@ -10,6 +10,7 @@ import {
   TrendingUp,
   Wallet,
   Globe2,
+  Sparkles,
 } from "lucide-react";
 import { faqJsonLd, reviewJsonLd } from "@/lib/seo";
 import { trackCta } from "@/lib/analytics";
@@ -128,6 +129,84 @@ export function StatsSection() {
           </div>
         ))}
       </div>
+    </section>
+  );
+}
+
+export function PartnersSection() {
+  const partners = [
+    {
+      name: "WinProFX",
+      tagline: "Trade. Win. Prosper.",
+      description:
+        "A globally recognised forex & CFD broker providing advanced trading infrastructure, liquidity, and professional execution — powering Qorix Markets' trading desk.",
+      tags: ["Advanced Execution", "Global Liquidity", "Professional Desk"],
+      icon: TrendingUp,
+      accent: { border: "rgba(16,185,129,0.2)", bg: "rgba(16,185,129,0.05)", iconBg: "rgba(16,185,129,0.12)", iconBorder: "rgba(16,185,129,0.25)", tagBg: "rgba(16,185,129,0.1)", tagBorder: "rgba(16,185,129,0.2)", iconColor: "text-emerald-400", tagColor: "text-emerald-300", labelColor: "text-emerald-400", glow: "rgba(16,185,129,0.35)" },
+    },
+    {
+      name: "Star Trader",
+      tagline: "Elite Trading Solutions",
+      description:
+        "An elite proprietary trading firm bringing institutional strategies, signal expertise, and market intelligence that directly benefits Qorix Markets investors.",
+      tags: ["Institutional Signals", "Market Intelligence", "Elite Strategies"],
+      icon: Sparkles,
+      accent: { border: "rgba(245,158,11,0.2)", bg: "rgba(245,158,11,0.05)", iconBg: "rgba(245,158,11,0.12)", iconBorder: "rgba(245,158,11,0.25)", tagBg: "rgba(245,158,11,0.1)", tagBorder: "rgba(245,158,11,0.2)", iconColor: "text-amber-400", tagColor: "text-amber-300", labelColor: "text-amber-400", glow: "rgba(245,158,11,0.3)" },
+    },
+  ];
+  return (
+    <section className="max-w-7xl mx-auto px-4 md:px-8 py-12 md:py-16">
+      <div className="text-center mb-10">
+        <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-emerald-400 mb-3">
+          Trusted Partnerships
+        </div>
+        <h2 className="text-2xl md:text-3xl font-black text-white mb-2">Stronger Together</h2>
+        <p className="text-slate-400 text-sm max-w-lg mx-auto">
+          Qorix Markets collaborates with industry-leading trading firms to deliver deeper liquidity and stronger results for every investor.
+        </p>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-3xl mx-auto">
+        {partners.map((p) => (
+          <div
+            key={p.name}
+            className="relative rounded-2xl p-6 flex flex-col gap-4 overflow-hidden"
+            style={{ background: p.accent.bg, border: `1px solid ${p.accent.border}` }}
+          >
+            <div
+              aria-hidden
+              className="absolute -top-8 -right-8 w-24 h-24 rounded-full blur-3xl opacity-40"
+              style={{ background: p.accent.glow }}
+            />
+            <div className="relative flex items-center gap-3">
+              <div
+                className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0"
+                style={{ background: p.accent.iconBg, border: `1px solid ${p.accent.iconBorder}` }}
+              >
+                <p.icon size={18} className={p.accent.iconColor} />
+              </div>
+              <div>
+                <div className="font-bold text-white text-base leading-tight">{p.name}</div>
+                <div className={`text-[11px] font-semibold uppercase tracking-wider ${p.accent.labelColor}`}>{p.tagline}</div>
+              </div>
+            </div>
+            <p className="relative text-sm text-slate-400 leading-relaxed flex-1">{p.description}</p>
+            <div className="relative flex flex-wrap gap-2">
+              {p.tags.map((tag) => (
+                <span
+                  key={tag}
+                  className={`text-[11px] px-2.5 py-1 rounded-full font-medium ${p.accent.tagColor}`}
+                  style={{ background: p.accent.tagBg, border: `1px solid ${p.accent.tagBorder}` }}
+                >
+                  {tag}
+                </span>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+      <p className="text-center text-xs text-slate-500 mt-6">
+        These partnerships enable consistent results, deeper liquidity, and a stronger trading edge for every investor.
+      </p>
     </section>
   );
 }
