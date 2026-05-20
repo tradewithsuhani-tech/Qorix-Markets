@@ -204,9 +204,19 @@ export function PartnersSection() {
           </div>
         ))}
       </div>
-      <p className="text-center text-xs text-slate-500 mt-6">
-        These partnerships enable consistent results, deeper liquidity, and a stronger trading edge for every investor.
-      </p>
+      <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mt-8">
+        <p className="text-xs text-slate-500 text-center sm:text-left max-w-sm">
+          These partnerships enable consistent results, deeper liquidity, and a stronger trading edge for every investor.
+        </p>
+        <Link
+          href="/partners"
+          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold text-white shrink-0"
+          style={{ background: "linear-gradient(90deg,#10b981,#22c55e)" }}
+        >
+          Become a Partner
+          <ArrowRight size={14} />
+        </Link>
+      </div>
     </section>
   );
 }

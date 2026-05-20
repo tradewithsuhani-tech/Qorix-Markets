@@ -260,6 +260,7 @@ import RegulationPage from "@/pages/legal/regulation";
 // so they keep clean URLs (no /m/ prefix) and a marketing-only header.
 import AboutPage from "@/pages/marketing/about";
 import ContactPage from "@/pages/marketing/contact";
+import PartnersPage from "@/pages/marketing/partners";
 import AiTradingPage from "@/pages/marketing/ai-trading";
 import ZeroFeePage from "@/pages/marketing/zero-fee";
 import LowInvestmentPage from "@/pages/marketing/low-investment";
@@ -456,6 +457,7 @@ function Router() {
       {/* SEO marketing routes (public, indexable) */}
       <Route path="/about" component={AboutPage} />
       <Route path="/contact" component={ContactPage} />
+      <Route path="/partners" component={PartnersPage} />
       <Route path="/ai-trading-platform" component={AiTradingPage} />
       <Route path="/zero-trading-fee" component={ZeroFeePage} />
       <Route path="/low-investment-trading" component={LowInvestmentPage} />
@@ -547,6 +549,7 @@ function AppContent() {
     location.startsWith("/privacy") ||
     location.startsWith("/about") ||
     location.startsWith("/contact") ||
+    location.startsWith("/partners") ||
     location.startsWith("/blog") ||
     location.startsWith("/ai-trading-platform") ||
     location.startsWith("/zero-trading-fee") ||
