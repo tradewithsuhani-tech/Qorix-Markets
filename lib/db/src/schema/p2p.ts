@@ -99,6 +99,34 @@ export const p2pEscrowTransactionsTable = pgTable("p2p_escrow_transactions", {
   sellerIdx: index("p2p_escrow_seller_idx").on(t.sellerId),
 }));
 
+// ─── P2P Chat Messages ────────────────────────────────────────────────────────
+// Per-order messaging between buyer and seller during active trades.
+export const p2pChatMessagesTable = pgTable("p2p_chat_messages", {
+  id: serial("id").primaryKey(),
+  orderId: integer("order_id").notNull(),
+  senderId: integer("sender_id").notNull(),
+  message: text("message").notNull(),
+  isSystem: boolean("is_system").notNull().default(false),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (t) => ({
+  orderIdx: index("p2p_chat_order_idx").on(t.orderId),
+}));
+
+// ─── P2P Ratings ──────────────────────────────────────────────────────────────
+// Post-trade ratings (1–5 stars) left by buyer/seller after order completes.
+export const p2pRatingsTable = pgTable("p2p_ratings", {
+  id: serial("id").primaryKey(),
+  orderId: integer("order_id").notNull(),
+  fromUserId: integer("from_user_id").notNull(),
+  toUserId: integer("to_user_id").notNull(),
+  rating: integer("rating").notNull(),
+  comment: text("comment"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (t) => ({
+  orderFromIdx: index("p2p_ratings_from_idx").on(t.orderId, t.fromUserId),
+  toUserIdx: index("p2p_ratings_to_user_idx").on(t.toUserId),
+}));
+
 // ─── Insert Schemas (Zod) ─────────────────────────────────────────────────────
 export const insertP2pWalletSchema = createInsertSchema(p2pWalletsTable).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertP2pAdSchema = createInsertSchema(p2pAdsTable).omit({ id: true, createdAt: true, updatedAt: true });

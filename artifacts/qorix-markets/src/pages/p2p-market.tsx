@@ -5,7 +5,7 @@ import { authFetch } from "@/lib/auth-fetch";
 import { useToast } from "@/hooks/use-toast";
 import {
   TrendingUp, TrendingDown, RefreshCw, ArrowUpDown,
-  Plus, ChevronRight, Wallet, AlertCircle, Filter,
+  Plus, ChevronRight, Wallet, AlertCircle, Filter, ChevronDown,
 } from "lucide-react";
 
 type Ad = {
@@ -16,6 +16,8 @@ type Ad = {
 };
 
 type FundingWallet = { tradingBalance: string | number };
+
+const PAYMENT_METHODS = ["All", "UPI", "BANK", "IMPS", "NEFT", "Fast Pay"];
 
 function AdRow({ ad, tab }: { ad: Ad; tab: "BUY" | "SELL" }) {
   const [, navigate] = useLocation();
@@ -68,13 +70,16 @@ export default function P2PMarketPage() {
   const [ads, setAds] = useState<Ad[]>([]);
   const [wallet, setWallet] = useState<FundingWallet | null>(null);
   const [loading, setLoading] = useState(true);
+  const [paymentFilter, setPaymentFilter] = useState("All");
+  const [filterOpen, setFilterOpen] = useState(false);
   const { toast } = useToast();
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
+      const pm = paymentFilter !== "All" ? `&paymentMethod=${encodeURIComponent(paymentFilter)}` : "";
       const [adsData, walletData] = await Promise.all([
-        authFetch<Ad[]>(`/api/p2p/ads?type=${tab}`),
+        authFetch<Ad[]>(`/api/p2p/ads?type=${tab}${pm}`),
         authFetch<FundingWallet>("/api/wallet"),
       ]);
       setAds(adsData);
@@ -84,7 +89,7 @@ export default function P2PMarketPage() {
     } finally {
       setLoading(false);
     }
-  }, [tab]);
+  }, [tab, paymentFilter]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -99,68 +104,54 @@ export default function P2PMarketPage() {
               <ArrowUpDown size={20} className="text-emerald-400" />
               P2P Trading
             </h1>
-            <p className="text-slate-400 text-sm mt-0.5">Buy & sell USDT directly with other users</p>
+            <p className="text-slate-400 text-xs mt-0.5">Peer-to-peer USDT marketplace</p>
           </div>
           <div className="flex items-center gap-2">
-            <Link href="/p2p/create-ad">
-              <button className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-white text-sm font-bold transition-all">
-                <Plus size={15} /> Post Ad
+            <button onClick={fetchData} className="p-2 glass-card rounded-xl text-slate-400 hover:text-white">
+              <RefreshCw size={15} className={loading ? "animate-spin" : ""} />
+            </button>
+            <Link href="/p2p/ads/my">
+              <button className="flex items-center gap-1.5 px-3 py-2 glass-card rounded-xl text-slate-300 hover:text-white text-xs font-medium transition-colors">
+                My Ads <ChevronRight size={13} />
               </button>
             </Link>
-            <button onClick={fetchData} className="p-2 rounded-xl glass-card text-slate-400 hover:text-white">
-              <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
-            </button>
+            <Link href="/p2p/create-ad">
+              <button className="flex items-center gap-1.5 px-3 py-2 bg-emerald-500/15 border border-emerald-500/25 rounded-xl text-emerald-400 hover:bg-emerald-500/25 text-xs font-bold transition-all">
+                <Plus size={13} /> Post Ad
+              </button>
+            </Link>
           </div>
         </div>
 
-        {/* Funding Wallet Bar */}
+        {/* Funding Wallet */}
         {wallet && (
-          <div className="glass-card rounded-xl p-4 flex flex-wrap items-center gap-5">
-            <Wallet size={16} className="text-emerald-400 shrink-0" />
-            <div className="flex flex-wrap gap-6 text-sm flex-1">
-              <div>
-                <span className="text-slate-500">Funding Wallet</span>
-                <span className="text-emerald-400 font-bold ml-2">{Number(wallet.tradingBalance).toFixed(4)} USDT</span>
-              </div>
-              <span className="text-slate-600 text-xs self-center">SELL ads deduct from this balance</span>
+          <div className="glass-card rounded-xl p-3 flex items-center gap-3">
+            <div className="p-2 bg-emerald-500/10 rounded-lg">
+              <Wallet size={14} className="text-emerald-400" />
             </div>
-            <Link href="/p2p/payment-methods" className="text-xs text-emerald-400 hover:underline flex items-center gap-1">
-              Manage <ChevronRight size={12} />
+            <div className="flex-1">
+              <div className="text-xs text-slate-500">Funding Wallet</div>
+              <div className="text-white font-bold text-sm">
+                {parseFloat(String(wallet.tradingBalance)).toFixed(4)} USDT
+              </div>
+            </div>
+            <Link href="/p2p/orders">
+              <button className="text-xs text-slate-400 hover:text-emerald-400 flex items-center gap-1">
+                My Orders <ChevronRight size={12} />
+              </button>
             </Link>
           </div>
         )}
 
-        {/* Quick links */}
-        <div className="flex gap-2">
-          <Link href="/p2p/orders">
-            <button className="glass-card px-3 py-2 rounded-xl text-xs text-slate-300 hover:text-white hover:border-white/20 transition-colors">
-              My Orders
-            </button>
-          </Link>
-          <Link href="/p2p/ads/my">
-            <button className="glass-card px-3 py-2 rounded-xl text-xs text-slate-300 hover:text-white hover:border-white/20 transition-colors">
-              My Ads
-            </button>
-          </Link>
-          <Link href="/p2p/payment-methods">
-            <button className="glass-card px-3 py-2 rounded-xl text-xs text-slate-300 hover:text-white hover:border-white/20 transition-colors">
-              Payment Methods
-            </button>
-          </Link>
-        </div>
-
-        {/* Buy/Sell Tabs */}
-        <div className="glass-card rounded-xl overflow-hidden">
+        {/* Main card */}
+        <div className="glass-card rounded-2xl overflow-hidden">
+          {/* BUY / SELL tabs */}
           <div className="flex border-b border-white/[0.06]">
             {(["BUY", "SELL"] as const).map((t) => (
-              <button
-                key={t}
-                onClick={() => setTab(t)}
+              <button key={t} onClick={() => setTab(t)}
                 className={`flex-1 py-3 text-sm font-bold transition-colors ${
                   tab === t
-                    ? t === "BUY"
-                      ? "text-emerald-400 border-b-2 border-emerald-400"
-                      : "text-red-400 border-b-2 border-red-400"
+                    ? t === "BUY" ? "text-emerald-400 border-b-2 border-emerald-400" : "text-red-400 border-b-2 border-red-400"
                     : "text-slate-500 hover:text-slate-300"
                 }`}
               >
@@ -169,13 +160,28 @@ export default function P2PMarketPage() {
             ))}
           </div>
 
-          {/* Table header */}
+          {/* Filter row */}
+          <div className="px-4 py-2.5 border-b border-white/[0.05] flex items-center gap-2">
+            <Filter size={13} className="text-slate-500 shrink-0" />
+            <span className="text-xs text-slate-500 shrink-0">Pay via:</span>
+            <div className="flex gap-1.5 flex-wrap">
+              {PAYMENT_METHODS.map((m) => (
+                <button key={m} onClick={() => setPaymentFilter(m)}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${
+                    paymentFilter === m
+                      ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                      : "text-slate-500 hover:text-slate-300 border border-white/[0.06] hover:border-white/10"
+                  }`}
+                >
+                  {m}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Table header desktop */}
           <div className="hidden sm:grid grid-cols-5 px-4 py-2 text-[11px] uppercase tracking-wider text-slate-600 font-semibold">
-            <div>Advertiser</div>
-            <div>Price</div>
-            <div>Available</div>
-            <div>Limits</div>
-            <div></div>
+            <div>Advertiser</div><div>Price</div><div>Available</div><div>Limits</div><div></div>
           </div>
 
           <div className="p-3 space-y-2">
@@ -186,10 +192,18 @@ export default function P2PMarketPage() {
             ) : ads.length === 0 ? (
               <div className="flex flex-col items-center py-12 gap-3">
                 <AlertCircle size={32} className="text-slate-600" />
-                <p className="text-slate-500 text-sm">No active ads right now</p>
-                <Link href="/p2p/create-ad">
-                  <button className="text-emerald-400 text-xs hover:underline">Be the first to post an ad →</button>
-                </Link>
+                <p className="text-slate-500 text-sm">
+                  {paymentFilter !== "All" ? `No active ${tab} ads accepting ${paymentFilter}` : "No active ads right now"}
+                </p>
+                {paymentFilter !== "All" ? (
+                  <button onClick={() => setPaymentFilter("All")} className="text-emerald-400 text-xs hover:underline">
+                    Clear filter
+                  </button>
+                ) : (
+                  <Link href="/p2p/create-ad">
+                    <button className="text-emerald-400 text-xs hover:underline">Be the first to post an ad →</button>
+                  </Link>
+                )}
               </div>
             ) : (
               ads.map((ad) => <AdRow key={ad.id} ad={ad} tab={tab} />)

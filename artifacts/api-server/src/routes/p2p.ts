@@ -6,6 +6,8 @@ import {
   p2pOrdersTable,
   p2pEscrowTransactionsTable,
   p2pUserPaymentMethodsTable,
+  p2pChatMessagesTable,
+  p2pRatingsTable,
 } from "@workspace/db";
 import { eq, and, or, ne, desc, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -172,10 +174,11 @@ router.delete("/p2p/payment-methods/:id", async (req: AuthRequest, res) => {
 
 // ─── P2P Ads ──────────────────────────────────────────────────────────────────
 
-// GET /p2p/ads — public listing (filterable)
+// GET /p2p/ads — public listing (filterable by type, paymentMethod)
 router.get("/p2p/ads", async (req: AuthRequest, res) => {
   try {
     const type = (req.query.type as string)?.toUpperCase(); // BUY | SELL
+    const paymentMethodFilter = (req.query.paymentMethod as string)?.toLowerCase();
     const conditions = [eq(p2pAdsTable.status, "active")];
     if (type === "BUY" || type === "SELL") conditions.push(eq(p2pAdsTable.type, type));
 
@@ -202,7 +205,7 @@ router.get("/p2p/ads", async (req: AuthRequest, res) => {
       .orderBy(desc(p2pAdsTable.createdAt))
       .limit(50);
 
-    res.json(ads.map((a) => ({
+    let result = ads.map((a) => ({
       ...a,
       price: parseNum(a.price as string),
       quantity: parseNum(a.quantity as string),
@@ -210,9 +213,16 @@ router.get("/p2p/ads", async (req: AuthRequest, res) => {
       maxLimit: parseNum(a.maxLimit as string),
       filledQuantity: parseNum(a.filledQuantity as string),
       remainingQuantity: parseNum(a.quantity as string) - parseNum(a.filledQuantity as string),
-      paymentMethods: JSON.parse(a.paymentMethods as string),
-      advertiserName: (a.advertiserName as string).split(" ")[0] + "***", // privacy mask
-    })));
+      paymentMethods: JSON.parse(a.paymentMethods as string) as string[],
+      advertiserName: (a.advertiserName as string).split(" ")[0] + "***",
+    }));
+    // Filter by payment method if specified
+    if (paymentMethodFilter) {
+      result = result.filter((a) =>
+        a.paymentMethods.some((m) => m.toLowerCase().includes(paymentMethodFilter))
+      );
+    }
+    res.json(result);
   } catch {
     res.status(500).json({ error: "Failed to fetch ads" });
   }
@@ -611,6 +621,110 @@ router.patch("/p2p/orders/:id/cancel", async (req: AuthRequest, res) => {
     res.json({ success: true, status: "cancelled" });
   } catch (err: any) {
     res.status(400).json({ error: err.message || "Failed to cancel order" });
+  }
+});
+
+// ─── P2P Chat ─────────────────────────────────────────────────────────────────
+
+// GET /p2p/orders/:id/messages
+router.get("/p2p/orders/:id/messages", async (req: AuthRequest, res) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  try {
+    const [order] = await db.select().from(p2pOrdersTable)
+      .where(and(eq(p2pOrdersTable.id, id), or(eq(p2pOrdersTable.buyerId, req.userId!), eq(p2pOrdersTable.sellerId, req.userId!)))).limit(1);
+    if (!order) { res.status(404).json({ error: "Order not found" }); return; }
+
+    const messages = await db
+      .select({
+        id: p2pChatMessagesTable.id,
+        senderId: p2pChatMessagesTable.senderId,
+        message: p2pChatMessagesTable.message,
+        isSystem: p2pChatMessagesTable.isSystem,
+        createdAt: p2pChatMessagesTable.createdAt,
+        senderName: usersTable.fullName,
+      })
+      .from(p2pChatMessagesTable)
+      .leftJoin(usersTable, eq(p2pChatMessagesTable.senderId, usersTable.id))
+      .where(eq(p2pChatMessagesTable.orderId, id))
+      .orderBy(p2pChatMessagesTable.createdAt);
+
+    res.json(messages.map((m) => ({
+      ...m,
+      senderName: m.isSystem ? "System" : (m.senderName as string || "User").split(" ")[0] + "***",
+      isOwn: !m.isSystem && m.senderId === req.userId!,
+    })));
+  } catch {
+    res.status(500).json({ error: "Failed to fetch messages" });
+  }
+});
+
+// POST /p2p/orders/:id/messages
+router.post("/p2p/orders/:id/messages", async (req: AuthRequest, res) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const { message } = req.body;
+  if (!message || typeof message !== "string" || !message.trim()) {
+    res.status(400).json({ error: "Message is required" }); return;
+  }
+  if (message.trim().length > 500) {
+    res.status(400).json({ error: "Message too long (max 500 chars)" }); return;
+  }
+  try {
+    const [order] = await db.select().from(p2pOrdersTable)
+      .where(and(eq(p2pOrdersTable.id, id), or(eq(p2pOrdersTable.buyerId, req.userId!), eq(p2pOrdersTable.sellerId, req.userId!)))).limit(1);
+    if (!order) { res.status(404).json({ error: "Order not found" }); return; }
+    if (order.status === "completed" || order.status === "cancelled") {
+      res.status(400).json({ error: "Cannot chat on a closed order" }); return;
+    }
+    const [msg] = await db.insert(p2pChatMessagesTable).values({
+      orderId: id, senderId: req.userId!, message: message.trim(),
+    }).returning();
+    res.status(201).json({ ...msg, isOwn: true, senderName: "You" });
+  } catch {
+    res.status(500).json({ error: "Failed to send message" });
+  }
+});
+
+// ─── P2P Ratings ──────────────────────────────────────────────────────────────
+
+// GET /p2p/orders/:id/myrating
+router.get("/p2p/orders/:id/myrating", async (req: AuthRequest, res) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  try {
+    const [rating] = await db.select().from(p2pRatingsTable)
+      .where(and(eq(p2pRatingsTable.orderId, id), eq(p2pRatingsTable.fromUserId, req.userId!))).limit(1);
+    res.json({ rated: !!rating, rating: rating ?? null });
+  } catch {
+    res.status(500).json({ error: "Failed to fetch rating" });
+  }
+});
+
+// POST /p2p/orders/:id/rate
+router.post("/p2p/orders/:id/rate", async (req: AuthRequest, res) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const { rating, comment } = req.body;
+  if (!rating || typeof rating !== "number" || rating < 1 || rating > 5) {
+    res.status(400).json({ error: "Rating must be 1-5" }); return;
+  }
+  try {
+    const [order] = await db.select().from(p2pOrdersTable)
+      .where(and(eq(p2pOrdersTable.id, id), or(eq(p2pOrdersTable.buyerId, req.userId!), eq(p2pOrdersTable.sellerId, req.userId!)))).limit(1);
+    if (!order) { res.status(404).json({ error: "Order not found" }); return; }
+    if (order.status !== "completed") { res.status(400).json({ error: "Can only rate completed orders" }); return; }
+    const [existing] = await db.select().from(p2pRatingsTable)
+      .where(and(eq(p2pRatingsTable.orderId, id), eq(p2pRatingsTable.fromUserId, req.userId!))).limit(1);
+    if (existing) { res.status(400).json({ error: "Already rated this order" }); return; }
+    const toUserId = order.buyerId === req.userId! ? order.sellerId : order.buyerId;
+    const [newRating] = await db.insert(p2pRatingsTable).values({
+      orderId: id, fromUserId: req.userId!, toUserId, rating: Math.round(rating),
+      comment: typeof comment === "string" && comment.trim() ? comment.trim() : null,
+    }).returning();
+    res.status(201).json(newRating);
+  } catch {
+    res.status(500).json({ error: "Failed to submit rating" });
   }
 });
 

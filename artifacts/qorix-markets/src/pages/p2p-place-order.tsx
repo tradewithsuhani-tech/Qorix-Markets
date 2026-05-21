@@ -171,14 +171,38 @@ export default function P2PPlaceOrderPage() {
                 }`}
               />
             </div>
+            {/* Quick-fill buttons */}
+            <div className="flex gap-2 mt-1.5">
+              <button type="button" onClick={() => setFiatAmount(String(ad.minLimit))}
+                className="flex-1 py-1 rounded-lg text-[11px] font-semibold text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 transition-all">
+                Min ₹{ad.minLimit.toLocaleString()}
+              </button>
+              <button type="button" onClick={() => setFiatAmount(String(Math.min(ad.maxLimit, ad.remainingQuantity * ad.price)))}
+                className="flex-1 py-1 rounded-lg text-[11px] font-semibold text-slate-400 bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 transition-all">
+                Max ₹{Math.min(ad.maxLimit, Math.floor(ad.remainingQuantity * ad.price)).toLocaleString()}
+              </button>
+            </div>
+
             {fiatNum > 0 && (
-              <div className="mt-1.5 flex items-center justify-between text-xs">
-                <span className={usdtCalc > ad.remainingQuantity ? "text-red-400" : "text-slate-500"}>
-                  ≈ {usdtCalc.toFixed(6)} USDT
-                </span>
-                {fiatNum < ad.minLimit && <span className="text-amber-400">Min: ₹{ad.minLimit.toLocaleString()}</span>}
-                {fiatNum > ad.maxLimit && <span className="text-amber-400">Max: ₹{ad.maxLimit.toLocaleString()}</span>}
-                {usdtCalc > ad.remainingQuantity && <span className="text-red-400">Exceeds available</span>}
+              <div className="mt-1.5 space-y-1.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-slate-400">≈ {usdtCalc.toFixed(6)} USDT</span>
+                </div>
+                {fiatNum < ad.minLimit && (
+                  <div className="flex items-center gap-2 text-xs bg-amber-500/5 border border-amber-500/20 rounded-lg px-3 py-2 text-amber-400">
+                    <AlertCircle size={12} /> Minimum order is ₹{ad.minLimit.toLocaleString("en-IN")}
+                  </div>
+                )}
+                {fiatNum > ad.maxLimit && (
+                  <div className="flex items-center gap-2 text-xs bg-amber-500/5 border border-amber-500/20 rounded-lg px-3 py-2 text-amber-400">
+                    <AlertCircle size={12} /> Maximum order is ₹{ad.maxLimit.toLocaleString("en-IN")}
+                  </div>
+                )}
+                {usdtCalc > ad.remainingQuantity && (
+                  <div className="flex items-center gap-2 text-xs bg-red-500/5 border border-red-500/20 rounded-lg px-3 py-2 text-red-400">
+                    <AlertCircle size={12} /> Exceeds available USDT ({ad.remainingQuantity.toFixed(4)})
+                  </div>
+                )}
               </div>
             )}
           </div>
