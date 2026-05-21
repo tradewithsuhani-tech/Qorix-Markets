@@ -28,11 +28,9 @@ export default function P2PCreateAdPage() {
   const [payMethods, setPayMethods] = useState<PaymentMethod[]>([]);
 
   useEffect(() => {
-    Promise.all([
-      authFetch<P2pWallet>("/api/p2p/wallet"),
-      authFetch<PaymentMethod[]>("/api/p2p/payment-methods"),
-      authFetch<MainWallet>("/api/wallet"),
-    ]).then(([w, pm, mw]) => { setWallet(w); setPayMethods(pm); setMainWallet(mw); }).catch(() => {});
+    authFetch<MainWallet>("/api/wallet").then(setMainWallet).catch(() => setMainWallet({ tradingBalance: 0 }));
+    authFetch<P2pWallet>("/api/p2p/wallet").then(setWallet).catch(() => {});
+    authFetch<PaymentMethod[]>("/api/p2p/payment-methods").then(setPayMethods).catch(() => {});
   }, []);
 
   const isSell = type === "SELL";
@@ -166,22 +164,25 @@ export default function P2PCreateAdPage() {
             <div className="relative">
               <input
                 required type="number" min="0.01" step="0.01"
-                max={isSell && sellMax < Infinity ? sellMax : undefined}
-                placeholder="e.g. 500"
+                max={isSell && fundingBalance > 0 ? fundingBalance : undefined}
+                placeholder={isSell && mainWallet === null ? "Loading balance..." : "e.g. 500"}
+                disabled={isSell && mainWallet === null}
                 value={quantity}
                 onChange={(e) => {
                   const val = e.target.value;
                   const num = parseFloat(val);
-                  if (isSell && mainWallet !== null && !isNaN(num) && num > fundingBalance) {
-                    setQuantity(fundingBalance > 0 ? fundingBalance.toFixed(4) : "0");
+                  if (isSell && !isNaN(num) && num > fundingBalance) {
+                    setQuantity(fundingBalance > 0 ? fundingBalance.toFixed(4) : "");
                   } else {
                     setQuantity(val);
                   }
                 }}
-                className={`w-full pr-24 pl-4 py-2.5 bg-black/30 rounded-xl text-white text-sm outline-none transition-colors border ${
-                  isSell && mainWallet !== null && qtyNum > 0 && qtyNum > fundingBalance
-                    ? "border-red-500/50 focus:border-red-500/70"
-                    : "border-white/10 focus:border-emerald-400/40"
+                className={`w-full pr-24 pl-4 py-2.5 bg-black/30 rounded-xl text-sm outline-none transition-colors border ${
+                  isSell && mainWallet === null
+                    ? "text-slate-500 cursor-not-allowed opacity-60 border-white/5"
+                    : qtyNum > 0 && qtyNum > fundingBalance
+                      ? "text-white border-red-500/50 focus:border-red-500/70"
+                      : "text-white border-white/10 focus:border-emerald-400/40"
                 }`}
               />
               <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
