@@ -269,17 +269,10 @@ router.post("/p2p/ads", async (req: AuthRequest, res) => {
         const tradingBal = parseNum(mainWallet.tradingBalance as string);
         if (tradingBal < quantity) throw new Error("Insufficient Funding Wallet balance to create SELL ad");
 
-        // Deduct from Funding Wallet
+        // Deduct from Funding Wallet (lock for SELL ad)
         await tx.update(walletsTable).set({
           tradingBalance: sql`${walletsTable.tradingBalance} - ${quantity}`,
         }).where(eq(walletsTable.userId, req.userId!));
-
-        // Track in P2P frozen (for accounting / display)
-        const p2pWallet = await getOrCreateP2pWallet(req.userId!);
-        await tx.update(p2pWalletsTable).set({
-          frozenBalance: sql`${p2pWalletsTable.frozenBalance} + ${quantity}`,
-          updatedAt: new Date(),
-        }).where(eq(p2pWalletsTable.id, p2pWallet.id));
 
         [ad] = await tx.insert(p2pAdsTable).values({
           userId: req.userId!,
@@ -351,11 +344,6 @@ router.delete("/p2p/ads/:id", async (req: AuthRequest, res) => {
         await tx.update(walletsTable).set({
           tradingBalance: sql`${walletsTable.tradingBalance} + ${remainingQty}`,
         }).where(eq(walletsTable.userId, req.userId!));
-
-        await tx.update(p2pWalletsTable).set({
-          frozenBalance: sql`${p2pWalletsTable.frozenBalance} - ${remainingQty}`,
-          updatedAt: new Date(),
-        }).where(eq(p2pWalletsTable.userId, req.userId!));
       }
 
       await tx.update(p2pAdsTable).set({ status: "cancelled", updatedAt: new Date() }).where(eq(p2pAdsTable.id, id));
@@ -405,14 +393,7 @@ router.post("/p2p/orders", async (req: AuthRequest, res) => {
       const buyerId = ad.type === "SELL" ? req.userId! : ad.userId;
       const sellerId = ad.type === "SELL" ? ad.userId : req.userId!;
 
-      // For SELL ads: move seller's USDT from frozen → escrow
-      if (ad.type === "SELL") {
-        await tx.update(p2pWalletsTable).set({
-          frozenBalance: sql`${p2pWalletsTable.frozenBalance} - ${usdtAmount}`,
-          escrowBalance: sql`${p2pWalletsTable.escrowBalance} + ${usdtAmount}`,
-          updatedAt: new Date(),
-        }).where(eq(p2pWalletsTable.userId, sellerId));
-      }
+      // SELL ads: funds already deducted from seller's Funding Wallet at ad creation time
 
       [order] = await tx.insert(p2pOrdersTable).values({
         adId,
