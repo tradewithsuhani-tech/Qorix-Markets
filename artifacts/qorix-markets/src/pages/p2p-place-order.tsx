@@ -17,9 +17,10 @@ type SellerMethod = {
 type AdDetail = {
   id: number; userId: number; type: "BUY" | "SELL"; price: number;
   quantity: number; remainingQuantity: number;
-  minLimit: number; maxLimit: number;
+  minLimit: number; maxLimit: number; timeLimit: number;
   paymentMethods: string[]; sellerPaymentMethods: SellerMethod[];
   terms: string | null; status: string; advertiserName: string;
+  tradesCount: number; completionRate: number;
 };
 
 export default function P2PPlaceOrderPage() {
@@ -90,7 +91,7 @@ export default function P2PPlaceOrderPage() {
           paymentMethod: selectedMethod?.type ?? selectedMethod?.displayName ?? undefined,
         }),
       });
-      toast({ title: "Order placed! Pay within 15 minutes." });
+      toast({ title: `Order placed! Pay within ${ad!.timeLimit} minutes.` });
       navigate(`/p2p/orders/${res.order.id}`);
     } catch (err: any) {
       toast({ title: err.message || "Failed to place order", variant: "destructive" });
@@ -185,8 +186,9 @@ export default function P2PPlaceOrderPage() {
 
             {fiatNum > 0 && (
               <div className="mt-1.5 space-y-1.5">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-slate-400">≈ {usdtCalc.toFixed(6)} USDT</span>
+                <div className="flex items-center justify-between rounded-xl bg-emerald-500/5 border border-emerald-500/20 px-3 py-2.5">
+                  <span className="text-slate-400 text-xs">You Receive</span>
+                  <span className="text-emerald-400 font-bold text-base">{usdtCalc.toFixed(6)} USDT</span>
                 </div>
                 {fiatNum < ad.minLimit && (
                   <div className="flex items-center gap-2 text-xs bg-amber-500/5 border border-amber-500/20 rounded-lg px-3 py-2 text-amber-400">
@@ -250,10 +252,34 @@ export default function P2PPlaceOrderPage() {
             </div>
           )}
 
+          {/* Advertiser Info */}
+          <div className="glass-card rounded-xl p-4 space-y-2.5">
+            <h3 className="text-slate-400 text-xs uppercase tracking-wider font-semibold">Advertiser's Info</h3>
+            <div className="flex items-center gap-3">
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold shrink-0 ${isSell ? "bg-emerald-500/15 text-emerald-400" : "bg-red-500/15 text-red-400"}`}>
+                {ad.advertiserName[0]?.toUpperCase()}
+              </div>
+              <div>
+                <div className="text-white font-semibold">{ad.advertiserName}</div>
+                <div className="flex items-center gap-2 mt-0.5 text-[11px] text-slate-500">
+                  <span>{ad.tradesCount} Trades</span>
+                  <span className="text-slate-700">·</span>
+                  <span className="text-emerald-500">{ad.completionRate}% Completion</span>
+                </div>
+              </div>
+            </div>
+            {ad.terms && (
+              <div className="border-t border-white/[0.05] pt-2.5">
+                <p className="text-[11px] text-slate-500 uppercase tracking-wider font-semibold mb-1">Trading Terms</p>
+                <p className="text-slate-300 text-xs leading-relaxed">{ad.terms}</p>
+              </div>
+            )}
+          </div>
+
           {/* Timer notice */}
           <div className="flex items-start gap-2 bg-amber-500/5 border border-amber-500/15 rounded-xl p-3 text-xs text-slate-400">
             <Clock size={13} className="text-amber-400 shrink-0 mt-0.5" />
-            <span>After placing the order, you have <strong className="text-amber-300">15 minutes</strong> to complete the payment and mark it as paid.</span>
+            <span>After placing the order, you have <strong className="text-amber-300">{ad.timeLimit} minutes</strong> to complete the payment and mark it as paid.</span>
           </div>
 
           {/* Escrow notice */}

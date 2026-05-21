@@ -51,6 +51,7 @@ export const p2pAdsTable = pgTable("p2p_ads", {
   maxLimit: numeric("max_limit", { precision: 18, scale: 2 }).notNull(),   // max INR per order
   paymentMethods: text("payment_methods").notNull().default("[]"),          // JSON array of method IDs
   terms: text("terms"),
+  timeLimit: integer("time_limit").notNull().default(15), // minutes buyer has to pay
   status: varchar("status", { length: 20 }).notNull().default("active"),   // active | paused | completed | cancelled
   filledQuantity: numeric("filled_quantity", { precision: 18, scale: 8 }).notNull().default("0"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
@@ -76,6 +77,8 @@ export const p2pOrdersTable = pgTable("p2p_orders", {
   paidAt: timestamp("paid_at"),
   completedAt: timestamp("completed_at"),
   cancelledAt: timestamp("cancelled_at"),
+  cancelReason: text("cancel_reason"),
+  paymentRef: text("payment_ref"), // buyer's payment reference / UPI transaction ID
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 }, (t) => ({

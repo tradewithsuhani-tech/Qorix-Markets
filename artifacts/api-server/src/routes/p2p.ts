@@ -9,7 +9,7 @@ import {
   p2pChatMessagesTable,
   p2pRatingsTable,
 } from "@workspace/db";
-import { eq, and, or, ne, desc, sql } from "drizzle-orm";
+import { eq, and, or, ne, desc, sql, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { authMiddleware, type AuthRequest } from "../middlewares/auth";
 
@@ -195,6 +195,7 @@ router.get("/p2p/ads", async (req: AuthRequest, res) => {
         maxLimit: p2pAdsTable.maxLimit,
         paymentMethods: p2pAdsTable.paymentMethods,
         terms: p2pAdsTable.terms,
+        timeLimit: p2pAdsTable.timeLimit,
         filledQuantity: p2pAdsTable.filledQuantity,
         createdAt: p2pAdsTable.createdAt,
         advertiserName: usersTable.fullName,
@@ -222,7 +223,40 @@ router.get("/p2p/ads", async (req: AuthRequest, res) => {
         a.paymentMethods.some((m) => m.toLowerCase().includes(paymentMethodFilter))
       );
     }
-    res.json(result);
+
+    // Compute per-advertiser trade stats
+    const userIds = [...new Set(result.map((a) => a.userId))];
+    const statsMap = new Map<number, { trades: number; completionRate: number }>();
+    if (userIds.length > 0) {
+      const [buyerRows, sellerRows] = await Promise.all([
+        db.select({
+          userId: p2pOrdersTable.buyerId,
+          total: sql<number>`count(*)::int`,
+          completed: sql<number>`count(*) filter (where ${p2pOrdersTable.status} = 'completed')::int`,
+        }).from(p2pOrdersTable).where(inArray(p2pOrdersTable.buyerId, userIds)).groupBy(p2pOrdersTable.buyerId),
+        db.select({
+          userId: p2pOrdersTable.sellerId,
+          total: sql<number>`count(*)::int`,
+          completed: sql<number>`count(*) filter (where ${p2pOrdersTable.status} = 'completed')::int`,
+        }).from(p2pOrdersTable).where(inArray(p2pOrdersTable.sellerId, userIds)).groupBy(p2pOrdersTable.sellerId),
+      ]);
+      for (const r of [...buyerRows, ...sellerRows]) {
+        const e = statsMap.get(r.userId) ?? { trades: 0, completionRate: 100 };
+        const prevCompleted = Math.round(e.completionRate / 100 * e.trades);
+        const newTotal = e.trades + (r.total ?? 0);
+        const newCompleted = prevCompleted + (r.completed ?? 0);
+        statsMap.set(r.userId, {
+          trades: newTotal,
+          completionRate: newTotal > 0 ? Math.round((newCompleted / newTotal) * 100) : 100,
+        });
+      }
+    }
+    const finalResult = result.map((a) => ({
+      ...a,
+      tradesCount: statsMap.get(a.userId)?.trades ?? 0,
+      completionRate: statsMap.get(a.userId)?.completionRate ?? 100,
+    }));
+    res.json(finalResult);
   } catch {
     res.status(500).json({ error: "Failed to fetch ads" });
   }
@@ -569,7 +603,9 @@ router.patch("/p2p/orders/:id/paid", async (req: AuthRequest, res) => {
       .where(and(eq(p2pOrdersTable.id, id), eq(p2pOrdersTable.buyerId, req.userId!))).limit(1);
     if (!order) { res.status(404).json({ error: "Order not found or not your order" }); return; }
     if (order.status !== "pending") { res.status(400).json({ error: "Order is not pending" }); return; }
-    await db.update(p2pOrdersTable).set({ status: "paid", paidAt: new Date(), updatedAt: new Date() })
+    const paymentRef = typeof req.body?.paymentRef === "string" && req.body.paymentRef.trim()
+      ? req.body.paymentRef.trim() : null;
+    await db.update(p2pOrdersTable).set({ status: "paid", paidAt: new Date(), updatedAt: new Date(), paymentRef })
       .where(eq(p2pOrdersTable.id, id));
     res.json({ success: true, status: "paid" });
   } catch {
@@ -626,7 +662,9 @@ router.patch("/p2p/orders/:id/cancel", async (req: AuthRequest, res) => {
       }).where(eq(p2pAdsTable.id, order.adId));
       await tx.update(p2pEscrowTransactionsTable).set({ status: "returned" })
         .where(eq(p2pEscrowTransactionsTable.orderId, id));
-      await tx.update(p2pOrdersTable).set({ status: "cancelled", cancelledAt: new Date(), updatedAt: new Date() })
+      const cancelReason = typeof req.body?.cancelReason === "string" && req.body.cancelReason.trim()
+        ? req.body.cancelReason.trim() : null;
+      await tx.update(p2pOrdersTable).set({ status: "cancelled", cancelledAt: new Date(), updatedAt: new Date(), cancelReason })
         .where(eq(p2pOrdersTable.id, id));
     });
     res.json({ success: true, status: "cancelled" });
