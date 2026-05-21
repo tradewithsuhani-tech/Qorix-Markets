@@ -15,7 +15,7 @@ type Ad = {
   remainingQuantity: number; advertiserName: string; createdAt: string;
 };
 
-type P2pWallet = { availableBalance: number; frozenBalance: number; escrowBalance: number };
+type FundingWallet = { tradingBalance: string | number };
 
 function AdRow({ ad, tab }: { ad: Ad; tab: "BUY" | "SELL" }) {
   const [, navigate] = useLocation();
@@ -66,7 +66,7 @@ function AdRow({ ad, tab }: { ad: Ad; tab: "BUY" | "SELL" }) {
 export default function P2PMarketPage() {
   const [tab, setTab] = useState<"BUY" | "SELL">("BUY");
   const [ads, setAds] = useState<Ad[]>([]);
-  const [wallet, setWallet] = useState<P2pWallet | null>(null);
+  const [wallet, setWallet] = useState<FundingWallet | null>(null);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
@@ -75,7 +75,7 @@ export default function P2PMarketPage() {
     try {
       const [adsData, walletData] = await Promise.all([
         authFetch<Ad[]>(`/api/p2p/ads?type=${tab}`),
-        authFetch<P2pWallet>("/api/p2p/wallet"),
+        authFetch<FundingWallet>("/api/wallet"),
       ]);
       setAds(adsData);
       setWallet(walletData);
@@ -113,14 +113,16 @@ export default function P2PMarketPage() {
           </div>
         </div>
 
-        {/* P2P Wallet Bar */}
+        {/* Funding Wallet Bar */}
         {wallet && (
           <div className="glass-card rounded-xl p-4 flex flex-wrap items-center gap-5">
             <Wallet size={16} className="text-emerald-400 shrink-0" />
             <div className="flex flex-wrap gap-6 text-sm flex-1">
-              <div><span className="text-slate-500">Available</span> <span className="text-white font-bold ml-2">{wallet.availableBalance.toFixed(4)} USDT</span></div>
-              <div><span className="text-slate-500">Frozen</span> <span className="text-amber-300 font-bold ml-2">{wallet.frozenBalance.toFixed(4)} USDT</span></div>
-              <div><span className="text-slate-500">In Escrow</span> <span className="text-blue-300 font-bold ml-2">{wallet.escrowBalance.toFixed(4)} USDT</span></div>
+              <div>
+                <span className="text-slate-500">Funding Wallet</span>
+                <span className="text-emerald-400 font-bold ml-2">{Number(wallet.tradingBalance).toFixed(4)} USDT</span>
+              </div>
+              <span className="text-slate-600 text-xs self-center">SELL ads deduct from this balance</span>
             </div>
             <Link href="/p2p/payment-methods" className="text-xs text-emerald-400 hover:underline flex items-center gap-1">
               Manage <ChevronRight size={12} />
