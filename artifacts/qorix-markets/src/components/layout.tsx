@@ -44,6 +44,7 @@ import {
   ShieldCheck,
   Store,
   PhoneCall,
+  ArrowUpDown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -580,6 +581,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/invest", label: "Trade", icon: TrendingUp, featured: true },
     { href: "/portfolio", label: "Portfolio", icon: PieChart },
     { href: "/self-trade", label: "Self Trade", icon: Activity },
+    { href: "/p2p", label: "P2P Trading", icon: ArrowUpDown },
     { href: "/market-insights", label: "Market Insights", icon: Globe },
     { href: "/transactions", label: "History", icon: History },
     { href: "/referral", label: "Referrals", icon: Users },
