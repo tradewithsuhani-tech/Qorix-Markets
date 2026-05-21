@@ -129,6 +129,9 @@ export default function P2POrderDetailPage() {
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const chatPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const sseRef = useRef<EventSource | null>(null);
+  const sseRetryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sseAttemptRef = useRef(0);
 
   const fetchOrder = useCallback(async () => {
     try {
@@ -142,13 +145,76 @@ export default function P2POrderDetailPage() {
     try { setMessages(await authFetch<ChatMsg[]>(`/api/p2p/orders/${orderId}/messages`)); } catch {}
   }, [orderId]);
 
+  // Real-time stream — replaces aggressive polling. We keep a slow HTTP
+  // safety-net interval so a wedged SSE connection (broken proxy, sleeping
+  // tab, server restart between heartbeats) still self-heals within a
+  // minute instead of looking stuck forever.
   useEffect(() => {
     if (!orderId) return;
     fetchOrder(); fetchMessages();
-    pollRef.current = setInterval(fetchOrder, 15000);
-    chatPollRef.current = setInterval(fetchMessages, 5000);
-    return () => { clearInterval(pollRef.current!); clearInterval(chatPollRef.current!); };
-  }, [fetchOrder, fetchMessages]);
+    pollRef.current = setInterval(fetchOrder, 60_000);
+    chatPollRef.current = setInterval(fetchMessages, 60_000);
+
+    let cancelled = false;
+    const connect = async () => {
+      if (cancelled) return;
+      // Mint a short-lived (5 min) purpose-scoped stream token so the
+      // long-lived session JWT never appears in URLs / proxy access logs.
+      let streamToken: string;
+      try {
+        const r = await authFetch<{ token: string }>(
+          `/api/p2p/orders/${orderId}/stream-token`,
+          { method: "POST" },
+        );
+        streamToken = r.token;
+      } catch {
+        const attempt = Math.min(++sseAttemptRef.current, 6);
+        sseRetryRef.current = setTimeout(connect, Math.min(1000 * 2 ** attempt, 30_000));
+        return;
+      }
+      if (cancelled) return;
+      try { sseRef.current?.close(); } catch {}
+      const es = new EventSource(
+        `/api/p2p/orders/${orderId}/stream?token=${encodeURIComponent(streamToken)}`,
+      );
+      sseRef.current = es;
+      es.addEventListener("ready", () => { sseAttemptRef.current = 0; });
+      const refetchOrder = () => { fetchOrder(); };
+      const refetchChat = () => { fetchMessages(); };
+      es.addEventListener("order.paid", refetchOrder);
+      es.addEventListener("order.completed", refetchOrder);
+      es.addEventListener("order.cancelled", refetchOrder);
+      es.addEventListener("order.disputed", refetchOrder);
+      es.addEventListener("order.dispute_resolved", refetchOrder);
+      es.addEventListener("order.expired", refetchOrder);
+      es.addEventListener("order.updated", refetchOrder);
+      es.addEventListener("chat.message", refetchChat);
+      es.onerror = () => {
+        try { es.close(); } catch {}
+        sseRef.current = null;
+        // Exponential backoff, capped — avoids tight reconnect loops if the
+        // backend is down or auth has truly expired.
+        const attempt = Math.min(++sseAttemptRef.current, 6);
+        const delay = Math.min(1000 * 2 ** attempt, 30_000);
+        sseRetryRef.current = setTimeout(connect, delay);
+      };
+    };
+    connect();
+
+    // Token TTL is 5 min; refresh the connection well before expiry so the
+    // user never sees a flap.
+    const tokenRefresh = setInterval(() => { connect(); }, 4 * 60_000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(tokenRefresh);
+      if (pollRef.current) clearInterval(pollRef.current);
+      if (chatPollRef.current) clearInterval(chatPollRef.current);
+      if (sseRetryRef.current) clearTimeout(sseRetryRef.current);
+      try { sseRef.current?.close(); } catch {}
+      sseRef.current = null;
+    };
+  }, [orderId, fetchOrder, fetchMessages]);
 
   useEffect(() => {
     if (order?.status === "completed") {

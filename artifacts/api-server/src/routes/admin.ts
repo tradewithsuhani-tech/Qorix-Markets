@@ -24,6 +24,7 @@ import {
 } from "@workspace/db/schema";
 import { eq, ne, sum, count, and, or, desc, sql, inArray, isNotNull, ilike } from "drizzle-orm";
 import { createNotification } from "../lib/notifications";
+import { publishOrderEvent } from "../lib/p2p-realtime";
 import { authMiddleware, adminMiddleware, getParam, getQueryInt, getQueryString, invalidateAuthUserCache, type AuthRequest } from "../middlewares/auth";
 import { RedisCache } from "../lib/cache/redis-cache";
 import { TTLCache } from "../lib/cache/ttl-cache";
@@ -3146,6 +3147,8 @@ router.post("/admin/p2p/disputes/:id/resolve", async (req: AuthRequest, res) => 
       createNotification(result.order.buyerId, "p2p_order", titleMap[result.newStatus], body).catch(() => {}),
       createNotification(result.order.sellerId, "p2p_order", titleMap[result.newStatus], body).catch(() => {}),
     ]);
+
+    publishOrderEvent({ type: "order.dispute_resolved", orderId: result.order.id, resolution: result.newStatus });
 
     res.json({ success: true, status: result.newStatus });
   } catch (err: any) {

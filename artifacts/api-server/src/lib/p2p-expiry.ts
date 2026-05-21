@@ -3,6 +3,7 @@ import { p2pOrdersTable, p2pAdsTable, p2pEscrowTransactionsTable } from "@worksp
 import { and, eq, lt, sql } from "drizzle-orm";
 import { logger, errorLogger } from "./logger";
 import { createNotification } from "./notifications";
+import { publishOrderEvent } from "./p2p-realtime";
 
 function parseNum(v: string | number): number {
   return typeof v === "number" ? v : parseFloat(v as string);
@@ -47,7 +48,7 @@ export async function expireStaleP2POrders(): Promise<{ expired: number }> {
 
     for (const order of stale) {
       try {
-        await db.transaction(async (tx) => {
+        const didExpire = await db.transaction(async (tx) => {
           // Re-check status inside the txn to avoid double-processing if
           // another instance grabbed it first.
           const [fresh] = await tx
@@ -55,7 +56,7 @@ export async function expireStaleP2POrders(): Promise<{ expired: number }> {
             .from(p2pOrdersTable)
             .where(eq(p2pOrdersTable.id, order.id))
             .limit(1);
-          if (!fresh || fresh.status !== "pending") return;
+          if (!fresh || fresh.status !== "pending") return false;
 
           const usdtAmount = parseNum(order.usdtAmount as string);
 
@@ -85,9 +86,15 @@ export async function expireStaleP2POrders(): Promise<{ expired: number }> {
               cancelReason: "auto_expired",
             })
             .where(eq(p2pOrdersTable.id, order.id));
+          return true;
         });
 
+        // Skip counting + notifying + emitting realtime if another instance
+        // already processed this order between our SELECT and our txn.
+        if (!didExpire) continue;
+
         expiredCount += 1;
+        publishOrderEvent({ type: "order.expired", orderId: order.id });
 
         // Notifications (fire-and-forget — outside the txn)
         const fiat = parseNum(order.fiatAmount as string).toFixed(2);

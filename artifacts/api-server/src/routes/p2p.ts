@@ -14,9 +14,34 @@ import { eq, and, or, ne, desc, sql, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { authMiddleware, type AuthRequest } from "../middlewares/auth";
 import { createNotification } from "../lib/notifications";
+import { publishOrderEvent } from "../lib/p2p-realtime";
+import jwt from "jsonwebtoken";
 
 const router = Router();
 router.use(authMiddleware);
+
+// POST /p2p/orders/:id/stream-token — issues a 5-minute SSE-only JWT.
+// Frontend calls this first (with the normal Bearer header) and then opens
+// EventSource using the returned token in the query string. This avoids
+// putting the long-lived session JWT in URLs / proxy access logs.
+router.post("/p2p/orders/:id/stream-token", async (req: AuthRequest, res) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const [order] = await db.select({ buyerId: p2pOrdersTable.buyerId, sellerId: p2pOrdersTable.sellerId })
+    .from(p2pOrdersTable)
+    .where(and(
+      eq(p2pOrdersTable.id, id),
+      or(eq(p2pOrdersTable.buyerId, req.userId!), eq(p2pOrdersTable.sellerId, req.userId!)),
+    )).limit(1);
+  if (!order) { res.status(404).json({ error: "Order not found" }); return; }
+  const SECRET = process.env.SESSION_SECRET || "qorix-markets-secret";
+  const token = jwt.sign(
+    { userId: req.userId!, orderId: id, purpose: "p2p-stream", aud: "markets" },
+    SECRET,
+    { expiresIn: "5m" },
+  );
+  res.json({ token, expiresIn: 300 });
+});
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -687,6 +712,7 @@ router.patch("/p2p/orders/:id/paid", async (req: AuthRequest, res) => {
       `Order #${order.id} (₹${fiat}): buyer says payment was sent${paymentRef ? ` (UTR: ${paymentRef})` : ""}. Please verify and confirm to release USDT.`,
     ).catch(() => {});
 
+    publishOrderEvent({ type: "order.paid", orderId: id, actorId: req.userId! });
     res.json({ success: true, status: "paid" });
   } catch {
     res.status(500).json({ error: "Failed to mark as paid" });
@@ -734,6 +760,7 @@ router.patch("/p2p/orders/:id/confirm", async (req: AuthRequest, res) => {
       ).catch(() => {});
     }
 
+    publishOrderEvent({ type: "order.completed", orderId: id, actorId: req.userId! });
     res.json({ success: true, status: "completed" });
   } catch (err: any) {
     res.status(400).json({ error: err.message || "Failed to confirm order" });
@@ -768,6 +795,7 @@ router.patch("/p2p/orders/:id/cancel", async (req: AuthRequest, res) => {
       await tx.update(p2pOrdersTable).set({ status: "cancelled", cancelledAt: new Date(), updatedAt: new Date(), cancelReason })
         .where(eq(p2pOrdersTable.id, id));
     });
+    publishOrderEvent({ type: "order.cancelled", orderId: id, actorId: req.userId!, reason: typeof req.body?.cancelReason === "string" ? req.body.cancelReason : null });
     res.json({ success: true, status: "cancelled" });
   } catch (err: any) {
     res.status(400).json({ error: err.message || "Failed to cancel order" });
@@ -818,6 +846,7 @@ router.post("/p2p/orders/:id/dispute", async (req: AuthRequest, res) => {
       `A dispute has been raised on Order #${id}. Our team will review and contact you. Reason: ${reasonRaw}`,
     ).catch(() => {});
 
+    publishOrderEvent({ type: "order.disputed", orderId: id, actorId: req.userId!, reason: reasonRaw });
     res.status(201).json({ success: true, dispute: created.dispute });
   } catch (err: any) {
     res.status(400).json({ error: err.message || "Failed to raise dispute" });
@@ -880,6 +909,7 @@ router.post("/p2p/orders/:id/messages", async (req: AuthRequest, res) => {
     const [msg] = await db.insert(p2pChatMessagesTable).values({
       orderId: id, senderId: req.userId!, message: message.trim(),
     }).returning();
+    publishOrderEvent({ type: "chat.message", orderId: id, messageId: msg.id, senderId: req.userId! });
     res.status(201).json({ ...msg, isOwn: true, senderName: "You" });
   } catch {
     res.status(500).json({ error: "Failed to send message" });

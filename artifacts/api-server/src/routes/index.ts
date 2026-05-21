@@ -41,6 +41,7 @@ import merchantRouter from "./merchant";
 import adminMerchantsRouter from "./admin-merchants";
 import adminEscalationRouter from "./admin-escalation";
 import p2pRouter from "./p2p";
+import p2pPublicRouter from "./p2p-public";
 // Batch R — Bot Trading Terminal. Currently exposes only the public
 // /bot-trading/quotes feed used by the dashboard widget. Future
 // batches will add user-gated endpoints (state, account, orders) on
@@ -76,6 +77,10 @@ router.use(captchaRouter);
 router.use(authRouter);
 router.use(googleOauthRouter); // public OAuth — must be before auth-gated routers
 router.use(kycRouter); // per-route authMiddleware — must be before router-level auth gates
+// P2P SSE stream — public router (auth via short-lived purpose-scoped JWT in
+// query string, since EventSource cannot send Authorization headers). MUST
+// sit in this pre-auth block so upstream auth-gated routers don't 401 it.
+router.use(p2pPublicRouter);
 // Merchant panel — own JWT (separate from user/admin auth). The login route
 // (POST /merchant/auth/login) is the ONLY public merchant endpoint; every
 // other route inside merchantRouter is gated by a path-prefixed
