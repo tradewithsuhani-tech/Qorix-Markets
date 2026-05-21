@@ -1,14 +1,12 @@
 import { useState, useEffect } from "react";
-import { useLocation } from "wouter";
+import { useLocation, Link } from "wouter";
 import { Layout } from "@/components/layout";
 import { authFetch } from "@/lib/auth-fetch";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, TrendingUp, TrendingDown, Lock, Wallet } from "lucide-react";
+import { ArrowLeft, TrendingUp, TrendingDown, Lock, Wallet, AlertCircle, CheckCircle2, Plus } from "lucide-react";
 
 type FundingWallet = { tradingBalance: string | number };
 type PaymentMethod = { id: number; type: string; displayName: string };
-
-const PAYMENT_METHOD_OPTIONS = ["UPI", "BANK", "IMPS", "NEFT", "RTGS"];
 
 export default function P2PCreateAdPage() {
   const [, navigate] = useLocation();
@@ -24,14 +22,15 @@ export default function P2PCreateAdPage() {
   const [loading, setLoading] = useState(false);
   const [fundingWallet, setFundingWallet] = useState<FundingWallet | null>(null);
   const [payMethods, setPayMethods] = useState<PaymentMethod[]>([]);
+  const [payMethodsLoading, setPayMethodsLoading] = useState(true);
 
   useEffect(() => {
     authFetch<FundingWallet>("/api/wallet")
       .then(setFundingWallet)
       .catch(() => setFundingWallet({ tradingBalance: 0 }));
     authFetch<PaymentMethod[]>("/api/p2p/payment-methods")
-      .then(setPayMethods)
-      .catch(() => {});
+      .then((m) => { setPayMethods(m); setPayMethodsLoading(false); })
+      .catch(() => setPayMethodsLoading(false));
   }, []);
 
   const isSell = type === "SELL";
@@ -79,10 +78,6 @@ export default function P2PCreateAdPage() {
     } finally {
       setLoading(false);
     }
-  }
-
-  function toggleMethod(m: string) {
-    setSelectedMethods((prev) => prev.includes(m) ? prev.filter((x) => x !== m) : [...prev, m]);
   }
 
   return (
@@ -249,22 +244,60 @@ export default function P2PCreateAdPage() {
             <label className="text-xs uppercase tracking-wider text-slate-400 font-semibold mb-2 block">
               Accepted Payment Methods <span className="text-red-400">*</span>
             </label>
-            <div className="flex flex-wrap gap-2">
-              {PAYMENT_METHOD_OPTIONS.map((m) => (
-                <button
-                  key={m}
-                  type="button"
-                  onClick={() => toggleMethod(m)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${
-                    selectedMethods.includes(m)
-                      ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-300"
-                      : "bg-white/[0.03] border-white/10 text-slate-400 hover:text-white"
-                  }`}
-                >
-                  {m}
-                </button>
-              ))}
-            </div>
+
+            {payMethodsLoading ? (
+              <div className="text-slate-500 text-sm py-3 text-center">Loading your payment methods…</div>
+            ) : payMethods.length === 0 ? (
+              <div className="flex items-start gap-3 bg-amber-500/5 border border-amber-500/20 rounded-xl p-4">
+                <AlertCircle size={16} className="text-amber-400 shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="text-amber-300 text-sm font-semibold">No payment methods added</p>
+                  <p className="text-slate-400 text-xs mt-0.5 mb-3">
+                    You need at least one payment method before posting an ad.
+                  </p>
+                  <Link
+                    href="/p2p/payment-methods"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/15 border border-emerald-500/25 text-emerald-400 text-xs font-bold hover:bg-emerald-500/25 transition-all"
+                  >
+                    <Plus size={12} /> Add Payment Method
+                  </Link>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {payMethods.map((m) => {
+                  const isSelected = selectedMethods.includes(String(m.id));
+                  return (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => {
+                        const key = String(m.id);
+                        setSelectedMethods((prev) =>
+                          prev.includes(key) ? prev.filter((x) => x !== key) : [...prev, key]
+                        );
+                      }}
+                      className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border text-left transition-all ${
+                        isSelected
+                          ? "bg-emerald-500/10 border-emerald-500/40"
+                          : "bg-white/[0.03] border-white/10 hover:border-white/20"
+                      }`}
+                    >
+                      {isSelected
+                        ? <CheckCircle2 size={16} className="text-emerald-400 shrink-0" />
+                        : <div className="w-4 h-4 rounded-full border border-slate-600 shrink-0" />
+                      }
+                      <div className="flex-1 min-w-0">
+                        <div className="text-white text-sm font-medium truncate">{m.displayName}</div>
+                      </div>
+                      <span className="text-xs font-bold px-2 py-0.5 rounded bg-slate-700 text-slate-300 shrink-0">
+                        {m.type}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           {/* Terms */}
