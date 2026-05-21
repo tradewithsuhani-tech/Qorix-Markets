@@ -157,7 +157,7 @@ export default function WalletPage() {
           title: "Transfer successful",
           description: wasToMain
             ? "Funds moved back to your main balance."
-            : "Funds moved to your trading balance.",
+            : "Funds moved to your funding balance.",
         });
         queryClient.invalidateQueries({ queryKey: getGetWalletQueryKey() });
         setTransferAmount("");
@@ -278,7 +278,7 @@ export default function WalletPage() {
                     hide={hideBalance}
                   />
                   <BreakdownTile
-                    label="Trading Balance"
+                    label="Funding Balance"
                     amount={tradingBal}
                     icon={ArrowRightLeft}
                     accent="cyan"
@@ -729,7 +729,7 @@ export default function WalletPage() {
                   badgeTone="emerald"
                   icon={fromIsMain ? WalletIcon : TrendingUp}
                   iconTone="emerald"
-                  name={fromIsMain ? "Main Wallet" : "Trading Wallet"}
+                  name={fromIsMain ? "Main Wallet" : "Funding Wallet"}
                   sub={fromIsMain ? "Withdrawable balance" : "Deployed capital"}
                   amount={fromIsMain ? mainBal : tradingBal}
                 />
@@ -749,7 +749,7 @@ export default function WalletPage() {
                   badgeTone="cyan"
                   icon={fromIsMain ? TrendingUp : WalletIcon}
                   iconTone="cyan"
-                  name={fromIsMain ? "Trading Wallet" : "Main Wallet"}
+                  name={fromIsMain ? "Funding Wallet" : "Main Wallet"}
                   sub={fromIsMain ? "Deployed capital" : "Withdrawable balance"}
                   amount={toBal}
                   incoming={numAmt}

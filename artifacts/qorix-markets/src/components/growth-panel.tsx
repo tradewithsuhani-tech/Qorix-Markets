@@ -520,7 +520,7 @@ function WeeklyLeaderboard({ userId }: { userId: number }) {
               <div>Rank</div>
               <div>Name</div>
               <div>User ID</div>
-              <div className="text-right">Trading Fund</div>
+              <div className="text-right">Funding Wallet</div>
               <div className="text-right">P&amp;L</div>
               <div className="text-right">Payout</div>
             </div>

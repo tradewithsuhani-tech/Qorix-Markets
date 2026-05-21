@@ -900,7 +900,7 @@ export function DemoDashboardBody({
       glow: marketClosed ? "rgba(245,158,11,0.1)" : isPositive ? "rgba(34,197,94,0.1)" : "rgba(239,68,68,0.1)",
     },
     {
-      label: "Active Trading Fund",
+      label: "Active Funding Wallet",
       // synced with Active Capital (Fund Transparency) — same value across both cards
       icon: <Zap style={{ width: 16, height: 16 }} className="text-indigo-400" />,
       value: <BigBalanceCounter value={(fundStats?.activeCapital ?? summary?.activeInvestment ?? 0) + scalpBotPnl} className="text-lg sm:text-2xl md:text-3xl" />,
@@ -1301,7 +1301,7 @@ export function DemoDashboardBody({
           Activate Trading to Unlock
         </h3>
         <p className="text-[11px] md:text-xs text-muted-foreground leading-relaxed mb-3">
-          This personal analytics view goes live the moment your Trading Fund activates.
+          This personal analytics view goes live the moment your Funding Wallet activates.
         </p>
         <Link
           href="/invest"

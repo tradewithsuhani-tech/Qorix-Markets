@@ -859,7 +859,7 @@ export default function InvestPage() {
   const stopMutation = useStopInvestment({
     mutation: {
       onSuccess: () => {
-        toast({ title: "Investment Stopped", description: "Funds returned to trading balance." });
+        toast({ title: "Investment Stopped", description: "Funds returned to funding balance." });
         queryClient.invalidateQueries({ queryKey: getGetInvestmentQueryKey() });
         queryClient.invalidateQueries({ queryKey: getGetWalletQueryKey() });
       },
@@ -1424,7 +1424,7 @@ export default function InvestPage() {
                 <div className="grid grid-cols-3 gap-2.5 mb-3">
                   {[
                     {
-                      label: "Trading Fund",
+                      label: "Funding Wallet",
                       icon: Wallet,
                       value: <AnimatedCounter value={investment.amount} prefix="$" />,
                       sub: "active capital",
@@ -1656,7 +1656,7 @@ export default function InvestPage() {
                               </p>
                               <p className="text-sm text-white font-semibold mt-0.5 tabular-nums">
                                 ${investment.amount.toFixed(2)}{" "}
-                                <span className="text-white/50 font-normal">stays in trading balance</span>
+                                <span className="text-white/50 font-normal">stays in funding balance</span>
                               </p>
                             </div>
                           </div>
@@ -2057,7 +2057,7 @@ export default function InvestPage() {
                     className="flex items-center gap-2 mt-3 text-xs text-red-400 bg-red-500/8 border border-red-500/20 rounded-lg px-3 py-2"
                   >
                     <AlertTriangle style={{ width: 12, height: 12 }} />
-                    Exceeds available trading balance
+                    Exceeds available funding balance
                   </motion.div>
                 )}
               </div>

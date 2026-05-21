@@ -108,7 +108,7 @@ function BalanceAdjustModal({ user, onClose, onDone }: { user: any; onClose: () 
 
   const walletLabels: Record<string, string> = {
     mainBalance: "Main Balance",
-    tradingBalance: "Trading Balance",
+    tradingBalance: "Funding Balance",
     profitBalance: "Profit Balance",
   };
 
@@ -169,7 +169,7 @@ function BalanceAdjustModal({ user, onClose, onDone }: { user: any; onClose: () 
           <div className="text-xs text-muted-foreground mb-2 font-semibold uppercase tracking-wider">Current Balances</div>
           <div className="grid grid-cols-3 gap-2 text-center">
             <div><div className="text-xs text-muted-foreground">Main</div><div className="font-bold text-sm">{money(user.mainBalance)}</div></div>
-            <div><div className="text-xs text-muted-foreground">Trading</div><div className="font-bold text-sm">{money(user.tradingBalance)}</div></div>
+            <div><div className="text-xs text-muted-foreground">Funding</div><div className="font-bold text-sm">{money(user.tradingBalance)}</div></div>
             <div><div className="text-xs text-muted-foreground">Profit</div><div className="font-bold text-sm">{money(user.profitBalance)}</div></div>
           </div>
         </div>
@@ -826,7 +826,7 @@ function InvestmentDetailModal({ user, onClose }: { user: any; onClose: () => vo
               <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3 space-y-1.5 text-xs">
                 <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">Wallets</div>
                 <div className="flex justify-between"><span className="text-muted-foreground">Main</span><span className="font-mono">{fmt(data.wallet?.mainBalance)}</span></div>
-                <div className="flex justify-between"><span className="text-muted-foreground">Trading</span><span className="font-mono">{fmt(data.wallet?.tradingBalance)}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Funding</span><span className="font-mono">{fmt(data.wallet?.tradingBalance)}</span></div>
                 <div className="flex justify-between"><span className="text-muted-foreground">Profit</span><span className="font-mono">{fmt(data.wallet?.profitBalance)}</span></div>
                 <div className="flex justify-between"><span className="text-muted-foreground">Updated</span><span className="font-mono">{fmtDt(data.wallet?.updatedAt)}</span></div>
               </div>
@@ -1136,7 +1136,7 @@ export function AdminUsersPage() {
                     </td>
                     <td className="p-4 font-mono text-xs">
                       <div>Main {money(u.mainBalance)}</div>
-                      <div className="text-muted-foreground">Trading {money(u.tradingBalance)}</div>
+                      <div className="text-muted-foreground">Funding {money(u.tradingBalance)}</div>
                       <div className="text-muted-foreground">Profit {money(u.profitBalance)}</div>
                     </td>
                     <td className="p-4">
@@ -1487,7 +1487,7 @@ export function AdminWalletPage() {
               <div className="text-[11px] text-muted-foreground mt-1">Available ${(stats?.totalMainWallet || 0).toFixed(2)}</div>
             </div>
             <div className="p-4 rounded-xl bg-black/30 border border-white/10">
-              <div className="text-xs text-muted-foreground">Trading Fund</div>
+              <div className="text-xs text-muted-foreground">Funding Wallet</div>
               <div className="text-xl font-bold text-blue-400">${(stats?.totalTradingWallet || 0).toFixed(2)}</div>
               <div className="text-[11px] text-muted-foreground mt-1">Active capital</div>
             </div>

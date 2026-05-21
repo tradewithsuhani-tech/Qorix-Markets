@@ -131,7 +131,7 @@ export function PromoBonusBanner() {
       toast({
         title: `${res.bonusPercent}% bonus locked in`,
         description:
-          "Your bonus will be added to your Trading Balance on your next confirmed deposit. Bonus is non-withdrawable — only realized profits can be withdrawn.",
+          "Your bonus will be added to your Funding Balance on your next confirmed deposit. Bonus is non-withdrawable — only realized profits can be withdrawn.",
       });
       queryClient.invalidateQueries({ queryKey: ["promo-offer"] });
     },
@@ -241,7 +241,7 @@ export function PromoBonusBanner() {
             </h3>
             <p className="mt-0.5 text-xs md:text-[13px] text-white/65 leading-snug">
               Apply this code on your next USDT deposit. Bonus credits to your{" "}
-              <span className="text-amber-200 font-semibold">Trading Balance</span>.{" "}
+              <span className="text-amber-200 font-semibold">Funding Balance</span>.{" "}
               <span className="text-white/40">T&amp;C apply.</span>
             </p>
 

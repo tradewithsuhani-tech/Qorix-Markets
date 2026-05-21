@@ -760,7 +760,7 @@ function PortfolioInner({ investment, invLoading, summary }: PortfolioInnerProps
         <div className="mb-6">
           <h1 className="text-2xl md:text-3xl font-bold text-white">Portfolio</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Track your trading fund, returns and live allocation in one place.
+            Track your funding wallet, returns and live allocation in one place.
           </p>
         </div>
 
@@ -777,8 +777,8 @@ function PortfolioInner({ investment, invLoading, summary }: PortfolioInnerProps
           </h2>
           <p className="text-sm md:text-base text-muted-foreground mt-2 max-w-md mx-auto">
             {hasStoppedInvestment
-              ? "Your trading fund is idle. Resume trading to unlock live portfolio tracking, returns and P&L."
-              : "Start your first trading fund to unlock live portfolio tracking, asset allocation, risk-protected drawdown limits and daily P&L attribution."}
+              ? "Your funding wallet is idle. Resume trading to unlock live portfolio tracking, returns and P&L."
+              : "Start your first funding wallet to unlock live portfolio tracking, asset allocation, risk-protected drawdown limits and daily P&L attribution."}
           </p>
           <Link
             href="/invest"
@@ -792,7 +792,7 @@ function PortfolioInner({ investment, invLoading, summary }: PortfolioInnerProps
           {/* Zero-data stat strip */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-8 max-w-4xl mx-auto">
             {[
-              { label: "Trading Fund", value: "$0.00" },
+              { label: "Funding Wallet", value: "$0.00" },
               { label: "Total P&L", value: "$0.00" },
               { label: "Rolling Return", value: "0.00%" },
               { label: "Win Rate", value: "0%" },
@@ -1243,7 +1243,7 @@ function PortfolioInner({ investment, invLoading, summary }: PortfolioInnerProps
           <div className="relative rounded-xl border border-white/10 bg-white/[0.02] p-6 text-center">
             <Lock className="w-6 h-6 text-muted-foreground mx-auto mb-2" />
             <div className="text-sm text-muted-foreground">
-              Start a trading fund to see your daily profit projection.
+              Start a funding wallet to see your daily profit projection.
             </div>
           </div>
         ) : (

@@ -1749,7 +1749,7 @@ function DepositReceiptModal({
           hub: "bg-emerald-500 shadow-[0_0_40px_-6px_rgba(16,185,129,0.75)]",
           label: "DEPOSIT APPROVED",
           labelText: "text-emerald-400",
-          subtitle: `Credited · ${Number(deposit.amountUsdt).toFixed(2)} USDT in your Trading Balance`,
+          subtitle: `Credited · ${Number(deposit.amountUsdt).toFixed(2)} USDT in your Funding Balance`,
           banner: "border-emerald-500/30 bg-emerald-500/10",
           bannerIcon: "text-emerald-300",
           bannerText: <>Approved by Qorix · <span className="font-semibold text-emerald-200">{Number(deposit.amountUsdt).toFixed(2)} USDT</span> credited</>,

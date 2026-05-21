@@ -292,7 +292,7 @@ export function generateMonthlyReport(data: ReportData): void {
 
   const balRows = [
     ["Main Balance", summary.totalBalance - summary.tradingBalance - summary.profitBalance],
-    ["Trading Balance", summary.tradingBalance],
+    ["Funding Balance", summary.tradingBalance],
     ["Profit Balance", summary.profitBalance],
     ["Total Equity", summary.totalBalance],
   ];
