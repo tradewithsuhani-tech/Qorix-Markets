@@ -11,6 +11,7 @@ import { tickAutoSignalEngine, closeMaturedAutoTrades, rehydrateAutoEngineState 
 import { runEscalationTick } from "./escalation-cron";
 import { chatFollowupTick } from "../workers/chat-followup-worker";
 import { chatFollowup2Tick } from "../workers/chat-followup2-worker";
+import { expireStaleP2POrders } from "./p2p-expiry";
 
 const AUTO_ENGINE_ENABLED = (process.env.AUTO_SIGNAL_ENGINE_ENABLED ?? "1") !== "0";
 
@@ -166,6 +167,18 @@ export async function initCronJobs(): Promise<void> {
   );
   // Touch sql import so it isn't dropped by tooling — kept for future hourly maintenance jobs.
   void sql;
+
+  // ── P2P order auto-expiry — runs every minute ──
+  // Scans for pending P2P orders whose paymentDeadline has passed and
+  // auto-cancels them, releasing seller's USDT back to the ad. Without
+  // this job, abandoned orders would permanently lock seller funds.
+  cron.schedule("* * * * *", async () => {
+    try {
+      await expireStaleP2POrders();
+    } catch (err) {
+      errorLogger.error({ err }, "Cron: p2p order expiry sweep failed");
+    }
+  });
 
   // ── Startup catch-up: run today's profit if server restarted after 00:05 UTC ──
   // node-cron only fires at the scheduled wall-clock time. If the server

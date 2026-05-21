@@ -12,11 +12,34 @@ import {
 import { eq, and, or, ne, desc, sql, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { authMiddleware, type AuthRequest } from "../middlewares/auth";
+import { createNotification } from "../lib/notifications";
 
 const router = Router();
 router.use(authMiddleware);
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/**
+ * Enforces that the caller has completed KYC before allowing
+ * trade-creating actions (create ad, create order). Returns true if the
+ * request should proceed; otherwise sends 403 and returns false.
+ */
+async function requireKycApproved(req: AuthRequest, res: any): Promise<boolean> {
+  const [u] = await db
+    .select({ kycStatus: usersTable.kycStatus })
+    .from(usersTable)
+    .where(eq(usersTable.id, req.userId!))
+    .limit(1);
+  if (!u || u.kycStatus !== "approved") {
+    res.status(403).json({
+      error: "KYC required",
+      message: "Complete KYC verification to use P2P trading.",
+      kycStatus: u?.kycStatus ?? "not_submitted",
+    });
+    return false;
+  }
+  return true;
+}
 
 async function getOrCreateP2pWallet(userId: number) {
   const existing = await db.select().from(p2pWalletsTable).where(eq(p2pWalletsTable.userId, userId)).limit(1);
@@ -299,6 +322,7 @@ const CreateAdSchema = z.object({
 
 // POST /p2p/ads
 router.post("/p2p/ads", async (req: AuthRequest, res) => {
+  if (!(await requireKycApproved(req, res))) return;
   const result = CreateAdSchema.safeParse(req.body);
   if (!result.success) { res.status(400).json({ error: "Invalid data", details: result.error.issues }); return; }
   const { type, price, quantity, minLimit, maxLimit, paymentMethods, terms } = result.data;
@@ -483,6 +507,7 @@ const CreateOrderSchema = z.object({
 
 // POST /p2p/orders
 router.post("/p2p/orders", async (req: AuthRequest, res) => {
+  if (!(await requireKycApproved(req, res))) return;
   const result = CreateOrderSchema.safeParse(req.body);
   if (!result.success) { res.status(400).json({ error: "Invalid data", details: result.error.issues }); return; }
   const { adId, fiatAmount, paymentMethod } = result.data;
@@ -635,6 +660,16 @@ router.patch("/p2p/orders/:id/paid", async (req: AuthRequest, res) => {
       ? req.body.paymentRef.trim() : null;
     await db.update(p2pOrdersTable).set({ status: "paid", paidAt: new Date(), updatedAt: new Date(), paymentRef })
       .where(eq(p2pOrdersTable.id, id));
+
+    // Notify the seller that the buyer has marked the payment as sent.
+    const fiat = parseNum(order.fiatAmount as string).toFixed(2);
+    await createNotification(
+      order.sellerId,
+      "p2p_order",
+      "Buyer marked payment as sent",
+      `Order #${order.id} (₹${fiat}): buyer says payment was sent${paymentRef ? ` (UTR: ${paymentRef})` : ""}. Please verify and confirm to release USDT.`,
+    ).catch(() => {});
+
     res.json({ success: true, status: "paid" });
   } catch {
     res.status(500).json({ error: "Failed to mark as paid" });
@@ -662,6 +697,26 @@ router.patch("/p2p/orders/:id/confirm", async (req: AuthRequest, res) => {
       await tx.update(p2pOrdersTable).set({ status: "completed", completedAt: new Date(), updatedAt: new Date() })
         .where(eq(p2pOrdersTable.id, id));
     });
+
+    // Notify the buyer that the USDT has been released to their wallet.
+    const [orderForNotif] = await db
+      .select({
+        buyerId: p2pOrdersTable.buyerId,
+        usdtAmount: p2pOrdersTable.usdtAmount,
+      })
+      .from(p2pOrdersTable)
+      .where(eq(p2pOrdersTable.id, id))
+      .limit(1);
+    if (orderForNotif) {
+      const usdt = parseNum(orderForNotif.usdtAmount as string).toFixed(2);
+      await createNotification(
+        orderForNotif.buyerId,
+        "p2p_order",
+        "USDT received",
+        `Order #${id} completed. ${usdt} USDT has been credited to your Funding Wallet.`,
+      ).catch(() => {});
+    }
+
     res.json({ success: true, status: "completed" });
   } catch (err: any) {
     res.status(400).json({ error: err.message || "Failed to confirm order" });
