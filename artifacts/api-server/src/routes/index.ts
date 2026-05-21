@@ -40,6 +40,7 @@ import phoneChangeRouter from "./phone-change";
 import merchantRouter from "./merchant";
 import adminMerchantsRouter from "./admin-merchants";
 import adminEscalationRouter from "./admin-escalation";
+import p2pRouter from "./p2p";
 // Batch R — Bot Trading Terminal. Currently exposes only the public
 // /bot-trading/quotes feed used by the dashboard widget. Future
 // batches will add user-gated endpoints (state, account, orders) on
@@ -115,5 +116,6 @@ router.use(phoneChangeRouter);
 router.use(merchantRouter);
 router.use(adminMerchantsRouter);
 router.use(adminEscalationRouter);
+router.use(p2pRouter);
 
 export default router;

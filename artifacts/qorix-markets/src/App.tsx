@@ -266,6 +266,10 @@ import ZeroFeePage from "@/pages/marketing/zero-fee";
 import LowInvestmentPage from "@/pages/marketing/low-investment";
 import BlogIndexPage from "@/pages/marketing/blog-index";
 import BlogPostPage from "@/pages/marketing/blog-post";
+import P2PMarketPage from "@/pages/p2p-market";
+import P2PCreateAdPage from "@/pages/p2p-create-ad";
+import P2POrdersPage from "@/pages/p2p-orders";
+import P2PPaymentMethodsPage from "@/pages/p2p-payment-methods";
 
 // Perf overhaul: tighten query-client defaults so we stop firing 50+
 // requests on every render. Per-query polling (refetchInterval) still
@@ -449,6 +453,10 @@ function Router() {
       <Route path="/verify/:hashId" component={VerifyPage} />
       <Route path="/verify" component={VerifyPage} />
       <Route path="/market-insights"><ProtectedRoute component={MarketInsightsPage} /></Route>
+      <Route path="/p2p"><ProtectedRoute component={P2PMarketPage} /></Route>
+      <Route path="/p2p/create-ad"><ProtectedRoute component={P2PCreateAdPage} /></Route>
+      <Route path="/p2p/orders"><ProtectedRoute component={P2POrdersPage} /></Route>
+      <Route path="/p2p/payment-methods"><ProtectedRoute component={P2PPaymentMethodsPage} /></Route>
       <Route path="/legal/terms" component={TermsPage} />
       <Route path="/legal/privacy" component={PrivacyPage} />
       <Route path="/legal/risk-disclosure" component={RiskDisclosurePage} />
