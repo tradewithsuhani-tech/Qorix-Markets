@@ -5,7 +5,7 @@ import { authFetch } from "@/lib/auth-fetch";
 import { useToast } from "@/hooks/use-toast";
 import {
   ArrowLeft, Plus, Trash2, CreditCard, Smartphone,
-  Building2, AlertCircle, Loader2, CheckCircle2,
+  Building2, AlertCircle, Loader2, CheckCircle2, Eye, EyeOff,
 } from "lucide-react";
 
 type PaymentMethod = {
@@ -20,27 +20,69 @@ const TYPE_ICONS: Record<string, React.ElementType> = {
 };
 
 function MethodCard({ method, onDelete }: { method: PaymentMethod; onDelete: (id: number) => void }) {
+  const [showDetails, setShowDetails] = useState(false);
   const Icon = TYPE_ICONS[method.type] ?? CreditCard;
   return (
-    <div className="glass-card rounded-xl p-4 flex items-start gap-4">
-      <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center shrink-0">
-        <Icon size={16} className="text-emerald-400" />
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 mb-1">
-          <span className="text-white font-semibold text-sm">{method.displayName}</span>
-          <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/5 border border-white/10 text-slate-400 font-bold uppercase tracking-wider">{method.type}</span>
+    <div className="glass-card rounded-xl overflow-hidden">
+      {/* Main row */}
+      <div className="p-4 flex items-center gap-3">
+        <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center shrink-0">
+          <Icon size={16} className="text-emerald-400" />
         </div>
-        {method.upiId && <div className="text-slate-400 text-xs">{method.upiId}</div>}
-        {method.bankName && <div className="text-slate-400 text-xs">{method.bankName}{method.accountNumber ? ` · ****${method.accountNumber.slice(-4)}` : ""}</div>}
-        {method.ifsc && <div className="text-slate-500 text-xs mt-0.5">IFSC: {method.ifsc}</div>}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-0.5">
+            <span className="text-white font-semibold text-sm">{method.displayName}</span>
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/5 border border-white/10 text-slate-400 font-bold uppercase tracking-wider">{method.type}</span>
+          </div>
+          {method.upiId && <div className="text-slate-400 text-xs">{method.upiId}</div>}
+          {method.bankName && (
+            <div className="text-slate-400 text-xs">
+              {method.bankName}{method.accountNumber ? ` · ****${method.accountNumber.slice(-4)}` : ""}
+            </div>
+          )}
+        </div>
+        {/* Eye button */}
+        <button
+          onClick={() => setShowDetails((v) => !v)}
+          title={showDetails ? "Hide details" : "View full details"}
+          className="p-2 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-colors"
+        >
+          {showDetails ? <EyeOff size={15} /> : <Eye size={15} />}
+        </button>
+        <button
+          onClick={() => onDelete(method.id)}
+          className="p-2 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+        >
+          <Trash2 size={14} />
+        </button>
       </div>
-      <button
-        onClick={() => onDelete(method.id)}
-        className="p-2 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-      >
-        <Trash2 size={14} />
-      </button>
+
+      {/* Expanded detail panel */}
+      {showDetails && (
+        <div className="border-t border-white/[0.06] bg-black/20 px-4 py-3 space-y-2">
+          <p className="text-[10px] uppercase tracking-wider text-slate-600 font-bold mb-2">Full Account Details</p>
+          {method.type === "UPI" ? (
+            <DetailRow label="UPI ID" value={method.upiId} />
+          ) : (
+            <>
+              <DetailRow label="Account Holder" value={method.accountHolder} />
+              <DetailRow label="Account Number" value={method.accountNumber} mono />
+              <DetailRow label="IFSC Code" value={method.ifsc} mono />
+              <DetailRow label="Bank Name" value={method.bankName} />
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DetailRow({ label, value, mono }: { label: string; value?: string | null; mono?: boolean }) {
+  if (!value) return null;
+  return (
+    <div className="flex justify-between items-center gap-4">
+      <span className="text-slate-500 text-xs shrink-0">{label}</span>
+      <span className={`text-white text-xs font-medium text-right ${mono ? "font-mono tracking-wider" : ""}`}>{value}</span>
     </div>
   );
 }

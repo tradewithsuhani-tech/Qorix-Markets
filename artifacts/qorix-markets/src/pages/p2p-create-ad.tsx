@@ -3,10 +3,14 @@ import { useLocation, Link } from "wouter";
 import { Layout } from "@/components/layout";
 import { authFetch } from "@/lib/auth-fetch";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, TrendingUp, TrendingDown, Lock, Wallet, AlertCircle, CheckCircle2, Plus } from "lucide-react";
+import { ArrowLeft, TrendingUp, TrendingDown, Lock, Wallet, AlertCircle, CheckCircle2, Plus, Eye, EyeOff, X } from "lucide-react";
 
 type FundingWallet = { tradingBalance: string | number };
-type PaymentMethod = { id: number; type: string; displayName: string };
+type PaymentMethod = {
+  id: number; type: string; displayName: string;
+  upiId?: string | null; bankName?: string | null; branchName?: string | null;
+  accountHolder?: string | null; accountNumber?: string | null; ifsc?: string | null;
+};
 
 export default function P2PCreateAdPage() {
   const [, navigate] = useLocation();
@@ -23,6 +27,7 @@ export default function P2PCreateAdPage() {
   const [fundingWallet, setFundingWallet] = useState<FundingWallet | null>(null);
   const [payMethods, setPayMethods] = useState<PaymentMethod[]>([]);
   const [payMethodsLoading, setPayMethodsLoading] = useState(true);
+  const [peekId, setPeekId] = useState<number | null>(null);
 
   useEffect(() => {
     authFetch<FundingWallet>("/api/wallet")
@@ -267,33 +272,69 @@ export default function P2PCreateAdPage() {
               <div className="space-y-2">
                 {payMethods.map((m) => {
                   const isSelected = selectedMethods.includes(String(m.id));
+                  const isPeeking = peekId === m.id;
                   return (
-                    <button
-                      key={m.id}
-                      type="button"
-                      onClick={() => {
-                        const key = String(m.id);
-                        setSelectedMethods((prev) =>
-                          prev.includes(key) ? prev.filter((x) => x !== key) : [...prev, key]
-                        );
-                      }}
-                      className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border text-left transition-all ${
-                        isSelected
-                          ? "bg-emerald-500/10 border-emerald-500/40"
-                          : "bg-white/[0.03] border-white/10 hover:border-white/20"
-                      }`}
-                    >
-                      {isSelected
-                        ? <CheckCircle2 size={16} className="text-emerald-400 shrink-0" />
-                        : <div className="w-4 h-4 rounded-full border border-slate-600 shrink-0" />
-                      }
-                      <div className="flex-1 min-w-0">
-                        <div className="text-white text-sm font-medium truncate">{m.displayName}</div>
+                    <div key={m.id} className="space-y-0">
+                      <div
+                        className={`flex items-center gap-3 px-4 py-3 rounded-xl border transition-all ${
+                          isPeeking ? "rounded-b-none border-b-0" : ""
+                        } ${
+                          isSelected
+                            ? "bg-emerald-500/10 border-emerald-500/40"
+                            : "bg-white/[0.03] border-white/10"
+                        }`}
+                      >
+                        {/* Checkbox area — clicks toggle selection */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const key = String(m.id);
+                            setSelectedMethods((prev) =>
+                              prev.includes(key) ? prev.filter((x) => x !== key) : [...prev, key]
+                            );
+                          }}
+                          className="flex items-center gap-3 flex-1 min-w-0 text-left"
+                        >
+                          {isSelected
+                            ? <CheckCircle2 size={16} className="text-emerald-400 shrink-0" />
+                            : <div className="w-4 h-4 rounded-full border border-slate-600 shrink-0" />
+                          }
+                          <div className="flex-1 min-w-0">
+                            <div className="text-white text-sm font-medium truncate">{m.displayName}</div>
+                          </div>
+                        </button>
+                        <span className="text-xs font-bold px-2 py-0.5 rounded bg-slate-700 text-slate-300 shrink-0">
+                          {m.type}
+                        </span>
+                        {/* Eye button */}
+                        <button
+                          type="button"
+                          onClick={() => setPeekId(isPeeking ? null : m.id)}
+                          title="View account details"
+                          className="p-1.5 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-colors shrink-0"
+                        >
+                          {isPeeking ? <EyeOff size={14} /> : <Eye size={14} />}
+                        </button>
                       </div>
-                      <span className="text-xs font-bold px-2 py-0.5 rounded bg-slate-700 text-slate-300 shrink-0">
-                        {m.type}
-                      </span>
-                    </button>
+
+                      {/* Inline details panel */}
+                      {isPeeking && (
+                        <div className={`px-4 py-3 rounded-b-xl border border-t-0 bg-black/30 space-y-2 ${
+                          isSelected ? "border-emerald-500/40" : "border-white/10"
+                        }`}>
+                          {m.type === "UPI" ? (
+                            <Row label="UPI ID" value={m.upiId} />
+                          ) : (
+                            <>
+                              <Row label="Account Holder" value={m.accountHolder} />
+                              <Row label="Account Number" value={m.accountNumber} />
+                              <Row label="IFSC Code" value={m.ifsc} mono />
+                              {m.bankName && <Row label="Bank" value={m.bankName} />}
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   );
                 })}
               </div>
@@ -338,6 +379,16 @@ export default function P2PCreateAdPage() {
         </form>
       </div>
     </Layout>
+  );
+}
+
+function Row({ label, value, mono }: { label: string; value?: string | null; mono?: boolean }) {
+  if (!value) return null;
+  return (
+    <div className="flex justify-between items-center gap-4">
+      <span className="text-slate-500 text-xs shrink-0">{label}</span>
+      <span className={`text-white text-xs font-medium ${mono ? "font-mono tracking-wider" : ""}`}>{value}</span>
+    </div>
   );
 }
 
