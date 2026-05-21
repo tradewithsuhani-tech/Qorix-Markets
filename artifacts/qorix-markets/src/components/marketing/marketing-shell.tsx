@@ -203,6 +203,7 @@ export function MarketingFooter() {
             <li><Link href="/about" className="hover:text-emerald-300">About Us</Link></li>
             <li><Link href="/blog" className="hover:text-emerald-300">Blog</Link></li>
             <li><Link href="/contact" className="hover:text-emerald-300">Contact</Link></li>
+            <li><Link href="/partners" className="hover:text-emerald-300">Become a Partner</Link></li>
           </ul>
         </div>
         <div>
