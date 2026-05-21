@@ -1,11 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link } from "wouter";
 import { Layout } from "@/components/layout";
 import { authFetch } from "@/lib/auth-fetch";
 import { useToast } from "@/hooks/use-toast";
 import {
   ArrowLeft, Plus, Trash2, CreditCard, Smartphone,
-  Building2, AlertCircle,
+  Building2, AlertCircle, Loader2, CheckCircle2,
 } from "lucide-react";
 
 type PaymentMethod = {
@@ -53,9 +53,12 @@ export default function P2PPaymentMethodsPage() {
 
   const [form, setForm] = useState({
     type: "UPI", displayName: "", upiId: "",
-    bankName: "", accountHolder: "", accountNumber: "", ifsc: "",
+    bankName: "", branchName: "", accountHolder: "", accountNumber: "", ifsc: "",
   });
   const [submitting, setSubmitting] = useState(false);
+  const [ifscLoading, setIfscLoading] = useState(false);
+  const [ifscOk, setIfscOk] = useState(false);
+  const ifscTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   async function loadData() {
     setLoading(true);
@@ -67,6 +70,32 @@ export default function P2PPaymentMethodsPage() {
   }
 
   useEffect(() => { loadData(); }, []);
+
+  function handleIfscChange(val: string) {
+    const code = val.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 11);
+    setForm((f) => ({ ...f, ifsc: code, bankName: "", branchName: "" }));
+    setIfscOk(false);
+    if (ifscTimer.current) clearTimeout(ifscTimer.current);
+    if (code.length === 11) {
+      setIfscLoading(true);
+      ifscTimer.current = setTimeout(async () => {
+        try {
+          const res = await fetch(`https://ifsc.razorpay.com/${code}`);
+          if (!res.ok) throw new Error("Invalid IFSC");
+          const data = await res.json();
+          setForm((f) => ({ ...f, bankName: data.BANK || "", branchName: data.BRANCH || "" }));
+          setIfscOk(true);
+        } catch {
+          setForm((f) => ({ ...f, bankName: "", branchName: "" }));
+          setIfscOk(false);
+        } finally {
+          setIfscLoading(false);
+        }
+      }, 400);
+    } else {
+      setIfscLoading(false);
+    }
+  }
 
   async function handleDelete(id: number) {
     try {
@@ -89,7 +118,8 @@ export default function P2PPaymentMethodsPage() {
       });
       setMethods((prev) => [created, ...prev]);
       setShowForm(false);
-      setForm({ type: "UPI", displayName: "", upiId: "", bankName: "", accountHolder: "", accountNumber: "", ifsc: "" });
+      setForm({ type: "UPI", displayName: "", upiId: "", bankName: "", branchName: "", accountHolder: "", accountNumber: "", ifsc: "" });
+      setIfscOk(false);
       toast({ title: "Payment method added" });
     } catch (err: any) {
       toast({ title: err.message || "Failed to add method", variant: "destructive" });
@@ -158,24 +188,49 @@ export default function P2PPaymentMethodsPage() {
                 </Field>
               ) : (
                 <>
-                  <Field label="Bank Name" required>
-                    <input required value={form.bankName} onChange={(e) => setForm((f) => ({ ...f, bankName: e.target.value }))}
-                      placeholder="e.g. HDFC Bank" className={inputCls} />
+                  <Field label="Account Holder" required>
+                    <input required value={form.accountHolder} onChange={(e) => setForm((f) => ({ ...f, accountHolder: e.target.value }))}
+                      placeholder="Full name as per bank" className={inputCls} />
                   </Field>
+                  <Field label="Account Number" required>
+                    <input required value={form.accountNumber} onChange={(e) => setForm((f) => ({ ...f, accountNumber: e.target.value }))}
+                      placeholder="Enter account number" className={inputCls} />
+                  </Field>
+                  <Field label="IFSC Code" required>
+                    <div className="relative">
+                      <input
+                        required
+                        value={form.ifsc}
+                        onChange={(e) => handleIfscChange(e.target.value)}
+                        placeholder="e.g. HDFC0001234"
+                        maxLength={11}
+                        className={`${inputCls} pr-9 font-mono tracking-widest uppercase`}
+                      />
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                        {ifscLoading && <Loader2 size={14} className="text-slate-400 animate-spin" />}
+                        {!ifscLoading && ifscOk && <CheckCircle2 size={14} className="text-emerald-400" />}
+                      </div>
+                    </div>
+                  </Field>
+                  {/* Auto-filled bank info */}
                   <div className="grid grid-cols-2 gap-3">
-                    <Field label="Account Holder" required>
-                      <input required value={form.accountHolder} onChange={(e) => setForm((f) => ({ ...f, accountHolder: e.target.value }))}
-                        placeholder="Full name" className={inputCls} />
+                    <Field label="Bank Name">
+                      <input
+                        readOnly
+                        value={form.bankName}
+                        placeholder="Auto-filled from IFSC"
+                        className={`${inputCls} bg-white/[0.02] text-slate-300 cursor-default`}
+                      />
                     </Field>
-                    <Field label="Account Number" required>
-                      <input required value={form.accountNumber} onChange={(e) => setForm((f) => ({ ...f, accountNumber: e.target.value }))}
-                        placeholder="Account number" className={inputCls} />
+                    <Field label="Branch">
+                      <input
+                        readOnly
+                        value={form.branchName}
+                        placeholder="Auto-filled from IFSC"
+                        className={`${inputCls} bg-white/[0.02] text-slate-300 cursor-default`}
+                      />
                     </Field>
                   </div>
-                  <Field label="IFSC Code" required>
-                    <input required value={form.ifsc} onChange={(e) => setForm((f) => ({ ...f, ifsc: e.target.value.toUpperCase() }))}
-                      placeholder="HDFC0001234" className={inputCls} />
-                  </Field>
                 </>
               )}
 
