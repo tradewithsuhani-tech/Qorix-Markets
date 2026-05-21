@@ -5,7 +5,7 @@ import { authFetch } from "@/lib/auth-fetch";
 import { useToast } from "@/hooks/use-toast";
 import {
   ArrowLeft, Clock, CheckCircle2, XCircle, AlertCircle,
-  ShieldCheck, Loader2, Copy, MessageCircle, Send, Star, RefreshCw, QrCode, X,
+  ShieldCheck, Loader2, Copy, MessageCircle, Send, Star, RefreshCw, QrCode, X, Upload,
 } from "lucide-react";
 
 type SellerMethod = {
@@ -20,7 +20,7 @@ type Order = {
   paymentMethod: string | null; status: string;
   paymentDeadline: string | null; paidAt: string | null;
   completedAt: string | null; cancelledAt: string | null;
-  cancelReason: string | null; paymentRef: string | null;
+  cancelReason: string | null; paymentRef: string | null; paymentProofUrl: string | null;
   createdAt: string; role: "buyer" | "seller";
   sellerPaymentMethods: SellerMethod[];
 };
@@ -93,7 +93,12 @@ export default function P2POrderDetailPage() {
   // Payment Proof Modal
   const [proofOpen, setProofOpen] = useState(false);
   const [paymentRef, setPaymentRef] = useState("");
+  const [paymentProof, setPaymentProof] = useState<string | null>(null);
+  const [proofPreview, setProofPreview] = useState<string | null>(null);
   const [transferConfirmed, setTransferConfirmed] = useState(false);
+
+  // View full proof image (seller side)
+  const [proofViewer, setProofViewer] = useState<string | null>(null);
 
   // Cancel Reason Modal
   const [cancelOpen, setCancelOpen] = useState(false);
@@ -156,14 +161,39 @@ export default function P2POrderDetailPage() {
     try {
       await authFetch(`/api/p2p/orders/${orderId}/paid`, {
         method: "PATCH",
-        body: JSON.stringify({ paymentRef: paymentRef.trim() || undefined }),
+        body: JSON.stringify({
+          paymentRef: paymentRef.trim() || undefined,
+          paymentProofUrl: paymentProof || undefined,
+        }),
       });
       await fetchOrder();
       setProofOpen(false);
+      setPaymentProof(null);
+      setProofPreview(null);
       toast({ title: "Seller notified! Waiting for confirmation." });
     } catch (err: any) {
       toast({ title: err.message || "Failed to notify seller", variant: "destructive" });
     } finally { setActionLoading(null); }
+  }
+
+  async function onProofFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!/^image\/(jpeg|jpg|png|webp)$/.test(file.type)) {
+      toast({ title: "Only JPG, PNG or WEBP images allowed", variant: "destructive" });
+      e.target.value = ""; return;
+    }
+    if (file.size > 450 * 1024) {
+      toast({ title: "Image too large (max 450KB)", variant: "destructive" });
+      e.target.value = ""; return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      setPaymentProof(dataUrl);
+      setProofPreview(dataUrl);
+    };
+    reader.readAsDataURL(file);
   }
 
   async function confirmRelease() {
@@ -505,6 +535,14 @@ export default function P2POrderDetailPage() {
                       <CopyBtn value={order.paymentRef} />
                     </div>
                   )}
+                  {order.paymentProofUrl && (
+                    <button
+                      onClick={() => setProofViewer(order.paymentProofUrl)}
+                      className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-500/10 border border-blue-500/30 text-blue-300 text-xs font-semibold hover:bg-blue-500/20"
+                    >
+                      <Upload size={12} /> View Payment Screenshot
+                    </button>
+                  )}
                 </div>
               </div>
               <button disabled={!!actionLoading} onClick={confirmRelease}
@@ -602,14 +640,31 @@ export default function P2POrderDetailPage() {
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
           <div className="bg-[#111827] w-full sm:max-w-sm rounded-t-3xl sm:rounded-2xl p-6 space-y-5">
             <h2 className="text-white font-bold text-lg">Payment Confirmation</h2>
-            <div>
-              <p className="text-slate-300 text-sm font-semibold mb-3">Upload Payment Proof</p>
+            <div className="space-y-3">
+              <p className="text-slate-300 text-sm font-semibold">Upload Payment Proof</p>
               <input
                 value={paymentRef}
                 onChange={e => setPaymentRef(e.target.value)}
                 placeholder="UPI Transaction ID / Reference (optional)"
                 className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-slate-600 outline-none focus:border-emerald-400/40"
               />
+
+              {proofPreview ? (
+                <div className="relative rounded-xl overflow-hidden border border-emerald-500/30 bg-black/40">
+                  <img src={proofPreview} alt="Payment proof preview" className="w-full max-h-56 object-contain" />
+                  <button
+                    onClick={() => { setPaymentProof(null); setProofPreview(null); }}
+                    className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/70 text-white text-xs flex items-center justify-center hover:bg-red-500"
+                    aria-label="Remove proof"
+                  >×</button>
+                </div>
+              ) : (
+                <label className="flex items-center justify-center gap-2 w-full py-3 rounded-xl border-2 border-dashed border-white/15 hover:border-emerald-500/40 cursor-pointer text-slate-400 hover:text-emerald-300 text-sm font-medium transition">
+                  <Upload size={15} />
+                  Upload Screenshot (optional, max 450KB)
+                  <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={onProofFile} />
+                </label>
+              )}
             </div>
             <div className="flex items-start gap-3 bg-amber-500/5 border border-amber-500/20 rounded-xl p-3">
               <AlertCircle size={14} className="text-amber-400 shrink-0 mt-0.5" />
@@ -628,6 +683,16 @@ export default function P2POrderDetailPage() {
                 Transferred, Notify Seller
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Payment Proof Viewer (seller side) ──────────────────────────── */}
+      {proofViewer && (
+        <div className="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setProofViewer(null)}>
+          <div className="relative max-w-2xl w-full" onClick={e => e.stopPropagation()}>
+            <button onClick={() => setProofViewer(null)} className="absolute -top-10 right-0 text-white/80 hover:text-white text-sm flex items-center gap-1">Close ×</button>
+            <img src={proofViewer} alt="Payment proof" className="w-full max-h-[80vh] object-contain rounded-2xl border border-white/10" />
           </div>
         </div>
       )}

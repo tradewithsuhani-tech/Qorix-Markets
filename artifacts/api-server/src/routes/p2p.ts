@@ -658,7 +658,23 @@ router.patch("/p2p/orders/:id/paid", async (req: AuthRequest, res) => {
     if (order.status !== "pending") { res.status(400).json({ error: "Order is not pending" }); return; }
     const paymentRef = typeof req.body?.paymentRef === "string" && req.body.paymentRef.trim()
       ? req.body.paymentRef.trim() : null;
-    await db.update(p2pOrdersTable).set({ status: "paid", paidAt: new Date(), updatedAt: new Date(), paymentRef })
+
+    // Optional payment proof screenshot (base64 data URL, ~450kb cap to match
+    // the QR code limit used elsewhere). Validated against image/* data URL
+    // shape; anything else is rejected so we never store arbitrary text.
+    const rawProof = req.body?.paymentProofUrl;
+    let paymentProofUrl: string | null = null;
+    if (typeof rawProof === "string" && rawProof.length > 0) {
+      if (rawProof.length > 600000) {
+        res.status(400).json({ error: "Payment proof too large (max ~450KB)" }); return;
+      }
+      if (!/^data:image\/(jpeg|jpg|png|webp);base64,/.test(rawProof)) {
+        res.status(400).json({ error: "Invalid payment proof format" }); return;
+      }
+      paymentProofUrl = rawProof;
+    }
+
+    await db.update(p2pOrdersTable).set({ status: "paid", paidAt: new Date(), updatedAt: new Date(), paymentRef, paymentProofUrl })
       .where(eq(p2pOrdersTable.id, id));
 
     // Notify the seller that the buyer has marked the payment as sent.

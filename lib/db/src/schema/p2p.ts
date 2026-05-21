@@ -80,6 +80,7 @@ export const p2pOrdersTable = pgTable("p2p_orders", {
   cancelledAt: timestamp("cancelled_at"),
   cancelReason: text("cancel_reason"),
   paymentRef: text("payment_ref"), // buyer's payment reference / UPI transaction ID
+  paymentProofUrl: text("payment_proof_url"), // base64 data URL of buyer's payment screenshot
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 }, (t) => ({
