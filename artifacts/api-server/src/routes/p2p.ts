@@ -262,17 +262,24 @@ router.post("/p2p/ads", async (req: AuthRequest, res) => {
     let ad: typeof p2pAdsTable.$inferSelect;
 
     if (type === "SELL") {
-      // SELL ad: lock seller's USDT into frozenBalance
+      // SELL ad: lock seller's USDT from Funding Wallet (tradingBalance) → p2p frozenBalance
       await db.transaction(async (tx) => {
-        const p2pWallet = await getOrCreateP2pWallet(req.userId!);
-        const avail = parseNum(p2pWallet.availableBalance as string);
-        if (avail < quantity) throw new Error("Insufficient P2P available balance to create SELL ad");
+        const [mainWallet] = await tx.select().from(walletsTable).where(eq(walletsTable.userId, req.userId!)).limit(1);
+        if (!mainWallet) throw new Error("Wallet not found");
+        const tradingBal = parseNum(mainWallet.tradingBalance as string);
+        if (tradingBal < quantity) throw new Error("Insufficient Funding Wallet balance to create SELL ad");
 
+        // Deduct from Funding Wallet
+        await tx.update(walletsTable).set({
+          tradingBalance: sql`${walletsTable.tradingBalance} - ${quantity}`,
+        }).where(eq(walletsTable.userId, req.userId!));
+
+        // Track in P2P frozen (for accounting / display)
+        const p2pWallet = await getOrCreateP2pWallet(req.userId!);
         await tx.update(p2pWalletsTable).set({
-          availableBalance: sql`${p2pWalletsTable.availableBalance} - ${quantity}`,
           frozenBalance: sql`${p2pWalletsTable.frozenBalance} + ${quantity}`,
           updatedAt: new Date(),
-        }).where(eq(p2pWalletsTable.userId, req.userId!));
+        }).where(eq(p2pWalletsTable.id, p2pWallet.id));
 
         [ad] = await tx.insert(p2pAdsTable).values({
           userId: req.userId!,
@@ -339,11 +346,14 @@ router.delete("/p2p/ads/:id", async (req: AuthRequest, res) => {
 
       const remainingQty = parseNum(ad.quantity as string) - parseNum(ad.filledQuantity as string);
 
-      // Return unfilled USDT to available balance for SELL ads
+      // Return unfilled USDT back to Funding Wallet (tradingBalance) for SELL ads
       if (ad.type === "SELL" && remainingQty > 0) {
+        await tx.update(walletsTable).set({
+          tradingBalance: sql`${walletsTable.tradingBalance} + ${remainingQty}`,
+        }).where(eq(walletsTable.userId, req.userId!));
+
         await tx.update(p2pWalletsTable).set({
           frozenBalance: sql`${p2pWalletsTable.frozenBalance} - ${remainingQty}`,
-          availableBalance: sql`${p2pWalletsTable.availableBalance} + ${remainingQty}`,
           updatedAt: new Date(),
         }).where(eq(p2pWalletsTable.userId, req.userId!));
       }

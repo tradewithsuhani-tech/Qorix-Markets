@@ -5,7 +5,7 @@ import { authFetch } from "@/lib/auth-fetch";
 import { useToast } from "@/hooks/use-toast";
 import { ArrowLeft, TrendingUp, TrendingDown, Lock, Wallet } from "lucide-react";
 
-type P2pWallet = { availableBalance: number; frozenBalance: number; escrowBalance: number };
+type FundingWallet = { tradingBalance: string | number };
 type PaymentMethod = { id: number; type: string; displayName: string };
 
 const PAYMENT_METHOD_OPTIONS = ["UPI", "BANK", "IMPS", "NEFT", "RTGS"];
@@ -22,12 +22,16 @@ export default function P2PCreateAdPage() {
   const [selectedMethods, setSelectedMethods] = useState<string[]>([]);
   const [terms, setTerms] = useState("");
   const [loading, setLoading] = useState(false);
-  const [wallet, setWallet] = useState<P2pWallet | null>(null);
+  const [fundingWallet, setFundingWallet] = useState<FundingWallet | null>(null);
   const [payMethods, setPayMethods] = useState<PaymentMethod[]>([]);
 
   useEffect(() => {
-    authFetch<P2pWallet>("/api/p2p/wallet").then(setWallet).catch(() => setWallet({ availableBalance: 0, frozenBalance: 0, escrowBalance: 0 }));
-    authFetch<PaymentMethod[]>("/api/p2p/payment-methods").then(setPayMethods).catch(() => {});
+    authFetch<FundingWallet>("/api/wallet")
+      .then(setFundingWallet)
+      .catch(() => setFundingWallet({ tradingBalance: 0 }));
+    authFetch<PaymentMethod[]>("/api/p2p/payment-methods")
+      .then(setPayMethods)
+      .catch(() => {});
   }, []);
 
   const isSell = type === "SELL";
@@ -35,19 +39,24 @@ export default function P2PCreateAdPage() {
   const qtyNum = parseFloat(quantity) || 0;
   const totalFiat = priceNum * qtyNum;
 
-  const p2pAvailable = wallet ? Number(wallet.availableBalance) : 0;
-  const canAfford = !isSell || (wallet !== null && qtyNum > 0 && qtyNum <= p2pAvailable);
+  const fundingBalance = fundingWallet ? Number(fundingWallet.tradingBalance) : 0;
+  const exceedsBalance = isSell && qtyNum > 0 && qtyNum > fundingBalance;
+  const canSubmit = !isSell || (fundingWallet !== null && qtyNum > 0 && qtyNum <= fundingBalance);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (selectedMethods.length === 0) {
       toast({ title: "Select at least one payment method", variant: "destructive" }); return;
     }
-    if (isSell && wallet === null) {
-      toast({ title: "P2P wallet is loading, please wait", variant: "destructive" }); return;
+    if (isSell && fundingWallet === null) {
+      toast({ title: "Wallet is loading, please wait", variant: "destructive" }); return;
     }
-    if (isSell && qtyNum > p2pAvailable) {
-      toast({ title: "Insufficient P2P balance", description: `You have ${p2pAvailable.toFixed(4)} USDT available in your P2P wallet`, variant: "destructive" }); return;
+    if (isSell && exceedsBalance) {
+      toast({
+        title: "Insufficient Funding Wallet balance",
+        description: `You have ${fundingBalance.toFixed(4)} USDT available`,
+        variant: "destructive",
+      }); return;
     }
     setLoading(true);
     try {
@@ -75,12 +84,6 @@ export default function P2PCreateAdPage() {
   function toggleMethod(m: string) {
     setSelectedMethods((prev) => prev.includes(m) ? prev.filter((x) => x !== m) : [...prev, m]);
   }
-
-  const balanceColor = wallet === null
-    ? "text-slate-400"
-    : isSell && qtyNum > 0 && qtyNum > p2pAvailable
-      ? "text-red-400"
-      : "text-emerald-400";
 
   return (
     <Layout>
@@ -114,26 +117,34 @@ export default function P2PCreateAdPage() {
           ))}
         </div>
 
-        {/* P2P Wallet Balance */}
-        <div className={`flex items-center gap-3 rounded-xl px-4 py-3 mb-5 text-sm border ${
-          wallet === null
-            ? "bg-white/[0.03] border-white/10"
-            : isSell && qtyNum > 0 && qtyNum > p2pAvailable
-              ? "bg-red-500/5 border-red-500/20"
-              : "bg-emerald-500/5 border-emerald-500/20"
-        }`}>
-          <Wallet size={15} className={balanceColor} />
-          <span className="text-slate-400">P2P Wallet:</span>
-          <span className={`font-bold ${balanceColor}`}>
-            {wallet === null ? "Loading..." : `${p2pAvailable.toFixed(4)} USDT`}
-          </span>
-          {wallet !== null && isSell && qtyNum > 0 && qtyNum > p2pAvailable && (
-            <span className="text-red-400 text-xs ml-auto">Insufficient balance</span>
-          )}
-        </div>
+        {/* Funding Wallet Balance — always show for SELL */}
+        {isSell && (
+          <div className={`flex items-center gap-3 rounded-xl px-4 py-3 mb-5 text-sm border ${
+            fundingWallet === null
+              ? "bg-white/[0.03] border-white/10"
+              : exceedsBalance
+                ? "bg-red-500/5 border-red-500/20"
+                : "bg-emerald-500/5 border-emerald-500/20"
+          }`}>
+            <Wallet size={15} className={
+              fundingWallet === null ? "text-slate-500"
+              : exceedsBalance ? "text-red-400" : "text-emerald-400"
+            } />
+            <span className="text-slate-400">Funding Wallet:</span>
+            <span className={`font-bold ${
+              fundingWallet === null ? "text-slate-400"
+              : exceedsBalance ? "text-red-400" : "text-emerald-400"
+            }`}>
+              {fundingWallet === null ? "Loading..." : `${fundingBalance.toFixed(4)} USDT`}
+            </span>
+            {exceedsBalance && (
+              <span className="text-red-400 text-xs ml-auto">Insufficient</span>
+            )}
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Asset (fixed for now) */}
+          {/* Asset */}
           <div className="glass-card rounded-xl p-4 flex items-center gap-3">
             <div className="w-8 h-8 rounded-full bg-teal-500/20 flex items-center justify-center text-xs font-bold text-teal-300">₮</div>
             <div>
@@ -161,32 +172,32 @@ export default function P2PCreateAdPage() {
             <div className="relative">
               <input
                 required type="number" min="0.01" step="0.01"
-                max={isSell && p2pAvailable > 0 ? p2pAvailable : undefined}
-                placeholder={isSell && wallet === null ? "Loading balance..." : "e.g. 500"}
-                disabled={isSell && wallet === null}
+                max={isSell && fundingBalance > 0 ? fundingBalance : undefined}
+                placeholder={isSell && fundingWallet === null ? "Loading..." : "e.g. 500"}
+                disabled={isSell && fundingWallet === null}
                 value={quantity}
                 onChange={(e) => {
                   const val = e.target.value;
                   const num = parseFloat(val);
-                  if (isSell && !isNaN(num) && num > p2pAvailable) {
-                    setQuantity(p2pAvailable > 0 ? p2pAvailable.toFixed(4) : "");
+                  if (isSell && fundingWallet !== null && !isNaN(num) && num > fundingBalance) {
+                    setQuantity(fundingBalance > 0 ? fundingBalance.toFixed(4) : "");
                   } else {
                     setQuantity(val);
                   }
                 }}
                 className={`w-full pr-24 pl-4 py-2.5 bg-black/30 rounded-xl text-sm outline-none transition-colors border ${
-                  isSell && wallet === null
+                  isSell && fundingWallet === null
                     ? "text-slate-500 cursor-not-allowed opacity-60 border-white/5"
-                    : isSell && qtyNum > 0 && qtyNum > p2pAvailable
+                    : exceedsBalance
                       ? "text-white border-red-500/50 focus:border-red-500/70"
                       : "text-white border-white/10 focus:border-emerald-400/40"
                 }`}
               />
               <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
-                {isSell && wallet !== null && p2pAvailable > 0 && (
+                {isSell && fundingWallet !== null && fundingBalance > 0 && (
                   <button
                     type="button"
-                    onClick={() => setQuantity(p2pAvailable.toFixed(4))}
+                    onClick={() => setQuantity(fundingBalance.toFixed(4))}
                     className="text-[10px] font-bold text-emerald-400 bg-emerald-500/15 border border-emerald-500/30 px-1.5 py-0.5 rounded hover:bg-emerald-500/25 transition-all"
                   >
                     MAX
@@ -195,12 +206,12 @@ export default function P2PCreateAdPage() {
                 <span className="text-slate-500 text-xs font-bold">USDT</span>
               </div>
             </div>
-            {isSell && wallet !== null && qtyNum > 0 && qtyNum > p2pAvailable && (
+            {exceedsBalance && fundingWallet !== null && (
               <div className="text-xs text-red-400 mt-1">
-                ⚠ Exceeds P2P balance ({p2pAvailable.toFixed(4)} USDT available)
+                ⚠ Exceeds Funding Wallet ({fundingBalance.toFixed(4)} USDT available)
               </div>
             )}
-            {totalFiat > 0 && !(isSell && wallet !== null && qtyNum > p2pAvailable) && (
+            {totalFiat > 0 && !exceedsBalance && (
               <div className="text-xs text-slate-500 mt-1">≈ ₹{totalFiat.toLocaleString("en-IN", { maximumFractionDigits: 0 })} total value</div>
             )}
           </Field>
@@ -273,13 +284,16 @@ export default function P2PCreateAdPage() {
           {isSell && (
             <div className="flex items-start gap-2 text-xs text-slate-400 bg-amber-500/5 border border-amber-500/15 rounded-xl p-3">
               <Lock size={13} className="text-amber-400 shrink-0 mt-0.5" />
-              <span>When you post a SELL ad, <strong className="text-amber-300">{qtyNum > 0 ? `${qtyNum} USDT` : "your USDT"}</strong> will be locked from your P2P available balance into frozen balance until the ad is cancelled or completed.</span>
+              <span>
+                When you post a SELL ad, <strong className="text-amber-300">{qtyNum > 0 ? `${qtyNum} USDT` : "your USDT"}</strong> will be
+                locked from your <strong className="text-amber-300">Funding Wallet</strong> until the ad is cancelled or completed.
+              </span>
             </div>
           )}
 
           <button
             type="submit"
-            disabled={loading || (isSell && (wallet === null || !canAfford))}
+            disabled={loading || (isSell && !canSubmit)}
             className={`w-full py-3 rounded-xl font-bold text-white transition-all ${
               isSell
                 ? "bg-red-500 hover:bg-red-400 disabled:opacity-50"
