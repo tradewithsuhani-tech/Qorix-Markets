@@ -6,6 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import { ArrowLeft, TrendingUp, TrendingDown, Info, Wallet, Lock } from "lucide-react";
 
 type P2pWallet = { availableBalance: number; frozenBalance: number; escrowBalance: number };
+type MainWallet = { tradingBalance: string | number };
 type PaymentMethod = { id: number; type: string; displayName: string };
 
 const PAYMENT_METHOD_OPTIONS = ["UPI", "BANK", "IMPS", "NEFT", "RTGS"];
@@ -23,13 +24,15 @@ export default function P2PCreateAdPage() {
   const [terms, setTerms] = useState("");
   const [loading, setLoading] = useState(false);
   const [wallet, setWallet] = useState<P2pWallet | null>(null);
+  const [mainWallet, setMainWallet] = useState<MainWallet | null>(null);
   const [payMethods, setPayMethods] = useState<PaymentMethod[]>([]);
 
   useEffect(() => {
     Promise.all([
       authFetch<P2pWallet>("/api/p2p/wallet"),
       authFetch<PaymentMethod[]>("/api/p2p/payment-methods"),
-    ]).then(([w, pm]) => { setWallet(w); setPayMethods(pm); }).catch(() => {});
+      authFetch<MainWallet>("/api/wallet"),
+    ]).then(([w, pm, mw]) => { setWallet(w); setPayMethods(pm); setMainWallet(mw); }).catch(() => {});
   }, []);
 
   const isSell = type === "SELL";
@@ -37,7 +40,9 @@ export default function P2PCreateAdPage() {
   const qtyNum = parseFloat(quantity) || 0;
   const totalFiat = priceNum * qtyNum;
 
-  const canAfford = !isSell || (wallet && wallet.availableBalance >= qtyNum);
+  const fundingBalance = mainWallet ? Number(mainWallet.tradingBalance) : 0;
+  const sellMax = isSell ? fundingBalance : Infinity;
+  const canAfford = !isSell || (mainWallet !== null && qtyNum <= fundingBalance && qtyNum > 0);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -106,13 +111,27 @@ export default function P2PCreateAdPage() {
           ))}
         </div>
 
-        {/* Wallet Balance (for SELL) */}
-        {isSell && wallet && (
-          <div className={`flex items-center gap-3 rounded-xl px-4 py-3 mb-5 text-sm ${canAfford ? "bg-emerald-500/5 border border-emerald-500/20" : "bg-red-500/5 border border-red-500/20"}`}>
-            <Wallet size={15} className={canAfford ? "text-emerald-400" : "text-red-400"} />
-            <span className="text-slate-400">P2P Available:</span>
-            <span className={`font-bold ${canAfford ? "text-emerald-400" : "text-red-400"}`}>{wallet.availableBalance.toFixed(4)} USDT</span>
-            {!canAfford && qtyNum > 0 && (
+        {/* Funding Wallet Balance (for SELL) */}
+        {isSell && (
+          <div className={`flex items-center gap-3 rounded-xl px-4 py-3 mb-5 text-sm ${
+            mainWallet === null
+              ? "bg-white/[0.03] border border-white/10"
+              : qtyNum > 0 && qtyNum > fundingBalance
+                ? "bg-red-500/5 border border-red-500/20"
+                : "bg-emerald-500/5 border border-emerald-500/20"
+          }`}>
+            <Wallet size={15} className={
+              mainWallet === null ? "text-slate-500"
+              : qtyNum > 0 && qtyNum > fundingBalance ? "text-red-400" : "text-emerald-400"
+            } />
+            <span className="text-slate-400">Funding Wallet:</span>
+            <span className={`font-bold ${
+              mainWallet === null ? "text-slate-400"
+              : qtyNum > 0 && qtyNum > fundingBalance ? "text-red-400" : "text-emerald-400"
+            }`}>
+              {mainWallet === null ? "Loading..." : `${fundingBalance.toFixed(4)} USDT`}
+            </span>
+            {mainWallet !== null && qtyNum > 0 && qtyNum > fundingBalance && (
               <span className="text-red-400 text-xs ml-auto">Insufficient balance</span>
             )}
           </div>
@@ -146,29 +165,30 @@ export default function P2PCreateAdPage() {
           <Field label="Total USDT quantity" required>
             <div className="relative">
               <input
-                required type="number" min="1" step="0.01"
-                max={isSell && wallet ? wallet.availableBalance : undefined}
+                required type="number" min="0.01" step="0.01"
+                max={isSell && sellMax < Infinity ? sellMax : undefined}
                 placeholder="e.g. 500"
                 value={quantity}
                 onChange={(e) => {
                   const val = e.target.value;
-                  if (isSell && wallet && parseFloat(val) > wallet.availableBalance) {
-                    setQuantity(wallet.availableBalance.toString());
+                  const num = parseFloat(val);
+                  if (isSell && mainWallet !== null && !isNaN(num) && num > fundingBalance) {
+                    setQuantity(fundingBalance > 0 ? fundingBalance.toFixed(4) : "0");
                   } else {
                     setQuantity(val);
                   }
                 }}
                 className={`w-full pr-24 pl-4 py-2.5 bg-black/30 rounded-xl text-white text-sm outline-none transition-colors border ${
-                  isSell && qtyNum > 0 && wallet && qtyNum > wallet.availableBalance
+                  isSell && mainWallet !== null && qtyNum > 0 && qtyNum > fundingBalance
                     ? "border-red-500/50 focus:border-red-500/70"
                     : "border-white/10 focus:border-emerald-400/40"
                 }`}
               />
               <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
-                {isSell && wallet && wallet.availableBalance > 0 && (
+                {isSell && mainWallet !== null && fundingBalance > 0 && (
                   <button
                     type="button"
-                    onClick={() => setQuantity(wallet.availableBalance.toFixed(4))}
+                    onClick={() => setQuantity(fundingBalance.toFixed(4))}
                     className="text-[10px] font-bold text-emerald-400 bg-emerald-500/15 border border-emerald-500/30 px-1.5 py-0.5 rounded hover:bg-emerald-500/25 transition-all"
                   >
                     MAX
@@ -177,12 +197,12 @@ export default function P2PCreateAdPage() {
                 <span className="text-slate-500 text-xs font-bold">USDT</span>
               </div>
             </div>
-            {isSell && qtyNum > 0 && wallet && qtyNum > wallet.availableBalance && (
-              <div className="text-xs text-red-400 mt-1 flex items-center gap-1">
-                <span>⚠ Exceeds available balance ({wallet.availableBalance.toFixed(4)} USDT)</span>
+            {isSell && mainWallet !== null && qtyNum > 0 && qtyNum > fundingBalance && (
+              <div className="text-xs text-red-400 mt-1">
+                ⚠ Exceeds funding balance ({fundingBalance.toFixed(4)} USDT)
               </div>
             )}
-            {totalFiat > 0 && !(isSell && qtyNum > 0 && wallet && qtyNum > wallet.availableBalance) && (
+            {totalFiat > 0 && !(isSell && mainWallet !== null && qtyNum > fundingBalance) && (
               <div className="text-xs text-slate-500 mt-1">≈ ₹{totalFiat.toLocaleString("en-IN", { maximumFractionDigits: 0 })} total value</div>
             )}
           </Field>
