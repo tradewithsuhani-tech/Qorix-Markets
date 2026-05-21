@@ -34,7 +34,8 @@ function OrderCard({ order }: { order: Order }) {
   const expired = deadline && now > deadline && order.status === "pending";
 
   return (
-    <div className="glass-card rounded-xl p-4 space-y-3">
+    <Link href={`/p2p/orders/${order.id}`}>
+    <div className="glass-card rounded-xl p-4 space-y-3 hover:border-white/15 cursor-pointer transition-colors">
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-2.5">
           <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${isBuyer ? "bg-emerald-500/15" : "bg-red-500/15"}`}>
@@ -90,6 +91,7 @@ function OrderCard({ order }: { order: Order }) {
         </div>
       )}
     </div>
+    </Link>
   );
 }
 

@@ -354,6 +354,54 @@ router.delete("/p2p/ads/:id", async (req: AuthRequest, res) => {
   }
 });
 
+// GET /p2p/ads/:id — single ad detail with seller payment methods
+router.get("/p2p/ads/:id", async (req: AuthRequest, res) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  try {
+    const [ad] = await db
+      .select({
+        id: p2pAdsTable.id, userId: p2pAdsTable.userId,
+        type: p2pAdsTable.type, asset: p2pAdsTable.asset,
+        fiatCurrency: p2pAdsTable.fiatCurrency,
+        price: p2pAdsTable.price, quantity: p2pAdsTable.quantity,
+        minLimit: p2pAdsTable.minLimit, maxLimit: p2pAdsTable.maxLimit,
+        paymentMethods: p2pAdsTable.paymentMethods,
+        terms: p2pAdsTable.terms, status: p2pAdsTable.status,
+        filledQuantity: p2pAdsTable.filledQuantity,
+        createdAt: p2pAdsTable.createdAt,
+        advertiserName: usersTable.fullName,
+      })
+      .from(p2pAdsTable)
+      .innerJoin(usersTable, eq(p2pAdsTable.userId, usersTable.id))
+      .where(eq(p2pAdsTable.id, id))
+      .limit(1);
+    if (!ad) { res.status(404).json({ error: "Ad not found" }); return; }
+
+    const methodRefs = JSON.parse(ad.paymentMethods as string) as string[];
+    const allSellerMethods = await db.select().from(p2pUserPaymentMethodsTable)
+      .where(eq(p2pUserPaymentMethodsTable.userId, ad.userId));
+    const sellerPaymentMethods = allSellerMethods.filter((m) =>
+      methodRefs.includes(String(m.id)) || methodRefs.includes(m.type)
+    );
+
+    res.json({
+      ...ad,
+      price: parseNum(ad.price as string),
+      quantity: parseNum(ad.quantity as string),
+      minLimit: parseNum(ad.minLimit as string),
+      maxLimit: parseNum(ad.maxLimit as string),
+      filledQuantity: parseNum(ad.filledQuantity as string),
+      remainingQuantity: parseNum(ad.quantity as string) - parseNum(ad.filledQuantity as string),
+      paymentMethods: methodRefs,
+      sellerPaymentMethods,
+      advertiserName: (ad.advertiserName as string).split(" ")[0] + "***",
+    });
+  } catch {
+    res.status(500).json({ error: "Failed to fetch ad" });
+  }
+});
+
 // ─── P2P Orders ───────────────────────────────────────────────────────────────
 
 const CreateOrderSchema = z.object({
@@ -488,6 +536,81 @@ router.get("/p2p/orders/:id", async (req: AuthRequest, res) => {
     });
   } catch {
     res.status(500).json({ error: "Failed to fetch order" });
+  }
+});
+
+// PATCH /p2p/orders/:id/paid — buyer marks payment as sent
+router.patch("/p2p/orders/:id/paid", async (req: AuthRequest, res) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  try {
+    const [order] = await db.select().from(p2pOrdersTable)
+      .where(and(eq(p2pOrdersTable.id, id), eq(p2pOrdersTable.buyerId, req.userId!))).limit(1);
+    if (!order) { res.status(404).json({ error: "Order not found or not your order" }); return; }
+    if (order.status !== "pending") { res.status(400).json({ error: "Order is not pending" }); return; }
+    await db.update(p2pOrdersTable).set({ status: "paid", paidAt: new Date(), updatedAt: new Date() })
+      .where(eq(p2pOrdersTable.id, id));
+    res.json({ success: true, status: "paid" });
+  } catch {
+    res.status(500).json({ error: "Failed to mark as paid" });
+  }
+});
+
+// PATCH /p2p/orders/:id/confirm — seller confirms payment received, releases USDT to buyer
+router.patch("/p2p/orders/:id/confirm", async (req: AuthRequest, res) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  try {
+    await db.transaction(async (tx) => {
+      const [order] = await tx.select().from(p2pOrdersTable)
+        .where(and(eq(p2pOrdersTable.id, id), eq(p2pOrdersTable.sellerId, req.userId!))).limit(1);
+      if (!order) throw new Error("Order not found or not your order");
+      if (order.status !== "paid") throw new Error("Order must be marked as paid first");
+      const usdtAmount = parseNum(order.usdtAmount as string);
+      // Release USDT from escrow to buyer's trading balance
+      await tx.update(walletsTable).set({
+        tradingBalance: sql`${walletsTable.tradingBalance} + ${usdtAmount}`,
+      }).where(eq(walletsTable.userId, order.buyerId));
+      // Update escrow audit record
+      await tx.update(p2pEscrowTransactionsTable).set({ status: "released", releasedAt: new Date() })
+        .where(eq(p2pEscrowTransactionsTable.orderId, id));
+      await tx.update(p2pOrdersTable).set({ status: "completed", completedAt: new Date(), updatedAt: new Date() })
+        .where(eq(p2pOrdersTable.id, id));
+    });
+    res.json({ success: true, status: "completed" });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message || "Failed to confirm order" });
+  }
+});
+
+// PATCH /p2p/orders/:id/cancel — cancel order (pending only; restores ad filled quantity)
+router.patch("/p2p/orders/:id/cancel", async (req: AuthRequest, res) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  try {
+    await db.transaction(async (tx) => {
+      const [order] = await tx.select().from(p2pOrdersTable)
+        .where(and(
+          eq(p2pOrdersTable.id, id),
+          or(eq(p2pOrdersTable.buyerId, req.userId!), eq(p2pOrdersTable.sellerId, req.userId!)),
+        )).limit(1);
+      if (!order) throw new Error("Order not found");
+      if (order.status === "completed" || order.status === "cancelled") throw new Error("Cannot cancel this order");
+      if (order.status === "paid") throw new Error("Payment already marked. Raise a dispute if needed.");
+      const usdtAmount = parseNum(order.usdtAmount as string);
+      // Restore filled quantity so the ad is available again
+      await tx.update(p2pAdsTable).set({
+        filledQuantity: sql`${p2pAdsTable.filledQuantity} - ${usdtAmount}`,
+        updatedAt: new Date(),
+      }).where(eq(p2pAdsTable.id, order.adId));
+      await tx.update(p2pEscrowTransactionsTable).set({ status: "returned" })
+        .where(eq(p2pEscrowTransactionsTable.orderId, id));
+      await tx.update(p2pOrdersTable).set({ status: "cancelled", cancelledAt: new Date(), updatedAt: new Date() })
+        .where(eq(p2pOrdersTable.id, id));
+    });
+    res.json({ success: true, status: "cancelled" });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message || "Failed to cancel order" });
   }
 });
 
