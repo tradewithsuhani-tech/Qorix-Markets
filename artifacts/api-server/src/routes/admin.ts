@@ -15,6 +15,13 @@ import {
   monthlyPerformanceTable,
 } from "@workspace/db";
 import { loginEventsTable, blockchainDepositsTable, serviceSubscriptionsTable } from "@workspace/db/schema";
+import {
+  p2pDisputesTable,
+  p2pOrdersTable,
+  p2pAdsTable,
+  p2pEscrowTransactionsTable,
+  p2pChatMessagesTable,
+} from "@workspace/db/schema";
 import { eq, ne, sum, count, and, or, desc, sql, inArray, isNotNull, ilike } from "drizzle-orm";
 import { createNotification } from "../lib/notifications";
 import { authMiddleware, adminMiddleware, getParam, getQueryInt, getQueryString, invalidateAuthUserCache, type AuthRequest } from "../middlewares/auth";
@@ -2873,6 +2880,141 @@ router.post("/admin/subscriptions/:id/mark-paid", authMiddleware, adminMiddlewar
     .where(eq(serviceSubscriptionsTable.id, id))
     .returning();
   res.json({ subscription: row });
+});
+
+// ─── P2P Disputes ────────────────────────────────────────────────────────────
+// Admin queue + resolution endpoints for P2P order disputes (Phase 3).
+router.get("/admin/p2p/disputes", async (req, res) => {
+  const status = (getQueryString(req, "status") || "open").toLowerCase();
+  const allowed = new Set(["open", "resolved_release", "resolved_refund", "rejected", "all"]);
+  if (!allowed.has(status)) { res.status(400).json({ error: "Invalid status" }); return; }
+  try {
+    const rows = await db.select({
+      id: p2pDisputesTable.id,
+      orderId: p2pDisputesTable.orderId,
+      openedByUserId: p2pDisputesTable.openedByUserId,
+      openerRole: p2pDisputesTable.openerRole,
+      reason: p2pDisputesTable.reason,
+      status: p2pDisputesTable.status,
+      createdAt: p2pDisputesTable.createdAt,
+      resolvedAt: p2pDisputesTable.resolvedAt,
+      buyerId: p2pOrdersTable.buyerId,
+      sellerId: p2pOrdersTable.sellerId,
+      usdtAmount: p2pOrdersTable.usdtAmount,
+      fiatAmount: p2pOrdersTable.fiatAmount,
+      orderStatus: p2pOrdersTable.status,
+    })
+    .from(p2pDisputesTable)
+    .leftJoin(p2pOrdersTable, eq(p2pDisputesTable.orderId, p2pOrdersTable.id))
+    .where(status === "all" ? sql`true` : eq(p2pDisputesTable.status, status))
+    .orderBy(desc(p2pDisputesTable.createdAt))
+    .limit(200);
+    res.json({ disputes: rows });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to load disputes" });
+  }
+});
+
+router.get("/admin/p2p/disputes/:id", async (req, res) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  try {
+    const [dispute] = await db.select().from(p2pDisputesTable).where(eq(p2pDisputesTable.id, id)).limit(1);
+    if (!dispute) { res.status(404).json({ error: "Dispute not found" }); return; }
+    const [order] = await db.select().from(p2pOrdersTable).where(eq(p2pOrdersTable.id, dispute.orderId)).limit(1);
+    const [ad] = order
+      ? await db.select().from(p2pAdsTable).where(eq(p2pAdsTable.id, order.adId)).limit(1)
+      : [null];
+    const messages = await db.select().from(p2pChatMessagesTable)
+      .where(eq(p2pChatMessagesTable.orderId, dispute.orderId))
+      .orderBy(p2pChatMessagesTable.createdAt).limit(500);
+    const userIds = order ? [order.buyerId, order.sellerId] : [];
+    const users = userIds.length
+      ? await db.select({ id: usersTable.id, email: usersTable.email, fullName: usersTable.fullName })
+          .from(usersTable).where(inArray(usersTable.id, userIds))
+      : [];
+    res.json({ dispute, order, ad, messages, users });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to load dispute" });
+  }
+});
+
+router.post("/admin/p2p/disputes/:id/resolve", async (req: AuthRequest, res) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const action = String(req.body?.action || "").toLowerCase();
+  const note = typeof req.body?.note === "string" ? req.body.note.trim().slice(0, 1000) : null;
+  if (!["release", "refund", "reject"].includes(action)) {
+    res.status(400).json({ error: "Invalid action" }); return;
+  }
+  const newStatus = action === "release" ? "resolved_release"
+    : action === "refund" ? "resolved_refund" : "rejected";
+  try {
+    const result = await db.transaction(async (tx) => {
+      // Atomic claim: only one concurrent admin call can flip status from "open".
+      // If zero rows are returned, another request already resolved this dispute.
+      const claimed = await tx.update(p2pDisputesTable).set({
+        status: newStatus, resolutionNote: note,
+        resolvedByAdminId: req.userId!, resolvedAt: new Date(), updatedAt: new Date(),
+      }).where(and(
+        eq(p2pDisputesTable.id, id),
+        eq(p2pDisputesTable.status, "open"),
+      )).returning();
+      if (claimed.length === 0) throw new Error("Dispute already resolved or not found");
+      const dispute = claimed[0];
+
+      // Atomic order transition: order must be "disputed" before we touch funds.
+      const orderClaim = await tx.update(p2pOrdersTable).set({ updatedAt: new Date() })
+        .where(and(eq(p2pOrdersTable.id, dispute.orderId), eq(p2pOrdersTable.status, "disputed")))
+        .returning();
+      if (orderClaim.length === 0) throw new Error("Order is not in disputed state");
+      const order = orderClaim[0];
+      const usdtAmount = Number(order.usdtAmount);
+
+      if (action === "release") {
+        await tx.update(walletsTable).set({
+          tradingBalance: sql`${walletsTable.tradingBalance} + ${usdtAmount}`,
+        }).where(eq(walletsTable.userId, order.buyerId));
+        await tx.update(p2pEscrowTransactionsTable).set({ status: "released", releasedAt: new Date() })
+          .where(eq(p2pEscrowTransactionsTable.orderId, order.id));
+        await tx.update(p2pOrdersTable).set({ status: "completed", completedAt: new Date(), updatedAt: new Date() })
+          .where(eq(p2pOrdersTable.id, order.id));
+      } else if (action === "refund") {
+        await tx.update(p2pAdsTable).set({
+          filledQuantity: sql`${p2pAdsTable.filledQuantity} - ${usdtAmount}`,
+          updatedAt: new Date(),
+        }).where(eq(p2pAdsTable.id, order.adId));
+        await tx.update(p2pEscrowTransactionsTable).set({ status: "returned" })
+          .where(eq(p2pEscrowTransactionsTable.orderId, order.id));
+        await tx.update(p2pOrdersTable).set({
+          status: "cancelled", cancelledAt: new Date(), updatedAt: new Date(),
+          cancelReason: "dispute_refund",
+        }).where(eq(p2pOrdersTable.id, order.id));
+      } else {
+        // reject — return order to "paid" so normal flow can resume
+        await tx.update(p2pOrdersTable).set({ status: "paid", updatedAt: new Date() })
+          .where(eq(p2pOrdersTable.id, order.id));
+      }
+
+      return { newStatus, order };
+    });
+
+    // Notify both parties
+    const titleMap: Record<string, string> = {
+      resolved_release: "Dispute resolved — USDT released to buyer",
+      resolved_refund: "Dispute resolved — order refunded to seller",
+      rejected: "Dispute closed by admin",
+    };
+    const body = `Order #${result.order.id}: ${titleMap[result.newStatus]}.${note ? ` Note: ${note}` : ""}`;
+    await Promise.all([
+      createNotification(result.order.buyerId, "p2p_order", titleMap[result.newStatus], body).catch(() => {}),
+      createNotification(result.order.sellerId, "p2p_order", titleMap[result.newStatus], body).catch(() => {}),
+    ]);
+
+    res.json({ success: true, status: result.newStatus });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message || "Failed to resolve dispute" });
+  }
 });
 
 export default router;

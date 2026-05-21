@@ -133,6 +133,31 @@ export const p2pRatingsTable = pgTable("p2p_ratings", {
 }));
 
 // ─── Insert Schemas (Zod) ─────────────────────────────────────────────────────
+// ─── P2P Disputes ────────────────────────────────────────────────────────────
+// One dispute per order. Opened by buyer or seller when something goes wrong
+// after the buyer marked payment as sent. Admin reviews chat + payment proof
+// + evidence and resolves by releasing USDT to buyer, refunding to seller,
+// or rejecting the dispute (returns order to "paid" state).
+export const p2pDisputesTable = pgTable("p2p_disputes", {
+  id: serial("id").primaryKey(),
+  orderId: integer("order_id").notNull().unique(),
+  openedByUserId: integer("opened_by_user_id").notNull(),
+  openerRole: varchar("opener_role", { length: 10 }).notNull(), // buyer | seller
+  reason: varchar("reason", { length: 60 }).notNull(),
+  description: text("description"),
+  evidenceUrl: text("evidence_url"), // optional base64 image
+  status: varchar("status", { length: 25 }).notNull().default("open"),
+  // open | resolved_release | resolved_refund | rejected
+  resolutionNote: text("resolution_note"),
+  resolvedByAdminId: integer("resolved_by_admin_id"),
+  resolvedAt: timestamp("resolved_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (t) => ({
+  statusIdx: index("p2p_disputes_status_idx").on(t.status),
+  openedByIdx: index("p2p_disputes_opened_by_idx").on(t.openedByUserId),
+}));
+
 export const insertP2pWalletSchema = createInsertSchema(p2pWalletsTable).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertP2pAdSchema = createInsertSchema(p2pAdsTable).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertP2pOrderSchema = createInsertSchema(p2pOrdersTable).omit({ id: true, createdAt: true, updatedAt: true });

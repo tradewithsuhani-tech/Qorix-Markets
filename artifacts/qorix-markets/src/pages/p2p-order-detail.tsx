@@ -102,6 +102,11 @@ export default function P2POrderDetailPage() {
 
   // Cancel Reason Modal
   const [cancelOpen, setCancelOpen] = useState(false);
+  const [disputeOpen, setDisputeOpen] = useState(false);
+  const [disputeReason, setDisputeReason] = useState("");
+  const [disputeDesc, setDisputeDesc] = useState("");
+  const [disputeEvidence, setDisputeEvidence] = useState<string | null>(null);
+  const [disputeSubmitting, setDisputeSubmitting] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
   const [unpaidConfirmed, setUnpaidConfirmed] = useState(false);
 
@@ -286,6 +291,11 @@ export default function P2POrderDetailPage() {
                 Cancel the Order
               </button>
             )}
+            {order.status === "paid" && (
+              <button onClick={() => setDisputeOpen(true)} className="text-slate-400 text-sm hover:text-orange-400 transition-colors">
+                Appeal
+              </button>
+            )}
             {!isActive && (
               <button onClick={fetchOrder} className="p-1.5 rounded-lg text-slate-400 hover:text-white"><RefreshCw size={15} /></button>
             )}
@@ -311,6 +321,9 @@ export default function P2POrderDetailPage() {
           )}
           {order.status === "paid" && isBuyer && (
             <h1 className="text-blue-400 font-bold text-xl">Waiting for seller to confirm</h1>
+          )}
+          {order.status === "disputed" && (
+            <h1 className="text-orange-400 font-bold text-xl">Dispute under admin review</h1>
           )}
           {order.status === "completed" && (
             <h1 className="text-emerald-400 font-bold text-xl">Order Completed</h1>
@@ -693,6 +706,108 @@ export default function P2POrderDetailPage() {
           <div className="relative max-w-2xl w-full" onClick={e => e.stopPropagation()}>
             <button onClick={() => setProofViewer(null)} className="absolute -top-10 right-0 text-white/80 hover:text-white text-sm flex items-center gap-1">Close ×</button>
             <img src={proofViewer} alt="Payment proof" className="w-full max-h-[80vh] object-contain rounded-2xl border border-white/10" />
+          </div>
+        </div>
+      )}
+
+      {/* ── Dispute / Appeal Modal ───────────────────────────────────────── */}
+      {disputeOpen && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 overflow-y-auto">
+          <div className="bg-[#111827] w-full sm:max-w-sm rounded-t-3xl sm:rounded-2xl p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between">
+              <h2 className="text-white font-bold text-lg">Raise a Dispute</h2>
+              <button onClick={() => setDisputeOpen(false)} className="text-slate-500 hover:text-white"><X size={18} /></button>
+            </div>
+            <p className="text-slate-500 text-xs">
+              Use only if there is a real problem — false disputes may freeze your account. Our team reviews the chat,
+              payment proof and any evidence you share before deciding.
+            </p>
+
+            <div className="space-y-2">
+              <label className="text-slate-400 text-xs font-semibold uppercase tracking-wide">Reason</label>
+              <select value={disputeReason} onChange={e => setDisputeReason(e.target.value)}
+                className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500/40">
+                <option value="">Select a reason…</option>
+                {isBuyer ? (
+                  <>
+                    <option>Seller not releasing USDT after payment</option>
+                    <option>Seller asking for extra payment</option>
+                    <option>Seller's payment method invalid / frozen</option>
+                    <option>Other reason</option>
+                  </>
+                ) : (
+                  <>
+                    <option>Payment not received in my account</option>
+                    <option>Wrong amount received</option>
+                    <option>Payment from third-party / different name</option>
+                    <option>Other reason</option>
+                  </>
+                )}
+              </select>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-slate-400 text-xs font-semibold uppercase tracking-wide">Description (optional)</label>
+              <textarea value={disputeDesc} onChange={e => setDisputeDesc(e.target.value.slice(0, 1000))}
+                rows={3} placeholder="Add any details that will help admin understand the issue…"
+                className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-orange-500/40" />
+              <p className="text-[10px] text-slate-600 text-right">{disputeDesc.length}/1000</p>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-slate-400 text-xs font-semibold uppercase tracking-wide">Evidence Screenshot (optional)</label>
+              {disputeEvidence ? (
+                <div className="relative inline-block">
+                  <img src={disputeEvidence} alt="Evidence" className="max-h-32 rounded-lg border border-white/10" />
+                  <button onClick={() => setDisputeEvidence(null)}
+                    className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs">×</button>
+                </div>
+              ) : (
+                <label className="flex items-center justify-center gap-2 px-3 py-3 bg-black/40 border border-dashed border-white/15 rounded-xl text-slate-400 text-sm cursor-pointer hover:border-orange-500/40">
+                  <Upload size={16} />
+                  <span>Upload screenshot</span>
+                  <input type="file" accept="image/png,image/jpeg,image/jpg,image/webp" className="hidden" onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (!f) return;
+                    if (f.size > 450 * 1024) { toast({ title: "Image too large", description: "Max 450KB", variant: "destructive" }); return; }
+                    const reader = new FileReader();
+                    reader.onload = () => setDisputeEvidence(reader.result as string);
+                    reader.readAsDataURL(f);
+                  }} />
+                </label>
+              )}
+            </div>
+
+            <div className="flex gap-2 pt-2">
+              <button onClick={() => setDisputeOpen(false)}
+                className="flex-1 py-2.5 rounded-xl bg-white/5 text-slate-300 font-medium text-sm hover:bg-white/10">
+                Cancel
+              </button>
+              <button disabled={!disputeReason || disputeSubmitting}
+                onClick={async () => {
+                  if (!order) return;
+                  setDisputeSubmitting(true);
+                  try {
+                    const res = await authFetch(`/api/p2p/orders/${order.id}/dispute`, {
+                      method: "POST",
+                      body: JSON.stringify({ reason: disputeReason, description: disputeDesc || undefined, evidenceUrl: disputeEvidence || undefined }),
+                    });
+                    if (res?.success) {
+                      toast({ title: "Dispute raised", description: "Our team will review and contact you." });
+                      setDisputeOpen(false);
+                      setDisputeReason(""); setDisputeDesc(""); setDisputeEvidence(null);
+                      fetchOrder();
+                    } else {
+                      toast({ title: "Failed", description: res?.error || "Could not raise dispute", variant: "destructive" });
+                    }
+                  } catch (err: any) {
+                    toast({ title: "Failed", description: err?.message || "Could not raise dispute", variant: "destructive" });
+                  } finally { setDisputeSubmitting(false); }
+                }}
+                className="flex-1 py-2.5 rounded-xl bg-orange-500 text-white font-semibold text-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-orange-600">
+                {disputeSubmitting ? <Loader2 size={14} className="animate-spin inline" /> : "Submit Dispute"}
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -233,6 +233,7 @@ import SettingsPage from "@/pages/settings";
 import DevicesPage from "@/pages/devices";
 import KycPage from "@/pages/kyc";
 import AdminKycPage from "@/pages/admin-kyc";
+import AdminP2pDisputesPage from "@/pages/admin-p2p-disputes";
 import {
   AdminAnalyticsPage,
   AdminHiddenFeaturesPage,
@@ -421,6 +422,7 @@ function Router() {
       <Route path="/trade-activity"><ProtectedRoute component={TradeActivityPage} /></Route>
       <Route path="/signal-history"><ProtectedRoute component={SignalHistoryPage} /></Route>
       <Route path="/admin/signal-trades"><ProtectedRoute component={AdminSignalTradesPage} adminOnly={true} /></Route>
+      <Route path="/admin/p2p-disputes"><ProtectedRoute component={AdminP2pDisputesPage} adminOnly={true} /></Route>
       <Route path="/admin"><ProtectedRoute component={AdminPage} adminOnly={true} /></Route>
       <Route path="/admin/users"><ProtectedRoute component={AdminUsersPage} adminOnly={true} /></Route>
       <Route path="/admin/deposits"><ProtectedRoute component={() => <AdminTransactionsPage mode="deposits" />} adminOnly={true} /></Route>

@@ -8,6 +8,7 @@ import {
   p2pUserPaymentMethodsTable,
   p2pChatMessagesTable,
   p2pRatingsTable,
+  p2pDisputesTable,
 } from "@workspace/db";
 import { eq, and, or, ne, desc, sql, inArray } from "drizzle-orm";
 import { z } from "zod";
@@ -752,6 +753,7 @@ router.patch("/p2p/orders/:id/cancel", async (req: AuthRequest, res) => {
         )).limit(1);
       if (!order) throw new Error("Order not found");
       if (order.status === "completed" || order.status === "cancelled") throw new Error("Cannot cancel this order");
+      if (order.status === "disputed") throw new Error("Order is under admin review and cannot be cancelled");
       if (order.status === "paid") throw new Error("Payment already marked. Raise a dispute if needed.");
       const usdtAmount = parseNum(order.usdtAmount as string);
       // Restore filled quantity so the ad is available again
@@ -769,6 +771,56 @@ router.patch("/p2p/orders/:id/cancel", async (req: AuthRequest, res) => {
     res.json({ success: true, status: "cancelled" });
   } catch (err: any) {
     res.status(400).json({ error: err.message || "Failed to cancel order" });
+  }
+});
+
+// POST /p2p/orders/:id/dispute — buyer or seller raises a dispute (only when paid)
+router.post("/p2p/orders/:id/dispute", async (req: AuthRequest, res) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const reasonRaw = typeof req.body?.reason === "string" ? req.body.reason.trim() : "";
+  const description = typeof req.body?.description === "string" ? req.body.description.trim().slice(0, 1000) : null;
+  const evidenceUrl = typeof req.body?.evidenceUrl === "string" ? req.body.evidenceUrl : null;
+  if (!reasonRaw || reasonRaw.length < 3 || reasonRaw.length > 60) {
+    res.status(400).json({ error: "Reason is required (3-60 chars)" }); return;
+  }
+  if (evidenceUrl && (evidenceUrl.length > 600_000 || !/^data:image\/(jpeg|jpg|png|webp);base64,/.test(evidenceUrl))) {
+    res.status(400).json({ error: "Invalid evidence image" }); return;
+  }
+  try {
+    const created = await db.transaction(async (tx) => {
+      const [order] = await tx.select().from(p2pOrdersTable)
+        .where(and(
+          eq(p2pOrdersTable.id, id),
+          or(eq(p2pOrdersTable.buyerId, req.userId!), eq(p2pOrdersTable.sellerId, req.userId!)),
+        )).limit(1);
+      if (!order) throw new Error("Order not found");
+      if (order.status !== "paid") throw new Error("Disputes can only be raised on orders marked as paid");
+      const [existing] = await tx.select({ id: p2pDisputesTable.id }).from(p2pDisputesTable)
+        .where(eq(p2pDisputesTable.orderId, id)).limit(1);
+      if (existing) throw new Error("Dispute already exists for this order");
+      const openerRole = order.buyerId === req.userId! ? "buyer" : "seller";
+      const [row] = await tx.insert(p2pDisputesTable).values({
+        orderId: id, openedByUserId: req.userId!, openerRole,
+        reason: reasonRaw, description, evidenceUrl,
+      }).returning();
+      await tx.update(p2pOrdersTable).set({ status: "disputed", updatedAt: new Date() })
+        .where(eq(p2pOrdersTable.id, id));
+      return { dispute: row, order, openerRole };
+    });
+
+    // Notify counterparty
+    const counterpartyId = created.openerRole === "buyer" ? created.order.sellerId : created.order.buyerId;
+    await createNotification(
+      counterpartyId,
+      "p2p_order",
+      "Dispute raised on your order",
+      `A dispute has been raised on Order #${id}. Our team will review and contact you. Reason: ${reasonRaw}`,
+    ).catch(() => {});
+
+    res.status(201).json({ success: true, dispute: created.dispute });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message || "Failed to raise dispute" });
   }
 });
 
