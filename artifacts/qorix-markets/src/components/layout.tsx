@@ -600,6 +600,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/admin/payment-methods", label: "INR / Payments", icon: Landmark },
     { href: "/admin/trading", label: "Trading", icon: TrendingUp },
     { href: "/admin/signal-trades", label: "Signal Trades", icon: Activity },
+    { href: "/admin/p2p", label: "P2P Markets", icon: ArrowUpDown },
     { href: "/admin/wallet", label: "Wallet", icon: Wallet },
     { href: "/admin/intelligence", label: "Intelligence", icon: Brain },
     { href: "/admin/communication", label: "Communication", icon: Bell },

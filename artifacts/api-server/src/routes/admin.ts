@@ -2882,6 +2882,142 @@ router.post("/admin/subscriptions/:id/mark-paid", authMiddleware, adminMiddlewar
   res.json({ subscription: row });
 });
 
+// ─── P2P Overview / Ads / Orders (Phase 4) ───────────────────────────────────
+router.get("/admin/p2p/overview", async (_req, res) => {
+  try {
+    const [[adsAgg], [ordersAgg], [escrowAgg], [openDisputes]] = await Promise.all([
+      db.select({
+        total: sql<number>`count(*)::int`,
+        active: sql<number>`count(*) filter (where ${p2pAdsTable.status} = 'active')::int`,
+        paused: sql<number>`count(*) filter (where ${p2pAdsTable.status} = 'paused')::int`,
+      }).from(p2pAdsTable),
+      db.select({
+        total: sql<number>`count(*)::int`,
+        pending: sql<number>`count(*) filter (where ${p2pOrdersTable.status} = 'pending')::int`,
+        paid: sql<number>`count(*) filter (where ${p2pOrdersTable.status} = 'paid')::int`,
+        disputed: sql<number>`count(*) filter (where ${p2pOrdersTable.status} = 'disputed')::int`,
+        completedToday: sql<number>`count(*) filter (where ${p2pOrdersTable.status} = 'completed' and ${p2pOrdersTable.completedAt} >= now() - interval '24 hours')::int`,
+        volume24hUsdt: sql<string>`coalesce(sum(${p2pOrdersTable.usdtAmount}) filter (where ${p2pOrdersTable.status} = 'completed' and ${p2pOrdersTable.completedAt} >= now() - interval '24 hours'), 0)::text`,
+        volume24hInr: sql<string>`coalesce(sum(${p2pOrdersTable.fiatAmount}) filter (where ${p2pOrdersTable.status} = 'completed' and ${p2pOrdersTable.completedAt} >= now() - interval '24 hours'), 0)::text`,
+      }).from(p2pOrdersTable),
+      db.select({
+        heldUsdt: sql<string>`coalesce(sum(${p2pEscrowTransactionsTable.amount}) filter (where ${p2pEscrowTransactionsTable.status} = 'held'), 0)::text`,
+      }).from(p2pEscrowTransactionsTable),
+      db.select({ count: sql<number>`count(*)::int` })
+        .from(p2pDisputesTable).where(eq(p2pDisputesTable.status, "open")),
+    ]);
+    res.json({
+      ads: adsAgg,
+      orders: ordersAgg,
+      escrowHeldUsdt: escrowAgg?.heldUsdt ?? "0",
+      openDisputes: openDisputes?.count ?? 0,
+    });
+  } catch {
+    res.status(500).json({ error: "Failed to load P2P overview" });
+  }
+});
+
+const ALLOWED_AD_STATUSES = new Set(["all", "active", "paused", "completed", "cancelled"]);
+const ALLOWED_ORDER_STATUSES = new Set(["all", "pending", "paid", "completed", "cancelled", "disputed"]);
+
+router.get("/admin/p2p/ads", async (req, res) => {
+  const status = (getQueryString(req, "status") || "all").toLowerCase();
+  if (!ALLOWED_AD_STATUSES.has(status)) { res.status(400).json({ error: "Invalid status" }); return; }
+  const type = (getQueryString(req, "type") || "all").toUpperCase();
+  const search = getQueryString(req, "search")?.trim() || "";
+  try {
+    const conds: any[] = [];
+    if (status !== "all") conds.push(eq(p2pAdsTable.status, status));
+    if (type === "BUY" || type === "SELL") conds.push(eq(p2pAdsTable.type, type));
+    if (search) {
+      const maybeId = parseInt(search);
+      if (!isNaN(maybeId)) {
+        conds.push(or(eq(p2pAdsTable.id, maybeId), eq(p2pAdsTable.userId, maybeId))!);
+      }
+    }
+    const rows = await db.select({
+      id: p2pAdsTable.id, userId: p2pAdsTable.userId,
+      type: p2pAdsTable.type, asset: p2pAdsTable.asset,
+      price: p2pAdsTable.price, quantity: p2pAdsTable.quantity,
+      filledQuantity: p2pAdsTable.filledQuantity,
+      minLimit: p2pAdsTable.minLimit, maxLimit: p2pAdsTable.maxLimit,
+      status: p2pAdsTable.status, createdAt: p2pAdsTable.createdAt,
+      userEmail: usersTable.email, userName: usersTable.fullName,
+    })
+    .from(p2pAdsTable)
+    .leftJoin(usersTable, eq(p2pAdsTable.userId, usersTable.id))
+    .where(conds.length ? and(...conds) : sql`true`)
+    .orderBy(desc(p2pAdsTable.createdAt))
+    .limit(200);
+    res.json({ ads: rows });
+  } catch {
+    res.status(500).json({ error: "Failed to load ads" });
+  }
+});
+
+router.patch("/admin/p2p/ads/:id", async (req: AuthRequest, res) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const action = String(req.body?.action || "").toLowerCase();
+  if (!["pause", "resume", "disable"].includes(action)) {
+    res.status(400).json({ error: "Invalid action" }); return;
+  }
+  const newStatus = action === "pause" ? "paused" : action === "resume" ? "active" : "cancelled";
+  try {
+    const updated = await db.update(p2pAdsTable)
+      .set({ status: newStatus, updatedAt: new Date() })
+      .where(and(
+        eq(p2pAdsTable.id, id),
+        // can only pause/resume between active<->paused, disable from either
+        action === "pause" ? eq(p2pAdsTable.status, "active")
+          : action === "resume" ? eq(p2pAdsTable.status, "paused")
+          : inArray(p2pAdsTable.status, ["active", "paused"]),
+      ))
+      .returning();
+    if (updated.length === 0) { res.status(400).json({ error: "Ad not found or action not allowed in current state" }); return; }
+    res.json({ success: true, ad: updated[0] });
+  } catch {
+    res.status(500).json({ error: "Failed to update ad" });
+  }
+});
+
+router.get("/admin/p2p/orders", async (req, res) => {
+  const status = (getQueryString(req, "status") || "all").toLowerCase();
+  if (!ALLOWED_ORDER_STATUSES.has(status)) { res.status(400).json({ error: "Invalid status" }); return; }
+  const search = getQueryString(req, "search")?.trim() || "";
+  try {
+    const conds: any[] = [];
+    if (status !== "all") conds.push(eq(p2pOrdersTable.status, status));
+    if (search) {
+      const maybeId = parseInt(search);
+      if (!isNaN(maybeId)) {
+        conds.push(or(
+          eq(p2pOrdersTable.id, maybeId),
+          eq(p2pOrdersTable.buyerId, maybeId),
+          eq(p2pOrdersTable.sellerId, maybeId),
+          eq(p2pOrdersTable.adId, maybeId),
+        )!);
+      }
+    }
+    const rows = await db.select({
+      id: p2pOrdersTable.id, adId: p2pOrdersTable.adId,
+      buyerId: p2pOrdersTable.buyerId, sellerId: p2pOrdersTable.sellerId,
+      fiatAmount: p2pOrdersTable.fiatAmount, usdtAmount: p2pOrdersTable.usdtAmount,
+      price: p2pOrdersTable.price, status: p2pOrdersTable.status,
+      paymentMethod: p2pOrdersTable.paymentMethod,
+      createdAt: p2pOrdersTable.createdAt, paidAt: p2pOrdersTable.paidAt,
+      completedAt: p2pOrdersTable.completedAt,
+    })
+    .from(p2pOrdersTable)
+    .where(conds.length ? and(...conds) : sql`true`)
+    .orderBy(desc(p2pOrdersTable.createdAt))
+    .limit(200);
+    res.json({ orders: rows });
+  } catch {
+    res.status(500).json({ error: "Failed to load orders" });
+  }
+});
+
 // ─── P2P Disputes ────────────────────────────────────────────────────────────
 // Admin queue + resolution endpoints for P2P order disputes (Phase 3).
 router.get("/admin/p2p/disputes", async (req, res) => {

@@ -87,6 +87,7 @@ export const p2pOrdersTable = pgTable("p2p_orders", {
   buyerIdx: index("p2p_orders_buyer_idx").on(t.buyerId),
   sellerIdx: index("p2p_orders_seller_idx").on(t.sellerId),
   adIdx: index("p2p_orders_ad_idx").on(t.adId),
+  statusCreatedIdx: index("p2p_orders_status_created_idx").on(t.status, t.createdAt),
 }));
 
 // ─── P2P Escrow Transactions ──────────────────────────────────────────────────
