@@ -525,7 +525,7 @@ router.get("/p2p/orders/my", async (req: AuthRequest, res) => {
   }
 });
 
-// GET /p2p/orders/:id — single order detail
+// GET /p2p/orders/:id — single order detail (includes seller's payment methods)
 router.get("/p2p/orders/:id", async (req: AuthRequest, res) => {
   const id = parseInt(req.params.id);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
@@ -537,12 +537,23 @@ router.get("/p2p/orders/:id", async (req: AuthRequest, res) => {
         or(eq(p2pOrdersTable.buyerId, req.userId!), eq(p2pOrdersTable.sellerId, req.userId!)),
       )).limit(1);
     if (!order) { res.status(404).json({ error: "Order not found" }); return; }
+
+    // Fetch the SELLER's payment methods so the buyer knows where to send money
+    const sellerPaymentMethods = await db
+      .select()
+      .from(p2pUserPaymentMethodsTable)
+      .where(and(
+        eq(p2pUserPaymentMethodsTable.userId, order.sellerId),
+        eq(p2pUserPaymentMethodsTable.isActive, true),
+      ));
+
     res.json({
       ...order,
       fiatAmount: parseNum(order.fiatAmount as string),
       usdtAmount: parseNum(order.usdtAmount as string),
       price: parseNum(order.price as string),
       role: order.buyerId === req.userId! ? "buyer" : "seller",
+      sellerPaymentMethods,
     });
   } catch {
     res.status(500).json({ error: "Failed to fetch order" });

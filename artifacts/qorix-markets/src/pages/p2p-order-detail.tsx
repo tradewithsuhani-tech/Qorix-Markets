@@ -9,6 +9,11 @@ import {
   MessageCircle, Send, Star, RefreshCw,
 } from "lucide-react";
 
+type SellerMethod = {
+  id: number; type: string; displayName: string; upiId: string | null;
+  bankName: string | null; accountHolder: string | null;
+  accountNumber: string | null; ifsc: string | null;
+};
 type Order = {
   id: number; adId: number; buyerId: number; sellerId: number;
   fiatAmount: number; usdtAmount: number; price: number;
@@ -16,13 +21,9 @@ type Order = {
   paymentDeadline: string | null; paidAt: string | null;
   completedAt: string | null; cancelledAt: string | null;
   createdAt: string; role: "buyer" | "seller";
+  sellerPaymentMethods: SellerMethod[];
 };
-type SellerMethod = {
-  id: number; type: string; displayName: string; upiId: string | null;
-  bankName: string | null; accountHolder: string | null;
-  accountNumber: string | null; ifsc: string | null;
-};
-type AdDetail = { sellerPaymentMethods: SellerMethod[]; type: string; advertiserName: string };
+type AdDetail = { type: string; advertiserName: string };
 type ChatMsg = { id: number; senderId: number; message: string; isSystem: boolean; createdAt: string; senderName: string; isOwn: boolean };
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; icon: React.ElementType }> = {
@@ -110,8 +111,10 @@ export default function P2POrderDetailPage() {
       const data = await authFetch<Order>(`/api/p2p/orders/${orderId}`);
       setOrder(data);
       if (!ad) {
-        const adData = await authFetch<AdDetail>(`/api/p2p/ads/${data.adId}`);
-        setAd(adData);
+        try {
+          const adData = await authFetch<AdDetail>(`/api/p2p/ads/${data.adId}`);
+          setAd(adData);
+        } catch {}
       }
     } catch {
       toast({ title: "Failed to load order", variant: "destructive" });
@@ -228,10 +231,10 @@ export default function P2POrderDetailPage() {
   const cfg = STATUS_CONFIG[order.status] ?? STATUS_CONFIG.pending!;
   const StatusIcon = cfg.icon;
   const isBuyer = order.role === "buyer";
-  const isSellAd = ad?.type === "SELL";
   const deadline = order.paymentDeadline ? new Date(order.paymentDeadline) : null;
   const deadlineExpired = deadline && Date.now() > deadline.getTime();
-  const payMethods = ad?.sellerPaymentMethods ?? [];
+  // sellerPaymentMethods now comes directly from the order (fetched by sellerId)
+  const payMethods = order.sellerPaymentMethods ?? [];
   const isActive = order.status !== "completed" && order.status !== "cancelled";
 
   return (
@@ -292,8 +295,8 @@ export default function P2POrderDetailPage() {
           </div>
         </div>
 
-        {/* Buyer payment instructions (SELL ad, pending) */}
-        {isBuyer && isSellAd && order.status === "pending" && payMethods.length > 0 && (
+        {/* Buyer payment instructions — show seller's accounts to buyer */}
+        {isBuyer && order.status === "pending" && payMethods.length > 0 && (
           <div className="glass-card rounded-xl p-4 space-y-3">
             <h2 className="text-white font-semibold text-sm flex items-center gap-2">
               <ShieldCheck size={15} className="text-emerald-400" />
@@ -336,6 +339,41 @@ export default function P2POrderDetailPage() {
                     <span className="text-white font-medium">{m.bankName}</span>
                   </div>
                 )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Buyer: no payment methods warning */}
+        {isBuyer && order.status === "pending" && payMethods.length === 0 && (
+          <div className="flex items-start gap-3 bg-red-500/5 border border-red-500/15 rounded-xl p-4">
+            <AlertCircle size={16} className="text-red-400 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-red-300 text-sm font-semibold">Seller has no payment method set up</p>
+              <p className="text-slate-400 text-xs mt-1">Contact seller via Trade Chat below or cancel this order.</p>
+            </div>
+          </div>
+        )}
+
+        {/* Seller: show own payment methods visible to buyer */}
+        {!isBuyer && order.status === "pending" && payMethods.length > 0 && (
+          <div className="glass-card rounded-xl p-4 space-y-3">
+            <h2 className="text-white font-semibold text-sm flex items-center gap-2">
+              <ShieldCheck size={15} className="text-blue-400" />
+              Your accounts shown to buyer
+            </h2>
+            <p className="text-slate-400 text-xs">Buyer will pay ₹{order.fiatAmount.toLocaleString("en-IN")} to one of these. Verify before confirming.</p>
+            {payMethods.map((m) => (
+              <div key={m.id} className="bg-black/30 rounded-xl p-3 space-y-2 border border-white/[0.06]">
+                <div className="flex items-center gap-2">
+                  <span className="text-white text-sm font-semibold">{m.displayName}</span>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-700 text-slate-300 font-bold">{m.type}</span>
+                </div>
+                {m.upiId && <div className="flex items-center justify-between text-xs"><span className="text-slate-500">UPI ID</span><div className="flex items-center gap-1"><span className="text-white font-mono">{m.upiId}</span><CopyBtn value={m.upiId} /></div></div>}
+                {m.accountHolder && <div className="flex items-center justify-between text-xs"><span className="text-slate-500">Account Holder</span><span className="text-white font-medium">{m.accountHolder}</span></div>}
+                {m.accountNumber && <div className="flex items-center justify-between text-xs"><span className="text-slate-500">Account No.</span><div className="flex items-center gap-1"><span className="text-white font-mono">{m.accountNumber}</span><CopyBtn value={m.accountNumber} /></div></div>}
+                {m.ifsc && <div className="flex items-center justify-between text-xs"><span className="text-slate-500">IFSC</span><div className="flex items-center gap-1"><span className="text-white font-mono">{m.ifsc}</span><CopyBtn value={m.ifsc} /></div></div>}
+                {m.bankName && <div className="flex items-center justify-between text-xs"><span className="text-slate-500">Bank</span><span className="text-white font-medium">{m.bankName}</span></div>}
               </div>
             ))}
           </div>
