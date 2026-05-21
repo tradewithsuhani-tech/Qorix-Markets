@@ -5,13 +5,14 @@ import { authFetch } from "@/lib/auth-fetch";
 import { useToast } from "@/hooks/use-toast";
 import {
   ArrowLeft, Clock, CheckCircle2, XCircle, AlertCircle,
-  ShieldCheck, Loader2, Copy, MessageCircle, Send, Star, RefreshCw,
+  ShieldCheck, Loader2, Copy, MessageCircle, Send, Star, RefreshCw, QrCode, X,
 } from "lucide-react";
 
 type SellerMethod = {
   id: number; type: string; displayName: string; upiId: string | null;
   bankName: string | null; accountHolder: string | null;
   accountNumber: string | null; ifsc: string | null;
+  qrCodeData: string | null;
 };
 type Order = {
   id: number; adId: number; buyerId: number; sellerId: number;
@@ -105,6 +106,9 @@ export default function P2POrderDetailPage() {
   const [chatMsg, setChatMsg] = useState("");
   const [chatSending, setChatSending] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
+
+  // QR Code modal for seller payment methods
+  const [qrModal, setQrModal] = useState<SellerMethod | null>(null);
 
   // Rating
   const [myRating, setMyRating] = useState<{ rated: boolean; rating: number | null }>({ rated: false, rating: null });
@@ -345,6 +349,12 @@ export default function P2POrderDetailPage() {
                         <div className="px-4 py-2.5 bg-white/[0.03] border-b border-white/[0.06] flex items-center gap-2">
                           <span className="text-white font-semibold text-sm">{m.displayName}</span>
                           <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-700 text-slate-300 font-bold">{m.type}</span>
+                          {m.qrCodeData && (
+                            <button onClick={() => setQrModal(m)}
+                              className="ml-auto flex items-center gap-1 px-2 py-1 rounded-lg bg-purple-500/15 text-purple-400 text-[11px] font-semibold hover:bg-purple-500/25 transition-colors">
+                              <QrCode size={11} /> QR
+                            </button>
+                          )}
                         </div>
                         <div className="divide-y divide-white/[0.06]">
                           <div className="flex items-center justify-between px-4 py-2.5">
@@ -667,6 +677,28 @@ export default function P2POrderDetailPage() {
                 {actionLoading === "cancel" ? <Loader2 size={15} className="animate-spin" /> : null}
                 Confirm Cancellation
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── QR Code Modal ────────────────────────────────────────────────── */}
+      {qrModal && qrModal.qrCodeData && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-xs overflow-hidden shadow-2xl">
+            <div className="flex items-center justify-between px-5 pt-5 pb-3">
+              <div>
+                <p className="font-bold text-gray-900">{qrModal.displayName}</p>
+                <p className="text-gray-500 text-xs">{qrModal.type}</p>
+              </div>
+              <button onClick={() => setQrModal(null)} className="text-gray-400 hover:text-gray-700"><X size={18} /></button>
+            </div>
+            <div className="text-center px-5 pb-2">
+              <p className="font-bold text-sm uppercase tracking-wide text-purple-600">ACCEPTED HERE</p>
+              <p className="text-gray-500 text-xs mt-1">Scan & Pay Using App</p>
+            </div>
+            <div className="px-5 pb-5">
+              <img src={qrModal.qrCodeData} alt="QR Code" className="w-full rounded-xl" />
             </div>
           </div>
         </div>

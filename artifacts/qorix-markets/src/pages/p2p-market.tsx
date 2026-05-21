@@ -24,7 +24,7 @@ function AdRow({ ad, tab }: { ad: Ad; tab: "BUY" | "SELL" }) {
   const [, navigate] = useLocation();
   const isBuy = tab === "BUY";
   return (
-    <div className="glass-card rounded-xl p-4 hover:border-white/10 transition-colors cursor-pointer" onClick={() => navigate(`/p2p/order/${ad.id}`)}>
+    <div className="glass-card rounded-xl p-4 hover:border-white/10 transition-colors cursor-pointer" onClick={() => navigate(tab === "BUY" ? `/p2p/sell/${ad.id}` : `/p2p/order/${ad.id}`)}>
       {/* Top row: advertiser info */}
       <div className="flex items-start justify-between gap-2 mb-3">
         <div className="flex items-center gap-2.5">
@@ -76,12 +76,12 @@ function AdRow({ ad, tab }: { ad: Ad; tab: "BUY" | "SELL" }) {
           </div>
         </div>
         <button
-          onClick={(e) => { e.stopPropagation(); navigate(`/p2p/order/${ad.id}`); }}
+          onClick={(e) => { e.stopPropagation(); navigate(tab === "BUY" ? `/p2p/sell/${ad.id}` : `/p2p/order/${ad.id}`); }}
           className={`px-5 py-2 rounded-xl text-sm font-bold shrink-0 transition-all ${
-            isBuy ? "bg-emerald-500 hover:bg-emerald-400 text-white" : "bg-red-500 hover:bg-red-400 text-white"
+            isBuy ? "bg-amber-400 hover:bg-amber-300 text-black" : "bg-emerald-500 hover:bg-emerald-400 text-white"
           }`}
         >
-          {isBuy ? "Buy" : "Sell"}
+          {isBuy ? "Sell" : "Buy"}
         </button>
       </div>
     </div>

@@ -30,6 +30,7 @@ export const p2pUserPaymentMethodsTable = pgTable("p2p_user_payment_methods", {
   accountHolder: varchar("account_holder", { length: 200 }),
   accountNumber: varchar("account_number", { length: 50 }),
   ifsc: varchar("ifsc", { length: 20 }),
+  qrCodeData: text("qr_code_data"), // base64 data URL of QR code image (optional)
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 }, (t) => ({

@@ -131,13 +131,14 @@ router.get("/p2p/payment-methods", async (req: AuthRequest, res) => {
 });
 
 const PaymentMethodSchema = z.object({
-  type: z.enum(["UPI", "BANK", "IMPS"]),
+  type: z.enum(["UPI", "BANK", "IMPS", "PHONEPE", "GPAY", "PAYTM", "DIGITAL_ERUPEE", "NEFT", "RTGS"]),
   displayName: z.string().min(2).max(100),
   upiId: z.string().max(100).optional(),
   bankName: z.string().max(100).optional(),
   accountHolder: z.string().max(200).optional(),
   accountNumber: z.string().max(50).optional(),
   ifsc: z.string().max(20).optional(),
+  qrCodeData: z.string().max(600000).optional().nullable(), // base64 data URL, ~450kb max
 });
 
 // POST /p2p/payment-methods
@@ -150,7 +151,10 @@ router.post("/p2p/payment-methods", async (req: AuthRequest, res) => {
       .where(and(eq(p2pUserPaymentMethodsTable.userId, req.userId!), eq(p2pUserPaymentMethodsTable.isActive, true)));
     if (Number(count[0]?.c ?? 0) >= 10) { res.status(400).json({ error: "Maximum 10 payment methods allowed" }); return; }
 
-    const [method] = await db.insert(p2pUserPaymentMethodsTable).values({ userId: req.userId!, ...result.data }).returning();
+    const { qrCodeData, ...rest } = result.data;
+    const [method] = await db.insert(p2pUserPaymentMethodsTable).values({
+      userId: req.userId!, ...rest, qrCodeData: qrCodeData ?? null,
+    }).returning();
     res.json(method);
   } catch {
     res.status(500).json({ error: "Failed to add payment method" });
@@ -429,6 +433,27 @@ router.get("/p2p/ads/:id", async (req: AuthRequest, res) => {
       methodRefs.includes(String(m.id)) || methodRefs.includes(m.type)
     );
 
+    // Compute advertiser trade stats
+    const [buyerRows, sellerRows] = await Promise.all([
+      db.select({
+        userId: p2pOrdersTable.buyerId,
+        total: sql<number>`count(*)::int`,
+        completed: sql<number>`sum(case when ${p2pOrdersTable.status}='completed' then 1 else 0 end)::int`,
+      }).from(p2pOrdersTable).where(eq(p2pOrdersTable.buyerId, ad.userId)).groupBy(p2pOrdersTable.buyerId),
+      db.select({
+        userId: p2pOrdersTable.sellerId,
+        total: sql<number>`count(*)::int`,
+        completed: sql<number>`sum(case when ${p2pOrdersTable.status}='completed' then 1 else 0 end)::int`,
+      }).from(p2pOrdersTable).where(eq(p2pOrdersTable.sellerId, ad.userId)).groupBy(p2pOrdersTable.sellerId),
+    ]);
+    let tradesTotal = 0; let completedTotal = 0;
+    for (const r of [...buyerRows, ...sellerRows]) {
+      tradesTotal += r.total ?? 0;
+      completedTotal += r.completed ?? 0;
+    }
+    const tradesCount = tradesTotal;
+    const completionRate = tradesTotal > 0 ? Math.round((completedTotal / tradesTotal) * 100) : 100;
+
     res.json({
       ...ad,
       price: parseNum(ad.price as string),
@@ -440,6 +465,8 @@ router.get("/p2p/ads/:id", async (req: AuthRequest, res) => {
       paymentMethods: methodRefs,
       sellerPaymentMethods,
       advertiserName: (ad.advertiserName as string).split(" ")[0] + "***",
+      tradesCount,
+      completionRate,
     });
   } catch {
     res.status(500).json({ error: "Failed to fetch ad" });
@@ -479,7 +506,8 @@ router.post("/p2p/orders", async (req: AuthRequest, res) => {
       const remaining = parseNum(ad.quantity as string) - parseNum(ad.filledQuantity as string);
       if (usdtAmount > remaining) throw new Error("Insufficient quantity remaining in ad");
 
-      const paymentDeadline = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes to pay
+      const timeLimitMinutes = Number(ad.timeLimit ?? 15);
+      const paymentDeadline = new Date(Date.now() + timeLimitMinutes * 60 * 1000);
 
       // Determine buyer/seller
       const buyerId = ad.type === "SELL" ? req.userId! : ad.userId;
