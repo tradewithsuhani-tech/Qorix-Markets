@@ -444,6 +444,7 @@ router.post("/p2p/ads", async (req: AuthRequest, res) => {
 
     res.status(201).json({ success: true, ad: ad! });
   } catch (err: any) {
+    console.error("POST /p2p/ads error:", err?.message || err);
     res.status(400).json({ error: err.message || "Failed to create ad" });
   }
 });
