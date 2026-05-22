@@ -552,7 +552,7 @@ export default function P2POrderDetailPage() {
             </div>
           </div>
           <button onClick={() => { setChatOpen(!chatOpen); setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100); }}
-            className="relative flex items-center gap-1.5 px-3.5 py-2 rounded-xl font-bold text-sm bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-black shadow-lg shadow-amber-500/20 transition-all">
+            className="relative flex items-center gap-1.5 px-3.5 py-2 rounded-xl font-bold text-sm bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-400 hover:to-blue-500 text-white shadow-lg shadow-blue-500/20 transition-all">
             <MessageCircle size={13} />
             Chat
             {newMsgCount > 0 && (
@@ -724,7 +724,7 @@ export default function P2POrderDetailPage() {
                 <button
                   onClick={() => setProofOpen(true)}
                   disabled={payMethods.length === 0}
-                  className="w-full py-4 rounded-xl bg-amber-400 hover:bg-amber-300 disabled:opacity-40 text-black font-bold text-sm transition-all active:scale-[0.98]"
+                  className="w-full py-4 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-400 hover:to-blue-500 disabled:opacity-40 text-white font-bold text-sm transition-all active:scale-[0.98] shadow-lg shadow-blue-500/20"
                 >
                   Transferred, Notify Seller
                 </button>
@@ -1108,7 +1108,7 @@ export default function P2POrderDetailPage() {
             </div>
             <div className="px-5 pb-5">
               <button onClick={() => setHowToPayOpen(false)}
-                className="w-full py-3.5 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 text-black font-bold text-sm hover:from-amber-300 hover:to-amber-400 transition-all">
+                className="w-full py-3.5 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-400 hover:to-blue-500 text-white font-bold text-sm transition-all shadow-lg shadow-blue-500/20">
                 Got it
               </button>
             </div>
@@ -1234,7 +1234,7 @@ export default function P2POrderDetailPage() {
                 <button
                   disabled={!transferConfirmed || actionLoading === "paid" || (!paymentRef.trim() && !paymentProof)}
                   onClick={notifySeller}
-                  className="flex-1 py-3 rounded-2xl bg-amber-400 hover:bg-amber-300 disabled:opacity-35 disabled:cursor-not-allowed text-black font-bold text-sm flex items-center justify-center gap-2 transition-all active:scale-[0.98] shadow-lg shadow-amber-500/20"
+                  className="flex-1 py-3 rounded-2xl bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-400 hover:to-blue-500 disabled:opacity-35 disabled:cursor-not-allowed text-white font-bold text-sm flex items-center justify-center gap-2 transition-all active:scale-[0.98] shadow-lg shadow-blue-500/20"
                 >
                   {actionLoading === "paid" ? <Loader2 size={15} className="animate-spin" /> : <Upload size={14} />}
                   Notify Seller
@@ -1461,7 +1461,7 @@ export default function P2POrderDetailPage() {
             <div className="flex gap-2">
               <button onClick={() => setCancelOpen(false)} className="flex-1 py-3 rounded-xl glass-card text-slate-400 hover:text-white text-sm">Back</button>
               <button disabled={!cancelReason || !unpaidConfirmed || actionLoading === "cancel"} onClick={doCancel}
-                className="flex-1 py-3 rounded-xl bg-amber-400 hover:bg-amber-300 disabled:opacity-40 text-black font-bold text-sm flex items-center justify-center gap-2">
+                className="flex-1 py-3 rounded-xl bg-rose-500 hover:bg-rose-400 disabled:opacity-40 text-white font-bold text-sm flex items-center justify-center gap-2">
                 {actionLoading === "cancel" ? <Loader2 size={15} className="animate-spin" /> : null}
                 Confirm Cancellation
               </button>
@@ -1515,7 +1515,7 @@ export default function P2POrderDetailPage() {
             <div className="flex gap-2">
               <button onClick={() => setRatingOpen(false)} className="flex-1 py-2.5 rounded-xl glass-card text-slate-400 hover:text-white text-sm">Cancel</button>
               <button onClick={submitRating} disabled={ratingSubmitting}
-                className="flex-1 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-white text-sm font-bold disabled:opacity-50 flex items-center justify-center gap-2">
+                className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-400 hover:to-blue-500 text-white text-sm font-bold disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg shadow-blue-500/20">
                 {ratingSubmitting ? <Loader2 size={14} className="animate-spin" /> : <Star size={14} />}
                 Submit Rating
               </button>
