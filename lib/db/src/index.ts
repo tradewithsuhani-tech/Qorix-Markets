@@ -36,7 +36,10 @@ if (process.env.NEON_DATABASE_URL) {
 // hard, in NODE_ENV=production the operator must ALSO set
 // PGSSL_BREAK_GLASS_ACK=true, otherwise the process refuses to start. A loud
 // warning is logged whenever the bypass is active so it's visible in tails.
-const dbUrl = process.env.DATABASE_URL;
+// Safe non-null assertion: the guard above throws if neither
+// NEON_DATABASE_URL nor DATABASE_URL is set, and the if-block copies
+// NEON_DATABASE_URL → DATABASE_URL when only the former is present.
+const dbUrl = process.env.DATABASE_URL!;
 const sslmodeMatch = /[?&]sslmode=(require|verify-ca|verify-full)/i.exec(dbUrl);
 const sslmode = sslmodeMatch?.[1]?.toLowerCase();
 const wantsSsl =

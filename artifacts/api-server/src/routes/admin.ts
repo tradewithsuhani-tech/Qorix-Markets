@@ -600,7 +600,7 @@ router.patch("/admin/users/:id/profile", async (req: AuthRequest, res) => {
   if (!existing) { res.status(404).json({ error: "user_not_found" }); return; }
 
   const updates: Partial<typeof usersTable.$inferInsert> = {};
-  const changes: Record<string, { from: any; to: any }> = {};
+  const changes: Record<string, { from: any; to: any; toName?: any; toCode?: any }> = {};
 
   // Full name: trim, length cap. Anything else passes through.
   if (typeof body.fullName === "string") {
@@ -2959,7 +2959,7 @@ router.get("/admin/p2p/ads", async (req, res) => {
 });
 
 router.patch("/admin/p2p/ads/:id", async (req: AuthRequest, res) => {
-  const id = parseInt(req.params.id);
+  const id = parseInt(String(req.params.id));
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const action = String(req.body?.action || "").toLowerCase();
   if (!["pause", "resume", "disable"].includes(action)) {
@@ -3055,7 +3055,7 @@ router.get("/admin/p2p/disputes", async (req, res) => {
 });
 
 router.get("/admin/p2p/disputes/:id", async (req, res) => {
-  const id = parseInt(req.params.id);
+  const id = parseInt(String(req.params.id));
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   try {
     const [dispute] = await db.select().from(p2pDisputesTable).where(eq(p2pDisputesTable.id, id)).limit(1);
@@ -3084,7 +3084,7 @@ router.get("/admin/p2p/disputes/:id", async (req, res) => {
 });
 
 router.post("/admin/p2p/disputes/:id/resolve", async (req: AuthRequest, res) => {
-  const id = parseInt(req.params.id);
+  const id = parseInt(String(req.params.id));
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const action = String(req.body?.action || "").toLowerCase();
   const note = typeof req.body?.note === "string" ? req.body.note.trim().slice(0, 1000) : null;

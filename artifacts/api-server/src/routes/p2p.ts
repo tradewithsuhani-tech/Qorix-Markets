@@ -31,7 +31,7 @@ router.use(authMiddleware);
 // EventSource using the returned token in the query string. This avoids
 // putting the long-lived session JWT in URLs / proxy access logs.
 router.post("/p2p/orders/:id/stream-token", async (req: AuthRequest, res) => {
-  const id = parseInt(req.params.id);
+  const id = parseInt(String(req.params.id));
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const [order] = await db.select({ buyerId: p2pOrdersTable.buyerId, sellerId: p2pOrdersTable.sellerId })
     .from(p2pOrdersTable)
@@ -218,7 +218,7 @@ router.post("/p2p/payment-methods", async (req: AuthRequest, res) => {
 
 // DELETE /p2p/payment-methods/:id
 router.delete("/p2p/payment-methods/:id", async (req: AuthRequest, res) => {
-  const id = parseInt(req.params.id);
+  const id = parseInt(String(req.params.id));
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
 
   try {
@@ -466,7 +466,7 @@ const UpdateAdSchema = z.object({
 });
 
 router.patch("/p2p/ads/:id", async (req: AuthRequest, res) => {
-  const id = parseInt(req.params.id);
+  const id = parseInt(String(req.params.id));
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const parsed = UpdateAdSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -612,7 +612,7 @@ router.patch("/p2p/ads/:id", async (req: AuthRequest, res) => {
 
 // PATCH /p2p/ads/:id/toggle — pause or resume
 router.patch("/p2p/ads/:id/toggle", async (req: AuthRequest, res) => {
-  const id = parseInt(req.params.id);
+  const id = parseInt(String(req.params.id));
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
 
   try {
@@ -632,7 +632,7 @@ router.patch("/p2p/ads/:id/toggle", async (req: AuthRequest, res) => {
 
 // DELETE /p2p/ads/:id — cancel + return frozen USDT for SELL ads
 router.delete("/p2p/ads/:id", async (req: AuthRequest, res) => {
-  const id = parseInt(req.params.id);
+  const id = parseInt(String(req.params.id));
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
 
   try {
@@ -661,7 +661,7 @@ router.delete("/p2p/ads/:id", async (req: AuthRequest, res) => {
 
 // GET /p2p/ads/:id — single ad detail with seller payment methods
 router.get("/p2p/ads/:id", async (req: AuthRequest, res) => {
-  const id = parseInt(req.params.id);
+  const id = parseInt(String(req.params.id));
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   try {
     const [ad] = await db
@@ -732,7 +732,7 @@ router.get("/p2p/ads/:id", async (req: AuthRequest, res) => {
 // cron) punch through the cache so the card stays honest after a trade
 // settles. Auth-gated because the masked first name is still PII-adjacent.
 router.get("/p2p/users/:id/profile", async (req: AuthRequest, res) => {
-  const id = parseInt(req.params.id);
+  const id = parseInt(String(req.params.id));
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   try {
     const profile = await getMerchantProfile(id);
@@ -758,7 +758,7 @@ router.post("/p2p/orders", async (req: AuthRequest, res) => {
   const { adId, fiatAmount, paymentMethod } = result.data;
 
   try {
-    let order: typeof p2pOrdersTable.$inferSelect;
+    let order: typeof p2pOrdersTable.$inferSelect | undefined;
 
     await db.transaction(async (tx) => {
       const [ad] = await tx.select().from(p2pAdsTable).where(eq(p2pAdsTable.id, adId)).limit(1);
@@ -879,7 +879,7 @@ router.get("/p2p/orders/my", async (req: AuthRequest, res) => {
 
 // GET /p2p/orders/:id — single order detail (includes seller's payment methods)
 router.get("/p2p/orders/:id", async (req: AuthRequest, res) => {
-  const id = parseInt(req.params.id);
+  const id = parseInt(String(req.params.id));
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
 
   try {
@@ -914,7 +914,7 @@ router.get("/p2p/orders/:id", async (req: AuthRequest, res) => {
 
 // PATCH /p2p/orders/:id/paid — buyer marks payment as sent
 router.patch("/p2p/orders/:id/paid", async (req: AuthRequest, res) => {
-  const id = parseInt(req.params.id);
+  const id = parseInt(String(req.params.id));
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   try {
     const [order] = await db.select().from(p2pOrdersTable)
@@ -960,7 +960,7 @@ router.patch("/p2p/orders/:id/paid", async (req: AuthRequest, res) => {
 
 // PATCH /p2p/orders/:id/confirm — seller confirms payment received, releases USDT to buyer
 router.patch("/p2p/orders/:id/confirm", async (req: AuthRequest, res) => {
-  const id = parseInt(req.params.id);
+  const id = parseInt(String(req.params.id));
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   try {
     await db.transaction(async (tx) => {
@@ -1014,7 +1014,7 @@ router.patch("/p2p/orders/:id/confirm", async (req: AuthRequest, res) => {
 
 // PATCH /p2p/orders/:id/cancel — cancel order (pending only; restores ad filled quantity)
 router.patch("/p2p/orders/:id/cancel", async (req: AuthRequest, res) => {
-  const id = parseInt(req.params.id);
+  const id = parseInt(String(req.params.id));
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   let buyerIdForInvalidate: number | null = null;
   let sellerIdForInvalidate: number | null = null;
@@ -1058,7 +1058,7 @@ router.patch("/p2p/orders/:id/cancel", async (req: AuthRequest, res) => {
 
 // POST /p2p/orders/:id/dispute — buyer or seller raises a dispute (only when paid)
 router.post("/p2p/orders/:id/dispute", async (req: AuthRequest, res) => {
-  const id = parseInt(req.params.id);
+  const id = parseInt(String(req.params.id));
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const reasonRaw = typeof req.body?.reason === "string" ? req.body.reason.trim() : "";
   const description = typeof req.body?.description === "string" ? req.body.description.trim().slice(0, 1000) : null;
@@ -1122,7 +1122,7 @@ const EVIDENCE_DATAURL_RE = /^data:image\/(jpeg|jpg|png|webp);base64,/;
 // Only buyer/seller of the order can post, and only while dispute.status === "open".
 // Once admin resolves, evidence is read-only.
 router.post("/p2p/orders/:id/dispute/evidence", async (req: AuthRequest, res) => {
-  const id = parseInt(req.params.id);
+  const id = parseInt(String(req.params.id));
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const fileData = typeof req.body?.fileData === "string" ? req.body.fileData : "";
   const captionRaw = typeof req.body?.caption === "string" ? req.body.caption.trim() : "";
@@ -1212,7 +1212,7 @@ router.post("/p2p/orders/:id/dispute/evidence", async (req: AuthRequest, res) =>
 
 // GET /p2p/orders/:id/dispute/evidence — both parties can list all attachments.
 router.get("/p2p/orders/:id/dispute/evidence", async (req: AuthRequest, res) => {
-  const id = parseInt(req.params.id);
+  const id = parseInt(String(req.params.id));
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   try {
     const [order] = await db.select().from(p2pOrdersTable)
@@ -1250,7 +1250,7 @@ router.get("/p2p/orders/:id/dispute/evidence", async (req: AuthRequest, res) => 
 
 // GET /p2p/orders/:id/messages
 router.get("/p2p/orders/:id/messages", async (req: AuthRequest, res) => {
-  const id = parseInt(req.params.id);
+  const id = parseInt(String(req.params.id));
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   try {
     const [order] = await db.select().from(p2pOrdersTable)
@@ -1283,7 +1283,7 @@ router.get("/p2p/orders/:id/messages", async (req: AuthRequest, res) => {
 
 // POST /p2p/orders/:id/messages
 router.post("/p2p/orders/:id/messages", async (req: AuthRequest, res) => {
-  const id = parseInt(req.params.id);
+  const id = parseInt(String(req.params.id));
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const { message } = req.body;
   if (!message || typeof message !== "string" || !message.trim()) {
@@ -1313,7 +1313,7 @@ router.post("/p2p/orders/:id/messages", async (req: AuthRequest, res) => {
 
 // GET /p2p/orders/:id/myrating
 router.get("/p2p/orders/:id/myrating", async (req: AuthRequest, res) => {
-  const id = parseInt(req.params.id);
+  const id = parseInt(String(req.params.id));
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   try {
     const [rating] = await db.select().from(p2pRatingsTable)
@@ -1326,7 +1326,7 @@ router.get("/p2p/orders/:id/myrating", async (req: AuthRequest, res) => {
 
 // POST /p2p/orders/:id/rate
 router.post("/p2p/orders/:id/rate", async (req: AuthRequest, res) => {
-  const id = parseInt(req.params.id);
+  const id = parseInt(String(req.params.id));
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const { rating, comment } = req.body;
   if (!rating || typeof rating !== "number" || rating < 1 || rating > 5) {
