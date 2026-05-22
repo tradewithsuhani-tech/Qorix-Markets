@@ -50,7 +50,7 @@ function AdRow({ ad, tab }: { ad: Ad; tab: "BUY" | "SELL" }) {
             <div className="flex items-center gap-1.5">
               <span className="text-white font-semibold text-sm truncate">{ad.advertiserName}</span>
               {ad.isVerifiedMerchant && (
-                <ShieldCheck size={12} className="text-emerald-400 shrink-0" title="Verified Merchant" />
+                <ShieldCheck size={12} className="text-emerald-400 shrink-0" aria-label="Verified Merchant" />
               )}
             </div>
             <div className="flex items-center gap-1.5 mt-0.5">
