@@ -3,7 +3,7 @@ import { useRoute, useLocation } from "wouter";
 import { Layout } from "@/components/layout";
 import { authFetch } from "@/lib/auth-fetch";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, AlertCircle, Loader2, BadgeCheck, ChevronRight, ShieldCheck, Clock } from "lucide-react";
+import { ArrowLeft, AlertCircle, Loader2, BadgeCheck, ChevronRight, ShieldCheck, Clock, X, RefreshCw } from "lucide-react";
 
 type SellerMethod = {
   id: number; type: string; displayName: string;
@@ -40,6 +40,7 @@ export default function P2PPlaceOrderPage() {
   const [fiatAmount, setFiatAmount] = useState("");
   const [selectedMethodId, setSelectedMethodId] = useState<number | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [payMethodModalOpen, setPayMethodModalOpen] = useState(false);
 
   useEffect(() => {
     if (!adId) return;
@@ -212,115 +213,130 @@ export default function P2PPlaceOrderPage() {
         </div>
 
         {/* Right col (or full-width on mobile): Form */}
-        <form onSubmit={handleSubmit} className="flex flex-col flex-1 gap-3 px-4 md:px-0 pb-6 md:pb-0">
+        <form onSubmit={handleSubmit} className="flex flex-col gap-3 px-4 md:px-0 pb-6 md:pb-0">
 
-          {/* ── Amount Card ─────────────────────────── */}
-          <div className="relative rounded-2xl overflow-hidden border border-white/[0.08] bg-[#0d1117]">
-            {/* Subtle top gradient accent */}
-            <div className={`absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r ${isBuying ? "from-emerald-500/0 via-emerald-400 to-emerald-500/0" : "from-red-500/0 via-red-400 to-red-500/0"}`} />
+          {/* Price line */}
+          <div className="flex items-center gap-2 text-sm px-0.5">
+            <span className="text-slate-500">Price</span>
+            <span className="text-white font-semibold">₹{ad.price.toLocaleString("en-IN")} INR</span>
+            <button type="button" onClick={() => {}} className="text-slate-600 hover:text-slate-400 transition-colors">
+              <RefreshCw size={13} />
+            </button>
+          </div>
 
-            <div className="p-5 space-y-4">
-              {/* Label */}
+          {/* ── You Pay ─────────────────────────────── */}
+          <div className="rounded-2xl border border-white/[0.1] bg-[#111827] p-4 space-y-2">
+            <p className="text-slate-400 text-sm">You Pay</p>
+            {fiatNum === 0 ? (
+              /* Limit range display when no amount typed */
               <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-slate-400 text-xs font-medium tracking-wide uppercase">Pay with</p>
-                  <p className="text-white font-semibold text-sm mt-0.5">Indian Rupee (INR)</p>
+                <div
+                  className="flex-1 text-white text-xl font-semibold tabular-nums cursor-text"
+                  onClick={() => document.getElementById("fiat-input")?.focus()}
+                >
+                  {ad.minLimit.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                  <span className="text-slate-500 mx-2">–</span>
+                  {maxFiat.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
                 </div>
-                <div className={`px-2.5 py-1 rounded-lg text-xs font-bold ${isBuying ? "bg-emerald-500/15 text-emerald-400" : "bg-red-500/15 text-red-400"}`}>
-                  {isBuying ? "BUY" : "SELL"}
+                <div className="flex items-center gap-2 shrink-0">
+                  <button type="button" onClick={() => setFiatAmount(String(maxFiat))}
+                    className="text-amber-400 font-semibold text-sm hover:text-amber-300 transition-colors">All</button>
+                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/[0.08]">
+                    <span className="text-amber-400 text-sm font-bold">₹</span>
+                    <span className="text-white text-sm font-semibold">INR</span>
+                  </div>
                 </div>
               </div>
-
-              {/* Big amount input */}
-              <div className="flex items-center gap-3">
-                <span className="text-slate-600 text-3xl font-light shrink-0">₹</span>
-                <input
-                  type="number" min={ad.minLimit} max={maxFiat} step="1"
-                  placeholder="0"
-                  value={fiatAmount}
-                  onChange={(e) => setFiatAmount(e.target.value)}
-                  className="flex-1 bg-transparent text-white text-4xl font-light outline-none placeholder:text-slate-700 w-0 tabular-nums"
-                />
-                <button type="button" onClick={() => setFiatAmount(String(maxFiat))}
-                  className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${isBuying ? "border-emerald-500/30 text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20" : "border-red-500/30 text-red-400 bg-red-500/10 hover:bg-red-500/20"}`}>
-                  MAX
-                </button>
-              </div>
-
-              {/* Limit row */}
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-slate-500">
-                  Limit&nbsp;&nbsp;₹{ad.minLimit.toLocaleString("en-IN")} – ₹{maxFiat.toLocaleString("en-IN")}
-                </span>
-                {fiatNum > 0 && <span className="text-slate-600">{usdtCalc.toFixed(4)} USDT</span>}
-              </div>
-
-              {/* Error */}
-              {amountError && (
-                <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-red-500/8 border border-red-500/20 text-red-400 text-xs">
-                  <AlertCircle size={12} className="shrink-0" /> {amountError}
+            ) : (
+              /* Amount input when typing */
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2 flex-1 min-w-0">
+                  <span className="text-slate-500 text-2xl shrink-0">₹</span>
+                  <input
+                    id="fiat-input"
+                    type="number" min={ad.minLimit} max={maxFiat} step="1"
+                    value={fiatAmount}
+                    onChange={(e) => setFiatAmount(e.target.value)}
+                    className="flex-1 bg-transparent text-white text-2xl font-semibold outline-none tabular-nums w-0"
+                    autoFocus
+                  />
                 </div>
-              )}
-
-              {/* Divider */}
-              <div className="h-px bg-white/[0.06]" />
-
-              {/* You Receive */}
-              <div className="flex items-center justify-between">
-                <span className="text-slate-400 text-sm">You Receive</span>
-                <div className="text-right">
-                  <span className={`text-xl font-bold tabular-nums ${fiatNum > 0 && isValidAmount ? (isBuying ? "text-emerald-400" : "text-red-400") : "text-slate-600"}`}>
-                    {usdtCalc > 0 ? usdtCalc.toFixed(4) : "0.0000"}
-                  </span>
-                  <span className="text-slate-500 text-sm ml-1.5">USDT</span>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button type="button" onClick={() => setFiatAmount(String(maxFiat))}
+                    className="text-amber-400 font-semibold text-sm hover:text-amber-300 transition-colors">All</button>
+                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/[0.08]">
+                    <span className="text-amber-400 text-sm font-bold">₹</span>
+                    <span className="text-white text-sm font-semibold">INR</span>
+                  </div>
                 </div>
+              </div>
+            )}
+            {/* Hidden input always present for form logic when showing range */}
+            {fiatNum === 0 && (
+              <input id="fiat-input" type="number" min={ad.minLimit} max={maxFiat} step="1"
+                value={fiatAmount} onChange={(e) => setFiatAmount(e.target.value)}
+                className="w-0 h-0 opacity-0 absolute" />
+            )}
+            {amountError && (
+              <div className="flex items-center gap-1.5 text-red-400 text-xs">
+                <AlertCircle size={11} /> {amountError}
+              </div>
+            )}
+          </div>
+
+          {/* ── You Receive ─────────────────────────── */}
+          <div className="rounded-2xl border border-white/[0.1] bg-[#111827] p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <p className="text-slate-400 text-sm">You Receive</p>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className={`text-2xl font-semibold tabular-nums ${fiatNum > 0 && isValidAmount ? "text-white" : "text-white"}`}>
+                {usdtCalc > 0 && isValidAmount ? usdtCalc.toFixed(2) : "0.00"}
+              </span>
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-full bg-teal-500/20 flex items-center justify-center">
+                  <span className="text-teal-400 text-xs font-bold">₮</span>
+                </div>
+                <span className="text-white font-semibold">USDT</span>
               </div>
             </div>
           </div>
 
-          {/* ── Quick amounts ───────────────────────── */}
-          <div className="flex gap-2">
-            {[25, 50, 75, 100].map((pct) => {
-              const val = Math.round((maxFiat - ad.minLimit) * pct / 100 + ad.minLimit);
-              return (
-                <button key={pct} type="button" onClick={() => setFiatAmount(String(val))}
-                  className="flex-1 py-2 rounded-xl text-xs font-semibold text-slate-400 bg-white/[0.04] border border-white/[0.06] hover:border-white/[0.12] hover:text-white transition-all">
-                  {pct}%
-                </button>
-              );
-            })}
-          </div>
-
-          {/* ── Payment Method ──────────────────────── */}
+          {/* ── Payment Method selector ──────────────── */}
           {ad.sellerPaymentMethods.length > 0 && (
-            <div className="rounded-2xl border border-white/[0.08] bg-[#0d1117] overflow-hidden">
-              <div className="px-4 pt-4 pb-2">
-                <p className="text-slate-500 text-xs font-medium uppercase tracking-wide">Payment Method</p>
+            <button type="button" onClick={() => setPayMethodModalOpen(true)}
+              className="w-full flex items-center justify-between px-4 py-4 rounded-2xl border border-white/[0.1] bg-[#111827] hover:bg-white/[0.04] transition-colors">
+              <div className="flex items-center gap-3 min-w-0">
+                {selectedMethod ? (
+                  <>
+                    <div className={`w-1 h-8 rounded-full ${
+                      selectedMethod.type === "UPI" ? "bg-purple-500" :
+                      selectedMethod.type === "IMPS" ? "bg-orange-500" :
+                      "bg-slate-400"
+                    }`} />
+                    <div className="min-w-0 text-left">
+                      <p className="text-white font-semibold text-sm truncate">{selectedMethod.displayName || selectedMethod.type}</p>
+                      <p className="text-slate-500 text-xs truncate">
+                        {selectedMethod.upiId || (selectedMethod.bankName && selectedMethod.accountNumber ? `${selectedMethod.bankName} · ****${selectedMethod.accountNumber.slice(-4)}` : selectedMethod.bankName || selectedMethod.type)}
+                      </p>
+                    </div>
+                  </>
+                ) : (
+                  <span className="text-slate-400 text-sm">Set my payment method</span>
+                )}
               </div>
-              {ad.sellerPaymentMethods.map((m, i) => {
-                const grad = METHOD_COLORS[m.type.toUpperCase()] ?? METHOD_COLORS.default;
-                const isSelected = selectedMethodId === m.id;
-                return (
-                  <button key={m.id} type="button" onClick={() => setSelectedMethodId(m.id)}
-                    className={`w-full flex items-center gap-3.5 px-4 py-3.5 text-left transition-all ${i > 0 ? "border-t border-white/[0.05]" : ""} ${isSelected ? "bg-white/[0.04]" : "hover:bg-white/[0.02]"}`}>
-                    <div className={`w-1 h-9 rounded-full bg-gradient-to-b ${isSelected ? grad : "bg-white/10"} transition-all`} />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-white text-sm font-semibold">{m.displayName || m.type}</p>
-                      {m.upiId && <p className="text-slate-500 text-xs mt-0.5">{m.upiId}</p>}
-                      {m.bankName && <p className="text-slate-500 text-xs mt-0.5">{m.bankName}{m.accountNumber ? ` · ****${m.accountNumber.slice(-4)}` : ""}</p>}
-                    </div>
-                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${isSelected ? `border-${accentColor}-400 bg-${accentColor}-400` : "border-slate-700"}`}>
-                      {isSelected && <div className="w-2 h-2 rounded-full bg-white" />}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="w-6 h-6 rounded-full bg-slate-700 text-slate-300 text-xs font-bold flex items-center justify-center">
+                  {ad.sellerPaymentMethods.length}
+                </span>
+                <ChevronRight size={16} className="text-slate-500" />
+              </div>
+            </button>
           )}
 
-          {/* ── Advertiser Card ─────────────────────── */}
-          <div className="rounded-2xl border border-white/[0.08] bg-[#0d1117] p-4 space-y-3.5">
-            <p className="text-slate-500 text-xs font-medium uppercase tracking-wide">Advertiser's Info</p>
+          {/* ── Mobile-only: Advertiser card ────────── */}
+          <div className="md:hidden rounded-2xl border border-white/[0.08] bg-[#111827] p-4 space-y-3">
+            <p className="text-slate-500 text-xs font-semibold uppercase tracking-wider">Advertiser's Info</p>
             <div className="flex items-center gap-3">
               <div className="relative shrink-0">
                 <div className={`w-11 h-11 rounded-xl flex items-center justify-center font-bold text-base ${isBuying ? "bg-emerald-500/15 text-emerald-300" : "bg-red-500/15 text-red-300"}`}>
@@ -333,57 +349,91 @@ export default function P2PPlaceOrderPage() {
                 )}
               </div>
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <span className="text-white font-bold text-sm tracking-wide">{ad.advertiserName.toUpperCase()}</span>
-                  {ad.isVerifiedMerchant && <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-emerald-500/15 text-emerald-400 font-semibold">VERIFIED</span>}
+                <div className="flex items-center gap-1.5">
+                  <span className="text-white font-bold text-sm">{ad.advertiserName.toUpperCase()}</span>
+                  {ad.isVerifiedMerchant && <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-400 font-semibold">VERIFIED</span>}
                 </div>
-                <div className="flex items-center gap-2 mt-0.5 text-xs">
-                  <span className="text-slate-500">{ad.tradesCount} trades</span>
-                  <span className="text-slate-700">·</span>
+                <div className="flex items-center gap-2 mt-0.5 text-xs text-slate-500">
+                  <span>{ad.tradesCount} trades</span><span>·</span>
                   <span className={ad.completionRate >= 90 ? "text-emerald-400" : "text-amber-400"}>{ad.completionRate}% completion</span>
                 </div>
               </div>
-              <ChevronRight size={16} className="text-slate-700 shrink-0" />
             </div>
-
             {ad.terms && (
-              <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl px-3.5 py-3">
+              <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl px-3 py-2.5">
                 <p className="text-slate-400 text-xs leading-relaxed">{ad.terms}</p>
               </div>
             )}
-          </div>
-
-          {/* ── Info strip ──────────────────────────── */}
-          <div className="grid grid-cols-2 gap-2">
-            <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-white/[0.03] border border-white/[0.06]">
-              <Clock size={12} className="text-amber-400 shrink-0" />
-              <span className="text-xs text-slate-500">{ad.timeLimit} min to pay</span>
-            </div>
-            <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-white/[0.03] border border-white/[0.06]">
-              <ShieldCheck size={12} className="text-emerald-400 shrink-0" />
-              <span className="text-xs text-slate-500">Escrow protected</span>
+            <div className="flex gap-2">
+              <div className="flex-1 flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+                <Clock size={11} className="text-amber-400" />
+                <span className="text-xs text-slate-500">{ad.timeLimit} min</span>
+              </div>
+              <div className="flex-1 flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+                <ShieldCheck size={11} className="text-emerald-400" />
+                <span className="text-xs text-slate-500">Escrow</span>
+              </div>
             </div>
           </div>
-
-          <div className="flex-1" />
 
           {/* ── CTA Button ──────────────────────────── */}
           <button type="submit" disabled={submitting || !isValidAmount || fiatNum === 0}
-            className={`relative w-full py-4 rounded-2xl font-bold text-base text-white overflow-hidden transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
+            className={`w-full py-4 rounded-2xl font-bold text-base transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
               isBuying
-                ? "bg-gradient-to-r from-emerald-600 to-emerald-500 shadow-[0_0_24px_rgba(16,185,129,0.35)] hover:shadow-[0_0_32px_rgba(16,185,129,0.5)]"
-                : "bg-gradient-to-r from-red-600 to-red-500 shadow-[0_0_24px_rgba(239,68,68,0.35)] hover:shadow-[0_0_32px_rgba(239,68,68,0.5)]"
+                ? "bg-emerald-600 hover:bg-emerald-500 text-white"
+                : "bg-red-600 hover:bg-red-500 text-white"
             }`}>
             {submitting
               ? <span className="flex items-center justify-center gap-2"><Loader2 size={18} className="animate-spin" /> Placing Order…</span>
-              : fiatNum > 0 && isValidAmount
-                ? `Place Order · ₹${fiatNum.toLocaleString("en-IN")} → ${usdtCalc.toFixed(4)} USDT`
-                : "Place Order"
+              : isBuying ? "Buy USDT" : "Sell USDT"
             }
           </button>
         </form>
         </div>{/* end grid */}
       </div>{/* end max-w-4xl */}
+
+      {/* ── Payment Method Modal ─────────────────────────────────────────── */}
+      {payMethodModalOpen && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="bg-[#1a2030] w-full sm:max-w-sm rounded-t-3xl sm:rounded-2xl overflow-hidden">
+            <div className="flex items-center justify-between px-5 pt-5 pb-4">
+              <h2 className="text-white font-bold text-base">Payment Method(s)</h2>
+              <button onClick={() => setPayMethodModalOpen(false)}
+                className="w-8 h-8 rounded-full bg-white/[0.08] flex items-center justify-center text-slate-400 hover:text-white transition-colors">
+                <X size={16} />
+              </button>
+            </div>
+            <div className="px-4 pb-6 space-y-2">
+              {ad.sellerPaymentMethods.map((m) => {
+                const isSelected = selectedMethodId === m.id;
+                const borderColor = m.type === "UPI" ? "bg-purple-500" :
+                  m.type === "IMPS" ? "bg-orange-500" :
+                  m.type === "NEFT" ? "bg-cyan-500" :
+                  "bg-slate-400";
+                return (
+                  <button key={m.id} type="button"
+                    onClick={() => { setSelectedMethodId(m.id); setPayMethodModalOpen(false); }}
+                    className={`w-full flex items-center gap-3.5 px-4 py-4 rounded-2xl border text-left transition-all ${
+                      isSelected ? "border-emerald-500/40 bg-emerald-500/5" : "border-white/[0.08] bg-white/[0.03] hover:bg-white/[0.06]"
+                    }`}>
+                    <div className={`w-1 h-10 rounded-full ${borderColor} shrink-0`} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-white font-bold text-sm">{m.displayName || m.type}</p>
+                      {m.upiId && <p className="text-slate-400 text-xs mt-0.5">{m.upiId}</p>}
+                      {m.bankName && <p className="text-slate-400 text-xs mt-0.5">{m.bankName}{m.accountNumber ? ` · ****${m.accountNumber.slice(-4)}` : ""}</p>}
+                    </div>
+                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all shrink-0 ${
+                      isSelected ? "border-emerald-400 bg-emerald-400" : "border-slate-600"
+                    }`}>
+                      {isSelected && <div className="w-2 h-2 rounded-full bg-white" />}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
     </Layout>
   );
 }
