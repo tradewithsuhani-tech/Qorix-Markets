@@ -137,7 +137,7 @@ export default function P2POrdersPage() {
 
         <div className="flex items-center justify-between">
           <p className="text-slate-400 text-xs">{orders.length} total orders</p>
-          <button onClick={loadOrders} className="p-2 rounded-xl glass-card text-slate-400 hover:text-white" aria-label="Refresh orders">
+          <button onClick={() => loadOrders()} className="p-2 rounded-xl glass-card text-slate-400 hover:text-white" aria-label="Refresh orders">
             <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
           </button>
         </div>
