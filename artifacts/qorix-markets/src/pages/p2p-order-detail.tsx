@@ -9,6 +9,26 @@ import {
   User, Paperclip, FileText, Image as ImageIcon,
 } from "lucide-react";
 import { MerchantProfileModal } from "@/components/p2p-merchant-profile-modal";
+import QRCode from "qrcode";
+
+/** Auto-generates a UPI QR code on a canvas — same as deposit-upi-pay.tsx */
+function UpiQrCanvas({ upiId, amount, name, orderId, size = 192 }: {
+  upiId: string; amount: number; name?: string | null; orderId: number; size?: number;
+}) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    if (!canvasRef.current) return;
+    const pn = encodeURIComponent(name ?? "Seller");
+    const tn = encodeURIComponent(`P2P-${orderId}`);
+    const uri = `upi://pay?pa=${upiId}&pn=${pn}&am=${amount}&cu=INR&tn=${tn}`;
+    QRCode.toCanvas(canvasRef.current, uri, {
+      width: size,
+      margin: 1,
+      color: { dark: "#0F172A", light: "#FFFFFF" },
+    }).catch(() => {});
+  }, [upiId, amount, name, orderId, size]);
+  return <canvas ref={canvasRef} />;
+}
 
 type SellerMethod = {
   id: number; type: string; displayName: string; upiId: string | null;
@@ -573,15 +593,25 @@ export default function P2POrderDetailPage() {
                     </div>
                   </div>
 
-                  {/* QR code — matches deposit-upi-pay.tsx exactly */}
-                  {m.qrCodeData && (
+                  {/* QR code — auto-generated from UPI ID (like deposit page) or fallback to uploaded image */}
+                  {(m.upiId || m.qrCodeData) && (
                     <>
                       <div className="mx-4 my-4 rounded-2xl border border-emerald-500/30 bg-gradient-to-br from-emerald-500/15 to-teal-500/5 p-5 flex flex-col items-center gap-3.5">
                         <div className="text-[10px] font-bold tracking-[0.16em] text-emerald-400">SCAN TO PAY</div>
-                        <div className="bg-white p-3 rounded-xl overflow-hidden">
-                          <div className="w-48 h-48 overflow-hidden rounded-lg">
-                            <img src={m.qrCodeData} alt="QR Code" className="w-full h-full object-cover" style={{ objectPosition: "50% 55%" }} />
-                          </div>
+                        <div className="bg-white p-3 rounded-xl">
+                          {m.upiId ? (
+                            <UpiQrCanvas
+                              upiId={m.upiId}
+                              amount={order.fiatAmount}
+                              name={m.accountHolder ?? m.displayName}
+                              orderId={order.id}
+                              size={192}
+                            />
+                          ) : (
+                            <div className="w-48 h-48 overflow-hidden rounded-lg">
+                              <img src={m.qrCodeData!} alt="QR Code" className="w-full h-full object-cover" style={{ objectPosition: "50% 55%" }} />
+                            </div>
+                          )}
                         </div>
                       </div>
                       {/* Divider */}
@@ -1241,7 +1271,7 @@ export default function P2POrderDetailPage() {
       )}
 
       {/* ── QR Code Modal ────────────────────────────────────────────────── */}
-      {qrModal && qrModal.qrCodeData && (
+      {qrModal && (qrModal.upiId || qrModal.qrCodeData) && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="glass-card rounded-2xl w-full max-w-xs overflow-hidden shadow-2xl border border-white/[0.08]">
             <div className="flex items-center justify-between px-5 pt-4 pb-3">
@@ -1251,13 +1281,22 @@ export default function P2POrderDetailPage() {
               </div>
               <button onClick={() => setQrModal(null)} className="text-slate-500 hover:text-white"><X size={18} /></button>
             </div>
-            {/* Same card as deposit-upi-pay */}
             <div className="mx-4 mb-4 rounded-2xl border border-emerald-500/30 bg-gradient-to-br from-emerald-500/15 to-teal-500/5 p-5 flex flex-col items-center gap-3.5">
               <div className="text-[10px] font-bold tracking-[0.16em] text-emerald-400">SCAN TO PAY</div>
-              <div className="bg-white p-3 rounded-xl overflow-hidden">
-                <div className="w-56 h-56 overflow-hidden rounded-lg">
-                  <img src={qrModal.qrCodeData} alt="QR Code" className="w-full h-full object-cover" style={{ objectPosition: "50% 55%" }} />
-                </div>
+              <div className="bg-white p-3 rounded-xl">
+                {qrModal.upiId ? (
+                  <UpiQrCanvas
+                    upiId={qrModal.upiId}
+                    amount={order.fiatAmount}
+                    name={qrModal.accountHolder ?? qrModal.displayName}
+                    orderId={order.id}
+                    size={220}
+                  />
+                ) : (
+                  <div className="w-56 h-56 overflow-hidden rounded-lg">
+                    <img src={qrModal.qrCodeData!} alt="QR Code" className="w-full h-full object-cover" style={{ objectPosition: "50% 55%" }} />
+                  </div>
+                )}
               </div>
             </div>
           </div>
