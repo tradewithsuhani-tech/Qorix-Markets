@@ -137,7 +137,11 @@ export default function P2PMarketPage() {
     }
   }, [tab, paymentFilter]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => {
+    fetchData();
+    const interval = setInterval(fetchData, 30000);
+    return () => clearInterval(interval);
+  }, [fetchData]);
 
   return (
     <Layout>
