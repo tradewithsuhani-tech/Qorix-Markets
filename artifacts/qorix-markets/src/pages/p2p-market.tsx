@@ -7,6 +7,7 @@ import {
   TrendingUp, TrendingDown, RefreshCw, ArrowUpDown,
   Plus, ChevronRight, Wallet, AlertCircle, Filter, Clock, ThumbsUp,
   ShieldCheck, ClipboardList, ChevronDown, MessageCircle, UserCircle2,
+  MoreHorizontal, CreditCard, LayoutList, HelpCircle,
 } from "lucide-react";
 import { MerchantProfileModal } from "@/components/p2p-merchant-profile-modal";
 
@@ -162,6 +163,8 @@ export default function P2PMarketPage() {
   const [processingOrders, setProcessingOrders] = useState<ProcessingOrder[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
   const ordersRef = useRef<HTMLDivElement>(null);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
   const fetchData = useCallback(async (showSkeleton = false) => {
@@ -205,12 +208,11 @@ export default function P2PMarketPage() {
     });
   };
 
-  // Close dropdown on outside click
+  // Close dropdowns on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (ordersRef.current && !ordersRef.current.contains(e.target as Node)) {
-        setOrdersOpen(false);
-      }
+      if (ordersRef.current && !ordersRef.current.contains(e.target as Node)) setOrdersOpen(false);
+      if (moreRef.current && !moreRef.current.contains(e.target as Node)) setMoreOpen(false);
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
@@ -322,6 +324,46 @@ export default function P2PMarketPage() {
                 </div>
               )}
             </div>
+
+            {/* ── More dropdown ───────────────────────────────── */}
+            <div className="relative" ref={moreRef}>
+              <button
+                onClick={() => setMoreOpen((v) => !v)}
+                className={`flex items-center gap-1 px-3 py-2 glass-card rounded-xl text-xs font-medium transition-colors ${
+                  moreOpen ? "text-white bg-white/[0.06]" : "text-slate-300 hover:text-white"
+                }`}
+              >
+                More <ChevronDown size={11} className={`transition-transform duration-200 ${moreOpen ? "rotate-180" : ""}`} />
+              </button>
+
+              {moreOpen && (
+                <div className="absolute right-0 top-full mt-2 w-52 z-50 rounded-2xl border border-white/[0.08] bg-[#0d1117] shadow-2xl overflow-hidden">
+                  <div className="py-1">
+                    {[
+                      { label: "Payment Methods", href: "/p2p/payment-methods", icon: CreditCard, desc: "Manage your pay options" },
+                      { label: "My Ads",           href: "/p2p/ads/my",          icon: LayoutList,  desc: "View & manage your ads"  },
+                      { label: "Post New Ad",      href: "/p2p/create-ad",       icon: Plus,        desc: "Create a buy/sell ad"    },
+                      { label: "User Center",      href: "/p2p/user-center",     icon: UserCircle2, desc: "Profile & stats"          },
+                      { label: "P2P Help",         href: "/faq",                 icon: HelpCircle,  desc: "How P2P trading works"    },
+                    ].map(({ label, href, icon: Icon, desc }) => (
+                      <Link key={href} href={href} onClick={() => setMoreOpen(false)}>
+                        <div className="flex items-center gap-3 px-4 py-3 hover:bg-white/[0.04] transition-colors cursor-pointer">
+                          <div className="w-8 h-8 rounded-xl bg-white/[0.04] flex items-center justify-center shrink-0">
+                            <Icon size={14} className="text-emerald-400" />
+                          </div>
+                          <div className="min-w-0">
+                            <div className="text-white text-xs font-semibold">{label}</div>
+                            <div className="text-slate-600 text-[10px] leading-tight">{desc}</div>
+                          </div>
+                          <ChevronRight size={11} className="text-slate-700 ml-auto shrink-0" />
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
             <Link href="/p2p/create-ad">
               <button className="flex items-center gap-1.5 px-3 py-2 bg-emerald-500 hover:bg-emerald-400 rounded-xl text-black text-xs font-bold transition-colors">
                 <Plus size={13} /> Post Ad
