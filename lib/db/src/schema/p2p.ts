@@ -111,8 +111,10 @@ export const p2pChatMessagesTable = pgTable("p2p_chat_messages", {
   id: serial("id").primaryKey(),
   orderId: integer("order_id").notNull(),
   senderId: integer("sender_id").notNull(),
-  message: text("message").notNull(),
+  message: text("message").notNull().default(""),
   isSystem: boolean("is_system").notNull().default(false),
+  attachmentData: text("attachment_data"),   // base64 data-URL (image or PDF)
+  attachmentType: varchar("attachment_type", { length: 10 }), // 'image' | 'pdf' | null
   createdAt: timestamp("created_at").notNull().defaultNow(),
 }, (t) => ({
   orderIdx: index("p2p_chat_order_idx").on(t.orderId),

@@ -6,7 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   ArrowLeft, Clock, CheckCircle2, XCircle, AlertCircle,
   ShieldCheck, Loader2, Copy, MessageCircle, Send, Star, RefreshCw, QrCode, X, Upload,
-  User,
+  User, Paperclip, FileText, Image as ImageIcon,
 } from "lucide-react";
 import { MerchantProfileModal } from "@/components/p2p-merchant-profile-modal";
 
@@ -26,7 +26,7 @@ type Order = {
   createdAt: string; role: "buyer" | "seller";
   sellerPaymentMethods: SellerMethod[];
 };
-type ChatMsg = { id: number; senderId: number; message: string; isSystem: boolean; createdAt: string; senderName: string; isOwn: boolean };
+type ChatMsg = { id: number; senderId: number; message: string; isSystem: boolean; createdAt: string; senderName: string; isOwn: boolean; attachmentData?: string | null; attachmentType?: string | null };
 
 const BUYER_CANCEL_REASONS = [
   "I do not want to trade anymore",
@@ -118,6 +118,8 @@ export default function P2POrderDetailPage() {
   const [chatOpen, setChatOpen] = useState(false);
   const [chatMsg, setChatMsg] = useState("");
   const [chatSending, setChatSending] = useState(false);
+  const [chatAttachment, setChatAttachment] = useState<{ data: string; type: "image" | "pdf"; name: string } | null>(null);
+  const chatFileRef = useRef<HTMLInputElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   // QR Code modal for seller payment methods
@@ -299,16 +301,35 @@ export default function P2POrderDetailPage() {
     } finally { setActionLoading(null); }
   }
 
+  function handleChatFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+    const isPdf = file.type === "application/pdf";
+    const isImg = file.type.startsWith("image/");
+    if (!isPdf && !isImg) { toast({ title: "Only images (JPEG/PNG/WebP) or PDF files", variant: "destructive" }); return; }
+    const maxBytes = isPdf ? 2 * 1024 * 1024 : 600 * 1024;
+    if (file.size > maxBytes) { toast({ title: isPdf ? "PDF too large (max 2 MB)" : "Image too large (max 600 KB)", variant: "destructive" }); return; }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setChatAttachment({ data: reader.result as string, type: isPdf ? "pdf" : "image", name: file.name });
+    };
+    reader.readAsDataURL(file);
+  }
+
   async function sendChat(e: React.FormEvent) {
     e.preventDefault();
-    if (!chatMsg.trim() || chatSending) return;
+    if ((!chatMsg.trim() && !chatAttachment) || chatSending) return;
     setChatSending(true);
     try {
+      const body: Record<string, string> = { message: chatMsg };
+      if (chatAttachment) { body.attachmentData = chatAttachment.data; body.attachmentType = chatAttachment.type; }
       const msg = await authFetch<ChatMsg>(`/api/p2p/orders/${orderId}/messages`, {
-        method: "POST", body: JSON.stringify({ message: chatMsg }),
+        method: "POST", body: JSON.stringify(body),
       });
       setMessages((prev) => [...prev, msg]);
       setChatMsg("");
+      setChatAttachment(null);
       setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
     } catch (err: any) {
       toast({ title: err.message || "Failed to send", variant: "destructive" });
@@ -680,7 +701,18 @@ export default function P2POrderDetailPage() {
                         : (
                           <div className={`max-w-[80%] flex flex-col gap-0.5 ${msg.isOwn ? "items-end" : "items-start"}`}>
                             {!msg.isOwn && <span className="text-[10px] text-slate-500 px-1">{msg.senderName}</span>}
-                            <div className={`px-3 py-2 rounded-2xl text-sm ${msg.isOwn ? "bg-emerald-500/20 text-emerald-100 rounded-tr-sm" : "bg-white/[0.07] text-slate-200 rounded-tl-sm"}`}>{msg.message}</div>
+                            <div className={`px-3 py-2 rounded-2xl text-sm ${msg.isOwn ? "bg-emerald-500/20 text-emerald-100 rounded-tr-sm" : "bg-white/[0.07] text-slate-200 rounded-tl-sm"}`}>
+                              {msg.message && <p>{msg.message}</p>}
+                              {msg.attachmentType === "image" && msg.attachmentData && (
+                                <img src={msg.attachmentData} alt="attachment" className="mt-1.5 max-w-[180px] rounded-xl object-cover cursor-pointer" onClick={() => window.open(msg.attachmentData!, "_blank")} />
+                              )}
+                              {msg.attachmentType === "pdf" && msg.attachmentData && (
+                                <a href={msg.attachmentData} download="attachment.pdf" className="mt-1.5 flex items-center gap-2 bg-white/10 px-3 py-2 rounded-xl hover:bg-white/15 transition-colors">
+                                  <FileText size={14} className="text-red-400 shrink-0" />
+                                  <span className="text-xs truncate">PDF File</span>
+                                </a>
+                              )}
+                            </div>
                             <span className="text-[10px] text-slate-600 px-1">{new Date(msg.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
                           </div>
                         )
@@ -689,13 +721,28 @@ export default function P2POrderDetailPage() {
                   ))}
                   <div ref={chatEndRef} />
                 </div>
-                <form onSubmit={sendChat} className="flex gap-2 p-3 border-t border-white/[0.06]">
-                  <input value={chatMsg} onChange={e => setChatMsg(e.target.value)} placeholder="Enter message here…" maxLength={500}
-                    className="flex-1 bg-black/30 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-slate-600 outline-none focus:border-emerald-400/40" />
-                  <button type="submit" disabled={!chatMsg.trim() || chatSending}
-                    className="p-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 text-white">
-                    {chatSending ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}
-                  </button>
+                <form onSubmit={sendChat} className="flex flex-col gap-2 p-3 border-t border-white/[0.06]">
+                  {chatAttachment && (
+                    <div className="flex items-center gap-2 bg-white/[0.04] rounded-xl px-3 py-2 border border-white/[0.08]">
+                      {chatAttachment.type === "image"
+                        ? <img src={chatAttachment.data} alt="" className="w-10 h-10 rounded-lg object-cover" />
+                        : <FileText size={18} className="text-red-400 shrink-0" />}
+                      <span className="text-xs text-slate-300 flex-1 truncate">{chatAttachment.name}</span>
+                      <button type="button" onClick={() => setChatAttachment(null)} className="text-slate-500 hover:text-red-400"><X size={13} /></button>
+                    </div>
+                  )}
+                  <div className="flex gap-2">
+                    <input ref={chatFileRef} type="file" accept="image/jpeg,image/png,image/webp,application/pdf" className="hidden" onChange={handleChatFile} />
+                    <button type="button" onClick={() => chatFileRef.current?.click()} className="p-2.5 rounded-xl bg-white/[0.05] hover:bg-white/10 text-slate-400 hover:text-white transition-colors shrink-0">
+                      <Paperclip size={15} />
+                    </button>
+                    <input value={chatMsg} onChange={e => setChatMsg(e.target.value)} placeholder="Enter message here…" maxLength={500}
+                      className="flex-1 bg-black/30 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-slate-600 outline-none focus:border-emerald-400/40" />
+                    <button type="submit" disabled={(!chatMsg.trim() && !chatAttachment) || chatSending}
+                      className="p-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 text-white shrink-0">
+                      {chatSending ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}
+                    </button>
+                  </div>
                 </form>
               </div>}
 
@@ -859,7 +906,17 @@ export default function P2POrderDetailPage() {
                       : (
                         <div className={`max-w-[80%] flex flex-col gap-0.5 ${m.isOwn ? "items-end" : "items-start"}`}>
                           {!m.isOwn && <span className="text-[10px] text-slate-500 px-1">{m.senderName}</span>}
-                          <div className={`px-3 py-2 rounded-2xl text-sm ${m.isOwn ? "bg-emerald-500/20 text-emerald-100 rounded-tr-sm" : "bg-white/[0.07] text-slate-200 rounded-tl-sm"}`}>{m.message}</div>
+                          <div className={`px-3 py-2 rounded-2xl text-sm ${m.isOwn ? "bg-emerald-500/20 text-emerald-100 rounded-tr-sm" : "bg-white/[0.07] text-slate-200 rounded-tl-sm"}`}>
+                            {m.message && <p>{m.message}</p>}
+                            {m.attachmentType === "image" && m.attachmentData && (
+                              <img src={m.attachmentData} alt="attachment" className="mt-1.5 max-w-[180px] rounded-xl object-cover cursor-pointer" onClick={() => window.open(m.attachmentData!, "_blank")} />
+                            )}
+                            {m.attachmentType === "pdf" && m.attachmentData && (
+                              <a href={m.attachmentData} download="attachment.pdf" className="mt-1.5 flex items-center gap-2 bg-white/10 px-3 py-2 rounded-xl hover:bg-white/15 transition-colors">
+                                <FileText size={14} className="text-red-400 shrink-0" /><span className="text-xs">PDF File</span>
+                              </a>
+                            )}
+                          </div>
                           <span className="text-[10px] text-slate-600 px-1">{new Date(m.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
                         </div>
                       )
@@ -869,13 +926,27 @@ export default function P2POrderDetailPage() {
                 <div ref={chatEndRef} />
               </div>
               {isActive ? (
-                <form onSubmit={sendChat} className="flex gap-2 p-3 border-t border-white/[0.06]">
-                  <input value={chatMsg} onChange={e => setChatMsg(e.target.value)} placeholder="Enter message here…" maxLength={500}
-                    className="flex-1 bg-black/30 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-slate-600 outline-none focus:border-emerald-400/40" />
-                  <button type="submit" disabled={!chatMsg.trim() || chatSending}
-                    className="p-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 text-white">
-                    {chatSending ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}
-                  </button>
+                <form onSubmit={sendChat} className="flex flex-col gap-2 p-3 border-t border-white/[0.06]">
+                  {chatAttachment && (
+                    <div className="flex items-center gap-2 bg-white/[0.04] rounded-xl px-3 py-2 border border-white/[0.08]">
+                      {chatAttachment.type === "image"
+                        ? <img src={chatAttachment.data} alt="" className="w-10 h-10 rounded-lg object-cover" />
+                        : <FileText size={18} className="text-red-400 shrink-0" />}
+                      <span className="text-xs text-slate-300 flex-1 truncate">{chatAttachment.name}</span>
+                      <button type="button" onClick={() => setChatAttachment(null)} className="text-slate-500 hover:text-red-400"><X size={13} /></button>
+                    </div>
+                  )}
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => chatFileRef.current?.click()} className="p-2.5 rounded-xl bg-white/[0.05] hover:bg-white/10 text-slate-400 hover:text-white transition-colors shrink-0">
+                      <Paperclip size={15} />
+                    </button>
+                    <input value={chatMsg} onChange={e => setChatMsg(e.target.value)} placeholder="Enter message here…" maxLength={500}
+                      className="flex-1 bg-black/30 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-slate-600 outline-none focus:border-emerald-400/40" />
+                    <button type="submit" disabled={(!chatMsg.trim() && !chatAttachment) || chatSending}
+                      className="p-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 text-white shrink-0">
+                      {chatSending ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}
+                    </button>
+                  </div>
                 </form>
               ) : (
                 <div className="px-4 py-2.5 border-t border-white/[0.06] text-center text-xs text-slate-600">Order closed — chat is read-only</div>
@@ -920,7 +991,17 @@ export default function P2POrderDetailPage() {
                 : (
                   <div className={`max-w-[85%] flex flex-col gap-0.5 ${m.isOwn ? "items-end" : "items-start"}`}>
                     {!m.isOwn && <span className="text-[10px] text-slate-500 px-1">{m.senderName}</span>}
-                    <div className={`px-3 py-2 rounded-2xl text-sm ${m.isOwn ? "bg-emerald-500/20 text-emerald-100 rounded-tr-sm" : "bg-white/[0.07] text-slate-200 rounded-tl-sm"}`}>{m.message}</div>
+                    <div className={`px-3 py-2 rounded-2xl text-sm ${m.isOwn ? "bg-emerald-500/20 text-emerald-100 rounded-tr-sm" : "bg-white/[0.07] text-slate-200 rounded-tl-sm"}`}>
+                      {m.message && <p>{m.message}</p>}
+                      {m.attachmentType === "image" && m.attachmentData && (
+                        <img src={m.attachmentData} alt="attachment" className="mt-1.5 max-w-[200px] rounded-xl object-cover cursor-pointer" onClick={() => window.open(m.attachmentData!, "_blank")} />
+                      )}
+                      {m.attachmentType === "pdf" && m.attachmentData && (
+                        <a href={m.attachmentData} download="attachment.pdf" className="mt-1.5 flex items-center gap-2 bg-white/10 px-3 py-2 rounded-xl hover:bg-white/15 transition-colors">
+                          <FileText size={14} className="text-red-400 shrink-0" /><span className="text-xs">PDF File</span>
+                        </a>
+                      )}
+                    </div>
                     <span className="text-[10px] text-slate-600 px-1">{new Date(m.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
                   </div>
                 )
@@ -931,13 +1012,27 @@ export default function P2POrderDetailPage() {
         </div>
         {/* Input */}
         {isActive ? (
-          <form onSubmit={sendChat} className="flex gap-2 p-3 border-t border-white/[0.06]">
-            <input value={chatMsg} onChange={e => setChatMsg(e.target.value)} placeholder="Enter message here…" maxLength={500}
-              className="flex-1 bg-black/30 border border-white/[0.1] rounded-xl px-3 py-2 text-sm text-white placeholder-slate-600 outline-none focus:border-emerald-400/40" />
-            <button type="submit" disabled={!chatMsg.trim() || chatSending}
-              className="p-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 text-white">
-              {chatSending ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}
-            </button>
+          <form onSubmit={sendChat} className="flex flex-col gap-2 p-3 border-t border-white/[0.06]">
+            {chatAttachment && (
+              <div className="flex items-center gap-2 bg-white/[0.04] rounded-xl px-3 py-2 border border-white/[0.08]">
+                {chatAttachment.type === "image"
+                  ? <img src={chatAttachment.data} alt="" className="w-10 h-10 rounded-lg object-cover" />
+                  : <FileText size={18} className="text-red-400 shrink-0" />}
+                <span className="text-xs text-slate-300 flex-1 truncate">{chatAttachment.name}</span>
+                <button type="button" onClick={() => setChatAttachment(null)} className="text-slate-500 hover:text-red-400"><X size={13} /></button>
+              </div>
+            )}
+            <div className="flex gap-2">
+              <button type="button" onClick={() => chatFileRef.current?.click()} className="p-2.5 rounded-xl bg-white/[0.05] hover:bg-white/10 text-slate-400 hover:text-white transition-colors shrink-0" title="Attach image or PDF">
+                <Paperclip size={15} />
+              </button>
+              <input value={chatMsg} onChange={e => setChatMsg(e.target.value)} placeholder="Enter message here…" maxLength={500}
+                className="flex-1 bg-black/30 border border-white/[0.1] rounded-xl px-3 py-2 text-sm text-white placeholder-slate-600 outline-none focus:border-emerald-400/40" />
+              <button type="submit" disabled={(!chatMsg.trim() && !chatAttachment) || chatSending}
+                className="p-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 text-white shrink-0">
+                {chatSending ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}
+              </button>
+            </div>
           </form>
         ) : (
           <div className="px-4 py-2.5 border-t border-white/[0.06] text-center text-xs text-slate-600">Order closed — chat is read-only</div>

@@ -1292,6 +1292,12 @@ router.get("/p2p/orders/:id/dispute/evidence", async (req: AuthRequest, res) => 
 
 // ─── P2P Chat ─────────────────────────────────────────────────────────────────
 
+// Attachment validation — same ceiling as dispute evidence (images) + PDF cap.
+const CHAT_IMG_RE = /^data:image\/(jpeg|png|webp);base64,/;
+const CHAT_PDF_RE = /^data:application\/pdf;base64,/;
+const CHAT_IMG_MAX = 800 * 1024;  // 800 KB base64
+const CHAT_PDF_MAX = 2 * 1024 * 1024; // 2 MB base64
+
 // GET /p2p/orders/:id/messages
 router.get("/p2p/orders/:id/messages", async (req: AuthRequest, res) => {
   const id = parseInt(String(req.params.id));
@@ -1307,6 +1313,8 @@ router.get("/p2p/orders/:id/messages", async (req: AuthRequest, res) => {
         senderId: p2pChatMessagesTable.senderId,
         message: p2pChatMessagesTable.message,
         isSystem: p2pChatMessagesTable.isSystem,
+        attachmentData: p2pChatMessagesTable.attachmentData,
+        attachmentType: p2pChatMessagesTable.attachmentType,
         createdAt: p2pChatMessagesTable.createdAt,
         senderName: usersTable.fullName,
       })
@@ -1329,13 +1337,35 @@ router.get("/p2p/orders/:id/messages", async (req: AuthRequest, res) => {
 router.post("/p2p/orders/:id/messages", async (req: AuthRequest, res) => {
   const id = parseInt(String(req.params.id));
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
-  const { message } = req.body;
-  if (!message || typeof message !== "string" || !message.trim()) {
-    res.status(400).json({ error: "Message is required" }); return;
+
+  const rawMsg = req.body?.message;
+  const message = typeof rawMsg === "string" ? rawMsg.trim() : "";
+  const attachmentData: string | null = typeof req.body?.attachmentData === "string" ? req.body.attachmentData : null;
+  const attachmentType: string | null = typeof req.body?.attachmentType === "string" ? req.body.attachmentType : null;
+
+  // Must have text OR attachment (or both)
+  if (!message && !attachmentData) {
+    res.status(400).json({ error: "Message or attachment is required" }); return;
   }
-  if (message.trim().length > 500) {
+  if (message.length > 500) {
     res.status(400).json({ error: "Message too long (max 500 chars)" }); return;
   }
+
+  // Validate attachment when present
+  if (attachmentData) {
+    if (attachmentType === "image") {
+      if (!CHAT_IMG_RE.test(attachmentData) || attachmentData.length > CHAT_IMG_MAX) {
+        res.status(400).json({ error: "Invalid image (jpeg/png/webp, max 600 KB)" }); return;
+      }
+    } else if (attachmentType === "pdf") {
+      if (!CHAT_PDF_RE.test(attachmentData) || attachmentData.length > CHAT_PDF_MAX) {
+        res.status(400).json({ error: "Invalid PDF (max 2 MB)" }); return;
+      }
+    } else {
+      res.status(400).json({ error: "Unsupported attachment type" }); return;
+    }
+  }
+
   try {
     const [order] = await db.select().from(p2pOrdersTable)
       .where(and(eq(p2pOrdersTable.id, id), or(eq(p2pOrdersTable.buyerId, req.userId!), eq(p2pOrdersTable.sellerId, req.userId!)))).limit(1);
@@ -1344,11 +1374,16 @@ router.post("/p2p/orders/:id/messages", async (req: AuthRequest, res) => {
       res.status(400).json({ error: "Cannot chat on a closed order" }); return;
     }
     const [msg] = await db.insert(p2pChatMessagesTable).values({
-      orderId: id, senderId: req.userId!, message: message.trim(),
+      orderId: id,
+      senderId: req.userId!,
+      message: message || "",
+      attachmentData: attachmentData ?? undefined,
+      attachmentType: attachmentType ?? undefined,
     }).returning();
     publishOrderEvent({ type: "chat.message", orderId: id, messageId: msg.id, senderId: req.userId! });
     res.status(201).json({ ...msg, isOwn: true, senderName: "You" });
-  } catch {
+  } catch (err: any) {
+    console.error("[p2p/messages] insert error:", err?.message || err);
     res.status(500).json({ error: "Failed to send message" });
   }
 });
