@@ -573,15 +573,22 @@ export default function P2POrderDetailPage() {
                     </div>
                   </div>
 
-                  {/* QR code — if available, show prominently */}
+                  {/* QR code — full-width prominent card (matches deposit UPI pay style) */}
                   {m.qrCodeData && (
-                    <div className="px-4 py-4 border-b border-white/[0.06] flex flex-col items-center gap-2">
-                      <p className="text-slate-500 text-xs uppercase tracking-widest">Scan to Pay</p>
-                      <div className="bg-white rounded-xl p-3 w-36 h-36 flex items-center justify-center">
-                        <img src={m.qrCodeData} alt="QR Code" className="w-full h-full object-contain" />
+                    <>
+                      <div className="mx-4 my-4 rounded-2xl overflow-hidden bg-gradient-to-br from-emerald-900/40 via-teal-900/30 to-emerald-900/40 border border-emerald-500/20 flex flex-col items-center gap-3 py-5 px-4">
+                        <p className="text-emerald-400/70 text-[11px] uppercase tracking-widest font-semibold">Scan to Pay</p>
+                        <div className="bg-white rounded-2xl p-3 w-full max-w-[240px]">
+                          <img src={m.qrCodeData} alt="QR Code" className="w-full h-auto object-contain" />
+                        </div>
                       </div>
-                      <p className="text-slate-600 text-xs">or pay using details below</p>
-                    </div>
+                      {/* Divider */}
+                      <div className="flex items-center gap-3 px-4 pb-1">
+                        <div className="flex-1 h-px bg-white/[0.06]" />
+                        <span className="text-slate-600 text-[10px] uppercase tracking-wider">or pay using details below</span>
+                        <div className="flex-1 h-px bg-white/[0.06]" />
+                      </div>
+                    </>
                   )}
 
                   {/* Payment detail rows — clean copy-button style */}
