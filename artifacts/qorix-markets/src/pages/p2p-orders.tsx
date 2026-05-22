@@ -175,7 +175,7 @@ export default function P2POrdersPage() {
             </Link>
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="flex flex-col gap-5">
             {filtered.map((order) => <OrderCard key={order.id} order={order} />)}
           </div>
         )}
