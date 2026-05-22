@@ -15,6 +15,7 @@ import {
   Settings,
   LogOut,
   ChevronRight,
+  ChevronLeft,
   Shield,
   X,
   AlertTriangle,
@@ -713,22 +714,77 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
         {/* Mobile top bar — relative + z-[60] so logo + bell stay ABOVE the notification backdrop (z-40)
             and panel (z-50). Solid bg ensures dim never bleeds through. */}
-        <div className="md:hidden relative z-[60] flex items-center justify-between px-4 py-3 border-b border-white/5 shrink-0"
+        <div className="md:hidden relative z-[60] flex items-center justify-between px-4 shrink-0 border-b border-white/[0.06]"
           style={{
-            paddingTop: "max(0.75rem, env(safe-area-inset-top, 0.75rem))",
-            background: "#050816",
+            paddingTop: "max(0.875rem, env(safe-area-inset-top, 0.875rem))",
+            paddingBottom: "0.75rem",
+            background: "linear-gradient(180deg, rgba(5,8,22,1) 0%, rgba(7,11,26,0.98) 100%)",
           }}
         >
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg overflow-hidden flex items-center justify-center" style={{ boxShadow: "0 0 20px rgba(16,185,129,0.45)" }}>
-              <QorixLogo size={32} />
-            </div>
-            <span className="text-sm font-bold text-white">
-              Qorix{" "}<span className="text-emerald-400">Markets</span>
-            </span>
-            {!isAdminArea && <VipBadge tier={vipTier} size="xs" />}
-          </div>
-          {!isAdminArea && <NotificationBell variant="mobile" />}
+          {(() => {
+            const PAGE_TITLES: Record<string, string> = {
+              "/p2p": "P2P Market",
+              "/p2p/create-ad": "Create Ad",
+              "/p2p/orders": "My Orders",
+              "/p2p/payment-methods": "Payment Methods",
+              "/transactions": "History",
+              "/referral": "Referrals",
+              "/rewards": "Promotions",
+              "/tasks": "Tasks & Rewards",
+              "/settings": "Settings",
+              "/kyc": "KYC Verification",
+              "/deposit": "Deposit",
+              "/deposit/crypto": "Crypto Deposit",
+              "/deposit/upi": "UPI Deposit",
+              "/withdraw": "Withdraw",
+              "/withdraw/usdt": "Withdraw USDT",
+              "/withdraw/inr": "Withdraw INR",
+              "/market-insights": "Market Insights",
+              "/self-trade": "Self Trade",
+              "/trading-desk": "Trading Desk",
+              "/portfolio": "Portfolio",
+            };
+            const PRIMARY_ROUTES = ["/dashboard", "/wallet", "/invest"];
+            const isPrimary = PRIMARY_ROUTES.includes(location) || location.startsWith("/admin");
+            const pageTitle = PAGE_TITLES[location] ?? (
+              Object.entries(PAGE_TITLES).find(([k]) => location.startsWith(k + "/"))?.[1]
+            );
+
+            if (isPrimary || !pageTitle) {
+              return (
+                <>
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-xl overflow-hidden flex items-center justify-center shrink-0" style={{ boxShadow: "0 0 18px rgba(16,185,129,0.5)" }}>
+                      <QorixLogo size={32} />
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[15px] font-extrabold tracking-tight text-white">
+                        Qorix<span className="text-emerald-400">Markets</span>
+                      </span>
+                      {!isAdminArea && <VipBadge tier={vipTier} size="xs" />}
+                    </div>
+                  </div>
+                  {!isAdminArea && <NotificationBell variant="mobile" />}
+                </>
+              );
+            }
+
+            return (
+              <>
+                <button
+                  onClick={() => window.history.back()}
+                  className="flex items-center justify-center w-9 h-9 -ml-1 rounded-xl text-muted-foreground active:bg-white/8 transition-colors"
+                  aria-label="Go back"
+                >
+                  <ChevronLeft style={{ width: 22, height: 22 }} />
+                </button>
+                <span className="absolute left-1/2 -translate-x-1/2 text-[15px] font-bold text-white tracking-tight">
+                  {pageTitle}
+                </span>
+                {!isAdminArea && <NotificationBell variant="mobile" />}
+              </>
+            );
+          })()}
         </div>
 
         {/* Page content with transitions.
@@ -745,7 +801,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
               exit="exit"
               transition={pageTransition}
             >
-              <div className="p-4 md:p-8">
+              <div className="px-3 py-4 md:p-8">
                 <div className="max-w-6xl mx-auto">
                   {children}
                 </div>

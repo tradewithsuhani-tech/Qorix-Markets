@@ -1112,6 +1112,55 @@
   /* Prevent horizontal scroll on small screens caused by stray wide children */
   html, body { overflow-x: hidden; }
 
+  /* ── Global iOS input zoom prevention ────────────────────────────────────
+     Safari auto-zooms any input with font-size < 16px. Enforce 16px on mobile
+     for ALL native inputs so the viewport never jumps on focus. */
+  @media (max-width: 767px) {
+    input:not([type="range"]),
+    input:not([type="checkbox"]):not([type="radio"]),
+    select,
+    textarea {
+      font-size: 16px !important;
+    }
+  }
+
+  /* ── Premium mobile button press feel ──────────────────────────────────── */
+  /* Any button/link gets a subtle scale-down on press for native-app feel */
+  @media (max-width: 767px) {
+    button:active, a:active {
+      opacity: 0.85;
+    }
+  }
+
+  /* ── Mobile card touch feedback ─────────────────────────────────────────── */
+  .mobile-tap-card {
+    transition: transform 0.12s ease, box-shadow 0.12s ease;
+  }
+  .mobile-tap-card:active {
+    transform: scale(0.985);
+    box-shadow: 0 2px 12px rgba(0,0,0,0.4);
+  }
+
+  /* ── Page header gradient fade (separates top bar from content) ──────────── */
+  .mobile-header-gradient {
+    background: linear-gradient(180deg, #050816 0%, rgba(5,8,22,0.96) 70%, transparent 100%);
+  }
+
+  /* ── Premium frosted glass for mobile cards ─────────────────────────────── */
+  .glass-card-mobile {
+    background: linear-gradient(135deg, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.025) 100%);
+    backdrop-filter: blur(24px) saturate(200%);
+    -webkit-backdrop-filter: blur(24px) saturate(200%);
+    border: 1px solid rgba(255, 255, 255, 0.11);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.09);
+  }
+
+  /* ── Bottom nav fade gradient above nav ─────────────────────────────────── */
+  .bottom-nav-fade {
+    background: linear-gradient(0deg, #050816 0%, transparent 100%);
+    pointer-events: none;
+  }
+
   /* CTA card enhanced glow */
   .cta-glow-card {
     background: linear-gradient(135deg, rgba(59,130,246,0.12) 0%, rgba(99,102,241,0.08) 50%, rgba(139,92,246,0.06) 100%);

@@ -104,8 +104,8 @@ export default function TransactionsPage() {
         transition={{ duration: 0.35, ease: "easeOut" }}
         className="space-y-5 md:space-y-6"
       >
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+        {/* Header — desktop only; mobile shows title in top bar */}
+        <div className="hidden sm:flex flex-col sm:flex-row sm:items-start justify-between gap-3">
           <div className="flex items-start gap-3">
             <button
               onClick={() => setLocation("/wallet")}
@@ -127,6 +127,14 @@ export default function TransactionsPage() {
             </div>
           )}
         </div>
+        {/* Mobile: compact record count badge */}
+        {!isLoading && (
+          <div className="sm:hidden flex items-center justify-end">
+            <span className="text-xs text-muted-foreground bg-white/5 border border-white/8 px-3 py-1 rounded-full">
+              {filtered.length} record{filtered.length !== 1 ? "s" : ""}
+            </span>
+          </div>
+        )}
 
         {/* Filters */}
         <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">

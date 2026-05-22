@@ -174,8 +174,8 @@ export default function SettingsPage() {
         animate="show"
         className="space-y-5 md:space-y-6 max-w-2xl mx-auto"
       >
-        {/* Header */}
-        <motion.div variants={item}>
+        {/* Header — hidden on mobile (shown in top bar) */}
+        <motion.div variants={item} className="hidden sm:block">
           <h1 className="text-2xl md:text-3xl font-bold tracking-tight gradient-text">Account Settings</h1>
           <p className="text-muted-foreground text-sm mt-0.5">Manage your profile and preferences.</p>
         </motion.div>

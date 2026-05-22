@@ -134,8 +134,8 @@ export default function ReferralPage() {
         animate="show"
         className="space-y-5 md:space-y-6 max-w-4xl"
       >
-        {/* ── Header ── */}
-        <motion.div variants={item}>
+        {/* ── Header — desktop only; mobile shows title in top bar ── */}
+        <motion.div variants={item} className="hidden sm:block">
           <div className="flex items-start justify-between">
             <div>
               <h1 className="text-2xl md:text-3xl font-bold tracking-tight gradient-text">Partner Dashboard</h1>

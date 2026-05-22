@@ -1330,14 +1330,13 @@ export function DemoDashboardBody({
       >
         {/* Header */}
         {!hideHeader && (
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+          <div className="hidden sm:block">
             <h1 className="text-2xl md:text-3xl font-bold tracking-tight gradient-text">Overview</h1>
             <p className="text-muted-foreground text-sm mt-0.5">Portfolio performance dashboard</p>
           </div>
-          <div className="flex items-center gap-2 sm:gap-2.5 overflow-x-auto sm:overflow-visible flex-nowrap [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden -mx-4 px-4 sm:mx-0 sm:px-0 pb-1 sm:pb-0">
+          <div className="flex items-center gap-2 overflow-x-auto flex-nowrap no-scrollbar -mx-3 px-3 sm:mx-0 sm:px-0 pb-0.5 sm:pb-0">
             {summary?.riskLevel && <RiskBadge score={perf?.riskScore ?? "Low"} />}
-            {/* VIP, Points pill, and Download Report removed from demo dashboard — not relevant in demo. */}
             <MarketsStatusPill />
             <InsightRotatorPill
               insights={[
@@ -1844,7 +1843,7 @@ export function DemoDashboardBody({
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.22, duration: 0.4 }}
-              className="glass-card p-5 rounded-2xl flex flex-col w-full h-[460px]"
+              className="glass-card p-4 md:p-5 rounded-2xl flex flex-col w-full h-auto md:h-[460px]"
             >
               {swapEquityWithRolling ? rollingReturnsBody : equityCurveBody}
             </motion.div>
@@ -1856,7 +1855,7 @@ export function DemoDashboardBody({
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.3, duration: 0.4 }}
-            className="glass-card p-5 rounded-2xl flex flex-col h-[460px] overflow-hidden"
+            className="glass-card p-4 md:p-5 rounded-2xl flex flex-col h-auto md:h-[460px] overflow-hidden"
           >
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-semibold">Live Trades</h3>
