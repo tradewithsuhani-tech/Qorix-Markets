@@ -1257,78 +1257,136 @@ export default function P2POrderDetailPage() {
 
       {/* ── Dispute / Appeal Modal ───────────────────────────────────────── */}
       {disputeOpen && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 overflow-y-auto">
-          <div className="bg-[#111827] w-full sm:max-w-sm rounded-t-3xl sm:rounded-2xl p-6 space-y-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between">
-              <h2 className="text-white font-bold text-lg">Raise a Dispute</h2>
-              <button onClick={() => setDisputeOpen(false)} className="text-slate-500 hover:text-white"><X size={18} /></button>
-            </div>
-            <p className="text-slate-500 text-xs">
-              Use only if there is a real problem — false disputes may freeze your account. Our team reviews the chat,
-              payment proof and any evidence you share before deciding.
-            </p>
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="bg-[#0e1420] border border-white/[0.08] w-full sm:max-w-sm rounded-t-3xl sm:rounded-3xl overflow-hidden max-h-[92vh] flex flex-col">
 
-            <div className="space-y-2">
-              <label className="text-slate-400 text-xs font-semibold uppercase tracking-wide">Reason</label>
-              <select value={disputeReason} onChange={e => setDisputeReason(e.target.value)}
-                className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-orange-500/40">
-                <option value="">Select a reason…</option>
-                {isBuyer ? (
-                  <>
-                    <option>Seller not releasing USDT after payment</option>
-                    <option>Seller asking for extra payment</option>
-                    <option>Seller's payment method invalid / frozen</option>
-                    <option>Other reason</option>
-                  </>
-                ) : (
-                  <>
-                    <option>Payment not received in my account</option>
-                    <option>Wrong amount received</option>
-                    <option>Payment from third-party / different name</option>
-                    <option>Other reason</option>
-                  </>
-                )}
-              </select>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-slate-400 text-xs font-semibold uppercase tracking-wide">Description (optional)</label>
-              <textarea value={disputeDesc} onChange={e => setDisputeDesc(e.target.value.slice(0, 1000))}
-                rows={3} placeholder="Add any details that will help admin understand the issue…"
-                className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-orange-500/40" />
-              <p className="text-[10px] text-slate-600 text-right">{disputeDesc.length}/1000</p>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-slate-400 text-xs font-semibold uppercase tracking-wide">Evidence Screenshot (optional)</label>
-              {disputeEvidence ? (
-                <div className="relative inline-block">
-                  <img src={disputeEvidence} alt="Evidence" className="max-h-32 rounded-lg border border-white/10" />
-                  <button onClick={() => setDisputeEvidence(null)}
-                    className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs">×</button>
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-white/[0.06] shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-2xl bg-orange-500/15 flex items-center justify-center">
+                  <AlertCircle size={17} className="text-orange-400" />
                 </div>
-              ) : (
-                <label className="flex items-center justify-center gap-2 px-3 py-3 bg-black/40 border border-dashed border-white/15 rounded-xl text-slate-400 text-sm cursor-pointer hover:border-orange-500/40">
-                  <Upload size={16} />
-                  <span>Upload screenshot</span>
-                  <input type="file" accept="image/png,image/jpeg,image/jpg,image/webp" className="hidden" onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (!f) return;
-                    if (f.size > 450 * 1024) { toast({ title: "Image too large", description: "Max 450KB", variant: "destructive" }); return; }
-                    const reader = new FileReader();
-                    reader.onload = () => setDisputeEvidence(reader.result as string);
-                    reader.readAsDataURL(f);
-                  }} />
-                </label>
-              )}
+                <div>
+                  <h2 className="text-white font-bold text-base leading-tight">Raise a Dispute</h2>
+                  <p className="text-slate-500 text-[11px]">Admin will review and decide</p>
+                </div>
+              </div>
+              <button onClick={() => setDisputeOpen(false)}
+                className="w-7 h-7 rounded-full bg-white/[0.05] hover:bg-white/10 flex items-center justify-center text-slate-500 hover:text-white transition-colors">
+                <X size={14} />
+              </button>
             </div>
 
-            <div className="flex gap-2 pt-2">
-              <button onClick={() => setDisputeOpen(false)}
-                className="flex-1 py-2.5 rounded-xl bg-white/5 text-slate-300 font-medium text-sm hover:bg-white/10">
+            {/* Scrollable body */}
+            <div className="overflow-y-auto flex-1 px-5 py-4 space-y-4">
+
+              {/* Warning banner */}
+              <div className="flex items-start gap-3 bg-red-500/[0.07] border border-red-500/20 rounded-2xl px-4 py-3">
+                <AlertCircle size={14} className="text-red-400 shrink-0 mt-0.5" />
+                <p className="text-red-300/80 text-xs leading-relaxed">
+                  Only raise a dispute for a genuine issue. False disputes may result in account suspension. Our team reviews chat history, payment proof, and all evidence before deciding.
+                </p>
+              </div>
+
+              {/* Reason */}
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                  Reason <span className="text-red-400">*</span>
+                </label>
+                <div className="relative">
+                  <select
+                    value={disputeReason}
+                    onChange={e => setDisputeReason(e.target.value)}
+                    className={`w-full appearance-none bg-white/[0.04] border rounded-xl px-3.5 py-3 text-sm outline-none transition-colors pr-9 ${
+                      disputeReason ? "border-orange-500/40 text-white" : "border-white/[0.08] text-slate-500 focus:border-white/20"
+                    }`}
+                  >
+                    <option value="" className="bg-[#0e1420]">Select a reason…</option>
+                    {isBuyer ? (
+                      <>
+                        <option className="bg-[#0e1420]">Seller not releasing USDT after payment</option>
+                        <option className="bg-[#0e1420]">Seller asking for extra payment</option>
+                        <option className="bg-[#0e1420]">Seller's payment method invalid / frozen</option>
+                        <option className="bg-[#0e1420]">Other reason</option>
+                      </>
+                    ) : (
+                      <>
+                        <option className="bg-[#0e1420]">Payment not received in my account</option>
+                        <option className="bg-[#0e1420]">Wrong amount received</option>
+                        <option className="bg-[#0e1420]">Payment from third-party / different name</option>
+                        <option className="bg-[#0e1420]">Other reason</option>
+                      </>
+                    )}
+                  </select>
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500">
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  </div>
+                </div>
+              </div>
+
+              {/* Description */}
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                  Description <span className="text-slate-600 normal-case font-normal tracking-normal">(optional)</span>
+                </label>
+                <textarea
+                  value={disputeDesc}
+                  onChange={e => setDisputeDesc(e.target.value.slice(0, 1000))}
+                  rows={3}
+                  placeholder="Explain the issue in detail so our team can review it quickly…"
+                  className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-3.5 py-3 text-sm text-white placeholder-slate-600 outline-none focus:border-white/20 resize-none transition-colors"
+                />
+                <p className="text-[10px] text-slate-600 text-right">{disputeDesc.length}/1000</p>
+              </div>
+
+              {/* Evidence */}
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                  Evidence Screenshot <span className="text-slate-600 normal-case font-normal tracking-normal">(optional)</span>
+                </label>
+                {disputeEvidence ? (
+                  <div className="relative rounded-xl overflow-hidden border border-orange-500/25 bg-black/30">
+                    <img src={disputeEvidence} alt="Evidence" className="w-full max-h-40 object-contain" />
+                    <button
+                      onClick={() => setDisputeEvidence(null)}
+                      className="absolute top-2 right-2 w-6 h-6 rounded-full bg-black/70 text-white text-xs flex items-center justify-center hover:bg-red-500/80 transition-colors"
+                    >×</button>
+                    <div className="absolute bottom-2 left-2 flex items-center gap-1 bg-orange-500/20 border border-orange-500/30 px-2 py-0.5 rounded-full">
+                      <span className="text-orange-300 text-[10px] font-semibold">✓ Uploaded</span>
+                    </div>
+                  </div>
+                ) : (
+                  <label className="flex flex-col items-center justify-center gap-2 w-full py-5 rounded-xl border-2 border-dashed border-white/[0.08] hover:border-orange-500/30 hover:bg-orange-500/[0.03] cursor-pointer transition-all">
+                    <div className="w-9 h-9 rounded-xl bg-white/[0.05] flex items-center justify-center">
+                      <Upload size={16} className="text-slate-400" />
+                    </div>
+                    <div className="text-center">
+                      <p className="text-slate-300 text-xs font-semibold">Tap to upload evidence</p>
+                      <p className="text-slate-600 text-[10px] mt-0.5">JPG, PNG or WebP · max 450KB</p>
+                    </div>
+                    <input type="file" accept="image/png,image/jpeg,image/jpg,image/webp" className="hidden" onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (!f) return;
+                      if (f.size > 450 * 1024) { toast({ title: "Image too large", description: "Max 450KB", variant: "destructive" }); return; }
+                      const reader = new FileReader();
+                      reader.onload = () => setDisputeEvidence(reader.result as string);
+                      reader.readAsDataURL(f);
+                    }} />
+                  </label>
+                )}
+              </div>
+            </div>
+
+            {/* Footer actions */}
+            <div className="px-5 pb-5 pt-3 border-t border-white/[0.06] flex gap-2.5 shrink-0">
+              <button
+                onClick={() => setDisputeOpen(false)}
+                className="flex-1 py-3 rounded-2xl bg-white/[0.05] hover:bg-white/[0.08] border border-white/[0.07] text-slate-400 hover:text-white text-sm font-medium transition-all"
+              >
                 Cancel
               </button>
-              <button disabled={!disputeReason || disputeSubmitting}
+              <button
+                disabled={!disputeReason || disputeSubmitting}
                 onClick={async () => {
                   if (!order) return;
                   setDisputeSubmitting(true);
@@ -1349,8 +1407,13 @@ export default function P2POrderDetailPage() {
                     toast({ title: "Failed", description: err?.message || "Could not raise dispute", variant: "destructive" });
                   } finally { setDisputeSubmitting(false); }
                 }}
-                className="flex-1 py-2.5 rounded-xl bg-orange-500 text-white font-semibold text-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-orange-600">
-                {disputeSubmitting ? <Loader2 size={14} className="animate-spin inline" /> : "Submit Dispute"}
+                className="flex-1 py-3 rounded-2xl bg-gradient-to-r from-orange-500 to-orange-400 hover:from-orange-400 hover:to-orange-300 disabled:opacity-35 disabled:cursor-not-allowed text-white font-bold text-sm flex items-center justify-center gap-2 transition-all active:scale-[0.98] shadow-lg shadow-orange-500/20"
+              >
+                {disputeSubmitting
+                  ? <Loader2 size={15} className="animate-spin" />
+                  : <AlertCircle size={15} />
+                }
+                Submit Dispute
               </button>
             </div>
           </div>
