@@ -4,7 +4,7 @@ import { Layout } from "@/components/layout";
 import { authFetch } from "@/lib/auth-fetch";
 import { useToast } from "@/hooks/use-toast";
 import {
-  ArrowLeft, Clock, CheckCircle2, XCircle,
+  Clock, CheckCircle2, XCircle,
   AlertCircle, TrendingUp, TrendingDown, RefreshCw,
 } from "lucide-react";
 
@@ -122,18 +122,8 @@ export default function P2POrdersPage() {
       <div className="max-w-3xl mx-auto px-4 py-6 space-y-5">
 
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Link href="/p2p">
-              <button className="p-2 rounded-xl glass-card text-slate-400 hover:text-white">
-                <ArrowLeft size={16} />
-              </button>
-            </Link>
-            <div>
-              <h1 className="text-xl font-bold text-white">My Orders</h1>
-              <p className="text-slate-400 text-xs mt-0.5">{orders.length} total orders</p>
-            </div>
-          </div>
-          <button onClick={loadOrders} className="p-2 rounded-xl glass-card text-slate-400 hover:text-white">
+          <p className="text-slate-400 text-xs">{orders.length} total orders</p>
+          <button onClick={loadOrders} className="p-2 rounded-xl glass-card text-slate-400 hover:text-white" aria-label="Refresh orders">
             <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
           </button>
         </div>
