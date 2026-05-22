@@ -40,6 +40,7 @@ export const signalTradeDistributionsTable = pgTable("signal_trade_distributions
 }, (t) => ({
   tradeUserUnique: uniqueIndex("signal_trade_dist_trade_user_unique").on(t.tradeId, t.userId),
   userIdx: index("signal_trade_dist_user_idx").on(t.userId),
+  userCreatedIdx: index("signal_trade_dist_user_created_idx").on(t.userId, t.createdAt),
 }));
 
 export const signalTradeAuditTable = pgTable("signal_trade_audit", {

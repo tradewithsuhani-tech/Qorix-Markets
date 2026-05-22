@@ -79,6 +79,28 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes("node_modules")) {
+            if (id.includes("/pages/admin")) return "chunk-admin";
+            if (id.includes("/pages/p2p")) return "chunk-p2p";
+            if (id.includes("/pages/marketing")) return "chunk-marketing";
+            if (id.includes("/pages/legal")) return "chunk-legal";
+            if (id.includes("/pages/merchant")) return "chunk-merchant";
+            if (id.includes("/pages/deposit")) return "chunk-deposit";
+            if (id.includes("/pages/withdraw")) return "chunk-withdraw";
+            return;
+          }
+          if (id.includes("recharts") || id.includes("d3-") || id.includes("victory")) return "vendor-charts";
+          if (id.includes("framer-motion")) return "vendor-motion";
+          if (id.includes("@tanstack/react-query") || id.includes("react-query")) return "vendor-query";
+          if (id.includes("react-dom")) return "vendor-react-dom";
+          if (id.includes("html2canvas")) return "vendor-html2canvas";
+          return "vendor";
+        },
+      },
+    },
   },
   server: {
     port,

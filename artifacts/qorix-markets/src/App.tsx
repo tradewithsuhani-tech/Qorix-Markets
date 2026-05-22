@@ -1,4 +1,5 @@
-import { Switch, Route, Router as WouterRouter } from "wouter";
+import { lazy, Suspense, useEffect, useState } from "react";
+import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { SiteActivityToaster } from "@/components/site-activity-toaster";
@@ -9,13 +10,104 @@ import { LoginApprovalGate } from "@/components/login-approval-modal";
 import { PWAInstallPrompt } from "@/components/pwa-install-prompt";
 import { SplashScreen, useSplash } from "@/components/splash-screen";
 import { QorixAssistant } from "@/components/qorix-assistant";
-import AdminChatsPage from "@/pages/admin-chats";
-import AdminCommunicationPage from "@/pages/admin-communication";
-import AdminContentPage from "@/pages/admin-content";
-import AdminBlogPage from "@/pages/admin-blog";
-import AdminTestPage from "@/pages/admin-test";
-import { useLocation } from "wouter";
-import { useEffect, useState } from "react";
+import { HighImpactNotificationBanner } from "@/components/economic-news-widget";
+import { UpdateBanner } from "@/components/update-banner";
+import { MaintenanceBanner } from "@/components/maintenance-banner";
+// All pages are lazy-loaded so the browser only downloads the chunk needed for
+// the current route. This converts the single 3.4 MB bundle into small parallel
+// chunks that load in ~400 KB instead of all-at-once.
+const Landing = lazy(() => import("@/pages/marketing/home"));
+const LoginPage = lazy(() => import("@/pages/login"));
+const ForgotPasswordPage = lazy(() => import("@/pages/forgot-password"));
+const AdminLoginPage = lazy(() => import("@/pages/admin-login"));
+const Dashboard = lazy(() => import("@/pages/dashboard"));
+const WalletPage = lazy(() => import("@/pages/wallet"));
+const DepositPage = lazy(() => import("@/pages/deposit"));
+const DepositUpiPage = lazy(() => import("@/pages/deposit-upi"));
+const DepositUpiPayPage = lazy(() => import("@/pages/deposit-upi-pay"));
+const DepositNetBankingPage = lazy(() => import("@/pages/deposit-netbanking"));
+const DepositNetBankingDetailsPage = lazy(() => import("@/pages/deposit-netbanking-details"));
+const DepositVerifyPage = lazy(() => import("@/pages/deposit-verify"));
+const DepositCryptoPage = lazy(() => import("@/pages/deposit-crypto"));
+const DepositSuccessPage = lazy(() => import("@/pages/deposit-success"));
+const WithdrawPage = lazy(() => import("@/pages/withdraw"));
+const WithdrawUsdtPage = lazy(() => import("@/pages/withdraw-usdt"));
+const WithdrawInrPage = lazy(() => import("@/pages/withdraw-inr"));
+const WithdrawUserTransferPage = lazy(() => import("@/pages/withdraw-user-transfer"));
+const WithdrawReviewPage = lazy(() => import("@/pages/withdraw-review"));
+const WithdrawOtpPage = lazy(() => import("@/pages/withdraw-otp"));
+const WithdrawSuccessPage = lazy(() => import("@/pages/withdraw-success"));
+const InvestPage = lazy(() => import("@/pages/invest"));
+const SelfTradePage = lazy(() => import("@/pages/self-trade"));
+const PortfolioPage = lazy(() => import("@/pages/portfolio"));
+const TransactionsPage = lazy(() => import("@/pages/transactions"));
+const ReferralPage = lazy(() => import("@/pages/referral"));
+const RewardsPage = lazy(() => import("@/pages/rewards"));
+const TasksPage = lazy(() => import("@/pages/tasks"));
+const AdminPage = lazy(() => import("@/pages/admin"));
+const AdminIntelligencePage = lazy(() => import("@/pages/admin-intelligence"));
+const AdminFraudPage = lazy(() => import("@/pages/admin-fraud"));
+const AdminPaymentMethodsPage = lazy(() => import("@/pages/admin-payment-methods"));
+const AdminSubscriptionsPage = lazy(() => import("@/pages/admin-subscriptions"));
+const AdminSubAdminsPage = lazy(() => import("@/pages/admin-sub-admins"));
+const AdminMerchantsPage = lazy(() => import("@/pages/admin-merchants"));
+const AdminEscalationContactsPage = lazy(() => import("@/pages/admin-escalation-contacts"));
+const MerchantLoginPage = lazy(() => import("@/pages/merchant-login"));
+const MerchantDashboardPage = lazy(() => import("@/pages/merchant-dashboard"));
+const MerchantPaymentMethodsPage = lazy(() => import("@/pages/merchant-payment-methods"));
+const MerchantDepositsPage = lazy(() => import("@/pages/merchant-deposits"));
+const MerchantWithdrawalsPage = lazy(() => import("@/pages/merchant-withdrawals"));
+const MerchantSettingsPage = lazy(() => import("@/pages/merchant-settings"));
+const AdminTaskProofsPage = lazy(() => import("@/pages/admin-task-proofs"));
+const AdminSignalTradesPage = lazy(() => import("@/pages/admin-signal-trades"));
+const SignalHistoryPage = lazy(() => import("@/pages/signal-history"));
+const SettingsPage = lazy(() => import("@/pages/settings"));
+const DevicesPage = lazy(() => import("@/pages/devices"));
+const KycPage = lazy(() => import("@/pages/kyc"));
+const AdminKycPage = lazy(() => import("@/pages/admin-kyc"));
+const AdminP2pDisputesPage = lazy(() => import("@/pages/admin-p2p-disputes"));
+const AdminP2pPage = lazy(() => import("@/pages/admin-p2p"));
+const AdminAnalyticsPage = lazy(() => import("@/pages/admin-modules").then(m => ({ default: m.AdminAnalyticsPage })));
+const AdminHiddenFeaturesPage = lazy(() => import("@/pages/admin-modules").then(m => ({ default: m.AdminHiddenFeaturesPage })));
+const AdminLogsPage = lazy(() => import("@/pages/admin-modules").then(m => ({ default: m.AdminLogsPage })));
+const AdminSystemPage = lazy(() => import("@/pages/admin-modules").then(m => ({ default: m.AdminSystemPage })));
+const AdminTradingPage = lazy(() => import("@/pages/admin-modules").then(m => ({ default: m.AdminTradingPage })));
+const AdminTransactionsPage = lazy(() => import("@/pages/admin-modules").then(m => ({ default: m.AdminTransactionsPage })));
+const AdminUsersPage = lazy(() => import("@/pages/admin-modules").then(m => ({ default: m.AdminUsersPage })));
+const AdminWalletPage = lazy(() => import("@/pages/admin-modules").then(m => ({ default: m.AdminWalletPage })));
+const AnalyticsPage = lazy(() => import("@/pages/analytics"));
+const TradingDeskPage = lazy(() => import("@/pages/trading-desk"));
+const TradeActivityPage = lazy(() => import("@/pages/trade-activity"));
+const VerifyPage = lazy(() => import("@/pages/verify"));
+const MarketInsightsPage = lazy(() => import("@/pages/market-insights"));
+const TermsPage = lazy(() => import("@/pages/legal/terms"));
+const PrivacyPage = lazy(() => import("@/pages/legal/privacy"));
+const RiskDisclosurePage = lazy(() => import("@/pages/legal/risk-disclosure"));
+const AmlKycPage = lazy(() => import("@/pages/legal/aml-kyc"));
+const RegulationPage = lazy(() => import("@/pages/legal/regulation"));
+const AboutPage = lazy(() => import("@/pages/marketing/about"));
+const ContactPage = lazy(() => import("@/pages/marketing/contact"));
+const PartnersPage = lazy(() => import("@/pages/marketing/partners"));
+const AiTradingPage = lazy(() => import("@/pages/marketing/ai-trading"));
+const ZeroFeePage = lazy(() => import("@/pages/marketing/zero-fee"));
+const LowInvestmentPage = lazy(() => import("@/pages/marketing/low-investment"));
+const BlogIndexPage = lazy(() => import("@/pages/marketing/blog-index"));
+const BlogPostPage = lazy(() => import("@/pages/marketing/blog-post"));
+const P2PMarketPage = lazy(() => import("@/pages/p2p-market"));
+const P2PCreateAdPage = lazy(() => import("@/pages/p2p-create-ad"));
+const P2POrdersPage = lazy(() => import("@/pages/p2p-orders"));
+const P2PPaymentMethodsPage = lazy(() => import("@/pages/p2p-payment-methods"));
+const P2PMyAdsPage = lazy(() => import("@/pages/p2p-my-ads"));
+const P2PPlaceOrderPage = lazy(() => import("@/pages/p2p-place-order"));
+const P2POrderDetailPage = lazy(() => import("@/pages/p2p-order-detail"));
+const P2PSellFlowPage = lazy(() => import("@/pages/p2p-sell-flow"));
+const P2PChatPage = lazy(() => import("@/pages/p2p-chat"));
+const P2PUserCenterPage = lazy(() => import("@/pages/p2p-user-center"));
+const AdminChatsPage = lazy(() => import("@/pages/admin-chats"));
+const AdminCommunicationPage = lazy(() => import("@/pages/admin-communication"));
+const AdminContentPage = lazy(() => import("@/pages/admin-content"));
+const AdminBlogPage = lazy(() => import("@/pages/admin-blog"));
+const AdminTestPage = lazy(() => import("@/pages/admin-test"));
 
 function OfflineScreen() {
   const [dots, setDots] = useState(0);
@@ -183,101 +275,6 @@ function useOnlineStatus() {
   }, []);
   return isOnline;
 }
-
-import Landing from "@/pages/marketing/home";
-import LoginPage from "@/pages/login";
-import ForgotPasswordPage from "@/pages/forgot-password";
-import AdminLoginPage from "@/pages/admin-login";
-import Dashboard from "@/pages/dashboard";
-import WalletPage from "@/pages/wallet";
-import DepositPage from "@/pages/deposit";
-import DepositUpiPage from "@/pages/deposit-upi";
-import DepositUpiPayPage from "@/pages/deposit-upi-pay";
-import DepositNetBankingPage from "@/pages/deposit-netbanking";
-import DepositNetBankingDetailsPage from "@/pages/deposit-netbanking-details";
-import DepositVerifyPage from "@/pages/deposit-verify";
-import DepositCryptoPage from "@/pages/deposit-crypto";
-import DepositSuccessPage from "@/pages/deposit-success";
-import WithdrawPage from "@/pages/withdraw";
-import WithdrawUsdtPage from "@/pages/withdraw-usdt";
-import WithdrawInrPage from "@/pages/withdraw-inr";
-import WithdrawUserTransferPage from "@/pages/withdraw-user-transfer";
-import WithdrawReviewPage from "@/pages/withdraw-review";
-import WithdrawOtpPage from "@/pages/withdraw-otp";
-import WithdrawSuccessPage from "@/pages/withdraw-success";
-import InvestPage from "@/pages/invest";
-import SelfTradePage from "@/pages/self-trade";
-import PortfolioPage from "@/pages/portfolio";
-import TransactionsPage from "@/pages/transactions";
-import ReferralPage from "@/pages/referral";
-import RewardsPage from "@/pages/rewards";
-import TasksPage from "@/pages/tasks";
-import AdminPage from "@/pages/admin";
-import AdminIntelligencePage from "@/pages/admin-intelligence";
-import AdminFraudPage from "@/pages/admin-fraud";
-import AdminPaymentMethodsPage from "@/pages/admin-payment-methods";
-import AdminSubscriptionsPage from "@/pages/admin-subscriptions";
-import AdminSubAdminsPage from "@/pages/admin-sub-admins";
-import AdminMerchantsPage from "@/pages/admin-merchants";
-import AdminEscalationContactsPage from "@/pages/admin-escalation-contacts";
-import MerchantLoginPage from "@/pages/merchant-login";
-import MerchantDashboardPage from "@/pages/merchant-dashboard";
-import MerchantPaymentMethodsPage from "@/pages/merchant-payment-methods";
-import MerchantDepositsPage from "@/pages/merchant-deposits";
-import MerchantWithdrawalsPage from "@/pages/merchant-withdrawals";
-import MerchantSettingsPage from "@/pages/merchant-settings";
-import AdminTaskProofsPage from "@/pages/admin-task-proofs";
-import AdminSignalTradesPage from "@/pages/admin-signal-trades";
-import SignalHistoryPage from "@/pages/signal-history";
-import SettingsPage from "@/pages/settings";
-import DevicesPage from "@/pages/devices";
-import KycPage from "@/pages/kyc";
-import AdminKycPage from "@/pages/admin-kyc";
-import AdminP2pDisputesPage from "@/pages/admin-p2p-disputes";
-import AdminP2pPage from "@/pages/admin-p2p";
-import {
-  AdminAnalyticsPage,
-  AdminHiddenFeaturesPage,
-  AdminLogsPage,
-  AdminSystemPage,
-  AdminTradingPage,
-  AdminTransactionsPage,
-  AdminUsersPage,
-  AdminWalletPage,
-} from "@/pages/admin-modules";
-import AnalyticsPage from "@/pages/analytics";
-import TradingDeskPage from "@/pages/trading-desk";
-import TradeActivityPage from "@/pages/trade-activity";
-import VerifyPage from "@/pages/verify";
-import MarketInsightsPage from "@/pages/market-insights";
-import { HighImpactNotificationBanner } from "@/components/economic-news-widget";
-import { UpdateBanner } from "@/components/update-banner";
-import { MaintenanceBanner } from "@/components/maintenance-banner";
-import TermsPage from "@/pages/legal/terms";
-import PrivacyPage from "@/pages/legal/privacy";
-import RiskDisclosurePage from "@/pages/legal/risk-disclosure";
-import AmlKycPage from "@/pages/legal/aml-kyc";
-import RegulationPage from "@/pages/legal/regulation";
-// Public marketing / SEO pages — separate from the authenticated app shell
-// so they keep clean URLs (no /m/ prefix) and a marketing-only header.
-import AboutPage from "@/pages/marketing/about";
-import ContactPage from "@/pages/marketing/contact";
-import PartnersPage from "@/pages/marketing/partners";
-import AiTradingPage from "@/pages/marketing/ai-trading";
-import ZeroFeePage from "@/pages/marketing/zero-fee";
-import LowInvestmentPage from "@/pages/marketing/low-investment";
-import BlogIndexPage from "@/pages/marketing/blog-index";
-import BlogPostPage from "@/pages/marketing/blog-post";
-import P2PMarketPage from "@/pages/p2p-market";
-import P2PCreateAdPage from "@/pages/p2p-create-ad";
-import P2POrdersPage from "@/pages/p2p-orders";
-import P2PPaymentMethodsPage from "@/pages/p2p-payment-methods";
-import P2PMyAdsPage from "@/pages/p2p-my-ads";
-import P2PPlaceOrderPage from "@/pages/p2p-place-order";
-import P2POrderDetailPage from "@/pages/p2p-order-detail";
-import P2PSellFlowPage from "@/pages/p2p-sell-flow";
-import P2PChatPage from "@/pages/p2p-chat";
-import P2PUserCenterPage from "@/pages/p2p-user-center";
 
 // Perf overhaul: tighten query-client defaults so we stop firing 50+
 // requests on every render. Per-query polling (refetchInterval) still
@@ -582,7 +579,13 @@ function AppContent() {
   return (
     <MaintenanceGate>
       {showSplash && <SplashScreen onDone={onSplashDone} />}
-      <Router />
+      <Suspense fallback={
+        <div className="h-screen w-full bg-background flex items-center justify-center">
+          <div className="w-8 h-8 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" />
+        </div>
+      }>
+        <Router />
+      </Suspense>
       {!isAdminArea && !isPublicArea && <HighImpactNotificationBanner />}
       {!isAdminArea && <QorixAssistant guestMode={isPublicArea} hideTrigger={isPublicArea} />}
       {!isAdminArea && <PWAInstallPrompt />}

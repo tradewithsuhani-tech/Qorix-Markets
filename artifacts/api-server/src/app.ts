@@ -1,4 +1,5 @@
 import express, { type Express, type Request, type Response, type NextFunction } from "express";
+import compression from "compression";
 import cors from "cors";
 import helmet from "helmet";
 import pinoHttp from "pino-http";
@@ -27,6 +28,10 @@ const app: Express = express();
 // and rate-limit throws ERR_ERL_UNEXPECTED_X_FORWARDED_FOR. Setting `1` is
 // safe here because we only ever sit behind exactly one Replit proxy hop.
 app.set("trust proxy", 1);
+
+// Gzip all JSON/text API responses — reduces payload size 5-10x for list
+// endpoints and dashboard data. Skips already-compressed content types.
+app.use(compression());
 
 app.use(
   pinoHttp({

@@ -96,8 +96,8 @@ router.use("/admin", auditAdminRequest);
 const adminStatsCache = new RedisCache<Awaited<ReturnType<typeof getAdminStatsData>>>({
   getRedis: getRedisConnection,
   namespace: "admin-stats",
-  ttlMs: 5_000,
-  fallback: new TTLCache<Awaited<ReturnType<typeof getAdminStatsData>>>(5_000),
+  ttlMs: 30_000,
+  fallback: new TTLCache<Awaited<ReturnType<typeof getAdminStatsData>>>(30_000),
 });
 
 type AdminSystemHealthResponse = {
@@ -114,8 +114,8 @@ type AdminSystemHealthResponse = {
 const adminSystemHealthCache = new RedisCache<AdminSystemHealthResponse>({
   getRedis: getRedisConnection,
   namespace: "admin-system-health",
-  ttlMs: 15_000,
-  fallback: new TTLCache<AdminSystemHealthResponse>(15_000),
+  ttlMs: 60_000,
+  fallback: new TTLCache<AdminSystemHealthResponse>(60_000),
 });
 
 export async function getSlotData() {
