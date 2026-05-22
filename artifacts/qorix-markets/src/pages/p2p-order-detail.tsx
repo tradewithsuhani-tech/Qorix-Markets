@@ -573,20 +573,20 @@ export default function P2POrderDetailPage() {
                     </div>
                   </div>
 
-                  {/* QR code — full-width prominent card (matches deposit UPI pay style) */}
+                  {/* QR code — matches deposit-upi-pay.tsx exactly */}
                   {m.qrCodeData && (
                     <>
-                      <div className="mx-4 my-4 rounded-2xl overflow-hidden bg-gradient-to-br from-emerald-900/40 via-teal-900/30 to-emerald-900/40 border border-emerald-500/20 flex flex-col items-center gap-3 py-5 px-4">
-                        <p className="text-emerald-400/70 text-[11px] uppercase tracking-widest font-semibold">Scan to Pay</p>
-                        <div className="bg-white rounded-2xl p-3 w-full max-w-[240px]">
-                          <img src={m.qrCodeData} alt="QR Code" className="w-full h-auto object-contain" />
+                      <div className="mx-4 my-4 rounded-2xl border border-emerald-500/30 bg-gradient-to-br from-emerald-500/15 to-teal-500/5 p-5 flex flex-col items-center gap-3.5">
+                        <div className="text-[10px] font-bold tracking-[0.16em] text-emerald-400">SCAN TO PAY</div>
+                        <div className="bg-white p-3 rounded-xl">
+                          <img src={m.qrCodeData} alt="QR Code" className="w-48 h-auto object-contain" />
                         </div>
                       </div>
                       {/* Divider */}
-                      <div className="flex items-center gap-3 px-4 pb-1">
-                        <div className="flex-1 h-px bg-white/[0.06]" />
-                        <span className="text-slate-600 text-[10px] uppercase tracking-wider">or pay using details below</span>
-                        <div className="flex-1 h-px bg-white/[0.06]" />
+                      <div className="flex items-center gap-2.5 px-4 pb-1">
+                        <div className="flex-1 h-px bg-white/10" />
+                        <div className="text-[10px] font-bold tracking-widest text-slate-500">OR PAY USING UPI ID</div>
+                        <div className="flex-1 h-px bg-white/10" />
                       </div>
                     </>
                   )}
@@ -1241,20 +1241,20 @@ export default function P2POrderDetailPage() {
       {/* ── QR Code Modal ────────────────────────────────────────────────── */}
       {qrModal && qrModal.qrCodeData && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl w-full max-w-xs overflow-hidden shadow-2xl">
-            <div className="flex items-center justify-between px-5 pt-5 pb-3">
+          <div className="glass-card rounded-2xl w-full max-w-xs overflow-hidden shadow-2xl border border-white/[0.08]">
+            <div className="flex items-center justify-between px-5 pt-4 pb-3">
               <div>
-                <p className="font-bold text-gray-900">{qrModal.displayName}</p>
-                <p className="text-gray-500 text-xs">{qrModal.type}</p>
+                <p className="font-bold text-white">{qrModal.displayName}</p>
+                <p className="text-slate-400 text-xs">{qrModal.type} Payment</p>
               </div>
-              <button onClick={() => setQrModal(null)} className="text-gray-400 hover:text-gray-700"><X size={18} /></button>
+              <button onClick={() => setQrModal(null)} className="text-slate-500 hover:text-white"><X size={18} /></button>
             </div>
-            <div className="text-center px-5 pb-2">
-              <p className="font-bold text-sm uppercase tracking-wide text-purple-600">ACCEPTED HERE</p>
-              <p className="text-gray-500 text-xs mt-1">Scan & Pay Using App</p>
-            </div>
-            <div className="px-5 pb-5">
-              <img src={qrModal.qrCodeData} alt="QR Code" className="w-full rounded-xl" />
+            {/* Same card as deposit-upi-pay */}
+            <div className="mx-4 mb-4 rounded-2xl border border-emerald-500/30 bg-gradient-to-br from-emerald-500/15 to-teal-500/5 p-5 flex flex-col items-center gap-3.5">
+              <div className="text-[10px] font-bold tracking-[0.16em] text-emerald-400">SCAN TO PAY</div>
+              <div className="bg-white p-3 rounded-xl">
+                <img src={qrModal.qrCodeData} alt="QR Code" className="w-48 h-auto object-contain" />
+              </div>
             </div>
           </div>
         </div>
