@@ -795,33 +795,93 @@ export default function P2POrderDetailPage() {
           {/* ── SELLER PAID: confirm release ─────────────────────────────── */}
           {!isBuyer && order.status === "paid" && (
             <div className="space-y-3">
-              <div className="flex items-start gap-3 bg-blue-500/5 border border-blue-500/20 rounded-xl p-4">
-                <AlertCircle size={16} className="text-blue-400 shrink-0 mt-0.5" />
-                <div>
-                  <p className="text-blue-300 text-sm font-semibold">Buyer has marked payment as sent</p>
-                  <p className="text-slate-400 text-xs mt-1">Verify ₹{order.fiatAmount.toLocaleString("en-IN")} in your account before releasing USDT.</p>
-                  {order.paymentRef && (
-                    <div className="mt-2 flex items-center gap-2 text-xs">
-                      <span className="text-slate-500">Payment Ref:</span>
-                      <span className="text-white font-mono">{order.paymentRef}</span>
+
+              {/* Payment proof card */}
+              <div className="rounded-2xl border border-blue-500/20 bg-blue-500/[0.04] overflow-hidden">
+                {/* Card header */}
+                <div className="flex items-center gap-3 px-4 py-3 border-b border-blue-500/15 bg-blue-500/[0.06]">
+                  <div className="w-7 h-7 rounded-xl bg-blue-500/20 flex items-center justify-center shrink-0">
+                    <CheckCircle2 size={14} className="text-blue-400" />
+                  </div>
+                  <div>
+                    <p className="text-blue-300 text-sm font-bold">Buyer has sent payment</p>
+                    <p className="text-blue-400/60 text-[11px]">Check your bank / UPI before releasing</p>
+                  </div>
+                </div>
+
+                {/* Amount to verify */}
+                <div className="px-4 py-3 flex items-center justify-between border-b border-blue-500/10">
+                  <span className="text-slate-500 text-xs uppercase tracking-wider">Amount to verify</span>
+                  <span className="text-white font-bold text-base">₹{order.fiatAmount.toLocaleString("en-IN")}</span>
+                </div>
+
+                {/* Payment Ref */}
+                {order.paymentRef && (
+                  <div className="px-4 py-3 flex items-center justify-between border-b border-blue-500/10">
+                    <span className="text-slate-500 text-xs uppercase tracking-wider">UTR / Ref</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-white font-mono text-sm">{order.paymentRef}</span>
                       <CopyBtn value={order.paymentRef} />
                     </div>
-                  )}
-                  {order.paymentProofUrl && (
+                  </div>
+                )}
+
+                {/* Screenshot proof */}
+                {order.paymentProofUrl && (
+                  <div className="px-4 py-3 flex items-center justify-between">
+                    <span className="text-slate-500 text-xs uppercase tracking-wider">Proof</span>
                     <button
                       onClick={() => setProofViewer(order.paymentProofUrl)}
-                      className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-500/10 border border-blue-500/30 text-blue-300 text-xs font-semibold hover:bg-blue-500/20"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-500/15 border border-blue-500/25 text-blue-300 text-xs font-semibold hover:bg-blue-500/25 transition-colors"
                     >
-                      <Upload size={12} /> View Payment Screenshot
+                      <ImageIcon size={11} /> View Screenshot
                     </button>
-                  )}
-                </div>
+                  </div>
+                )}
+
+                {/* No proof warning */}
+                {!order.paymentRef && !order.paymentProofUrl && (
+                  <div className="px-4 py-3 flex items-center gap-2 text-amber-400/80 text-xs">
+                    <AlertCircle size={12} className="shrink-0" />
+                    No UTR or screenshot provided — verify manually in your bank app
+                  </div>
+                )}
               </div>
-              <button disabled={!!actionLoading} onClick={confirmRelease}
-                className="w-full py-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-white font-bold text-base transition-all flex items-center justify-center gap-2">
-                {actionLoading === "confirm" ? <Loader2 size={18} className="animate-spin" /> : <ShieldCheck size={18} />}
-                Confirm Receipt & Release {order.usdtAmount.toFixed(4)} USDT
+
+              {/* Checklist reminder */}
+              <div className="rounded-xl bg-white/[0.02] border border-white/[0.06] px-4 py-3 space-y-2">
+                <p className="text-slate-400 text-[11px] font-semibold uppercase tracking-wider mb-1">Before releasing, confirm:</p>
+                {[
+                  `₹${order.fiatAmount.toLocaleString("en-IN")} received in your account`,
+                  "Sender name matches the buyer",
+                  "Payment is NOT from a third-party",
+                ].map((item) => (
+                  <div key={item} className="flex items-start gap-2">
+                    <div className="w-4 h-4 rounded-full border border-emerald-500/40 bg-emerald-500/10 flex items-center justify-center shrink-0 mt-0.5">
+                      <span className="text-emerald-400 text-[9px] font-bold">✓</span>
+                    </div>
+                    <span className="text-slate-400 text-xs leading-snug">{item}</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Release button */}
+              <button
+                disabled={!!actionLoading}
+                onClick={confirmRelease}
+                className="w-full py-4 rounded-2xl bg-gradient-to-r from-emerald-500 to-emerald-400 hover:from-emerald-400 hover:to-emerald-300 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-sm transition-all active:scale-[0.99] shadow-xl shadow-emerald-500/25 flex items-center justify-center gap-2"
+              >
+                {actionLoading === "confirm"
+                  ? <Loader2 size={17} className="animate-spin" />
+                  : <ShieldCheck size={17} />
+                }
+                Release {order.usdtAmount.toFixed(4)} USDT to Buyer
               </button>
+
+              {/* Irreversible warning */}
+              <p className="text-center text-[11px] text-slate-600">
+                ⚠ This action is irreversible — only release after verifying receipt
+              </p>
             </div>
           )}
 
