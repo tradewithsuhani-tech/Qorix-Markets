@@ -190,7 +190,7 @@ export default function P2PMarketPage() {
 
   useEffect(() => {
     fetchData(true);
-    const interval = setInterval(() => fetchData(false), 30000);
+    const interval = setInterval(() => fetchData(false), 60000);
     return () => clearInterval(interval);
   }, [fetchData]);
 

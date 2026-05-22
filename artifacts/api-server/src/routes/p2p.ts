@@ -17,6 +17,9 @@ import { authMiddleware, type AuthRequest } from "../middlewares/auth";
 import { createNotification } from "../lib/notifications";
 import { sendEmail } from "../lib/email-service";
 import { publishOrderEvent } from "../lib/p2p-realtime";
+import { RedisCache } from "../lib/cache/redis-cache";
+import { TTLCache } from "../lib/cache/ttl-cache";
+import { getRedisConnection } from "../lib/redis";
 import {
   getMerchantProfile,
   getMerchantProfiles,
@@ -27,6 +30,30 @@ import jwt from "jsonwebtoken";
 
 const router = Router();
 router.use(authMiddleware);
+
+// ── P2P Ads listing cache ─────────────────────────────────────────────────────
+// GET /p2p/ads is the heaviest endpoint: 3 DB queries per call, hit every
+// 30-60s by every user on the market page. A 20s shared Redis cache means
+// at most 1 DB round-trip per 20s regardless of concurrent users, while
+// per-instance TTLCache fallback keeps serving stale-but-valid data if
+// Upstash is temporarily unreachable.
+type AdsListItem = Record<string, unknown>;
+const _adsListFallback = new TTLCache<AdsListItem[]>(20_000);
+const adsListCache = new RedisCache<AdsListItem[]>({
+  getRedis: getRedisConnection,
+  namespace: "p2p-ads",
+  ttlMs: 20_000,
+  fallback: _adsListFallback,
+});
+
+/** Invalidate all 3 cached variants (ALL/BUY/SELL) after any mutation. */
+async function invalidateAdsCache(): Promise<void> {
+  await Promise.all([
+    adsListCache.invalidate("ALL"),
+    adsListCache.invalidate("BUY"),
+    adsListCache.invalidate("SELL"),
+  ]).catch(() => {}); // non-fatal
+}
 
 // POST /p2p/orders/:id/stream-token — issues a 5-minute SSE-only JWT.
 // Frontend calls this first (with the normal Bearer header) and then opens
@@ -237,136 +264,140 @@ router.delete("/p2p/payment-methods/:id", async (req: AuthRequest, res) => {
 // ─── P2P Ads ──────────────────────────────────────────────────────────────────
 
 // GET /p2p/ads — public listing (filterable by type, paymentMethod)
+// Results are cached in Redis for 20s per type variant (ALL/BUY/SELL).
+// paymentMethod is applied in-memory after cache lookup so the 3 cache
+// keys cover all filter combinations without a combinatorial explosion.
 router.get("/p2p/ads", async (req: AuthRequest, res) => {
   try {
     const type = (req.query.type as string)?.toUpperCase(); // BUY | SELL
     const paymentMethodFilter = (req.query.paymentMethod as string)?.toLowerCase();
-    const conditions = [eq(p2pAdsTable.status, "active")];
-    if (type === "BUY" || type === "SELL") conditions.push(eq(p2pAdsTable.type, type));
+    const cacheKey = (type === "BUY" || type === "SELL") ? type : "ALL";
 
-    const ads = await db
-      .select({
-        id: p2pAdsTable.id,
-        userId: p2pAdsTable.userId,
-        type: p2pAdsTable.type,
-        asset: p2pAdsTable.asset,
-        fiatCurrency: p2pAdsTable.fiatCurrency,
-        price: p2pAdsTable.price,
-        quantity: p2pAdsTable.quantity,
-        minLimit: p2pAdsTable.minLimit,
-        maxLimit: p2pAdsTable.maxLimit,
-        paymentMethods: p2pAdsTable.paymentMethods,
-        terms: p2pAdsTable.terms,
-        timeLimit: p2pAdsTable.timeLimit,
-        filledQuantity: p2pAdsTable.filledQuantity,
-        createdAt: p2pAdsTable.createdAt,
-        advertiserName: usersTable.fullName,
-      })
-      .from(p2pAdsTable)
-      .innerJoin(usersTable, eq(p2pAdsTable.userId, usersTable.id))
-      .where(and(...conditions))
-      .orderBy(desc(p2pAdsTable.createdAt))
-      .limit(50);
+    const { value: cached } = await adsListCache.getOrCompute(cacheKey, async () => {
+      const conditions = [eq(p2pAdsTable.status, "active")];
+      if (cacheKey !== "ALL") conditions.push(eq(p2pAdsTable.type, cacheKey));
 
-    // Parse raw method IDs from each ad
-    const parsedAds = ads.map((a) => {
-      let rawIds: (string | number)[] = [];
-      try { rawIds = JSON.parse(a.paymentMethods as string) as (string | number)[]; } catch { /* fallback */ }
-      return { ...a, rawIds };
-    });
-
-    // Collect all numeric IDs that need resolving
-    const allNumericIds = [...new Set(
-      parsedAds.flatMap((a) => a.rawIds.filter((v) => typeof v === "number" || /^\d+$/.test(String(v))).map(Number)
-    ))];
-
-    // Resolve IDs → type strings in one query (only if needed)
-    const idTypeMap = new Map<number, string>();
-    if (allNumericIds.length > 0) {
-      const methodRows = await db
-        .select({ id: p2pUserPaymentMethodsTable.id, type: p2pUserPaymentMethodsTable.type })
-        .from(p2pUserPaymentMethodsTable)
-        .where(inArray(p2pUserPaymentMethodsTable.id, allNumericIds));
-      for (const row of methodRows) idTypeMap.set(row.id, row.type);
-    }
-
-    let result = parsedAds.map((a) => {
-      // Resolve each element: if it's a numeric ID map to type, else keep as-is
-      const paymentMethods: string[] = [...new Set(
-        a.rawIds.map((v) => {
-          const n = Number(v);
-          if (!isNaN(n) && idTypeMap.has(n)) return idTypeMap.get(n)!;
-          return String(v);
+      const ads = await db
+        .select({
+          id: p2pAdsTable.id,
+          userId: p2pAdsTable.userId,
+          type: p2pAdsTable.type,
+          asset: p2pAdsTable.asset,
+          fiatCurrency: p2pAdsTable.fiatCurrency,
+          price: p2pAdsTable.price,
+          quantity: p2pAdsTable.quantity,
+          minLimit: p2pAdsTable.minLimit,
+          maxLimit: p2pAdsTable.maxLimit,
+          paymentMethods: p2pAdsTable.paymentMethods,
+          terms: p2pAdsTable.terms,
+          timeLimit: p2pAdsTable.timeLimit,
+          filledQuantity: p2pAdsTable.filledQuantity,
+          createdAt: p2pAdsTable.createdAt,
+          advertiserName: usersTable.fullName,
         })
-      )];
-      return {
-        ...a,
-        rawIds: undefined,
-        price: parseNum(a.price as string),
-        quantity: parseNum(a.quantity as string),
-        minLimit: parseNum(a.minLimit as string),
-        maxLimit: parseNum(a.maxLimit as string),
-        filledQuantity: parseNum(a.filledQuantity as string),
-        remainingQuantity: parseNum(a.quantity as string) - parseNum(a.filledQuantity as string),
-        paymentMethods,
-        advertiserName: (a.advertiserName as string).split(" ")[0] + "***",
-      };
+        .from(p2pAdsTable)
+        .innerJoin(usersTable, eq(p2pAdsTable.userId, usersTable.id))
+        .where(and(...conditions))
+        .orderBy(desc(p2pAdsTable.createdAt))
+        .limit(50);
+
+      // Parse raw method IDs from each ad
+      const parsedAds = ads.map((a) => {
+        let rawIds: (string | number)[] = [];
+        try { rawIds = JSON.parse(a.paymentMethods as string) as (string | number)[]; } catch { /* fallback */ }
+        return { ...a, rawIds };
+      });
+
+      // Collect all numeric IDs that need resolving
+      const allNumericIds = [...new Set(
+        parsedAds.flatMap((a) => a.rawIds.filter((v) => typeof v === "number" || /^\d+$/.test(String(v))).map(Number)
+      ))];
+
+      // Resolve IDs → type strings in one query (only if needed)
+      const idTypeMap = new Map<number, string>();
+      if (allNumericIds.length > 0) {
+        const methodRows = await db
+          .select({ id: p2pUserPaymentMethodsTable.id, type: p2pUserPaymentMethodsTable.type })
+          .from(p2pUserPaymentMethodsTable)
+          .where(inArray(p2pUserPaymentMethodsTable.id, allNumericIds));
+        for (const row of methodRows) idTypeMap.set(row.id, row.type);
+      }
+
+      const result = parsedAds.map((a) => {
+        const paymentMethods: string[] = [...new Set(
+          a.rawIds.map((v) => {
+            const n = Number(v);
+            if (!isNaN(n) && idTypeMap.has(n)) return idTypeMap.get(n)!;
+            return String(v);
+          })
+        )];
+        return {
+          ...a,
+          rawIds: undefined,
+          price: parseNum(a.price as string),
+          quantity: parseNum(a.quantity as string),
+          minLimit: parseNum(a.minLimit as string),
+          maxLimit: parseNum(a.maxLimit as string),
+          filledQuantity: parseNum(a.filledQuantity as string),
+          remainingQuantity: parseNum(a.quantity as string) - parseNum(a.filledQuantity as string),
+          paymentMethods,
+          advertiserName: (a.advertiserName as string).split(" ")[0] + "***",
+        };
+      });
+
+      // Compute per-advertiser trade stats (uses composite indexes buyer_status / seller_status)
+      const userIds = [...new Set(result.map((a) => a.userId))];
+      const statsMap = new Map<number, { trades: number; completionRate: number }>();
+      if (userIds.length > 0) {
+        const [buyerRows, sellerRows] = await Promise.all([
+          db.select({
+            userId: p2pOrdersTable.buyerId,
+            total: sql<number>`count(*)::int`,
+            completed: sql<number>`count(*) filter (where ${p2pOrdersTable.status} = 'completed')::int`,
+          }).from(p2pOrdersTable).where(inArray(p2pOrdersTable.buyerId, userIds)).groupBy(p2pOrdersTable.buyerId),
+          db.select({
+            userId: p2pOrdersTable.sellerId,
+            total: sql<number>`count(*)::int`,
+            completed: sql<number>`count(*) filter (where ${p2pOrdersTable.status} = 'completed')::int`,
+          }).from(p2pOrdersTable).where(inArray(p2pOrdersTable.sellerId, userIds)).groupBy(p2pOrdersTable.sellerId),
+        ]);
+        for (const r of [...buyerRows, ...sellerRows]) {
+          const e = statsMap.get(r.userId) ?? { trades: 0, completionRate: 100 };
+          const prevCompleted = Math.round(e.completionRate / 100 * e.trades);
+          const newTotal = e.trades + (r.total ?? 0);
+          const newCompleted = prevCompleted + (r.completed ?? 0);
+          statsMap.set(r.userId, {
+            trades: newTotal,
+            completionRate: newTotal > 0 ? Math.round((newCompleted / newTotal) * 100) : 100,
+          });
+        }
+      }
+
+      let profiles = new Map<number, MerchantProfile>();
+      try { profiles = await getMerchantProfiles(userIds); } catch { /* best-effort */ }
+
+      return result.map((a) => {
+        const p = profiles.get(a.userId);
+        return {
+          ...a,
+          tradesCount: statsMap.get(a.userId)?.trades ?? 0,
+          completionRate: statsMap.get(a.userId)?.completionRate ?? 100,
+          isVerifiedMerchant: p?.isVerifiedMerchant ?? false,
+          kycVerified: p?.kycVerified ?? false,
+          avgReleaseSeconds: p?.avgReleaseSeconds ?? null,
+          avgRating: p?.avgRating ?? null,
+          ratingCount: p?.ratingCount ?? 0,
+        };
+      });
     });
-    // Filter by payment method if specified
+
+    // paymentMethod filter applied in-memory on the cached result
+    let finalResult = cached;
     if (paymentMethodFilter) {
-      result = result.filter((a) =>
-        a.paymentMethods.some((m) => m.toLowerCase().includes(paymentMethodFilter))
+      finalResult = cached.filter((a) =>
+        (a.paymentMethods as string[]).some((m) => m.toLowerCase().includes(paymentMethodFilter))
       );
     }
-
-    // Compute per-advertiser trade stats
-    const userIds = [...new Set(result.map((a) => a.userId))];
-    const statsMap = new Map<number, { trades: number; completionRate: number }>();
-    if (userIds.length > 0) {
-      const [buyerRows, sellerRows] = await Promise.all([
-        db.select({
-          userId: p2pOrdersTable.buyerId,
-          total: sql<number>`count(*)::int`,
-          completed: sql<number>`count(*) filter (where ${p2pOrdersTable.status} = 'completed')::int`,
-        }).from(p2pOrdersTable).where(inArray(p2pOrdersTable.buyerId, userIds)).groupBy(p2pOrdersTable.buyerId),
-        db.select({
-          userId: p2pOrdersTable.sellerId,
-          total: sql<number>`count(*)::int`,
-          completed: sql<number>`count(*) filter (where ${p2pOrdersTable.status} = 'completed')::int`,
-        }).from(p2pOrdersTable).where(inArray(p2pOrdersTable.sellerId, userIds)).groupBy(p2pOrdersTable.sellerId),
-      ]);
-      for (const r of [...buyerRows, ...sellerRows]) {
-        const e = statsMap.get(r.userId) ?? { trades: 0, completionRate: 100 };
-        const prevCompleted = Math.round(e.completionRate / 100 * e.trades);
-        const newTotal = e.trades + (r.total ?? 0);
-        const newCompleted = prevCompleted + (r.completed ?? 0);
-        statsMap.set(r.userId, {
-          trades: newTotal,
-          completionRate: newTotal > 0 ? Math.round((newCompleted / newTotal) * 100) : 100,
-        });
-      }
-    }
-    // Pull per-user trust profiles (verified badge + avg release time + rating)
-    // from the cache. This is O(unique-userIds) Redis GETs; cold misses fan
-    // out to compute() under single-flight, so a list page that surfaces 20
-    // ads from ~10 distinct advertisers hits the DB at most 10 times on the
-    // very first request and 0 times for the next 5 minutes.
-    // Non-fatal: Redis/cache failure must not block the ad listing.
-    let profiles = new Map<number, MerchantProfile>();
-    try { profiles = await getMerchantProfiles(userIds); } catch { /* profile enrichment is best-effort */ }
-    const finalResult = result.map((a) => {
-      const p = profiles.get(a.userId);
-      return {
-        ...a,
-        tradesCount: statsMap.get(a.userId)?.trades ?? 0,
-        completionRate: statsMap.get(a.userId)?.completionRate ?? 100,
-        isVerifiedMerchant: p?.isVerifiedMerchant ?? false,
-        kycVerified: p?.kycVerified ?? false,
-        avgReleaseSeconds: p?.avgReleaseSeconds ?? null,
-        avgRating: p?.avgRating ?? null,
-        ratingCount: p?.ratingCount ?? 0,
-      };
-    });
     res.json(finalResult);
   } catch {
     res.status(500).json({ error: "Failed to fetch ads" });
@@ -482,6 +513,7 @@ router.post("/p2p/ads", async (req: AuthRequest, res) => {
       }).returning();
     }
 
+    void invalidateAdsCache(); // new ad → bust listing cache
     res.status(201).json({ success: true, ad: ad! });
   } catch (err: any) {
     console.error("POST /p2p/ads error:", err?.message || err);
@@ -631,6 +663,7 @@ router.patch("/p2p/ads/:id", async (req: AuthRequest, res) => {
       return result[0];
     });
 
+    void invalidateAdsCache(); // price/qty/methods changed → bust listing cache
     res.json({
       success: true,
       ad: {
@@ -666,6 +699,7 @@ router.patch("/p2p/ads/:id/toggle", async (req: AuthRequest, res) => {
     }
     const newStatus = ad.status === "active" ? "paused" : "active";
     await db.update(p2pAdsTable).set({ status: newStatus, updatedAt: new Date() }).where(eq(p2pAdsTable.id, id));
+    void invalidateAdsCache(); // active status changed → bust listing cache
     res.json({ success: true, status: newStatus });
   } catch {
     res.status(500).json({ error: "Failed to toggle ad" });
@@ -1116,6 +1150,7 @@ router.patch("/p2p/orders/:id/confirm", async (req: AuthRequest, res) => {
     if (orderForNotif) {
       await invalidateMerchantProfiles([orderForNotif.buyerId, req.userId!]);
     }
+    void invalidateAdsCache(); // filledQuantity changed → bust listing cache
     res.json({ success: true, status: "completed" });
   } catch (err: any) {
     res.status(400).json({ error: err.message || "Failed to confirm order" });

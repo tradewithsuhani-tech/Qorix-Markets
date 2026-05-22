@@ -88,6 +88,10 @@ export const p2pOrdersTable = pgTable("p2p_orders", {
   sellerIdx: index("p2p_orders_seller_idx").on(t.sellerId),
   adIdx: index("p2p_orders_ad_idx").on(t.adId),
   statusCreatedIdx: index("p2p_orders_status_created_idx").on(t.status, t.createdAt),
+  // Composite indexes for stats aggregation query (completion rate per advertiser)
+  // Allows index-only scans for COUNT(*) FILTER (WHERE status = 'completed')
+  buyerStatusIdx: index("p2p_orders_buyer_status_idx").on(t.buyerId, t.status),
+  sellerStatusIdx: index("p2p_orders_seller_status_idx").on(t.sellerId, t.status),
 }));
 
 // ─── P2P Escrow Transactions ──────────────────────────────────────────────────
