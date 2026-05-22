@@ -1066,9 +1066,11 @@ export default function P2POrderDetailPage() {
               <input
                 value={paymentRef}
                 onChange={e => setPaymentRef(e.target.value)}
-                placeholder="UPI Transaction ID / Reference (optional)"
+                placeholder="UPI Transaction ID / Reference"
                 className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-slate-600 outline-none focus:border-emerald-400/40"
               />
+
+              <p className="text-slate-500 text-[11px] text-center">— या —</p>
 
               {proofPreview ? (
                 <div className="relative rounded-xl overflow-hidden border border-emerald-500/30 bg-black/40">
@@ -1082,9 +1084,12 @@ export default function P2POrderDetailPage() {
               ) : (
                 <label className="flex items-center justify-center gap-2 w-full py-3 rounded-xl border-2 border-dashed border-white/15 hover:border-emerald-500/40 cursor-pointer text-slate-400 hover:text-emerald-300 text-sm font-medium transition">
                   <Upload size={15} />
-                  Upload Screenshot (optional, max 450KB)
+                  Upload Screenshot (max 450KB)
                   <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={onProofFile} />
                 </label>
+              )}
+              {!paymentRef.trim() && !paymentProof && (
+                <p className="text-amber-400 text-[11px] text-center">UTR number या screenshot — कम से कम एक जरूरी है</p>
               )}
             </div>
             <div className="flex items-start gap-3 bg-amber-500/5 border border-amber-500/20 rounded-xl p-3">
@@ -1098,7 +1103,7 @@ export default function P2POrderDetailPage() {
             </label>
             <div className="flex gap-2">
               <button onClick={() => setProofOpen(false)} className="flex-1 py-3 rounded-xl glass-card text-slate-400 hover:text-white text-sm">Cancel</button>
-              <button disabled={!transferConfirmed || actionLoading === "paid"} onClick={notifySeller}
+              <button disabled={!transferConfirmed || actionLoading === "paid" || (!paymentRef.trim() && !paymentProof)} onClick={notifySeller}
                 className="flex-1 py-3 rounded-xl bg-amber-400 hover:bg-amber-300 disabled:opacity-40 text-black font-bold text-sm flex items-center justify-center gap-2">
                 {actionLoading === "paid" ? <Loader2 size={15} className="animate-spin" /> : null}
                 Transferred, Notify Seller
