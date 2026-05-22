@@ -692,7 +692,8 @@ router.get("/p2p/ads/:id", async (req: AuthRequest, res) => {
       .limit(1);
     if (!ad) { res.status(404).json({ error: "Ad not found" }); return; }
 
-    const methodRefs = JSON.parse(ad.paymentMethods as string) as string[];
+    let methodRefs: string[] = [];
+    try { methodRefs = JSON.parse(ad.paymentMethods as string) as string[]; } catch { /* fallback to empty */ }
     const allSellerMethods = await db.select().from(p2pUserPaymentMethodsTable)
       .where(eq(p2pUserPaymentMethodsTable.userId, ad.userId));
     const sellerPaymentMethods = allSellerMethods.filter((m) =>
@@ -703,12 +704,14 @@ router.get("/p2p/ads/:id", async (req: AuthRequest, res) => {
     // group-by aggregates over p2p_orders on every detail-page hit. The
     // numbers stay fresh because we punch through the cache on every order
     // state mutation (see invalidateMerchantProfiles calls below).
-    const profile = await getMerchantProfile(ad.userId);
-    const tradesCount = profile.totalCompletedAllTime;
+    // Non-fatal: Redis/cache failure must not prevent placing an order.
+    let profile: MerchantProfile | null = null;
+    try { profile = await getMerchantProfile(ad.userId); } catch { /* best-effort */ }
+    const tradesCount = profile?.totalCompletedAllTime ?? 0;
     // For the ad detail card we surface the 30d completion rate (matches
     // the trust modal); falls back to 100% when no trades yet to avoid
     // scaring buyers off brand-new sellers.
-    const completionRate = profile.completionRate30d;
+    const completionRate = profile?.completionRate30d ?? 100;
 
     res.json({
       ...ad,
@@ -723,11 +726,11 @@ router.get("/p2p/ads/:id", async (req: AuthRequest, res) => {
       advertiserName: (ad.advertiserName as string).split(" ")[0] + "***",
       tradesCount,
       completionRate,
-      isVerifiedMerchant: profile.isVerifiedMerchant,
-      kycVerified: profile.kycVerified,
-      avgReleaseSeconds: profile.avgReleaseSeconds,
-      avgRating: profile.avgRating,
-      ratingCount: profile.ratingCount,
+      isVerifiedMerchant: profile?.isVerifiedMerchant ?? false,
+      kycVerified: profile?.kycVerified ?? false,
+      avgReleaseSeconds: profile?.avgReleaseSeconds ?? null,
+      avgRating: profile?.avgRating ?? null,
+      ratingCount: profile?.ratingCount ?? 0,
     });
   } catch {
     res.status(500).json({ error: "Failed to fetch ad" });

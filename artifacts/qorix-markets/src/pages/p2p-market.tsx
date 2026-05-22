@@ -116,8 +116,8 @@ export default function P2PMarketPage() {
   const [paymentFilter, setPaymentFilter] = useState("All");
   const { toast } = useToast();
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
+  const fetchData = useCallback(async (showSkeleton = false) => {
+    if (showSkeleton) setLoading(true);
     setFetchError(false);
     try {
       const pm = paymentFilter !== "All" ? `&paymentMethod=${encodeURIComponent(paymentFilter)}` : "";
@@ -138,8 +138,8 @@ export default function P2PMarketPage() {
   }, [tab, paymentFilter]);
 
   useEffect(() => {
-    fetchData();
-    const interval = setInterval(fetchData, 30000);
+    fetchData(true);
+    const interval = setInterval(() => fetchData(false), 30000);
     return () => clearInterval(interval);
   }, [fetchData]);
 
@@ -163,7 +163,7 @@ export default function P2PMarketPage() {
             )}
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={fetchData} className="p-2 glass-card rounded-xl text-slate-400 active:bg-white/10 transition-colors" aria-label="Refresh">
+            <button onClick={() => fetchData(true)} className="p-2 glass-card rounded-xl text-slate-400 active:bg-white/10 transition-colors" aria-label="Refresh">
               <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
             </button>
             <Link href="/p2p/orders">
@@ -236,7 +236,7 @@ export default function P2PMarketPage() {
                   <p className="text-white font-semibold text-sm">Could not load ads</p>
                   <p className="text-slate-500 text-xs mt-0.5">Server error — tap refresh to retry</p>
                 </div>
-                <button onClick={fetchData} className="text-emerald-400 text-xs px-4 py-2 bg-emerald-500/10 rounded-xl border border-emerald-500/20">Refresh</button>
+                <button onClick={() => fetchData(true)} className="text-emerald-400 text-xs px-4 py-2 bg-emerald-500/10 rounded-xl border border-emerald-500/20">Refresh</button>
               </div>
             ) : ads.length === 0 ? (
               <div className="flex flex-col items-center py-14 gap-3">
