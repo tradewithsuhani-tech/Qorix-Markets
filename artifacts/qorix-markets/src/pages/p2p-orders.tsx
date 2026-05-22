@@ -116,16 +116,20 @@ export default function P2POrdersPage() {
   useEffect(() => {
     loadOrders();
 
-    const interval = setInterval(() => loadOrders(true), 20000);
+    const interval = setInterval(() => loadOrders(true), 10000);
 
     function onVisible() {
       if (document.visibilityState === "visible") loadOrders(true);
     }
+    function onFocus() { loadOrders(true); }
+
     document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onFocus);
 
     return () => {
       clearInterval(interval);
       document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onFocus);
     };
   }, []);
 
