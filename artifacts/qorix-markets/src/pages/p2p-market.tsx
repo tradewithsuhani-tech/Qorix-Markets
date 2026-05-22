@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Link, useLocation } from "wouter";
 import { Layout } from "@/components/layout";
 import { authFetch } from "@/lib/auth-fetch";
@@ -6,7 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   TrendingUp, TrendingDown, RefreshCw, ArrowUpDown,
   Plus, ChevronRight, Wallet, AlertCircle, Filter, Clock, ThumbsUp,
-  ShieldCheck,
+  ShieldCheck, ClipboardList, ChevronDown,
 } from "lucide-react";
 import { MerchantProfileModal } from "@/components/p2p-merchant-profile-modal";
 
@@ -21,6 +21,12 @@ type Ad = {
 };
 
 type FundingWallet = { tradingBalance: string | number };
+
+type ProcessingOrder = {
+  id: number; status: string; type: "BUY" | "SELL";
+  fiatAmount: number; cryptoAmount: number; fiatCurrency: string;
+  counterpartyName: string; createdAt: string;
+};
 
 const PAYMENT_METHODS = ["All", "UPI", "BANK", "IMPS", "NEFT", "Fast Pay"];
 
@@ -152,6 +158,10 @@ export default function P2PMarketPage() {
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState(false);
   const [paymentFilter, setPaymentFilter] = useState("All");
+  const [ordersOpen, setOrdersOpen] = useState(false);
+  const [processingOrders, setProcessingOrders] = useState<ProcessingOrder[]>([]);
+  const [ordersLoading, setOrdersLoading] = useState(false);
+  const ordersRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
   const fetchData = useCallback(async (showSkeleton = false) => {
@@ -181,6 +191,31 @@ export default function P2PMarketPage() {
     return () => clearInterval(interval);
   }, [fetchData]);
 
+  // Fetch processing orders when dropdown opens
+  const openOrders = async () => {
+    setOrdersOpen((v) => {
+      if (!v) {
+        setOrdersLoading(true);
+        authFetch<ProcessingOrder[]>("/api/p2p/orders/my?status=pending,paid&limit=5")
+          .then((data) => setProcessingOrders(data))
+          .catch(() => setProcessingOrders([]))
+          .finally(() => setOrdersLoading(false));
+      }
+      return !v;
+    });
+  };
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ordersRef.current && !ordersRef.current.contains(e.target as Node)) {
+        setOrdersOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
   return (
     <Layout>
       <div className="max-w-5xl mx-auto space-y-4">
@@ -204,11 +239,73 @@ export default function P2PMarketPage() {
             <button onClick={() => fetchData(true)} className="p-2 glass-card rounded-xl text-slate-400 active:bg-white/10 transition-colors" aria-label="Refresh">
               <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
             </button>
-            <Link href="/p2p/orders">
-              <button className="flex items-center gap-1 px-3 py-2 glass-card rounded-xl text-slate-300 text-xs font-medium">
-                Orders <ChevronRight size={12} />
+            {/* ── Orders dropdown ─────────────────────────────── */}
+            <div className="relative" ref={ordersRef}>
+              <button
+                onClick={openOrders}
+                className={`flex items-center gap-1.5 px-3 py-2 glass-card rounded-xl text-xs font-medium transition-colors ${ordersOpen ? "text-amber-400" : "text-slate-300 hover:text-white"}`}
+              >
+                <ClipboardList size={13} />
+                Orders
+                <ChevronDown size={11} className={`transition-transform ${ordersOpen ? "rotate-180" : ""}`} />
               </button>
-            </Link>
+
+              {ordersOpen && (
+                <div className="absolute right-0 top-full mt-2 w-80 z-50 rounded-2xl border border-white/[0.1] bg-[#0d1117] shadow-2xl overflow-hidden">
+                  {/* Header */}
+                  <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.06]">
+                    <span className="text-white font-semibold text-sm">Processing</span>
+                    <Link href="/p2p/orders" onClick={() => setOrdersOpen(false)}>
+                      <span className="text-amber-400 text-xs font-semibold flex items-center gap-0.5 hover:text-amber-300 transition-colors">
+                        View All <ChevronRight size={11} />
+                      </span>
+                    </Link>
+                  </div>
+
+                  {/* Order list */}
+                  <div className="max-h-72 overflow-y-auto">
+                    {ordersLoading ? (
+                      <div className="flex flex-col gap-2 p-4">
+                        {[1, 2].map((i) => (
+                          <div key={i} className="h-14 rounded-xl bg-white/[0.04] animate-pulse" />
+                        ))}
+                      </div>
+                    ) : processingOrders.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center py-10 gap-3 text-slate-600">
+                        <ClipboardList size={28} />
+                        <p className="text-xs">No more orders</p>
+                      </div>
+                    ) : (
+                      <div className="divide-y divide-white/[0.04]">
+                        {processingOrders.map((o) => (
+                          <Link key={o.id} href={`/p2p/orders/${o.id}`} onClick={() => setOrdersOpen(false)}>
+                            <div className="flex items-center justify-between px-4 py-3 hover:bg-white/[0.03] transition-colors cursor-pointer">
+                              <div className="flex items-center gap-3">
+                                <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-[10px] font-bold ${o.type === "BUY" ? "bg-emerald-500/15 text-emerald-400" : "bg-red-500/15 text-red-400"}`}>
+                                  {o.type === "BUY" ? "B" : "S"}
+                                </div>
+                                <div>
+                                  <div className="text-white text-sm font-semibold">Order #{o.id}</div>
+                                  <div className="text-slate-500 text-[11px]">{o.counterpartyName}</div>
+                                </div>
+                              </div>
+                              <div className="text-right">
+                                <div className="text-white text-sm font-semibold">₹{o.fiatAmount.toLocaleString("en-IN")}</div>
+                                <div className={`text-[11px] font-medium px-1.5 py-0.5 rounded-md inline-block mt-0.5 ${
+                                  o.status === "pending" ? "bg-amber-500/15 text-amber-400" :
+                                  o.status === "paid" ? "bg-blue-500/15 text-blue-400" :
+                                  "bg-slate-500/15 text-slate-400"
+                                }`}>{o.status}</div>
+                              </div>
+                            </div>
+                          </Link>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
             <Link href="/p2p/create-ad">
               <button className="flex items-center gap-1.5 px-3 py-2 bg-emerald-500 hover:bg-emerald-400 rounded-xl text-black text-xs font-bold transition-colors">
                 <Plus size={13} /> Post Ad
