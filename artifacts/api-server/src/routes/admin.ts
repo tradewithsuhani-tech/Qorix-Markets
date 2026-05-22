@@ -17,6 +17,7 @@ import {
 import { loginEventsTable, blockchainDepositsTable, serviceSubscriptionsTable } from "@workspace/db/schema";
 import {
   p2pDisputesTable,
+  p2pDisputeEvidenceTable,
   p2pOrdersTable,
   p2pAdsTable,
   p2pEscrowTransactionsTable,
@@ -3071,7 +3072,12 @@ router.get("/admin/p2p/disputes/:id", async (req, res) => {
       ? await db.select({ id: usersTable.id, email: usersTable.email, fullName: usersTable.fullName })
           .from(usersTable).where(inArray(usersTable.id, userIds))
       : [];
-    res.json({ dispute, order, ad, messages, users });
+    // Phase 8: include both-party evidence attachments so the admin sees the
+    // full picture, not just the opener's single image.
+    const evidence = await db.select().from(p2pDisputeEvidenceTable)
+      .where(eq(p2pDisputeEvidenceTable.disputeId, dispute.id))
+      .orderBy(p2pDisputeEvidenceTable.createdAt);
+    res.json({ dispute, order, ad, messages, users, evidence });
   } catch (err) {
     res.status(500).json({ error: "Failed to load dispute" });
   }

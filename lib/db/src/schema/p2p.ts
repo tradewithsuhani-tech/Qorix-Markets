@@ -159,6 +159,26 @@ export const p2pDisputesTable = pgTable("p2p_disputes", {
   openedByIdx: index("p2p_disputes_opened_by_idx").on(t.openedByUserId),
 }));
 
+// ─── P2P Dispute Evidence ────────────────────────────────────────────────────
+// Multi-file evidence attached to a dispute by either party (buyer or seller)
+// after the dispute is opened. The legacy `p2p_disputes.evidence_url` column
+// remains for the opener's at-creation upload; this table covers everything
+// posted later (counter-evidence, second screenshots, etc) and is what admin
+// reviews alongside the chat transcript. Files stored as base64 data URLs to
+// keep parity with payment proofs (no S3 wiring yet) — size capped server-side.
+export const p2pDisputeEvidenceTable = pgTable("p2p_dispute_evidence", {
+  id: serial("id").primaryKey(),
+  disputeId: integer("dispute_id").notNull(),
+  uploadedByUserId: integer("uploaded_by_user_id").notNull(),
+  uploaderRole: varchar("uploader_role", { length: 10 }).notNull(), // buyer | seller
+  fileType: varchar("file_type", { length: 20 }).notNull(),         // image | document
+  fileData: text("file_data").notNull(),                            // base64 data URL
+  caption: varchar("caption", { length: 280 }),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (t) => ({
+  disputeIdx: index("p2p_dispute_evidence_dispute_idx").on(t.disputeId),
+}));
+
 export const insertP2pWalletSchema = createInsertSchema(p2pWalletsTable).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertP2pAdSchema = createInsertSchema(p2pAdsTable).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertP2pOrderSchema = createInsertSchema(p2pOrdersTable).omit({ id: true, createdAt: true, updatedAt: true });

@@ -40,6 +40,11 @@ interface DisputeDetail {
   ad: { id: number; type: string; userId: number } | null;
   messages: { id: number; senderId: number; message: string; isSystem: boolean; createdAt: string }[];
   users: { id: number; email: string; fullName: string }[];
+  // Phase 8 — multi-file evidence attached after dispute creation, from both parties.
+  evidence?: {
+    id: number; uploaderRole: "buyer" | "seller"; uploadedByUserId: number;
+    fileType: string; fileData: string; caption: string | null; createdAt: string;
+  }[];
 }
 
 const TABS = [
@@ -230,6 +235,42 @@ export default function AdminP2pDisputesPage() {
                     </button>
                   )}
                 </div>
+
+                {/* Phase 8 — both-party evidence gallery (attached AFTER dispute creation). */}
+                {detail.evidence && detail.evidence.length > 0 && (
+                  <div>
+                    <div className="text-slate-400 text-xs font-semibold uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
+                      <ImageIcon size={12} /> Evidence attachments ({detail.evidence.length})
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      {detail.evidence.map((e) => (
+                        <button
+                          key={e.id}
+                          onClick={() => setImgViewer(e.fileData)}
+                          className="group bg-white/[0.03] hover:bg-white/[0.06] border border-white/[0.06] rounded-lg overflow-hidden text-left"
+                          title={e.caption ?? ""}
+                        >
+                          <img
+                            src={e.fileData}
+                            alt={`Evidence #${e.id}`}
+                            className="w-full h-20 object-cover group-hover:opacity-90"
+                          />
+                          <div className="p-1.5">
+                            <div className={`text-[10px] font-bold uppercase ${e.uploaderRole === "buyer" ? "text-blue-300" : "text-purple-300"}`}>
+                              {e.uploaderRole}
+                            </div>
+                            {e.caption && (
+                              <div className="text-slate-400 text-[10px] truncate">{e.caption}</div>
+                            )}
+                            <div className="text-slate-600 text-[9px]">
+                              {format(new Date(e.createdAt), "MMM d HH:mm")}
+                            </div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* Chat */}
                 <div>

@@ -9,6 +9,7 @@ import {
   p2pChatMessagesTable,
   p2pRatingsTable,
   p2pDisputesTable,
+  p2pDisputeEvidenceTable,
 } from "@workspace/db";
 import { eq, and, or, ne, desc, sql, inArray } from "drizzle-orm";
 import { z } from "zod";
@@ -1103,6 +1104,145 @@ router.post("/p2p/orders/:id/dispute", async (req: AuthRequest, res) => {
     res.status(201).json({ success: true, dispute: created.dispute });
   } catch (err: any) {
     res.status(400).json({ error: err.message || "Failed to raise dispute" });
+  }
+});
+
+// ─── P2P Dispute Evidence (Phase 8) ──────────────────────────────────────────
+// Once a dispute is open, EITHER party (buyer or seller) can attach further
+// evidence — counter-screenshots, bank statements, additional UPI proofs —
+// so admin sees both sides instead of only the opener's single image.
+// Cap: 600 KB base64 per file, max 6 files per dispute, image MIME only for
+// now (matches the opener's evidenceUrl validation pattern).
+
+const MAX_EVIDENCE_BYTES = 600_000;
+const MAX_EVIDENCE_PER_DISPUTE = 6;
+const EVIDENCE_DATAURL_RE = /^data:image\/(jpeg|jpg|png|webp);base64,/;
+
+// POST /p2p/orders/:id/dispute/evidence — add evidence to an open dispute.
+// Only buyer/seller of the order can post, and only while dispute.status === "open".
+// Once admin resolves, evidence is read-only.
+router.post("/p2p/orders/:id/dispute/evidence", async (req: AuthRequest, res) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const fileData = typeof req.body?.fileData === "string" ? req.body.fileData : "";
+  const captionRaw = typeof req.body?.caption === "string" ? req.body.caption.trim() : "";
+  const caption = captionRaw ? captionRaw.slice(0, 280) : null;
+
+  if (!fileData || fileData.length > MAX_EVIDENCE_BYTES || !EVIDENCE_DATAURL_RE.test(fileData)) {
+    res.status(400).json({ error: "Invalid evidence image (jpeg/png/webp, ≤600KB base64)" });
+    return;
+  }
+
+  try {
+    const created = await db.transaction(async (tx) => {
+      const [order] = await tx.select().from(p2pOrdersTable)
+        .where(and(
+          eq(p2pOrdersTable.id, id),
+          or(eq(p2pOrdersTable.buyerId, req.userId!), eq(p2pOrdersTable.sellerId, req.userId!)),
+        )).limit(1);
+      if (!order) throw new Error("Order not found");
+      // FOR UPDATE on the dispute row serializes concurrent evidence uploads
+      // for the same dispute, so the 6-file cap can't be raced past by two
+      // simultaneous POSTs from buyer + seller.
+      const [dispute] = await tx.select().from(p2pDisputesTable)
+        .where(eq(p2pDisputesTable.orderId, id))
+        .limit(1)
+        .for("update");
+      if (!dispute) throw new Error("No dispute exists for this order");
+      if (dispute.status !== "open") {
+        throw new Error("Dispute is closed — evidence can no longer be added");
+      }
+
+      // Cap files per dispute to keep DB pages tight and prevent a single
+      // bad actor from spamming the admin queue. Under the FOR UPDATE lock
+      // above this count is authoritative for the rest of the txn.
+      const [{ count }] = await tx.select({
+        count: sql<number>`count(*)::int`,
+      }).from(p2pDisputeEvidenceTable)
+        .where(eq(p2pDisputeEvidenceTable.disputeId, dispute.id));
+      if (count >= MAX_EVIDENCE_PER_DISPUTE) {
+        throw new Error(`Evidence limit reached (max ${MAX_EVIDENCE_PER_DISPUTE} files per dispute)`);
+      }
+
+      const role = order.buyerId === req.userId! ? "buyer" : "seller";
+      const [row] = await tx.insert(p2pDisputeEvidenceTable).values({
+        disputeId: dispute.id,
+        uploadedByUserId: req.userId!,
+        uploaderRole: role,
+        fileType: "image",
+        fileData,
+        caption,
+      }).returning();
+      // Bump dispute updatedAt so admin queue surfaces freshly-evidenced
+      // disputes — gives reviewers a signal that new material has arrived.
+      await tx.update(p2pDisputesTable)
+        .set({ updatedAt: new Date() })
+        .where(eq(p2pDisputesTable.id, dispute.id));
+
+      // Counterparty notification — they should know the other side just
+      // posted something so they can match or rebut it.
+      const counterpartyId = role === "buyer" ? order.sellerId : order.buyerId;
+      return { row, counterpartyId };
+    });
+
+    await createNotification(
+      created.counterpartyId,
+      "p2p_order",
+      "New evidence on dispute",
+      `The other party added evidence to the dispute on Order #${id}.`,
+    ).catch(() => {});
+
+    res.status(201).json({
+      success: true,
+      evidence: {
+        id: created.row.id,
+        disputeId: created.row.disputeId,
+        uploaderRole: created.row.uploaderRole,
+        fileType: created.row.fileType,
+        // Echo the data URL so the client can render optimistically.
+        fileData: created.row.fileData,
+        caption: created.row.caption,
+        createdAt: created.row.createdAt,
+      },
+    });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message || "Failed to attach evidence" });
+  }
+});
+
+// GET /p2p/orders/:id/dispute/evidence — both parties can list all attachments.
+router.get("/p2p/orders/:id/dispute/evidence", async (req: AuthRequest, res) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  try {
+    const [order] = await db.select().from(p2pOrdersTable)
+      .where(and(
+        eq(p2pOrdersTable.id, id),
+        or(eq(p2pOrdersTable.buyerId, req.userId!), eq(p2pOrdersTable.sellerId, req.userId!)),
+      )).limit(1);
+    if (!order) { res.status(404).json({ error: "Order not found" }); return; }
+    const [dispute] = await db.select().from(p2pDisputesTable)
+      .where(eq(p2pDisputesTable.orderId, id)).limit(1);
+    if (!dispute) { res.json({ evidence: [], disputeStatus: null }); return; }
+
+    const rows = await db.select().from(p2pDisputeEvidenceTable)
+      .where(eq(p2pDisputeEvidenceTable.disputeId, dispute.id))
+      .orderBy(p2pDisputeEvidenceTable.createdAt);
+
+    res.json({
+      disputeStatus: dispute.status,
+      evidence: rows.map((r) => ({
+        id: r.id,
+        uploaderRole: r.uploaderRole,
+        uploadedByUserId: r.uploadedByUserId,
+        fileType: r.fileType,
+        fileData: r.fileData,
+        caption: r.caption,
+        createdAt: r.createdAt,
+      })),
+    });
+  } catch {
+    res.status(500).json({ error: "Failed to load evidence" });
   }
 });
 

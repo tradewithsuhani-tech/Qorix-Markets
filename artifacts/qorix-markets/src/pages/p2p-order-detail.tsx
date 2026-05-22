@@ -396,7 +396,13 @@ export default function P2POrderDetailPage() {
             <h1 className="text-blue-400 font-bold text-xl">Waiting for seller to confirm</h1>
           )}
           {order.status === "disputed" && (
-            <h1 className="text-orange-400 font-bold text-xl">Dispute under admin review</h1>
+            <>
+              <h1 className="text-orange-400 font-bold text-xl">Dispute under admin review</h1>
+              {/* Mounted only on disputed orders; the panel lazy-fetches the
+                  evidence list and lets EITHER party add more files until
+                  admin resolves. Phase 8. */}
+              <DisputeEvidencePanel orderId={order.id} />
+            </>
           )}
           {order.status === "completed" && (
             <h1 className="text-emerald-400 font-bold text-xl">Order Completed</h1>
@@ -993,5 +999,219 @@ export default function P2POrderDetailPage() {
         <MerchantProfileModal userId={counterpartyId} onClose={() => setMerchantOpen(false)} />
       )}
     </Layout>
+  );
+}
+
+// ─── Dispute Evidence Panel (Phase 8) ────────────────────────────────────────
+// Self-contained card that lives on the order detail page while an order is
+// disputed. Lazy-fetches the evidence list and lets EITHER party add more
+// files until admin resolves. Kept local to this page (instead of a shared
+// component) since this is the only consumer for now.
+
+type DisputeEvidence = {
+  id: number;
+  uploaderRole: "buyer" | "seller";
+  uploadedByUserId: number;
+  fileType: string;
+  fileData: string;
+  caption: string | null;
+  createdAt: string;
+};
+
+function DisputeEvidencePanel({ orderId }: { orderId: number }) {
+  const { toast } = useToast();
+  const [items, setItems] = useState<DisputeEvidence[]>([]);
+  const [disputeStatus, setDisputeStatus] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [picking, setPicking] = useState(false);
+  const [staged, setStaged] = useState<string | null>(null);
+  const [caption, setCaption] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const [viewer, setViewer] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await authFetch<{ evidence: DisputeEvidence[]; disputeStatus: string | null }>(
+        `/api/p2p/orders/${orderId}/dispute/evidence`,
+      );
+      setItems(res.evidence);
+      setDisputeStatus(res.disputeStatus);
+    } catch (err: any) {
+      // Soft-fail — the order page itself still works; just log.
+      console.error("Failed to load dispute evidence", err);
+    } finally {
+      setLoading(false);
+    }
+  }, [orderId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const canUpload = disputeStatus === "open" && items.length < 6;
+
+  function onFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    e.target.value = "";
+    if (!f) return;
+    if (f.size > 450_000) {
+      // Pre-warn at ~450KB so the base64-inflated payload stays under the
+      // server's 600KB cap (base64 ≈ +33%).
+      toast({ title: "File too large", description: "Please use an image under ~450 KB.", variant: "destructive" });
+      return;
+    }
+    if (!/^image\/(jpeg|jpg|png|webp)$/.test(f.type)) {
+      toast({ title: "Unsupported format", description: "JPEG, PNG, or WebP only.", variant: "destructive" });
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => setStaged(reader.result as string);
+    reader.readAsDataURL(f);
+  }
+
+  async function submit() {
+    if (!staged) return;
+    setUploading(true);
+    try {
+      const res = await authFetch<{ success: boolean; evidence: DisputeEvidence }>(
+        `/api/p2p/orders/${orderId}/dispute/evidence`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ fileData: staged, caption: caption || undefined }),
+        },
+      );
+      setItems((prev) => [...prev, res.evidence]);
+      setStaged(null);
+      setCaption("");
+      setPicking(false);
+      toast({ title: "Evidence added" });
+    } catch (err: any) {
+      toast({ title: "Upload failed", description: err?.message || "Try again", variant: "destructive" });
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  if (loading && items.length === 0) {
+    return (
+      <div className="mt-4 text-slate-500 text-xs">Loading evidence…</div>
+    );
+  }
+
+  return (
+    <div className="mt-4 text-left bg-orange-500/[0.04] border border-orange-500/15 rounded-xl p-3 space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="text-orange-300 text-xs font-bold uppercase tracking-wide">
+          Evidence ({items.length}/6)
+        </div>
+        {canUpload && !picking && (
+          <button
+            onClick={() => setPicking(true)}
+            className="text-[11px] px-2.5 py-1 rounded-full bg-orange-500/15 border border-orange-500/30 text-orange-300 font-bold hover:bg-orange-500/25 transition-colors flex items-center gap-1"
+          >
+            <Upload size={11} /> Add file
+          </button>
+        )}
+      </div>
+
+      {items.length === 0 && !picking && (
+        <p className="text-slate-400 text-xs leading-relaxed">
+          Add screenshots, bank statements, or chat captures to support your case.
+          Both you and the other party can attach evidence until admin resolves.
+        </p>
+      )}
+
+      {items.length > 0 && (
+        <div className="grid grid-cols-3 gap-1.5">
+          {items.map((it) => (
+            <button
+              key={it.id}
+              onClick={() => setViewer(it.fileData)}
+              className="group bg-black/30 border border-white/[0.06] rounded-lg overflow-hidden text-left"
+              title={it.caption ?? ""}
+            >
+              <img src={it.fileData} alt="" className="w-full h-16 object-cover group-hover:opacity-90" />
+              <div className="px-1 py-0.5">
+                <div className={`text-[9px] font-bold uppercase ${it.uploaderRole === "buyer" ? "text-blue-300" : "text-purple-300"}`}>
+                  {it.uploaderRole}
+                </div>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {picking && (
+        <div className="space-y-2 pt-1 border-t border-orange-500/15">
+          {!staged ? (
+            <>
+              <input
+                ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp"
+                onChange={onFileChange} className="hidden"
+              />
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="w-full py-3 rounded-lg border-2 border-dashed border-white/15 text-slate-400 text-xs hover:border-orange-500/40 hover:text-orange-300 transition-colors flex items-center justify-center gap-2"
+              >
+                <Upload size={14} /> Choose image (≤450 KB)
+              </button>
+            </>
+          ) : (
+            <>
+              <div className="relative">
+                <img src={staged} alt="Preview" className="w-full max-h-40 object-contain rounded-lg border border-white/10" />
+                <button
+                  onClick={() => setStaged(null)}
+                  className="absolute top-1 right-1 p-1 rounded-full bg-black/70 text-white hover:bg-black"
+                >
+                  <X size={12} />
+                </button>
+              </div>
+              <input
+                value={caption} onChange={(e) => setCaption(e.target.value.slice(0, 280))}
+                placeholder="Optional caption (e.g. UPI transaction screenshot)"
+                className="w-full bg-black/40 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-orange-500/40"
+              />
+            </>
+          )}
+          <div className="flex gap-2">
+            <button
+              onClick={() => { setPicking(false); setStaged(null); setCaption(""); }}
+              disabled={uploading}
+              className="flex-1 py-1.5 rounded-lg bg-white/5 text-slate-300 text-xs font-medium hover:bg-white/10 disabled:opacity-40"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={submit}
+              disabled={!staged || uploading}
+              className="flex-1 py-1.5 rounded-lg bg-orange-500/20 border border-orange-500/30 text-orange-300 text-xs font-bold hover:bg-orange-500/30 disabled:opacity-40"
+            >
+              {uploading ? "Uploading…" : "Submit evidence"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {!canUpload && items.length >= 6 && (
+        <p className="text-[10px] text-slate-500">Maximum 6 attachments reached.</p>
+      )}
+      {disputeStatus && disputeStatus !== "open" && (
+        <p className="text-[10px] text-slate-500">Dispute resolved — evidence is now read-only.</p>
+      )}
+
+      {viewer && (
+        <div
+          className="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          onClick={() => setViewer(null)}
+        >
+          <div className="relative max-w-3xl w-full" onClick={(e) => e.stopPropagation()}>
+            <button onClick={() => setViewer(null)} className="absolute -top-9 right-0 text-white/80 hover:text-white text-sm">Close ×</button>
+            <img src={viewer} alt="Evidence" className="w-full max-h-[85vh] object-contain rounded-2xl border border-white/10" />
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
