@@ -846,7 +846,8 @@ router.post("/p2p/orders", async (req: AuthRequest, res) => {
 
     res.status(201).json({ success: true, order: order! });
   } catch (err: any) {
-    res.status(400).json({ error: err.message || "Failed to create order" });
+    const msg = err?.cause?.message || err?.message || "Failed to create order";
+    res.status(400).json({ error: msg });
   }
 });
 
