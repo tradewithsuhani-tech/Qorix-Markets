@@ -22,6 +22,7 @@ export default function P2PCreateAdPage() {
   const [minLimit, setMinLimit] = useState("");
   const [maxLimit, setMaxLimit] = useState("");
   const [selectedMethods, setSelectedMethods] = useState<string[]>([]);
+  const [timeLimit, setTimeLimit] = useState(15);
   const [terms, setTerms] = useState("");
   const [loading, setLoading] = useState(false);
   const [fundingWallet, setFundingWallet] = useState<FundingWallet | null>(null);
@@ -89,6 +90,7 @@ export default function P2PCreateAdPage() {
           minLimit: parseFloat(minLimit),
           maxLimit: parseFloat(maxLimit),
           paymentMethods: selectedMethods,
+          timeLimit,
           terms: terms.trim() || undefined,
         }),
       });
@@ -261,6 +263,30 @@ export default function P2PCreateAdPage() {
                 />
               </div>
             </Field>
+          </div>
+
+          {/* Payment Window */}
+          <div>
+            <label className="text-xs uppercase tracking-wider text-slate-400 font-semibold block mb-2">
+              Payment Window <span className="text-slate-600 normal-case tracking-normal font-normal">(time buyer has to pay)</span>
+            </label>
+            <div className="grid grid-cols-4 gap-2">
+              {[15, 30, 45, 60].map((min) => (
+                <button
+                  key={min}
+                  type="button"
+                  onClick={() => setTimeLimit(min)}
+                  className={`py-2.5 rounded-xl text-sm font-semibold border transition-all ${
+                    timeLimit === min
+                      ? "bg-emerald-500/20 border-emerald-500/50 text-emerald-300"
+                      : "bg-white/[0.04] border-white/[0.08] text-slate-400 hover:text-white hover:border-white/20"
+                  }`}
+                >
+                  {min}m
+                </button>
+              ))}
+            </div>
+            <p className="text-[11px] text-slate-600 mt-1.5">Buyer must complete payment within {timeLimit} minutes</p>
           </div>
 
           {/* Payment Methods */}

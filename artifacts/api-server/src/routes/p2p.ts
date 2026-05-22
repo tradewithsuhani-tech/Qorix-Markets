@@ -425,6 +425,7 @@ const CreateAdSchema = z.object({
   maxLimit: z.number().positive(),
   paymentMethods: z.array(z.string()).min(1),
   terms: z.string().max(500).optional(),
+  timeLimit: z.number().int().min(5).max(120).optional().default(15),
 });
 
 // POST /p2p/ads
@@ -432,7 +433,7 @@ router.post("/p2p/ads", async (req: AuthRequest, res) => {
   if (!(await requireKycApproved(req, res))) return;
   const result = CreateAdSchema.safeParse(req.body);
   if (!result.success) { res.status(400).json({ error: "Invalid data", details: result.error.issues }); return; }
-  const { type, price, quantity, minLimit, maxLimit, paymentMethods, terms } = result.data;
+  const { type, price, quantity, minLimit, maxLimit, paymentMethods, terms, timeLimit } = result.data;
 
   if (minLimit >= maxLimit) { res.status(400).json({ error: "min_limit must be less than max_limit" }); return; }
   if (minLimit / price > quantity) { res.status(400).json({ error: "min_limit exceeds total quantity" }); return; }
@@ -462,6 +463,7 @@ router.post("/p2p/ads", async (req: AuthRequest, res) => {
           maxLimit: String(maxLimit),
           paymentMethods: JSON.stringify(paymentMethods),
           terms,
+          timeLimit,
         }).returning();
       });
     } else {
@@ -475,6 +477,7 @@ router.post("/p2p/ads", async (req: AuthRequest, res) => {
         maxLimit: String(maxLimit),
         paymentMethods: JSON.stringify(paymentMethods),
         terms,
+        timeLimit,
       }).returning();
     }
 
