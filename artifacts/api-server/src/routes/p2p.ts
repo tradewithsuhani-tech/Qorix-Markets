@@ -267,11 +267,40 @@ router.get("/p2p/ads", async (req: AuthRequest, res) => {
       .orderBy(desc(p2pAdsTable.createdAt))
       .limit(50);
 
-    let result = ads.map((a) => {
-      let paymentMethods: string[] = [];
-      try { paymentMethods = JSON.parse(a.paymentMethods as string) as string[]; } catch { /* use empty array fallback */ }
+    // Parse raw method IDs from each ad
+    const parsedAds = ads.map((a) => {
+      let rawIds: (string | number)[] = [];
+      try { rawIds = JSON.parse(a.paymentMethods as string) as (string | number)[]; } catch { /* fallback */ }
+      return { ...a, rawIds };
+    });
+
+    // Collect all numeric IDs that need resolving
+    const allNumericIds = [...new Set(
+      parsedAds.flatMap((a) => a.rawIds.filter((v) => typeof v === "number" || /^\d+$/.test(String(v))).map(Number)
+    ))];
+
+    // Resolve IDs → type strings in one query (only if needed)
+    const idTypeMap = new Map<number, string>();
+    if (allNumericIds.length > 0) {
+      const methodRows = await db
+        .select({ id: p2pUserPaymentMethodsTable.id, type: p2pUserPaymentMethodsTable.type })
+        .from(p2pUserPaymentMethodsTable)
+        .where(inArray(p2pUserPaymentMethodsTable.id, allNumericIds));
+      for (const row of methodRows) idTypeMap.set(row.id, row.type);
+    }
+
+    let result = parsedAds.map((a) => {
+      // Resolve each element: if it's a numeric ID map to type, else keep as-is
+      const paymentMethods: string[] = [...new Set(
+        a.rawIds.map((v) => {
+          const n = Number(v);
+          if (!isNaN(n) && idTypeMap.has(n)) return idTypeMap.get(n)!;
+          return String(v);
+        })
+      )];
       return {
         ...a,
+        rawIds: undefined,
         price: parseNum(a.price as string),
         quantity: parseNum(a.quantity as string),
         minLimit: parseNum(a.minLimit as string),
