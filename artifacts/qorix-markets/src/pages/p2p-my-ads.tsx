@@ -4,7 +4,7 @@ import { Layout } from "@/components/layout";
 import { authFetch } from "@/lib/auth-fetch";
 import { useToast } from "@/hooks/use-toast";
 import {
-  ArrowLeft, Plus, Pause, Play, Trash2, AlertCircle,
+  Plus, Pause, Play, Trash2, AlertCircle,
   TrendingUp, TrendingDown, RefreshCw, Pencil, X, Activity, CheckCircle2,
 } from "lucide-react";
 
@@ -27,11 +27,11 @@ type MyAd = {
   completedRevenueUsdt: number;
 };
 
-const STATUS_STYLES: Record<string, string> = {
-  active: "bg-emerald-500/15 text-emerald-400 border-emerald-500/25",
-  paused: "bg-amber-500/15 text-amber-400 border-amber-500/25",
-  completed: "bg-blue-500/15 text-blue-400 border-blue-500/25",
-  cancelled: "bg-red-500/15 text-red-400 border-red-500/25",
+const STATUS_STYLES: Record<string, { pill: string; dot: string }> = {
+  active:    { pill: "bg-emerald-500/15 text-emerald-400 border-emerald-500/25", dot: "bg-emerald-400" },
+  paused:    { pill: "bg-amber-500/15 text-amber-400 border-amber-500/25",       dot: "bg-amber-400" },
+  completed: { pill: "bg-blue-500/15 text-blue-400 border-blue-500/25",          dot: "bg-blue-400" },
+  cancelled: { pill: "bg-red-500/15 text-red-400 border-red-500/25",             dot: "bg-red-400" },
 };
 
 export default function P2PMyAdsPage() {
@@ -62,7 +62,6 @@ export default function P2PMyAdsPage() {
       const res = await authFetch<{ success: boolean; status: string }>(`/api/p2p/ads/${id}/toggle`, {
         method: "PATCH",
       });
-      // Toggle bumps updatedAt server-side — refetch so optimistic-lock stays in sync.
       setAds((prev) => prev.map((a) => a.id === id ? { ...a, status: res.status as MyAd["status"] } : a));
       toast({ title: res.status === "active" ? "Ad resumed" : "Ad paused" });
       fetchAds();
@@ -91,46 +90,48 @@ export default function P2PMyAdsPage() {
 
   return (
     <Layout>
-      <div className="max-w-2xl mx-auto px-4 py-6 space-y-5">
+      <div className="max-w-2xl mx-auto space-y-3">
 
-        {/* Header */}
-        <div className="flex items-center gap-3">
-          <Link href="/p2p">
-            <button className="p-2 rounded-xl glass-card text-slate-400 hover:text-white">
-              <ArrowLeft size={16} />
+        {/* Compact action bar — title is in the top bar */}
+        <div className="flex items-center justify-between">
+          <p className="text-xs text-slate-500">
+            {loading ? "Loading…" : `${ads.length} listing${ads.length !== 1 ? "s" : ""}`}
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={fetchAds}
+              disabled={loading}
+              className="p-2 rounded-xl glass-card text-slate-400 active:bg-white/10 transition-colors"
+              aria-label="Refresh"
+            >
+              <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
             </button>
-          </Link>
-          <div className="flex-1">
-            <h1 className="text-xl font-bold text-white">My Ads</h1>
-            <p className="text-slate-400 text-xs mt-0.5">Manage your P2P listings</p>
+            <Link href="/p2p/create-ad">
+              <button className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-bold transition-colors">
+                <Plus size={13} /> New Ad
+              </button>
+            </Link>
           </div>
-          <button
-            onClick={fetchAds}
-            className="p-2 rounded-xl glass-card text-slate-400 hover:text-white transition-colors"
-          >
-            <RefreshCw size={15} />
-          </button>
-          <Link href="/p2p/create-ad">
-            <button className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-500/15 border border-emerald-500/25 text-emerald-400 text-xs font-bold hover:bg-emerald-500/25 transition-all">
-              <Plus size={13} /> New Ad
-            </button>
-          </Link>
         </div>
 
         {/* Content */}
         {loading ? (
           <div className="space-y-3">
             {Array.from({ length: 3 }).map((_, i) => (
-              <div key={i} className="glass-card rounded-xl h-28 animate-pulse" />
+              <div key={i} className="glass-card rounded-2xl h-40 animate-pulse" />
             ))}
           </div>
         ) : ads.length === 0 ? (
-          <div className="flex flex-col items-center py-14 gap-3">
-            <AlertCircle size={30} className="text-slate-600" />
-            <p className="text-slate-500 text-sm font-medium">No ads posted yet</p>
-            <p className="text-slate-600 text-xs">Create your first P2P listing</p>
+          <div className="glass-card rounded-2xl flex flex-col items-center py-16 gap-4">
+            <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center">
+              <AlertCircle size={28} className="text-slate-600" />
+            </div>
+            <div className="text-center">
+              <p className="text-white font-semibold text-sm">No listings yet</p>
+              <p className="text-slate-500 text-xs mt-0.5">Create your first P2P ad</p>
+            </div>
             <Link href="/p2p/create-ad">
-              <button className="mt-2 flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-500/15 border border-emerald-500/25 text-emerald-400 text-sm font-bold hover:bg-emerald-500/25 transition-all">
+              <button className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-emerald-500 text-black text-sm font-bold">
                 <Plus size={14} /> Post Ad
               </button>
             </Link>
@@ -141,153 +142,163 @@ export default function P2PMyAdsPage() {
               const fillPct = ad.quantity > 0 ? Math.round((ad.filledQuantity / ad.quantity) * 100) : 0;
               const isActing = actionId === ad.id;
               const isDeletingThis = confirmDelete === ad.id;
+              const statusStyle = STATUS_STYLES[ad.status] ?? STATUS_STYLES.cancelled;
+              const isBuy = ad.type === "BUY";
+
               return (
-                <div key={ad.id} className="glass-card rounded-xl p-4 space-y-3">
-                  {/* Top row */}
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-center gap-2">
-                      <div className={`p-1.5 rounded-lg ${ad.type === "SELL" ? "bg-red-500/15" : "bg-emerald-500/15"}`}>
-                        {ad.type === "SELL"
-                          ? <TrendingDown size={14} className="text-red-400" />
-                          : <TrendingUp size={14} className="text-emerald-400" />
-                        }
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className={`text-sm font-bold ${ad.type === "SELL" ? "text-red-400" : "text-emerald-400"}`}>
-                            {ad.type} USDT
-                          </span>
-                          <span className={`text-[10px] px-2 py-0.5 rounded-full border font-bold uppercase ${STATUS_STYLES[ad.status] ?? ""}`}>
-                            {ad.status}
-                          </span>
-                        </div>
-                        <div className="text-slate-500 text-xs mt-0.5">
-                          #{ad.id} · {new Date(ad.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
-                        </div>
-                      </div>
-                    </div>
+                <div key={ad.id} className="glass-card rounded-2xl overflow-hidden border border-white/[0.07]">
+                  {/* Colored top accent */}
+                  <div className={`h-0.5 w-full ${isBuy ? "bg-gradient-to-r from-emerald-500 to-emerald-400" : "bg-gradient-to-r from-red-500 to-rose-400"}`} />
 
-                    {/* Actions */}
-                    {canManage(ad) && (
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        {/* Edit */}
-                        <button
-                          disabled={isActing}
-                          onClick={() => setEditingAd(ad)}
-                          title="Edit ad"
-                          className="p-2 rounded-lg glass-card text-slate-400 hover:text-electric-400 hover:bg-electric-500/10 disabled:opacity-40 transition-colors"
-                        >
-                          <Pencil size={14} />
-                        </button>
-                        {/* Pause / Resume */}
-                        <button
-                          disabled={isActing}
-                          onClick={() => handleToggle(ad.id)}
-                          title={ad.status === "active" ? "Pause ad" : "Resume ad"}
-                          className="p-2 rounded-lg glass-card text-slate-400 hover:text-amber-400 hover:bg-amber-500/10 disabled:opacity-40 transition-colors"
-                        >
-                          {ad.status === "active"
-                            ? <Pause size={14} />
-                            : <Play size={14} />
+                  <div className="p-4 space-y-3.5">
+                    {/* Top row: type + status + actions */}
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2.5">
+                        <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 border ${isBuy ? "bg-emerald-500/15 border-emerald-500/20" : "bg-red-500/15 border-red-500/20"}`}>
+                          {isBuy
+                            ? <TrendingUp size={15} className="text-emerald-400" />
+                            : <TrendingDown size={15} className="text-red-400" />
                           }
-                        </button>
-
-                        {/* Delete / Confirm */}
-                        {isDeletingThis ? (
-                          <div className="flex items-center gap-1">
-                            <button
-                              disabled={isActing}
-                              onClick={() => handleDelete(ad.id)}
-                              className="px-2.5 py-1.5 rounded-lg bg-red-500/20 border border-red-500/30 text-red-400 text-xs font-bold hover:bg-red-500/30 disabled:opacity-40 transition-all"
-                            >
-                              Confirm
-                            </button>
-                            <button
-                              onClick={() => setConfirmDelete(null)}
-                              className="px-2.5 py-1.5 rounded-lg glass-card text-slate-400 text-xs hover:text-white transition-colors"
-                            >
-                              Cancel
-                            </button>
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className={`text-sm font-extrabold tracking-tight ${isBuy ? "text-emerald-400" : "text-red-400"}`}>
+                              {ad.type} USDT
+                            </span>
+                            <span className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border font-bold uppercase tracking-wide ${statusStyle.pill}`}>
+                              <span className={`w-1.5 h-1.5 rounded-full ${statusStyle.dot}`} />
+                              {ad.status}
+                            </span>
                           </div>
-                        ) : (
+                          <div className="text-slate-500 text-[11px] mt-0.5">
+                            #{ad.id} · {new Date(ad.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Action buttons */}
+                      {canManage(ad) && !isDeletingThis && (
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            disabled={isActing}
+                            onClick={() => setEditingAd(ad)}
+                            className="w-8 h-8 rounded-xl bg-white/[0.04] border border-white/[0.08] flex items-center justify-center text-slate-400 active:bg-white/10 disabled:opacity-40 transition-colors"
+                            title="Edit"
+                          >
+                            <Pencil size={13} />
+                          </button>
+                          <button
+                            disabled={isActing}
+                            onClick={() => handleToggle(ad.id)}
+                            className={`w-8 h-8 rounded-xl border flex items-center justify-center disabled:opacity-40 transition-colors ${
+                              ad.status === "active"
+                                ? "bg-amber-500/10 border-amber-500/20 text-amber-400 active:bg-amber-500/20"
+                                : "bg-emerald-500/10 border-emerald-500/20 text-emerald-400 active:bg-emerald-500/20"
+                            }`}
+                            title={ad.status === "active" ? "Pause" : "Resume"}
+                          >
+                            {ad.status === "active" ? <Pause size={13} /> : <Play size={13} />}
+                          </button>
                           <button
                             disabled={isActing}
                             onClick={() => setConfirmDelete(ad.id)}
+                            className="w-8 h-8 rounded-xl bg-red-500/8 border border-red-500/15 flex items-center justify-center text-red-400 active:bg-red-500/20 disabled:opacity-40 transition-colors"
                             title="Cancel ad"
-                            className="p-2 rounded-lg glass-card text-slate-400 hover:text-red-400 hover:bg-red-500/10 disabled:opacity-40 transition-colors"
                           >
-                            <Trash2 size={14} />
+                            <Trash2 size={13} />
                           </button>
+                        </div>
+                      )}
+
+                      {/* Delete confirm */}
+                      {isDeletingThis && (
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button
+                            disabled={isActing}
+                            onClick={() => handleDelete(ad.id)}
+                            className="px-3 py-1.5 rounded-xl bg-red-500 text-white text-xs font-bold active:bg-red-600 disabled:opacity-40 transition-all"
+                          >
+                            Confirm
+                          </button>
+                          <button
+                            onClick={() => setConfirmDelete(null)}
+                            className="px-3 py-1.5 rounded-xl glass-card text-slate-300 text-xs font-medium"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Stats row */}
+                    <div className="grid grid-cols-3 gap-2">
+                      {[
+                        { label: "Price", value: `₹${ad.price.toLocaleString("en-IN")}` },
+                        { label: "Remaining", value: `${ad.remainingQuantity.toFixed(2)}`, sub: "USDT" },
+                        { label: "Limits", value: `₹${ad.minLimit.toLocaleString("en-IN")}`, sub: `–${ad.maxLimit.toLocaleString("en-IN")}` },
+                      ].map(({ label, value, sub }) => (
+                        <div key={label} className="bg-white/[0.03] border border-white/[0.06] rounded-xl px-2.5 py-2">
+                          <div className="text-[9px] text-slate-500 uppercase tracking-wider mb-1">{label}</div>
+                          <div className="text-white font-bold text-xs leading-snug">
+                            {value}
+                            {sub && <span className="text-slate-500 font-normal text-[10px]"> {sub}</span>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Fill progress */}
+                    <div>
+                      <div className="flex justify-between text-[10px] text-slate-500 mb-1.5">
+                        <span>Filled {ad.filledQuantity.toFixed(2)} / {ad.quantity.toFixed(2)} USDT</span>
+                        <span className={fillPct > 0 ? (isBuy ? "text-emerald-400" : "text-red-400") : ""}>{fillPct}%</span>
+                      </div>
+                      <div className="h-1.5 bg-white/[0.06] rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all duration-500 ${isBuy ? "bg-gradient-to-r from-emerald-600 to-emerald-400" : "bg-gradient-to-r from-red-600 to-rose-400"}`}
+                          style={{ width: `${fillPct}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Order activity pills */}
+                    {(ad.activeOrdersCount > 0 || ad.completedOrdersCount > 0) && (
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {ad.activeOrdersCount > 0 && (
+                          <Link href="/p2p/orders">
+                            <button className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-300 text-[11px] font-semibold">
+                              <Activity size={10} />
+                              {ad.activeOrdersCount} active
+                            </button>
+                          </Link>
+                        )}
+                        {ad.completedOrdersCount > 0 && (
+                          <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-[11px] font-medium">
+                            <CheckCircle2 size={10} />
+                            {ad.completedOrdersCount} done · {ad.completedRevenueUsdt.toFixed(2)} USDT
+                          </span>
                         )}
                       </div>
                     )}
+
+                    {/* Payment methods */}
+                    {ad.paymentMethods.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {ad.paymentMethods.map((m) => (
+                          <span key={m} className="text-[10px] px-2 py-0.5 rounded-md bg-white/[0.04] border border-white/[0.08] text-slate-400 font-medium">
+                            {m}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Terms */}
+                    {ad.terms && (
+                      <p className="text-[11px] text-slate-500 border-t border-white/[0.06] pt-2.5 leading-relaxed italic">
+                        "{ad.terms}"
+                      </p>
+                    )}
                   </div>
-
-                  {/* Stats row */}
-                  <div className="grid grid-cols-3 gap-2 text-xs">
-                    <div className="bg-black/20 rounded-lg p-2.5">
-                      <div className="text-slate-500 mb-0.5">Price</div>
-                      <div className="text-white font-bold">₹{ad.price.toLocaleString("en-IN")}</div>
-                    </div>
-                    <div className="bg-black/20 rounded-lg p-2.5">
-                      <div className="text-slate-500 mb-0.5">Remaining</div>
-                      <div className="text-white font-bold">{ad.remainingQuantity.toFixed(2)} <span className="text-slate-500 font-normal">USDT</span></div>
-                    </div>
-                    <div className="bg-black/20 rounded-lg p-2.5">
-                      <div className="text-slate-500 mb-0.5">Limits</div>
-                      <div className="text-white font-bold">₹{ad.minLimit.toLocaleString("en-IN")}–{ad.maxLimit.toLocaleString("en-IN")}</div>
-                    </div>
-                  </div>
-
-                  {/* Order pipeline pills — visible only when there's activity */}
-                  {(ad.activeOrdersCount > 0 || ad.completedOrdersCount > 0) && (
-                    <div className="flex items-center gap-2 text-[11px]">
-                      {ad.activeOrdersCount > 0 && (
-                        <Link href="/p2p/orders">
-                          <button className="flex items-center gap-1 px-2 py-1 rounded-full bg-electric-500/15 border border-electric-500/25 text-electric-300 font-bold hover:bg-electric-500/25 transition-colors">
-                            <Activity size={11} />
-                            {ad.activeOrdersCount} live
-                          </button>
-                        </Link>
-                      )}
-                      {ad.completedOrdersCount > 0 && (
-                        <span className="flex items-center gap-1 px-2 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-300 font-medium">
-                          <CheckCircle2 size={11} />
-                          {ad.completedOrdersCount} done · {ad.completedRevenueUsdt.toFixed(2)} USDT
-                        </span>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Fill bar */}
-                  <div>
-                    <div className="flex justify-between text-[10px] text-slate-500 mb-1">
-                      <span>Filled {ad.filledQuantity.toFixed(2)} / {ad.quantity.toFixed(2)} USDT</span>
-                      <span>{fillPct}%</span>
-                    </div>
-                    <div className="h-1 bg-white/[0.06] rounded-full overflow-hidden">
-                      <div
-                        className={`h-full rounded-full transition-all ${ad.type === "SELL" ? "bg-red-500" : "bg-emerald-500"}`}
-                        style={{ width: `${fillPct}%` }}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Payment methods */}
-                  {ad.paymentMethods.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5">
-                      {ad.paymentMethods.map((m, i) => (
-                        <span key={i} className="text-[10px] px-2 py-0.5 rounded-full bg-white/5 border border-white/10 text-slate-400 font-bold">
-                          {m}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Terms */}
-                  {ad.terms && (
-                    <p className="text-xs text-slate-500 border-t border-white/[0.05] pt-2">{ad.terms}</p>
-                  )}
                 </div>
               );
             })}
@@ -304,8 +315,6 @@ export default function P2PMyAdsPage() {
             setEditingAd(null);
           }}
           onStale={() => {
-            // Server rejected because someone else moved the row first.
-            // Refetch authoritative state and force the user to retry from scratch.
             setEditingAd(null);
             fetchAds();
           }}
@@ -316,12 +325,8 @@ export default function P2PMyAdsPage() {
 }
 
 // ─── Edit Modal ─────────────────────────────────────────────────────────────
-// Pre-filled with the ad's current values. Sends only fields that actually
-// changed so the server-side audit trail stays clean. Includes the
-// `expectedUpdatedAt` for optimistic-lock — if a fill or another edit
-// landed in between, the server returns 409 and we refetch.
 
-const COMMON_METHODS = ["UPI", "BANK", "IMPS"] as const;
+const COMMON_METHODS = ["UPI", "BANK", "IMPS", "NEFT", "Fast Pay"] as const;
 
 function EditAdModal({
   ad,
@@ -348,8 +353,6 @@ function EditAdModal({
   }
 
   async function handleSave() {
-    // Build a diff against the original — sending unchanged fields is harmless
-    // but wastes audit-trail bytes and obscures what the merchant actually edited.
     const body: Record<string, unknown> = { expectedUpdatedAt: ad.updatedAt };
     const pNum = parseFloat(price);
     const qNum = parseFloat(quantity);
@@ -360,7 +363,7 @@ function EditAdModal({
     if (!isFinite(qNum) || qNum <= 0) { toast({ title: "Invalid quantity", variant: "destructive" }); return; }
     if (!isFinite(minNum) || minNum <= 0) { toast({ title: "Invalid min limit", variant: "destructive" }); return; }
     if (!isFinite(maxNum) || maxNum <= 0) { toast({ title: "Invalid max limit", variant: "destructive" }); return; }
-    if (minNum >= maxNum) { toast({ title: "Min limit must be less than max", variant: "destructive" }); return; }
+    if (minNum >= maxNum) { toast({ title: "Min must be less than max", variant: "destructive" }); return; }
     if (methods.length === 0) { toast({ title: "Select at least one payment method", variant: "destructive" }); return; }
 
     if (pNum !== ad.price) body.price = pNum;
@@ -386,8 +389,6 @@ function EditAdModal({
       toast({ title: "Ad updated" });
       onSaved(res.ad);
     } catch (err: any) {
-      // authFetch surfaces server's `code` if present — treat 409/stale as
-      // a refresh-required signal rather than a generic error.
       if (err?.code === "stale" || /modified by another action/i.test(err?.message ?? "")) {
         toast({
           title: "Ad changed elsewhere",
@@ -403,127 +404,139 @@ function EditAdModal({
     }
   }
 
+  const isBuy = ad.type === "BUY";
+
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/75 backdrop-blur-sm"
       onClick={onClose}
     >
       <div
-        className="w-full sm:max-w-md max-h-[90vh] overflow-y-auto bg-slate-900 border border-white/10 rounded-t-2xl sm:rounded-2xl p-5 space-y-4"
+        className="w-full sm:max-w-md max-h-[92vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl border border-white/10 shadow-2xl"
+        style={{ background: "linear-gradient(180deg, #0e1320 0%, #090c17 100%)" }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-base font-bold text-white">Edit Ad #{ad.id}</h2>
-            <p className="text-slate-500 text-xs mt-0.5">{ad.type} USDT</p>
-          </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg text-slate-500 hover:text-white hover:bg-white/5">
-            <X size={16} />
-          </button>
+        {/* Drag handle (mobile) */}
+        <div className="flex justify-center pt-3 pb-1 sm:hidden">
+          <div className="w-10 h-1 rounded-full bg-white/20" />
         </div>
 
-        <Field label="Price (₹ per USDT)">
-          <input
-            type="number" step="0.01" value={price}
-            onChange={(e) => setPrice(e.target.value)}
-            className="input-base"
-          />
-        </Field>
-
-        <Field
-          label="Quantity (USDT)"
-          hint={
-            ad.type === "SELL"
-              ? "Increasing locks more from Funding Wallet · decreasing returns the freed USDT"
-              : `Already filled: ${ad.filledQuantity.toFixed(2)} USDT`
-          }
-        >
-          <input
-            type="number" step="0.01" value={quantity}
-            onChange={(e) => setQuantity(e.target.value)}
-            className="input-base"
-          />
-        </Field>
-
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Min limit (₹)">
-            <input
-              type="number" step="1" value={minLimit}
-              onChange={(e) => setMinLimit(e.target.value)}
-              className="input-base"
-            />
-          </Field>
-          <Field label="Max limit (₹)">
-            <input
-              type="number" step="1" value={maxLimit}
-              onChange={(e) => setMaxLimit(e.target.value)}
-              className="input-base"
-            />
-          </Field>
-        </div>
-
-        <Field label="Payment methods">
-          <div className="flex flex-wrap gap-2">
-            {COMMON_METHODS.map((m) => {
-              const on = methods.includes(m);
-              return (
-                <button
-                  type="button" key={m}
-                  onClick={() => toggleMethod(m)}
-                  className={`text-xs px-3 py-1.5 rounded-full border font-bold transition-colors ${
-                    on
-                      ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-300"
-                      : "bg-white/5 border-white/10 text-slate-400 hover:text-white"
-                  }`}
-                >
-                  {m}
-                </button>
-              );
-            })}
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-white/[0.07]">
+          <div className="flex items-center gap-2.5">
+            <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${isBuy ? "bg-emerald-500/15" : "bg-red-500/15"}`}>
+              {isBuy
+                ? <TrendingUp size={14} className="text-emerald-400" />
+                : <TrendingDown size={14} className="text-red-400" />
+              }
+            </div>
+            <div>
+              <h2 className="text-sm font-bold text-white">Edit Ad #{ad.id}</h2>
+              <p className="text-[11px] text-slate-500">{ad.type} USDT listing</p>
+            </div>
           </div>
-        </Field>
-
-        <Field label="Terms (optional)">
-          <textarea
-            value={terms}
-            onChange={(e) => setTerms(e.target.value)}
-            rows={3} maxLength={500}
-            placeholder="e.g. Pay within 10 minutes, mention order ID in UPI note"
-            className="input-base resize-none"
-          />
-        </Field>
-
-        <div className="flex gap-2 pt-2">
           <button
             onClick={onClose}
-            disabled={saving}
-            className="flex-1 py-2.5 rounded-xl glass-card text-slate-300 text-sm font-bold hover:text-white disabled:opacity-40 transition-colors"
+            className="w-8 h-8 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-slate-400 active:bg-white/10 transition-colors"
           >
-            Cancel
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="flex-1 py-2.5 rounded-xl bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 text-sm font-bold hover:bg-emerald-500/30 disabled:opacity-40 transition-all"
-          >
-            {saving ? "Saving…" : "Save changes"}
+            <X size={15} />
           </button>
         </div>
-      </div>
 
-      <style>{`
-        .input-base {
-          width: 100%;
-          background: rgba(255,255,255,0.04);
-          border: 1px solid rgba(255,255,255,0.10);
-          border-radius: 0.75rem;
-          padding: 0.6rem 0.8rem;
-          color: white;
-          font-size: 0.875rem;
-          outline: none;
-        }
-        .input-base:focus { border-color: rgba(56,189,248,0.5); }
-      `}</style>
+        <div className="px-5 py-4 space-y-4">
+          <Field label="Price (₹ per USDT)">
+            <input
+              type="number" step="0.01" value={price}
+              onChange={(e) => setPrice(e.target.value)}
+              className="field-input"
+              placeholder="e.g. 105"
+            />
+          </Field>
+
+          <Field
+            label="Quantity (USDT)"
+            hint={
+              ad.type === "SELL"
+                ? "Increasing locks more from Funding Wallet; decreasing returns freed USDT"
+                : `Already filled: ${ad.filledQuantity.toFixed(2)} USDT`
+            }
+          >
+            <input
+              type="number" step="0.01" value={quantity}
+              onChange={(e) => setQuantity(e.target.value)}
+              className="field-input"
+              placeholder="e.g. 100"
+            />
+          </Field>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Min limit (₹)">
+              <input
+                type="number" step="1" value={minLimit}
+                onChange={(e) => setMinLimit(e.target.value)}
+                className="field-input"
+                placeholder="100"
+              />
+            </Field>
+            <Field label="Max limit (₹)">
+              <input
+                type="number" step="1" value={maxLimit}
+                onChange={(e) => setMaxLimit(e.target.value)}
+                className="field-input"
+                placeholder="50000"
+              />
+            </Field>
+          </div>
+
+          <Field label="Payment methods">
+            <div className="flex flex-wrap gap-2">
+              {COMMON_METHODS.map((m) => {
+                const on = methods.includes(m);
+                return (
+                  <button
+                    type="button" key={m}
+                    onClick={() => toggleMethod(m)}
+                    className={`text-xs px-3 py-1.5 rounded-xl border font-semibold transition-all ${
+                      on
+                        ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-300"
+                        : "bg-white/[0.04] border-white/10 text-slate-400"
+                    }`}
+                  >
+                    {m}
+                  </button>
+                );
+              })}
+            </div>
+          </Field>
+
+          <Field label="Terms (optional)">
+            <textarea
+              value={terms}
+              onChange={(e) => setTerms(e.target.value)}
+              rows={3} maxLength={500}
+              placeholder="e.g. Pay within 10 minutes, mention order ID in UPI note"
+              className="field-input resize-none"
+            />
+          </Field>
+
+          <div className="flex gap-2 pt-1 pb-2">
+            <button
+              onClick={onClose}
+              disabled={saving}
+              className="flex-1 py-3 rounded-xl glass-card text-slate-300 text-sm font-semibold disabled:opacity-40 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="flex-1 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-400 text-black text-sm font-bold disabled:opacity-50 transition-all active:scale-[0.99]"
+            >
+              {saving ? "Saving…" : "Save Changes"}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -531,9 +544,9 @@ function EditAdModal({
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
     <div className="space-y-1.5">
-      <label className="text-[11px] text-slate-400 font-bold uppercase tracking-wide">{label}</label>
+      <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{label}</label>
       {children}
-      {hint && <p className="text-[10px] text-slate-500 leading-relaxed">{hint}</p>}
+      {hint && <p className="text-[11px] text-slate-500 leading-relaxed">{hint}</p>}
     </div>
   );
 }

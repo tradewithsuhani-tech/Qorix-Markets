@@ -726,6 +726,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
               "/p2p": "P2P Market",
               "/p2p/create-ad": "Create Ad",
               "/p2p/orders": "My Orders",
+              "/p2p/ads/my": "My Ads",
               "/p2p/payment-methods": "Payment Methods",
               "/transactions": "History",
               "/referral": "Referrals",
@@ -743,6 +744,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
               "/self-trade": "Self Trade",
               "/trading-desk": "Trading Desk",
               "/portfolio": "Portfolio",
+              "/devices": "My Devices",
+              "/notifications": "Notifications",
             };
             const PRIMARY_ROUTES = ["/dashboard", "/wallet", "/invest"];
             const isPrimary = PRIMARY_ROUTES.includes(location) || location.startsWith("/admin");
