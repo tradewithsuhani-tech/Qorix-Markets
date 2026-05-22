@@ -340,16 +340,40 @@ router.get("/p2p/ads/my", async (req: AuthRequest, res) => {
     const ads = await db.select().from(p2pAdsTable)
       .where(eq(p2pAdsTable.userId, req.userId!))
       .orderBy(desc(p2pAdsTable.createdAt));
-    res.json(ads.map((a) => ({
-      ...a,
-      price: parseNum(a.price as string),
-      quantity: parseNum(a.quantity as string),
-      minLimit: parseNum(a.minLimit as string),
-      maxLimit: parseNum(a.maxLimit as string),
-      filledQuantity: parseNum(a.filledQuantity as string),
-      remainingQuantity: parseNum(a.quantity as string) - parseNum(a.filledQuantity as string),
-      paymentMethods: JSON.parse(a.paymentMethods as string),
-    })));
+
+    // Per-ad order stats — advertiser dashboard needs to know which ads are
+    // generating live trades vs sitting idle. One grouped query per user
+    // (not per ad) so this stays O(1) regardless of ad count.
+    const adIds = ads.map((a) => a.id);
+    type AdStat = { adId: number; active: number; completed: number; revenue: string };
+    const statRows: AdStat[] = adIds.length === 0 ? [] : (await db
+      .select({
+        adId: p2pOrdersTable.adId,
+        active: sql<number>`count(*) filter (where ${p2pOrdersTable.status} in ('pending','paid','disputed'))::int`,
+        completed: sql<number>`count(*) filter (where ${p2pOrdersTable.status} = 'completed')::int`,
+        revenue: sql<string>`coalesce(sum(${p2pOrdersTable.usdtAmount}) filter (where ${p2pOrdersTable.status} = 'completed'), 0)`,
+      })
+      .from(p2pOrdersTable)
+      .where(inArray(p2pOrdersTable.adId, adIds))
+      .groupBy(p2pOrdersTable.adId)) as AdStat[];
+    const statByAd = new Map(statRows.map((s) => [s.adId, s]));
+
+    res.json(ads.map((a) => {
+      const s = statByAd.get(a.id);
+      return {
+        ...a,
+        price: parseNum(a.price as string),
+        quantity: parseNum(a.quantity as string),
+        minLimit: parseNum(a.minLimit as string),
+        maxLimit: parseNum(a.maxLimit as string),
+        filledQuantity: parseNum(a.filledQuantity as string),
+        remainingQuantity: parseNum(a.quantity as string) - parseNum(a.filledQuantity as string),
+        paymentMethods: JSON.parse(a.paymentMethods as string),
+        activeOrdersCount: s?.active ?? 0,
+        completedOrdersCount: s?.completed ?? 0,
+        completedRevenueUsdt: parseNum((s?.revenue as string) ?? "0"),
+      };
+    }));
   } catch {
     res.status(500).json({ error: "Failed to fetch your ads" });
   }
@@ -419,6 +443,169 @@ router.post("/p2p/ads", async (req: AuthRequest, res) => {
     res.status(201).json({ success: true, ad: ad! });
   } catch (err: any) {
     res.status(400).json({ error: err.message || "Failed to create ad" });
+  }
+});
+
+// PATCH /p2p/ads/:id — edit price / limits / quantity / terms / payment methods.
+// Optimistic-lock via `expectedUpdatedAt` so two concurrent edits (e.g. two
+// browser tabs, or a price refresh racing a manual edit) can't silently
+// clobber each other. SELL ads rebalance the seller's locked USDT when
+// quantity changes:
+//   - increasing qty  → lock the delta from Funding Wallet (fail if short)
+//   - decreasing qty  → return the delta to Funding Wallet (forbidden if
+//     it would drop below filledQuantity + currently-reserved active orders)
+const UpdateAdSchema = z.object({
+  price: z.number().positive().optional(),
+  quantity: z.number().positive().max(100000).optional(),
+  minLimit: z.number().positive().optional(),
+  maxLimit: z.number().positive().optional(),
+  paymentMethods: z.array(z.string()).min(1).optional(),
+  terms: z.string().max(500).nullable().optional(),
+  expectedUpdatedAt: z.string().min(1), // ISO timestamp; required
+});
+
+router.patch("/p2p/ads/:id", async (req: AuthRequest, res) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const parsed = UpdateAdSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid data", details: parsed.error.issues });
+    return;
+  }
+  const patch = parsed.data;
+
+  // At least one editable field must be present.
+  const hasEdit = ["price", "quantity", "minLimit", "maxLimit", "paymentMethods", "terms"]
+    .some((k) => (patch as any)[k] !== undefined);
+  if (!hasEdit) { res.status(400).json({ error: "No editable fields supplied" }); return; }
+
+  try {
+    const updated = await db.transaction(async (tx) => {
+      const [ad] = await tx.select().from(p2pAdsTable)
+        .where(and(eq(p2pAdsTable.id, id), eq(p2pAdsTable.userId, req.userId!))).limit(1);
+      if (!ad) throw new Error("Ad not found");
+      if (ad.status === "completed" || ad.status === "cancelled") {
+        throw new Error("Cannot edit a completed or cancelled ad");
+      }
+
+      // Optimistic lock — client sends the `updatedAt` it last saw. If the
+      // row has moved since (someone else edited, or a fill bumped it),
+      // reject so the client can refresh and retry.
+      const currentTs = (ad.updatedAt as Date).toISOString();
+      if (currentTs !== patch.expectedUpdatedAt) {
+        const e: any = new Error("Ad was modified by another action — please refresh and try again");
+        e.code = "stale";
+        throw e;
+      }
+
+      const oldQty = parseNum(ad.quantity as string);
+      const filledQty = parseNum(ad.filledQuantity as string);
+      const newQty = patch.quantity ?? oldQty;
+      const newMin = patch.minLimit ?? parseNum(ad.minLimit as string);
+      const newMax = patch.maxLimit ?? parseNum(ad.maxLimit as string);
+      const newPrice = patch.price ?? parseNum(ad.price as string);
+
+      // Limit invariants.
+      if (newMin >= newMax) throw new Error("min_limit must be less than max_limit");
+      // Min order in USDT must be deliverable from total quantity.
+      if (newMin / newPrice > newQty) throw new Error("min_limit exceeds total quantity");
+
+      // Quantity invariants — never below already-filled amount.
+      if (newQty < filledQty) {
+        throw new Error(`new quantity (${newQty}) cannot be below already-filled (${filledQty})`);
+      }
+
+      // SELL ads: rebalance Funding Wallet escrow on qty change.
+      if (ad.type === "SELL" && newQty !== oldQty) {
+        // Active orders (pending/paid/disputed) reserve USDT against the ad
+        // until they settle. Reducing below that reserve would orphan the
+        // running orders' escrow, so block it.
+        const [reserveRow] = await tx
+          .select({
+            reserved: sql<string>`coalesce(sum(${p2pOrdersTable.usdtAmount}) filter (where ${p2pOrdersTable.status} in ('pending','paid','disputed')), 0)`,
+          })
+          .from(p2pOrdersTable)
+          .where(eq(p2pOrdersTable.adId, id));
+        const reservedActive = parseNum((reserveRow?.reserved as string) ?? "0");
+        const minSafeQty = filledQty + reservedActive;
+        if (newQty < minSafeQty) {
+          throw new Error(
+            `Cannot reduce quantity below ${minSafeQty} USDT (filled + active orders)`,
+          );
+        }
+
+        const delta = newQty - oldQty; // positive = lock more, negative = release
+        const [w] = await tx.select().from(walletsTable).where(eq(walletsTable.userId, req.userId!)).limit(1);
+        if (!w) throw new Error("Wallet not found");
+        if (delta > 0) {
+          // Guard the deduction at the SQL layer so two concurrent ad
+          // increases on different ads of the same user can't both pass an
+          // earlier read-time balance check and overdraw the wallet. The
+          // conditional UPDATE matches zero rows if the live balance is
+          // insufficient — we treat that as the same insufficient-funds
+          // failure the read-time check would have raised.
+          const upd = await tx.update(walletsTable).set({
+            tradingBalance: sql`${walletsTable.tradingBalance} - ${delta}`,
+          }).where(and(
+            eq(walletsTable.userId, req.userId!),
+            sql`${walletsTable.tradingBalance} >= ${delta}`,
+          )).returning({ userId: walletsTable.userId });
+          if (upd.length === 0) {
+            throw new Error("Insufficient Funding Wallet balance to increase quantity");
+          }
+        } else {
+          const refund = -delta;
+          await tx.update(walletsTable).set({
+            tradingBalance: sql`${walletsTable.tradingBalance} + ${refund}`,
+          }).where(eq(walletsTable.userId, req.userId!));
+        }
+      }
+
+      // Build SET payload — only fields the client sent.
+      const set: Record<string, unknown> = { updatedAt: new Date() };
+      if (patch.price !== undefined) set.price = String(newPrice);
+      if (patch.quantity !== undefined) set.quantity = String(newQty);
+      if (patch.minLimit !== undefined) set.minLimit = String(newMin);
+      if (patch.maxLimit !== undefined) set.maxLimit = String(newMax);
+      if (patch.paymentMethods !== undefined) set.paymentMethods = JSON.stringify(patch.paymentMethods);
+      if (patch.terms !== undefined) set.terms = patch.terms;
+
+      // Conditional update guards the optimistic lock at the SQL layer too —
+      // belt-and-braces against the read-check-write race between the
+      // tx.select() above and this update inside a serializable boundary.
+      const result = await tx.update(p2pAdsTable)
+        .set(set)
+        .where(and(
+          eq(p2pAdsTable.id, id),
+          eq(p2pAdsTable.updatedAt, ad.updatedAt as Date),
+        ))
+        .returning();
+      if (result.length === 0) {
+        const e: any = new Error("Ad was modified by another action — please refresh and try again");
+        e.code = "stale";
+        throw e;
+      }
+      return result[0];
+    });
+
+    res.json({
+      success: true,
+      ad: {
+        ...updated,
+        price: parseNum(updated.price as string),
+        quantity: parseNum(updated.quantity as string),
+        minLimit: parseNum(updated.minLimit as string),
+        maxLimit: parseNum(updated.maxLimit as string),
+        filledQuantity: parseNum(updated.filledQuantity as string),
+        paymentMethods: JSON.parse(updated.paymentMethods as string),
+      },
+    });
+  } catch (err: any) {
+    if (err?.code === "stale") {
+      res.status(409).json({ error: err.message, code: "stale" });
+      return;
+    }
+    res.status(400).json({ error: err?.message || "Failed to update ad" });
   }
 });
 
@@ -617,11 +804,23 @@ router.post("/p2p/orders", async (req: AuthRequest, res) => {
         status: "held",
       });
 
-      // Update filled quantity on ad
-      await tx.update(p2pAdsTable).set({
+      // Update filled quantity on ad — guarded at the SQL layer so two
+      // buyers racing the same ad can't both pass the earlier remaining-qty
+      // check and overfill it. Under READ COMMITTED the prior select is a
+      // snapshot, so we re-assert the invariant atomically here. If the
+      // condition fails (status flipped to paused/cancelled, or a sibling
+      // order consumed the remainder first) we abort the order.
+      const fillRes = await tx.update(p2pAdsTable).set({
         filledQuantity: sql`${p2pAdsTable.filledQuantity} + ${usdtAmount}`,
         updatedAt: new Date(),
-      }).where(eq(p2pAdsTable.id, adId));
+      }).where(and(
+        eq(p2pAdsTable.id, adId),
+        eq(p2pAdsTable.status, "active"),
+        sql`${p2pAdsTable.quantity} - ${p2pAdsTable.filledQuantity} >= ${usdtAmount}`,
+      )).returning({ id: p2pAdsTable.id });
+      if (fillRes.length === 0) {
+        throw new Error("Ad is no longer available — quantity exhausted or ad paused");
+      }
     });
 
     // Order creation grows both parties' 30d total — invalidate so the

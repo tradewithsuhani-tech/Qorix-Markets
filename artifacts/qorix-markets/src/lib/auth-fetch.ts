@@ -76,7 +76,14 @@ export async function authFetch<T = any>(url: string, init?: RequestInit): Promi
   }
   if (!res.ok) {
     const msg = (data && (data.message || data.error)) || `Request failed (${res.status})`;
-    throw new Error(msg);
+    const err: Error & { code?: string; status?: number } = new Error(msg);
+    err.status = res.status;
+    // Preserve server-provided machine-readable code (e.g. "stale", "kyc_required")
+    // so callers can branch on the failure without parsing the human message.
+    if (data && typeof data === "object" && typeof data.code === "string") {
+      err.code = data.code;
+    }
+    throw err;
   }
   return data as T;
 }
