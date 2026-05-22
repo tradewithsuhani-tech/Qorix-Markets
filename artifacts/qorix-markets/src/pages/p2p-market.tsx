@@ -6,7 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   TrendingUp, TrendingDown, RefreshCw, ArrowUpDown,
   Plus, ChevronRight, Wallet, AlertCircle, Filter, Clock, ThumbsUp,
-  ShieldCheck, ClipboardList, ChevronDown,
+  ShieldCheck, ClipboardList, ChevronDown, MessageCircle,
 } from "lucide-react";
 import { MerchantProfileModal } from "@/components/p2p-merchant-profile-modal";
 
@@ -239,6 +239,14 @@ export default function P2PMarketPage() {
             <button onClick={() => fetchData(true)} className="p-2 glass-card rounded-xl text-slate-400 active:bg-white/10 transition-colors" aria-label="Refresh">
               <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
             </button>
+            {/* ── Chat button ─────────────────────────────────── */}
+            <Link href="/p2p/chat">
+              <button className="flex items-center gap-1.5 px-3 py-2 glass-card rounded-xl text-slate-300 hover:text-white text-xs font-medium transition-colors">
+                <MessageCircle size={13} />
+                Chat
+              </button>
+            </Link>
+
             {/* ── Orders dropdown ─────────────────────────────── */}
             <div className="relative" ref={ordersRef}>
               <button
