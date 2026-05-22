@@ -25,6 +25,7 @@ import {
 import { eq, ne, sum, count, and, or, desc, sql, inArray, isNotNull, ilike } from "drizzle-orm";
 import { createNotification } from "../lib/notifications";
 import { publishOrderEvent } from "../lib/p2p-realtime";
+import { invalidateMerchantProfiles } from "../lib/p2p-profile";
 import { authMiddleware, adminMiddleware, getParam, getQueryInt, getQueryString, invalidateAuthUserCache, type AuthRequest } from "../middlewares/auth";
 import { RedisCache } from "../lib/cache/redis-cache";
 import { TTLCache } from "../lib/cache/ttl-cache";
@@ -3149,6 +3150,11 @@ router.post("/admin/p2p/disputes/:id/resolve", async (req: AuthRequest, res) => 
     ]);
 
     publishOrderEvent({ type: "order.dispute_resolved", orderId: result.order.id, resolution: result.newStatus });
+    // A dispute resolution changes the 30d completion-rate denominator
+    // and (for release/refund) the completed count for both parties.
+    // Bust their trust profile caches so the merchant card reflects the
+    // outcome on the next request.
+    await invalidateMerchantProfiles([result.order.buyerId, result.order.sellerId]);
 
     res.json({ success: true, status: result.newStatus });
   } catch (err: any) {

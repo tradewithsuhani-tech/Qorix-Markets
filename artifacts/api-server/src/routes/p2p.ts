@@ -15,6 +15,11 @@ import { z } from "zod";
 import { authMiddleware, type AuthRequest } from "../middlewares/auth";
 import { createNotification } from "../lib/notifications";
 import { publishOrderEvent } from "../lib/p2p-realtime";
+import {
+  getMerchantProfile,
+  getMerchantProfiles,
+  invalidateMerchantProfiles,
+} from "../lib/p2p-profile";
 import jwt from "jsonwebtoken";
 
 const router = Router();
@@ -304,11 +309,25 @@ router.get("/p2p/ads", async (req: AuthRequest, res) => {
         });
       }
     }
-    const finalResult = result.map((a) => ({
-      ...a,
-      tradesCount: statsMap.get(a.userId)?.trades ?? 0,
-      completionRate: statsMap.get(a.userId)?.completionRate ?? 100,
-    }));
+    // Pull per-user trust profiles (verified badge + avg release time + rating)
+    // from the cache. This is O(unique-userIds) Redis GETs; cold misses fan
+    // out to compute() under single-flight, so a list page that surfaces 20
+    // ads from ~10 distinct advertisers hits the DB at most 10 times on the
+    // very first request and 0 times for the next 5 minutes.
+    const profiles = await getMerchantProfiles(userIds);
+    const finalResult = result.map((a) => {
+      const p = profiles.get(a.userId);
+      return {
+        ...a,
+        tradesCount: statsMap.get(a.userId)?.trades ?? 0,
+        completionRate: statsMap.get(a.userId)?.completionRate ?? 100,
+        isVerifiedMerchant: p?.isVerifiedMerchant ?? false,
+        kycVerified: p?.kycVerified ?? false,
+        avgReleaseSeconds: p?.avgReleaseSeconds ?? null,
+        avgRating: p?.avgRating ?? null,
+        ratingCount: p?.ratingCount ?? 0,
+      };
+    });
     res.json(finalResult);
   } catch {
     res.status(500).json({ error: "Failed to fetch ads" });
@@ -483,26 +502,16 @@ router.get("/p2p/ads/:id", async (req: AuthRequest, res) => {
       methodRefs.includes(String(m.id)) || methodRefs.includes(m.type)
     );
 
-    // Compute advertiser trade stats
-    const [buyerRows, sellerRows] = await Promise.all([
-      db.select({
-        userId: p2pOrdersTable.buyerId,
-        total: sql<number>`count(*)::int`,
-        completed: sql<number>`sum(case when ${p2pOrdersTable.status}='completed' then 1 else 0 end)::int`,
-      }).from(p2pOrdersTable).where(eq(p2pOrdersTable.buyerId, ad.userId)).groupBy(p2pOrdersTable.buyerId),
-      db.select({
-        userId: p2pOrdersTable.sellerId,
-        total: sql<number>`count(*)::int`,
-        completed: sql<number>`sum(case when ${p2pOrdersTable.status}='completed' then 1 else 0 end)::int`,
-      }).from(p2pOrdersTable).where(eq(p2pOrdersTable.sellerId, ad.userId)).groupBy(p2pOrdersTable.sellerId),
-    ]);
-    let tradesTotal = 0; let completedTotal = 0;
-    for (const r of [...buyerRows, ...sellerRows]) {
-      tradesTotal += r.total ?? 0;
-      completedTotal += r.completed ?? 0;
-    }
-    const tradesCount = tradesTotal;
-    const completionRate = tradesTotal > 0 ? Math.round((completedTotal / tradesTotal) * 100) : 100;
+    // Reuse the cached merchant trust profile — single Redis GET vs two
+    // group-by aggregates over p2p_orders on every detail-page hit. The
+    // numbers stay fresh because we punch through the cache on every order
+    // state mutation (see invalidateMerchantProfiles calls below).
+    const profile = await getMerchantProfile(ad.userId);
+    const tradesCount = profile.totalCompletedAllTime;
+    // For the ad detail card we surface the 30d completion rate (matches
+    // the trust modal); falls back to 100% when no trades yet to avoid
+    // scaring buyers off brand-new sellers.
+    const completionRate = profile.completionRate30d;
 
     res.json({
       ...ad,
@@ -517,9 +526,31 @@ router.get("/p2p/ads/:id", async (req: AuthRequest, res) => {
       advertiserName: (ad.advertiserName as string).split(" ")[0] + "***",
       tradesCount,
       completionRate,
+      isVerifiedMerchant: profile.isVerifiedMerchant,
+      kycVerified: profile.kycVerified,
+      avgReleaseSeconds: profile.avgReleaseSeconds,
+      avgRating: profile.avgRating,
+      ratingCount: profile.ratingCount,
     });
   } catch {
     res.status(500).json({ error: "Failed to fetch ad" });
+  }
+});
+
+// GET /p2p/users/:id/profile — Binance-style merchant trust card.
+// Surfaces verified badge, completion rate, avg release time, 30d volume,
+// rating average. All numbers come from a 5-minute Redis cache; mutations
+// (order completed / cancelled / rated, admin dispute resolved, expiry
+// cron) punch through the cache so the card stays honest after a trade
+// settles. Auth-gated because the masked first name is still PII-adjacent.
+router.get("/p2p/users/:id/profile", async (req: AuthRequest, res) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  try {
+    const profile = await getMerchantProfile(id);
+    res.json(profile);
+  } catch {
+    res.status(500).json({ error: "Failed to fetch profile" });
   }
 });
 
@@ -592,6 +623,14 @@ router.post("/p2p/orders", async (req: AuthRequest, res) => {
         updatedAt: new Date(),
       }).where(eq(p2pAdsTable.id, adId));
     });
+
+    // Order creation grows both parties' 30d total — invalidate so the
+    // completion-rate denominator updates immediately. Without this, a
+    // buyer could refresh the ad page and still see the seller's pre-order
+    // numbers for up to 5 minutes.
+    if (order) {
+      await invalidateMerchantProfiles([order.buyerId, order.sellerId]);
+    }
 
     res.status(201).json({ success: true, order: order! });
   } catch (err: any) {
@@ -761,6 +800,12 @@ router.patch("/p2p/orders/:id/confirm", async (req: AuthRequest, res) => {
     }
 
     publishOrderEvent({ type: "order.completed", orderId: id, actorId: req.userId! });
+    // Trust profile aggregates changed for BOTH parties — bust their caches
+    // so the merchant card on the ad list reflects the new completion +
+    // release-time stats immediately on the next request.
+    if (orderForNotif) {
+      await invalidateMerchantProfiles([orderForNotif.buyerId, req.userId!]);
+    }
     res.json({ success: true, status: "completed" });
   } catch (err: any) {
     res.status(400).json({ error: err.message || "Failed to confirm order" });
@@ -771,6 +816,8 @@ router.patch("/p2p/orders/:id/confirm", async (req: AuthRequest, res) => {
 router.patch("/p2p/orders/:id/cancel", async (req: AuthRequest, res) => {
   const id = parseInt(req.params.id);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  let buyerIdForInvalidate: number | null = null;
+  let sellerIdForInvalidate: number | null = null;
   try {
     await db.transaction(async (tx) => {
       const [order] = await tx.select().from(p2pOrdersTable)
@@ -779,6 +826,8 @@ router.patch("/p2p/orders/:id/cancel", async (req: AuthRequest, res) => {
           or(eq(p2pOrdersTable.buyerId, req.userId!), eq(p2pOrdersTable.sellerId, req.userId!)),
         )).limit(1);
       if (!order) throw new Error("Order not found");
+      buyerIdForInvalidate = order.buyerId;
+      sellerIdForInvalidate = order.sellerId;
       if (order.status === "completed" || order.status === "cancelled") throw new Error("Cannot cancel this order");
       if (order.status === "disputed") throw new Error("Order is under admin review and cannot be cancelled");
       if (order.status === "paid") throw new Error("Payment already marked. Raise a dispute if needed.");
@@ -796,6 +845,11 @@ router.patch("/p2p/orders/:id/cancel", async (req: AuthRequest, res) => {
         .where(eq(p2pOrdersTable.id, id));
     });
     publishOrderEvent({ type: "order.cancelled", orderId: id, actorId: req.userId!, reason: typeof req.body?.cancelReason === "string" ? req.body.cancelReason : null });
+    // Cancel changes both parties' 30d completion rate (denominator grew,
+    // numerator didn't). Bust trust profile caches.
+    if (buyerIdForInvalidate && sellerIdForInvalidate) {
+      await invalidateMerchantProfiles([buyerIdForInvalidate, sellerIdForInvalidate]);
+    }
     res.json({ success: true, status: "cancelled" });
   } catch (err: any) {
     res.status(400).json({ error: err.message || "Failed to cancel order" });
@@ -952,6 +1006,8 @@ router.post("/p2p/orders/:id/rate", async (req: AuthRequest, res) => {
       orderId: id, fromUserId: req.userId!, toUserId, rating: Math.round(rating),
       comment: typeof comment === "string" && comment.trim() ? comment.trim() : null,
     }).returning();
+    // Recipient's avgRating + ratingCount changed — bust their trust card.
+    await invalidateMerchantProfiles([toUserId]);
     res.status(201).json(newRating);
   } catch {
     res.status(500).json({ error: "Failed to submit rating" });

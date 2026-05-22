@@ -4,6 +4,7 @@ import { and, eq, lt, sql } from "drizzle-orm";
 import { logger, errorLogger } from "./logger";
 import { createNotification } from "./notifications";
 import { publishOrderEvent } from "./p2p-realtime";
+import { invalidateMerchantProfiles } from "./p2p-profile";
 
 function parseNum(v: string | number): number {
   return typeof v === "number" ? v : parseFloat(v as string);
@@ -95,6 +96,10 @@ export async function expireStaleP2POrders(): Promise<{ expired: number }> {
 
         expiredCount += 1;
         publishOrderEvent({ type: "order.expired", orderId: order.id });
+        // Expiry counts toward both parties' 30d total but not their
+        // completed count, so completion-rate drops. Bust their cached
+        // trust profiles so the merchant card shows the updated number.
+        await invalidateMerchantProfiles([order.buyerId, order.sellerId]);
 
         // Notifications (fire-and-forget — outside the txn)
         const fiat = parseNum(order.fiatAmount as string).toFixed(2);

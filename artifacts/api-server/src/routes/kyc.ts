@@ -5,6 +5,7 @@ import { authMiddleware, getQueryString, type AuthRequest } from "../middlewares
 import { createNotification } from "../lib/notifications";
 import { sendTxnEmailToUser } from "../lib/email-service";
 import { notSmokeTestUser, shouldIncludeSmokeTest } from "../lib/smoke-test-account";
+import { invalidateMerchantProfiles } from "../lib/p2p-profile";
 
 const router = Router();
 
@@ -343,6 +344,13 @@ router.post("/admin/kyc/review", authMiddleware, async (req: AuthRequest, res) =
         kycRejectionReason: action === "reject" ? cleanReason : null,
       };
   await db.update(usersTable).set(set).where(eq(usersTable.id, userId));
+  // P2P merchant trust profile depends on users.kycStatus (verified badge
+  // gate). When the admin flips KYC to approved/rejected, bust the cached
+  // profile so the badge updates immediately instead of lagging by up to
+  // 5 minutes on every P2P surface.
+  if (!isAddress) {
+    await invalidateMerchantProfiles([userId]);
+  }
   const notifTitle =
     action === "approve"
       ? (isAddress ? "Address verified" : "KYC approved")

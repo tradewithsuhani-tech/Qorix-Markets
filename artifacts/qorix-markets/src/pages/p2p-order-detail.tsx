@@ -6,7 +6,9 @@ import { useToast } from "@/hooks/use-toast";
 import {
   ArrowLeft, Clock, CheckCircle2, XCircle, AlertCircle,
   ShieldCheck, Loader2, Copy, MessageCircle, Send, Star, RefreshCw, QrCode, X, Upload,
+  User,
 } from "lucide-react";
+import { MerchantProfileModal } from "@/components/p2p-merchant-profile-modal";
 
 type SellerMethod = {
   id: number; type: string; displayName: string; upiId: string | null;
@@ -92,6 +94,7 @@ export default function P2POrderDetailPage() {
 
   // Payment Proof Modal
   const [proofOpen, setProofOpen] = useState(false);
+  const [merchantOpen, setMerchantOpen] = useState(false);
   const [paymentRef, setPaymentRef] = useState("");
   const [paymentProof, setPaymentProof] = useState<string | null>(null);
   const [proofPreview, setProofPreview] = useState<string | null>(null);
@@ -331,6 +334,10 @@ export default function P2POrderDetailPage() {
   }
 
   const isBuyer = order.role === "buyer";
+  // Counterparty for the trust card — the OTHER party's user id, so the
+  // buyer sees the seller's profile and vice versa.
+  const counterpartyId = isBuyer ? order.sellerId : order.buyerId;
+  const counterpartyLabel = isBuyer ? "Seller" : "Buyer";
   const payMethods = order.sellerPaymentMethods ?? [];
   const primaryMethod = payMethods[0] ?? null;
   const methodLabel = order.paymentMethod || primaryMethod?.type || "your payment method";
@@ -397,6 +404,18 @@ export default function P2POrderDetailPage() {
           {order.status === "cancelled" && (
             <h1 className="text-slate-400 font-bold text-xl">Order Cancelled</h1>
           )}
+
+          {/* Counterparty trust pill — opens the merchant profile modal.
+              Tucked into the status header so it's visible on every state
+              of the order without crowding the action area. */}
+          <button
+            onClick={() => setMerchantOpen(true)}
+            className="mt-3 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/[0.04] border border-white/[0.06] hover:border-white/[0.12] text-slate-300 text-xs transition-colors"
+          >
+            <User size={11} className="text-slate-400" />
+            <span>View {counterpartyLabel.toLowerCase()} profile</span>
+            <ShieldCheck size={11} className="text-emerald-400" />
+          </button>
 
           <p className="text-slate-500 text-xs mt-1.5">
             Order #{order.id} · {new Date(order.createdAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}
@@ -969,6 +988,9 @@ export default function P2POrderDetailPage() {
             </div>
           </div>
         </div>
+      )}
+      {merchantOpen && (
+        <MerchantProfileModal userId={counterpartyId} onClose={() => setMerchantOpen(false)} />
       )}
     </Layout>
   );

@@ -6,7 +6,9 @@ import { useToast } from "@/hooks/use-toast";
 import {
   TrendingUp, TrendingDown, RefreshCw, ArrowUpDown,
   Plus, ChevronRight, Wallet, AlertCircle, Filter, Clock, ThumbsUp,
+  ShieldCheck,
 } from "lucide-react";
+import { MerchantProfileModal } from "@/components/p2p-merchant-profile-modal";
 
 type Ad = {
   id: number; userId: number; type: "BUY" | "SELL"; asset: string;
@@ -14,6 +16,8 @@ type Ad = {
   maxLimit: number; paymentMethods: string[]; terms: string | null;
   timeLimit: number; remainingQuantity: number; advertiserName: string;
   tradesCount: number; completionRate: number; createdAt: string;
+  isVerifiedMerchant?: boolean; kycVerified?: boolean;
+  avgReleaseSeconds?: number | null; avgRating?: number | null; ratingCount?: number;
 };
 
 type FundingWallet = { tradingBalance: string | number };
@@ -22,17 +26,32 @@ const PAYMENT_METHODS = ["All", "UPI", "BANK", "IMPS", "NEFT", "Fast Pay"];
 
 function AdRow({ ad, tab }: { ad: Ad; tab: "BUY" | "SELL" }) {
   const [, navigate] = useLocation();
+  const [profileOpen, setProfileOpen] = useState(false);
   const isBuy = tab === "BUY";
+  // Clicking the advertiser identity opens the trust profile instead of
+  // navigating into the order flow. Matches Binance P2P UX.
+  const openProfile = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setProfileOpen(true);
+  };
   return (
+    <>
     <div className="glass-card rounded-xl p-4 hover:border-white/10 transition-colors cursor-pointer" onClick={() => navigate(tab === "BUY" ? `/p2p/sell/${ad.id}` : `/p2p/order/${ad.id}`)}>
       {/* Top row: advertiser info */}
       <div className="flex items-start justify-between gap-2 mb-3">
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2.5 cursor-pointer" onClick={openProfile}>
           <div className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm shrink-0 ${isBuy ? "bg-emerald-500/15 text-emerald-400" : "bg-red-500/15 text-red-400"}`}>
             {ad.advertiserName[0]?.toUpperCase()}
           </div>
           <div>
-            <div className="text-white font-semibold text-sm">{ad.advertiserName}</div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-white font-semibold text-sm hover:underline">{ad.advertiserName}</span>
+              {ad.isVerifiedMerchant && (
+                <span title="Verified Merchant" className="inline-flex items-center text-emerald-400">
+                  <ShieldCheck size={12} />
+                </span>
+              )}
+            </div>
             <div className="flex items-center gap-2 mt-0.5">
               <span className="text-slate-500 text-[11px] flex items-center gap-1">
                 <span>{ad.tradesCount} Trades</span>
@@ -85,6 +104,10 @@ function AdRow({ ad, tab }: { ad: Ad; tab: "BUY" | "SELL" }) {
         </button>
       </div>
     </div>
+    {profileOpen && (
+      <MerchantProfileModal userId={ad.userId} onClose={() => setProfileOpen(false)} />
+    )}
+    </>
   );
 }
 
