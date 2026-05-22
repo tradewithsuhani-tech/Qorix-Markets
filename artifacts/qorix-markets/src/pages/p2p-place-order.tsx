@@ -120,7 +120,7 @@ export default function P2PPlaceOrderPage() {
 
   return (
     <Layout>
-      <div className="max-w-xl mx-auto flex flex-col" style={{ minHeight: "calc(100dvh - 4rem)" }}>
+      <div className="max-w-4xl mx-auto flex flex-col" style={{ minHeight: "calc(100dvh - 4rem)" }}>
 
         {/* ── Header ─────────────────────────────────── */}
         <div className="relative flex items-center justify-center px-4 py-5">
@@ -140,7 +140,79 @@ export default function P2PPlaceOrderPage() {
           </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="flex flex-col flex-1 gap-3 px-4 pb-6">
+        {/* Desktop 2-column wrapper */}
+        <div className="md:grid md:gap-5 md:items-start md:px-4 md:pb-6" style={{ gridTemplateColumns: "1fr 1fr" }}>
+
+        {/* Left col: Advertiser info + terms */}
+        <div className="hidden md:block glass-card rounded-2xl p-5 space-y-4">
+          {/* Advertiser */}
+          <div className="flex items-center gap-3">
+            <div className="relative shrink-0">
+              <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-bold text-base ${isBuying ? "bg-emerald-500/15 text-emerald-300" : "bg-red-500/15 text-red-300"}`}>
+                {ad.advertiserName[0]?.toUpperCase()}
+              </div>
+              {ad.isVerifiedMerchant && (
+                <div className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-emerald-500 flex items-center justify-center">
+                  <BadgeCheck size={10} className="text-white" />
+                </div>
+              )}
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-white font-bold text-sm tracking-wide">{ad.advertiserName.toUpperCase()}</span>
+                {ad.isVerifiedMerchant && <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-400 font-semibold">VERIFIED</span>}
+              </div>
+              <div className="flex items-center gap-2 mt-0.5 text-xs text-slate-500">
+                <span>{ad.tradesCount} trades</span>
+                <span>·</span>
+                <span className={ad.completionRate >= 90 ? "text-emerald-400" : "text-amber-400"}>{ad.completionRate}% completion</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Stats row */}
+          <div className="grid grid-cols-2 gap-2">
+            <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+              <Clock size={12} className="text-amber-400 shrink-0" />
+              <span className="text-xs text-slate-400">{ad.timeLimit} min to pay</span>
+            </div>
+            <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+              <ShieldCheck size={12} className="text-emerald-400 shrink-0" />
+              <span className="text-xs text-slate-400">Escrow protected</span>
+            </div>
+          </div>
+
+          {/* Advertiser's Terms */}
+          <div>
+            <p className="text-slate-500 text-xs font-semibold uppercase tracking-wider mb-2">Advertiser's Terms</p>
+            {ad.terms ? (
+              <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl px-4 py-3">
+                <p className="text-slate-400 text-xs leading-relaxed">{ad.terms}</p>
+              </div>
+            ) : (
+              <p className="text-slate-600 text-xs italic">No special terms.</p>
+            )}
+          </div>
+
+          {/* Limit info */}
+          <div className="space-y-2 pt-1">
+            <div className="flex justify-between text-xs">
+              <span className="text-slate-500">Available</span>
+              <span className="text-white font-semibold">{ad.remainingQuantity.toFixed(2)} USDT</span>
+            </div>
+            <div className="flex justify-between text-xs">
+              <span className="text-slate-500">Order Limit</span>
+              <span className="text-white font-semibold">₹{ad.minLimit.toLocaleString()} – ₹{ad.maxLimit.toLocaleString()}</span>
+            </div>
+            <div className="flex justify-between text-xs">
+              <span className="text-slate-500">Price</span>
+              <span className={`font-bold ${isBuying ? "text-emerald-400" : "text-red-400"}`}>₹{ad.price.toLocaleString("en-IN")}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Right col (or full-width on mobile): Form */}
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 gap-3 px-4 md:px-0 pb-6 md:pb-0">
 
           {/* ── Amount Card ─────────────────────────── */}
           <div className="relative rounded-2xl overflow-hidden border border-white/[0.08] bg-[#0d1117]">
@@ -310,7 +382,8 @@ export default function P2PPlaceOrderPage() {
             }
           </button>
         </form>
-      </div>
+        </div>{/* end grid */}
+      </div>{/* end max-w-4xl */}
     </Layout>
   );
 }

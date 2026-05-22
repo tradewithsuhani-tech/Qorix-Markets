@@ -28,81 +28,113 @@ function AdRow({ ad, tab }: { ad: Ad; tab: "BUY" | "SELL" }) {
   const [, navigate] = useLocation();
   const [profileOpen, setProfileOpen] = useState(false);
   const isBuy = tab === "BUY";
-  // Clicking the advertiser identity opens the trust profile instead of
-  // navigating into the order flow. Matches Binance P2P UX.
-  const openProfile = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setProfileOpen(true);
-  };
+  const dest = tab === "BUY" ? `/p2p/order/${ad.id}` : `/p2p/sell/${ad.id}`;
+  const openProfile = (e: React.MouseEvent) => { e.stopPropagation(); setProfileOpen(true); };
+
   return (
     <>
-    <div
-      className="glass-card rounded-xl p-4 active:scale-[0.99] transition-transform cursor-pointer border border-white/[0.06] hover:border-white/[0.1]"
-      onClick={() => navigate(tab === "BUY" ? `/p2p/order/${ad.id}` : `/p2p/sell/${ad.id}`)}
-    >
-      {/* Top row: advertiser + time limit */}
-      <div className="flex items-center justify-between gap-2 mb-3">
-        <div className="flex items-center gap-2.5 min-w-0" onClick={openProfile}>
-          <div className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm shrink-0 border ${isBuy ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/20" : "bg-red-500/15 text-red-400 border-red-500/20"}`}>
+      {/* ── Desktop table row ────────────────────────────────────────── */}
+      <div
+        className="hidden md:grid items-center gap-0 border-b border-white/[0.05] hover:bg-white/[0.02] cursor-pointer transition-colors"
+        style={{ gridTemplateColumns: "2.2fr 1fr 1.4fr 1.2fr auto" }}
+        onClick={() => navigate(dest)}
+      >
+        {/* Advertiser */}
+        <div className="px-4 py-3.5 flex items-center gap-3" onClick={openProfile}>
+          <div className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm shrink-0 ${isBuy ? "bg-emerald-500/15 text-emerald-400" : "bg-red-500/15 text-red-400"}`}>
             {ad.advertiserName[0]?.toUpperCase()}
           </div>
-          <div className="min-w-0">
+          <div>
             <div className="flex items-center gap-1.5">
-              <span className="text-white font-semibold text-sm truncate">{ad.advertiserName}</span>
-              {ad.isVerifiedMerchant && (
-                <ShieldCheck size={12} className="text-emerald-400 shrink-0" aria-label="Verified Merchant" />
-              )}
+              <span className="text-white font-semibold text-sm">{ad.advertiserName}</span>
+              {ad.isVerifiedMerchant && <ShieldCheck size={12} className="text-emerald-400" />}
             </div>
-            <div className="flex items-center gap-1.5 mt-0.5">
-              <span className="text-slate-500 text-[11px]">{ad.tradesCount} trades</span>
-              <span className="text-slate-700">·</span>
-              <span className="text-emerald-500 text-[11px] flex items-center gap-0.5">
-                <ThumbsUp size={9} />{ad.completionRate}%
-              </span>
+            <div className="flex items-center gap-2 mt-0.5 text-[11px] text-slate-500">
+              <span>{ad.tradesCount} orders</span>
+              <span>·</span>
+              <span className="flex items-center gap-0.5 text-emerald-500"><ThumbsUp size={9} />{ad.completionRate}%</span>
+              <span>·</span>
+              <span className="flex items-center gap-0.5"><Clock size={9} />{ad.timeLimit}m</span>
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-1 shrink-0 text-slate-500 text-[11px]">
-          <Clock size={11} />
-          <span>{ad.timeLimit}m</span>
-          {ad.terms && (
-            <span className="px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20 text-[10px] font-medium ml-0.5">T&amp;C</span>
-          )}
+        {/* Price */}
+        <div className="px-4 py-3.5">
+          <span className={`text-base font-bold tabular-nums ${isBuy ? "text-emerald-400" : "text-red-400"}`}>
+            ₹ {ad.price.toLocaleString("en-IN")}
+          </span>
+        </div>
+        {/* Available / Limit */}
+        <div className="px-4 py-3.5">
+          <div className="text-slate-300 text-sm tabular-nums">{ad.remainingQuantity.toFixed(2)} USDT</div>
+          <div className="text-slate-500 text-xs mt-0.5">₹{ad.minLimit.toLocaleString()} – ₹{ad.maxLimit.toLocaleString()}</div>
+        </div>
+        {/* Payment */}
+        <div className="px-4 py-3.5 flex flex-wrap gap-1">
+          {ad.paymentMethods.map((m) => (
+            <span key={m} className="text-[11px] px-2 py-0.5 rounded-md bg-white/[0.05] border border-white/[0.08] text-slate-400 font-medium">{m}</span>
+          ))}
+        </div>
+        {/* Trade button */}
+        <div className="px-4 py-3.5">
+          <button
+            onClick={(e) => { e.stopPropagation(); navigate(dest); }}
+            className={`px-5 py-2 rounded-lg text-sm font-bold transition-all active:scale-95 min-w-[80px] ${
+              isBuy ? "bg-emerald-500 hover:bg-emerald-400 text-white shadow-lg shadow-emerald-500/20" : "bg-red-500 hover:bg-red-400 text-white shadow-lg shadow-red-500/20"
+            }`}
+          >
+            {isBuy ? "Buy USDT" : "Sell USDT"}
+          </button>
         </div>
       </div>
 
-      {/* Price + CTA row */}
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <div className="flex items-baseline gap-1">
-            <span className={`text-2xl font-extrabold tabular-nums ${isBuy ? "text-emerald-400" : "text-red-400"}`}>
-              ₹{ad.price.toLocaleString("en-IN")}
-            </span>
-            <span className="text-slate-500 text-xs">/USDT</span>
+      {/* ── Mobile card ──────────────────────────────────────────────── */}
+      <div
+        className="md:hidden px-4 py-4 border-b border-white/[0.05] cursor-pointer hover:bg-white/[0.02] transition-colors"
+        onClick={() => navigate(dest)}
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-2.5" onClick={openProfile}>
+            <div className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm shrink-0 ${isBuy ? "bg-emerald-500/15 text-emerald-400" : "bg-red-500/15 text-red-400"}`}>
+              {ad.advertiserName[0]?.toUpperCase()}
+            </div>
+            <div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-white font-semibold text-sm">{ad.advertiserName}</span>
+                {ad.isVerifiedMerchant && <ShieldCheck size={12} className="text-emerald-400" />}
+              </div>
+              <div className="text-slate-500 text-[11px] mt-0.5 flex items-center gap-1.5">
+                <span>{ad.tradesCount} orders</span><span>·</span>
+                <span className="text-emerald-500 flex items-center gap-0.5"><ThumbsUp size={9} />{ad.completionRate}%</span>
+              </div>
+            </div>
           </div>
-          <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 text-[11px] text-slate-500">
-            <span>Limit <span className="text-slate-300">₹{ad.minLimit.toLocaleString()}–₹{ad.maxLimit.toLocaleString()}</span></span>
-            <span>Avail <span className="text-slate-300">{ad.remainingQuantity.toFixed(2)} USDT</span></span>
+          <button
+            onClick={(e) => { e.stopPropagation(); navigate(dest); }}
+            className={`px-4 py-2 rounded-lg text-sm font-bold shrink-0 transition-all active:scale-95 ${
+              isBuy ? "bg-emerald-500 text-white shadow-emerald-500/20 shadow-lg" : "bg-red-500 text-white shadow-red-500/20 shadow-lg"
+            }`}
+          >
+            {isBuy ? "Buy" : "Sell"}
+          </button>
+        </div>
+        <div className="mt-3 flex items-end justify-between">
+          <div>
+            <span className={`text-xl font-bold tabular-nums ${isBuy ? "text-emerald-400" : "text-red-400"}`}>₹{ad.price.toLocaleString("en-IN")}</span>
+            <div className="text-slate-500 text-xs mt-1">
+              Limit&nbsp;<span className="text-slate-300">₹{ad.minLimit.toLocaleString()}–₹{ad.maxLimit.toLocaleString()}</span>
+              &nbsp;·&nbsp;<span className="text-slate-300">{ad.remainingQuantity.toFixed(2)} USDT</span>
+            </div>
           </div>
-          <div className="flex flex-wrap gap-1 mt-2">
+          <div className="flex gap-1 flex-wrap justify-end">
             {ad.paymentMethods.map((m) => (
-              <span key={m} className="text-[10px] px-2 py-0.5 rounded-md bg-white/[0.05] text-slate-400 border border-white/[0.07] font-medium">{m}</span>
+              <span key={m} className="text-[10px] px-2 py-0.5 rounded bg-white/[0.05] border border-white/[0.07] text-slate-400">{m}</span>
             ))}
           </div>
         </div>
-        <button
-          onClick={(e) => { e.stopPropagation(); navigate(tab === "BUY" ? `/p2p/order/${ad.id}` : `/p2p/sell/${ad.id}`); }}
-          className={`px-5 py-2.5 rounded-xl text-sm font-bold shrink-0 transition-all active:scale-95 min-w-[72px] ${
-            isBuy ? "bg-emerald-500 active:bg-emerald-400 text-white shadow-lg shadow-emerald-500/25" : "bg-red-500 active:bg-red-400 text-white shadow-lg shadow-red-500/20"
-          }`}
-        >
-          {isBuy ? "Buy" : "Sell"}
-        </button>
       </div>
-    </div>
-    {profileOpen && (
-      <MerchantProfileModal userId={ad.userId} onClose={() => setProfileOpen(false)} />
-    )}
+
+      {profileOpen && <MerchantProfileModal userId={ad.userId} onClose={() => setProfileOpen(false)} />}
     </>
   );
 }
@@ -222,10 +254,20 @@ export default function P2PMarketPage() {
           </div>
           <div className="h-px bg-white/[0.04]" />
 
-          <div className="p-3 space-y-2.5">
+          {/* Desktop table header */}
+          <div
+            className="hidden md:grid border-b border-white/[0.06] bg-white/[0.01]"
+            style={{ gridTemplateColumns: "2.2fr 1fr 1.4fr 1.2fr auto" }}
+          >
+            {["Advertisers", "Price", "Available/Order Limit", "Payment", "Trade"].map((h) => (
+              <div key={h} className="px-4 py-2.5 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">{h}</div>
+            ))}
+          </div>
+
+          <div className="md:p-0 p-3 md:space-y-0 space-y-2.5">
             {loading ? (
               Array.from({ length: 3 }).map((_, i) => (
-                <div key={i} className="glass-card rounded-xl p-4 h-32 animate-pulse" />
+                <div key={i} className="glass-card rounded-xl p-4 h-24 animate-pulse md:rounded-none md:h-16" />
               ))
             ) : fetchError ? (
               <div className="flex flex-col items-center py-14 gap-3">

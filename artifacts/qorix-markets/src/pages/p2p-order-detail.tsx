@@ -123,6 +123,9 @@ export default function P2POrderDetailPage() {
   // QR Code modal for seller payment methods
   const [qrModal, setQrModal] = useState<SellerMethod | null>(null);
 
+  // How to Pay modal
+  const [howToPayOpen, setHowToPayOpen] = useState(false);
+
   // Rating
   const [myRating, setMyRating] = useState<{ rated: boolean; rating: number | null }>({ rated: false, rating: null });
   const [ratingOpen, setRatingOpen] = useState(false);
@@ -351,7 +354,9 @@ export default function P2POrderDetailPage() {
 
   return (
     <Layout>
-      <div className="max-w-xl mx-auto pb-8">
+      <div className="max-w-4xl mx-auto pb-8">
+      <div className="md:grid md:gap-5 md:items-start" style={{ gridTemplateColumns: "1fr 340px" }}>
+      <div className="min-w-0">
 
         {/* ── Status header ────────────────────────────────────────────── */}
         <div className={`relative px-4 pt-4 pb-5 overflow-hidden ${
@@ -398,16 +403,11 @@ export default function P2POrderDetailPage() {
           {/* Status title + countdown */}
           {order.status === "pending" && isBuyer && (
             <div className="mb-3">
-              <div className="flex items-center gap-2 mb-1">
-                <div className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-                <span className="text-amber-400 text-xs font-semibold uppercase tracking-wider">Action Required</span>
-              </div>
-              <h1 className="text-white font-bold text-2xl mb-2">Transfer via {methodLabel}</h1>
-              <div className="flex items-center gap-2">
-                <Clock size={13} className="text-slate-400" />
-                <span className="text-slate-400 text-sm">Pay within</span>
+              <h1 className="text-white font-bold text-2xl leading-snug">
+                Pay the Seller within{" "}
                 {deadline && <Countdown deadline={order.paymentDeadline!} />}
-              </div>
+              </h1>
+              <div className="text-slate-500 text-sm mt-1">Order #{order.id}</div>
             </div>
           )}
           {order.status === "pending" && !isBuyer && (
@@ -534,7 +534,13 @@ export default function P2POrderDetailPage() {
                       <div className="w-px flex-1 bg-gradient-to-b from-amber-400/30 to-transparent mt-1" />
                     </div>
                     <div className="flex-1 pb-2">
-                      <span className="text-white font-semibold text-sm block mb-2">Transfer via {methodLabel}</span>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-white font-semibold text-sm">Transfer via {methodLabel}</span>
+                        <button onClick={() => setHowToPayOpen(true)}
+                          className="flex items-center gap-1 text-xs text-amber-400 hover:text-amber-300 transition-colors">
+                          <AlertCircle size={11} /> Payment Tips
+                        </button>
+                      </div>
                       {payMethods.map((m) => (
                         <div key={m.id} className="rounded-2xl overflow-hidden border border-white/[0.08] bg-white/[0.03] backdrop-blur-sm">
                           {/* Card header */}
@@ -628,14 +634,30 @@ export default function P2POrderDetailPage() {
                 </div>
               )}
 
-              {/* Upload Payment Proof button */}
-              <button
-                onClick={() => setProofOpen(true)}
-                disabled={payMethods.length === 0}
-                className="w-full py-4 rounded-2xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 disabled:opacity-40 text-black font-bold text-base shadow-lg shadow-amber-500/20 hover:shadow-amber-500/30 transition-all active:scale-[0.98]"
-              >
-                ✓ I've Transferred — Upload Proof
-              </button>
+              {/* Binance-style 3-button action row */}
+              <div className="space-y-2.5">
+                <button
+                  onClick={() => setProofOpen(true)}
+                  disabled={payMethods.length === 0}
+                  className="w-full py-3.5 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 disabled:opacity-40 text-black font-bold text-sm shadow-lg shadow-amber-500/20 transition-all active:scale-[0.98]"
+                >
+                  Transferred, Notify Seller
+                </button>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => { setChatOpen(true); setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100); }}
+                    className="flex-1 py-3 rounded-xl bg-white/[0.06] border border-white/[0.08] hover:bg-white/[0.1] text-slate-300 font-semibold text-sm transition-all active:scale-[0.98]"
+                  >
+                    I Have a Question
+                  </button>
+                  <button
+                    onClick={() => setCancelOpen(true)}
+                    className="flex-1 py-3 rounded-xl border border-red-500/25 hover:bg-red-500/10 text-red-400 font-semibold text-sm transition-all active:scale-[0.98]"
+                  >
+                    Cancel Order
+                  </button>
+                </div>
+              </div>
             </>
           )}
 
@@ -756,9 +778,9 @@ export default function P2POrderDetailPage() {
             </div>
           )}
 
-          {/* ── Chat Panel ──────────────────────────────────────────────── */}
+          {/* ── Mobile-only Chat Panel ──────────────────────────────────── */}
           {chatOpen && (
-            <div className="glass-card rounded-xl overflow-hidden border border-white/[0.08]">
+            <div className="md:hidden glass-card rounded-xl overflow-hidden border border-white/[0.08]">
               <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/[0.06]">
                 <div className="flex items-center gap-2">
                   <MessageCircle size={14} className="text-emerald-400" />
@@ -805,6 +827,107 @@ export default function P2POrderDetailPage() {
           <Link href="/p2p/orders"><button className="text-slate-500 text-xs hover:text-slate-300">← All Orders</button></Link>
         </div>
       </div>
+
+      {/* ── Desktop right-col: Chat always visible ─────────────────────── */}
+      <div className="hidden md:flex md:flex-col sticky top-4 glass-card rounded-2xl overflow-hidden border border-white/[0.08]">
+        {/* Chat header with counterparty info */}
+        <div className="px-4 py-3 border-b border-white/[0.07] flex items-center justify-between bg-white/[0.02]">
+          <div className="flex items-center gap-2.5">
+            <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold text-sm ${
+              isBuyer ? "bg-gradient-to-br from-violet-500 to-blue-600 text-white" : "bg-gradient-to-br from-emerald-500 to-teal-600 text-white"
+            }`}>{isBuyer ? "S" : "B"}</div>
+            <div>
+              <div className="text-white font-semibold text-sm">{counterpartyLabel}</div>
+              <div className="flex items-center gap-1">
+                <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                <span className="text-slate-500 text-[11px]">Online</span>
+              </div>
+            </div>
+          </div>
+          <button onClick={fetchMessages} className="w-7 h-7 rounded-lg bg-white/[0.05] flex items-center justify-center text-slate-500 hover:text-white">
+            <RefreshCw size={13} />
+          </button>
+        </div>
+        {/* Messages */}
+        <div className="flex-1 overflow-y-auto p-3 space-y-2 min-h-[320px] max-h-[520px]">
+          {messages.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-full gap-2 text-slate-600 pt-10">
+              <MessageCircle size={24} /><p className="text-xs">No messages yet</p>
+            </div>
+          ) : messages.map((m) => (
+            <div key={m.id} className={`flex ${m.isOwn ? "justify-end" : m.isSystem ? "justify-center" : "justify-start"}`}>
+              {m.isSystem
+                ? <span className="text-[11px] text-slate-500 px-3 py-1 rounded-full bg-slate-800/60">{m.message}</span>
+                : (
+                  <div className={`max-w-[85%] flex flex-col gap-0.5 ${m.isOwn ? "items-end" : "items-start"}`}>
+                    {!m.isOwn && <span className="text-[10px] text-slate-500 px-1">{m.senderName}</span>}
+                    <div className={`px-3 py-2 rounded-2xl text-sm ${m.isOwn ? "bg-emerald-500/20 text-emerald-100 rounded-tr-sm" : "bg-white/[0.07] text-slate-200 rounded-tl-sm"}`}>{m.message}</div>
+                    <span className="text-[10px] text-slate-600 px-1">{new Date(m.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+                  </div>
+                )
+              }
+            </div>
+          ))}
+          <div ref={chatEndRef} />
+        </div>
+        {/* Input */}
+        {isActive ? (
+          <form onSubmit={sendChat} className="flex gap-2 p-3 border-t border-white/[0.06]">
+            <input value={chatMsg} onChange={e => setChatMsg(e.target.value)} placeholder="Enter message here…" maxLength={500}
+              className="flex-1 bg-black/30 border border-white/[0.1] rounded-xl px-3 py-2 text-sm text-white placeholder-slate-600 outline-none focus:border-emerald-400/40" />
+            <button type="submit" disabled={!chatMsg.trim() || chatSending}
+              className="p-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 text-white">
+              {chatSending ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}
+            </button>
+          </form>
+        ) : (
+          <div className="px-4 py-2.5 border-t border-white/[0.06] text-center text-xs text-slate-600">Order closed — chat is read-only</div>
+        )}
+      </div>
+
+      </div>{/* end grid */}
+      </div>{/* end max-w-4xl */}
+
+      {/* ── How to Pay Modal ─────────────────────────────────────────────── */}
+      {howToPayOpen && (
+        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-[#111827] w-full max-w-sm rounded-2xl overflow-hidden shadow-2xl">
+            {/* Header tabs */}
+            <div className="flex items-center justify-between px-5 pt-5 pb-4">
+              <div className="flex gap-5">
+                <span className="text-white font-bold text-base border-b-2 border-amber-400 pb-1">How to Pay</span>
+                <span className="text-slate-500 text-base pb-1">Things to Note</span>
+              </div>
+              <button onClick={() => setHowToPayOpen(false)} className="w-7 h-7 rounded-full bg-white/[0.07] flex items-center justify-center text-slate-400 hover:text-white text-sm">✕</button>
+            </div>
+            {/* Steps */}
+            <div className="px-5 pb-6 space-y-5">
+              {[
+                { n: 1, title: "Make Your Payment", desc: `Open your ${methodLabel} app and complete the payment to the seller's account.` },
+                { n: 2, title: "Save Your Payment Proof", desc: "Take a clear screenshot or save the receipt of your payment. You'll need this as proof for the next step." },
+                { n: 3, title: "Confirm & Upload Proof", desc: "Tap 'Transferred, Notify Seller' and upload your payment proof to confirm your transfer." },
+              ].map(({ n, title, desc }) => (
+                <div key={n} className="flex gap-4">
+                  <div className="flex flex-col items-center">
+                    <div className="w-7 h-7 rounded-full bg-amber-400/15 border border-amber-400/40 flex items-center justify-center text-amber-400 font-bold text-sm shrink-0">{n}</div>
+                    {n < 3 && <div className="w-px flex-1 bg-white/[0.08] mt-2" />}
+                  </div>
+                  <div className="flex-1 pb-1">
+                    <p className="text-white font-bold text-sm mb-1">{title}</p>
+                    <p className="text-slate-400 text-xs leading-relaxed">{desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="px-5 pb-5">
+              <button onClick={() => setHowToPayOpen(false)}
+                className="w-full py-3.5 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 text-black font-bold text-sm hover:from-amber-300 hover:to-amber-400 transition-all">
+                Got it
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Payment Proof Modal ──────────────────────────────────────────── */}
       {proofOpen && (
