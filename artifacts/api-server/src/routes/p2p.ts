@@ -20,6 +20,7 @@ import {
   getMerchantProfile,
   getMerchantProfiles,
   invalidateMerchantProfiles,
+  type MerchantProfile,
 } from "../lib/p2p-profile";
 import jwt from "jsonwebtoken";
 
@@ -266,17 +267,21 @@ router.get("/p2p/ads", async (req: AuthRequest, res) => {
       .orderBy(desc(p2pAdsTable.createdAt))
       .limit(50);
 
-    let result = ads.map((a) => ({
-      ...a,
-      price: parseNum(a.price as string),
-      quantity: parseNum(a.quantity as string),
-      minLimit: parseNum(a.minLimit as string),
-      maxLimit: parseNum(a.maxLimit as string),
-      filledQuantity: parseNum(a.filledQuantity as string),
-      remainingQuantity: parseNum(a.quantity as string) - parseNum(a.filledQuantity as string),
-      paymentMethods: JSON.parse(a.paymentMethods as string) as string[],
-      advertiserName: (a.advertiserName as string).split(" ")[0] + "***",
-    }));
+    let result = ads.map((a) => {
+      let paymentMethods: string[] = [];
+      try { paymentMethods = JSON.parse(a.paymentMethods as string) as string[]; } catch { /* use empty array fallback */ }
+      return {
+        ...a,
+        price: parseNum(a.price as string),
+        quantity: parseNum(a.quantity as string),
+        minLimit: parseNum(a.minLimit as string),
+        maxLimit: parseNum(a.maxLimit as string),
+        filledQuantity: parseNum(a.filledQuantity as string),
+        remainingQuantity: parseNum(a.quantity as string) - parseNum(a.filledQuantity as string),
+        paymentMethods,
+        advertiserName: (a.advertiserName as string).split(" ")[0] + "***",
+      };
+    });
     // Filter by payment method if specified
     if (paymentMethodFilter) {
       result = result.filter((a) =>
@@ -316,7 +321,9 @@ router.get("/p2p/ads", async (req: AuthRequest, res) => {
     // out to compute() under single-flight, so a list page that surfaces 20
     // ads from ~10 distinct advertisers hits the DB at most 10 times on the
     // very first request and 0 times for the next 5 minutes.
-    const profiles = await getMerchantProfiles(userIds);
+    // Non-fatal: Redis/cache failure must not block the ad listing.
+    let profiles = new Map<number, MerchantProfile>();
+    try { profiles = await getMerchantProfiles(userIds); } catch { /* profile enrichment is best-effort */ }
     const finalResult = result.map((a) => {
       const p = profiles.get(a.userId);
       return {

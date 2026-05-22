@@ -112,11 +112,13 @@ export default function P2PMarketPage() {
   const [ads, setAds] = useState<Ad[]>([]);
   const [wallet, setWallet] = useState<FundingWallet | null>(null);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState(false);
   const [paymentFilter, setPaymentFilter] = useState("All");
   const { toast } = useToast();
 
   const fetchData = useCallback(async () => {
     setLoading(true);
+    setFetchError(false);
     try {
       const pm = paymentFilter !== "All" ? `&paymentMethod=${encodeURIComponent(paymentFilter)}` : "";
       const [adsData, walletData] = await Promise.all([
@@ -126,12 +128,10 @@ export default function P2PMarketPage() {
       setAds(adsData);
       setWallet(walletData);
     } catch (err: any) {
-      // Silently show empty state instead of a scary toast — the UI already
-      // renders "No active ads right now" when the array is empty. A red
-      // error banner on every refresh feels broken even when the server is
-      // just warming up or there genuinely are zero ads.
       console.error("P2P market load error:", err?.message || err);
       setAds([]);
+      setFetchError(true);
+      toast({ title: "Could not load ads", description: "Tap refresh to try again.", variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -227,6 +227,17 @@ export default function P2PMarketPage() {
               Array.from({ length: 3 }).map((_, i) => (
                 <div key={i} className="glass-card rounded-xl p-4 h-32 animate-pulse" />
               ))
+            ) : fetchError ? (
+              <div className="flex flex-col items-center py-14 gap-3">
+                <div className="w-14 h-14 rounded-2xl bg-red-500/10 border border-red-500/20 flex items-center justify-center">
+                  <AlertCircle size={24} className="text-red-400" />
+                </div>
+                <div className="text-center">
+                  <p className="text-white font-semibold text-sm">Could not load ads</p>
+                  <p className="text-slate-500 text-xs mt-0.5">Server error — tap refresh to retry</p>
+                </div>
+                <button onClick={fetchData} className="text-emerald-400 text-xs px-4 py-2 bg-emerald-500/10 rounded-xl border border-emerald-500/20">Refresh</button>
+              </div>
             ) : ads.length === 0 ? (
               <div className="flex flex-col items-center py-14 gap-3">
                 <div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center">
