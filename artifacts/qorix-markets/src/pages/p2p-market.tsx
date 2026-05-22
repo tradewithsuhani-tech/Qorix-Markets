@@ -347,7 +347,7 @@ export default function P2PMarketPage() {
             </button>
 
             {moreOpen && (
-              <div className="absolute left-0 top-full mt-2 w-52 z-50 rounded-2xl border border-white/[0.08] bg-[#0d1117] shadow-2xl overflow-hidden">
+              <div className="absolute right-0 top-full mt-2 w-52 z-50 rounded-2xl border border-white/[0.08] bg-[#0d1117] shadow-2xl overflow-hidden">
                 <div className="py-1">
                   {[
                     { label: "Payment Methods", href: "/p2p/payment-methods", icon: CreditCard,   desc: "Manage your pay options" },
