@@ -61,14 +61,15 @@ export default function AdminP2pPage() {
   const [orderStatus, setOrderStatus] = useState("all");
   const [orderSearch, setOrderSearch] = useState("");
 
-  const { data: overview, isLoading: ovLoading } = useQuery<Overview>({
+  const { data: overview, isLoading: ovLoading, isError: ovError } = useQuery<Overview>({
     queryKey: ["admin-p2p-overview"],
     queryFn: () => authFetch(`/api/admin/p2p/overview`),
     refetchInterval: 30000,
     enabled: tab === "overview",
+    retry: 1,
   });
 
-  const { data: adsData, isLoading: adsLoading } = useQuery<{ ads: AdRow[] }>({
+  const { data: adsData, isLoading: adsLoading, isError: adsError } = useQuery<{ ads: AdRow[] }>({
     queryKey: ["admin-p2p-ads", adStatus, adType, adSearch],
     queryFn: () => {
       const p = new URLSearchParams({ status: adStatus, type: adType });
@@ -76,9 +77,10 @@ export default function AdminP2pPage() {
       return authFetch(`/api/admin/p2p/ads?${p.toString()}`);
     },
     enabled: tab === "ads",
+    retry: 1,
   });
 
-  const { data: ordersData, isLoading: ordersLoading } = useQuery<{ orders: OrderRow[] }>({
+  const { data: ordersData, isLoading: ordersLoading, isError: ordersError } = useQuery<{ orders: OrderRow[] }>({
     queryKey: ["admin-p2p-orders", orderStatus, orderSearch],
     queryFn: () => {
       const p = new URLSearchParams({ status: orderStatus });
@@ -86,6 +88,7 @@ export default function AdminP2pPage() {
       return authFetch(`/api/admin/p2p/orders?${p.toString()}`);
     },
     enabled: tab === "orders",
+    retry: 1,
   });
 
   const adAction = useMutation({
@@ -135,8 +138,13 @@ export default function AdminP2pPage() {
 
         {/* OVERVIEW */}
         {tab === "overview" && (
-          ovLoading || !overview ? (
+          ovLoading ? (
             <div className="flex justify-center py-10"><Loader2 className="animate-spin text-slate-500" /></div>
+          ) : ovError || !overview ? (
+            <div className="flex flex-col items-center py-10 gap-2 text-slate-500 text-sm">
+              <AlertTriangle size={20} className="text-orange-400" />
+              Failed to load overview. <button onClick={() => qc.invalidateQueries({ queryKey: ["admin-p2p-overview"] })} className="text-blue-400 underline text-xs">Retry</button>
+            </div>
           ) : (
             <div className="space-y-4">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
@@ -184,6 +192,11 @@ export default function AdminP2pPage() {
 
             {adsLoading ? (
               <div className="flex justify-center py-10"><Loader2 className="animate-spin text-slate-500" /></div>
+            ) : adsError ? (
+              <div className="flex flex-col items-center py-10 gap-2 text-slate-500 text-sm">
+                <AlertTriangle size={20} className="text-orange-400" />
+                Failed to load ads. <button onClick={() => qc.invalidateQueries({ queryKey: ["admin-p2p-ads"] })} className="text-blue-400 underline text-xs">Retry</button>
+              </div>
             ) : !adsData?.ads?.length ? (
               <div className="text-center py-10 text-slate-500 text-sm bg-white/[0.02] border border-white/[0.05] rounded-xl">No ads.</div>
             ) : (
@@ -278,6 +291,11 @@ export default function AdminP2pPage() {
 
             {ordersLoading ? (
               <div className="flex justify-center py-10"><Loader2 className="animate-spin text-slate-500" /></div>
+            ) : ordersError ? (
+              <div className="flex flex-col items-center py-10 gap-2 text-slate-500 text-sm">
+                <AlertTriangle size={20} className="text-orange-400" />
+                Failed to load orders. <button onClick={() => qc.invalidateQueries({ queryKey: ["admin-p2p-orders"] })} className="text-blue-400 underline text-xs">Retry</button>
+              </div>
             ) : !ordersData?.orders?.length ? (
               <div className="text-center py-10 text-slate-500 text-sm bg-white/[0.02] border border-white/[0.05] rounded-xl">No orders.</div>
             ) : (
