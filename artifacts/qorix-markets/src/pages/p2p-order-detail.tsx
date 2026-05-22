@@ -526,7 +526,7 @@ export default function P2POrderDetailPage() {
           {isBuyer && order.status === "pending" && (
             <>
               {payMethods.length > 0 ? payMethods.map((m) => (
-                <div key={m.id} className="rounded-2xl overflow-hidden border border-white/[0.08] bg-[#0d1117]">
+                <div key={m.id} className={`rounded-2xl overflow-hidden border border-white/[0.08] bg-[#0d1117]${chatOpen ? " md:hidden" : ""}`}>
 
                   {/* Section header */}
                   <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.06]">
@@ -659,8 +659,8 @@ export default function P2POrderDetailPage() {
                 </div>
               )}
 
-              {/* Mobile-only inline chat ─────────────────────────────────── */}
-              <div className="md:hidden rounded-2xl overflow-hidden border border-white/[0.08] bg-[#0d1117]">
+              {/* Mobile-only inline chat — shown only when Chat button tapped */}
+              {chatOpen && <div className="md:hidden rounded-2xl overflow-hidden border border-white/[0.08] bg-[#0d1117]">
                 <div className="flex items-center gap-2.5 px-4 py-3 border-b border-white/[0.06]">
                   <MessageCircle size={14} className="text-emerald-400" />
                   <span className="text-white font-semibold text-sm">Chat with Seller</span>
@@ -697,7 +697,7 @@ export default function P2POrderDetailPage() {
                     {chatSending ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}
                   </button>
                 </form>
-              </div>
+              </div>}
 
               {/* 3-button action row */}
               <div className="space-y-2.5">
@@ -887,8 +887,8 @@ export default function P2POrderDetailPage() {
         </div>
       </div>
 
-      {/* ── Desktop right-col: Chat always visible ─────────────────────── */}
-      <div className="hidden md:flex md:flex-col sticky top-4 glass-card rounded-2xl overflow-hidden border border-white/[0.08]">
+      {/* ── Desktop right-col: Chat — visible only when chatOpen ────────── */}
+      <div className={chatOpen ? "hidden md:flex md:flex-col sticky top-4 glass-card rounded-2xl overflow-hidden border border-white/[0.08]" : "hidden"}>
         {/* Chat header with counterparty info */}
         <div className="px-4 py-3 border-b border-white/[0.07] flex items-center justify-between bg-white/[0.02]">
           <div className="flex items-center gap-2.5">
