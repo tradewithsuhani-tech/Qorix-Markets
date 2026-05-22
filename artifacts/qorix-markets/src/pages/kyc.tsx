@@ -689,8 +689,18 @@ export default function KycPage() {
                               </div>
                             )}
                             {!phoneVerified && otpExpiresAt && otpSecondsLeft === 0 && (
-                              <div className="text-[11px] text-rose-300 flex items-center gap-1.5">
-                                <AlertCircle className="w-3 h-3" /> OTP expired. Send again.
+                              <div className="rounded-xl bg-rose-500/[0.06] border border-rose-500/20 p-3 flex items-center justify-between gap-3">
+                                <div className="text-[11px] text-rose-300 flex items-center gap-1.5">
+                                  <AlertCircle className="w-3 h-3 shrink-0" /> OTP expired.
+                                </div>
+                                <button
+                                  type="button"
+                                  disabled={sendOtp.isPending || cooldownSecLeft > 0}
+                                  onClick={() => { setOtpExpiresAt(null); sendOtp.mutate("voice"); }}
+                                  className="text-[11px] text-blue-300 hover:text-blue-200 font-semibold underline underline-offset-2 disabled:opacity-40 shrink-0"
+                                >
+                                  {sendOtp.isPending ? "Sending…" : cooldownSecLeft > 0 ? `Wait ${cooldownSecLeft}s` : "Send Again"}
+                                </button>
                               </div>
                             )}
                           </div>
