@@ -225,58 +225,32 @@ export default function P2PPlaceOrderPage() {
           </div>
 
           {/* ── You Pay ─────────────────────────────── */}
-          <div className="rounded-2xl border border-white/[0.1] bg-[#111827] p-4 space-y-2">
+          <div className="rounded-2xl border border-white/[0.1] bg-[#111827] p-4 space-y-3">
             <p className="text-slate-400 text-sm">You Pay</p>
-            {fiatNum === 0 ? (
-              /* Limit range display when no amount typed */
-              <div className="flex items-center justify-between">
-                <div
-                  className="flex-1 text-white text-xl font-semibold tabular-nums cursor-text"
-                  onClick={() => document.getElementById("fiat-input")?.focus()}
-                >
-                  {ad.minLimit.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
-                  <span className="text-slate-500 mx-2">–</span>
-                  {maxFiat.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <button type="button" onClick={() => setFiatAmount(String(maxFiat))}
-                    className="text-amber-400 font-semibold text-sm hover:text-amber-300 transition-colors">All</button>
-                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/[0.08]">
-                    <span className="text-amber-400 text-sm font-bold">₹</span>
-                    <span className="text-white text-sm font-semibold">INR</span>
-                  </div>
+            <div className="flex items-center justify-between gap-3">
+              <input
+                id="fiat-input"
+                type="number" min={ad.minLimit} max={maxFiat} step="1"
+                placeholder={`${ad.minLimit.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`}
+                value={fiatAmount}
+                onChange={(e) => setFiatAmount(e.target.value)}
+                className="flex-1 bg-transparent text-white text-2xl font-semibold outline-none tabular-nums w-0 placeholder:text-slate-600 placeholder:font-normal"
+              />
+              <div className="flex items-center gap-2 shrink-0">
+                <button type="button" onClick={() => setFiatAmount(String(maxFiat))}
+                  className="text-amber-400 font-semibold text-sm hover:text-amber-300 transition-colors">All</button>
+                <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-white/[0.08]">
+                  <span className="text-amber-400 text-sm font-bold">₹</span>
+                  <span className="text-white text-sm font-semibold">INR</span>
                 </div>
               </div>
-            ) : (
-              /* Amount input when typing */
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2 flex-1 min-w-0">
-                  <span className="text-slate-500 text-2xl shrink-0">₹</span>
-                  <input
-                    id="fiat-input"
-                    type="number" min={ad.minLimit} max={maxFiat} step="1"
-                    value={fiatAmount}
-                    onChange={(e) => setFiatAmount(e.target.value)}
-                    className="flex-1 bg-transparent text-white text-2xl font-semibold outline-none tabular-nums w-0"
-                    autoFocus
-                  />
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <button type="button" onClick={() => setFiatAmount(String(maxFiat))}
-                    className="text-amber-400 font-semibold text-sm hover:text-amber-300 transition-colors">All</button>
-                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/[0.08]">
-                    <span className="text-amber-400 text-sm font-bold">₹</span>
-                    <span className="text-white text-sm font-semibold">INR</span>
-                  </div>
-                </div>
-              </div>
-            )}
-            {/* Hidden input always present for form logic when showing range */}
-            {fiatNum === 0 && (
-              <input id="fiat-input" type="number" min={ad.minLimit} max={maxFiat} step="1"
-                value={fiatAmount} onChange={(e) => setFiatAmount(e.target.value)}
-                className="w-0 h-0 opacity-0 absolute" />
-            )}
+            </div>
+            <div className="text-slate-600 text-xs">
+              Limit&nbsp;
+              <span className="text-slate-500">
+                ₹{ad.minLimit.toLocaleString("en-IN")} – ₹{maxFiat.toLocaleString("en-IN")}
+              </span>
+            </div>
             {amountError && (
               <div className="flex items-center gap-1.5 text-red-400 text-xs">
                 <AlertCircle size={11} /> {amountError}
