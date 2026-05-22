@@ -185,13 +185,16 @@ export default function P2PMarketPage() {
           <div className="flex">
             {(["BUY", "SELL"] as const).map((t) => (
               <button key={t} onClick={() => setTab(t)}
-                className={`relative flex-1 py-3.5 text-sm font-bold transition-all ${
+                className={`relative flex-1 py-3 text-sm font-bold transition-all ${
                   tab === t
                     ? t === "BUY" ? "text-emerald-400" : "text-red-400"
                     : "text-slate-500"
                 }`}
               >
-                {t} USDT
+                <div>{t} USDT</div>
+                <div className={`text-[10px] font-normal mt-0.5 ${tab === t ? "opacity-80" : "opacity-40"}`}>
+                  {t === "BUY" ? "Find sellers" : "Find buyers"}
+                </div>
                 {tab === t && (
                   <span className={`absolute bottom-0 left-1/4 right-1/4 h-0.5 rounded-full ${t === "BUY" ? "bg-emerald-400" : "bg-red-400"}`} />
                 )}

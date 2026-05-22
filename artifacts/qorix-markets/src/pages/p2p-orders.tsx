@@ -101,19 +101,33 @@ export default function P2POrdersPage() {
   const [filter, setFilter] = useState<string>("all");
   const { toast } = useToast();
 
-  async function loadOrders() {
-    setLoading(true);
+  async function loadOrders(silent = false) {
+    if (!silent) setLoading(true);
     try {
       const data = await authFetch<Order[]>("/api/p2p/orders/my");
       setOrders(data);
     } catch {
-      toast({ title: "Failed to load orders", variant: "destructive" });
+      if (!silent) toast({ title: "Failed to load orders", variant: "destructive" });
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }
 
-  useEffect(() => { loadOrders(); }, []);
+  useEffect(() => {
+    loadOrders();
+
+    const interval = setInterval(() => loadOrders(true), 20000);
+
+    function onVisible() {
+      if (document.visibilityState === "visible") loadOrders(true);
+    }
+    document.addEventListener("visibilitychange", onVisible);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, []);
 
   const filtered = filter === "all" ? orders : orders.filter((o) => o.status === filter);
 
