@@ -578,8 +578,10 @@ export default function P2POrderDetailPage() {
                     <>
                       <div className="mx-4 my-4 rounded-2xl border border-emerald-500/30 bg-gradient-to-br from-emerald-500/15 to-teal-500/5 p-5 flex flex-col items-center gap-3.5">
                         <div className="text-[10px] font-bold tracking-[0.16em] text-emerald-400">SCAN TO PAY</div>
-                        <div className="bg-white p-3 rounded-xl">
-                          <img src={m.qrCodeData} alt="QR Code" className="w-48 h-auto object-contain" />
+                        <div className="bg-white p-3 rounded-xl overflow-hidden">
+                          <div className="w-48 h-48 overflow-hidden rounded-lg">
+                            <img src={m.qrCodeData} alt="QR Code" className="w-full h-full object-cover" style={{ objectPosition: "50% 55%" }} />
+                          </div>
                         </div>
                       </div>
                       {/* Divider */}
@@ -1252,8 +1254,10 @@ export default function P2POrderDetailPage() {
             {/* Same card as deposit-upi-pay */}
             <div className="mx-4 mb-4 rounded-2xl border border-emerald-500/30 bg-gradient-to-br from-emerald-500/15 to-teal-500/5 p-5 flex flex-col items-center gap-3.5">
               <div className="text-[10px] font-bold tracking-[0.16em] text-emerald-400">SCAN TO PAY</div>
-              <div className="bg-white p-3 rounded-xl">
-                <img src={qrModal.qrCodeData} alt="QR Code" className="w-48 h-auto object-contain" />
+              <div className="bg-white p-3 rounded-xl overflow-hidden">
+                <div className="w-56 h-56 overflow-hidden rounded-lg">
+                  <img src={qrModal.qrCodeData} alt="QR Code" className="w-full h-full object-cover" style={{ objectPosition: "50% 55%" }} />
+                </div>
               </div>
             </div>
           </div>
