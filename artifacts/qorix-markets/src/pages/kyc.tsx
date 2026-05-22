@@ -224,6 +224,13 @@ export default function KycPage() {
   const phoneDigitsOk = phone.length === selectedCountry.digits;
   const indianPhoneOk = countryCode === "+91" && /^[6-9]\d{9}$/.test(phone);
   const [dob, setDob] = useState("");
+  const dobValid = (() => {
+    if (!dob) return true; // empty → neutral, button already disabled
+    const d = new Date(dob);
+    const ageMs = Date.now() - d.getTime();
+    const age = ageMs / (1000 * 60 * 60 * 24 * 365.25);
+    return !Number.isNaN(age) && age >= 18 && age <= 120;
+  })();
   const [otpCode, setOtpCode] = useState("");
   const [otpExpiresAt, setOtpExpiresAt] = useState<number | null>(null);
   const [otpCooldownUntil, setOtpCooldownUntil] = useState<number | null>(null);
@@ -698,13 +705,20 @@ export default function KycPage() {
                               className="mt-2 w-full px-3 py-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-sm focus:outline-none focus:border-blue-500/40 [color-scheme:dark]"
                             />
                           </div>
+                          {dob && !dobValid && (
+                            <p className="text-[11px] text-rose-400 flex items-center gap-1">
+                              <AlertCircle className="w-3 h-3" />
+                              You must be 18 or older
+                            </p>
+                          )}
                           <button
-                            disabled={!phoneVerified || !dob || personalSubmit.isPending}
+                            disabled={!phoneVerified || !dob || !dobValid || personalSubmit.isPending}
                             onClick={() => personalSubmit.mutate()}
                             className="w-full py-2.5 rounded-xl bg-gradient-to-r from-blue-500 to-indigo-600 text-white text-sm font-semibold disabled:opacity-50 hover:brightness-110 transition-all"
                           >
                             {personalSubmit.isPending ? "Saving…" :
                              !phoneVerified ? "Verify Phone First" :
+                             !dobValid ? "Invalid Date of Birth" :
                              "Save & Continue"}
                           </button>
                         </div>
