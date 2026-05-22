@@ -251,24 +251,27 @@ export default function P2PMarketPage() {
           </div>
         </div>
 
-        {/* Row 2: Secondary nav — icon+label pills, scrollable on mobile */}
-        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-0.5">
-          {/* Chat */}
-          <Link href="/p2p/chat">
-            <button className="flex items-center gap-1.5 px-3 py-2 glass-card rounded-xl text-slate-300 hover:text-white text-xs font-medium transition-colors whitespace-nowrap shrink-0">
-              <MessageCircle size={13} /> Chat
-            </button>
-          </Link>
+        {/* Row 2: Secondary nav */}
+        <div className="flex items-center gap-2">
+          {/* Scrollable section: Chat, User Center */}
+          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar flex-1 min-w-0">
+            <Link href="/p2p/chat">
+              <button className="flex items-center gap-1.5 px-3 py-2 glass-card rounded-xl text-slate-300 hover:text-white text-xs font-medium transition-colors whitespace-nowrap shrink-0">
+                <MessageCircle size={13} /> Chat
+              </button>
+            </Link>
+            <Link href="/p2p/user-center">
+              <button className="flex items-center gap-1.5 px-3 py-2 glass-card rounded-xl text-slate-300 hover:text-white text-xs font-medium transition-colors whitespace-nowrap shrink-0">
+                <UserCircle2 size={13} /> User Center
+              </button>
+            </Link>
+          </div>
 
-          {/* User Center */}
-          <Link href="/p2p/user-center">
-            <button className="flex items-center gap-1.5 px-3 py-2 glass-card rounded-xl text-slate-300 hover:text-white text-xs font-medium transition-colors whitespace-nowrap shrink-0">
-              <UserCircle2 size={13} /> User Center
-            </button>
-          </Link>
+          {/* Fixed right: Orders + More — outside overflow container so dropdowns aren't clipped */}
+          <div className="flex items-center gap-2 shrink-0">
 
           {/* Orders dropdown */}
-          <div className="relative shrink-0" ref={ordersRef}>
+          <div className="relative" ref={ordersRef}>
             <button
               onClick={openOrders}
               className={`flex items-center gap-1.5 px-3 py-2 glass-card rounded-xl text-xs font-medium transition-colors whitespace-nowrap ${ordersOpen ? "text-amber-400" : "text-slate-300 hover:text-white"}`}
@@ -370,6 +373,7 @@ export default function P2PMarketPage() {
               </div>
             )}
           </div>
+          </div>{/* end fixed-right */}
         </div>
 
         {/* Main card */}
