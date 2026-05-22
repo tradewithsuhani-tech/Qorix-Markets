@@ -3,7 +3,7 @@ import { useLocation, Link } from "wouter";
 import { Layout } from "@/components/layout";
 import { authFetch } from "@/lib/auth-fetch";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, TrendingUp, TrendingDown, Lock, Wallet, AlertCircle, CheckCircle2, Plus, Eye, EyeOff, X } from "lucide-react";
+import { ArrowLeft, TrendingUp, TrendingDown, Lock, Wallet, AlertCircle, CheckCircle2, Plus, Eye, EyeOff, X, Trash2 } from "lucide-react";
 
 type FundingWallet = { tradingBalance: string | number };
 type PaymentMethod = {
@@ -28,6 +28,22 @@ export default function P2PCreateAdPage() {
   const [payMethods, setPayMethods] = useState<PaymentMethod[]>([]);
   const [payMethodsLoading, setPayMethodsLoading] = useState(true);
   const [peekId, setPeekId] = useState<number | null>(null);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+
+  const deleteMethod = async (id: number) => {
+    setDeletingId(id);
+    try {
+      await authFetch(`/api/p2p/payment-methods/${id}`, { method: "DELETE" });
+      setPayMethods((prev) => prev.filter((m) => m.id !== id));
+      setSelectedMethods((prev) => prev.filter((x) => x !== String(id)));
+      if (peekId === id) setPeekId(null);
+      toast({ title: "Payment method removed" });
+    } catch {
+      toast({ title: "Failed to remove", variant: "destructive" });
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   useEffect(() => {
     authFetch<FundingWallet>("/api/wallet")
@@ -249,9 +265,17 @@ export default function P2PCreateAdPage() {
 
           {/* Payment Methods */}
           <div>
-            <label className="text-xs uppercase tracking-wider text-slate-400 font-semibold mb-2 block">
-              Accepted Payment Methods <span className="text-red-400">*</span>
-            </label>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-xs uppercase tracking-wider text-slate-400 font-semibold">
+                Accepted Payment Methods <span className="text-red-400">*</span>
+              </label>
+              <Link
+                href="/p2p/payment-methods"
+                className="inline-flex items-center gap-1 text-xs text-emerald-400 hover:text-emerald-300 font-semibold transition-colors"
+              >
+                <Plus size={11} /> Add New
+              </Link>
+            </div>
 
             {payMethodsLoading ? (
               <div className="text-slate-500 text-sm py-3 text-center">Loading your payment methods…</div>
@@ -317,6 +341,16 @@ export default function P2PCreateAdPage() {
                           className="p-1.5 rounded-lg text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-colors shrink-0"
                         >
                           {isPeeking ? <EyeOff size={14} /> : <Eye size={14} />}
+                        </button>
+                        {/* Delete button */}
+                        <button
+                          type="button"
+                          onClick={() => deleteMethod(m.id)}
+                          disabled={deletingId === m.id}
+                          title="Remove payment method"
+                          className="p-1.5 rounded-lg text-slate-600 hover:text-red-400 hover:bg-red-500/10 transition-colors shrink-0 disabled:opacity-40"
+                        >
+                          <Trash2 size={14} />
                         </button>
                       </div>
 
