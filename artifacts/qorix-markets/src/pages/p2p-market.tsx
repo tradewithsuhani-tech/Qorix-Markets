@@ -38,7 +38,7 @@ function AdRow({ ad, tab }: { ad: Ad; tab: "BUY" | "SELL" }) {
     <>
     <div
       className="glass-card rounded-xl p-4 active:scale-[0.99] transition-transform cursor-pointer border border-white/[0.06] hover:border-white/[0.1]"
-      onClick={() => navigate(tab === "BUY" ? `/p2p/sell/${ad.id}` : `/p2p/order/${ad.id}`)}
+      onClick={() => navigate(tab === "BUY" ? `/p2p/order/${ad.id}` : `/p2p/sell/${ad.id}`)}
     >
       {/* Top row: advertiser + time limit */}
       <div className="flex items-center justify-between gap-2 mb-3">
@@ -91,12 +91,12 @@ function AdRow({ ad, tab }: { ad: Ad; tab: "BUY" | "SELL" }) {
           </div>
         </div>
         <button
-          onClick={(e) => { e.stopPropagation(); navigate(tab === "BUY" ? `/p2p/sell/${ad.id}` : `/p2p/order/${ad.id}`); }}
+          onClick={(e) => { e.stopPropagation(); navigate(tab === "BUY" ? `/p2p/order/${ad.id}` : `/p2p/sell/${ad.id}`); }}
           className={`px-5 py-2.5 rounded-xl text-sm font-bold shrink-0 transition-all active:scale-95 min-w-[72px] ${
-            isBuy ? "bg-amber-400 active:bg-amber-300 text-black shadow-lg shadow-amber-500/20" : "bg-emerald-500 active:bg-emerald-400 text-white shadow-lg shadow-emerald-500/25"
+            isBuy ? "bg-emerald-500 active:bg-emerald-400 text-white shadow-lg shadow-emerald-500/25" : "bg-red-500 active:bg-red-400 text-white shadow-lg shadow-red-500/20"
           }`}
         >
-          {isBuy ? "Sell" : "Buy"}
+          {isBuy ? "Buy" : "Sell"}
         </button>
       </div>
     </div>
@@ -120,7 +120,7 @@ export default function P2PMarketPage() {
     try {
       const pm = paymentFilter !== "All" ? `&paymentMethod=${encodeURIComponent(paymentFilter)}` : "";
       const [adsData, walletData] = await Promise.all([
-        authFetch<Ad[]>(`/api/p2p/ads?type=${tab}${pm}`),
+        authFetch<Ad[]>(`/api/p2p/ads?type=${tab === "BUY" ? "SELL" : "BUY"}${pm}`),
         authFetch<FundingWallet>("/api/wallet"),
       ]);
       setAds(adsData);
