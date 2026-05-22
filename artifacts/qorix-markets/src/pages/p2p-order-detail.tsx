@@ -522,109 +522,134 @@ export default function P2POrderDetailPage() {
 
         <div className="px-4 py-5 space-y-5">
 
-          {/* ── BUYER PENDING: Numbered payment steps ───────────────────── */}
+          {/* ── BUYER PENDING: Clean payment card ───────────────────────── */}
           {isBuyer && order.status === "pending" && (
             <>
-              {payMethods.length > 0 ? (
-                <div className="space-y-3">
-                  {/* Step 1 */}
-                  <div className="flex gap-3">
-                    <div className="flex flex-col items-center">
-                      <div className="w-8 h-8 rounded-full bg-amber-400/15 border-2 border-amber-400 flex items-center justify-center text-amber-400 font-bold text-sm shrink-0">1</div>
-                      <div className="w-px flex-1 bg-gradient-to-b from-amber-400/30 to-transparent mt-1" />
+              {payMethods.length > 0 ? payMethods.map((m) => (
+                <div key={m.id} className="rounded-2xl overflow-hidden border border-white/[0.08] bg-[#0d1117]">
+
+                  {/* Section header */}
+                  <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.06]">
+                    <div className="flex items-center gap-2">
+                      <div className={`w-6 h-6 rounded-lg flex items-center justify-center text-white text-[10px] font-bold ${
+                        m.type === "UPI" ? "bg-purple-600" :
+                        m.type === "IMPS" ? "bg-orange-600" :
+                        "bg-blue-600"
+                      }`}>{m.type.charAt(0)}</div>
+                      <span className="text-white font-semibold text-sm">{m.type} Payment</span>
                     </div>
-                    <div className="flex-1 pb-2">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-white font-semibold text-sm">Transfer via {methodLabel}</span>
-                        <button onClick={() => setHowToPayOpen(true)}
-                          className="flex items-center gap-1 text-xs text-amber-400 hover:text-amber-300 transition-colors">
-                          <AlertCircle size={11} /> Payment Tips
+                    <div className="flex items-center gap-2">
+                      {m.qrCodeData && (
+                        <button onClick={() => setQrModal(m)}
+                          className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white/[0.06] border border-white/[0.08] text-slate-400 text-[11px] font-medium hover:text-white transition-colors">
+                          <QrCode size={11} /> QR Code
                         </button>
-                      </div>
-                      {payMethods.map((m) => (
-                        <div key={m.id} className="rounded-2xl overflow-hidden border border-white/[0.08] bg-white/[0.03] backdrop-blur-sm">
-                          {/* Card header */}
-                          <div className="px-4 py-3 bg-gradient-to-r from-white/[0.05] to-transparent border-b border-white/[0.06] flex items-center gap-2">
-                            <div className={`w-7 h-7 rounded-lg flex items-center justify-center text-white text-[10px] font-bold shrink-0 ${
-                              m.type === "UPI" ? "bg-gradient-to-br from-purple-500 to-purple-700" :
-                              m.type === "BANK" || m.type === "NEFT" || m.type === "IMPS" ? "bg-gradient-to-br from-blue-500 to-blue-700" :
-                              "bg-gradient-to-br from-emerald-500 to-emerald-700"
-                            }`}>{m.type.charAt(0)}</div>
-                            <div>
-                              <span className="text-white font-semibold text-sm">{m.displayName}</span>
-                              <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded-md bg-white/[0.08] text-slate-400 font-medium">{m.type}</span>
-                            </div>
-                            {m.qrCodeData && (
-                              <button onClick={() => setQrModal(m)}
-                                className="ml-auto flex items-center gap-1 px-2.5 py-1 rounded-lg bg-purple-500/15 border border-purple-500/20 text-purple-400 text-[11px] font-semibold hover:bg-purple-500/25 transition-colors">
-                                <QrCode size={11} /> QR
-                              </button>
-                            )}
-                          </div>
-                          {/* Card rows */}
-                          <div className="divide-y divide-white/[0.05]">
-                            <div className="flex items-center justify-between px-4 py-3">
-                              <span className="text-slate-500 text-xs uppercase tracking-wide">Amount</span>
-                              <div className="flex items-center gap-1.5">
-                                <span className="text-white font-bold">₹{order.fiatAmount.toLocaleString("en-IN")}</span>
-                                <CopyBtn value={String(order.fiatAmount)} />
-                              </div>
-                            </div>
-                            {m.accountHolder && (
-                              <div className="flex items-center justify-between px-4 py-3">
-                                <span className="text-slate-500 text-xs uppercase tracking-wide">Name</span>
-                                <div className="flex items-center gap-1.5">
-                                  <span className="text-white text-sm">{m.accountHolder}</span>
-                                  <CopyBtn value={m.accountHolder} />
-                                </div>
-                              </div>
-                            )}
-                            {m.upiId && (
-                              <div className="flex items-center justify-between px-4 py-3">
-                                <span className="text-slate-500 text-xs uppercase tracking-wide">UPI ID</span>
-                                <div className="flex items-center gap-1.5">
-                                  <span className="text-white font-mono text-sm">{m.upiId}</span>
-                                  <CopyBtn value={m.upiId} />
-                                </div>
-                              </div>
-                            )}
-                            {m.accountNumber && (
-                              <div className="flex items-center justify-between px-4 py-3">
-                                <span className="text-slate-500 text-xs uppercase tracking-wide">Account No.</span>
-                                <div className="flex items-center gap-1.5">
-                                  <span className="text-white font-mono text-sm">{m.accountNumber}</span>
-                                  <CopyBtn value={m.accountNumber} />
-                                </div>
-                              </div>
-                            )}
-                            {m.ifsc && (
-                              <div className="flex items-center justify-between px-4 py-3">
-                                <span className="text-slate-500 text-xs uppercase tracking-wide">IFSC</span>
-                                <div className="flex items-center gap-1.5">
-                                  <span className="text-white font-mono text-sm">{m.ifsc}</span>
-                                  <CopyBtn value={m.ifsc} />
-                                </div>
-                              </div>
-                            )}
-                            {m.bankName && (
-                              <div className="flex items-center justify-between px-4 py-3">
-                                <span className="text-slate-500 text-xs uppercase tracking-wide">Bank</span>
-                                <span className="text-white text-sm">{m.bankName}</span>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      ))}
+                      )}
+                      <button onClick={() => setHowToPayOpen(true)}
+                        className="text-xs text-amber-400 hover:text-amber-300 transition-colors">
+                        How to pay?
+                      </button>
                     </div>
                   </div>
 
-                  {/* Step 2 */}
-                  <div className="flex gap-3">
-                    <div className="w-8 h-8 rounded-full bg-slate-700/50 border-2 border-slate-600 flex items-center justify-center text-slate-400 font-bold text-sm shrink-0">2</div>
-                    <p className="text-slate-400 text-sm pt-1.5">Upload payment screenshot or enter reference for seller's confirmation</p>
+                  {/* QR code — if available, show prominently */}
+                  {m.qrCodeData && (
+                    <div className="px-4 py-4 border-b border-white/[0.06] flex flex-col items-center gap-2">
+                      <p className="text-slate-500 text-xs uppercase tracking-widest">Scan to Pay</p>
+                      <div className="bg-white rounded-xl p-3 w-36 h-36 flex items-center justify-center">
+                        <img src={m.qrCodeData} alt="QR Code" className="w-full h-full object-contain" />
+                      </div>
+                      <p className="text-slate-600 text-xs">or pay using details below</p>
+                    </div>
+                  )}
+
+                  {/* Payment detail rows — clean copy-button style */}
+                  <div className="divide-y divide-white/[0.04]">
+                    {m.accountHolder && (
+                      <div className="flex items-center justify-between px-4 py-3.5">
+                        <div className="flex items-center gap-3">
+                          <div className="w-7 h-7 rounded-full bg-white/[0.06] flex items-center justify-center shrink-0">
+                            <User size={13} className="text-slate-400" />
+                          </div>
+                          <div>
+                            <p className="text-slate-500 text-[11px] uppercase tracking-wider">Account Holder</p>
+                            <p className="text-white font-semibold text-sm mt-0.5">{m.accountHolder}</p>
+                          </div>
+                        </div>
+                        <CopyBtn value={m.accountHolder} />
+                      </div>
+                    )}
+                    {m.upiId && (
+                      <div className="flex items-center justify-between px-4 py-3.5">
+                        <div className="flex items-center gap-3">
+                          <div className="w-7 h-7 rounded-full bg-white/[0.06] flex items-center justify-center shrink-0">
+                            <span className="text-purple-400 text-xs font-bold">@</span>
+                          </div>
+                          <div>
+                            <p className="text-slate-500 text-[11px] uppercase tracking-wider">UPI ID</p>
+                            <p className="text-white font-mono text-sm mt-0.5">{m.upiId}</p>
+                          </div>
+                        </div>
+                        <CopyBtn value={m.upiId} />
+                      </div>
+                    )}
+                    {m.accountNumber && (
+                      <div className="flex items-center justify-between px-4 py-3.5">
+                        <div className="flex items-center gap-3">
+                          <div className="w-7 h-7 rounded-full bg-white/[0.06] flex items-center justify-center shrink-0">
+                            <span className="text-blue-400 text-xs font-bold">#</span>
+                          </div>
+                          <div>
+                            <p className="text-slate-500 text-[11px] uppercase tracking-wider">Account No.</p>
+                            <p className="text-white font-mono text-sm mt-0.5">{m.accountNumber}</p>
+                          </div>
+                        </div>
+                        <CopyBtn value={m.accountNumber} />
+                      </div>
+                    )}
+                    {m.ifsc && (
+                      <div className="flex items-center justify-between px-4 py-3.5">
+                        <div className="flex items-center gap-3">
+                          <div className="w-7 h-7 rounded-full bg-white/[0.06] flex items-center justify-center shrink-0">
+                            <span className="text-cyan-400 text-xs font-bold">IF</span>
+                          </div>
+                          <div>
+                            <p className="text-slate-500 text-[11px] uppercase tracking-wider">IFSC Code</p>
+                            <p className="text-white font-mono text-sm mt-0.5">{m.ifsc}</p>
+                          </div>
+                        </div>
+                        <CopyBtn value={m.ifsc} />
+                      </div>
+                    )}
+                    {m.bankName && (
+                      <div className="flex items-center justify-between px-4 py-3.5">
+                        <div className="flex items-center gap-3">
+                          <div className="w-7 h-7 rounded-full bg-white/[0.06] flex items-center justify-center shrink-0">
+                            <span className="text-amber-400 text-xs font-bold">B</span>
+                          </div>
+                          <div>
+                            <p className="text-slate-500 text-[11px] uppercase tracking-wider">Bank</p>
+                            <p className="text-white text-sm mt-0.5">{m.bankName}</p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    {/* Amount row — always shown */}
+                    <div className="flex items-center justify-between px-4 py-3.5 bg-amber-500/[0.04]">
+                      <div className="flex items-center gap-3">
+                        <div className="w-7 h-7 rounded-full bg-amber-500/15 flex items-center justify-center shrink-0">
+                          <span className="text-amber-400 text-xs font-bold">₹</span>
+                        </div>
+                        <div>
+                          <p className="text-slate-500 text-[11px] uppercase tracking-wider">Amount</p>
+                          <p className="text-amber-400 font-bold text-base mt-0.5">₹{order.fiatAmount.toLocaleString("en-IN")}</p>
+                        </div>
+                      </div>
+                      <CopyBtn value={String(order.fiatAmount)} />
+                    </div>
                   </div>
                 </div>
-              ) : (
+              )) : (
                 <div className="flex items-start gap-3 bg-red-500/5 border border-red-500/20 rounded-2xl p-4">
                   <AlertCircle size={16} className="text-red-400 shrink-0 mt-0.5" />
                   <div>
@@ -634,22 +659,56 @@ export default function P2POrderDetailPage() {
                 </div>
               )}
 
-              {/* Binance-style 3-button action row */}
+              {/* Mobile-only inline chat ─────────────────────────────────── */}
+              <div className="md:hidden rounded-2xl overflow-hidden border border-white/[0.08] bg-[#0d1117]">
+                <div className="flex items-center gap-2.5 px-4 py-3 border-b border-white/[0.06]">
+                  <MessageCircle size={14} className="text-emerald-400" />
+                  <span className="text-white font-semibold text-sm">Chat with Seller</span>
+                  {newMsgCount > 0 && (
+                    <span className="ml-auto w-5 h-5 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">{newMsgCount}</span>
+                  )}
+                </div>
+                <div className="h-48 overflow-y-auto p-3 space-y-2">
+                  {messages.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center h-full gap-2 text-slate-600">
+                      <MessageCircle size={20} /><p className="text-xs">No messages yet</p>
+                    </div>
+                  ) : messages.map((msg) => (
+                    <div key={msg.id} className={`flex ${msg.isOwn ? "justify-end" : msg.isSystem ? "justify-center" : "justify-start"}`}>
+                      {msg.isSystem
+                        ? <span className="text-[11px] text-slate-500 px-3 py-1 rounded-full bg-slate-800/60">{msg.message}</span>
+                        : (
+                          <div className={`max-w-[80%] flex flex-col gap-0.5 ${msg.isOwn ? "items-end" : "items-start"}`}>
+                            {!msg.isOwn && <span className="text-[10px] text-slate-500 px-1">{msg.senderName}</span>}
+                            <div className={`px-3 py-2 rounded-2xl text-sm ${msg.isOwn ? "bg-emerald-500/20 text-emerald-100 rounded-tr-sm" : "bg-white/[0.07] text-slate-200 rounded-tl-sm"}`}>{msg.message}</div>
+                            <span className="text-[10px] text-slate-600 px-1">{new Date(msg.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+                          </div>
+                        )
+                      }
+                    </div>
+                  ))}
+                  <div ref={chatEndRef} />
+                </div>
+                <form onSubmit={sendChat} className="flex gap-2 p-3 border-t border-white/[0.06]">
+                  <input value={chatMsg} onChange={e => setChatMsg(e.target.value)} placeholder="Enter message here…" maxLength={500}
+                    className="flex-1 bg-black/30 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-slate-600 outline-none focus:border-emerald-400/40" />
+                  <button type="submit" disabled={!chatMsg.trim() || chatSending}
+                    className="p-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 text-white">
+                    {chatSending ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}
+                  </button>
+                </form>
+              </div>
+
+              {/* 3-button action row */}
               <div className="space-y-2.5">
                 <button
                   onClick={() => setProofOpen(true)}
                   disabled={payMethods.length === 0}
-                  className="w-full py-3.5 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 disabled:opacity-40 text-black font-bold text-sm shadow-lg shadow-amber-500/20 transition-all active:scale-[0.98]"
+                  className="w-full py-4 rounded-xl bg-amber-400 hover:bg-amber-300 disabled:opacity-40 text-black font-bold text-sm transition-all active:scale-[0.98]"
                 >
                   Transferred, Notify Seller
                 </button>
                 <div className="flex gap-2">
-                  <button
-                    onClick={() => { setChatOpen(true); setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100); }}
-                    className="flex-1 py-3 rounded-xl bg-white/[0.06] border border-white/[0.08] hover:bg-white/[0.1] text-slate-300 font-semibold text-sm transition-all active:scale-[0.98]"
-                  >
-                    I Have a Question
-                  </button>
                   <button
                     onClick={() => setCancelOpen(true)}
                     className="flex-1 py-3 rounded-xl border border-red-500/25 hover:bg-red-500/10 text-red-400 font-semibold text-sm transition-all active:scale-[0.98]"
