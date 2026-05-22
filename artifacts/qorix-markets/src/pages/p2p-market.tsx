@@ -282,7 +282,7 @@ export default function P2PMarketPage() {
             </button>
 
             {ordersOpen && (
-              <div className="absolute left-0 top-full mt-2 w-80 max-w-[calc(100vw-2rem)] z-50 rounded-2xl border border-white/[0.1] bg-[#0d1117] shadow-2xl overflow-hidden">
+              <div className="absolute right-0 top-full mt-2 w-[calc(100vw-1rem)] sm:w-80 z-50 rounded-2xl border border-white/[0.1] bg-[#0d1117] shadow-2xl overflow-hidden">
                 <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.06]">
                   <span className="text-white font-semibold text-sm">Processing</span>
                   <Link href="/p2p/orders" onClick={() => setOrdersOpen(false)}>
