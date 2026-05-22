@@ -222,153 +222,153 @@ export default function P2PMarketPage() {
     <Layout>
       <div className="max-w-5xl mx-auto space-y-4">
 
-        {/* Header — compact on mobile, title shown in top bar */}
+        {/* Header */}
+        {/* Row 1: Balance + primary actions */}
         <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            {wallet && (
-              <div className="flex items-center gap-2 px-3 py-2 glass-card rounded-xl">
-                <div className="w-5 h-5 bg-emerald-500/15 rounded-lg flex items-center justify-center shrink-0">
-                  <Wallet size={11} className="text-emerald-400" />
-                </div>
-                <div>
-                  <div className="text-[9px] text-slate-500 uppercase tracking-wider leading-none mb-0.5">Balance</div>
-                  <div className="text-white font-bold text-xs tabular-nums">{parseFloat(String(wallet.tradingBalance)).toFixed(2)} USDT</div>
-                </div>
+          {wallet ? (
+            <div className="flex items-center gap-2 px-3 py-2 glass-card rounded-xl">
+              <div className="w-5 h-5 bg-emerald-500/15 rounded-lg flex items-center justify-center shrink-0">
+                <Wallet size={11} className="text-emerald-400" />
               </div>
-            )}
-          </div>
+              <div>
+                <div className="text-[9px] text-slate-500 uppercase tracking-wider leading-none mb-0.5">Balance</div>
+                <div className="text-white font-bold text-xs tabular-nums">{parseFloat(String(wallet.tradingBalance)).toFixed(2)} USDT</div>
+              </div>
+            </div>
+          ) : (
+            <div className="h-9 w-28 glass-card rounded-xl animate-pulse" />
+          )}
+
           <div className="flex items-center gap-2">
             <button onClick={() => fetchData(true)} className="p-2 glass-card rounded-xl text-slate-400 active:bg-white/10 transition-colors" aria-label="Refresh">
               <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
             </button>
-            {/* ── Chat button ─────────────────────────────────── */}
-            <Link href="/p2p/chat">
-              <button className="flex items-center gap-1.5 px-3 py-2 glass-card rounded-xl text-slate-300 hover:text-white text-xs font-medium transition-colors">
-                <MessageCircle size={13} />
-                Chat
-              </button>
-            </Link>
-
-            {/* ── User Center button ───────────────────────────── */}
-            <Link href="/p2p/user-center">
-              <button className="flex items-center gap-1.5 px-3 py-2 glass-card rounded-xl text-slate-300 hover:text-white text-xs font-medium transition-colors">
-                <UserCircle2 size={13} />
-                User Center
-              </button>
-            </Link>
-
-            {/* ── Orders dropdown ─────────────────────────────── */}
-            <div className="relative" ref={ordersRef}>
-              <button
-                onClick={openOrders}
-                className={`flex items-center gap-1.5 px-3 py-2 glass-card rounded-xl text-xs font-medium transition-colors ${ordersOpen ? "text-amber-400" : "text-slate-300 hover:text-white"}`}
-              >
-                <ClipboardList size={13} />
-                Orders
-                <ChevronDown size={11} className={`transition-transform ${ordersOpen ? "rotate-180" : ""}`} />
-              </button>
-
-              {ordersOpen && (
-                <div className="absolute right-0 top-full mt-2 w-80 z-50 rounded-2xl border border-white/[0.1] bg-[#0d1117] shadow-2xl overflow-hidden">
-                  {/* Header */}
-                  <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.06]">
-                    <span className="text-white font-semibold text-sm">Processing</span>
-                    <Link href="/p2p/orders" onClick={() => setOrdersOpen(false)}>
-                      <span className="text-amber-400 text-xs font-semibold flex items-center gap-0.5 hover:text-amber-300 transition-colors">
-                        View All <ChevronRight size={11} />
-                      </span>
-                    </Link>
-                  </div>
-
-                  {/* Order list */}
-                  <div className="max-h-72 overflow-y-auto">
-                    {ordersLoading ? (
-                      <div className="flex flex-col gap-2 p-4">
-                        {[1, 2].map((i) => (
-                          <div key={i} className="h-14 rounded-xl bg-white/[0.04] animate-pulse" />
-                        ))}
-                      </div>
-                    ) : processingOrders.length === 0 ? (
-                      <div className="flex flex-col items-center justify-center py-10 gap-3 text-slate-600">
-                        <ClipboardList size={28} />
-                        <p className="text-xs">No more orders</p>
-                      </div>
-                    ) : (
-                      <div className="divide-y divide-white/[0.04]">
-                        {processingOrders.map((o) => (
-                          <Link key={o.id} href={`/p2p/orders/${o.id}`} onClick={() => setOrdersOpen(false)}>
-                            <div className="flex items-center justify-between px-4 py-3 hover:bg-white/[0.03] transition-colors cursor-pointer">
-                              <div className="flex items-center gap-3">
-                                <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-[10px] font-bold ${o.type === "BUY" ? "bg-emerald-500/15 text-emerald-400" : "bg-red-500/15 text-red-400"}`}>
-                                  {o.type === "BUY" ? "B" : "S"}
-                                </div>
-                                <div>
-                                  <div className="text-white text-sm font-semibold">Order #{o.id}</div>
-                                  <div className="text-slate-500 text-[11px]">{o.counterpartyName}</div>
-                                </div>
-                              </div>
-                              <div className="text-right">
-                                <div className="text-white text-sm font-semibold">₹{o.fiatAmount.toLocaleString("en-IN")}</div>
-                                <div className={`text-[11px] font-medium px-1.5 py-0.5 rounded-md inline-block mt-0.5 ${
-                                  o.status === "pending" ? "bg-amber-500/15 text-amber-400" :
-                                  o.status === "paid" ? "bg-blue-500/15 text-blue-400" :
-                                  "bg-slate-500/15 text-slate-400"
-                                }`}>{o.status}</div>
-                              </div>
-                            </div>
-                          </Link>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* ── More dropdown ───────────────────────────────── */}
-            <div className="relative" ref={moreRef}>
-              <button
-                onClick={() => setMoreOpen((v) => !v)}
-                className={`flex items-center gap-1 px-3 py-2 glass-card rounded-xl text-xs font-medium transition-colors ${
-                  moreOpen ? "text-white bg-white/[0.06]" : "text-slate-300 hover:text-white"
-                }`}
-              >
-                More <ChevronDown size={11} className={`transition-transform duration-200 ${moreOpen ? "rotate-180" : ""}`} />
-              </button>
-
-              {moreOpen && (
-                <div className="absolute right-0 top-full mt-2 w-52 z-50 rounded-2xl border border-white/[0.08] bg-[#0d1117] shadow-2xl overflow-hidden">
-                  <div className="py-1">
-                    {[
-                      { label: "Payment Methods", href: "/p2p/payment-methods", icon: CreditCard, desc: "Manage your pay options" },
-                      { label: "My Ads",           href: "/p2p/ads/my",          icon: LayoutList,  desc: "View & manage your ads"  },
-                      { label: "Post New Ad",      href: "/p2p/create-ad",       icon: Plus,        desc: "Create a buy/sell ad"    },
-                      { label: "User Center",      href: "/p2p/user-center",     icon: UserCircle2, desc: "Profile & stats"          },
-                      { label: "P2P Help",         href: "/faq",                 icon: HelpCircle,  desc: "How P2P trading works"    },
-                    ].map(({ label, href, icon: Icon, desc }) => (
-                      <Link key={href} href={href} onClick={() => setMoreOpen(false)}>
-                        <div className="flex items-center gap-3 px-4 py-3 hover:bg-white/[0.04] transition-colors cursor-pointer">
-                          <div className="w-8 h-8 rounded-xl bg-white/[0.04] flex items-center justify-center shrink-0">
-                            <Icon size={14} className="text-emerald-400" />
-                          </div>
-                          <div className="min-w-0">
-                            <div className="text-white text-xs font-semibold">{label}</div>
-                            <div className="text-slate-600 text-[10px] leading-tight">{desc}</div>
-                          </div>
-                          <ChevronRight size={11} className="text-slate-700 ml-auto shrink-0" />
-                        </div>
-                      </Link>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-
             <Link href="/p2p/create-ad">
-              <button className="flex items-center gap-1.5 px-3 py-2 bg-emerald-500 hover:bg-emerald-400 rounded-xl text-black text-xs font-bold transition-colors">
+              <button className="flex items-center gap-1.5 px-3 py-2 bg-emerald-500 hover:bg-emerald-400 rounded-xl text-black text-xs font-bold transition-colors active:scale-95">
                 <Plus size={13} /> Post Ad
               </button>
             </Link>
+          </div>
+        </div>
+
+        {/* Row 2: Secondary nav — icon+label pills, scrollable on mobile */}
+        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-0.5">
+          {/* Chat */}
+          <Link href="/p2p/chat">
+            <button className="flex items-center gap-1.5 px-3 py-2 glass-card rounded-xl text-slate-300 hover:text-white text-xs font-medium transition-colors whitespace-nowrap shrink-0">
+              <MessageCircle size={13} /> Chat
+            </button>
+          </Link>
+
+          {/* User Center */}
+          <Link href="/p2p/user-center">
+            <button className="flex items-center gap-1.5 px-3 py-2 glass-card rounded-xl text-slate-300 hover:text-white text-xs font-medium transition-colors whitespace-nowrap shrink-0">
+              <UserCircle2 size={13} /> User Center
+            </button>
+          </Link>
+
+          {/* Orders dropdown */}
+          <div className="relative shrink-0" ref={ordersRef}>
+            <button
+              onClick={openOrders}
+              className={`flex items-center gap-1.5 px-3 py-2 glass-card rounded-xl text-xs font-medium transition-colors whitespace-nowrap ${ordersOpen ? "text-amber-400" : "text-slate-300 hover:text-white"}`}
+            >
+              <ClipboardList size={13} />
+              Orders
+              <ChevronDown size={11} className={`transition-transform ${ordersOpen ? "rotate-180" : ""}`} />
+            </button>
+
+            {ordersOpen && (
+              <div className="absolute left-0 top-full mt-2 w-80 max-w-[calc(100vw-2rem)] z-50 rounded-2xl border border-white/[0.1] bg-[#0d1117] shadow-2xl overflow-hidden">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.06]">
+                  <span className="text-white font-semibold text-sm">Processing</span>
+                  <Link href="/p2p/orders" onClick={() => setOrdersOpen(false)}>
+                    <span className="text-amber-400 text-xs font-semibold flex items-center gap-0.5 hover:text-amber-300 transition-colors">
+                      View All <ChevronRight size={11} />
+                    </span>
+                  </Link>
+                </div>
+                <div className="max-h-72 overflow-y-auto">
+                  {ordersLoading ? (
+                    <div className="flex flex-col gap-2 p-4">
+                      {[1, 2].map((i) => (
+                        <div key={i} className="h-14 rounded-xl bg-white/[0.04] animate-pulse" />
+                      ))}
+                    </div>
+                  ) : processingOrders.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-10 gap-3 text-slate-600">
+                      <ClipboardList size={28} />
+                      <p className="text-xs">No active orders</p>
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-white/[0.04]">
+                      {processingOrders.map((o) => (
+                        <Link key={o.id} href={`/p2p/orders/${o.id}`} onClick={() => setOrdersOpen(false)}>
+                          <div className="flex items-center justify-between px-4 py-3 hover:bg-white/[0.03] transition-colors cursor-pointer">
+                            <div className="flex items-center gap-3">
+                              <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-[10px] font-bold ${o.type === "BUY" ? "bg-emerald-500/15 text-emerald-400" : "bg-red-500/15 text-red-400"}`}>
+                                {o.type === "BUY" ? "B" : "S"}
+                              </div>
+                              <div>
+                                <div className="text-white text-sm font-semibold">Order #{o.id}</div>
+                                <div className="text-slate-500 text-[11px]">{o.counterpartyName}</div>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-white text-sm font-semibold">₹{o.fiatAmount.toLocaleString("en-IN")}</div>
+                              <div className={`text-[11px] font-medium px-1.5 py-0.5 rounded-md inline-block mt-0.5 ${
+                                o.status === "pending" ? "bg-amber-500/15 text-amber-400" :
+                                o.status === "paid" ? "bg-blue-500/15 text-blue-400" :
+                                "bg-slate-500/15 text-slate-400"
+                              }`}>{o.status}</div>
+                            </div>
+                          </div>
+                        </Link>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* More dropdown */}
+          <div className="relative shrink-0" ref={moreRef}>
+            <button
+              onClick={() => setMoreOpen((v) => !v)}
+              className={`flex items-center gap-1.5 px-3 py-2 glass-card rounded-xl text-xs font-medium transition-colors whitespace-nowrap ${
+                moreOpen ? "text-white bg-white/[0.06]" : "text-slate-300 hover:text-white"
+              }`}
+            >
+              <MoreHorizontal size={13} /> More
+            </button>
+
+            {moreOpen && (
+              <div className="absolute left-0 top-full mt-2 w-52 z-50 rounded-2xl border border-white/[0.08] bg-[#0d1117] shadow-2xl overflow-hidden">
+                <div className="py-1">
+                  {[
+                    { label: "Payment Methods", href: "/p2p/payment-methods", icon: CreditCard,   desc: "Manage your pay options" },
+                    { label: "My Ads",           href: "/p2p/ads/my",          icon: LayoutList,   desc: "View & manage your ads"  },
+                    { label: "Post New Ad",      href: "/p2p/create-ad",       icon: Plus,         desc: "Create a buy/sell ad"    },
+                    { label: "User Center",      href: "/p2p/user-center",     icon: UserCircle2,  desc: "Profile & stats"          },
+                    { label: "P2P Help",         href: "/faq",                 icon: HelpCircle,   desc: "How P2P trading works"    },
+                  ].map(({ label, href, icon: Icon, desc }) => (
+                    <Link key={href} href={href} onClick={() => setMoreOpen(false)}>
+                      <div className="flex items-center gap-3 px-4 py-3 hover:bg-white/[0.04] transition-colors cursor-pointer">
+                        <div className="w-8 h-8 rounded-xl bg-white/[0.04] flex items-center justify-center shrink-0">
+                          <Icon size={14} className="text-emerald-400" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-white text-xs font-semibold">{label}</div>
+                          <div className="text-slate-600 text-[10px] leading-tight">{desc}</div>
+                        </div>
+                        <ChevronRight size={11} className="text-slate-700 ml-auto shrink-0" />
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
