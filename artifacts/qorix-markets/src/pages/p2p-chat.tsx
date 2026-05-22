@@ -3,8 +3,8 @@ import { Link } from "wouter";
 import { Layout } from "@/components/layout";
 import { authFetch } from "@/lib/auth-fetch";
 import {
-  MessageCircle, ArrowLeft, Send, Loader2, RefreshCw,
-  ChevronRight, Clock, CheckCheck,
+  MessageCircle, ArrowLeft, Send, Loader2,
+  ChevronRight, Clock, CheckCheck, Paperclip, FileText, X,
 } from "lucide-react";
 
 type Order = {
@@ -16,6 +16,7 @@ type Order = {
 type ChatMsg = {
   id: number; senderId: number | null; message: string;
   isSystem: boolean; isOwn: boolean; senderName: string; createdAt: string;
+  attachmentData?: string | null; attachmentType?: string | null;
 };
 
 type Thread = Order & {
@@ -24,6 +25,8 @@ type Thread = Order & {
   lastMsgTime?: string;
   unread: number;
 };
+
+type Attachment = { data: string; type: "image" | "pdf"; name: string };
 
 function timeAgo(iso: string) {
   const d = new Date(iso);
@@ -41,6 +44,9 @@ function statusColor(status: string) {
   return "bg-slate-500/15 text-slate-400";
 }
 
+const CHAT_IMG_MAX = 600 * 1024 * (4 / 3);
+const CHAT_PDF_MAX = 2 * 1024 * 1024 * (4 / 3);
+
 export default function P2PChatPage() {
   const [threads, setThreads] = useState<Thread[]>([]);
   const [threadsLoading, setThreadsLoading] = useState(true);
@@ -50,7 +56,13 @@ export default function P2PChatPage() {
   const [chatMsg, setChatMsg] = useState("");
   const [sending, setSending] = useState(false);
   const [mobileView, setMobileView] = useState<"list" | "chat">("list");
+  const [attachment, setAttachment] = useState<Attachment | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const selectedRef = useRef<Thread | null>(null);
+
+  selectedRef.current = selected;
 
   // Load all orders as threads
   useEffect(() => {
@@ -69,46 +81,84 @@ export default function P2PChatPage() {
   }, []);
 
   // Load messages for selected order
-  const loadMessages = useCallback(async (orderId: number) => {
-    setMsgsLoading(true);
+  const loadMessages = useCallback(async (orderId: number, silent = false) => {
+    if (!silent) setMsgsLoading(true);
     try {
       const data = await authFetch<ChatMsg[]>(`/api/p2p/orders/${orderId}/messages`);
-      setMessages(data);
-      setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 80);
+      setMessages((prev) => {
+        if (silent && prev.length === data.length && prev[prev.length - 1]?.id === data[data.length - 1]?.id) return prev;
+        return data;
+      });
+      if (!silent) setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 80);
     } catch {
-      setMessages([]);
+      if (!silent) setMessages([]);
     } finally {
-      setMsgsLoading(false);
+      if (!silent) setMsgsLoading(false);
     }
   }, []);
+
+  // Real-time polling — every 4s while a conversation is open
+  useEffect(() => {
+    if (pollRef.current) clearInterval(pollRef.current);
+    if (!selected) return;
+    pollRef.current = setInterval(() => {
+      if (selectedRef.current) {
+        loadMessages(selectedRef.current.id, true).then(() => {
+          chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+        });
+      }
+    }, 4000);
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  }, [selected?.id, loadMessages]);
 
   const selectThread = (t: Thread) => {
     setSelected(t);
     setMessages([]);
     setChatMsg("");
+    setAttachment(null);
     setMobileView("chat");
     loadMessages(t.id);
-    // Update last message preview in thread list
     setThreads((prev) => prev.map((x) => x.id === t.id ? { ...x, unread: 0 } : x));
+  };
+
+  // File picker handler
+  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!fileRef.current) return;
+    fileRef.current.value = "";
+    if (!file) return;
+    const isImg = file.type.startsWith("image/");
+    const isPdf = file.type === "application/pdf";
+    if (!isImg && !isPdf) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const data = ev.target?.result as string;
+      if (isImg && data.length > CHAT_IMG_MAX) { alert("Image too large (max 600 KB)"); return; }
+      if (isPdf && data.length > CHAT_PDF_MAX) { alert("PDF too large (max 2 MB)"); return; }
+      setAttachment({ data, type: isImg ? "image" : "pdf", name: file.name });
+    };
+    reader.readAsDataURL(file);
   };
 
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selected || !chatMsg.trim() || sending) return;
+    if (!selected || (!chatMsg.trim() && !attachment) || sending) return;
     setSending(true);
     try {
+      const body: Record<string, string> = { message: chatMsg.trim() };
+      if (attachment) { body.attachmentData = attachment.data; body.attachmentType = attachment.type; }
       const msg = await authFetch<ChatMsg>(`/api/p2p/orders/${selected.id}/messages`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: chatMsg.trim() }),
+        body: JSON.stringify(body),
       });
       setMessages((prev) => [...prev, msg]);
       setThreads((prev) => prev.map((t) =>
         t.id === selected.id
-          ? { ...t, lastMsg: chatMsg.trim(), lastMsgTime: new Date().toISOString() }
+          ? { ...t, lastMsg: chatMsg.trim() || "📎 Attachment", lastMsgTime: new Date().toISOString() }
           : t
       ));
       setChatMsg("");
+      setAttachment(null);
       setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 60);
     } catch {
       // silent
@@ -173,7 +223,6 @@ export default function P2PChatPage() {
                     className={`w-full text-left px-4 py-3.5 border-b border-white/[0.04] hover:bg-white/[0.03] transition-colors ${selected?.id === t.id ? "bg-white/[0.05]" : ""}`}
                   >
                     <div className="flex items-start gap-3">
-                      {/* Avatar */}
                       <div className={`w-9 h-9 rounded-full shrink-0 flex items-center justify-center font-bold text-sm ${t.role === "buyer" ? "bg-emerald-500/15 text-emerald-400" : "bg-violet-500/15 text-violet-400"}`}>
                         {t.counterpartyLabel[0]}
                       </div>
@@ -206,7 +255,6 @@ export default function P2PChatPage() {
           {/* ── Right: Chat panel ──────────────────────────────────── */}
           <div className={`${mobileView === "list" ? "hidden" : "flex"} md:flex flex-1 flex-col glass-card rounded-2xl overflow-hidden border border-white/[0.08] min-w-0`}>
             {!selected ? (
-              /* Empty state */
               <div className="flex flex-col items-center justify-center h-full gap-4 text-slate-600">
                 <MessageCircle size={40} />
                 <div className="text-center">
@@ -233,19 +281,11 @@ export default function P2PChatPage() {
                       </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => loadMessages(selected.id)}
-                      className="w-7 h-7 rounded-lg bg-white/[0.05] flex items-center justify-center text-slate-500 hover:text-white transition-colors"
-                    >
-                      <RefreshCw size={12} />
-                    </button>
-                    <Link href={`/p2p/orders/${selected.id}`}>
-                      <span className="text-xs text-amber-400 hover:text-amber-300 flex items-center gap-0.5 transition-colors">
-                        View Order <ChevronRight size={11} />
-                      </span>
-                    </Link>
-                  </div>
+                  <Link href={`/p2p/orders/${selected.id}`}>
+                    <span className="text-xs text-amber-400 hover:text-amber-300 flex items-center gap-0.5 transition-colors">
+                      View Order <ChevronRight size={11} />
+                    </span>
+                  </Link>
                 </div>
 
                 {/* Messages area */}
@@ -272,7 +312,25 @@ export default function P2PChatPage() {
                               <span className="text-[10px] text-slate-500 px-1">{m.senderName}</span>
                             )}
                             <div className={`px-3.5 py-2 rounded-2xl text-sm leading-relaxed ${m.isOwn ? "bg-emerald-500/20 text-emerald-100 rounded-tr-sm" : "bg-white/[0.08] text-slate-200 rounded-tl-sm"}`}>
-                              {m.message}
+                              {m.message && <p>{m.message}</p>}
+                              {m.attachmentType === "image" && m.attachmentData && (
+                                <img
+                                  src={m.attachmentData}
+                                  alt="attachment"
+                                  className="mt-1.5 max-w-[200px] rounded-xl object-cover cursor-pointer"
+                                  onClick={() => window.open(m.attachmentData!, "_blank")}
+                                />
+                              )}
+                              {m.attachmentType === "pdf" && m.attachmentData && (
+                                <a
+                                  href={m.attachmentData}
+                                  download="attachment.pdf"
+                                  className="mt-1.5 flex items-center gap-2 bg-white/10 px-3 py-2 rounded-xl hover:bg-white/15 transition-colors"
+                                >
+                                  <FileText size={14} className="text-red-400 shrink-0" />
+                                  <span className="text-xs">PDF File</span>
+                                </a>
+                              )}
                             </div>
                             <div className={`flex items-center gap-1 px-1 ${m.isOwn ? "flex-row-reverse" : ""}`}>
                               <span className="text-[10px] text-slate-600">
@@ -290,21 +348,49 @@ export default function P2PChatPage() {
 
                 {/* Input area */}
                 {isActive ? (
-                  <form onSubmit={sendMessage} className="px-4 py-3 border-t border-white/[0.06] flex gap-2 items-end">
-                    <input
-                      value={chatMsg}
-                      onChange={(e) => setChatMsg(e.target.value)}
-                      placeholder="Enter message here…"
-                      maxLength={500}
-                      className="flex-1 bg-black/30 border border-white/[0.1] rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-slate-600 outline-none focus:border-emerald-400/40 transition-colors"
-                    />
-                    <button
-                      type="submit"
-                      disabled={!chatMsg.trim() || sending}
-                      className="p-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 disabled:cursor-not-allowed text-white transition-colors shrink-0"
-                    >
-                      {sending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
-                    </button>
+                  <form onSubmit={sendMessage} className="flex flex-col gap-2 px-3 py-3 border-t border-white/[0.06]">
+                    {/* Attachment preview */}
+                    {attachment && (
+                      <div className="flex items-center gap-2 bg-white/[0.04] rounded-xl px-3 py-2 border border-white/[0.08]">
+                        {attachment.type === "image"
+                          ? <img src={attachment.data} alt="" className="w-10 h-10 rounded-lg object-cover shrink-0" />
+                          : <FileText size={18} className="text-red-400 shrink-0" />}
+                        <span className="text-xs text-slate-300 flex-1 truncate">{attachment.name}</span>
+                        <button type="button" onClick={() => setAttachment(null)} className="text-slate-500 hover:text-red-400 shrink-0">
+                          <X size={13} />
+                        </button>
+                      </div>
+                    )}
+                    <div className="flex gap-2 items-center">
+                      <input
+                        ref={fileRef}
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp,application/pdf"
+                        className="hidden"
+                        onChange={handleFile}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => fileRef.current?.click()}
+                        className="p-2.5 rounded-xl bg-white/[0.05] hover:bg-white/10 text-slate-400 hover:text-white transition-colors shrink-0"
+                      >
+                        <Paperclip size={15} />
+                      </button>
+                      <input
+                        value={chatMsg}
+                        onChange={(e) => setChatMsg(e.target.value)}
+                        placeholder="Enter message here…"
+                        maxLength={500}
+                        className="flex-1 bg-black/30 border border-white/[0.1] rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-slate-600 outline-none focus:border-emerald-400/40 transition-colors"
+                      />
+                      <button
+                        type="submit"
+                        disabled={(!chatMsg.trim() && !attachment) || sending}
+                        className="p-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 disabled:cursor-not-allowed text-white transition-colors shrink-0"
+                      >
+                        {sending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+                      </button>
+                    </div>
                   </form>
                 ) : (
                   <div className="px-4 py-3 border-t border-white/[0.06] text-center text-xs text-slate-600">
