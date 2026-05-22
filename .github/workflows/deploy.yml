@@ -210,8 +210,21 @@ jobs:
           # the workflow file or logs.
           SMOKE_TEST_EMAIL: ${{ secrets.SMOKE_TEST_EMAIL }}
           SMOKE_TEST_PASSWORD: ${{ secrets.SMOKE_TEST_PASSWORD }}
+          # When the API has CLOUDFLARE_ORIGIN_SECRET set, direct hits to
+          # qorix-api.fly.dev (bypassing Cloudflare) get 403 ORIGIN_PIN_REQUIRED
+          # unless we add the X-Origin-Auth header. This secret is OPTIONAL —
+          # when unset, smoke curls behave as before and only work if the
+          # API has CLOUDFLARE_ORIGIN_SECRET unset.
+          CLOUDFLARE_ORIGIN_SECRET: ${{ secrets.CLOUDFLARE_ORIGIN_SECRET }}
         run: |
           set -euo pipefail
+          # Build optional X-Origin-Auth header array. Empty when the secret
+          # is not set so the curls work in either configuration.
+          ORIGIN_AUTH=()
+          if [ -n "${CLOUDFLARE_ORIGIN_SECRET:-}" ]; then
+            ORIGIN_AUTH=(-H "X-Origin-Auth: ${CLOUDFLARE_ORIGIN_SECRET}")
+            echo "✓ X-Origin-Auth header will be sent on smoke curls"
+          fi
           # API_BASE is inherited from the workflow-level env block above
           # (defaults to https://qorix-api.fly.dev pre-cutover, override via
           # repo variable API_BASE after DNS cutover).
@@ -222,7 +235,7 @@ jobs:
           echo
           echo "→ GET ${API_BASE}/api/public/market-indicators (exercises Neon)"
           curl -fsS --retry 5 --retry-delay 5 --retry-all-errors \
-            --max-time 15 "${API_BASE}/api/public/market-indicators" \
+            --max-time 15 "${ORIGIN_AUTH[@]}" "${API_BASE}/api/public/market-indicators" \
             | tee /tmp/market.json
           grep -q '"activeInvestors"' /tmp/market.json
           echo
@@ -247,6 +260,7 @@ jobs:
           curl -fsS --retry 3 --retry-delay 3 --retry-connrefused \
             --max-time 15 \
             -H "Content-Type: application/json" \
+            "${ORIGIN_AUTH[@]}" \
             -d "${LOGIN_BODY}" \
             "${API_BASE}/api/auth/login" \
             -o /tmp/login.json
@@ -266,6 +280,7 @@ jobs:
           curl -fsS --retry 3 --retry-delay 3 --retry-connrefused \
             --max-time 15 \
             -H "Authorization: Bearer ${TOKEN}" \
+            "${ORIGIN_AUTH[@]}" \
             "${API_BASE}/api/auth/me" \
             -o /tmp/me.json
           jq -e 'has("id") and has("email")' /tmp/me.json > /dev/null \
@@ -324,8 +339,13 @@ jobs:
         env:
           SMOKE_TEST_EMAIL: ${{ secrets.SMOKE_TEST_EMAIL }}
           SMOKE_TEST_PASSWORD: ${{ secrets.SMOKE_TEST_PASSWORD }}
+          CLOUDFLARE_ORIGIN_SECRET: ${{ secrets.CLOUDFLARE_ORIGIN_SECRET }}
         run: |
           set -euo pipefail
+          ORIGIN_AUTH=()
+          if [ -n "${CLOUDFLARE_ORIGIN_SECRET:-}" ]; then
+            ORIGIN_AUTH=(-H "X-Origin-Auth: ${CLOUDFLARE_ORIGIN_SECRET}")
+          fi
           # API_BASE inherited from workflow-level env (see top of file).
           echo "→ (post-rollback) GET ${API_BASE}/api/healthz"
           curl -fsS --retry 5 --retry-delay 5 --retry-all-errors \
@@ -334,7 +354,7 @@ jobs:
           echo
           echo "→ (post-rollback) GET ${API_BASE}/api/public/market-indicators"
           curl -fsS --retry 5 --retry-delay 5 --retry-all-errors \
-            --max-time 15 "${API_BASE}/api/public/market-indicators" \
+            --max-time 15 "${ORIGIN_AUTH[@]}" "${API_BASE}/api/public/market-indicators" \
             | tee /tmp/market-rollback.json
           grep -q '"activeInvestors"' /tmp/market-rollback.json
           echo
@@ -350,6 +370,7 @@ jobs:
             curl -fsS --retry 3 --retry-delay 3 --retry-connrefused \
               --max-time 15 \
               -H "Content-Type: application/json" \
+              "${ORIGIN_AUTH[@]}" \
               -d "${LOGIN_BODY}" \
               "${API_BASE}/api/auth/login" \
               -o /tmp/login-rollback.json
@@ -363,6 +384,7 @@ jobs:
             curl -fsS --retry 3 --retry-delay 3 --retry-connrefused \
               --max-time 15 \
               -H "Authorization: Bearer ${TOKEN}" \
+              "${ORIGIN_AUTH[@]}" \
               "${API_BASE}/api/auth/me" \
               -o /tmp/me-rollback.json
             jq -e 'has("id") and has("email")' /tmp/me-rollback.json > /dev/null \
@@ -468,8 +490,15 @@ jobs:
         env:
           SMOKE_TEST_EMAIL: ${{ secrets.SMOKE_TEST_EMAIL }}
           SMOKE_TEST_PASSWORD: ${{ secrets.SMOKE_TEST_PASSWORD }}
+          CLOUDFLARE_ORIGIN_SECRET: ${{ secrets.CLOUDFLARE_ORIGIN_SECRET }}
         run: |
           set -euo pipefail
+          # Optional X-Origin-Auth header for direct hits to qorix-api.fly.dev
+          # when CLOUDFLARE_ORIGIN_SECRET is set on the API. No-op otherwise.
+          ORIGIN_AUTH=()
+          if [ -n "${CLOUDFLARE_ORIGIN_SECRET:-}" ]; then
+            ORIGIN_AUTH=(-H "X-Origin-Auth: ${CLOUDFLARE_ORIGIN_SECRET}")
+          fi
           # WEB_BASE / API_BASE inherited from workflow-level env (see top of
           # file). Defaults are the Fly direct hostnames pre-cutover; flip the
           # repo variables WEB_BASE / API_BASE to qorixmarkets.com /
@@ -545,6 +574,7 @@ jobs:
             -H "Origin: ${WEB_BASE}" \
             -H "Access-Control-Request-Method: POST" \
             -H "Access-Control-Request-Headers: content-type" \
+            "${ORIGIN_AUTH[@]}" \
             -D - -o /dev/null \
             "${API_BASE}/api/auth/login")
           if ! echo "${PREFLIGHT_HEADERS}" | grep -iq "^access-control-allow-origin: ${WEB_BASE}"; then
@@ -564,6 +594,7 @@ jobs:
             --max-time 15 \
             -H "Content-Type: application/json" \
             -H "Origin: ${WEB_BASE}" \
+            "${ORIGIN_AUTH[@]}" \
             -d "${LOGIN_BODY}" \
             "${API_BASE}/api/auth/login" \
             -o /tmp/web-login.json
@@ -583,6 +614,7 @@ jobs:
             --max-time 15 \
             -H "Authorization: Bearer ${TOKEN}" \
             -H "Origin: ${WEB_BASE}" \
+            "${ORIGIN_AUTH[@]}" \
             "${API_BASE}/api/auth/me" \
             -o /tmp/web-me.json
           jq -e 'has("id") and has("email")' /tmp/web-me.json > /dev/null \
@@ -1904,8 +1936,13 @@ jobs:
         env:
           SMOKE_TEST_EMAIL: ${{ secrets.SMOKE_TEST_EMAIL }}
           SMOKE_TEST_PASSWORD: ${{ secrets.SMOKE_TEST_PASSWORD }}
+          CLOUDFLARE_ORIGIN_SECRET: ${{ secrets.CLOUDFLARE_ORIGIN_SECRET }}
         run: |
           set -euo pipefail
+          ORIGIN_AUTH=()
+          if [ -n "${CLOUDFLARE_ORIGIN_SECRET:-}" ]; then
+            ORIGIN_AUTH=(-H "X-Origin-Auth: ${CLOUDFLARE_ORIGIN_SECRET}")
+          fi
           # WEB_BASE / API_BASE inherited from workflow-level env (see top
           # of file). Same hostnames as the forward smoke step.
           echo "→ (post-rollback) GET ${WEB_BASE}/healthz"
@@ -2010,6 +2047,7 @@ jobs:
               -H "Origin: ${WEB_BASE}" \
               -H "Access-Control-Request-Method: POST" \
               -H "Access-Control-Request-Headers: content-type" \
+              "${ORIGIN_AUTH[@]}" \
               -D - -o /dev/null \
               "${API_BASE}/api/auth/login")
             if ! echo "${PREFLIGHT_HEADERS}" | grep -iq "^access-control-allow-origin: ${WEB_BASE}"; then
@@ -2026,6 +2064,7 @@ jobs:
               --max-time 15 \
               -H "Content-Type: application/json" \
               -H "Origin: ${WEB_BASE}" \
+              "${ORIGIN_AUTH[@]}" \
               -d "${LOGIN_BODY}" \
               "${API_BASE}/api/auth/login" \
               -o /tmp/web-login-rollback.json
@@ -2039,6 +2078,7 @@ jobs:
               --max-time 15 \
               -H "Authorization: Bearer ${TOKEN}" \
               -H "Origin: ${WEB_BASE}" \
+              "${ORIGIN_AUTH[@]}" \
               "${API_BASE}/api/auth/me" \
               -o /tmp/web-me-rollback.json
             jq -e 'has("id") and has("email")' /tmp/web-me-rollback.json > /dev/null \
