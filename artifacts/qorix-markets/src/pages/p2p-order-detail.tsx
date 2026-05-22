@@ -338,9 +338,13 @@ export default function P2POrderDetailPage() {
   // buyer sees the seller's profile and vice versa.
   const counterpartyId = isBuyer ? order.sellerId : order.buyerId;
   const counterpartyLabel = isBuyer ? "Seller" : "Buyer";
-  const payMethods = order.sellerPaymentMethods ?? [];
-  const primaryMethod = payMethods[0] ?? null;
-  const methodLabel = order.paymentMethod || primaryMethod?.type || "your payment method";
+  const allPayMethods = order.sellerPaymentMethods ?? [];
+  const selectedMethodId = order.paymentMethod ? parseInt(order.paymentMethod, 10) : null;
+  const payMethods = selectedMethodId && !isNaN(selectedMethodId)
+    ? allPayMethods.filter((m) => m.id === selectedMethodId)
+    : allPayMethods;
+  const primaryMethod = payMethods[0] ?? allPayMethods[0] ?? null;
+  const methodLabel = primaryMethod?.type || order.paymentMethod || "your payment method";
   const deadline = order.paymentDeadline ? new Date(order.paymentDeadline) : null;
   const isActive = order.status !== "completed" && order.status !== "cancelled";
   const newMsgCount = messages.filter(m => !m.isOwn && !m.isSystem).length;

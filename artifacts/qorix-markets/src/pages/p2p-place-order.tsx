@@ -104,7 +104,7 @@ export default function P2PPlaceOrderPage() {
         body: JSON.stringify({
           adId: ad!.id,
           fiatAmount: fiatNum,
-          paymentMethod: selectedMethod?.type ?? selectedMethod?.displayName ?? undefined,
+          paymentMethod: selectedMethod ? String(selectedMethod.id) : undefined,
         }),
       });
       toast({ title: `Order placed! Pay within ${ad!.timeLimit} minutes.` });
