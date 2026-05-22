@@ -76,8 +76,11 @@ export default function P2PCreateAdPage() {
           terms: terms.trim() || undefined,
         }),
       });
-      toast({ title: "Ad posted successfully!" });
-      navigate("/p2p");
+      toast({
+        title: "Ad posted! Your USDT is held in escrow.",
+        description: "Buyers will see your ad. When someone places an order, it will appear in My Orders.",
+      });
+      navigate("/p2p/ads/my");
     } catch (err: any) {
       toast({ title: err.message || "Failed to post ad", variant: "destructive" });
     } finally {

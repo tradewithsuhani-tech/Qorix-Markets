@@ -171,12 +171,22 @@ export default function P2POrdersPage() {
             ))}
           </div>
         ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center py-16 gap-3">
+          <div className="flex flex-col items-center py-14 gap-3 text-center">
             <AlertCircle size={32} className="text-slate-600" />
-            <p className="text-slate-500 text-sm">No orders found</p>
-            <Link href="/p2p">
-              <button className="text-emerald-400 text-xs hover:underline">Browse marketplace →</button>
-            </Link>
+            <div>
+              <p className="text-white font-semibold text-sm">No orders yet</p>
+              <p className="text-slate-500 text-xs mt-1 max-w-[260px]">
+                Orders appear here when you trade with someone. If you posted a SELL ad, buyers will create orders against it — check <span className="text-emerald-400">My Ads</span> to see your listings.
+              </p>
+            </div>
+            <div className="flex gap-2 flex-wrap justify-center">
+              <Link href="/p2p/ads/my">
+                <button className="text-emerald-400 text-xs px-4 py-2 bg-emerald-500/10 rounded-xl border border-emerald-500/20">My Ads →</button>
+              </Link>
+              <Link href="/p2p">
+                <button className="text-slate-400 text-xs px-4 py-2 glass-card rounded-xl">Browse market</button>
+              </Link>
+            </div>
           </div>
         ) : (
           <div className="flex flex-col gap-5">
