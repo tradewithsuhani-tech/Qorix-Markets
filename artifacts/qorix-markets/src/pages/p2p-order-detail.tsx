@@ -353,105 +353,156 @@ export default function P2POrderDetailPage() {
     <Layout>
       <div className="max-w-xl mx-auto pb-8">
 
-        {/* ── Binance-style status header ─────────────────────────────── */}
-        <div className={`px-4 pt-4 pb-4 ${
-          order.status === "pending" ? "bg-amber-500/8" :
-          order.status === "paid"    ? "bg-blue-500/8" :
-          order.status === "completed" ? "bg-emerald-500/8" : "bg-slate-500/8"
+        {/* ── Status header ────────────────────────────────────────────── */}
+        <div className={`relative px-4 pt-4 pb-5 overflow-hidden ${
+          order.status === "pending"   ? "bg-gradient-to-br from-amber-500/10 via-amber-500/5 to-transparent" :
+          order.status === "paid"      ? "bg-gradient-to-br from-blue-500/10 via-blue-500/5 to-transparent" :
+          order.status === "completed" ? "bg-gradient-to-br from-emerald-500/10 via-emerald-500/5 to-transparent" :
+          order.status === "disputed"  ? "bg-gradient-to-br from-orange-500/10 via-orange-500/5 to-transparent" :
+          "bg-gradient-to-br from-slate-500/8 to-transparent"
         }`}>
-          <div className="flex items-start justify-between mb-3">
+          {/* Subtle glow orb */}
+          <div className={`absolute -top-8 -right-8 w-40 h-40 rounded-full blur-3xl opacity-20 pointer-events-none ${
+            order.status === "pending" ? "bg-amber-400" :
+            order.status === "paid" ? "bg-blue-400" :
+            order.status === "completed" ? "bg-emerald-400" : "bg-slate-400"
+          }`} />
+
+          <div className="flex items-center justify-between mb-4">
             <Link href="/p2p/orders">
-              <button className="p-1.5 rounded-lg text-slate-400 hover:text-white"><ArrowLeft size={18} /></button>
+              <button className="w-8 h-8 rounded-xl bg-white/[0.06] border border-white/[0.08] flex items-center justify-center text-slate-300 hover:bg-white/10 transition-colors">
+                <ArrowLeft size={16} />
+              </button>
             </Link>
-            {order.status === "pending" && (
-              <button onClick={() => setCancelOpen(true)} className="text-slate-400 text-sm hover:text-red-400 transition-colors">
-                Cancel the Order
-              </button>
-            )}
-            {order.status === "paid" && (
-              <button onClick={() => setDisputeOpen(true)} className="text-slate-400 text-sm hover:text-orange-400 transition-colors">
-                Appeal
-              </button>
-            )}
-            {!isActive && (
-              <button onClick={fetchOrder} className="p-1.5 rounded-lg text-slate-400 hover:text-white"><RefreshCw size={15} /></button>
-            )}
+            <div className="flex items-center gap-2">
+              {order.status === "pending" && (
+                <button onClick={() => setCancelOpen(true)}
+                  className="text-xs px-3 py-1.5 rounded-lg border border-red-500/30 text-red-400 hover:bg-red-500/10 transition-colors font-medium">
+                  Cancel Order
+                </button>
+              )}
+              {order.status === "paid" && (
+                <button onClick={() => setDisputeOpen(true)}
+                  className="text-xs px-3 py-1.5 rounded-lg border border-orange-500/30 text-orange-400 hover:bg-orange-500/10 transition-colors font-medium">
+                  Appeal
+                </button>
+              )}
+              {!isActive && (
+                <button onClick={fetchOrder} className="w-8 h-8 rounded-xl bg-white/[0.06] border border-white/[0.08] flex items-center justify-center text-slate-300 hover:bg-white/10 transition-colors">
+                  <RefreshCw size={14} />
+                </button>
+              )}
+            </div>
           </div>
 
+          {/* Status title + countdown */}
           {order.status === "pending" && isBuyer && (
-            <>
-              <h1 className="text-white font-bold text-xl mb-1">
-                Transfer via {methodLabel}
-              </h1>
-              <div className="flex items-center gap-2 text-slate-400 text-sm">
-                <Clock size={14} />
-                <span>Pay the seller within</span>
+            <div className="mb-3">
+              <div className="flex items-center gap-2 mb-1">
+                <div className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+                <span className="text-amber-400 text-xs font-semibold uppercase tracking-wider">Action Required</span>
+              </div>
+              <h1 className="text-white font-bold text-2xl mb-2">Transfer via {methodLabel}</h1>
+              <div className="flex items-center gap-2">
+                <Clock size={13} className="text-slate-400" />
+                <span className="text-slate-400 text-sm">Pay within</span>
                 {deadline && <Countdown deadline={order.paymentDeadline!} />}
               </div>
-            </>
+            </div>
           )}
           {order.status === "pending" && !isBuyer && (
-            <h1 className="text-amber-400 font-bold text-xl">Waiting for buyer's payment</h1>
+            <div className="mb-3">
+              <div className="flex items-center gap-2 mb-1">
+                <div className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+                <span className="text-amber-400 text-xs font-semibold uppercase tracking-wider">Pending</span>
+              </div>
+              <h1 className="text-white font-bold text-2xl">Waiting for payment</h1>
+            </div>
           )}
           {order.status === "paid" && !isBuyer && (
-            <h1 className="text-blue-400 font-bold text-xl">Buyer has sent payment</h1>
+            <div className="mb-3">
+              <div className="flex items-center gap-2 mb-1">
+                <div className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
+                <span className="text-blue-400 text-xs font-semibold uppercase tracking-wider">Payment Received</span>
+              </div>
+              <h1 className="text-white font-bold text-2xl">Buyer has paid</h1>
+            </div>
           )}
           {order.status === "paid" && isBuyer && (
-            <h1 className="text-blue-400 font-bold text-xl">Waiting for seller to confirm</h1>
+            <div className="mb-3">
+              <div className="flex items-center gap-2 mb-1">
+                <div className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
+                <span className="text-blue-400 text-xs font-semibold uppercase tracking-wider">Confirming</span>
+              </div>
+              <h1 className="text-white font-bold text-2xl">Awaiting confirmation</h1>
+            </div>
           )}
           {order.status === "disputed" && (
-            <>
-              <h1 className="text-orange-400 font-bold text-xl">Dispute under admin review</h1>
-              {/* Mounted only on disputed orders; the panel lazy-fetches the
-                  evidence list and lets EITHER party add more files until
-                  admin resolves. Phase 8. */}
+            <div className="mb-3">
+              <div className="flex items-center gap-2 mb-1">
+                <div className="w-2 h-2 rounded-full bg-orange-400 animate-pulse" />
+                <span className="text-orange-400 text-xs font-semibold uppercase tracking-wider">Under Review</span>
+              </div>
+              <h1 className="text-white font-bold text-2xl">Dispute in progress</h1>
               <DisputeEvidencePanel orderId={order.id} />
-            </>
+            </div>
           )}
           {order.status === "completed" && (
-            <h1 className="text-emerald-400 font-bold text-xl">Order Completed</h1>
+            <div className="mb-3">
+              <div className="flex items-center gap-2 mb-1">
+                <div className="w-2 h-2 rounded-full bg-emerald-400" />
+                <span className="text-emerald-400 text-xs font-semibold uppercase tracking-wider">Completed</span>
+              </div>
+              <h1 className="text-white font-bold text-2xl">Order Completed</h1>
+            </div>
           )}
           {order.status === "cancelled" && (
-            <h1 className="text-slate-400 font-bold text-xl">Order Cancelled</h1>
+            <div className="mb-3">
+              <div className="flex items-center gap-2 mb-1">
+                <div className="w-2 h-2 rounded-full bg-slate-500" />
+                <span className="text-slate-400 text-xs font-semibold uppercase tracking-wider">Cancelled</span>
+              </div>
+              <h1 className="text-white font-bold text-2xl">Order Cancelled</h1>
+            </div>
           )}
 
-          {/* Counterparty trust pill — opens the merchant profile modal.
-              Tucked into the status header so it's visible on every state
-              of the order without crowding the action area. */}
-          <button
-            onClick={() => setMerchantOpen(true)}
-            className="mt-3 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/[0.04] border border-white/[0.06] hover:border-white/[0.12] text-slate-300 text-xs transition-colors"
-          >
-            <User size={11} className="text-slate-400" />
-            <span>View {counterpartyLabel.toLowerCase()} profile</span>
-            <ShieldCheck size={11} className="text-emerald-400" />
-          </button>
-
-          <p className="text-slate-500 text-xs mt-1.5">
-            Order #{order.id} · {new Date(order.createdAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}
-          </p>
+          {/* Order meta + profile pill */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-slate-500 text-xs">Order #{order.id}</span>
+            <span className="text-slate-600 text-xs">·</span>
+            <span className="text-slate-500 text-xs">{new Date(order.createdAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}</span>
+            <button
+              onClick={() => setMerchantOpen(true)}
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/[0.05] border border-white/[0.08] hover:border-emerald-500/30 text-slate-400 hover:text-slate-300 text-[11px] transition-colors"
+            >
+              <ShieldCheck size={10} className="text-emerald-400" />
+              <span>View {counterpartyLabel.toLowerCase()}</span>
+            </button>
+          </div>
         </div>
 
         {/* ── Order summary strip ──────────────────────────────────────── */}
-        <div className="grid grid-cols-3 divide-x divide-white/[0.06] bg-black/20 text-center">
-          <div className="py-3">
-            <div className="text-[10px] text-slate-500 uppercase mb-0.5">{isBuyer ? "You Pay" : "You Receive"}</div>
-            <div className="text-white font-bold text-sm">₹{order.fiatAmount.toLocaleString("en-IN")}</div>
+        <div className="grid grid-cols-3 bg-white/[0.02] border-y border-white/[0.06]">
+          <div className="py-3.5 px-4 text-center">
+            <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">{isBuyer ? "You Pay" : "You Receive"}</div>
+            <div className="text-white font-bold">₹{order.fiatAmount.toLocaleString("en-IN")}</div>
           </div>
-          <div className="py-3">
-            <div className="text-[10px] text-slate-500 uppercase mb-0.5">USDT</div>
-            <div className="text-white font-bold text-sm">{order.usdtAmount.toFixed(4)}</div>
+          <div className="py-3.5 px-4 text-center border-x border-white/[0.06]">
+            <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">USDT</div>
+            <div className="text-emerald-400 font-bold">{order.usdtAmount.toFixed(4)}</div>
           </div>
-          <div className="py-3">
-            <div className="text-[10px] text-slate-500 uppercase mb-0.5">Price</div>
-            <div className="text-slate-300 font-medium text-sm">₹{order.price.toLocaleString("en-IN")}</div>
+          <div className="py-3.5 px-4 text-center">
+            <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Price</div>
+            <div className="text-slate-300 font-semibold">₹{order.price.toLocaleString("en-IN")}</div>
           </div>
         </div>
 
         {/* ── Counterparty + Chat button ───────────────────────────────── */}
-        <div className="flex items-center justify-between px-4 py-3 bg-white/[0.02] border-b border-white/[0.06]">
+        <div className="flex items-center justify-between px-4 py-3.5 border-b border-white/[0.06]">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-emerald-500 to-blue-500 flex items-center justify-center text-white font-bold text-sm shrink-0">
+            <div className={`w-10 h-10 rounded-2xl flex items-center justify-center text-white font-bold text-sm shrink-0 ${
+              isBuyer ? "bg-gradient-to-br from-violet-500 to-blue-600" : "bg-gradient-to-br from-emerald-500 to-teal-600"
+            }`}>
               {isBuyer ? "S" : "B"}
             </div>
             <div>
@@ -460,7 +511,7 @@ export default function P2POrderDetailPage() {
             </div>
           </div>
           <button onClick={() => { setChatOpen(!chatOpen); setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100); }}
-            className="relative flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold text-sm bg-amber-400 hover:bg-amber-300 text-black transition-colors">
+            className="relative flex items-center gap-1.5 px-3.5 py-2 rounded-xl font-bold text-sm bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-black shadow-lg shadow-amber-500/20 transition-all">
             <MessageCircle size={13} />
             Chat
             {newMsgCount > 0 && (
@@ -475,88 +526,100 @@ export default function P2POrderDetailPage() {
           {isBuyer && order.status === "pending" && (
             <>
               {payMethods.length > 0 ? (
-                <div className="space-y-4">
+                <div className="space-y-3">
                   {/* Step 1 */}
-                  <div>
-                    <div className="flex items-center gap-3 mb-3">
-                      <div className="w-8 h-8 rounded-full border-2 border-amber-400 flex items-center justify-center text-amber-400 font-bold text-sm shrink-0">1</div>
-                      <span className="text-white font-semibold">Transfer via {methodLabel}</span>
+                  <div className="flex gap-3">
+                    <div className="flex flex-col items-center">
+                      <div className="w-8 h-8 rounded-full bg-amber-400/15 border-2 border-amber-400 flex items-center justify-center text-amber-400 font-bold text-sm shrink-0">1</div>
+                      <div className="w-px flex-1 bg-gradient-to-b from-amber-400/30 to-transparent mt-1" />
                     </div>
-                    {payMethods.map((m) => (
-                      <div key={m.id} className="ml-11 glass-card rounded-xl overflow-hidden">
-                        <div className="px-4 py-2.5 bg-white/[0.03] border-b border-white/[0.06] flex items-center gap-2">
-                          <span className="text-white font-semibold text-sm">{m.displayName}</span>
-                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-700 text-slate-300 font-bold">{m.type}</span>
-                          {m.qrCodeData && (
-                            <button onClick={() => setQrModal(m)}
-                              className="ml-auto flex items-center gap-1 px-2 py-1 rounded-lg bg-purple-500/15 text-purple-400 text-[11px] font-semibold hover:bg-purple-500/25 transition-colors">
-                              <QrCode size={11} /> QR
-                            </button>
-                          )}
-                        </div>
-                        <div className="divide-y divide-white/[0.06]">
-                          <div className="flex items-center justify-between px-4 py-2.5">
-                            <span className="text-slate-400 text-sm">You Pay</span>
-                            <div className="flex items-center gap-1">
-                              <span className="text-white font-bold">₹{order.fiatAmount.toLocaleString("en-IN")}</span>
-                              <CopyBtn value={String(order.fiatAmount)} />
+                    <div className="flex-1 pb-2">
+                      <span className="text-white font-semibold text-sm block mb-2">Transfer via {methodLabel}</span>
+                      {payMethods.map((m) => (
+                        <div key={m.id} className="rounded-2xl overflow-hidden border border-white/[0.08] bg-white/[0.03] backdrop-blur-sm">
+                          {/* Card header */}
+                          <div className="px-4 py-3 bg-gradient-to-r from-white/[0.05] to-transparent border-b border-white/[0.06] flex items-center gap-2">
+                            <div className={`w-7 h-7 rounded-lg flex items-center justify-center text-white text-[10px] font-bold shrink-0 ${
+                              m.type === "UPI" ? "bg-gradient-to-br from-purple-500 to-purple-700" :
+                              m.type === "BANK" || m.type === "NEFT" || m.type === "IMPS" ? "bg-gradient-to-br from-blue-500 to-blue-700" :
+                              "bg-gradient-to-br from-emerald-500 to-emerald-700"
+                            }`}>{m.type.charAt(0)}</div>
+                            <div>
+                              <span className="text-white font-semibold text-sm">{m.displayName}</span>
+                              <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded-md bg-white/[0.08] text-slate-400 font-medium">{m.type}</span>
                             </div>
+                            {m.qrCodeData && (
+                              <button onClick={() => setQrModal(m)}
+                                className="ml-auto flex items-center gap-1 px-2.5 py-1 rounded-lg bg-purple-500/15 border border-purple-500/20 text-purple-400 text-[11px] font-semibold hover:bg-purple-500/25 transition-colors">
+                                <QrCode size={11} /> QR
+                              </button>
+                            )}
                           </div>
-                          {m.accountHolder && (
-                            <div className="flex items-center justify-between px-4 py-2.5">
-                              <span className="text-slate-400 text-sm">Name</span>
-                              <div className="flex items-center gap-1">
-                                <span className="text-white">{m.accountHolder}</span>
-                                <CopyBtn value={m.accountHolder} />
+                          {/* Card rows */}
+                          <div className="divide-y divide-white/[0.05]">
+                            <div className="flex items-center justify-between px-4 py-3">
+                              <span className="text-slate-500 text-xs uppercase tracking-wide">Amount</span>
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-white font-bold">₹{order.fiatAmount.toLocaleString("en-IN")}</span>
+                                <CopyBtn value={String(order.fiatAmount)} />
                               </div>
                             </div>
-                          )}
-                          {m.upiId && (
-                            <div className="flex items-center justify-between px-4 py-2.5">
-                              <span className="text-slate-400 text-sm">UPI ID</span>
-                              <div className="flex items-center gap-1">
-                                <span className="text-white font-mono text-sm">{m.upiId}</span>
-                                <CopyBtn value={m.upiId} />
+                            {m.accountHolder && (
+                              <div className="flex items-center justify-between px-4 py-3">
+                                <span className="text-slate-500 text-xs uppercase tracking-wide">Name</span>
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-white text-sm">{m.accountHolder}</span>
+                                  <CopyBtn value={m.accountHolder} />
+                                </div>
                               </div>
-                            </div>
-                          )}
-                          {m.accountNumber && (
-                            <div className="flex items-center justify-between px-4 py-2.5">
-                              <span className="text-slate-400 text-sm">Account No.</span>
-                              <div className="flex items-center gap-1">
-                                <span className="text-white font-mono text-sm">{m.accountNumber}</span>
-                                <CopyBtn value={m.accountNumber} />
+                            )}
+                            {m.upiId && (
+                              <div className="flex items-center justify-between px-4 py-3">
+                                <span className="text-slate-500 text-xs uppercase tracking-wide">UPI ID</span>
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-white font-mono text-sm">{m.upiId}</span>
+                                  <CopyBtn value={m.upiId} />
+                                </div>
                               </div>
-                            </div>
-                          )}
-                          {m.ifsc && (
-                            <div className="flex items-center justify-between px-4 py-2.5">
-                              <span className="text-slate-400 text-sm">IFSC</span>
-                              <div className="flex items-center gap-1">
-                                <span className="text-white font-mono text-sm">{m.ifsc}</span>
-                                <CopyBtn value={m.ifsc} />
+                            )}
+                            {m.accountNumber && (
+                              <div className="flex items-center justify-between px-4 py-3">
+                                <span className="text-slate-500 text-xs uppercase tracking-wide">Account No.</span>
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-white font-mono text-sm">{m.accountNumber}</span>
+                                  <CopyBtn value={m.accountNumber} />
+                                </div>
                               </div>
-                            </div>
-                          )}
-                          {m.bankName && (
-                            <div className="flex items-center justify-between px-4 py-2.5">
-                              <span className="text-slate-400 text-sm">Bank</span>
-                              <span className="text-white text-sm">{m.bankName}</span>
-                            </div>
-                          )}
+                            )}
+                            {m.ifsc && (
+                              <div className="flex items-center justify-between px-4 py-3">
+                                <span className="text-slate-500 text-xs uppercase tracking-wide">IFSC</span>
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-white font-mono text-sm">{m.ifsc}</span>
+                                  <CopyBtn value={m.ifsc} />
+                                </div>
+                              </div>
+                            )}
+                            {m.bankName && (
+                              <div className="flex items-center justify-between px-4 py-3">
+                                <span className="text-slate-500 text-xs uppercase tracking-wide">Bank</span>
+                                <span className="text-white text-sm">{m.bankName}</span>
+                              </div>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
 
                   {/* Step 2 */}
-                  <div className="flex items-start gap-3">
-                    <div className="w-8 h-8 rounded-full border-2 border-slate-600 flex items-center justify-center text-slate-400 font-bold text-sm shrink-0 mt-0.5">2</div>
-                    <p className="text-slate-400 text-sm pt-1.5">Tap the button below to upload payment proof for seller's confirmation</p>
+                  <div className="flex gap-3">
+                    <div className="w-8 h-8 rounded-full bg-slate-700/50 border-2 border-slate-600 flex items-center justify-center text-slate-400 font-bold text-sm shrink-0">2</div>
+                    <p className="text-slate-400 text-sm pt-1.5">Upload payment screenshot or enter reference for seller's confirmation</p>
                   </div>
                 </div>
               ) : (
-                <div className="flex items-start gap-3 bg-red-500/5 border border-red-500/20 rounded-xl p-4">
+                <div className="flex items-start gap-3 bg-red-500/5 border border-red-500/20 rounded-2xl p-4">
                   <AlertCircle size={16} className="text-red-400 shrink-0 mt-0.5" />
                   <div>
                     <p className="text-red-300 text-sm font-semibold">Seller has no payment method set up</p>
@@ -569,9 +632,9 @@ export default function P2POrderDetailPage() {
               <button
                 onClick={() => setProofOpen(true)}
                 disabled={payMethods.length === 0}
-                className="w-full py-4 rounded-xl bg-amber-400 hover:bg-amber-300 disabled:opacity-40 text-black font-bold text-base transition-all"
+                className="w-full py-4 rounded-2xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 disabled:opacity-40 text-black font-bold text-base shadow-lg shadow-amber-500/20 hover:shadow-amber-500/30 transition-all active:scale-[0.98]"
               >
-                Upload Payment Proof
+                ✓ I've Transferred — Upload Proof
               </button>
             </>
           )}
