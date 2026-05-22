@@ -1070,7 +1070,7 @@ export default function P2POrderDetailPage() {
                 className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-slate-600 outline-none focus:border-emerald-400/40"
               />
 
-              <p className="text-slate-500 text-[11px] text-center">— या —</p>
+              <p className="text-slate-500 text-[11px] text-center">— or —</p>
 
               {proofPreview ? (
                 <div className="relative rounded-xl overflow-hidden border border-emerald-500/30 bg-black/40">
@@ -1089,7 +1089,7 @@ export default function P2POrderDetailPage() {
                 </label>
               )}
               {!paymentRef.trim() && !paymentProof && (
-                <p className="text-amber-400 text-[11px] text-center">UTR number या screenshot — कम से कम एक जरूरी है</p>
+                <p className="text-amber-400 text-[11px] text-center">Please enter a UTR number or upload a screenshot</p>
               )}
             </div>
             <div className="flex items-start gap-3 bg-amber-500/5 border border-amber-500/20 rounded-xl p-3">
