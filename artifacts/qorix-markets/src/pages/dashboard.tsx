@@ -1843,7 +1843,7 @@ export function DemoDashboardBody({
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.22, duration: 0.4 }}
-              className="glass-card p-4 md:p-5 rounded-2xl flex flex-col w-full h-auto md:h-[460px]"
+              className="glass-card p-4 md:p-5 rounded-2xl flex flex-col w-full h-[300px] md:h-[460px]"
             >
               {swapEquityWithRolling ? rollingReturnsBody : equityCurveBody}
             </motion.div>
@@ -2020,7 +2020,7 @@ export function DemoDashboardBody({
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.35, duration: 0.4 }}
             className="glass-card p-5 rounded-2xl flex flex-col"
-            style={{ minHeight: 240 }}
+            style={{ height: 300 }}
           >
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 gap-2">
               <div>
@@ -2090,7 +2090,7 @@ export function DemoDashboardBody({
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.4, duration: 0.4 }}
             className="glass-card p-5 rounded-2xl flex flex-col"
-            style={{ minHeight: swapEquityWithRolling ? 460 : 240 }}
+            style={{ height: swapEquityWithRolling ? 460 : 300 }}
           >
             {swapEquityWithRolling ? equityCurveBody : rollingReturnsBody}
 
