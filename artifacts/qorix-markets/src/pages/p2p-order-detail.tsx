@@ -687,72 +687,6 @@ export default function P2POrderDetailPage() {
                 </div>
               )}
 
-              {/* Mobile-only inline chat — shown only when Chat button tapped */}
-              {chatOpen && <div className="md:hidden rounded-2xl overflow-hidden border border-white/[0.08] bg-[#0d1117]">
-                <div className="flex items-center gap-2.5 px-4 py-3 border-b border-white/[0.06]">
-                  <MessageCircle size={14} className="text-emerald-400" />
-                  <span className="text-white font-semibold text-sm">Chat with Seller</span>
-                  {newMsgCount > 0 && (
-                    <span className="ml-auto w-5 h-5 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">{newMsgCount}</span>
-                  )}
-                </div>
-                <div className="h-48 overflow-y-auto p-3 space-y-2">
-                  {messages.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center h-full gap-2 text-slate-600">
-                      <MessageCircle size={20} /><p className="text-xs">No messages yet</p>
-                    </div>
-                  ) : messages.map((msg) => (
-                    <div key={msg.id} className={`flex ${msg.isOwn ? "justify-end" : msg.isSystem ? "justify-center" : "justify-start"}`}>
-                      {msg.isSystem
-                        ? <span className="text-[11px] text-slate-500 px-3 py-1 rounded-full bg-slate-800/60">{msg.message}</span>
-                        : (
-                          <div className={`max-w-[80%] flex flex-col gap-0.5 ${msg.isOwn ? "items-end" : "items-start"}`}>
-                            {!msg.isOwn && <span className="text-[10px] text-slate-500 px-1">{msg.senderName}</span>}
-                            <div className={`px-3 py-2 rounded-2xl text-sm ${msg.isOwn ? "bg-emerald-500/20 text-emerald-100 rounded-tr-sm" : "bg-white/[0.07] text-slate-200 rounded-tl-sm"}`}>
-                              {msg.message && <p>{msg.message}</p>}
-                              {msg.attachmentType === "image" && msg.attachmentData && (
-                                <img src={msg.attachmentData} alt="attachment" className="mt-1.5 max-w-[180px] rounded-xl object-cover cursor-pointer" onClick={() => window.open(msg.attachmentData!, "_blank")} />
-                              )}
-                              {msg.attachmentType === "pdf" && msg.attachmentData && (
-                                <a href={msg.attachmentData} download="attachment.pdf" className="mt-1.5 flex items-center gap-2 bg-white/10 px-3 py-2 rounded-xl hover:bg-white/15 transition-colors">
-                                  <FileText size={14} className="text-red-400 shrink-0" />
-                                  <span className="text-xs truncate">PDF File</span>
-                                </a>
-                              )}
-                            </div>
-                            <span className="text-[10px] text-slate-600 px-1">{new Date(msg.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
-                          </div>
-                        )
-                      }
-                    </div>
-                  ))}
-                  <div ref={chatEndRef} />
-                </div>
-                <form onSubmit={sendChat} className="flex flex-col gap-2 p-3 border-t border-white/[0.06]">
-                  {chatAttachment && (
-                    <div className="flex items-center gap-2 bg-white/[0.04] rounded-xl px-3 py-2 border border-white/[0.08]">
-                      {chatAttachment.type === "image"
-                        ? <img src={chatAttachment.data} alt="" className="w-10 h-10 rounded-lg object-cover" />
-                        : <FileText size={18} className="text-red-400 shrink-0" />}
-                      <span className="text-xs text-slate-300 flex-1 truncate">{chatAttachment.name}</span>
-                      <button type="button" onClick={() => setChatAttachment(null)} className="text-slate-500 hover:text-red-400"><X size={13} /></button>
-                    </div>
-                  )}
-                  <div className="flex gap-2">
-                    <input ref={chatFileRef} type="file" accept="image/jpeg,image/png,image/webp,application/pdf" className="hidden" onChange={handleChatFile} />
-                    <button type="button" onClick={() => chatFileRef.current?.click()} className="p-2.5 rounded-xl bg-white/[0.05] hover:bg-white/10 text-slate-400 hover:text-white transition-colors shrink-0">
-                      <Paperclip size={15} />
-                    </button>
-                    <input value={chatMsg} onChange={e => setChatMsg(e.target.value)} placeholder="Enter message here…" maxLength={500}
-                      className="flex-1 bg-black/30 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-slate-600 outline-none focus:border-emerald-400/40" />
-                    <button type="submit" disabled={(!chatMsg.trim() && !chatAttachment) || chatSending}
-                      className="p-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 text-white shrink-0">
-                      {chatSending ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}
-                    </button>
-                  </div>
-                </form>
-              </div>}
-
               {/* 3-button action row */}
               <div className="space-y-2.5">
                 <button
@@ -893,7 +827,7 @@ export default function P2POrderDetailPage() {
 
           {/* ── Mobile-only Chat Panel ──────────────────────────────────── */}
           {chatOpen && (
-            <div className="md:hidden glass-card rounded-xl overflow-hidden border border-white/[0.08]">
+            <div className="md:hidden glass-card rounded-xl border border-white/[0.08]">
               <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/[0.06]">
                 <div className="flex items-center gap-2">
                   <MessageCircle size={14} className="text-emerald-400" />
