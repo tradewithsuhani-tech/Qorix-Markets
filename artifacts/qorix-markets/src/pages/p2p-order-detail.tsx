@@ -1058,56 +1058,128 @@ export default function P2POrderDetailPage() {
 
       {/* ── Payment Proof Modal ──────────────────────────────────────────── */}
       {proofOpen && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
-          <div className="bg-[#111827] w-full sm:max-w-sm rounded-t-3xl sm:rounded-2xl p-6 space-y-5">
-            <h2 className="text-white font-bold text-lg">Payment Confirmation</h2>
-            <div className="space-y-3">
-              <p className="text-slate-300 text-sm font-semibold">Upload Payment Proof</p>
-              <input
-                value={paymentRef}
-                onChange={e => setPaymentRef(e.target.value)}
-                placeholder="UPI Transaction ID / Reference"
-                className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-slate-600 outline-none focus:border-emerald-400/40"
-              />
+        <div className="fixed inset-0 bg-black/75 backdrop-blur-md z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="bg-[#0e1420] border border-white/[0.08] w-full sm:max-w-sm rounded-t-3xl sm:rounded-3xl overflow-hidden">
 
-              <p className="text-slate-500 text-[11px] text-center">— or —</p>
-
-              {proofPreview ? (
-                <div className="relative rounded-xl overflow-hidden border border-emerald-500/30 bg-black/40">
-                  <img src={proofPreview} alt="Payment proof preview" className="w-full max-h-56 object-contain" />
-                  <button
-                    onClick={() => { setPaymentProof(null); setProofPreview(null); }}
-                    className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/70 text-white text-xs flex items-center justify-center hover:bg-red-500"
-                    aria-label="Remove proof"
-                  >×</button>
+            {/* Header strip */}
+            <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-white/[0.06]">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-amber-400/15 flex items-center justify-center">
+                  <Upload size={15} className="text-amber-400" />
                 </div>
-              ) : (
-                <label className="flex items-center justify-center gap-2 w-full py-3 rounded-xl border-2 border-dashed border-white/15 hover:border-emerald-500/40 cursor-pointer text-slate-400 hover:text-emerald-300 text-sm font-medium transition">
-                  <Upload size={15} />
-                  Upload Screenshot (max 450KB)
-                  <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={onProofFile} />
+                <div>
+                  <h2 className="text-white font-bold text-base leading-tight">Payment Confirmation</h2>
+                  <p className="text-slate-500 text-[11px]">Provide proof of your transfer</p>
+                </div>
+              </div>
+              <button onClick={() => setProofOpen(false)} className="w-7 h-7 rounded-full bg-white/[0.05] hover:bg-white/10 flex items-center justify-center text-slate-500 hover:text-white transition-colors text-sm">×</button>
+            </div>
+
+            <div className="px-5 pt-4 pb-5 space-y-4">
+              {/* Step 1: UTR */}
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                  Option 1 — UTR / Transaction ID
                 </label>
-              )}
+                <div className="relative">
+                  <input
+                    value={paymentRef}
+                    onChange={e => setPaymentRef(e.target.value)}
+                    placeholder="Enter UPI Transaction ID or Reference"
+                    className={`w-full bg-white/[0.04] border rounded-xl px-3.5 py-3 text-sm text-white placeholder-slate-600 outline-none transition-colors ${
+                      paymentRef.trim() ? "border-emerald-500/40 bg-emerald-500/[0.04]" : "border-white/[0.08] focus:border-slate-500/50"
+                    }`}
+                  />
+                  {paymentRef.trim() && (
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-emerald-500/20 flex items-center justify-center">
+                      <span className="text-emerald-400 text-xs">✓</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Divider */}
+              <div className="flex items-center gap-3">
+                <div className="flex-1 h-px bg-white/[0.06]" />
+                <span className="text-slate-600 text-[11px] font-medium">OR</span>
+                <div className="flex-1 h-px bg-white/[0.06]" />
+              </div>
+
+              {/* Step 2: Screenshot */}
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                  Option 2 — Payment Screenshot
+                </label>
+                {proofPreview ? (
+                  <div className="relative rounded-xl overflow-hidden border border-emerald-500/30 bg-black/30">
+                    <img src={proofPreview} alt="Payment proof preview" className="w-full max-h-44 object-contain" />
+                    <button
+                      onClick={() => { setPaymentProof(null); setProofPreview(null); }}
+                      className="absolute top-2 right-2 w-6 h-6 rounded-full bg-black/70 text-white text-xs flex items-center justify-center hover:bg-red-500/80 transition-colors"
+                      aria-label="Remove proof"
+                    >×</button>
+                    <div className="absolute bottom-2 left-2 flex items-center gap-1 bg-emerald-500/20 border border-emerald-500/30 px-2 py-0.5 rounded-full">
+                      <span className="text-emerald-400 text-[10px] font-semibold">✓ Uploaded</span>
+                    </div>
+                  </div>
+                ) : (
+                  <label className={`flex flex-col items-center justify-center gap-2 w-full py-5 rounded-xl border-2 border-dashed cursor-pointer transition-all ${
+                    paymentProof ? "border-emerald-500/40 bg-emerald-500/[0.04]" : "border-white/[0.08] hover:border-white/20 hover:bg-white/[0.02]"
+                  }`}>
+                    <div className="w-9 h-9 rounded-xl bg-white/[0.05] flex items-center justify-center">
+                      <Upload size={16} className="text-slate-400" />
+                    </div>
+                    <div className="text-center">
+                      <p className="text-slate-300 text-xs font-semibold">Tap to upload screenshot</p>
+                      <p className="text-slate-600 text-[10px] mt-0.5">JPG, PNG or WebP · max 450KB</p>
+                    </div>
+                    <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={onProofFile} />
+                  </label>
+                )}
+              </div>
+
+              {/* Validation hint */}
               {!paymentRef.trim() && !paymentProof && (
-                <p className="text-amber-400 text-[11px] text-center">Please enter a UTR number or upload a screenshot</p>
+                <div className="flex items-center gap-2 bg-amber-500/[0.07] border border-amber-500/20 rounded-xl px-3 py-2.5">
+                  <AlertCircle size={13} className="text-amber-400 shrink-0" />
+                  <p className="text-amber-300 text-xs">Please enter a UTR number or upload a screenshot</p>
+                </div>
               )}
-            </div>
-            <div className="flex items-start gap-3 bg-amber-500/5 border border-amber-500/20 rounded-xl p-3">
-              <AlertCircle size={14} className="text-amber-400 shrink-0 mt-0.5" />
-              <p className="text-amber-300 text-xs">Do not make payments from a third-party account — it may result in account suspension.</p>
-            </div>
-            <label className="flex items-start gap-3 cursor-pointer">
-              <input type="checkbox" checked={transferConfirmed} onChange={e => setTransferConfirmed(e.target.checked)}
-                className="mt-0.5 w-4 h-4 accent-emerald-500 shrink-0" />
-              <span className="text-slate-300 text-sm">I have made the transfer with my own payment account</span>
-            </label>
-            <div className="flex gap-2">
-              <button onClick={() => setProofOpen(false)} className="flex-1 py-3 rounded-xl glass-card text-slate-400 hover:text-white text-sm">Cancel</button>
-              <button disabled={!transferConfirmed || actionLoading === "paid" || (!paymentRef.trim() && !paymentProof)} onClick={notifySeller}
-                className="flex-1 py-3 rounded-xl bg-amber-400 hover:bg-amber-300 disabled:opacity-40 text-black font-bold text-sm flex items-center justify-center gap-2">
-                {actionLoading === "paid" ? <Loader2 size={15} className="animate-spin" /> : null}
-                Transferred, Notify Seller
-              </button>
+
+              {/* Warning */}
+              <div className="flex items-start gap-2.5 bg-red-500/[0.06] border border-red-500/15 rounded-xl px-3 py-2.5">
+                <AlertCircle size={13} className="text-red-400 shrink-0 mt-0.5" />
+                <p className="text-red-300/80 text-[11px] leading-relaxed">Do not pay from a third-party account — it may result in account suspension.</p>
+              </div>
+
+              {/* Confirm checkbox */}
+              <label className="flex items-start gap-3 cursor-pointer group">
+                <div className={`mt-0.5 w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0 transition-all ${
+                  transferConfirmed ? "bg-emerald-500 border-emerald-500" : "border-white/20 group-hover:border-white/40"
+                }`}>
+                  {transferConfirmed && <span className="text-white text-[10px] font-bold">✓</span>}
+                  <input type="checkbox" checked={transferConfirmed} onChange={e => setTransferConfirmed(e.target.checked)} className="hidden" />
+                </div>
+                <span className="text-slate-300 text-sm leading-snug">I confirm this payment was made from my own account</span>
+              </label>
+
+              {/* Actions */}
+              <div className="flex gap-2.5 pt-1">
+                <button
+                  onClick={() => setProofOpen(false)}
+                  className="flex-1 py-3 rounded-2xl bg-white/[0.05] hover:bg-white/[0.08] border border-white/[0.07] text-slate-400 hover:text-white text-sm font-medium transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  disabled={!transferConfirmed || actionLoading === "paid" || (!paymentRef.trim() && !paymentProof)}
+                  onClick={notifySeller}
+                  className="flex-1 py-3 rounded-2xl bg-amber-400 hover:bg-amber-300 disabled:opacity-35 disabled:cursor-not-allowed text-black font-bold text-sm flex items-center justify-center gap-2 transition-all active:scale-[0.98] shadow-lg shadow-amber-500/20"
+                >
+                  {actionLoading === "paid" ? <Loader2 size={15} className="animate-spin" /> : <Upload size={14} />}
+                  Notify Seller
+                </button>
+              </div>
             </div>
           </div>
         </div>
