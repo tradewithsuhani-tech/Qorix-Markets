@@ -69,11 +69,17 @@ function AdRow({ ad, tab }: { ad: Ad; tab: "BUY" | "SELL" }) {
           <div className="text-slate-300 text-sm tabular-nums">{ad.remainingQuantity.toFixed(2)} USDT</div>
           <div className="text-slate-500 text-xs mt-0.5">₹{ad.minLimit.toLocaleString()} – ₹{ad.maxLimit.toLocaleString()}</div>
         </div>
-        {/* Payment */}
-        <div className="px-4 py-3.5 flex flex-wrap gap-1">
-          {ad.paymentMethods.map((m) => (
-            <span key={m} className="text-[11px] px-2 py-0.5 rounded-md bg-white/[0.05] border border-white/[0.08] text-slate-400 font-medium">{m}</span>
-          ))}
+        {/* Payment — Binance-style small badges with colored dot */}
+        <div className="px-4 py-3.5 flex flex-wrap gap-1.5">
+          {ad.paymentMethods.map((m) => {
+            const dot = m === "UPI" ? "bg-slate-400" : m === "IMPS" ? "bg-orange-400" : m === "BANK" || m === "NEFT" ? "bg-amber-400" : "bg-emerald-400";
+            return (
+              <span key={m} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white/[0.06] text-slate-300 text-[11px] font-medium">
+                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dot}`} />
+                {m}
+              </span>
+            );
+          })}
         </div>
         {/* Trade button */}
         <div className="px-4 py-3.5">
