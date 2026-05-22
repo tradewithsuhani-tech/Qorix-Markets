@@ -277,6 +277,7 @@ import P2PPlaceOrderPage from "@/pages/p2p-place-order";
 import P2POrderDetailPage from "@/pages/p2p-order-detail";
 import P2PSellFlowPage from "@/pages/p2p-sell-flow";
 import P2PChatPage from "@/pages/p2p-chat";
+import P2PUserCenterPage from "@/pages/p2p-user-center";
 
 // Perf overhaul: tighten query-client defaults so we stop firing 50+
 // requests on every render. Per-query polling (refetchInterval) still
@@ -471,6 +472,7 @@ function Router() {
       <Route path="/p2p/orders/:id"><ProtectedRoute component={P2POrderDetailPage} /></Route>
       <Route path="/p2p/sell/:adId"><ProtectedRoute component={P2PSellFlowPage} /></Route>
       <Route path="/p2p/chat"><ProtectedRoute component={P2PChatPage} /></Route>
+      <Route path="/p2p/user-center"><ProtectedRoute component={P2PUserCenterPage} /></Route>
       <Route path="/legal/terms" component={TermsPage} />
       <Route path="/legal/privacy" component={PrivacyPage} />
       <Route path="/legal/risk-disclosure" component={RiskDisclosurePage} />

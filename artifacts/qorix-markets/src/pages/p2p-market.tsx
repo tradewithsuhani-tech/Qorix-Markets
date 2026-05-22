@@ -6,7 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   TrendingUp, TrendingDown, RefreshCw, ArrowUpDown,
   Plus, ChevronRight, Wallet, AlertCircle, Filter, Clock, ThumbsUp,
-  ShieldCheck, ClipboardList, ChevronDown, MessageCircle,
+  ShieldCheck, ClipboardList, ChevronDown, MessageCircle, UserCircle2,
 } from "lucide-react";
 import { MerchantProfileModal } from "@/components/p2p-merchant-profile-modal";
 
@@ -244,6 +244,14 @@ export default function P2PMarketPage() {
               <button className="flex items-center gap-1.5 px-3 py-2 glass-card rounded-xl text-slate-300 hover:text-white text-xs font-medium transition-colors">
                 <MessageCircle size={13} />
                 Chat
+              </button>
+            </Link>
+
+            {/* ── User Center button ───────────────────────────── */}
+            <Link href="/p2p/user-center">
+              <button className="flex items-center gap-1.5 px-3 py-2 glass-card rounded-xl text-slate-300 hover:text-white text-xs font-medium transition-colors">
+                <UserCircle2 size={13} />
+                User Center
               </button>
             </Link>
 
