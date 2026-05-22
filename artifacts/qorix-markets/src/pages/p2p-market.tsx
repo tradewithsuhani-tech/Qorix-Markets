@@ -129,8 +129,13 @@ export default function P2PMarketPage() {
       ]);
       setAds(adsData);
       setWallet(walletData);
-    } catch {
-      toast({ title: "Failed to load P2P data", variant: "destructive" });
+    } catch (err: any) {
+      // Silently show empty state instead of a scary toast — the UI already
+      // renders "No active ads right now" when the array is empty. A red
+      // error banner on every refresh feels broken even when the server is
+      // just warming up or there genuinely are zero ads.
+      console.error("P2P market load error:", err?.message || err);
+      setAds([]);
     } finally {
       setLoading(false);
     }
