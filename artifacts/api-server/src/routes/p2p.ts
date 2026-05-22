@@ -15,6 +15,7 @@ import { eq, and, or, ne, desc, sql, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { authMiddleware, type AuthRequest } from "../middlewares/auth";
 import { createNotification } from "../lib/notifications";
+import { sendEmail } from "../lib/email-service";
 import { publishOrderEvent } from "../lib/p2p-realtime";
 import {
   getMerchantProfile,
@@ -991,12 +992,74 @@ router.patch("/p2p/orders/:id/paid", async (req: AuthRequest, res) => {
 
     // Notify the seller that the buyer has marked the payment as sent.
     const fiat = parseNum(order.fiatAmount as string).toFixed(2);
-    await createNotification(
-      order.sellerId,
-      "p2p_order",
-      "Buyer marked payment as sent",
-      `Order #${order.id} (₹${fiat}): buyer says payment was sent${paymentRef ? ` (UTR: ${paymentRef})` : ""}. Please verify and confirm to release USDT.`,
-    ).catch(() => {});
+    const notifTitle = "💰 Payment Received — Release Required";
+    const notifMsg = `Order #${order.id} (₹${fiat}): buyer has marked payment as sent${paymentRef ? ` (UTR: ${paymentRef})` : ""}. Please verify ₹${fiat} in your account and release USDT.`;
+
+    // In-app + Telegram (createNotification mirrors to Telegram automatically)
+    await createNotification(order.sellerId, "p2p_order", notifTitle, notifMsg).catch(() => {});
+
+    // Email — fire-and-forget, never block the response
+    setImmediate(() => {
+      db.select({ email: usersTable.email, name: usersTable.fullName })
+        .from(usersTable)
+        .where(eq(usersTable.id, order.sellerId))
+        .limit(1)
+        .then(([seller]) => {
+          if (!seller?.email) return;
+          const sellerName = seller.name ?? "Seller";
+          const subject = `[Order #${order.id}] Buyer has sent ₹${fiat} — Please Release USDT`;
+          const text = [
+            `Hi ${sellerName},`,
+            ``,
+            `Your buyer has marked payment as sent for Order #${order.id}.`,
+            ``,
+            `  Amount:  ₹${fiat}`,
+            `  USDT:    ${parseNum(order.usdtAmount as string).toFixed(4)} USDT`,
+            paymentRef ? `  UTR:     ${paymentRef}` : `  UTR:     Not provided`,
+            ``,
+            `Please verify the payment in your bank / UPI app and release USDT on the order page.`,
+            ``,
+            `⚠️  Do NOT release USDT until you have confirmed the funds are in your account.`,
+            ``,
+            `— Qorix Markets P2P`,
+          ].join("\n");
+          const html = `
+            <div style="font-family:sans-serif;max-width:520px;margin:auto;background:#0e1420;color:#e2e8f0;border-radius:16px;overflow:hidden">
+              <div style="background:#1a2235;padding:24px 28px;border-bottom:1px solid rgba(255,255,255,0.08)">
+                <span style="font-size:13px;font-weight:700;color:#10b981;letter-spacing:1px;text-transform:uppercase">Qorix Markets · P2P</span>
+              </div>
+              <div style="padding:28px">
+                <h2 style="margin:0 0 6px;font-size:20px;color:#ffffff">💰 Payment Marked as Sent</h2>
+                <p style="margin:0 0 20px;font-size:13px;color:#94a3b8">Your buyer has notified us that ₹${fiat} has been transferred.</p>
+                <table style="width:100%;border-collapse:collapse;border-radius:12px;overflow:hidden;border:1px solid rgba(255,255,255,0.08)">
+                  <tr style="background:rgba(255,255,255,0.03)">
+                    <td style="padding:11px 14px;font-size:12px;color:#64748b;text-transform:uppercase;letter-spacing:.5px">Order</td>
+                    <td style="padding:11px 14px;font-size:14px;font-weight:700;color:#fff;text-align:right">#${order.id}</td>
+                  </tr>
+                  <tr style="border-top:1px solid rgba(255,255,255,0.05)">
+                    <td style="padding:11px 14px;font-size:12px;color:#64748b;text-transform:uppercase;letter-spacing:.5px">Amount</td>
+                    <td style="padding:11px 14px;font-size:14px;font-weight:700;color:#fff;text-align:right">₹${fiat}</td>
+                  </tr>
+                  <tr style="border-top:1px solid rgba(255,255,255,0.05)">
+                    <td style="padding:11px 14px;font-size:12px;color:#64748b;text-transform:uppercase;letter-spacing:.5px">USDT</td>
+                    <td style="padding:11px 14px;font-size:14px;font-weight:700;color:#10b981;text-align:right">${parseNum(order.usdtAmount as string).toFixed(4)} USDT</td>
+                  </tr>
+                  ${paymentRef ? `<tr style="border-top:1px solid rgba(255,255,255,0.05)"><td style="padding:11px 14px;font-size:12px;color:#64748b;text-transform:uppercase;letter-spacing:.5px">UTR / Ref</td><td style="padding:11px 14px;font-size:14px;font-family:monospace;color:#fff;text-align:right">${paymentRef}</td></tr>` : ""}
+                </table>
+                <div style="margin-top:20px;padding:14px 16px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);border-radius:12px;font-size:12px;color:#fca5a5;line-height:1.6">
+                  ⚠️ <strong>Do NOT release USDT</strong> until you have verified ₹${fiat} is in your account. Open the order page to confirm and release.
+                </div>
+                <div style="margin-top:20px;text-align:center">
+                  <a href="https://qorixmarkets.com/p2p/orders/${order.id}" style="display:inline-block;padding:12px 28px;background:#10b981;color:#000;font-weight:700;font-size:14px;border-radius:12px;text-decoration:none">View Order &amp; Release →</a>
+                </div>
+              </div>
+              <div style="padding:16px 28px;border-top:1px solid rgba(255,255,255,0.06);font-size:11px;color:#334155;text-align:center">Qorix Markets · Automated P2P notification</div>
+            </div>
+          `;
+          return sendEmail(seller.email, subject, text, html);
+        })
+        .catch(() => {}); // never fail the request
+    });
 
     publishOrderEvent({ type: "order.paid", orderId: id, actorId: req.userId! });
     res.json({ success: true, status: "paid" });
