@@ -211,7 +211,8 @@ router.post("/p2p/payment-methods", async (req: AuthRequest, res) => {
       userId: req.userId!, ...rest, qrCodeData: qrCodeData ?? null,
     }).returning();
     res.json(method);
-  } catch {
+  } catch (err: any) {
+    console.error("POST /p2p/payment-methods error:", err?.message || err);
     res.status(500).json({ error: "Failed to add payment method" });
   }
 });
