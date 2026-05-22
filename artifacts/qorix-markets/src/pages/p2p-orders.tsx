@@ -35,7 +35,7 @@ function OrderCard({ order }: { order: Order }) {
 
   return (
     <Link href={`/p2p/orders/${order.id}`}>
-    <div className="glass-card rounded-xl p-4 space-y-3 hover:border-white/15 cursor-pointer transition-colors">
+    <div className={`glass-card rounded-xl p-4 space-y-3 cursor-pointer transition-colors border-l-4 ${isBuyer ? "border-l-emerald-500/70" : "border-l-red-500/70"}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-2.5">
           <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${isBuyer ? "bg-emerald-500/15" : "bg-red-500/15"}`}>
@@ -175,7 +175,7 @@ export default function P2POrdersPage() {
             </Link>
           </div>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-4">
             {filtered.map((order) => <OrderCard key={order.id} order={order} />)}
           </div>
         )}
