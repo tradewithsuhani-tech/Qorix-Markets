@@ -28,6 +28,10 @@ args = "api-server-test"
 task = "workflow.run"
 args = "API Server"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Deploy to Fly.io"
+
 [[workflows.workflow]]
 name = "Start application"
 author = "agent"
@@ -59,6 +63,17 @@ author = "agent"
 task = "shell.exec"
 args = "PORT=8080 NODE_ENV=development pnpm --filter @workspace/api-server run build && PORT=8080 NODE_ENV=development pnpm --filter @workspace/api-server run start"
 waitForPort = 8080
+
+[workflows.workflow.metadata]
+outputType = "console"
+
+[[workflows.workflow]]
+name = "Deploy to Fly.io"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash scripts/deploy-fly.sh"
 
 [workflows.workflow.metadata]
 outputType = "console"
