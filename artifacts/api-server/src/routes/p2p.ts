@@ -474,16 +474,16 @@ router.post("/p2p/ads", async (req: AuthRequest, res) => {
     let ad: typeof p2pAdsTable.$inferSelect;
 
     if (type === "SELL") {
-      // SELL ad: lock seller's USDT from Funding Wallet (tradingBalance) → p2p frozenBalance
+      // SELL ad: lock seller's USDT from USDT Wallet (usdtBalance) → p2p frozenBalance
       await db.transaction(async (tx) => {
         const [mainWallet] = await tx.select().from(walletsTable).where(eq(walletsTable.userId, req.userId!)).limit(1);
         if (!mainWallet) throw new Error("Wallet not found");
-        const tradingBal = parseNum(mainWallet.tradingBalance as string);
-        if (tradingBal < quantity) throw new Error("Insufficient Funding Wallet balance to create SELL ad");
+        const usdtBal = parseNum(mainWallet.usdtBalance as string);
+        if (usdtBal < quantity) throw new Error("Insufficient USDT Wallet balance to create SELL ad");
 
-        // Deduct from Funding Wallet (lock for SELL ad)
+        // Deduct from USDT Wallet (lock for SELL ad)
         await tx.update(walletsTable).set({
-          tradingBalance: sql`${walletsTable.tradingBalance} - ${quantity}`,
+          usdtBalance: sql`${walletsTable.usdtBalance} - ${quantity}`,
         }).where(eq(walletsTable.userId, req.userId!));
 
         [ad] = await tx.insert(p2pAdsTable).values({
@@ -620,18 +620,18 @@ router.patch("/p2p/ads/:id", async (req: AuthRequest, res) => {
           // insufficient — we treat that as the same insufficient-funds
           // failure the read-time check would have raised.
           const upd = await tx.update(walletsTable).set({
-            tradingBalance: sql`${walletsTable.tradingBalance} - ${delta}`,
+            usdtBalance: sql`${walletsTable.usdtBalance} - ${delta}`,
           }).where(and(
             eq(walletsTable.userId, req.userId!),
-            sql`${walletsTable.tradingBalance} >= ${delta}`,
+            sql`${walletsTable.usdtBalance} >= ${delta}`,
           )).returning({ userId: walletsTable.userId });
           if (upd.length === 0) {
-            throw new Error("Insufficient Funding Wallet balance to increase quantity");
+            throw new Error("Insufficient USDT Wallet balance to increase quantity");
           }
         } else {
           const refund = -delta;
           await tx.update(walletsTable).set({
-            tradingBalance: sql`${walletsTable.tradingBalance} + ${refund}`,
+            usdtBalance: sql`${walletsTable.usdtBalance} + ${refund}`,
           }).where(eq(walletsTable.userId, req.userId!));
         }
       }
@@ -720,10 +720,10 @@ router.delete("/p2p/ads/:id", async (req: AuthRequest, res) => {
 
       const remainingQty = parseNum(ad.quantity as string) - parseNum(ad.filledQuantity as string);
 
-      // Return unfilled USDT back to Funding Wallet (tradingBalance) for SELL ads
+      // Return unfilled USDT back to USDT Wallet (usdtBalance) for SELL ads
       if (ad.type === "SELL" && remainingQty > 0) {
         await tx.update(walletsTable).set({
-          tradingBalance: sql`${walletsTable.tradingBalance} + ${remainingQty}`,
+          usdtBalance: sql`${walletsTable.usdtBalance} + ${remainingQty}`,
         }).where(eq(walletsTable.userId, req.userId!));
       }
 
@@ -1113,9 +1113,9 @@ router.patch("/p2p/orders/:id/confirm", async (req: AuthRequest, res) => {
       if (!order) throw new Error("Order not found or not your order");
       if (order.status !== "paid") throw new Error("Order must be marked as paid first");
       const usdtAmount = parseNum(order.usdtAmount as string);
-      // Release USDT from escrow to buyer's trading balance
+      // Release USDT from escrow to buyer's USDT wallet
       await tx.update(walletsTable).set({
-        tradingBalance: sql`${walletsTable.tradingBalance} + ${usdtAmount}`,
+        usdtBalance: sql`${walletsTable.usdtBalance} + ${usdtAmount}`,
       }).where(eq(walletsTable.userId, order.buyerId));
       // Update escrow audit record
       await tx.update(p2pEscrowTransactionsTable).set({ status: "released", releasedAt: new Date() })

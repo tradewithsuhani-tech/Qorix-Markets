@@ -146,7 +146,7 @@ export async function creditUserDeposit(
     await tx
       .update(walletsTable)
       .set({
-        mainBalance: sql`${walletsTable.mainBalance} + ${amount.toString()}`,
+        usdtBalance: sql`${walletsTable.usdtBalance} + ${amount.toString()}`,
         updatedAt: new Date(),
       })
       .where(eq(walletsTable.userId, userId));
@@ -172,10 +172,10 @@ export async function creditUserDeposit(
           description: `Blockchain deposit received from user ${userId}`,
         },
         {
-          accountCode: `user:${userId}:main`,
+          accountCode: `user:${userId}:usdt`,
           entryType: "credit",
           amount,
-          description: `Blockchain deposit credited to main wallet`,
+          description: `Blockchain USDT deposit credited to USDT wallet`,
         },
       ],
       txn!.id,

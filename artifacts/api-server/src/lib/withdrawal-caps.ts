@@ -39,6 +39,7 @@ export async function getWithdrawalCaps(userId: number, executor: DbExecutor = d
       .select({
         mainBalance: walletsTable.mainBalance,
         profitBalance: walletsTable.profitBalance,
+        usdtBalance: walletsTable.usdtBalance,
       })
       .from(walletsTable)
       .where(eq(walletsTable.userId, userId))
@@ -74,7 +75,8 @@ export async function getWithdrawalCaps(userId: number, executor: DbExecutor = d
 
   const mainBalance = w ? parseFloat(w.mainBalance as string) : 0;
   const profitBalance = w ? parseFloat(w.profitBalance as string) : 0;
-  const totalBalance = +(mainBalance + profitBalance).toFixed(6);
+  const usdtWalletBalance = w ? parseFloat((w.usdtBalance ?? "0") as string) : 0;
+  const totalBalance = +(mainBalance + profitBalance + usdtWalletBalance).toFixed(6);
 
   const inrDepositedUsdt = parseFloat((inrDep?.total as string) ?? "0");
   const usdtDepositedUsdt = parseFloat((usdtDep?.total as string) ?? "0");

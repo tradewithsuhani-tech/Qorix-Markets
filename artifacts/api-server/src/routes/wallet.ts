@@ -48,6 +48,7 @@ function formatWallet(w: typeof walletsTable.$inferSelect, points = 0) {
     mainBalance: parseFloat(w.mainBalance as string),
     tradingBalance: parseFloat(w.tradingBalance as string),
     profitBalance: parseFloat(w.profitBalance as string),
+    usdtBalance: parseFloat((w.usdtBalance ?? "0") as string),
     points,
     updatedAt: w.updatedAt.toISOString(),
   };
@@ -327,11 +328,12 @@ router.post("/wallet/withdraw", async (req: AuthRequest, res) => {
   }
 
   const rawSource = (req.body?.source as string | undefined) ?? "profit";
-  const source: "main" | "profit" = rawSource === "main" ? "main" : "profit";
+  const source: "main" | "profit" | "usdt" = rawSource === "main" ? "main" : rawSource === "usdt" ? "usdt" : "profit";
 
   const profitBalance = parseFloat(wallet.profitBalance as string);
   const mainBalance = parseFloat(wallet.mainBalance as string);
-  const sourceBalance = source === "main" ? mainBalance : profitBalance;
+  const usdtBalance = parseFloat((wallet.usdtBalance ?? "0") as string);
+  const sourceBalance = source === "main" ? mainBalance : source === "usdt" ? usdtBalance : profitBalance;
   if (amount > sourceBalance) {
     res.status(400).json({ error: `Insufficient ${source} balance` });
     return;
@@ -382,8 +384,8 @@ router.post("/wallet/withdraw", async (req: AuthRequest, res) => {
       }
 
       // --- Atomic guarded balance debit (prevents over-withdrawal under concurrency) ---
-      const balanceCol = source === "main" ? walletsTable.mainBalance : walletsTable.profitBalance;
-      const balanceColName = source === "main" ? "mainBalance" : "profitBalance";
+      const balanceCol = source === "main" ? walletsTable.mainBalance : source === "usdt" ? walletsTable.usdtBalance : walletsTable.profitBalance;
+      const balanceColName = source === "main" ? "mainBalance" : source === "usdt" ? "usdtBalance" : "profitBalance";
       const balanceUpdate: Record<string, any> = {
         updatedAt: new Date(),
         [balanceColName]: sql`${balanceCol} - ${amount}`,

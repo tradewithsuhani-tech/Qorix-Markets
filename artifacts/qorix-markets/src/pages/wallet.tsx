@@ -83,7 +83,10 @@ export default function WalletPage() {
       ? crypto.randomUUID()
       : `wd-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
-  const sourceBalance = withdrawSource === "main" ? (wallet?.mainBalance || 0) : (wallet?.profitBalance || 0);
+  // Note: usdtBal/mainBal computed below after wallet data is available
+  const _usdtBal = Number((wallet as any)?.usdtBalance) || 0;
+  const _mainBal = Number(wallet?.mainBalance) || 0;
+  const sourceBalance = withdrawSource === ("usdt" as any) ? _usdtBal : withdrawSource === "main" ? _mainBal : (wallet?.profitBalance || 0);
 
   const { data: kycData, isLoading: kycLoading, isError: kycError } = useQuery<any>({
     queryKey: ["kyc-status"],
@@ -177,10 +180,16 @@ export default function WalletPage() {
   const netWithdraw = Number(withdrawAmount) - feeAmount;
 
   // Portfolio totals
-  const mainBal = Number(wallet?.mainBalance) || 0;
+  // mainBalance = INR (legacy users had USDT here, displayed at $1=₹98)
+  // usdtBalance = new USDT wallet (TRC20 deposits, P2P buys)
+  const INR_DISPLAY_RATE = 98; // legacy main_balance display rate
+  const mainBal = Number(wallet?.mainBalance) || 0; // INR amount
+  const usdtBal = Number((wallet as any)?.usdtBalance) || 0; // USDT amount
   const tradingBal = Number(wallet?.tradingBalance) || 0;
   const profitBal = Number(wallet?.profitBalance) || 0;
-  const totalUsd = mainBal + tradingBal + profitBal;
+  // Total in USD: main (INR/98) + usdt + trading + profit
+  const mainBalUsd = mainBal / INR_DISPLAY_RATE;
+  const totalUsd = mainBalUsd + usdtBal + tradingBal + profitBal;
   const totalInr = totalUsd * FX_RATE;
   const dailyPnlUsd = Number((summary as any)?.dailyProfitLoss) || 0;
   const dailyPnlInr = dailyPnlUsd * FX_RATE;
@@ -268,13 +277,22 @@ export default function WalletPage() {
                 transition={{ duration: 0.22, ease: "easeOut" }}
                 className="overflow-hidden"
               >
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
                   <BreakdownTile
-                    label="Main Balance"
+                    label="Main Balance (INR)"
                     amount={mainBal}
                     icon={WalletIcon}
                     accent="emerald"
-                    sub="Available to transfer"
+                    sub={`≈ ₹${(mainBal).toLocaleString("en-IN", { maximumFractionDigits: 0 })}`}
+                    hide={hideBalance}
+                    isInr
+                  />
+                  <BreakdownTile
+                    label="USDT Wallet"
+                    amount={usdtBal}
+                    icon={DollarSign}
+                    accent="amber"
+                    sub="TRC20 deposits & P2P buys"
                     hide={hideBalance}
                   />
                   <BreakdownTile
@@ -386,7 +404,20 @@ export default function WalletPage() {
           ) : (
             <>
               {withdrawStep !== "success" && (
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    onClick={() => { setWithdrawSource("usdt" as any); setWithdrawAmount(""); }}
+                    className={`rounded-xl px-3 py-2.5 border text-left transition-all ${
+                      withdrawSource === ("usdt" as any)
+                        ? "bg-amber-500/15 border-amber-500/50"
+                        : "bg-white/[0.02] border-white/10 hover:bg-white/[0.04]"
+                    }`}
+                  >
+                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground">USDT Wallet</div>
+                    <div className={`text-sm font-bold ${withdrawSource === ("usdt" as any) ? "text-amber-400" : "text-white/80"}`}>
+                      ${usdtBal.toFixed(2)}
+                    </div>
+                  </button>
                   <button
                     onClick={() => { setWithdrawSource("profit"); setWithdrawAmount(""); }}
                     className={`rounded-xl px-3 py-2.5 border text-left transition-all ${
@@ -408,9 +439,9 @@ export default function WalletPage() {
                         : "bg-white/[0.02] border-white/10 hover:bg-white/[0.04]"
                     }`}
                   >
-                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground">From Main</div>
+                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Main (INR)</div>
                     <div className={`text-sm font-bold ${withdrawSource === "main" ? "text-emerald-400" : "text-white/80"}`}>
-                      ${(wallet?.mainBalance || 0).toFixed(2)}
+                      ₹{mainBal.toFixed(0)}
                     </div>
                   </button>
                 </div>
@@ -1187,18 +1218,21 @@ function MiniSparkline({ width, height, color, isUp }: { width: number; height: 
 /* ─────────────── Balance Breakdown Tile ─────────────── */
 
 function BreakdownTile({
-  label, amount, icon: Icon, accent, sub, hide, profit,
+  label, amount, icon: Icon, accent, sub, hide, profit, isInr,
 }: {
   label: string;
   amount: number;
   icon: React.ElementType;
-  accent: "emerald" | "cyan";
+  accent: "emerald" | "cyan" | "amber";
   sub: string;
   hide: boolean;
   profit?: boolean;
+  isInr?: boolean;
 }) {
   const palette = accent === "emerald"
     ? { dot: "from-emerald-500 to-emerald-400", ic: "bg-emerald-500/15 text-emerald-400" }
+    : accent === "amber"
+    ? { dot: "from-amber-500 to-amber-400", ic: "bg-amber-500/15 text-amber-400" }
     : { dot: "from-cyan-500 to-cyan-400", ic: "bg-cyan-500/15 text-cyan-400" };
   return (
     <div className="glass-card p-4 rounded-2xl relative overflow-hidden">
@@ -1210,7 +1244,12 @@ function BreakdownTile({
         </div>
       </div>
       <div className={`text-xl font-bold ${profit ? "profit-text" : "text-white"}`}>
-        {hide ? "$••••" : <AnimatedCounter value={amount} prefix="$" />}
+        {hide
+          ? (isInr ? "₹••••" : "$••••")
+          : isInr
+          ? <AnimatedCounter value={amount} prefix="₹" decimals={0} />
+          : <AnimatedCounter value={amount} prefix="$" />
+        }
       </div>
       <p className="text-[11px] text-muted-foreground mt-1">{sub}</p>
     </div>

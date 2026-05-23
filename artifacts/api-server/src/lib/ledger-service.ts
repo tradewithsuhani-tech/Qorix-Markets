@@ -16,6 +16,7 @@ export const SYSTEM_ACCOUNTS = [
   { code: "platform:cold_wallet",        name: "Cold Wallet (Reserve)",         accountType: "asset",     normalBalance: "debit"  },
   { code: "platform:pending_deposits",   name: "Pending Deposits (In-Flight)",  accountType: "asset",     normalBalance: "debit"  },
   { code: "platform:pending_withdrawals",name: "Pending Withdrawals (Held)",    accountType: "liability", normalBalance: "credit" },
+  { code: "platform:inr_pool",           name: "Platform INR Pool",             accountType: "asset",     normalBalance: "debit"  },
 ] as const;
 
 // Per-user account definitions (suffix → metadata)
@@ -24,6 +25,7 @@ const USER_ACCOUNT_DEFS = [
   { suffix: "trading", name: "Trading Wallet", accountType: "liability", normalBalance: "credit" },
   { suffix: "profit",  name: "Profit Wallet",  accountType: "liability", normalBalance: "credit" },
   { suffix: "locked",  name: "Locked Funds",   accountType: "liability", normalBalance: "credit" },
+  { suffix: "usdt",    name: "USDT Wallet",    accountType: "liability", normalBalance: "credit" },
 ] as const;
 
 // Accounts where balance is allowed to go negative (system expense/revenue accumulators
@@ -151,6 +153,8 @@ export async function ensureUserAccounts(userId: number, txn?: any): Promise<voi
     if (wallet) {
       const mainBal = parseFloat(wallet.mainBalance as string);
       const tradingBal = parseFloat(wallet.tradingBalance as string);
+      const usdtBal = parseFloat((wallet as any).usdtBalance ?? "0");
+      const usdtCode = `user:${userId}:usdt`;
       const lines: JournalLine[] = [];
       if (newlyCreated.has(mainCode) && mainBal > 0) {
         lines.push({
@@ -166,6 +170,14 @@ export async function ensureUserAccounts(userId: number, txn?: any): Promise<voi
           entryType: "credit",
           amount: tradingBal,
           description: `Opening balance — trading wallet (reconciled from wallets table)`,
+        });
+      }
+      if (newlyCreated.has(usdtCode) && usdtBal > 0) {
+        lines.push({
+          accountCode: usdtCode,
+          entryType: "credit",
+          amount: usdtBal,
+          description: `Opening balance — USDT wallet (reconciled from wallets table)`,
         });
       }
       if (lines.length > 0) {

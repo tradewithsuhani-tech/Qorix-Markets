@@ -590,10 +590,12 @@ router.post("/admin/inr-deposits/:id/approve", async (req: AuthRequest, res) => 
       // Atomic balance increment via raw SQL — no read-modify-write window,
       // safe under any concurrent wallet mutation. The numeric column accepts
       // the +/- arithmetic directly and Postgres handles row locking.
+      // INR deposits store the raw INR amount in mainBalance (not USDT-converted).
+      const amountInrRaw = parseFloat(claimed.amountInr as string);
       const updRes = await tx
         .update(walletsTable)
         .set({
-          mainBalance: sql`${walletsTable.mainBalance} + ${amountUsdt.toFixed(6)}::numeric`,
+          mainBalance: sql`${walletsTable.mainBalance} + ${amountInrRaw.toFixed(2)}::numeric`,
           updatedAt: new Date(),
         })
         .where(eq(walletsTable.userId, claimed.userId))
@@ -605,16 +607,16 @@ router.post("/admin/inr-deposits/:id/approve", async (req: AuthRequest, res) => 
         .values({
           userId: claimed.userId,
           type: "deposit",
-          amount: amountUsdt.toString(),
+          amount: amountInrRaw.toFixed(2),
           status: "completed",
-          description: `INR deposit ₹${parseFloat(claimed.amountInr as string).toFixed(2)} (UTR ${claimed.utr}) approved → $${amountUsdt.toFixed(2)} USDT`,
+          description: `INR deposit ₹${amountInrRaw.toFixed(2)} (UTR ${claimed.utr}) approved`,
         })
         .returning();
       await postJournalEntry(
         journalForTransaction(txn!.id),
         [
-          { accountCode: "platform:usdt_pool", entryType: "debit", amount: amountUsdt, description: `INR deposit approved for user ${claimed.userId}` },
-          { accountCode: `user:${claimed.userId}:main`, entryType: "credit", amount: amountUsdt, description: `INR deposit credited (UTR ${claimed.utr})` },
+          { accountCode: "platform:inr_pool", entryType: "debit", amount: amountInrRaw, description: `INR deposit approved for user ${claimed.userId}` },
+          { accountCode: `user:${claimed.userId}:main`, entryType: "credit", amount: amountInrRaw, description: `INR deposit credited (UTR ${claimed.utr})` },
         ],
         txn!.id,
         tx,

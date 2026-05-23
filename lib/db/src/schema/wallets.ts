@@ -8,6 +8,10 @@ export const walletsTable = pgTable("wallets", {
   mainBalance: numeric("main_balance", { precision: 18, scale: 8 }).notNull().default("0"),
   tradingBalance: numeric("trading_balance", { precision: 18, scale: 8 }).notNull().default("0"),
   profitBalance: numeric("profit_balance", { precision: 18, scale: 8 }).notNull().default("0"),
+  // Internal USDT wallet — stores USDT from TRC20 deposits, P2P buys, and USDT market purchases.
+  // All USDT withdrawals debit this balance. Separate from mainBalance which holds INR.
+  // Existing users: mainBalance continues to hold their legacy USDT (displayed at ₹98/$ rate).
+  usdtBalance: numeric("usdt_balance", { precision: 18, scale: 8 }).notNull().default("0"),
   // Display-only synthetic boost shown in the dashboard "Total Equity" card.
   // Never affects real balances, withdrawals, profit distribution or accounting.
   // Auto-grows by random $100–$500 every 10 min via /api/dashboard/summary.
