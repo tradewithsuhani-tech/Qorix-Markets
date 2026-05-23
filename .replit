@@ -30,7 +30,19 @@ args = "API Server"
 
 [[workflows.workflow.tasks]]
 task = "workflow.run"
-args = "Deploy to Fly.io"
+args = "Full Deploy"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Deploy API Only"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Deploy Web Only"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Migration Only"
 
 [[workflows.workflow]]
 name = "Start application"
@@ -68,12 +80,45 @@ waitForPort = 8080
 outputType = "console"
 
 [[workflows.workflow]]
-name = "Deploy to Fly.io"
+name = "Full Deploy"
 author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "bash scripts/deploy-fly.sh"
+
+[workflows.workflow.metadata]
+outputType = "console"
+
+[[workflows.workflow]]
+name = "Deploy API Only"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash scripts/deploy-api.sh"
+
+[workflows.workflow.metadata]
+outputType = "console"
+
+[[workflows.workflow]]
+name = "Deploy Web Only"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash scripts/deploy-web.sh"
+
+[workflows.workflow.metadata]
+outputType = "console"
+
+[[workflows.workflow]]
+name = "Migration Only"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash scripts/migrate-db.sh"
 
 [workflows.workflow.metadata]
 outputType = "console"
