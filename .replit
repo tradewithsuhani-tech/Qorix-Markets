@@ -216,6 +216,7 @@ SES_FROM_EMAIL = "no-reply@qorixmarkets.com"
 CORS_ORIGIN = "https://qorixmarkets.com,https://www.qorixmarkets.com,https://qorix-markets-web.fly.dev"
 QUIZ_OAUTH_ALLOWED_REDIRECT_URIS = "https://qorixplay.com/auth/callback,https://qorix-quiz.fly.dev/auth/callback"
 GOOGLE_CLIENT_ID = "905039735320-lc7nauggottuubm9v03k8f64dvqpl57k.apps.googleusercontent.com"
+DEMO_RESET_SECRET = "dev-demo-secret-2026"
 
 [userenv.development]
 RUN_BACKGROUND_JOBS = "false"

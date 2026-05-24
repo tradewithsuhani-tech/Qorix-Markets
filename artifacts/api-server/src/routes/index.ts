@@ -47,6 +47,7 @@ import p2pPublicRouter from "./p2p-public";
 // batches will add user-gated endpoints (state, account, orders) on
 // the same router; mounting once here keeps wiring stable.
 import botTradingRouter from "./bot-trading";
+import demoRouter from "./demo";
 
 const router: IRouter = Router();
 
@@ -58,6 +59,9 @@ const router: IRouter = Router();
 // with 401 Unauthorized before ever reaching the intended handler.
 router.use(healthRouter);
 router.use(publicRouter);
+// Demo reset endpoint — own secret auth, NOT gated by user JWT.
+// Must be in the public block so Flutter devs can call it without a session.
+router.use(demoRouter);
 // Batch R — public Bot Trading Terminal quotes feed
 // (GET /bot-trading/quotes). MUST be mounted in the public block
 // alongside healthRouter / publicRouter — otherwise upstream

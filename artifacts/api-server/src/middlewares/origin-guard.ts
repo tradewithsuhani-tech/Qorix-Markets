@@ -54,12 +54,20 @@ const PATH_EXEMPTIONS = new Set([
   "/version",
   "/version.json",
   "/csrf",
+  // Demo reset — own secret auth (DEMO_RESET_SECRET); exempt from CSRF/origin
+  // checks so Flutter devs and CI scripts can call it without a browser session.
+  // The endpoint has its own auth gate (secret comparison) which is sufficient
+  // because it only resets the demo account, never touches real user data.
+  "/demo/reset",
+  "/demo/status",
   // Absolute (matches req.path if remounted at root):
   "/api/healthz",
   "/api/worker-healthz",
   "/api/version",
   "/api/version.json",
   "/api/csrf",
+  "/api/demo/reset",
+  "/api/demo/status",
 ]);
 
 function parseAllowedOrigins(): readonly string[] | null {
