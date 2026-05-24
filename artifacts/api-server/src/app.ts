@@ -13,6 +13,7 @@ import { adminIpAllowlist, adminIpAllowlistEnabled } from "./middlewares/admin-i
 import { getCaptchaProvider } from "./lib/captcha-service";
 import { issueCsrfToken } from "./lib/csrf-token";
 import { peekLocalHeartbeat } from "./lib/worker-heartbeat-service";
+import { recordLatency, normaliseRoute, logSlowResponse, logMonitoringStatus, SLOW_WARN_MS } from "./lib/monitoring";
 // OpenAPI spec bundled as a string at build time via esbuild's
 // '.yaml': 'text' loader (see build.mjs). Served by /api/openapi.yaml +
 // /api/docs (Scalar UI) below. Module declaration in src/yaml.d.ts.
@@ -491,12 +492,57 @@ if (adminIpAllowlistEnabled) {
 }
 app.use("/api/admin", adminIpAllowlist);
 
+// ─── Observability: request tracing + latency recording ──────────────────
+// Mounted AFTER the rate limiter so 429s are also timed and traced.
+// Mounted BEFORE the route tree so every request (including 404s) is covered.
+//
+// What this does:
+//  - Stamps X-Request-Id response header (UUID v4). The web app and mobile
+//    clients can log this for correlation. It also flows into pino-http as
+//    `req.id` via the `genReqId` option (if configured) but even without that
+//    it's visible in response headers which is enough for curl debugging.
+//  - Records response time into the in-process latency ring buffer (per
+//    normalised route prefix) for /admin/metrics/latency.
+//  - Emits a WARN for responses > SLOW_WARN_MS and an ERROR + Telegram alert
+//    for responses > SLOW_ERROR_MS (5s). Both are structured pino entries so
+//    they appear in `fly logs` with full context.
+//
+// SSE streams (/p2p/orders/:id/stream) are long-lived by design and would
+// always trigger the slow-response warning. They are excluded via Content-Type
+// sniff on the response.
+import { randomUUID } from "crypto";
+app.use("/api", (req, res, next) => {
+  const reqId = randomUUID();
+  res.setHeader("X-Request-Id", reqId);
+  const startMs = Date.now();
+
+  res.on("finish", () => {
+    // Skip SSE streams — they stay open for minutes by design
+    const ct = res.getHeader("content-type") as string | undefined;
+    if (ct?.includes("text/event-stream")) return;
+
+    const durationMs = Date.now() - startMs;
+    const route = normaliseRoute(req.path, req.method);
+    recordLatency(route, durationMs);
+
+    if (durationMs >= SLOW_WARN_MS) {
+      const userId = (req as any).userId as number | undefined;
+      logSlowResponse(req.method, req.path, durationMs, res.statusCode, userId);
+    }
+  });
+
+  next();
+});
+
 // Maintenance gate sits in front of every /api route. When MAINTENANCE_MODE=true
 // (set as a Fly secret during the cutover window) it lets reads through with a
 // header marker and rejects writes with a structured 503 — replacing the blunt
 // "scale to zero machines → raw 503 on every request" approach in
 // MUMBAI_DB_CUTOVER_RUNBOOK.md step 2.
 app.use("/api", maintenanceMiddleware, router);
+
+// Log monitoring startup status (runs once, non-blocking)
+logMonitoringStatus();
 
 // ─── Centralised error logger ─────────────────────────────────────────────
 // Express's built-in 500 handler swallows the underlying exception (sends a
@@ -530,14 +576,24 @@ app.use(
       cur = anyC.cause;
       depth++;
     }
+    const route = `${req.method} ${req.path}`;
     logger.error(
       {
         err: chain[0],
         causeChain: chain.slice(1),
-        route: `${req.method} ${req.path}`,
+        route,
+        reqId: res.getHeader("X-Request-Id"),
       },
       "unhandled route error",
     );
+    // Forward to Sentry (non-blocking, fire-and-forget)
+    import("./lib/monitoring").then(({ captureException }) => {
+      captureException(err, {
+        route,
+        reqId: res.getHeader("X-Request-Id"),
+        userId: (req as any).userId,
+      }).catch(() => {});
+    }).catch(() => {});
     if (res.headersSent) return;
     res.status(500).json({ error: "Internal Server Error" });
   },

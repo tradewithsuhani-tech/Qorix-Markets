@@ -40,6 +40,7 @@ import phoneChangeRouter from "./phone-change";
 import merchantRouter from "./merchant";
 import adminMerchantsRouter from "./admin-merchants";
 import adminEscalationRouter from "./admin-escalation";
+import adminRiskRouter from "./admin-risk";
 import p2pRouter from "./p2p";
 import p2pPublicRouter from "./p2p-public";
 // Batch R — Bot Trading Terminal. Currently exposes only the public
@@ -125,6 +126,7 @@ router.use(phoneChangeRouter);
 router.use(merchantRouter);
 router.use(adminMerchantsRouter);
 router.use(adminEscalationRouter);
+router.use(adminRiskRouter);
 router.use(p2pRouter);
 
 export default router;

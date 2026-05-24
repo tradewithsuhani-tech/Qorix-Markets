@@ -1,6 +1,7 @@
 import type { Response } from "express";
 import IORedis from "ioredis";
 import { logger } from "./logger";
+import { logSseConnect, logSseDisconnect } from "./monitoring";
 
 const CHANNEL = "p2p:order:events";
 const HEARTBEAT_MS = 25_000;
@@ -168,6 +169,11 @@ export async function addSSEClient(
   const client: Client = { res, userId, orderId, heartbeat };
   set.add(client);
 
+  const connectedAt = Date.now();
+  let totalClients = 0;
+  for (const s of clientsByOrder.values()) totalClients += s.size;
+  logSseConnect(orderId, userId, totalClients);
+
   return () => {
     clearInterval(heartbeat);
     const s = clientsByOrder.get(orderId);
@@ -175,6 +181,9 @@ export async function addSSEClient(
       s.delete(client);
       if (s.size === 0) clientsByOrder.delete(orderId);
     }
+    let remaining = 0;
+    for (const sv of clientsByOrder.values()) remaining += sv.size;
+    logSseDisconnect(orderId, userId, Date.now() - connectedAt, remaining);
     try { res.end(); } catch {}
   };
 }

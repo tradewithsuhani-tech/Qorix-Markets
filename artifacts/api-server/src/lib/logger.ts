@@ -8,6 +8,10 @@ export const logger = pino({
     "req.headers.authorization",
     "req.headers.cookie",
     "res.headers['set-cookie']",
+    "*.password",
+    "*.passwordHash",
+    "*.privateKey",
+    "*.secret",
   ],
   ...(isProduction
     ? {}
@@ -22,3 +26,6 @@ export const logger = pino({
 export const transactionLogger = logger.child({ module: "transactions" });
 export const profitLogger = logger.child({ module: "profit" });
 export const errorLogger = logger.child({ module: "error" });
+export const monitoringLogger = logger.child({ module: "monitoring" });
+export const riskLogger = logger.child({ module: "risk-engine" });
+export const sseLogger = logger.child({ module: "sse" });

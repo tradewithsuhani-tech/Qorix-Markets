@@ -1,7 +1,7 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
-import { db, usersTable, walletsTable, investmentsTable, systemSettingsTable, ipSignupsTable } from "@workspace/db";
-import { eq, and, gte, count, sql } from "drizzle-orm";
+import { db, usersTable, walletsTable, investmentsTable, systemSettingsTable, ipSignupsTable, fraudFlagsTable, userDevicesTable } from "@workspace/db";
+import { eq, and, gte, count, sql, desc } from "drizzle-orm";
 import { authMiddleware, signToken, computeDeviceFingerprint, describeDevice, invalidateAuthUserCache, type AuthRequest } from "../middlewares/auth";
 import { loginAttemptsTable } from "@workspace/db";
 import { RegisterBody, LoginBody } from "@workspace/api-zod";
@@ -1054,37 +1054,225 @@ router.get("/auth/me", authMiddleware, async (req: AuthRequest, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// GET /auth/security-status — exposes password-change history and the
-// resulting 24h post-change withdrawal lock status, so the settings page
-// can render an accurate "Last changed" line and the withdraw page can
-// show a banner when the lock is active. The withdraw endpoint enforces
-// this server-side; this is purely informational for the UI.
+// GET /auth/security-status — consolidated pre-flight response for all
+// security dimensions. Flutter / mobile reads this BEFORE rendering the
+// withdraw screen so it can show premium trust messaging, exact lock
+// reasons, and CTAs (e.g. "Complete KYC" or "Wait 18h") without
+// ever receiving a confusing 403 mid-flow.
+//
+// Dimensions covered:
+//  1. Account restrictions (frozen / disabled)
+//  2. KYC state
+//  3. Email verification
+//  4. 2FA state
+//  5. Password-change withdrawal lock
+//  6. New-account withdrawal lock
+//  7. New-device withdrawal cooldown
+//  8. Suspicious activity / fraud flags
 // ---------------------------------------------------------------------------
 router.get("/auth/security-status", authMiddleware, async (req: AuthRequest, res) => {
-  const rows = await db
-    .select({ passwordChangedAt: usersTable.passwordChangedAt })
-    .from(usersTable)
-    .where(eq(usersTable.id, req.userId!))
-    .limit(1);
-  if (rows.length === 0) {
+  const userId = req.userId!;
+  const now = Date.now();
+
+  // All DB reads fire in parallel — single round-trip for all 8 dimensions.
+  const [userRows, fraudRows, deviceRows] = await Promise.all([
+    db
+      .select({
+        id: usersTable.id,
+        kycStatus: usersTable.kycStatus,
+        isDisabled: usersTable.isDisabled,
+        isFrozen: usersTable.isFrozen,
+        emailVerified: usersTable.emailVerified,
+        createdAt: usersTable.createdAt,
+        passwordChangedAt: usersTable.passwordChangedAt,
+        twoFactorEnabled: usersTable.twoFactorEnabled,
+        twoFactorEnabledAt: usersTable.twoFactorEnabledAt,
+      })
+      .from(usersTable)
+      .where(eq(usersTable.id, userId))
+      .limit(1),
+    // Unresolved fraud flags — severity breakdown for escalation UI
+    db
+      .select({
+        flagType: fraudFlagsTable.flagType,
+        severity: fraudFlagsTable.severity,
+        createdAt: fraudFlagsTable.createdAt,
+      })
+      .from(fraudFlagsTable)
+      .where(
+        and(
+          eq(fraudFlagsTable.userId, userId),
+          eq(fraudFlagsTable.isResolved, false),
+        ),
+      )
+      .orderBy(desc(fraudFlagsTable.createdAt))
+      .limit(10),
+    // Device trust — most recently seen device row for cooldown check
+    db
+      .select({ firstSeenAt: userDevicesTable.firstSeenAt })
+      .from(userDevicesTable)
+      .where(eq(userDevicesTable.userId, userId))
+      .orderBy(desc(userDevicesTable.firstSeenAt))
+      .limit(1),
+  ]);
+
+  if (userRows.length === 0) {
     res.status(404).json({ error: "User not found" });
     return;
   }
-  const passwordChangedAt = rows[0]!.passwordChangedAt;
-  const lockMs = WITHDRAWAL_LOCK_HOURS_AFTER_PASSWORD_CHANGE * 60 * 60 * 1000;
-  const withdrawalLockedUntilMs = passwordChangedAt
-    ? new Date(passwordChangedAt).getTime() + lockMs
+
+  const user = userRows[0]!;
+
+  // ── 1. Account restrictions ─────────────────────────────────────────────
+  const accountRestricted = user.isDisabled || user.isFrozen;
+
+  // ── 2. KYC ──────────────────────────────────────────────────────────────
+  const kycApproved = user.kycStatus === "approved";
+
+  // ── 3. Email verification ────────────────────────────────────────────────
+  const emailVerified = user.emailVerified;
+
+  // ── 4. 2FA ──────────────────────────────────────────────────────────────
+  const twoFactorEnabled = user.twoFactorEnabled ?? false;
+
+  // ── 5. Password-change lock ──────────────────────────────────────────────
+  const pwLockMs = WITHDRAWAL_LOCK_HOURS_AFTER_PASSWORD_CHANGE * 60 * 60 * 1000;
+  const passwordChangedAt = user.passwordChangedAt;
+  const pwLockUntilMs = passwordChangedAt
+    ? new Date(passwordChangedAt).getTime() + pwLockMs
     : null;
-  const now = Date.now();
-  const withdrawalLocked = !!withdrawalLockedUntilMs && withdrawalLockedUntilMs > now;
+  const withdrawalLockedByPassword = !!pwLockUntilMs && pwLockUntilMs > now;
+  const passwordLockHoursLeft = withdrawalLockedByPassword && pwLockUntilMs
+    ? Math.ceil((pwLockUntilMs - now) / 3_600_000)
+    : 0;
+
+  // ── 6. New-account lock ──────────────────────────────────────────────────
+  const { NEW_ACCOUNT_WITHDRAWAL_LOCK_HOURS } = await import("./wallet");
+  const accountAgeMs = now - new Date(user.createdAt).getTime();
+  const newAccountLockMs = NEW_ACCOUNT_WITHDRAWAL_LOCK_HOURS * 60 * 60 * 1000;
+  const withdrawalLockedByNewAccount = accountAgeMs < newAccountLockMs;
+  const newAccountLockHoursLeft = withdrawalLockedByNewAccount
+    ? Math.ceil((newAccountLockMs - accountAgeMs) / 3_600_000)
+    : 0;
+
+  // ── 7. New-device cooldown ───────────────────────────────────────────────
+  const latestDevice = deviceRows[0];
+  const deviceCooldownMs = 24 * 60 * 60 * 1000; // mirrors NEW_DEVICE_WITHDRAWAL_COOLDOWN_HOURS
+  let withdrawalLockedByDevice = false;
+  let deviceLockHoursLeft = 0;
+  let deviceUnlockAt: string | null = null;
+  if (!latestDevice) {
+    // No known device at all — fail-closed
+    withdrawalLockedByDevice = true;
+    deviceLockHoursLeft = 24;
+    deviceUnlockAt = new Date(now + deviceCooldownMs).toISOString();
+  } else {
+    const deviceAgeMs = now - new Date(latestDevice.firstSeenAt).getTime();
+    if (deviceAgeMs < deviceCooldownMs) {
+      withdrawalLockedByDevice = true;
+      const unlockMs = new Date(latestDevice.firstSeenAt).getTime() + deviceCooldownMs;
+      deviceLockHoursLeft = Math.max(1, Math.ceil((unlockMs - now) / 3_600_000));
+      deviceUnlockAt = new Date(unlockMs).toISOString();
+    }
+  }
+
+  // ── 8. Fraud / suspicious activity ──────────────────────────────────────
+  const highFlags = fraudRows.filter((f) => f.severity === "high");
+  const mediumFlags = fraudRows.filter((f) => f.severity === "medium");
+  const suspiciousActivity = fraudRows.length > 0;
+  const escalated = highFlags.length >= 2;
+
+  // ── Aggregate: can the user withdraw right now? ──────────────────────────
+  const withdrawalBlocked =
+    accountRestricted ||
+    !kycApproved ||
+    withdrawalLockedByPassword ||
+    withdrawalLockedByNewAccount ||
+    withdrawalLockedByDevice;
+
+  // Determine primary block reason (priority order matches enforce guards)
+  let primaryBlockReason: string | null = null;
+  if (user.isDisabled) primaryBlockReason = "account_disabled";
+  else if (user.isFrozen) primaryBlockReason = "account_frozen";
+  else if (!kycApproved) primaryBlockReason = "kyc_required";
+  else if (withdrawalLockedByPassword) primaryBlockReason = "withdrawal_locked_password_change";
+  else if (withdrawalLockedByNewAccount) primaryBlockReason = "withdrawal_locked_new_account";
+  else if (withdrawalLockedByDevice) primaryBlockReason = "withdrawal_locked_new_device";
+
   res.json({
-    passwordChangedAt: passwordChangedAt ? new Date(passwordChangedAt).toISOString() : null,
-    withdrawalLockHours: WITHDRAWAL_LOCK_HOURS_AFTER_PASSWORD_CHANGE,
-    withdrawalLockedUntil: withdrawalLockedUntilMs
-      ? new Date(withdrawalLockedUntilMs).toISOString()
-      : null,
-    withdrawalLocked,
+    // ── Aggregates ──────────────────────────────────────────────────────
+    withdrawalBlocked,
+    primaryBlockReason,
     serverTime: new Date(now).toISOString(),
+
+    // ── 1. Account ──────────────────────────────────────────────────────
+    account: {
+      isDisabled: user.isDisabled,
+      isFrozen: user.isFrozen,
+      restricted: accountRestricted,
+    },
+
+    // ── 2. KYC ──────────────────────────────────────────────────────────
+    kyc: {
+      status: user.kycStatus ?? "none",
+      approved: kycApproved,
+    },
+
+    // ── 3. Email ─────────────────────────────────────────────────────────
+    email: {
+      verified: emailVerified,
+    },
+
+    // ── 4. 2FA ───────────────────────────────────────────────────────────
+    twoFactor: {
+      enabled: twoFactorEnabled,
+      enabledAt: user.twoFactorEnabledAt
+        ? new Date(user.twoFactorEnabledAt).toISOString()
+        : null,
+    },
+
+    // ── 5. Password-change lock ──────────────────────────────────────────
+    passwordLock: {
+      locked: withdrawalLockedByPassword,
+      passwordChangedAt: passwordChangedAt
+        ? new Date(passwordChangedAt).toISOString()
+        : null,
+      lockedUntil: pwLockUntilMs
+        ? new Date(pwLockUntilMs).toISOString()
+        : null,
+      hoursLeft: passwordLockHoursLeft,
+      lockHours: WITHDRAWAL_LOCK_HOURS_AFTER_PASSWORD_CHANGE,
+    },
+
+    // ── 6. New-account lock ──────────────────────────────────────────────
+    newAccountLock: {
+      locked: withdrawalLockedByNewAccount,
+      accountCreatedAt: new Date(user.createdAt).toISOString(),
+      lockHours: NEW_ACCOUNT_WITHDRAWAL_LOCK_HOURS,
+      hoursLeft: newAccountLockHoursLeft,
+      unlockAt: withdrawalLockedByNewAccount
+        ? new Date(new Date(user.createdAt).getTime() + newAccountLockMs).toISOString()
+        : null,
+    },
+
+    // ── 7. Device cooldown ────────────────────────────────────────────────
+    deviceCooldown: {
+      locked: withdrawalLockedByDevice,
+      hoursLeft: deviceLockHoursLeft,
+      unlockAt: deviceUnlockAt,
+      cooldownHours: 24,
+      knownDevice: !!latestDevice,
+    },
+
+    // ── 8. Suspicious activity / fraud flags ──────────────────────────────
+    suspiciousActivity: {
+      detected: suspiciousActivity,
+      escalated,
+      unresolvedFlags: fraudRows.length,
+      highSeverityFlags: highFlags.length,
+      mediumSeverityFlags: mediumFlags.length,
+      flagTypes: fraudRows.map((f) => f.flagType),
+    },
   });
 });
 
