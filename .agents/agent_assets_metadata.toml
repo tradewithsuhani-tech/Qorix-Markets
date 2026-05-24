@@ -131,3 +131,9 @@ id = "CUSFvMiKqSzgO34eOW0cy"
 uri = "file://flutter-docs/FLUTTER_PRODUCTION_PACK.md"
 type = "text"
 title = "Flutter Production Pack (Design Tokens + JSON + UX Priority + Design Direction)"
+
+[[outputs]]
+id = "6TGJon4SCZzVDn41YQTp3"
+uri = "file://flutter-docs/qorix-flutter-dev-pack.zip"
+type = "unspecified"
+title = "Qorix Flutter Dev Pack (857 KB) — Saari docs + screenshots"
