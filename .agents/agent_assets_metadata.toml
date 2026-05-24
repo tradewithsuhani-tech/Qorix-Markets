@@ -71,3 +71,27 @@ id = "USqXj9jAPXl-0l6c8744f"
 uri = "file://ARCHITECTURE_ANALYSIS.md"
 type = "text"
 title = "Qorix Markets — Complete Architecture Analysis (Flutter Reference)"
+
+[[outputs]]
+id = "cfHUs_t_PbnaFu269i6kS"
+uri = "file://flutter-docs/ARCHITECTURE_ANALYSIS.md"
+type = "text"
+title = "Architecture Analysis"
+
+[[outputs]]
+id = "Y219hA2bnkYjmlIgpDwJ8"
+uri = "file://flutter-docs/MOBILE_API_REFERENCE.md"
+type = "text"
+title = "Mobile API Reference"
+
+[[outputs]]
+id = "BwC710ggtSraq3oxg-Fop"
+uri = "file://flutter-docs/MOBILE_UI_SYSTEM.md"
+type = "text"
+title = "Mobile UI Design System"
+
+[[outputs]]
+id = "BWOXJySfe6RKIl_doy3IA"
+uri = "file://flutter-docs/WEBSOCKET_EVENTS.md"
+type = "text"
+title = "Real-time Events Guide"
