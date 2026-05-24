@@ -154,7 +154,8 @@ router.post("/wallet/deposit", async (req: AuthRequest, res) => {
     errorLogger.error({ err, userId: req.userId!, amount }, "Failed to emit deposit event");
   });
 
-  res.json(formatWallet(updated!));
+  const points = await getUserPoints(req.userId!);
+  res.json(formatWallet(updated!, points));
 });
 
 // Withdrawal lock window for brand-new accounts (anti-fraud cool-off)

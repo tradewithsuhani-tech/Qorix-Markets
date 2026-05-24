@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, investmentsTable, walletsTable, transactionsTable, tradesTable, equityHistoryTable, usersTable } from "@workspace/db";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, count } from "drizzle-orm";
 import { authMiddleware, getQueryInt, type AuthRequest } from "../middlewares/auth";
 import { StartInvestmentBody, ToggleCompoundingBody } from "@workspace/api-zod";
 import { ensureUserAccounts, postJournalEntry, journalForTransaction } from "../lib/ledger-service";
@@ -374,23 +374,36 @@ router.patch("/investment/compounding", async (req: AuthRequest, res) => {
 });
 
 router.get("/investment/trades", async (req: AuthRequest, res) => {
-  const limit = getQueryInt(req, "limit", 10);
+  const page = getQueryInt(req, "page", 1);
+  const limit = Math.min(getQueryInt(req, "limit", 10), 100);
+  const offset = (page - 1) * limit;
 
-  const trades = await db.select().from(tradesTable)
-    .where(eq(tradesTable.userId, req.userId!))
-    .orderBy(desc(tradesTable.executedAt))
-    .limit(limit);
+  const [[totalResult], trades] = await Promise.all([
+    db.select({ total: count() }).from(tradesTable).where(eq(tradesTable.userId, req.userId!)),
+    db.select().from(tradesTable)
+      .where(eq(tradesTable.userId, req.userId!))
+      .orderBy(desc(tradesTable.executedAt))
+      .limit(limit)
+      .offset(offset),
+  ]);
 
-  res.json(trades.map((t) => ({
-    id: t.id,
-    symbol: t.symbol,
-    direction: t.direction,
-    entryPrice: parseFloat(t.entryPrice as string),
-    exitPrice: parseFloat(t.exitPrice as string),
-    profit: parseFloat(t.profit as string),
-    profitPercent: parseFloat(t.profitPercent as string),
-    executedAt: t.executedAt.toISOString(),
-  })));
+  const total = Number(totalResult?.total ?? 0);
+
+  res.json({
+    data: trades.map((t) => ({
+      id: t.id,
+      symbol: t.symbol,
+      direction: t.direction,
+      entryPrice: parseFloat(t.entryPrice as string),
+      exitPrice: parseFloat(t.exitPrice as string),
+      profit: parseFloat(t.profit as string),
+      profitPercent: parseFloat(t.profitPercent as string),
+      executedAt: t.executedAt.toISOString(),
+    })),
+    total,
+    page,
+    totalPages: Math.ceil(total / limit),
+  });
 });
 
 export default router;

@@ -1429,8 +1429,135 @@ paths:
               schema:
                 $ref: "#/components/schemas/AdminQuizWinnerPaidResult"
 
+  # DEMO RESET (Flutter dev / QA only)
+  /demo/status:
+    get:
+      operationId: getDemoStatus
+      tags: [public]
+      summary: Check demo reset availability
+      description: Returns whether the demo reset endpoint is available in this environment. No auth required.
+      responses:
+        "200":
+          description: Demo status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DemoStatus"
+
+  /demo/reset:
+    post:
+      operationId: resetDemo
+      tags: [public]
+      summary: Full demo ecosystem reset
+      description: |
+        Wipes all data for the demo account (trades, transactions, P2P, notifications, equity history)
+        and re-seeds a deterministic premium dataset. Auth: `Authorization: Bearer <DEMO_RESET_SECRET>`
+        or `X-Demo-Secret: <DEMO_RESET_SECRET>` header. Blocked in production unless
+        `DEMO_RESET_ENABLED=true` env var is set.
+      security: []
+      parameters:
+        - in: header
+          name: X-Demo-Secret
+          schema:
+            type: string
+          description: Alternative to Authorization header when Bearer is stripped by proxy
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DemoResetRequest"
+      responses:
+        "200":
+          description: Reset complete
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DemoResetResponse"
+        "400":
+          description: Bad confirm string
+        "401":
+          description: Missing or invalid reset secret
+        "503":
+          description: Reset disabled in production
+
 components:
   schemas:
+    DemoStatus:
+      type: object
+      properties:
+        resetAvailable: { type: boolean }
+        reason: { type: string, nullable: true }
+        demoEmail: { type: string }
+        env: { type: string }
+      required: [resetAvailable, demoEmail, env]
+
+    DemoResetRequest:
+      type: object
+      properties:
+        confirm:
+          type: string
+          description: Optional safety gate. If provided must equal "RESET_DEMO"
+
+    DemoResetSeededWallets:
+      type: object
+      properties:
+        inr: { type: number }
+        usdt: { type: number }
+        trading: { type: number }
+        profit: { type: number }
+      required: [inr, usdt, trading, profit]
+
+    DemoResetSeededInvestment:
+      type: object
+      properties:
+        amount: { type: number }
+        riskLevel: { type: string }
+        isActive: { type: boolean }
+        totalProfit: { type: number }
+      required: [amount, riskLevel, isActive, totalProfit]
+
+    DemoResetSeededP2P:
+      type: object
+      properties:
+        ads: { type: integer }
+        completedOrders: { type: integer }
+        pendingOrders: { type: integer }
+        chatMessages: { type: integer }
+        ratings: { type: integer }
+      required: [ads, completedOrders, pendingOrders, chatMessages, ratings]
+
+    DemoResetSeededNotifications:
+      type: object
+      properties:
+        total: { type: integer }
+        unread: { type: integer }
+      required: [total, unread]
+
+    DemoResetSeeded:
+      type: object
+      properties:
+        wallets: { $ref: "#/components/schemas/DemoResetSeededWallets" }
+        investment: { $ref: "#/components/schemas/DemoResetSeededInvestment" }
+        trades: { type: integer }
+        transactions: { type: integer }
+        notifications: { $ref: "#/components/schemas/DemoResetSeededNotifications" }
+        equityHistory: { type: integer }
+        p2p: { $ref: "#/components/schemas/DemoResetSeededP2P" }
+      required: [wallets, investment, trades, transactions, notifications, equityHistory, p2p]
+
+    DemoResetResponse:
+      type: object
+      properties:
+        success: { type: boolean }
+        message: { type: string }
+        demoEmail: { type: string }
+        demoPassword: { type: string }
+        resetAt: { type: string, format: date-time }
+        durationMs: { type: integer }
+        seeded: { $ref: "#/components/schemas/DemoResetSeeded" }
+      required: [success, message, demoEmail, demoPassword, resetAt, durationMs, seeded]
+
+
     SuccessResponse:
       type: object
       properties:
