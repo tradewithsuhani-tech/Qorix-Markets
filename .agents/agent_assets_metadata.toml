@@ -95,3 +95,39 @@ id = "BWOXJySfe6RKIl_doy3IA"
 uri = "file://flutter-docs/WEBSOCKET_EVENTS.md"
 type = "text"
 title = "Real-time Events Guide"
+
+[[outputs]]
+id = "Bm6JbaO-3_pcSR5hayqaH"
+uri = "file://flutter-docs/screenshots/01-landing.jpg"
+type = "image"
+title = "01 — Landing Page (Desktop)"
+
+[[outputs]]
+id = "7KH9TeusJDrHowp_MGcsp"
+uri = "file://flutter-docs/screenshots/02-login.jpg"
+type = "image"
+title = "02 — Login Screen"
+
+[[outputs]]
+id = "j9euAnKps3Y4AYNhTHb9t"
+uri = "file://flutter-docs/screenshots/03-signup.jpg"
+type = "image"
+title = "03 — Signup / Register"
+
+[[outputs]]
+id = "NIi7dQI0Nxacnr5v1Iede"
+uri = "file://flutter-docs/screenshots/16-forgot-password.jpg"
+type = "image"
+title = "04 — Forgot Password"
+
+[[outputs]]
+id = "xKtVmJr-TAlb9dNIJsGwm"
+uri = "file://flutter-docs/screenshots/17-admin-login.jpg"
+type = "image"
+title = "05 — Admin Panel Login"
+
+[[outputs]]
+id = "CUSFvMiKqSzgO34eOW0cy"
+uri = "file://flutter-docs/FLUTTER_PRODUCTION_PACK.md"
+type = "text"
+title = "Flutter Production Pack (Design Tokens + JSON + UX Priority + Design Direction)"
