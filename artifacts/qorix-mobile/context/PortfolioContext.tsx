@@ -14,6 +14,7 @@ import {
 import React, { createContext, useContext, useEffect, useRef, useState } from "react";
 
 import { useAuth } from "@/context/AuthContext";
+import { FX_RATE } from "@/lib/tx-mapper";
 
 export type TransactionType = "deposit" | "withdrawal" | "income" | "fee" | "transfer";
 
@@ -336,10 +337,12 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
     try {
       const w = await apiGetWallet();
       const current = stateRef.current;
+      const usdtBal = Number((w as any).usdtBalance) || 0;
+      const inrBal = Number(w.mainBalance) || 0;
       const next: PortfolioState = {
         ...current,
         wallet: {
-          balance: Number(w.mainBalance) || 0,
+          balance: inrBal / FX_RATE + usdtBal,
           lockedAmount: Number(w.tradingBalance) || 0,
         },
       };

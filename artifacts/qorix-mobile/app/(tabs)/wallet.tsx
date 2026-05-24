@@ -39,8 +39,11 @@ export default function WalletScreen() {
   const summary = summaryQ.data as any;
   const txData = (txQ.data as any)?.data ?? [];
 
+  const usdtBal = Number(wallet?.usdtBalance) || 0;
+  const inrBal = Number(wallet?.mainBalance) || 0;
   const totalUsd =
-    (Number(wallet?.mainBalance) || 0) +
+    inrBal / FX_RATE +
+    usdtBal +
     (Number(wallet?.tradingBalance) || 0) +
     (Number(wallet?.profitBalance) || 0);
   const totalLiquidity = totalUsd * FX_RATE;
