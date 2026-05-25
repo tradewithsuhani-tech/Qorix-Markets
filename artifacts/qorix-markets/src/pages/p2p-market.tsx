@@ -29,6 +29,9 @@ type ProcessingOrder = {
   counterpartyName: string; createdAt: string;
 };
 
+// ─── Feature flag — P2P trading disabled until further notice ────────────────
+const P2P_ENABLED = false;
+
 const PAYMENT_METHODS = ["All", "UPI", "BANK", "IMPS", "NEFT", "Fast Pay"];
 
 function AdRow({ ad, tab }: { ad: Ad; tab: "BUY" | "SELL" }) {
@@ -37,14 +40,18 @@ function AdRow({ ad, tab }: { ad: Ad; tab: "BUY" | "SELL" }) {
   const isBuy = tab === "BUY";
   const dest = tab === "BUY" ? `/p2p/order/${ad.id}` : `/p2p/sell/${ad.id}`;
   const openProfile = (e: React.MouseEvent) => { e.stopPropagation(); setProfileOpen(true); };
+  const handleTrade = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!P2P_ENABLED) return;
+    navigate(dest);
+  };
 
   return (
     <>
       {/* ── Desktop table row ────────────────────────────────────────── */}
       <div
-        className="hidden md:grid items-center gap-0 border-b border-white/[0.05] hover:bg-white/[0.02] cursor-pointer transition-colors"
+        className="hidden md:grid items-center gap-0 border-b border-white/[0.05] hover:bg-white/[0.02] transition-colors"
         style={{ gridTemplateColumns: "2.2fr 1fr 1.4fr 1.2fr auto" }}
-        onClick={() => navigate(dest)}
       >
         {/* Advertiser */}
         <div className="px-4 py-3.5 flex items-center gap-3" onClick={openProfile}>
@@ -91,8 +98,9 @@ function AdRow({ ad, tab }: { ad: Ad; tab: "BUY" | "SELL" }) {
         {/* Trade button */}
         <div className="px-4 py-3.5">
           <button
-            onClick={(e) => { e.stopPropagation(); navigate(dest); }}
-            className={`px-5 py-2 rounded-lg text-sm font-bold transition-all active:scale-95 min-w-[80px] ${
+            onClick={handleTrade}
+            disabled={!P2P_ENABLED}
+            className={`px-5 py-2 rounded-lg text-sm font-bold transition-all active:scale-95 min-w-[80px] disabled:opacity-50 disabled:cursor-not-allowed ${
               isBuy ? "bg-emerald-500 hover:bg-emerald-400 text-white shadow-lg shadow-emerald-500/20" : "bg-red-500 hover:bg-red-400 text-white shadow-lg shadow-red-500/20"
             }`}
           >
@@ -103,8 +111,7 @@ function AdRow({ ad, tab }: { ad: Ad; tab: "BUY" | "SELL" }) {
 
       {/* ── Mobile card ──────────────────────────────────────────────── */}
       <div
-        className="md:hidden px-4 py-4 border-b border-white/[0.05] cursor-pointer hover:bg-white/[0.02] transition-colors"
-        onClick={() => navigate(dest)}
+        className="md:hidden px-4 py-4 border-b border-white/[0.05] hover:bg-white/[0.02] transition-colors"
       >
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-2.5" onClick={openProfile}>
@@ -123,8 +130,9 @@ function AdRow({ ad, tab }: { ad: Ad; tab: "BUY" | "SELL" }) {
             </div>
           </div>
           <button
-            onClick={(e) => { e.stopPropagation(); navigate(dest); }}
-            className={`px-4 py-2 rounded-lg text-sm font-bold shrink-0 transition-all active:scale-95 ${
+            onClick={handleTrade}
+            disabled={!P2P_ENABLED}
+            className={`px-4 py-2 rounded-lg text-sm font-bold shrink-0 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed ${
               isBuy ? "bg-emerald-500 text-white shadow-emerald-500/20 shadow-lg" : "bg-red-500 text-white shadow-red-500/20 shadow-lg"
             }`}
           >
@@ -243,11 +251,17 @@ export default function P2PMarketPage() {
             <button onClick={() => fetchData(true)} className="p-2 glass-card rounded-xl text-slate-400 active:bg-white/10 transition-colors" aria-label="Refresh">
               <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
             </button>
-            <Link href="/p2p/create-ad">
-              <button className="flex items-center gap-1.5 px-3 py-2 bg-emerald-500 hover:bg-emerald-400 rounded-xl text-black text-xs font-bold transition-colors active:scale-95">
+            {P2P_ENABLED ? (
+              <Link href="/p2p/create-ad">
+                <button className="flex items-center gap-1.5 px-3 py-2 bg-emerald-500 hover:bg-emerald-400 rounded-xl text-black text-xs font-bold transition-colors active:scale-95">
+                  <Plus size={13} /> Post Ad
+                </button>
+              </Link>
+            ) : (
+              <button disabled className="flex items-center gap-1.5 px-3 py-2 bg-emerald-500/40 rounded-xl text-black/50 text-xs font-bold cursor-not-allowed">
                 <Plus size={13} /> Post Ad
               </button>
-            </Link>
+            )}
           </div>
         </div>
 

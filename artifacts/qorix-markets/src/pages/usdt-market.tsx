@@ -16,6 +16,9 @@ import {
 } from "lucide-react";
 import { Link } from "wouter";
 
+// ─── Feature flag — set to true when trading is enabled ──────────────────────
+const TRADING_ENABLED = false;
+
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
 function apiUrl(p: string) { return `${BASE_URL}/api${p}`; }
 async function apiFetch(p: string, o: RequestInit = {}) { return authFetch(apiUrl(p), o); }
@@ -564,17 +567,24 @@ export default function UsdtMarketPage() {
             </div>
 
             {/* Submit */}
-            <button
-              onClick={handleSubmit}
-              disabled={submitting || !amount || numAmt <= 0}
-              className={`w-full py-3.5 rounded-xl text-sm font-extrabold tracking-wide transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed ${
-                side === "buy"
-                  ? "bg-emerald-500 hover:bg-emerald-400 text-white shadow-[0_0_20px_rgba(34,197,94,0.3)]"
-                  : "bg-rose-500 hover:bg-rose-400 text-white shadow-[0_0_20px_rgba(244,63,94,0.3)]"
-              }`}
-            >
-              {submitting ? "Processing…" : side === "buy" ? "BUY USDT" : "SELL USDT"}
-            </button>
+            {TRADING_ENABLED ? (
+              <button
+                onClick={handleSubmit}
+                disabled={submitting || !amount || numAmt <= 0}
+                className={`w-full py-3.5 rounded-xl text-sm font-extrabold tracking-wide transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed ${
+                  side === "buy"
+                    ? "bg-emerald-500 hover:bg-emerald-400 text-white shadow-[0_0_20px_rgba(34,197,94,0.3)]"
+                    : "bg-rose-500 hover:bg-rose-400 text-white shadow-[0_0_20px_rgba(244,63,94,0.3)]"
+                }`}
+              >
+                {submitting ? "Processing…" : side === "buy" ? "BUY USDT" : "SELL USDT"}
+              </button>
+            ) : (
+              <div className="w-full py-3.5 rounded-xl border border-amber-500/30 bg-amber-500/8 flex flex-col items-center gap-1 text-center">
+                <span className="text-xs font-bold text-amber-300">🔒 Trading Paused</span>
+                <span className="text-[11px] text-muted-foreground">This market is in view-only mode</span>
+              </div>
+            )}
 
             <p className="text-[10px] text-muted-foreground text-center">
               Internal market · Rate set by platform · Instant settlement

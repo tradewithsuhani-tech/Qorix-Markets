@@ -320,11 +320,6 @@ export default function WalletPage() {
           </AnimatePresence>
         </motion.div>
 
-        {/* INR ↔ USDT Exchange Rate Widget */}
-        <motion.div variants={item}>
-          <InrUsdtRateWidget inrRate={FX_RATE} mainBalInr={mainBal} usdtBal={usdtBal} />
-        </motion.div>
-
         {/* Transaction History */}
         <motion.div variants={item}>
           <div className="flex items-center justify-between mb-3">
