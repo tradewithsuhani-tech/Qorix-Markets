@@ -114,6 +114,15 @@ async function upsertUser(data: {
 // Main seed function
 // ─────────────────────────────────────────────────────────────────────────────
 async function seed() {
+  // SAFETY: Block execution if DATABASE_URL points to Neon (production).
+  // This script must only run against a local / dev database.
+  const dbUrl = process.env["DATABASE_URL"] ?? process.env["NEON_DATABASE_URL"] ?? "";
+  if (dbUrl.includes("neon.tech") || process.env["NODE_ENV"] === "production") {
+    console.error("\n❌  BLOCKED: seed-demo.ts must not run against a Neon / production database.");
+    console.error("    Set DATABASE_URL to a local dev DB and retry.\n");
+    process.exit(1);
+  }
+
   console.log("\n🌱  Qorix Markets — Demo Seed Starting...\n");
 
   // ── 1. Users ────────────────────────────────────────────────────────────────
