@@ -168,7 +168,7 @@ export default function UsdtMarketPage() {
   const [lastPrice, setLastPrice] = useState<number | null>(null);
   const [rateLoading, setRateLoading] = useState(true);
 
-  const [interval, setInterval]   = useState<Interval>("1m");
+  const [chartInterval, setChartInterval] = useState<Interval>("1m");
   const [side, setSide]           = useState<Side>("buy");
   const [ordType, setOrdType]     = useState<OrdType>("market");
   const [amount, setAmount]       = useState("");
@@ -224,7 +224,7 @@ export default function UsdtMarketPage() {
 
   // Candles
   const COUNTS: Record<Interval, number> = { "1m": 60, "5m": 60, "15m": 48, "1h": 48, "1d": 30 };
-  const candles = useMemo(() => makeCandles(rate, COUNTS[interval], interval), [rate, interval]);
+  const candles = useMemo(() => makeCandles(rate, COUNTS[chartInterval], chartInterval), [rate, chartInterval]);
   const barData  = useMemo(() => toBarData(candles), [candles]);
   const domainMin = useMemo(() => Math.floor(Math.min(...candles.map(c => c.low)) * 0.998), [candles]);
   const domainMax = useMemo(() => Math.ceil(Math.max(...candles.map(c => c.high)) * 1.002), [candles]);
@@ -351,9 +351,9 @@ export default function UsdtMarketPage() {
               {(["1m", "5m", "15m", "1h", "1d"] as Interval[]).map(iv => (
                 <button
                   key={iv}
-                  onClick={() => setInterval(iv)}
+                  onClick={() => setChartInterval(iv)}
                   className={`px-2 py-0.5 rounded-lg text-[11px] font-bold transition-all ${
-                    interval === iv
+                    chartInterval === iv
                       ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
                       : "text-muted-foreground hover:text-white"
                   }`}
