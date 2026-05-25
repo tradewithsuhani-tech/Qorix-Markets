@@ -13,6 +13,10 @@ import {
   Users,
   BarChart3,
   RefreshCw,
+  AlertTriangle,
+  Gauge,
+  Activity,
+  Zap,
 } from "lucide-react";
 import {
   AreaChart,
@@ -32,6 +36,39 @@ import {
   Pie,
 } from "recharts";
 import { format, parseISO } from "date-fns";
+
+type RiskSignal = {
+  userId: number;
+  email: string;
+  fullName: string;
+  score: number;
+  tier: "low" | "medium" | "high" | "critical";
+  signals: string[];
+  unresolvedFraudFlags: number;
+  lastFlaggedAt: string | null;
+};
+
+type RiskDashboardData = {
+  flagged: RiskSignal[];
+  summary: { total: number; critical: number; high: number; medium: number; low: number };
+  generatedAt: string;
+};
+
+type LatencyRoute = {
+  route: string;
+  count: number;
+  p50: number;
+  p90: number;
+  p95: number;
+  p99: number;
+  min: number;
+  max: number;
+};
+
+type LatencyData = {
+  routes: LatencyRoute[];
+  generatedAt: string;
+};
 
 type IntelligenceData = {
   summary: {
@@ -55,6 +92,24 @@ function useIntelligence() {
     queryKey: ["admin-intelligence"],
     queryFn: () => authFetch("/api/admin/intelligence"),
     refetchInterval: 60000,
+  });
+}
+
+function useRiskDashboard() {
+  return useQuery<RiskDashboardData>({
+    queryKey: ["admin-risk-dashboard"],
+    queryFn: () => authFetch("/api/admin/risk/dashboard?severity=medium&computeScores=true"),
+    refetchInterval: 120000,
+    staleTime: 60000,
+  });
+}
+
+function useLatencyMetrics() {
+  return useQuery<LatencyData>({
+    queryKey: ["admin-latency-metrics"],
+    queryFn: () => authFetch("/api/admin/metrics/latency"),
+    refetchInterval: 30000,
+    staleTime: 15000,
   });
 }
 
@@ -105,8 +160,34 @@ const item: Variants = {
   show: { opacity: 1, y: 0, transition: { duration: 0.35, ease: [0.25, 0.46, 0.45, 0.94] } },
 };
 
+const TIER_COLOR: Record<string, string> = {
+  low: "#22c55e",
+  medium: "#f59e0b",
+  high: "#ef4444",
+  critical: "#dc2626",
+};
+const TIER_BG: Record<string, string> = {
+  low: "rgba(34,197,94,0.12)",
+  medium: "rgba(245,158,11,0.12)",
+  high: "rgba(239,68,68,0.12)",
+  critical: "rgba(220,38,38,0.18)",
+};
+const TIER_BORDER: Record<string, string> = {
+  low: "rgba(34,197,94,0.25)",
+  medium: "rgba(245,158,11,0.25)",
+  high: "rgba(239,68,68,0.3)",
+  critical: "rgba(220,38,38,0.4)",
+};
+
+function fmtMs(ms: number) {
+  if (ms >= 1000) return `${(ms / 1000).toFixed(1)}s`;
+  return `${Math.round(ms)}ms`;
+}
+
 export default function AdminIntelligencePage() {
   const { data, isLoading, refetch, isFetching } = useIntelligence();
+  const { data: riskData, isLoading: riskLoading } = useRiskDashboard();
+  const { data: latencyData, isLoading: latencyLoading } = useLatencyMetrics();
 
   const riskChartData = data
     ? [
@@ -511,6 +592,187 @@ export default function AdminIntelligencePage() {
             </ResponsiveContainer>
           )}
         </motion.div>
+
+        {/* ── Risk Engine — Flagged Users ───────────────────────────────────── */}
+        <motion.div variants={item} className="glass-card rounded-xl p-6">
+          <div className="flex items-center justify-between mb-5">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 rounded-xl bg-rose-500/15">
+                <AlertTriangle className="w-4 h-4 text-rose-400" />
+              </div>
+              <div>
+                <h2 className="font-bold text-white">Risk Engine — Flagged Users</h2>
+                <p className="text-xs text-muted-foreground mt-0.5">Composite fraud scores ≥ medium severity</p>
+              </div>
+            </div>
+            {riskData && (
+              <div className="flex items-center gap-2 text-xs">
+                {riskData.summary.critical > 0 && (
+                  <span className="px-2 py-0.5 rounded-full font-semibold" style={{ background: TIER_BG.critical, color: TIER_COLOR.critical, border: `1px solid ${TIER_BORDER.critical}` }}>
+                    {riskData.summary.critical} critical
+                  </span>
+                )}
+                {riskData.summary.high > 0 && (
+                  <span className="px-2 py-0.5 rounded-full font-semibold" style={{ background: TIER_BG.high, color: TIER_COLOR.high, border: `1px solid ${TIER_BORDER.high}` }}>
+                    {riskData.summary.high} high
+                  </span>
+                )}
+                {riskData.summary.medium > 0 && (
+                  <span className="px-2 py-0.5 rounded-full font-semibold" style={{ background: TIER_BG.medium, color: TIER_COLOR.medium, border: `1px solid ${TIER_BORDER.medium}` }}>
+                    {riskData.summary.medium} medium
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+
+          {riskLoading ? (
+            <div className="space-y-2">
+              {[1,2,3].map(i => <div key={i} className="h-14 bg-white/3 rounded-xl animate-pulse" />)}
+            </div>
+          ) : !riskData?.flagged.length ? (
+            <div className="h-28 flex flex-col items-center justify-center gap-2 text-muted-foreground">
+              <ShieldAlert className="w-8 h-8 opacity-25" />
+              <span className="text-sm">No flagged users — risk engine clear</span>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {riskData.flagged.slice(0, 10).map((u) => (
+                <div
+                  key={u.userId}
+                  className="flex items-start gap-3 p-3.5 rounded-xl border transition-colors"
+                  style={{ background: TIER_BG[u.tier], borderColor: TIER_BORDER[u.tier] }}
+                >
+                  {/* Score gauge */}
+                  <div className="w-12 h-12 rounded-xl flex flex-col items-center justify-center shrink-0 border"
+                    style={{ background: "rgba(0,0,0,0.25)", borderColor: TIER_BORDER[u.tier] }}>
+                    <span className="text-lg font-extrabold tabular-nums leading-none" style={{ color: TIER_COLOR[u.tier] }}>
+                      {u.score}
+                    </span>
+                    <span className="text-[9px] uppercase tracking-wide mt-0.5" style={{ color: TIER_COLOR[u.tier], opacity: 0.7 }}>
+                      score
+                    </span>
+                  </div>
+
+                  {/* Details */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm font-semibold text-white truncate">{u.fullName || u.email}</span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wide"
+                        style={{ background: TIER_BG[u.tier], color: TIER_COLOR[u.tier], border: `1px solid ${TIER_BORDER[u.tier]}` }}>
+                        {u.tier}
+                      </span>
+                      {u.unresolvedFraudFlags > 0 && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-rose-500/15 text-rose-300 border border-rose-500/25 font-medium">
+                          {u.unresolvedFraudFlags} flag{u.unresolvedFraudFlags > 1 ? "s" : ""}
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-[11px] text-muted-foreground mt-0.5 truncate">{u.email}</div>
+                    {u.signals.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-1.5">
+                        {u.signals.slice(0, 4).map((s) => (
+                          <span key={s} className="text-[10px] px-1.5 py-0.5 rounded bg-white/[0.05] border border-white/10 text-slate-400 font-mono">
+                            {s}
+                          </span>
+                        ))}
+                        {u.signals.length > 4 && (
+                          <span className="text-[10px] text-muted-foreground">+{u.signals.length - 4} more</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Last flagged */}
+                  {u.lastFlaggedAt && (
+                    <div className="text-[10px] text-muted-foreground shrink-0 text-right">
+                      <div>Last flagged</div>
+                      <div className="text-white/60 font-medium">{format(new Date(u.lastFlaggedAt), "MMM d, HH:mm")}</div>
+                    </div>
+                  )}
+                </div>
+              ))}
+              {riskData.flagged.length > 10 && (
+                <p className="text-xs text-muted-foreground text-center pt-1">
+                  Showing top 10 of {riskData.flagged.length} flagged users
+                </p>
+              )}
+            </div>
+          )}
+        </motion.div>
+
+        {/* ── API Latency Metrics ───────────────────────────────────────────── */}
+        <motion.div variants={item} className="glass-card rounded-xl p-6">
+          <div className="flex items-center gap-2.5 mb-5">
+            <div className="p-2 rounded-xl bg-blue-500/15">
+              <Activity className="w-4 h-4 text-blue-400" />
+            </div>
+            <div>
+              <h2 className="font-bold text-white">API Latency Metrics</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">Per-route percentiles — last 500 requests per route (in-process ring buffer)</p>
+            </div>
+          </div>
+
+          {latencyLoading ? (
+            <div className="space-y-2">
+              {[1,2,3,4].map(i => <div key={i} className="h-9 bg-white/3 rounded-lg animate-pulse" />)}
+            </div>
+          ) : !latencyData?.routes.length ? (
+            <div className="h-24 flex flex-col items-center justify-center gap-2 text-muted-foreground">
+              <Gauge className="w-7 h-7 opacity-25" />
+              <span className="text-sm">No requests recorded yet — metrics populate on traffic</span>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="text-muted-foreground border-b border-white/[0.06]">
+                    <th className="text-left pb-2 font-medium pr-4">Route</th>
+                    <th className="text-right pb-2 font-medium px-2">Reqs</th>
+                    <th className="text-right pb-2 font-medium px-2">p50</th>
+                    <th className="text-right pb-2 font-medium px-2">p90</th>
+                    <th className="text-right pb-2 font-medium px-2 text-amber-400">p95</th>
+                    <th className="text-right pb-2 font-medium px-2 text-rose-400">p99</th>
+                    <th className="text-right pb-2 font-medium pl-2">max</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {latencyData.routes
+                    .sort((a, b) => b.p95 - a.p95)
+                    .slice(0, 15)
+                    .map((r) => {
+                      const isWarn = r.p95 >= 2000;
+                      const isErr = r.p95 >= 5000;
+                      return (
+                        <tr key={r.route} className="border-b border-white/[0.04] hover:bg-white/[0.02] transition-colors">
+                          <td className="py-2 pr-4 font-mono text-[11px] text-slate-300 max-w-[200px] truncate" title={r.route}>
+                            {isErr ? <Zap className="inline w-3 h-3 text-rose-400 mr-1" /> : isWarn ? <Zap className="inline w-3 h-3 text-amber-400 mr-1" /> : null}
+                            {r.route}
+                          </td>
+                          <td className="py-2 text-right px-2 tabular-nums text-muted-foreground">{r.count}</td>
+                          <td className="py-2 text-right px-2 tabular-nums text-emerald-400">{fmtMs(r.p50)}</td>
+                          <td className="py-2 text-right px-2 tabular-nums text-blue-400">{fmtMs(r.p90)}</td>
+                          <td className="py-2 text-right px-2 tabular-nums font-semibold" style={{ color: isWarn ? "#f59e0b" : "#94a3b8" }}>{fmtMs(r.p95)}</td>
+                          <td className="py-2 text-right px-2 tabular-nums font-semibold" style={{ color: isErr ? "#ef4444" : "#94a3b8" }}>{fmtMs(r.p99)}</td>
+                          <td className="py-2 text-right pl-2 tabular-nums text-muted-foreground">{fmtMs(r.max)}</td>
+                        </tr>
+                      );
+                    })}
+                </tbody>
+              </table>
+              {latencyData.routes.length > 15 && (
+                <p className="text-xs text-muted-foreground text-center pt-3">
+                  Showing top 15 slowest routes of {latencyData.routes.length} total
+                </p>
+              )}
+              <p className="text-[10px] text-muted-foreground/50 mt-3 text-right">
+                Snapshot: {latencyData.generatedAt ? format(new Date(latencyData.generatedAt), "HH:mm:ss") : "—"}
+                {" · "}Amber = p95 &gt; 2s{" · "}Red = p95 &gt; 5s
+              </p>
+            </div>
+          )}
+        </motion.div>
+
       </motion.div>
     </Layout>
   );

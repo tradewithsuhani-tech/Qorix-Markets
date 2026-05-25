@@ -17,11 +17,22 @@ import { TwoFactorCard } from "@/components/two-factor-card";
 import { PhoneChangeCard } from "@/components/phone-change-card";
 
 interface SecurityStatus {
-  passwordChangedAt: string | null;
-  withdrawalLockHours: number;
-  withdrawalLockedUntil: string | null;
-  withdrawalLocked: boolean;
+  withdrawalBlocked: boolean;
+  primaryBlockReason: string | null;
   serverTime: string;
+  account: { frozen: boolean; disabled: boolean };
+  kyc: { status: string };
+  email: { verified: boolean };
+  twoFactor: { enabled: boolean; enabledAt: string | null };
+  passwordLock: {
+    locked: boolean;
+    lockedUntil: string | null;
+    lockHours: number;
+    passwordChangedAt: string | null;
+  };
+  newAccountLock: { locked: boolean; hoursLeft: number; unlockAt: string | null };
+  deviceCooldown: { locked: boolean; hoursLeft: number; unlockAt: string | null; cooldownHours: number };
+  suspiciousActivity: { unresolvedFlags: number; flagTypes: string[]; escalated: boolean };
 }
 
 const container: Variants = { hidden: {}, show: { transition: { staggerChildren: 0.08 } } };
@@ -243,16 +254,35 @@ export default function SettingsPage() {
             <h3 className="font-semibold">Security</h3>
           </div>
 
-          {/* Active 24h withdrawal lock banner (after a recent password change) */}
-          {security?.withdrawalLocked && security.withdrawalLockedUntil && (
+          {/* Withdrawal blocked banner — shows whichever dimension is blocking */}
+          {security?.withdrawalBlocked && (
+            <div className="flex items-start gap-2.5 p-3 rounded-xl bg-rose-500/10 border border-rose-500/25 text-rose-200">
+              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-rose-400" />
+              <div className="text-xs leading-relaxed">
+                <div className="font-semibold text-rose-300">Withdrawals currently blocked</div>
+                <div className="text-rose-200/75 mt-0.5">
+                  {security.primaryBlockReason === "withdrawal_locked_password_change" && security.passwordLock?.lockedUntil
+                    ? `Password changed recently — unlocks ${formatDistanceToNow(new Date(security.passwordLock.lockedUntil), { addSuffix: true })}.`
+                    : security.primaryBlockReason === "withdrawal_locked_new_account" && security.newAccountLock?.hoursLeft
+                    ? `New account security hold — ~${security.newAccountLock.hoursLeft}h remaining.`
+                    : security.primaryBlockReason === "withdrawal_locked_new_device" && security.deviceCooldown?.hoursLeft
+                    ? `New device cooldown — ~${security.deviceCooldown.hoursLeft}h remaining.`
+                    : security.primaryBlockReason === "fraud_flag"
+                    ? "Account flagged for review — contact support."
+                    : "Contact support for details."}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* New device cooldown (informational, even when not the primary block) */}
+          {!security?.withdrawalBlocked && security?.deviceCooldown?.locked && (
             <div className="flex items-start gap-2.5 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-200">
               <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
               <div className="text-xs leading-relaxed">
-                <div className="font-semibold">Withdrawals paused for security</div>
+                <div className="font-semibold">New device — withdrawal cooldown</div>
                 <div className="text-amber-200/80 mt-0.5">
-                  Your password was changed recently. Withdrawals will re-enable{" "}
-                  {formatDistanceToNow(new Date(security.withdrawalLockedUntil), { addSuffix: true })}.
-                  Deposits and trading continue as normal.
+                  Unlocks in ~{security.deviceCooldown.hoursLeft}h. Deposits and trading continue as normal.
                 </div>
               </div>
             </div>
@@ -263,8 +293,8 @@ export default function SettingsPage() {
               <div className="min-w-0 pr-3">
                 <div className="text-sm font-medium">Password</div>
                 <div className="text-xs text-muted-foreground mt-0.5 truncate">
-                  {security?.passwordChangedAt
-                    ? `Last changed: ${format(new Date(security.passwordChangedAt), "MMM d, yyyy")}`
+                  {security?.passwordLock?.passwordChangedAt
+                    ? `Last changed: ${format(new Date(security.passwordLock.passwordChangedAt), "MMM d, yyyy")}`
                     : "Last changed: Never"}
                 </div>
               </div>
@@ -467,9 +497,10 @@ export default function SettingsPage() {
               <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
               <p className="text-xs leading-relaxed">
                 For your security, withdrawals will be paused for{" "}
-                <span className="font-semibold">{security?.withdrawalLockHours ?? 24} hours</span>{" "}
+                <span className="font-semibold">{security?.passwordLock?.lockHours ?? 24} hours</span>{" "}
                 after this change. Deposits and trading continue as normal.
               </p>
+
             </div>
 
             <form

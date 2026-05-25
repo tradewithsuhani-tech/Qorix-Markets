@@ -3,11 +3,12 @@ import { useLocation } from "wouter";
 import { useGetWallet, useGetDashboardSummary } from "@workspace/api-client-react";
 import { useQuery } from "@tanstack/react-query";
 import { Layout } from "@/components/layout";
-import { ArrowLeft, ArrowRight, Shield, AlertTriangle, Info, Landmark, Zap, ShieldCheck, Users } from "lucide-react";
+import { ArrowLeft, ArrowRight, Shield, AlertTriangle, Info, Landmark, Zap, ShieldCheck, Users, Lock } from "lucide-react";
 import { authFetch } from "@/lib/auth-fetch";
 import { newIdemKey, patchWithdrawState, readWithdrawState } from "@/lib/withdraw-flow-state";
 import { cn } from "@/lib/utils";
 import { useInrRate } from "@/hooks/use-inr-rate";
+import { formatDistanceToNow } from "date-fns";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
 const apiUrl = (p: string) => `${BASE_URL}/api${p}`;
@@ -36,6 +37,40 @@ export default function WithdrawPage() {
 
   const mainBal = Number(wallet?.mainBalance) || 0;
   const sourceBalance = mainBal;
+
+  // Security pre-flight — blocks withdrawals for: password lock, new account, device cooldown, fraud
+  const { data: secStatus } = useQuery<any>({
+    queryKey: ["auth-security-status"],
+    queryFn: () => apiFetch("/auth/security-status"),
+    staleTime: 30_000,
+    retry: 1,
+  });
+  const withdrawalBlocked: boolean = secStatus?.withdrawalBlocked ?? false;
+  const blockReason: string | null = secStatus?.primaryBlockReason ?? null;
+  const blockMessages: Record<string, { title: string; detail: (s: any) => string }> = {
+    account_frozen:                { title: "Account frozen", detail: () => "Your account has been frozen. Please contact support." },
+    account_disabled:              { title: "Account disabled", detail: () => "Your account is disabled. Please contact support." },
+    email_not_verified:            { title: "Email not verified", detail: () => "Verify your email address before making withdrawals." },
+    withdrawal_locked_password_change: {
+      title: "Withdrawal paused after password change",
+      detail: (s) => s?.passwordLock?.lockedUntil
+        ? `Unlocks ${formatDistanceToNow(new Date(s.passwordLock.lockedUntil), { addSuffix: true })}.`
+        : `Paused for ${s?.passwordLock?.lockHours ?? 24} hours for security.`,
+    },
+    withdrawal_locked_new_account: {
+      title: "New account — withdrawals not yet unlocked",
+      detail: (s) => `Unlocks in ~${s?.newAccountLock?.hoursLeft ?? "?"} hours for security.`,
+    },
+    withdrawal_locked_new_device: {
+      title: "New device — withdrawal cooldown active",
+      detail: (s) => `Unlocks in ~${s?.deviceCooldown?.hoursLeft ?? "?"} hours. Log in from a trusted device to skip.`,
+    },
+    fraud_flag: {
+      title: "Withdrawal blocked — suspicious activity",
+      detail: () => "Your account has unresolved flags. Please contact support.",
+    },
+  };
+  const blockMsg = blockReason ? (blockMessages[blockReason] ?? { title: "Withdrawal temporarily blocked", detail: () => "Please contact support for assistance." }) : null;
 
   // KYC
   const { data: kycData } = useQuery<any>({
@@ -241,6 +276,19 @@ export default function WithdrawPage() {
           ))}
         </div>
 
+        {/* Security pre-flight block — shown above everything else when withdrawals are blocked */}
+        {withdrawalBlocked && blockMsg && (
+          <div className="mb-4 flex items-start gap-2.5 rounded-xl border border-rose-500/30 bg-rose-500/[0.07] px-3.5 py-3 text-left">
+            <Lock className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <div className="text-[13px] font-semibold text-rose-300 leading-tight">{blockMsg.title}</div>
+              <div className="text-[11.5px] text-rose-200/70 mt-1 leading-snug">
+                {blockMsg.detail(secStatus)}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* KYC pill — shown above CTA when needed */}
         {!kycApproved && (
           <button
@@ -258,7 +306,7 @@ export default function WithdrawPage() {
         )}
 
         {/* Payout Method (INR) */}
-        {!isUsdt && kycApproved && (
+        {!isUsdt && kycApproved && !withdrawalBlocked && (
           <div className="mb-4">
             <div className="text-[13px] text-white/65 mb-2">Payout Method</div>
             <div className="space-y-2.5">
@@ -320,16 +368,23 @@ export default function WithdrawPage() {
         {isUsdt && (
           <button
             onClick={() => handleContinue()}
-            disabled={!kycApproved || !valid}
+            disabled={!kycApproved || !valid || withdrawalBlocked}
             className={cn(
               "w-full h-12 rounded-xl text-[13px] font-semibold flex items-center justify-center gap-2 transition-all",
               "disabled:opacity-40 disabled:cursor-not-allowed",
-              "bg-amber-400 hover:bg-amber-300 text-black shadow-[0_4px_18px_-4px_rgba(245,158,11,0.55)]"
+              withdrawalBlocked
+                ? "bg-rose-500/20 text-rose-300 border border-rose-500/30"
+                : "bg-amber-400 hover:bg-amber-300 text-black shadow-[0_4px_18px_-4px_rgba(245,158,11,0.55)]"
             )}
             data-testid="button-continue"
           >
-            {!kycApproved ? "Complete KYC to continue" : "Continue"}
-            {kycApproved && <ArrowRight className="w-3.5 h-3.5" />}
+            {withdrawalBlocked ? (
+              <><Lock className="w-3.5 h-3.5" /> Withdrawal Blocked</>
+            ) : !kycApproved ? (
+              "Complete KYC to continue"
+            ) : (
+              <>"Continue" <ArrowRight className="w-3.5 h-3.5" /></>
+            )}
           </button>
         )}
 
