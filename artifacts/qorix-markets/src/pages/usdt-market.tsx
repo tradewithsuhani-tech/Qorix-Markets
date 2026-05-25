@@ -35,6 +35,17 @@ interface OpenOrder {
   status: string;
 }
 
+interface HistoryOrder {
+  id: number;
+  direction: "buy" | "sell";
+  type: "market" | "limit";
+  usdt: number;
+  limitPrice: number | null;
+  status: string;
+  description: string | null;
+  createdAt: string;
+}
+
 // ─── Candle generation ─────────────────────────────────────────────────────────
 type Candle = { time: string; open: number; high: number; low: number; close: number };
 type BarDatum = {
@@ -207,6 +218,17 @@ export default function UsdtMarketPage() {
     },
     refetchInterval: 15_000,
   });
+
+  // Order history query (fetch when tab is active)
+  const { data: historyData, isLoading: historyLoading } = useQuery({
+    queryKey: ["usdt-market-history"],
+    queryFn: async () => {
+      const d = await apiFetch("/usdt-market/history") as any;
+      return d.history as HistoryOrder[];
+    },
+    enabled: openTab === "history",
+    staleTime: 30_000,
+  });
   const openOrders = openOrdersData ?? [];
 
   // Cancel order mutation
@@ -280,6 +302,7 @@ export default function UsdtMarketPage() {
 
       setAmount("");
       queryClient.invalidateQueries({ queryKey: getGetWalletQueryKey() });
+      queryClient.invalidateQueries({ queryKey: ["usdt-market-history"] });
       refetchOrders();
     } catch (err: any) {
       toast({ title: "Order failed", description: err.message ?? "Please try again.", variant: "destructive" });
@@ -646,15 +669,73 @@ export default function UsdtMarketPage() {
               </motion.div>
             ) : (
               <motion.div key="history" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                <div className="flex flex-col items-center justify-center py-10 text-muted-foreground gap-2">
-                  <CheckCircle2 className="w-8 h-8 opacity-30" />
-                  <p className="text-sm">View your full order history</p>
-                  <Link href="/transactions">
-                    <span className="text-xs text-amber-400 hover:text-amber-300 underline cursor-pointer transition-colors">
-                      Go to Transaction History →
-                    </span>
-                  </Link>
-                </div>
+                {historyLoading ? (
+                  <div className="flex items-center justify-center py-10">
+                    <RefreshCw className="w-5 h-5 text-muted-foreground animate-spin" />
+                  </div>
+                ) : !historyData || historyData.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-10 text-muted-foreground gap-2">
+                    <CheckCircle2 className="w-8 h-8 opacity-30" />
+                    <p className="text-sm">No order history yet</p>
+                    <p className="text-xs opacity-60">Your completed trades will appear here</p>
+                  </div>
+                ) : (
+                  <>
+                    {/* Column headers */}
+                    <div className="grid grid-cols-5 text-[10px] text-muted-foreground px-4 pt-3 pb-1">
+                      <span>Type</span>
+                      <span className="text-center">Amount</span>
+                      <span className="text-center">Price</span>
+                      <span className="text-center">Date & Time</span>
+                      <span className="text-right">Status</span>
+                    </div>
+                    {historyData.map(order => {
+                      // Parse executed price from description: "Bought 10.0000 USDT @ ₹98/USDT ..."
+                      const priceMatch = order.description?.match(/@ ₹([\d.]+)/);
+                      const execPrice = priceMatch ? parseFloat(priceMatch[1]) : order.limitPrice;
+                      const dt = new Date(order.createdAt);
+                      const dateStr = dt.toLocaleDateString([], { day: "numeric", month: "short" });
+                      const timeStr = dt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+                      const isFilled = order.status === "completed";
+                      const isCancelled = order.status === "rejected";
+                      return (
+                        <div key={order.id} className="grid grid-cols-5 items-center px-4 py-2.5 border-t border-white/5 text-xs hover:bg-white/[0.02] transition-colors">
+                          <div className="flex flex-col">
+                            <span className={`font-bold uppercase ${order.direction === "buy" ? "text-emerald-400" : "text-rose-400"}`}>
+                              {order.type === "limit" ? `Limit ${order.direction === "buy" ? "Buy" : "Sell"}` : order.direction === "buy" ? "Market Buy" : "Market Sell"}
+                            </span>
+                            <span className="text-muted-foreground text-[10px] capitalize">{order.type}</span>
+                          </div>
+                          <span className="text-center font-medium text-white tabular-nums">
+                            {order.usdt.toFixed(4)} USDT
+                          </span>
+                          <span className="text-center tabular-nums text-amber-300 font-medium">
+                            {execPrice ? `₹${execPrice.toFixed(2)}` : "—"}
+                          </span>
+                          <div className="flex flex-col items-center">
+                            <span className="text-white/70 tabular-nums">{dateStr}</span>
+                            <span className="text-muted-foreground text-[10px] tabular-nums">{timeStr}</span>
+                          </div>
+                          <div className="flex justify-end">
+                            {isFilled ? (
+                              <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 text-[10px] font-bold">
+                                <CheckCircle2 className="w-2.5 h-2.5" /> Filled
+                              </span>
+                            ) : isCancelled ? (
+                              <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/5 border border-white/10 text-muted-foreground text-[10px] font-bold">
+                                <X className="w-2.5 h-2.5" /> Cancelled
+                              </span>
+                            ) : (
+                              <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/25 text-amber-300 text-[10px] font-bold">
+                                <Clock className="w-2.5 h-2.5" /> Pending
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </>
+                )}
               </motion.div>
             )}
           </AnimatePresence>

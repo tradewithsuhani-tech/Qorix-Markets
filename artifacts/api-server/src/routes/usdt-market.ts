@@ -142,6 +142,46 @@ router.delete("/usdt-market/open-orders/:id", authMiddleware, async (req: AuthRe
   }
 });
 
+// ─── GET /api/usdt-market/history — completed orders ────────────────────────
+router.get("/usdt-market/history", authMiddleware, async (req: AuthRequest, res) => {
+  const userId = req.userId!;
+  try {
+    const rows = await db
+      .select()
+      .from(transactionsTable)
+      .where(
+        and(
+          eq(transactionsTable.userId, userId),
+          inArray(transactionsTable.type, ["usdt_buy", "usdt_sell", "usdt_limit_buy", "usdt_limit_sell"])
+        )
+      )
+      .orderBy(sql`${transactionsTable.createdAt} DESC`)
+      .limit(50);
+
+    const history = rows.map((r) => {
+      const isBuy = r.type === "usdt_buy" || r.type === "usdt_limit_buy";
+      const isLimit = r.type === "usdt_limit_buy" || r.type === "usdt_limit_sell";
+      const limitPrice = isLimit && r.walletAddress ? parseFloat(r.walletAddress) : null;
+      const usdt = parseFloat(r.amount as string);
+      return {
+        id: r.id,
+        direction: isBuy ? "buy" : "sell",
+        type: isLimit ? "limit" : "market",
+        usdt,
+        limitPrice,
+        status: r.status,
+        description: r.description,
+        createdAt: r.createdAt,
+      };
+    });
+
+    res.json({ history });
+  } catch (e) {
+    transactionLogger.error({ err: e, userId }, "usdt-market history fetch failed");
+    res.status(500).json({ error: "Failed to fetch history" });
+  }
+});
+
 // ─── POST /api/usdt-market/swap — authenticated ──────────────────────────────
 // Body: { direction: "buy"|"sell", amount: number (USDT), type: "market"|"limit", limitPrice?: number }
 // MARKET orders → execute immediately
