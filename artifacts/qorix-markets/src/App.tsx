@@ -39,6 +39,7 @@ const WithdrawOtpPage = lazy(() => import("@/pages/withdraw-otp"));
 const WithdrawSuccessPage = lazy(() => import("@/pages/withdraw-success"));
 const InvestPage = lazy(() => import("@/pages/invest"));
 const SelfTradePage = lazy(() => import("@/pages/self-trade"));
+const UsdtMarketPage = lazy(() => import("@/pages/usdt-market"));
 const PortfolioPage = lazy(() => import("@/pages/portfolio"));
 const TransactionsPage = lazy(() => import("@/pages/transactions"));
 const ReferralPage = lazy(() => import("@/pages/referral"));
@@ -412,6 +413,7 @@ function Router() {
       <Route path="/withdraw/success"><ProtectedRoute component={WithdrawSuccessPage} /></Route>
       <Route path="/invest"><ProtectedRoute component={InvestPage} /></Route>
       <Route path="/self-trade"><ProtectedRoute component={SelfTradePage} /></Route>
+      <Route path="/usdt-market"><ProtectedRoute component={UsdtMarketPage} /></Route>
       <Route path="/portfolio"><ProtectedRoute component={PortfolioPage} /></Route>
       <Route path="/transactions"><ProtectedRoute component={TransactionsPage} /></Route>
       <Route path="/referral"><ProtectedRoute component={ReferralPage} /></Route>
