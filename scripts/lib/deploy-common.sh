@@ -140,19 +140,14 @@ run_preflight_checks() {
       log_error "flyctl not found in PATH — cannot deploy to Fly.io"
       failed=1
     else
-      log_ok "flyctl $(flyctl version --json 2>/dev/null | node -e "let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{try{console.log(JSON.parse(d).Version||'?')}catch{console.log('?')}})" 2>/dev/null || echo '') — available'
+      log_ok "flyctl $(flyctl version 2>/dev/null | head -1 || echo '?') — available"
     fi
   fi
 
   # DB connectivity check
   if [[ "$mode" == "migrate" || "$mode" == "full" ]]; then
     log_info "Checking DB connectivity..."
-    if node -e "
-      import pg from 'pg';
-      const { Pool } = pg;
-      const pool = new Pool({ connectionString: process.env.DATABASE_URL, connectionTimeoutMillis: 8000, ssl: { rejectUnauthorized: false } });
-      pool.query('SELECT 1').then(() => { console.log('ok'); pool.end(); process.exit(0); }).catch(e => { console.error(e.message); process.exit(1); });
-    " --input-type=module 2>/dev/null; then
+    if PGCONNECT_TIMEOUT=8 psql "$DATABASE_URL" -c "SELECT 1" -q --no-psqlrc 2>/dev/null | grep -q "1 row"; then
       log_ok "Database — reachable"
     else
       log_error "Database not reachable — check NEON_DATABASE_URL / DATABASE_URL"
@@ -179,7 +174,7 @@ check_api_health() {
   while [ $attempt -lt $max_attempts ]; do
     attempt=$((attempt + 1))
     local status
-    status=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "$url" 2>/dev/null || echo "000")
+    status=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$url" 2>/dev/null || echo "000")
     if [ "$status" == "200" ]; then
       log_ok "API health check passed (HTTP 200)"
       return 0
@@ -199,7 +194,7 @@ check_web_health() {
   while [ $attempt -lt $max_attempts ]; do
     attempt=$((attempt + 1))
     local status
-    status=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "$url" 2>/dev/null || echo "000")
+    status=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$url" 2>/dev/null || echo "000")
     if [ "$status" == "200" ]; then
       log_ok "Web health check passed (HTTP 200)"
       return 0

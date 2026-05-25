@@ -75,6 +75,7 @@ if flyctl deploy \
   --config artifacts/qorix-markets/fly.toml \
   --dockerfile artifacts/qorix-markets/Dockerfile \
   --remote-only \
+  --depot=false \
   --strategy rolling \
   --wait-timeout 300 \
   --build-arg VITE_API_URL="https://api.qorixmarkets.com" \

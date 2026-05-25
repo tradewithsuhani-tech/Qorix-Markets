@@ -66,6 +66,7 @@ if flyctl deploy \
   --config artifacts/api-server/fly.toml \
   --dockerfile artifacts/api-server/Dockerfile \
   --remote-only \
+  --depot=false \
   --strategy rolling \
   --wait-timeout 300; then
   log_ok "API deployed to Fly.io"

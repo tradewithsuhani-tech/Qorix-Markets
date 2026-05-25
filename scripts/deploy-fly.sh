@@ -150,6 +150,7 @@ if flyctl deploy \
   --config artifacts/api-server/fly.toml \
   --dockerfile artifacts/api-server/Dockerfile \
   --remote-only \
+  --build-arg BUILD_TIME="$(date +%s)" \
   --strategy rolling \
   --wait-timeout 300; then
   log_ok "API server deployed"
@@ -187,7 +188,8 @@ fi
 if flyctl deploy \
   --config artifacts/qorix-markets/fly.toml \
   --dockerfile artifacts/qorix-markets/Dockerfile \
-  --remote-only \
+  --local-only \
+  --no-cache \
   --strategy rolling \
   --wait-timeout 300 \
   --build-arg VITE_API_URL="https://api.qorixmarkets.com" \

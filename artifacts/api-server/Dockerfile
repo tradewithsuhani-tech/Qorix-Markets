@@ -64,6 +64,11 @@ COPY --from=deploy /deploy ./
 
 EXPOSE 8080
 
+# Cache-bust arg — pass --build-arg BUILD_TIME=$(date +%s) to force a fresh
+# Depot build when the layer cache is stale (e.g. after a registry incident).
+ARG BUILD_TIME=0
+LABEL build_time="${BUILD_TIME}"
+
 # Healthcheck mirrors the Fly healthcheck on /api/healthz.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||8080)+'/api/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
