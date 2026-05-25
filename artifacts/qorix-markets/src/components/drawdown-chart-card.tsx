@@ -49,6 +49,8 @@ const CHART_DEFAULTS = {
       bodyColor: "#f1f5f9",
       padding: 10,
       cornerRadius: 10,
+      // Keep tooltip inside the canvas — never render it above the top edge
+      yAlign: "bottom" as const,
     },
   },
   scales: {
@@ -63,6 +65,9 @@ const CHART_DEFAULTS = {
       border: { display: false },
     },
   },
+  // Internal top padding so tooltip has room to render above data points
+  // without bleeding outside the canvas into sibling DOM elements
+  layout: { padding: { top: 44 } },
   responsive: true,
   maintainAspectRatio: false,
   interaction: { mode: "index" as const, intersect: false },
