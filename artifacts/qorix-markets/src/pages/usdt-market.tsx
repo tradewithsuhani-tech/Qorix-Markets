@@ -408,8 +408,8 @@ export default function UsdtMarketPage() {
             </div>
           </div>
 
-          {/* Order Book */}
-          <div className="rounded-2xl border border-white/8 bg-[#0a0d14] overflow-hidden flex flex-col">
+          {/* Order Book — desktop only (mobile sees it below the trading form) */}
+          <div className="hidden lg:flex flex-col rounded-2xl border border-white/8 bg-[#0a0d14] overflow-hidden">
             <div className="px-3 pt-3 pb-1 border-b border-white/5 shrink-0">
               <span className="text-[11px] font-bold text-white">Order Book</span>
             </div>
@@ -579,6 +579,38 @@ export default function UsdtMarketPage() {
             <p className="text-[10px] text-muted-foreground text-center">
               Internal market · Rate set by platform · Instant settlement
             </p>
+          </div>
+        </motion.div>
+
+        {/* ── Order Book — mobile only, appears after trading form ── */}
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.15 }}
+          className="lg:hidden rounded-2xl border border-white/8 bg-[#0a0d14] overflow-hidden"
+        >
+          <div className="px-3 pt-3 pb-1 border-b border-white/5">
+            <span className="text-[11px] font-bold text-white">Order Book</span>
+          </div>
+          <div className="flex text-[10px] text-muted-foreground px-2 pt-1.5 pb-0.5">
+            <span className="w-1/3">Price(₹)</span>
+            <span className="w-1/3 text-center">Qty(USDT)</span>
+            <span className="w-1/3 text-right">Total</span>
+          </div>
+          {/* Asks */}
+          <div className="flex flex-col">
+            {[...asks].slice(5).map((row, i) => <OrderBookRow key={i} row={row} side="ask" />)}
+          </div>
+          {/* Mid price */}
+          <div className={`flex items-center justify-between px-2 py-1.5 border-y border-white/8 ${isUp ? "bg-emerald-500/5" : "bg-rose-500/5"}`}>
+            <span className={`text-sm font-extrabold tabular-nums ${isUp ? "text-emerald-400" : "text-rose-400"}`}>
+              ₹{displayRate.toFixed(2)}
+            </span>
+            <span className="text-[10px] text-muted-foreground">≈ $1.000</span>
+          </div>
+          {/* Bids */}
+          <div className="flex flex-col">
+            {bids.slice(0, 5).map((row, i) => <OrderBookRow key={i} row={row} side="bid" />)}
           </div>
         </motion.div>
 
