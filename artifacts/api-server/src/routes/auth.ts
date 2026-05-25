@@ -124,6 +124,17 @@ router.post("/auth/register", async (req, res) => {
   // so all new rows are stored canonical.
   const email = rawEmail.toLowerCase().trim();
 
+  // ─── Block platform's own domain (prevents seed/demo account re-creation) ─
+  const emailDomain = email.split("@")[1] ?? "";
+  const PLATFORM_DOMAINS = ["qorix.markets", "qorixmarkets.com"];
+  if (PLATFORM_DOMAINS.includes(emailDomain)) {
+    res.status(400).json({
+      error: "Registration with this email domain is not allowed.",
+      code: "DOMAIN_NOT_ALLOWED",
+    });
+    return;
+  }
+
   // ─── Disposable / temporary email block (B27) ──────────────────────────
   // Block signups from known throwaway / public-inbox services
   // (mailinator, 10minutemail, guerrillamail, yopmail, tempmail, etc).
