@@ -8,6 +8,7 @@ import {
   ArrowRightLeft, Info, AlertCircle, Mail, ShieldCheck, X,
   CheckCircle2, Clock, Landmark, Eye, EyeOff, TrendingUp, TrendingDown,
   ChevronRight, ChevronDown, ArrowDownCircle, ArrowUpCircle, DollarSign,
+  RefreshCw,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
@@ -317,6 +318,11 @@ export default function WalletPage() {
               </motion.div>
             )}
           </AnimatePresence>
+        </motion.div>
+
+        {/* INR ↔ USDT Exchange Rate Widget */}
+        <motion.div variants={item}>
+          <InrUsdtRateWidget inrRate={FX_RATE} mainBalInr={mainBal} usdtBal={usdtBal} />
         </motion.div>
 
         {/* Transaction History */}
@@ -1060,6 +1066,160 @@ export default function WalletPage() {
         )}
       </AnimatePresence>
     </Layout>
+  );
+}
+
+/* ─────────────── INR ↔ USDT Exchange Rate Widget ─────────────── */
+
+function InrUsdtRateWidget({
+  inrRate,
+  mainBalInr,
+  usdtBal,
+}: {
+  inrRate: number;
+  mainBalInr: number;
+  usdtBal: number;
+}) {
+  const [inrInput, setInrInput] = useState("");
+  const [usdtInput, setUsdtInput] = useState("");
+  const [refreshed, setRefreshed] = useState(false);
+  const rate = inrRate > 0 ? inrRate : 99;
+
+  const handleInrChange = (val: string) => {
+    setInrInput(val);
+    setLastEdited("inr");
+    const n = parseFloat(val);
+    if (!isNaN(n) && n > 0) {
+      setUsdtInput((n / rate).toFixed(2));
+    } else {
+      setUsdtInput("");
+    }
+  };
+
+  const handleUsdtChange = (val: string) => {
+    setUsdtInput(val);
+    setLastEdited("usdt");
+    const n = parseFloat(val);
+    if (!isNaN(n) && n > 0) {
+      setInrInput((n * rate).toFixed(2));
+    } else {
+      setInrInput("");
+    }
+  };
+
+  const handleRefresh = () => {
+    setRefreshed(true);
+    setTimeout(() => setRefreshed(false), 1200);
+  };
+
+  const canBuyUsdt = mainBalInr > 0 ? (mainBalInr / rate).toFixed(2) : null;
+
+  return (
+    <div className="rounded-2xl border border-amber-500/15 bg-gradient-to-br from-amber-500/[0.05] to-orange-500/[0.03] p-4 relative overflow-hidden">
+      {/* Top accent line */}
+      <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-amber-500 to-orange-400 rounded-t-2xl" />
+
+      {/* Header */}
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <div className="w-7 h-7 rounded-lg bg-amber-500/15 border border-amber-400/25 flex items-center justify-center shrink-0">
+            <span className="text-[13px] font-bold text-amber-300">₹</span>
+          </div>
+          <div>
+            <div className="text-sm font-bold text-white">USDT Markets</div>
+            <div className="text-[10px] text-muted-foreground">INR ↔ USDT live rate</div>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {/* Live rate badge */}
+          <div className="flex items-center gap-1 px-2 py-1 rounded-lg bg-amber-500/10 border border-amber-500/20">
+            <span className="relative inline-flex w-1.5 h-1.5">
+              <span className="absolute inset-0 rounded-full bg-amber-400 opacity-60 animate-ping" />
+              <span className="relative w-1 h-1 m-auto rounded-full bg-amber-400" />
+            </span>
+            <span className="text-[10px] font-bold text-amber-300 tabular-nums">1 USDT = ₹{rate.toFixed(2)}</span>
+          </div>
+          <button
+            onClick={handleRefresh}
+            className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center hover:bg-white/10 transition-colors"
+            title="Rate is live"
+          >
+            <RefreshCw
+              className={`w-3 h-3 text-muted-foreground transition-transform ${refreshed ? "animate-spin" : ""}`}
+            />
+          </button>
+        </div>
+      </div>
+
+      {/* Converter */}
+      <div className="space-y-2">
+        {/* INR input */}
+        <div className="relative">
+          <div className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
+            <span className="text-sm font-bold text-emerald-400">₹</span>
+            <span className="text-[10px] text-muted-foreground font-semibold">INR</span>
+          </div>
+          <input
+            type="number"
+            value={inrInput}
+            onChange={(e) => handleInrChange(e.target.value)}
+            placeholder="Enter INR amount"
+            className="w-full pl-14 pr-16 py-2.5 rounded-xl bg-white/[0.04] border border-white/10 text-sm text-white placeholder:text-white/20 focus:outline-none focus:border-emerald-500/40 focus:bg-white/[0.06] transition-colors"
+          />
+          {mainBalInr > 0 && (
+            <button
+              onClick={() => handleInrChange(String(mainBalInr.toFixed(2)))}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-emerald-300 font-bold px-2 py-1 bg-emerald-500/10 rounded-lg hover:bg-emerald-500/20 transition"
+            >
+              MAX
+            </button>
+          )}
+        </div>
+
+        {/* Swap divider */}
+        <div className="flex items-center gap-2">
+          <div className="flex-1 h-px bg-white/8" />
+          <div className="w-6 h-6 rounded-full bg-amber-500/15 border border-amber-500/25 flex items-center justify-center shrink-0">
+            <ArrowRightLeft className="w-3 h-3 text-amber-400" />
+          </div>
+          <div className="flex-1 h-px bg-white/8" />
+        </div>
+
+        {/* USDT input */}
+        <div className="relative">
+          <div className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
+            <span className="text-sm font-bold text-amber-400">$</span>
+            <span className="text-[10px] text-muted-foreground font-semibold">USDT</span>
+          </div>
+          <input
+            type="number"
+            value={usdtInput}
+            onChange={(e) => handleUsdtChange(e.target.value)}
+            placeholder="Enter USDT amount"
+            className="w-full pl-16 pr-16 py-2.5 rounded-xl bg-white/[0.04] border border-white/10 text-sm text-white placeholder:text-white/20 focus:outline-none focus:border-amber-500/40 focus:bg-white/[0.06] transition-colors"
+          />
+          {usdtBal > 0 && (
+            <button
+              onClick={() => handleUsdtChange(String(usdtBal.toFixed(2)))}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-amber-300 font-bold px-2 py-1 bg-amber-500/10 rounded-lg hover:bg-amber-500/20 transition"
+            >
+              MAX
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Info strip */}
+      {canBuyUsdt && (
+        <div className="mt-3 flex items-center gap-2 px-3 py-2 rounded-xl bg-white/[0.03] border border-white/8 text-xs text-muted-foreground">
+          <Info style={{ width: 11, height: 11 }} className="text-amber-400 shrink-0" />
+          <span>
+            Your main balance (₹{mainBalInr.toLocaleString("en-IN", { maximumFractionDigits: 0 })}) ≈{" "}
+            <span className="text-amber-300 font-semibold">{canBuyUsdt} USDT</span> at today's rate
+          </span>
+        </div>
+      )}
+    </div>
   );
 }
 
