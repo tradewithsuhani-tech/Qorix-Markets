@@ -63,6 +63,7 @@ export default function WalletPage() {
   const [usePoints, setUsePoints] = useState(false);
   const [transferAmount, setTransferAmount] = useState("");
   const [transferDirection, setTransferDirection] = useState<"toTrading" | "toMain">("toTrading");
+  const [transferSource, setTransferSource] = useState<"usdt" | "main">("usdt");
   const userPoints = (wallet as any)?.points ?? 0;
 
   const [withdrawStep, setWithdrawStep] = useState<"form" | "review" | "otp" | "success">("form");
@@ -740,31 +741,83 @@ export default function WalletPage() {
           const fromIsMain = transferDirection === "toTrading";
           const deployedAmt = (investment?.isActive && !fromIsMain) ? (Number(investment.amount) || 0) : 0;
           const freeCapital = Math.max(0, tradingBal - deployedAmt);
-          // When going toMain with active investment, only free capital is transferable
-          const fromBal = fromIsMain ? mainBal : freeCapital;
-          const toBal = fromIsMain ? tradingBal : mainBal;
+          const hasActiveInv = !!investment?.isActive && !fromIsMain && deployedAmt > 0;
+
+          // Source-aware FROM balance & currency
+          // toTrading: source=usdt → usdtBal ($), source=main → mainBal (₹)
+          // toMain: always from tradingBal ($)
+          const isMainSrc = fromIsMain && transferSource === "main";
+          const isUsdtSrc = fromIsMain && transferSource === "usdt";
+          const fromBalRaw = fromIsMain
+            ? (transferSource === "usdt" ? usdtBal : mainBal)
+            : freeCapital;
+          // For "main" source the input is in INR, limit = mainBal (INR)
+          // For all other sources the input is in USDT
+          const inputIsInr = isMainSrc;
+          const fromBal = fromBalRaw; // always the natural unit for the source
           const numAmt = Number(transferAmount) || 0;
           const valid = numAmt > 0 && numAmt <= fromBal;
-          const hasActiveInv = !!investment?.isActive && !fromIsMain && deployedAmt > 0;
+
+          // Conversion preview
+          // isMainSrc: user enters ₹ → they'll receive USDT = INR / FX_RATE
+          // isUsdtSrc: user enters $ → 1:1
+          // toMain:    user enters $ → they'll receive ₹ = $ × FX_RATE
+          const usdtReceive = isMainSrc ? numAmt / FX_RATE : numAmt;
+          const inrReceive  = !fromIsMain ? numAmt * FX_RATE : 0;
+
           const swap = () => {
             setTransferDirection(fromIsMain ? "toMain" : "toTrading");
             setTransferAmount("");
           };
-          const inrEquiv = numAmt * FX_RATE;
+
+          // FROM card display amounts
+          const fromDisplayAmt = isMainSrc ? mainBal / FX_RATE : fromBal; // always in USD for card
+          const toDisplayAmt   = fromIsMain ? tradingBal : mainBal / FX_RATE;
+
           return (
             <div className="space-y-4 pb-2">
-              {/* FROM / TO cards with swap */}
+
+              {/* Source selector — only shown when going to_trading */}
+              {fromIsMain && (usdtBal > 0 || mainBal > 0) && (
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => { setTransferSource("usdt"); setTransferAmount(""); }}
+                    className={`flex-1 py-2 rounded-xl text-[12px] font-bold border transition-all ${
+                      transferSource === "usdt"
+                        ? "bg-emerald-500/15 border-emerald-400/50 text-emerald-300"
+                        : "bg-white/[0.03] border-white/10 text-white/50 hover:border-white/20"
+                    }`}
+                  >
+                    <div className="text-[10px] uppercase tracking-wider mb-0.5 opacity-70">From</div>
+                    USDT Wallet
+                    <div className="text-[11px] font-mono mt-0.5 opacity-80">${usdtBal.toFixed(2)}</div>
+                  </button>
+                  <button
+                    onClick={() => { setTransferSource("main"); setTransferAmount(""); }}
+                    className={`flex-1 py-2 rounded-xl text-[12px] font-bold border transition-all ${
+                      transferSource === "main"
+                        ? "bg-amber-500/15 border-amber-400/50 text-amber-300"
+                        : "bg-white/[0.03] border-white/10 text-white/50 hover:border-white/20"
+                    }`}
+                  >
+                    <div className="text-[10px] uppercase tracking-wider mb-0.5 opacity-70">From</div>
+                    Main (INR)
+                    <div className="text-[11px] font-mono mt-0.5 opacity-80">₹{Math.round(mainBal).toLocaleString("en-IN")}</div>
+                  </button>
+                </div>
+              )}
+
+              {/* FROM / TO wallet cards */}
               <div className="relative">
                 <WalletCard
                   badge="FROM"
                   badgeTone="emerald"
-                  icon={fromIsMain ? WalletIcon : TrendingUp}
-                  iconTone="emerald"
-                  name={fromIsMain ? "Main Wallet" : "Funding Wallet"}
-                  sub={fromIsMain ? "Withdrawable balance" : "Deployed capital"}
-                  amount={fromIsMain ? mainBal : tradingBal}
+                  icon={fromIsMain ? (isMainSrc ? WalletIcon : DollarSign) : TrendingUp}
+                  iconTone={isMainSrc ? "amber" : "emerald"}
+                  name={fromIsMain ? (isMainSrc ? "Main Wallet (INR)" : "USDT Wallet") : "Funding Wallet"}
+                  sub={fromIsMain ? (isMainSrc ? `₹${Math.round(mainBal).toLocaleString("en-IN")} available` : `$${usdtBal.toFixed(2)} available`) : "Deployed capital"}
+                  amount={fromDisplayAmt}
                 />
-                {/* Connecting line */}
                 <div className="relative h-7 flex items-center justify-center">
                   <div className="absolute inset-x-0 top-1/2 h-px bg-gradient-to-r from-transparent via-emerald-400/30 to-transparent" />
                   <button
@@ -780,10 +833,10 @@ export default function WalletPage() {
                   badgeTone="cyan"
                   icon={fromIsMain ? TrendingUp : WalletIcon}
                   iconTone="cyan"
-                  name={fromIsMain ? "Funding Wallet" : "Main Wallet"}
-                  sub={fromIsMain ? "Deployed capital" : "Withdrawable balance"}
-                  amount={toBal}
-                  incoming={numAmt}
+                  name={fromIsMain ? "Funding Wallet" : "Main Wallet (INR)"}
+                  sub={fromIsMain ? "Ready to trade" : "Withdrawable balance"}
+                  amount={toDisplayAmt}
+                  incoming={isMainSrc ? usdtReceive : (fromIsMain ? numAmt : inrReceive / FX_RATE)}
                 />
               </div>
 
@@ -807,15 +860,17 @@ export default function WalletPage() {
                 </div>
               )}
 
-              {/* Transfer amount */}
+              {/* Transfer amount input */}
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-[10px] font-bold tracking-[0.18em] text-white/45">TRANSFER AMOUNT</span>
+                  <span className="text-[10px] font-bold tracking-[0.18em] text-white/45">
+                    {inputIsInr ? "AMOUNT (INR ₹)" : "AMOUNT (USDT $)"}
+                  </span>
                   <button
-                    onClick={() => setTransferAmount(fromBal > 0 ? fromBal.toFixed(2) : "")}
+                    onClick={() => setTransferAmount(fromBal > 0 ? fromBal.toFixed(inputIsInr ? 0 : 2) : "")}
                     className="text-[10px] font-bold tracking-wide text-emerald-300 hover:text-emerald-200 px-2 py-0.5 rounded-md bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-400/30 transition-colors"
                   >
-                    MAX · ${fromBal.toFixed(2)}
+                    MAX · {inputIsInr ? `₹${Math.round(fromBal).toLocaleString("en-IN")}` : `$${fromBal.toFixed(2)}`}
                   </button>
                 </div>
                 <div
@@ -828,7 +883,9 @@ export default function WalletPage() {
                   }`}
                 >
                   <div className="px-3.5 py-2 flex items-center gap-2">
-                    <span className="text-[18px] font-semibold leading-none text-emerald-400 shrink-0 select-none">$</span>
+                    <span className={`text-[18px] font-semibold leading-none shrink-0 select-none ${inputIsInr ? "text-amber-400" : "text-emerald-400"}`}>
+                      {inputIsInr ? "₹" : "$"}
+                    </span>
                     <input
                       type="text"
                       inputMode="decimal"
@@ -843,11 +900,28 @@ export default function WalletPage() {
                     />
                     {numAmt > 0 && (
                       <span className="text-[11px] text-white/45 font-mono tabular-nums shrink-0">
-                        ≈ ₹{Math.round(inrEquiv).toLocaleString("en-IN")}
+                        {isMainSrc
+                          ? `≈ $${usdtReceive.toFixed(2)} USDT`
+                          : !fromIsMain
+                          ? `≈ ₹${Math.round(inrReceive).toLocaleString("en-IN")}`
+                          : `≈ ₹${Math.round(numAmt * FX_RATE).toLocaleString("en-IN")}`}
                       </span>
                     )}
                   </div>
                 </div>
+
+                {/* FX rate info row */}
+                {(isMainSrc || !fromIsMain) && numAmt > 0 && valid && (
+                  <div className="mt-2 flex items-center justify-between text-[11px] px-1">
+                    <span className="text-white/35">Rate: ₹1 = ${(1 / FX_RATE).toFixed(4)}</span>
+                    {isMainSrc ? (
+                      <span className="text-emerald-400 font-semibold">You receive ${usdtReceive.toFixed(4)} USDT</span>
+                    ) : (
+                      <span className="text-amber-400 font-semibold">You receive ₹{Math.round(inrReceive).toLocaleString("en-IN")}</span>
+                    )}
+                  </div>
+                )}
+
                 {numAmt > fromBal && (
                   <div className="mt-1.5 text-[11px] text-rose-400 flex items-center gap-1">
                     <AlertCircle className="w-3 h-3" />
@@ -855,6 +929,8 @@ export default function WalletPage() {
                       ? "No free capital — all funds are locked in your active strategy"
                       : hasActiveInv
                       ? `Only $${freeCapital.toFixed(2)} free capital available to transfer`
+                      : inputIsInr
+                      ? `Only ₹${Math.round(fromBal).toLocaleString("en-IN")} available`
                       : "Exceeds available balance"}
                   </div>
                 )}
@@ -865,10 +941,12 @@ export default function WalletPage() {
                 <Info className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
                 <p className="text-[12px] text-white/70 leading-relaxed">
                   {fromIsMain
-                    ? "Funds moved to Trading are deployed to your active bot in the next cycle."
+                    ? isMainSrc
+                      ? `Your INR balance converts to USDT at ₹1 = $${(1/FX_RATE).toFixed(4)} and is deployed to your funding wallet instantly.`
+                      : "USDT from your wallet moves 1:1 to your funding wallet. Ready to trade in the next cycle."
                     : hasActiveInv
                     ? "Only free capital (not deployed in bot) can be transferred. Stop the strategy to move all funds."
-                    : "Funds moved to Main are immediately available for withdrawal."}
+                    : `USDT converts to ₹ at the live rate and credited to your main wallet instantly.`}
                 </p>
               </div>
 
@@ -876,9 +954,11 @@ export default function WalletPage() {
               <button
                 onClick={() => transferMutation.mutate({
                   data: {
-                    amount: numAmt,
+                    // For INR source: send USDT target amount (inrAmt/FX_RATE); backend multiplies back by fxRate
+                    amount: isMainSrc ? usdtReceive : numAmt,
                     direction: fromIsMain ? "to_trading" : "to_main",
-                  },
+                    ...(fromIsMain ? { source: transferSource } : {}),
+                  } as any,
                 })}
                 disabled={transferMutation.isPending || !valid}
                 className={`w-full h-12 rounded-2xl text-[14px] font-bold flex items-center justify-center gap-2 transition-all ${
@@ -896,10 +976,20 @@ export default function WalletPage() {
                   "Enter Amount"
                 ) : !valid ? (
                   "Insufficient Balance"
+                ) : isMainSrc ? (
+                  <>
+                    <ArrowRightLeft style={{ width: 14, height: 14 }} strokeWidth={2.5} />
+                    Convert ₹{Math.round(numAmt).toLocaleString("en-IN")} → ${usdtReceive.toFixed(2)} USDT
+                  </>
+                ) : !fromIsMain ? (
+                  <>
+                    <ArrowRightLeft style={{ width: 14, height: 14 }} strokeWidth={2.5} />
+                    Convert ${numAmt.toFixed(2)} → ₹{Math.round(inrReceive).toLocaleString("en-IN")}
+                  </>
                 ) : (
                   <>
                     <ArrowRightLeft style={{ width: 14, height: 14 }} strokeWidth={2.5} />
-                    Transfer ${numAmt.toFixed(2)}
+                    Transfer ${numAmt.toFixed(2)} USDT
                   </>
                 )}
               </button>

@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, walletsTable, transactionsTable, investmentsTable, usersTable } from "@workspace/db";
+import { db, walletsTable, transactionsTable, investmentsTable, usersTable, systemSettingsTable } from "@workspace/db";
 import { eq, and, gte, sql, or } from "drizzle-orm";
 import { z } from "zod";
 import { authMiddleware, type AuthRequest } from "../middlewares/auth";
@@ -19,6 +19,19 @@ import { checkWithdrawDeviceCooldown } from "../lib/withdraw-device-cooldown";
 
 const router = Router();
 router.use(authMiddleware);
+
+const INR_RATE_KEY = "inr_to_usdt_rate";
+const DEFAULT_INR_RATE = 99;
+async function getInrRate(): Promise<number> {
+  const rows = await db.select().from(systemSettingsTable).where(eq(systemSettingsTable.key, INR_RATE_KEY)).limit(1);
+  const raw = rows[0]?.value ?? DEFAULT_INR_RATE.toString();
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : DEFAULT_INR_RATE;
+}
+
+const TransferBody = TransferToTradingBody.extend({
+  source: z.enum(["main", "usdt"]).optional().default("main"),
+});
 
 // Block real-money flows for the dedicated post-deploy smoke-test account so a
 // stray funded balance can never trigger a real journal entry, on-chain
@@ -618,7 +631,7 @@ router.post("/wallet/withdraw", async (req: AuthRequest, res) => {
 
 router.post("/wallet/transfer", async (req: AuthRequest, res) => {
  try {
-  const result = TransferToTradingBody.safeParse(req.body);
+  const result = TransferBody.safeParse(req.body);
   if (!result.success) {
     res.status(400).json({ error: "Invalid request" });
     return;
@@ -627,34 +640,13 @@ router.post("/wallet/transfer", async (req: AuthRequest, res) => {
   if (await blockSmokeTestRealMoney(req.userId!, res, "transfer")) return;
 
   const { amount } = result.data;
-  // Default to "to_trading" when omitted — preserves backward compatibility
-  // with legacy clients that called this endpoint before bidirectional
-  // transfers were introduced.
   const direction = result.data.direction ?? "to_trading";
+  // source: which wallet funds the trade deposit ("main"=INR legacy, "usdt"=USDT wallet)
+  // Only relevant for to_trading; to_main always targets mainBalance with FX conversion.
+  const source = result.data.source ?? "main";
 
-  // Direction-aware metadata. The actual balance check + arithmetic is done
-  // atomically inside the DB transaction below using a conditional UPDATE,
-  // so we no longer need to read the wallet here.
-  let txnDescription: string;
-  let debitAccountCode: string;
-  let creditAccountCode: string;
-  let debitDescription: string;
-  let creditDescription: string;
-  let logEvent: string;
-  let logMessage: string;
-
-  if (direction === "to_trading") {
-    txnDescription = `Transfer $${amount.toFixed(2)} to trading balance`;
-    debitAccountCode = `user:${req.userId!}:main`;
-    creditAccountCode = `user:${req.userId!}:trading`;
-    debitDescription = `Transfer out of main wallet`;
-    creditDescription = `Transfer into trading wallet`;
-    logEvent = "transfer_to_trading";
-    logMessage = "Transfer to trading balance completed";
-  } else {
-    // direction === "to_main" — reverse transfer (Trading → Main)
-    // Only the FREE portion of the trading balance (trading_balance − investment.amount)
-    // can be transferred while a strategy is active. The deployed capital stays locked.
+  // ── Guard: check free capital for to_main ──────────────────────────────
+  if (direction === "to_main") {
     const [activeInv] = await db
       .select({ id: investmentsTable.id, amount: investmentsTable.amount })
       .from(investmentsTable)
@@ -680,15 +672,68 @@ router.post("/wallet/transfer", async (req: AuthRequest, res) => {
         return;
       }
     }
+  }
 
-    txnDescription = `Transfer $${amount.toFixed(2)} to main balance`;
+  // ── FX rate (needed for INR↔USDT paths) ──────────────────────────────
+  const needsFx =
+    (direction === "to_trading" && source === "main") || direction === "to_main";
+  const fxRate = needsFx ? await getInrRate() : DEFAULT_INR_RATE;
+
+  // ── Compute exact DB amounts per path ─────────────────────────────────
+  //
+  // to_trading / source=usdt : usdtBalance  − amount  │ tradingBalance + amount     (1:1)
+  // to_trading / source=main : mainBalance  − inrAmt  │ tradingBalance + amount     (INR → USDT)
+  //                            where inrAmt = amount × fxRate  (frontend sends USDT target)
+  // to_main                  : tradingBalance − amount │ mainBalance   + inrAmt     (USDT → INR)
+  //                            where inrAmt = amount × fxRate
+  //
+  let inrAmount = 0;
+  if (direction === "to_trading" && source === "main") {
+    inrAmount = parseFloat((amount * fxRate).toFixed(8));
+  } else if (direction === "to_main") {
+    inrAmount = parseFloat((amount * fxRate).toFixed(8));
+  }
+
+  // Ledger entries always record the USDT-equivalent economic value
+  const ledgerAmount = amount;
+
+  // ── Metadata ──────────────────────────────────────────────────────────
+  let txnDescription: string;
+  let debitAccountCode: string;
+  let creditAccountCode: string;
+  let debitDescription: string;
+  let creditDescription: string;
+  let logEvent: string;
+  let logMessage: string;
+
+  if (direction === "to_trading") {
+    if (source === "usdt") {
+      txnDescription = `Transfer $${amount.toFixed(2)} USDT Wallet → Funding`;
+      debitAccountCode = `user:${req.userId!}:usdt`;
+      creditAccountCode = `user:${req.userId!}:trading`;
+      debitDescription = `Transfer out of USDT wallet`;
+      creditDescription = `Transfer into funding wallet`;
+    } else {
+      txnDescription = `Transfer ₹${Math.round(inrAmount)} → $${amount.toFixed(2)} to funding balance`;
+      debitAccountCode = `user:${req.userId!}:main`;
+      creditAccountCode = `user:${req.userId!}:trading`;
+      debitDescription = `INR transfer out of main wallet`;
+      creditDescription = `USDT transfer into funding wallet`;
+    }
+    logEvent = "transfer_to_trading";
+    logMessage = "Transfer to trading balance completed";
+  } else {
+    txnDescription = `Transfer $${amount.toFixed(2)} → ₹${Math.round(inrAmount)} to main balance`;
     debitAccountCode = `user:${req.userId!}:trading`;
     creditAccountCode = `user:${req.userId!}:main`;
-    debitDescription = `Transfer out of trading wallet`;
-    creditDescription = `Transfer into main wallet`;
+    debitDescription = `USDT transfer out of trading wallet`;
+    creditDescription = `INR transfer into main wallet`;
     logEvent = "transfer_to_main";
     logMessage = "Transfer to main balance completed";
   }
+
+  const amountStr = amount.toFixed(8);
+  const inrAmountStr = inrAmount.toFixed(8);
 
   let updated: typeof walletsTable.$inferSelect | undefined;
   try {
@@ -696,42 +741,44 @@ router.post("/wallet/transfer", async (req: AuthRequest, res) => {
       await ensureUserAccounts(req.userId!, tx);
 
       // Atomic conditional UPDATE — race-safe under concurrent transfers.
-      //
-      // The previous form read the wallet outside the tx, computed absolute
-      // newMain/newTrading values in JS, then wrote them back. Two concurrent
-      // transfers could each see the same starting balance, both pass the
-      // pre-check, and both write absolute values that overwrite each other —
-      // effectively letting the user double-spend. The ledger negative-balance
-      // guard would catch the second one and roll back, but only after both
-      // wallet writes had been queued.
-      //
-      // Doing the arithmetic in SQL with a `gte` guard in the WHERE clause
-      // makes the whole step row-locked + atomic: only one of the racing
-      // transactions sees the balance high enough to proceed, the other
-      // gets a 0-row return and we throw.
-      const amountStr = amount.toFixed(8);
-      const sourceBalanceCol =
-        direction === "to_trading" ? walletsTable.mainBalance : walletsTable.tradingBalance;
-      const updatedRows = await tx
-        .update(walletsTable)
-        .set(
-          direction === "to_trading"
-            ? {
-                mainBalance: sql`${walletsTable.mainBalance} - ${amountStr}::numeric`,
-                tradingBalance: sql`${walletsTable.tradingBalance} + ${amountStr}::numeric`,
-                updatedAt: new Date(),
-              }
-            : {
-                mainBalance: sql`${walletsTable.mainBalance} + ${amountStr}::numeric`,
-                tradingBalance: sql`${walletsTable.tradingBalance} - ${amountStr}::numeric`,
-                updatedAt: new Date(),
-              },
-        )
-        .where(and(eq(walletsTable.userId, req.userId!), gte(sourceBalanceCol, amountStr)))
-        .returning();
+      let updatedRows: (typeof walletsTable.$inferSelect)[];
+
+      if (direction === "to_trading" && source === "usdt") {
+        // USDT Wallet → Trading (1:1, no FX)
+        updatedRows = await tx
+          .update(walletsTable)
+          .set({
+            usdtBalance: sql`${walletsTable.usdtBalance} - ${amountStr}::numeric`,
+            tradingBalance: sql`${walletsTable.tradingBalance} + ${amountStr}::numeric`,
+            updatedAt: new Date(),
+          })
+          .where(and(eq(walletsTable.userId, req.userId!), gte(walletsTable.usdtBalance, amountStr)))
+          .returning();
+      } else if (direction === "to_trading" && source === "main") {
+        // Main (INR) → Trading (USDT): deduct INR, credit USDT
+        updatedRows = await tx
+          .update(walletsTable)
+          .set({
+            mainBalance: sql`${walletsTable.mainBalance} - ${inrAmountStr}::numeric`,
+            tradingBalance: sql`${walletsTable.tradingBalance} + ${amountStr}::numeric`,
+            updatedAt: new Date(),
+          })
+          .where(and(eq(walletsTable.userId, req.userId!), gte(walletsTable.mainBalance, inrAmountStr)))
+          .returning();
+      } else {
+        // Trading → Main (INR): deduct USDT from trading, credit INR to main
+        updatedRows = await tx
+          .update(walletsTable)
+          .set({
+            tradingBalance: sql`${walletsTable.tradingBalance} - ${amountStr}::numeric`,
+            mainBalance: sql`${walletsTable.mainBalance} + ${inrAmountStr}::numeric`,
+            updatedAt: new Date(),
+          })
+          .where(and(eq(walletsTable.userId, req.userId!), gte(walletsTable.tradingBalance, amountStr)))
+          .returning();
+      }
+
       if (updatedRows.length === 0) {
-        // Differentiate between "wallet missing" and "insufficient balance"
-        // by doing a follow-up read inside the same tx. Both cases roll back.
         const [exists] = await tx
           .select({ id: walletsTable.id })
           .from(walletsTable)
@@ -755,8 +802,8 @@ router.post("/wallet/transfer", async (req: AuthRequest, res) => {
       await postJournalEntry(
         journalForTransaction(txn!.id),
         [
-          { accountCode: debitAccountCode, entryType: "debit", amount, description: debitDescription },
-          { accountCode: creditAccountCode, entryType: "credit", amount, description: creditDescription },
+          { accountCode: debitAccountCode, entryType: "debit", amount: ledgerAmount, description: debitDescription },
+          { accountCode: creditAccountCode, entryType: "credit", amount: ledgerAmount, description: creditDescription },
         ],
         txn!.id,
         tx,
@@ -766,12 +813,11 @@ router.post("/wallet/transfer", async (req: AuthRequest, res) => {
     });
   } catch (err: any) {
     if (err?.message === "INSUFFICIENT_BALANCE") {
-      res.status(400).json({
-        error:
-          direction === "to_trading"
-            ? "Insufficient main balance"
-            : "Insufficient trading balance",
-      });
+      const srcLabel =
+        direction === "to_trading"
+          ? source === "usdt" ? "USDT wallet" : "main (INR) balance"
+          : "trading balance";
+      res.status(400).json({ error: `Insufficient ${srcLabel}` });
       return;
     }
     if (err?.message === "WALLET_NOT_FOUND") {
@@ -787,6 +833,9 @@ router.post("/wallet/transfer", async (req: AuthRequest, res) => {
       userId: req.userId!,
       amount,
       direction,
+      source,
+      fxRate: needsFx ? fxRate : undefined,
+      inrAmount: needsFx ? inrAmount : undefined,
       newMainBalance: parseFloat(updated!.mainBalance as string),
       newTradingBalance: parseFloat(updated!.tradingBalance as string),
     },
