@@ -9,7 +9,7 @@ import { trackLoginEvent, runFraudChecks } from "../lib/fraud-service";
 import { sendOtp, verifyOtp, getDevOtp, sendEmail, sendWelcomeEmail } from "../lib/email-service";
 import { trackLoginDevice } from "../lib/device-tracking";
 import { buildBrandedEmailHtml } from "../lib/email-template";
-import { verifyCaptcha } from "../lib/captcha-service";
+import { verifyCaptcha, isMobileRequest } from "../lib/captcha-service";
 import {
   signTwoFactorChallenge,
   verifyTwoFactorChallenge,
@@ -164,7 +164,10 @@ router.post("/auth/register", async (req, res) => {
   // for every mode and resets it on failed submit. Server enforcement
   // here matches /auth/login. Local/dev builds with no
   // RECAPTCHA_SECRET_KEY auto-skip via captcha-service.ts.
-  const captchaResult = await verifyCaptcha(req.body.captchaToken, ip);
+  // Mobile bypass: native apps (X-App-Platform + X-Device-Id) skip captcha.
+  const captchaResult = await verifyCaptcha(req.body.captchaToken, ip, {
+    isMobile: isMobileRequest(req.headers),
+  });
   if (!captchaResult.ok) {
     res.status(400).json({ error: captchaResult.error ?? "Captcha required" });
     return;
@@ -446,8 +449,11 @@ router.post("/auth/login", loginRateLimit, async (req, res) => {
   // body is `captchaToken` — the dispatcher hides which vendor verifies it.
   // Auto-skips if the active provider's secret is missing (dev escape
   // hatch); production always has the active secret set as a Fly app secret.
+  // Mobile bypass: native apps (X-App-Platform + X-Device-Id) skip captcha.
   const loginIp = normalizeIp(getClientIp(req));
-  const captchaResult = await verifyCaptcha(req.body.captchaToken, loginIp);
+  const captchaResult = await verifyCaptcha(req.body.captchaToken, loginIp, {
+    isMobile: isMobileRequest(req.headers),
+  });
   if (!captchaResult.ok) {
     res.status(400).json({ error: captchaResult.error ?? "Captcha required" });
     return;

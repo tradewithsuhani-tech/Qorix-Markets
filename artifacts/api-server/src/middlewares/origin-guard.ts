@@ -113,6 +113,23 @@ export function originGuard(req: Request, res: Response, next: NextFunction): vo
     return;
   }
 
+  // ─── NATIVE MOBILE CLIENT BYPASS ─────────────────────────────────────────
+  // Pre-login requests from native apps (Flutter / React Native) have no
+  // Bearer token yet and no browser Origin header — they cannot pass the
+  // stateless-bearer check below or the Origin check further down.
+  // Detection: X-App-Platform (android|ios) + X-Device-Id both present.
+  // Requiring two independent headers makes spoofing harder than a single
+  // header. CSRF is structurally impossible for native apps (no browser,
+  // no ambient cookies), so skipping the origin gate is safe. Rate-limiter
+  // (5 req/IP/min) + bcrypt + account-status gates remain active.
+  const appPlatform = String(req.headers["x-app-platform"] ?? "").toLowerCase().trim();
+  const deviceId = String(req.headers["x-device-id"] ?? "").trim();
+  const isNativeMobile = (appPlatform === "android" || appPlatform === "ios") && deviceId.length > 0;
+  if (isNativeMobile) {
+    next();
+    return;
+  }
+
   // ─── BL: STATELESS BEARER BYPASS (mobile / native clients) ───────────────
   // Origin + CSRF checks exist solely to defeat cross-site request forgery,
   // which is only possible when a browser ambiently attaches Cookies to a

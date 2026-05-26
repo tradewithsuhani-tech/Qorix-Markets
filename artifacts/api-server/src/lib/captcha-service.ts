@@ -98,6 +98,24 @@ function isRecaptchaEnabled(): boolean {
 }
 
 /**
+ * Returns true if the request originates from a native mobile client.
+ * Detection criteria: `X-App-Platform` header set to "android" or "ios"
+ * AND `X-Device-Id` header present (non-empty). Both headers must be
+ * present — requiring two independent headers makes it harder to spoof
+ * from a plain browser. Native Flutter / React Native clients set both
+ * automatically via the HTTP client interceptor.
+ *
+ * Used by verifyCaptcha() to skip the widget-based captcha flow for
+ * mobile logins/registrations. Mobile clients use device-level attestation
+ * (Play Integrity / DeviceCheck) instead of a visual CAPTCHA widget.
+ */
+export function isMobileRequest(headers: Record<string, string | string[] | undefined>): boolean {
+  const platform = String(headers["x-app-platform"] ?? "").toLowerCase().trim();
+  const deviceId = String(headers["x-device-id"] ?? "").trim();
+  return (platform === "android" || platform === "ios") && deviceId.length > 0;
+}
+
+/**
  * Provider-agnostic captcha verification. Routes to the active provider
  * based on `CAPTCHA_PROVIDER` (defaults to `recaptcha`). All callers in
  * `routes/auth.ts` (and any future risk-aware path) use this single entry
@@ -107,11 +125,24 @@ function isRecaptchaEnabled(): boolean {
  * The legacy local/dev bypass (skip when the active provider's secret is
  * not configured) is preserved per-provider so contributors can still run
  * the api-server locally without setting up either captcha vendor.
+ *
+ * Mobile bypass: if `options.isMobile` is true (caller detected
+ * X-App-Platform + X-Device-Id headers), captcha is skipped entirely.
+ * Native mobile clients cannot render a browser-based CAPTCHA widget.
  */
 export async function verifyCaptcha(
   token: string | undefined | null,
   ip: string | undefined,
+  options?: { isMobile?: boolean },
 ): Promise<{ ok: boolean; skipped?: boolean; error?: string }> {
+  // Native mobile clients (Flutter / React Native) cannot render a browser
+  // CAPTCHA widget — skip verification when the request is identified as
+  // coming from a trusted mobile client via X-App-Platform + X-Device-Id.
+  if (options?.isMobile) {
+    logger.debug("[captcha-service] skipping captcha for native mobile request");
+    return { ok: true, skipped: true };
+  }
+
   const provider = getCaptchaProvider();
   // `none` is the explicit dev/local opt-out — no token check, no upstream
   // round-trip, just pass through. Mirrors the `skipped: true` shape every
