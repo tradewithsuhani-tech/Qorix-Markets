@@ -637,7 +637,7 @@ export async function distributeAutoDailyProfit(): Promise<DistributeProfitResul
         pri.userId,
         "risk_level_changed",
         "✅ Risk Level Updated",
-        `Your risk level has been changed to ${levelLabel} as scheduled. Your trading will now follow the new risk settings.`,
+        `Your risk level has been updated to ${levelLabel} as scheduled.`,
       );
     }
 
