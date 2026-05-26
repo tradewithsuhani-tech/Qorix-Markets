@@ -113,6 +113,23 @@ security:
   - bearerAuth: []
 
 tags:
+  # ── v1 Mobile Layer tags ──────────────────────────────────────────────────
+  - name: v1-Auth
+    description: |
+      **Phase 1 Mobile** — Auth endpoints.
+      `POST /v1/auth/login` and `POST /v1/auth/refresh` are origin-guard exempt
+      for native mobile clients (no browser Origin before token issuance).
+  - name: v1-Portfolio
+    description: "**Phase 1 Mobile** — Portfolio snapshot (balances + investment state)."
+  - name: v1-Wallet
+    description: "**Phase 1 Mobile** — Wallet balance and transaction history. Write routes return 503 in Phase 1."
+  - name: v1-Markets
+    description: "**Phase 1 Mobile** — Public market ticker (USDT/INR + instruments) and simulated orderbook."
+  - name: v1-Bots
+    description: "**Phase 1 Mobile** — Bot signal trade list and per-pair performance summary."
+  - name: v1-Profile
+    description: "**Phase 1 Mobile** — Extended user profile with KYC, 2FA, referral and balance summary."
+  # ─────────────────────────────────────────────────────────────────────────
   - name: health
     description: Health operations
   - name: public
@@ -2745,6 +2762,548 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
+  # ══════════════════════════════════════════════════════════════════════════
+  # /api/v1 — Phase 1 Mobile Integration Layer
+  #
+  # Stable READ-ONLY versioned endpoints for native mobile (Flutter / React
+  # Native) and third-party integrations.  All responses use the v1 envelope:
+  #
+  #   Success:   { success: true,  data: {...},   meta: { version, requestId, timestamp } }
+  #   List:      { success: true,  data: [...],   pagination: { page, limit, total, totalPages }, meta }
+  #   Error:     { success: false, error: { code, message }, meta }
+  #
+  # Auth:  POST /v1/auth/login and POST /v1/auth/refresh are origin-guard
+  #        exempt (mobile clients have no browser Origin). All other write
+  #        routes return 503 phase_1_writes_disabled until ledger + withdrawal
+  #        hardening sprints pass QA.
+  # ══════════════════════════════════════════════════════════════════════════
+
+  /v1/auth/login:
+    post:
+      tags: [v1-Auth]
+      operationId: v1AuthLogin
+      summary: Mobile login
+      description: |
+        Exchange email + password for a 7-day Bearer JWT.
+        No captcha required — rate-limited at 5 req/IP/min (shared with the
+        main `/auth/login` bucket).
+
+        If the account has 2FA enabled, the response returns
+        `{ requires2FA: true }` — the client must complete the challenge via
+        `POST /api/auth/2fa/login-verify` and use that token instead.
+
+        Origin guard is **exempt** for this endpoint — mobile clients cannot
+        set a valid `Origin` header before obtaining a token.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: user@example.com
+                password:
+                  type: string
+                  format: password
+                  example: "MyS3cret!"
+            examples:
+              standard:
+                summary: Normal login
+                value: { email: "pravesh@example.com", password: "MyS3cret!" }
+      responses:
+        "200":
+          description: Login successful — Bearer token + user object
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/V1LoginResponse"
+              examples:
+                success:
+                  summary: Successful login
+                  value:
+                    success: true
+                    data:
+                      token: "eyJhbGci..."
+                      tokenType: "Bearer"
+                      expiresIn: 604800
+                      user:
+                        id: 117
+                        email: "pravesh@example.com"
+                        fullName: "Pravesh Kumar"
+                        kycStatus: "approved"
+                        emailVerified: true
+                        isAdmin: false
+                        isFrozen: false
+                        isDisabled: false
+                        referralCode: "QXC5168F43"
+                        points: 25
+                        createdAt: "2026-04-22T09:28:00.203Z"
+                    meta:
+                      version: "v1"
+                      requestId: "8ca07a202476a74f"
+                      timestamp: "2026-05-26T13:13:58.992Z"
+                requires2fa:
+                  summary: 2FA enabled — token not issued yet
+                  value:
+                    success: true
+                    data:
+                      requires2FA: true
+                      message: "Complete the 2FA flow via POST /api/auth/2fa/login-verify"
+                    meta:
+                      version: "v1"
+                      requestId: "abc123"
+                      timestamp: "2026-05-26T13:00:00.000Z"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              example:
+                success: false
+                error: { code: "validation_error", message: "email and password are required" }
+                meta: { version: "v1", requestId: "f848260705163877", timestamp: "2026-05-26T13:13:24.991Z" }
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              example:
+                success: false
+                error: { code: "invalid_credentials", message: "Email or password is incorrect" }
+                meta: { version: "v1", requestId: "f3f2c8b4e8c46adc", timestamp: "2026-05-26T13:13:25.265Z" }
+        "403":
+          description: Account disabled, frozen, or email not verified
+          content:
+            application/json:
+              examples:
+                disabled:
+                  value:
+                    success: false
+                    error: { code: "account_disabled", message: "This account has been disabled. Contact support." }
+                    meta: { version: "v1", requestId: "...", timestamp: "..." }
+                emailNotVerified:
+                  value:
+                    success: false
+                    error: { code: "email_not_verified", message: "Please verify your email before logging in." }
+                    meta: { version: "v1", requestId: "...", timestamp: "..." }
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /v1/auth/refresh:
+    post:
+      tags: [v1-Auth]
+      operationId: v1AuthRefresh
+      summary: Rotate JWT (token refresh)
+      description: |
+        Exchange a valid (non-expired) Bearer JWT for a new one with a fresh
+        7-day expiry. Call this on app resume or when the token has ≤ 24h
+        remaining.
+
+        **Note:** This is token *rotation*, not a true refresh-token flow.
+        The client must call before expiry — an expired token will return 401
+        and require re-authentication via `POST /v1/auth/login`.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: New token issued
+          content:
+            application/json:
+              example:
+                success: true
+                data:
+                  token: "eyJhbGci...newtoken"
+                  tokenType: "Bearer"
+                  expiresIn: 604800
+                  user: { id: 117, email: "pravesh@example.com", fullName: "Pravesh Kumar" }
+                meta: { version: "v1", requestId: "abc123", timestamp: "2026-05-26T13:00:00.000Z" }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /v1/auth/me:
+    get:
+      tags: [v1-Auth]
+      operationId: v1AuthMe
+      summary: Current user (minimal profile)
+      description: Returns the authenticated user's core profile fields.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: User profile
+          content:
+            application/json:
+              example:
+                success: true
+                data:
+                  id: 117
+                  email: "looxprem@gmail.com"
+                  fullName: "PRAVESH KUMAR"
+                  kycStatus: "approved"
+                  emailVerified: true
+                  isAdmin: false
+                  isFrozen: false
+                  isDisabled: false
+                  referralCode: "QXC5168F43"
+                  points: 25
+                  createdAt: "2026-04-22T09:28:00.203Z"
+                meta: { version: "v1", requestId: "8ca07a202476a74f", timestamp: "2026-05-26T13:13:58.992Z" }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /v1/portfolio/summary:
+    get:
+      tags: [v1-Portfolio]
+      operationId: v1PortfolioSummary
+      summary: Portfolio snapshot (balances + investment)
+      description: |
+        Consolidated portfolio snapshot for the dashboard home screen.
+        Returns wallet balances across all sub-accounts and the active
+        investment state in one round-trip.
+
+        All amounts are in **USDT**.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Portfolio summary
+          content:
+            application/json:
+              example:
+                success: true
+                data:
+                  balances:
+                    total: 36904.423615
+                    main: 28063.734896
+                    trading: 678.529593
+                    profit: 8162.159126
+                    usdt: 0.0
+                    currency: "USDT"
+                  investment:
+                    id: 120
+                    isActive: true
+                    isPaused: false
+                    amount: 0.52
+                    riskLevel: "high"
+                    drawdownLimit: 3.0
+                    totalProfit: 2.870552
+                    dailyProfit: 0.001981
+                    drawdown: 0.0
+                    autoCompound: false
+                    startedAt: "2026-05-18T19:51:44.582Z"
+                    stoppedAt: null
+                    pausedAt: null
+                  hasActiveInvestment: true
+                meta: { version: "v1", requestId: "bc6f901bfd816913", timestamp: "2026-05-26T13:16:52.229Z" }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /v1/wallet/balance:
+    get:
+      tags: [v1-Wallet]
+      operationId: v1WalletBalance
+      summary: Wallet balances by sub-account
+      description: |
+        Returns current balances across the four wallet sub-accounts.
+        For a combined view that also includes investment state, prefer
+        `GET /v1/portfolio/summary`.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Wallet balances
+          content:
+            application/json:
+              example:
+                success: true
+                data:
+                  mainBalance: 28063.734896
+                  tradingBalance: 678.529593
+                  profitBalance: 8162.159126
+                  usdtBalance: 0.0
+                  currency: "USDT"
+                  updatedAt: "2026-05-26T00:05:18.305Z"
+                meta: { version: "v1", requestId: "776d2e59fc23e881", timestamp: "2026-05-26T13:13:59.920Z" }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /v1/wallet/history:
+    get:
+      tags: [v1-Wallet]
+      operationId: v1WalletHistory
+      summary: Transaction history (paginated)
+      description: |
+        Returns the calling user's transaction ledger ordered by `createdAt`
+        descending. Supports optional `type` filter.
+
+        **Transaction types:**
+        | type | description |
+        |---|---|
+        | `deposit` | USDT TRC20 deposit credited to main balance |
+        | `withdrawal` | USDT TRC20 withdrawal from main balance |
+        | `inr_withdrawal` | INR bank/UPI withdrawal |
+        | `transfer` | Internal transfer between sub-wallets |
+        | `profit` | Daily bot profit credit |
+        | `fee` | Withdrawal fee charged |
+        | `referral_bonus` | Sponsor commission credit |
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: page
+          schema: { type: integer, minimum: 1, default: 1 }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+        - in: query
+          name: type
+          schema:
+            type: string
+            enum: [deposit, withdrawal, inr_withdrawal, transfer, profit, fee, referral_bonus]
+          description: Filter by transaction type
+      responses:
+        "200":
+          description: Paginated transaction list
+          content:
+            application/json:
+              example:
+                success: true
+                data:
+                  - id: 2337
+                    type: "referral_bonus"
+                    amount: 3.331953
+                    status: "completed"
+                    description: "Referral commission: 10% of partner's daily profit"
+                    walletAddress: null
+                    createdAt: "2026-05-26T00:05:00.328Z"
+                pagination:
+                  page: 1
+                  limit: 20
+                  total: 125
+                  totalPages: 7
+                meta: { version: "v1", requestId: "687fbe7b77fd979c", timestamp: "2026-05-26T13:14:00.256Z" }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /v1/markets/ticker:
+    get:
+      tags: [v1-Markets]
+      operationId: v1MarketsTicker
+      summary: Combined market ticker
+      description: |
+        Returns the platform USDT/INR rate and live quotes for the four
+        bot-terminal instruments (XAUUSD, EURUSD, BTCUSD, USOIL).
+
+        **Public endpoint** — no auth required.
+
+        Recommended poll interval: **2–3 seconds** for the ticker widget.
+        `Cache-Control: no-store` is set — do not cache this response.
+      security: []
+      responses:
+        "200":
+          description: Combined ticker
+          content:
+            application/json:
+              example:
+                success: true
+                data:
+                  usdtInr:
+                    rate: 98
+                    lastPrice: 97.92
+                    high24h: 99.86
+                    low24h: 96.24
+                    change24hPct: -0.0816
+                    currency: "INR"
+                    asOf: "2026-05-26T13:13:25.925Z"
+                  instruments:
+                    - symbol: "XAUUSD"
+                      bid: 2345.12
+                      ask: 2345.52
+                      mid: 2345.32
+                      spread: 0.4
+                      change: null
+                      changePct: null
+                      asOf: "2026-05-26T13:13:25.000Z"
+                  forexMarketOpen: true
+                meta: { version: "v1", requestId: "f6a322507931fc91", timestamp: "2026-05-26T13:13:25.925Z" }
+
+  /v1/markets/orderbook:
+    get:
+      tags: [v1-Markets]
+      operationId: v1MarketsOrderbook
+      summary: Simulated USDT/INR orderbook
+      description: |
+        Returns a simulated limit orderbook for the USDT/INR internal market.
+        Depth levels are constructed around the current mid price with
+        realistic tapering quantity — suitable for displaying a market depth
+        chart in the mobile app.
+
+        **Public endpoint** — no auth required.
+
+        **Note:** This is NOT a real exchange orderbook. The platform operates
+        a single admin-set USDT/INR rate with ±0.1% jitter; the orderbook is
+        a visual representation of that market.
+      security: []
+      parameters:
+        - in: query
+          name: depth
+          schema: { type: integer, minimum: 1, maximum: 20, default: 10 }
+          description: Number of price levels on each side (bid + ask)
+      responses:
+        "200":
+          description: Orderbook snapshot
+          content:
+            application/json:
+              example:
+                success: true
+                data:
+                  symbol: "USDT/INR"
+                  mid: 98
+                  spread: 0.1
+                  bids:
+                    - { price: 97.95, quantity: 5052.12, total: 5052.12 }
+                    - { price: 97.9,  quantity: 4556.51, total: 9608.63 }
+                    - { price: 97.85, quantity: 4201.84, total: 13810.47 }
+                  asks:
+                    - { price: 98.05, quantity: 4987.33, total: 4987.33 }
+                    - { price: 98.1,  quantity: 4321.11, total: 9308.44 }
+                    - { price: 98.15, quantity: 3955.09, total: 13263.53 }
+                  note: "Simulated orderbook — reflects platform USDT/INR swap market depth."
+                  asOf: "2026-05-26T13:13:26.132Z"
+                meta: { version: "v1", requestId: "cff7adec3643a0b3", timestamp: "2026-05-26T13:13:26.132Z" }
+
+  /v1/bots/list:
+    get:
+      tags: [v1-Bots]
+      operationId: v1BotsList
+      summary: Platform bot signal trades
+      description: |
+        Lists platform-level bot signal trades — open positions and all
+        trades closed since UTC midnight. Includes the calling user's
+        profit distribution share from today.
+
+        Each signal trade is a **platform-wide** position opened by an admin.
+        Profits are distributed proportionally to all active investors when
+        the trade closes.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Open and closed signal trades
+          content:
+            application/json:
+              example:
+                success: true
+                data:
+                  open:
+                    - id: 42
+                      pair: "XAUUSD"
+                      direction: "BUY"
+                      entryPrice: 2345.12
+                      tpPrice: 2360.0
+                      slPrice: 2330.0
+                      expectedProfitPercent: 0.64
+                      livePnlPct: 0.21
+                      openedAt: "2026-05-26T09:00:00.000Z"
+                  closedToday: []
+                  userToday:
+                    distributionsCount: 0
+                    totalProfit: 0
+                  summary:
+                    openCount: 25
+                    closedTodayCount: 0
+                    closedTodayPctSum: 0
+                  market:
+                    forexOpen: true
+                    cryptoOpen: true
+                  botEnabled: true
+                meta: { version: "v1", requestId: "881f7667fbe2d010", timestamp: "2026-05-26T13:14:04.389Z" }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /v1/bots/performance:
+    get:
+      tags: [v1-Bots]
+      operationId: v1BotsPerformance
+      summary: Bot performance by pair (today)
+      description: |
+        Aggregated bot plan execution stats and per-pair win/loss breakdown
+        for today (UTC). Shaped for a performance dashboard card.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Bot performance summary
+          content:
+            application/json:
+              example:
+                success: true
+                data:
+                  bot:
+                    enabled: true
+                    plan:
+                      dayKey: "2026-05-26"
+                      plan: null
+                  today:
+                    tradesOpen: 25
+                    tradesClosed: 0
+                    totalTrades: 25
+                    totalProfitPct: 0
+                  byPair: []
+                  market:
+                    forexOpen: true
+                    cryptoOpen: true
+                  userToday:
+                    distributionsCount: 0
+                    totalProfit: 0
+                meta: { version: "v1", requestId: "e3874e8e3c4e6c64", timestamp: "2026-05-26T13:14:04.729Z" }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /v1/user/profile:
+    get:
+      tags: [v1-Profile]
+      operationId: v1UserProfile
+      summary: Extended user profile
+      description: |
+        Full user profile including KYC status, referral code, 2FA flag,
+        and a balance summary across all sub-accounts.
+
+        Safe for client-side caching with a TTL of **30 seconds**.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Full user profile
+          content:
+            application/json:
+              example:
+                success: true
+                data:
+                  id: 117
+                  email: "looxprem@gmail.com"
+                  fullName: "PRAVESH KUMAR"
+                  phone: null
+                  kycStatus: "approved"
+                  emailVerified: true
+                  twoFactorEnabled: false
+                  referralCode: "QXC5168F43"
+                  points: 25
+                  isAdmin: false
+                  isFrozen: false
+                  createdAt: "2026-04-22T09:28:00.203Z"
+                  balanceSummary:
+                    main: 28063.734896
+                    trading: 678.529593
+                    profit: 8162.159126
+                    usdt: 0.0
+                meta: { version: "v1", requestId: "e4de99a69ad085fa", timestamp: "2026-05-26T13:14:05.320Z" }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -2795,6 +3354,108 @@ components:
             message: "Rate limit exceeded. Try again in 60 seconds."
 
   schemas:
+    # ── v1 Mobile Layer schemas ──────────────────────────────────────────────
+    V1Meta:
+      type: object
+      description: Standard v1 response metadata attached to every response.
+      properties:
+        version:
+          type: string
+          example: "v1"
+        requestId:
+          type: string
+          example: "8ca07a202476a74f"
+        timestamp:
+          type: string
+          format: date-time
+      required: [version, requestId, timestamp]
+
+    V1UserMin:
+      type: object
+      description: Minimal user object returned in auth responses.
+      properties:
+        id: { type: integer, example: 117 }
+        email: { type: string, format: email, example: "pravesh@example.com" }
+        fullName: { type: string, example: "Pravesh Kumar" }
+        kycStatus: { type: string, enum: [not_submitted, pending, approved, rejected] }
+        emailVerified: { type: boolean }
+        isAdmin: { type: boolean }
+        isFrozen: { type: boolean }
+        isDisabled: { type: boolean }
+        referralCode: { type: string, example: "QXC5168F43" }
+        points: { type: integer }
+        createdAt: { type: string, format: date-time }
+      required: [id, email, fullName, kycStatus, emailVerified, isAdmin, isFrozen, isDisabled, referralCode, points, createdAt]
+
+    V1LoginResponse:
+      type: object
+      description: Successful login envelope.
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          oneOf:
+            - description: Token issued successfully
+              type: object
+              properties:
+                token:
+                  type: string
+                  description: "7-day Bearer JWT. Pass as: Authorization: Bearer <token>"
+                tokenType:
+                  type: string
+                  example: "Bearer"
+                expiresIn:
+                  type: integer
+                  example: 604800
+                  description: Seconds until expiry (7 days = 604800)
+                user:
+                  $ref: "#/components/schemas/V1UserMin"
+            - description: 2FA required — token not yet issued
+              type: object
+              properties:
+                requires2FA:
+                  type: boolean
+                  example: true
+                message:
+                  type: string
+        meta:
+          $ref: "#/components/schemas/V1Meta"
+
+    V1ErrorResponse:
+      type: object
+      description: Standard v1 error envelope.
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              description: Machine-readable snake_case error code
+              example: "invalid_credentials"
+            message:
+              type: string
+              description: Human-readable description
+              example: "Email or password is incorrect"
+          required: [code, message]
+        meta:
+          $ref: "#/components/schemas/V1Meta"
+      required: [success, error, meta]
+
+    V1Pagination:
+      type: object
+      description: Pagination block returned on list responses.
+      properties:
+        page: { type: integer, example: 1 }
+        limit: { type: integer, example: 20 }
+        total: { type: integer, example: 125 }
+        totalPages: { type: integer, example: 7 }
+      required: [page, limit, total, totalPages]
+    # ─────────────────────────────────────────────────────────────────────────
+
     DemoStatus:
       type: object
       properties:

@@ -60,6 +60,17 @@ const PATH_EXEMPTIONS = new Set([
   // because it only resets the demo account, never touches real user data.
   "/demo/reset",
   "/demo/status",
+  // Phase 1 mobile /api/v1 auth endpoints — exempt because native mobile
+  // clients cannot set a valid browser Origin header pre-login (they have
+  // no token yet so the stateless-Bearer bypass above doesn't apply either).
+  // Protection is: shared Redis rate-limiter (5 req/IP/min), bcrypt
+  // credential check, and explicit account-status gates. The CSRF threat
+  // model (browser tab riding ambient cookies) doesn't apply to native apps.
+  "/v1/auth/login",
+  "/v1/auth/refresh",
+  // Absolute forms (if middleware is ever remounted at root):
+  "/api/v1/auth/login",
+  "/api/v1/auth/refresh",
   // Absolute (matches req.path if remounted at root):
   "/api/healthz",
   "/api/worker-healthz",

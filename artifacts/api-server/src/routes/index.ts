@@ -50,6 +50,7 @@ import usdtMarketRouter from "./usdt-market";
 // the same router; mounting once here keeps wiring stable.
 import botTradingRouter from "./bot-trading";
 import demoRouter from "./demo";
+import v1Router from "./v1";
 
 const router: IRouter = Router();
 
@@ -72,6 +73,12 @@ router.use(demoRouter);
 // per-user endpoints on the same router will gate auth at the
 // route level so /quotes stays publicly reachable.
 router.use(botTradingRouter);
+// Phase 1 mobile /api/v1 versioned layer. Contains both public endpoints
+// (POST /v1/auth/login, GET /v1/markets/ticker, GET /v1/markets/orderbook)
+// and per-route auth-gated endpoints. Must be in this public block so the
+// public sub-routes are reachable before any router-level authMiddleware
+// further down intercepts the request.
+router.use(v1Router);
 // Slider captcha (B9.1) — fully public; both endpoints
 // (POST /captcha/slider/challenge, /verify) need to be reachable
 // PRE-auth so signup/login forms can solve the puzzle before they
