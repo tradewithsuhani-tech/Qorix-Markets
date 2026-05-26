@@ -12,6 +12,7 @@ export type NotificationType =
   | "referral_bonus"
   | "milestone"
   | "p2p_order"
+  | "risk_level_changed"
   | "system";
 
 // Optional executor lets callers pass a transaction handle (`tx`) so the
