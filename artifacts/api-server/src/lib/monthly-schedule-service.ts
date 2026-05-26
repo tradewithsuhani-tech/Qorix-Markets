@@ -251,10 +251,20 @@ export async function getMonthSchedule(yearMonth: string) {
 /**
  * Ensure schedules exist for the current month (and next month if we're in
  * the last week). Called at server startup and by the monthly cron.
+ *
+ * Completeness check: a full schedule has 3 risk levels × N trading days rows.
+ * If the DB has fewer rows than expected (e.g. partial generation or a new
+ * risk bucket added) we re-run generateAllRiskSchedules which is idempotent
+ * (onConflictDoNothing) and fills in only the missing rows.
  */
 export async function ensureCurrentMonthSchedules(): Promise<void> {
   const now = new Date();
   const yearMonth = now.toISOString().slice(0, 7)!;
+
+  const tradingDays = tradingDaysForMonth(yearMonth);
+  const expectedRows = 3 * tradingDays.length; // low + medium + high
+
+  if (expectedRows === 0) return;
 
   const existing = await db
     .select({ id: sql<number>`count(*)` })
@@ -262,8 +272,11 @@ export async function ensureCurrentMonthSchedules(): Promise<void> {
     .where(eq(dailyRateScheduleTable.yearMonth, yearMonth));
 
   const count = Number(existing[0]?.id ?? 0);
-  if (count > 0) return; // already generated
+  if (count >= expectedRows) return; // all rows present — nothing to do
 
-  logger.info({ yearMonth }, "Startup: generating missing monthly rate schedules");
+  logger.info(
+    { yearMonth, count, expectedRows },
+    "Startup: generating missing monthly rate schedules (incomplete or absent)",
+  );
   await generateAllRiskSchedules(yearMonth);
 }

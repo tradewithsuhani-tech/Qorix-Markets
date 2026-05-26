@@ -5,9 +5,8 @@ import {
 } from "@workspace/db/schema";
 import { and, eq, isNull, lt, sql } from "drizzle-orm";
 import { logger, profitLogger, errorLogger } from "./logger";
-import { getLastDailyProfitPercent, sweepSignalProfitsToProfitWallet, distributeAutoDailyProfit } from "./profit-service";
+import { sweepSignalProfitsToProfitWallet, distributeAutoDailyProfit } from "./profit-service";
 import { generateAllRiskSchedules, ensureCurrentMonthSchedules } from "./monthly-schedule-service";
-import { emitProfitDistribution } from "./event-bus";
 import { tickAutoSignalEngine, closeMaturedAutoTrades, rehydrateAutoEngineState } from "./auto-signal-engine";
 import { runEscalationTick } from "./escalation-cron";
 import { chatFollowupTick } from "../workers/chat-followup-worker";
@@ -37,19 +36,12 @@ async function expireStalePromoRedemptions(): Promise<number> {
 export async function initCronJobs(): Promise<void> {
   // Auto daily profit accrual — runs every weekday (Mon–Fri) at 00:05 UTC
   // (5 min past midnight avoids node-cron "missed execution" at boundary).
-  // Credits each active investment its per-risk monthly target / 21
-  // working days (Conservative 4%, Balanced 6%, Aggressive 8%). No admin
-  // input required. If an admin override % is configured we still honour
-  // it via the legacy distribute path; otherwise auto-credit kicks in.
+  // Credits each active investment its pre-seeded NAV daily rate for that
+  // risk bucket. The NAV engine is always authoritative — no admin override
+  // bypass in this path (monthly targets are set via /admin/roi-schedule).
   cron.schedule("5 0 * * 1-5", async () => {
     profitLogger.info("Cron: daily profit accrual — starting");
     try {
-      const adminPct = await getLastDailyProfitPercent();
-      if (adminPct !== 0) {
-        await emitProfitDistribution({ profitPercent: adminPct, triggeredBy: "cron" });
-        profitLogger.info({ profitPercent: adminPct }, "Cron: admin-overridden profit distribution enqueued");
-        return;
-      }
       const result = await distributeAutoDailyProfit();
       profitLogger.info(result, "Cron: auto daily profit accrual complete");
     } catch (err) {
@@ -251,12 +243,6 @@ async function catchUpTodaysProfitIfMissed(): Promise<void> {
     }
 
     profitLogger.info({ runDate: todayStr }, "Startup catch-up: today's profit was missed — distributing now");
-    const adminPct = await getLastDailyProfitPercent();
-    if (adminPct !== 0) {
-      await emitProfitDistribution({ profitPercent: adminPct, triggeredBy: "cron" });
-      profitLogger.info({ profitPercent: adminPct }, "Startup catch-up: admin-overridden profit enqueued");
-      return;
-    }
     const result = await distributeAutoDailyProfit();
     profitLogger.info(result, "Startup catch-up: auto daily profit distribution complete");
   } catch (err) {

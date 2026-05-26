@@ -289,9 +289,11 @@ router.post("/investment/topup", async (req: AuthRequest, res) => {
 
   const tradingBalance = parseFloat(wallet.tradingBalance as string);
   const currentAmount = parseFloat(inv.amount as string);
+  const existingPending = parseFloat(inv.navPendingAdd as string) || 0;
 
-  // Available = total trading pool minus already-deployed investment amount
-  const available = tradingBalance - currentAmount;
+  // Available = trading pool minus already-deployed capital AND already-queued pending additions.
+  // Both currentAmount and existingPending are committed slices of the pool.
+  const available = tradingBalance - currentAmount - existingPending;
   if (amount > available || available <= 0) {
     res.status(400).json({ error: "Insufficient available trading balance" });
     return;
@@ -301,7 +303,6 @@ router.post("/investment/topup", async (req: AuthRequest, res) => {
   // affect today's snapshot if today's profit run hasn't fired yet.
   // We accumulate into navPendingAdd (in case of multiple same-day top-ups).
   const todayStr = new Date().toISOString().split("T")[0]!;
-  const existingPending = parseFloat(inv.navPendingAdd as string) || 0;
   const newPending = existingPending + amount;
 
   const currentPeak = parseFloat(inv.peakBalance as string);
