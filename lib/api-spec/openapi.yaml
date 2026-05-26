@@ -2,38 +2,188 @@ openapi: 3.1.0
 info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
-  version: 0.1.0
-  description: Qorix Markets API specification
+  version: 2.0.0
+  description: |
+    # Qorix Markets — Complete API Contract
+
+    Qorix Markets is a fintech platform for automated USDT trading. This spec is the
+    authoritative contract for all frontend and mobile integrations.
+
+    ## Authentication
+    All protected endpoints require a **Bearer JWT** in the `Authorization` header:
+    ```
+    Authorization: Bearer <token>
+    ```
+    Tokens are issued at login/register and expire after **7 days** (configurable via
+    `JWT_EXPIRY` env var). There is no separate refresh-token endpoint — the client
+    should re-authenticate when a `401` is received.
+
+    ### Mobile / Flutter Bypass
+    Flutter and native mobile apps using `Authorization: Bearer <jwt>` do **not** need
+    to worry about CSRF tokens or `Origin` headers. The origin guard automatically
+    applies the bearer bypass for stateless clients.
+
+    ### Device Fingerprinting
+    Send `X-Device-Id` (a persistent UUID per device) on every request. This powers
+    new-device alerts, withdrawal cooldowns, and session approval flows.
+
+    ## Standardised Response Format
+    ### Success
+    ```json
+    { "data": { ... } }          // single object
+    { "data": [...], "total": 0, "page": 1, "totalPages": 1 }  // paginated list
+    ```
+    ### Error
+    ```json
+    { "error": "<machine_code>", "message": "<human string>" }
+    ```
+    The `error` field is always a machine-readable code (snake_case). Use it for
+    conditional logic. `message` is for display.
+
+    ## Pagination
+    List endpoints that support pagination accept `?page=1&limit=20` and return:
+    ```json
+    { "data": [...], "total": 100, "page": 1, "totalPages": 5 }
+    ```
+
+    ## Rate Limiting
+    - **Global:** 600 req/IP/min (configurable via `GLOBAL_RATE_LIMIT`)
+    - **Login + 2FA:** 5 req/IP/min shared bucket across `/auth/login`,
+      `/auth/2fa/login-verify`, `/auth/2fa/email-fallback/request`
+    - **Signup:** 5 new accounts/IP/day
+
+    Rate limit responses return HTTP **429** with the standard error schema.
+
+    ## Ledger Architecture
+    Every money movement (deposit, withdrawal, transfer, fee, profit) produces
+    a double-entry journal entry via `lib/ledger-service.ts`. The chart of accounts is:
+    - `platform:usdt_pool` — platform USDT reserve
+    - `platform:fee_revenue` — collected withdrawal fees
+    - `platform:referral_expense` — referral bonus outflows
+    - `platform:pending_withdrawals` — funds locked while withdrawal is pending
+    - `user:{id}:main` — user's main INR balance (USDT-equivalent)
+    - `user:{id}:trading` — user's deployed trading capital
+    - `user:{id}:profit` — user's accumulated profit
+    - `user:{id}:usdt` — user's USDT spot balance
+
+    ## Webhook-Ready Deposit Architecture
+    On-chain TRON USDT deposits are handled by a self-contained pipeline:
+    1. `GET /deposit/address` — returns the user's unique TRC20 deposit address
+    2. The TRON monitor (`lib/tron-monitor.ts`) watches for incoming transfers
+    3. On detection, a `blockchain_deposits` record is created with `status: detected`
+    4. After confirmation sweep, `status` becomes `credited` and main balance is topped up
+    5. The `emitDepositEvent` bus fires an SSE event to any listening client
+
+    Webhook payloads are documented in `SSE_LIFECYCLE.md` (see flutter-docs/).
+
+    ## Environment Separation
+    | Env | API Base | Notes |
+    |-----|----------|-------|
+    | Dev (local) | `http://localhost:8080/api` | All security bypassed if secrets missing |
+    | Dev (Replit) | `https://$REPLIT_DEV_DOMAIN/api` | Live secrets, full security |
+    | Staging | `https://qorix-api-staging.fly.dev/api` | Mirror of prod config |
+    | Production | `https://qorix-api.fly.dev/api` | Full hardening + Cloudflare |
+
+  contact:
+    name: Qorix Markets API Support
+    email: support@qorixmarkets.com
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+
 servers:
-  - url: /api
-    description: Base API path
+  - url: http://localhost:8080/api
+    description: Local development (API Server workflow on Replit)
+    x-environment: development
+  - url: https://{replitDomain}/api
+    description: Replit preview (replace {replitDomain} with REPLIT_DEV_DOMAIN)
+    x-environment: development
+    variables:
+      replitDomain:
+        default: your-repl.replit.dev
+        description: Your Replit dev domain
+  - url: https://qorix-api-staging.fly.dev/api
+    description: Staging (Fly.io — mirrors production config)
+    x-environment: staging
+  - url: https://qorix-api.fly.dev/api
+    description: Production (Fly.io — Cloudflare + full hardening)
+    x-environment: production
+
+security:
+  - bearerAuth: []
+
 tags:
   - name: health
     description: Health operations
   - name: public
     description: Public endpoints (no auth required)
   - name: auth
-    description: Authentication operations
+    description: |
+      Authentication — register, login, 2FA, device approval, password management.
+
+      **Flow summary:**
+      1. `POST /auth/register` → `requiresVerification: true`
+      2. `POST /auth/verify-email-public` → `token` (JWT) + `user`
+      3. `POST /auth/login` → either `token` (success), `requires2FA: true`, or `requiresApproval: true`
+      4. If `requires2FA`: `POST /auth/2fa/login-verify` → `token`
+      5. If `requiresApproval`: poll `GET /auth/login-approval?pollToken=...`
   - name: wallet
-    description: Wallet and balance operations
+    description: |
+      Wallet and balance operations. Ledger-backed — every mutation posts a double-entry journal.
+
+      **Balance types:**
+      - `mainBalance` — INR equivalent, receives deposits and INR withdrawals
+      - `tradingBalance` — deployed capital pool (transfers in from main)
+      - `profitBalance` — accumulated daily profits (withdraw to TRC20)
+      - `usdtBalance` — USDT spot wallet (swaps via internal market)
+  - name: deposits
+    description: |
+      TRON USDT on-chain deposit pipeline.
+
+      **Webhook-ready architecture:** each user gets a unique TRC20 address. The TRON
+      monitor detects incoming transfers within ~15s. Use `GET /deposit/history` to
+      poll status, or connect to the SSE stream for real-time credit events.
+  - name: withdrawals
+    description: |
+      Withdrawal flows — USDT/TRC20 and INR (UPI/Bank).
+
+      Both channels require a withdrawal OTP (`POST /auth/withdrawal-otp`). Both
+      enforce 24h new-account lock, 24h post-password-change lock, and 24h new-device
+      cooldown. The INR channel is capped by `inrChannelMax` to enforce channel parity.
   - name: investment
-    description: Investment and trading operations
+    description: |
+      Portfolio — auto-trading bot management. Start/stop/topup capital, adjust risk level
+      and drawdown protection. Pending risk-level changes are promoted at the next trading day.
   - name: transactions
-    description: Transaction history
+    description: Transaction history (all types — deposits, withdrawals, profits, fees, P2P, swaps)
+  - name: markets
+    description: |
+      Internal USDT/INR market. Supports market and limit orders (buy/sell USDT).
+      Rate is set by admin via system settings.
+  - name: bots
+    description: |
+      Bot trading terminal — live price quotes (XAUUSD, EURUSD, BTCUSD, USOIL) and
+      platform bot state (open/closed signal trades, user distribution share).
+  - name: p2p
+    description: |
+      Peer-to-peer USDT trading. KYC required. Supports ads, orders, chat,
+      escrow, ratings, and disputes.
+
+      **Order SSE stream:** after creating/opening an order, call
+      `POST /p2p/orders/{id}/stream-token` to get a short-lived token, then open
+      `GET /p2p/orders/{id}/stream?token=<token>` as an EventSource.
+  - name: notifications
+    description: User notification system — in-app notifications and admin popup
   - name: referral
     description: Referral system
-  - name: notifications
-    description: User notification system
-  - name: admin
-    description: Admin panel operations
   - name: dashboard
     description: Dashboard summary and analytics
   - name: trading-desk
     description: Trading desk statistics and trader roster
-  - name: deposit
-    description: Blockchain USDT deposit system
   - name: quiz
     description: Real-time quiz giveaway (user-facing)
+  - name: admin
+    description: Admin panel operations
   - name: admin-quiz
     description: Admin quiz management
 
@@ -945,27 +1095,81 @@ paths:
               schema:
                 $ref: "#/components/schemas/TraderList"
 
-  # DEPOSIT
+  # DEPOSIT — TRON USDT on-chain pipeline
   /deposit/address:
     get:
       operationId: getDepositAddress
-      tags: [deposit]
-      summary: Get or create user TRC20 USDT deposit address
+      tags: [deposits]
+      summary: Get user's unique TRC20 USDT deposit address
+      description: |
+        Returns the user's persistent, unique TRC20 USDT deposit address.
+        Generated on first call, reused on subsequent calls.
+
+        **Webhook-ready pipeline:**
+        The TRON monitor polls the blockchain every ~15s. On detection a
+        `blockchain_deposits` row is created (`status: detected`). After the
+        sweep confirms the transaction, `status` becomes `credited`, main
+        balance is topped up, and a deposit notification is fired.
+
+        The response also includes `userTronAddress` — the address the user
+        sends FROM (registered via `POST /deposit/tron-address`).
       security:
         - bearerAuth: []
       responses:
         "200":
-          description: User TRC20 deposit address
+          description: Deposit address info
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/DepositAddressResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /deposit/tron-address:
+    post:
+      operationId: registerTronAddress
+      tags: [deposits]
+      summary: Register user's own TronLink wallet (the address they send FROM)
+      description: |
+        Stores the user's personal TRC20 address for display / tracking purposes.
+        This is the source address — not the platform's receiving address.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tronAddress]
+              properties:
+                tronAddress:
+                  type: string
+                  example: "TQn9Y2khEsLJW1ChVWFMSMeRDow5KcbLSE"
+                  description: Valid TRC20 wallet address (starts with T, 34 chars)
+      responses:
+        "200":
+          description: Address registered
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  tronAddress: { type: string }
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
 
   /deposit/history:
     get:
-      operationId: getBlockchainDepositHistory
-      tags: [deposit]
-      summary: Get blockchain deposit history for user
+      operationId: getDepositHistory
+      tags: [deposits]
+      summary: Get on-chain USDT deposit history
+      description: |
+        Returns blockchain-confirmed USDT deposits detected by the TRON monitor.
+        Status lifecycle: `detected` → `credited`.
       security:
         - bearerAuth: []
       parameters:
@@ -974,13 +1178,16 @@ paths:
           schema:
             type: integer
             default: 20
+            maximum: 50
       responses:
         "200":
-          description: List of blockchain deposits
+          description: Deposit history
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/BlockchainDepositHistory"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
 
   # ── QUIZ (user) ──────────────────────────────────────────────────────────
   /quiz:
@@ -1480,7 +1687,1113 @@ paths:
         "503":
           description: Reset disabled in production
 
+  # ══════════════════════════════════════════════════════════════════════════
+  # WITHDRAWALS — USDT (TRC20) — see also /wallet/withdraw above
+  # ══════════════════════════════════════════════════════════════════════════
+  /auth/withdrawal-otp:
+    post:
+      operationId: requestWithdrawalOtp
+      tags: [withdrawals]
+      summary: Request a one-time OTP to authorise a withdrawal
+      description: |
+        Sends a 6-digit OTP to the user's email. The OTP must be included
+        in the withdrawal request body (`otp` field) for both USDT and INR
+        withdrawal endpoints. The OTP is single-use and expires in 10 minutes.
+
+        **Purpose:** `withdrawal_confirm`
+
+        This is step 1 of the 2-step withdrawal flow:
+        1. `POST /auth/withdrawal-otp` → receive OTP via email
+        2. `POST /wallet/withdraw` or `POST /inr-withdrawals` with `otp` in body
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OTP sent (generic — does not reveal whether email was delivered)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessMessage"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /withdrawal-limits:
+    get:
+      operationId: getWithdrawalLimits
+      tags: [withdrawals]
+      summary: Get withdrawal caps for the current user
+      description: |
+        Returns the channel-parity caps that determine how much a user can
+        withdraw via each channel (USDT TRC20 vs INR UPI/Bank).
+
+        **Channel parity rule:** USDT deposited must exit via USDT; INR deposited
+        must exit via INR. Caps prevent cross-channel drainage.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Withdrawal limits
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WithdrawalLimits"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # WITHDRAWALS — INR (UPI / Bank Transfer)
+  # ══════════════════════════════════════════════════════════════════════════
+  /inr-withdrawals:
+    post:
+      operationId: createInrWithdrawal
+      tags: [withdrawals]
+      summary: Submit an INR withdrawal (UPI or bank transfer)
+      description: |
+        Debits the user's **main balance** (USDT-equivalent) and creates a
+        pending INR withdrawal request for admin payout.
+
+        **Prerequisites (all enforced server-side):**
+        - KYC status = `approved`
+        - Account age ≥ 24h
+        - No password change in last 24h
+        - Device first seen ≥ 24h ago
+        - Valid email OTP (request via `POST /auth/withdrawal-otp`)
+        - INR channel cap not exceeded (`GET /withdrawal-limits`)
+
+        **Payout flow:**
+        1. User submits → status = `pending`, funds debited from main balance
+        2. Admin reviews in admin panel → approves or rejects
+        3. On approval, merchant is credited; user notified via email + notification
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InrWithdrawalRequest"
+      responses:
+        "200":
+          description: INR withdrawal submitted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  withdrawal:
+                    $ref: "#/components/schemas/InrWithdrawal"
+        "400":
+          description: |
+            Validation error or cap exceeded.
+            Error codes: `insufficient_main_balance`, `channel_cap_exceeded`,
+            `invalid_otp`, `withdrawal_otp_required`, `amountInr must be at least ₹100`
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WithdrawalError"
+        "403":
+          description: |
+            Account restriction or withdrawal lock.
+            Error codes: `account_restricted`, `kyc_required`,
+            `withdrawal_locked_new_account`, `withdrawal_locked_password_change`
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WithdrawalError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /inr-withdrawals/mine:
+    get:
+      operationId: getMyInrWithdrawals
+      tags: [withdrawals]
+      summary: Get my INR withdrawal history
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: INR withdrawal history
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  withdrawals:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/InrWithdrawal"
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # INVESTMENT — additional endpoints (risk-level, topup)
+  # ══════════════════════════════════════════════════════════════════════════
+  /investment/risk-level:
+    patch:
+      operationId: changeRiskLevel
+      tags: [investment]
+      summary: Queue a risk-level change (effective next trading day)
+      description: |
+        Sets a **pending** risk-level change. The change is promoted before the
+        next day's profit run so today's profit still accrues at the current rate.
+
+        **Risk levels and drawdown limits:**
+        - `low` → 3% drawdown protection
+        - `medium` → 5% drawdown protection
+        - `high` → 10% drawdown protection
+
+        If the requested level equals the current level (no pending change), returns
+        the current investment unchanged. Idempotent on duplicate submissions.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [riskLevel]
+              properties:
+                riskLevel:
+                  type: string
+                  enum: [low, medium, high]
+      responses:
+        "200":
+          description: Risk-level change queued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Investment"
+        "400":
+          description: No active investment or invalid risk level
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    delete:
+      operationId: cancelPendingRiskLevel
+      tags: [investment]
+      summary: Cancel a pending risk-level change
+      description: |
+        Removes the queued pending risk-level change before it is promoted.
+        Only works while the investment is **active**. Returns 409 if investment
+        is inactive. Returns the unchanged investment if there is no pending change.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Pending change cancelled (or was already absent)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Investment"
+        "409":
+          description: Investment is not active
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /investment/topup:
+    post:
+      operationId: topupInvestment
+      tags: [investment]
+      summary: Add capital to an active investment (NAV-pending)
+      description: |
+        Queues additional capital from the trading balance into the active
+        investment. The amount is stored as `navPendingAdd` and merged before
+        the **next** day's profit run (today's NAV snapshot is preserved).
+
+        Available = `tradingBalance - amount - existingPending`
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [amount]
+              properties:
+                amount:
+                  type: number
+                  minimum: 0.01
+                  description: Additional USDT to deploy (must not exceed available trading balance)
+      responses:
+        "200":
+          description: Top-up queued (earns from next trading day)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Investment"
+        "400":
+          description: No active investment or insufficient available trading balance
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /investment/trades:
+    get:
+      operationId: getInvestmentTrades
+      tags: [investment]
+      summary: Get paginated bot trade history
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 10, maximum: 100 }
+      responses:
+        "200":
+          description: Paginated trade history
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TradeList"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # MARKETS — USDT/INR internal market
+  # ══════════════════════════════════════════════════════════════════════════
+  /usdt-market/rate:
+    get:
+      operationId: getUsdtMarketRate
+      tags: [markets]
+      summary: Get current USDT/INR exchange rate
+      description: |
+        Returns the platform's USDT/INR rate with a small jitter applied to
+        `lastPrice` to simulate tick movement. The base `rate` is admin-controlled.
+      security: []
+      responses:
+        "200":
+          description: Market rate
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UsdtMarketRate"
+
+  /usdt-market/swap:
+    post:
+      operationId: swapUsdt
+      tags: [markets]
+      summary: Buy or sell USDT against INR (market or limit order)
+      description: |
+        **Market orders** execute immediately:
+        - BUY: deducts `amount × rate` INR from `mainBalance`, credits `amount` USDT to `usdtBalance`
+        - SELL: deducts `amount` USDT from `usdtBalance`, credits `amount × rate` INR to `mainBalance`
+
+        **Limit orders** lock funds and create a pending record:
+        - BUY limit: locks `amount × limitPrice` INR; credited when price hits
+        - SELL limit: locks `amount` USDT; credited when price hits
+
+        Minimum order: **1 USDT**
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UsdtSwapRequest"
+      responses:
+        "200":
+          description: Swap executed or limit order placed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UsdtSwapResponse"
+        "400":
+          description: Insufficient balance or invalid parameters
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /usdt-market/open-orders:
+    get:
+      operationId: getUsdtOpenOrders
+      tags: [markets]
+      summary: Get pending limit orders
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Open limit orders
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  orders:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/UsdtLimitOrder"
+
+  /usdt-market/open-orders/{id}:
+    delete:
+      operationId: cancelUsdtLimitOrder
+      tags: [markets]
+      summary: Cancel a pending limit order and refund locked funds
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Order cancelled and funds refunded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  orderId: { type: integer }
+        "404":
+          description: Order not found or already cancelled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /usdt-market/history:
+    get:
+      operationId: getUsdtMarketHistory
+      tags: [markets]
+      summary: Get completed USDT market order history
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Market order history (last 50)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  history:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/UsdtMarketHistoryItem"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # BOTS — Bot Trading Terminal
+  # ══════════════════════════════════════════════════════════════════════════
+  /bot-trading/quotes:
+    get:
+      operationId: getBotQuotes
+      tags: [bots]
+      summary: Get live price quotes for 4 trading pairs
+      description: |
+        Returns real-time (or cached within 30s) price quotes for:
+        - **XAUUSD** — Gold/USD
+        - **EURUSD** — Euro/USD
+        - **BTCUSD** — Bitcoin/USD
+        - **USOIL** — Crude Oil/USD
+
+        No auth required. Poll every 1.5s for a live ticker.
+        `Cache-Control: no-store` is set on this endpoint.
+      security: []
+      responses:
+        "200":
+          description: Live quotes
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BotQuotesResponse"
+
+  /bot-trading/state:
+    get:
+      operationId: getBotState
+      tags: [bots]
+      summary: Get platform bot state + user's distribution share
+      description: |
+        Returns a full snapshot:
+        - Market gating flags (forex/crypto open)
+        - Bot plan progress (slots executed/pending/next ETA)
+        - Platform-level open signal trades with live PnL%
+        - Platform-level closed signal trades since UTC midnight
+        - The calling user's distribution share for today
+
+        Poll every few seconds alongside `/bot-trading/quotes`.
+        `Cache-Control: no-store` is set on this endpoint.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Bot state snapshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BotStateResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # P2P — Peer-to-Peer USDT Trading
+  # ══════════════════════════════════════════════════════════════════════════
+  /p2p/wallet:
+    get:
+      operationId: getP2pWallet
+      tags: [p2p]
+      summary: Get P2P wallet balances
+      description: Returns the user's P2P-specific wallet (separate from main wallet).
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: P2P wallet
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/P2pWallet"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /p2p/ads:
+    get:
+      operationId: listP2pAds
+      tags: [p2p]
+      summary: List active P2P ads
+      description: |
+        Returns active buy/sell ads. Results are cached for 20s in Redis (shared
+        across all instances). Cache is invalidated on any ad mutation.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [ALL, BUY, SELL]
+            default: ALL
+      responses:
+        "200":
+          description: P2P ads list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ads:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/P2pAd"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      operationId: createP2pAd
+      tags: [p2p]
+      summary: Create a P2P ad (KYC required)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/P2pAdCreateRequest"
+      responses:
+        "201":
+          description: Ad created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ad:
+                    $ref: "#/components/schemas/P2pAd"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          description: KYC not approved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /p2p/ads/{id}:
+    patch:
+      operationId: updateP2pAd
+      tags: [p2p]
+      summary: Update a P2P ad (owner only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/P2pAdUpdateRequest"
+      responses:
+        "200":
+          description: Ad updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ad:
+                    $ref: "#/components/schemas/P2pAd"
+        "403":
+          description: Not the ad owner
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    delete:
+      operationId: deleteP2pAd
+      tags: [p2p]
+      summary: Delete a P2P ad (owner only, no active orders)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Ad deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "400":
+          description: Ad has active orders — cannot delete
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Not the ad owner
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /p2p/orders:
+    get:
+      operationId: listP2pOrders
+      tags: [p2p]
+      summary: List user's P2P orders (as buyer or seller)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, paid, completed, cancelled, disputed]
+        - name: limit
+          in: query
+          schema: { type: integer, default: 20, maximum: 50 }
+      responses:
+        "200":
+          description: P2P orders
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  orders:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/P2pOrder"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      operationId: createP2pOrder
+      tags: [p2p]
+      summary: Create a P2P order against an ad (KYC required)
+      description: |
+        Places a buy/sell order against an existing ad. Escrow locks the
+        seller's USDT immediately. The buyer must mark payment within the
+        countdown window (default 15 min).
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/P2pOrderCreateRequest"
+      responses:
+        "201":
+          description: Order created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  order:
+                    $ref: "#/components/schemas/P2pOrder"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          description: KYC not approved or cannot trade with own ad
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /p2p/orders/{id}:
+    get:
+      operationId: getP2pOrder
+      tags: [p2p]
+      summary: Get a P2P order (buyer or seller only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Order detail
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  order:
+                    $ref: "#/components/schemas/P2pOrder"
+                  chat:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/P2pChatMessage"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /p2p/orders/{id}/stream-token:
+    post:
+      operationId: getP2pOrderStreamToken
+      tags: [p2p]
+      summary: Get a short-lived SSE stream token for a P2P order
+      description: |
+        Issues a 5-minute JWT specifically for opening the SSE stream.
+        Use the returned `token` in `GET /p2p/orders/{id}/stream?token=<token>`
+        as an EventSource. This avoids putting the long-lived session JWT in URLs.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Stream token
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                    description: Short-lived JWT (5 min) for SSE stream authentication
+                  expiresIn:
+                    type: integer
+                    description: Token TTL in seconds
+                    example: 300
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /p2p/orders/{id}/mark-paid:
+    post:
+      operationId: markP2pOrderPaid
+      tags: [p2p]
+      summary: Buyer marks payment as sent
+      description: |
+        Buyer confirms they have sent the INR payment. Changes order status
+        from `pending` to `paid`. Seller is notified via SSE + in-app notification.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Order marked as paid
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  order:
+                    $ref: "#/components/schemas/P2pOrder"
+        "400":
+          description: Order not in pending state or not the buyer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /p2p/orders/{id}/release:
+    post:
+      operationId: releaseP2pEscrow
+      tags: [p2p]
+      summary: Seller releases USDT from escrow
+      description: |
+        Seller confirms payment received and releases escrowed USDT to the buyer.
+        Order status changes to `completed`. Both parties can then rate each other.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Escrow released, order completed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  order:
+                    $ref: "#/components/schemas/P2pOrder"
+        "400":
+          description: Order not in paid state or not the seller
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /p2p/orders/{id}/cancel:
+    post:
+      operationId: cancelP2pOrder
+      tags: [p2p]
+      summary: Cancel a pending P2P order and refund escrow
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Order cancelled, escrow refunded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  order:
+                    $ref: "#/components/schemas/P2pOrder"
+        "400":
+          description: Cannot cancel a paid or completed order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /p2p/orders/{id}/dispute:
+    post:
+      operationId: raiseP2pDispute
+      tags: [p2p]
+      summary: Raise a dispute on an order
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason:
+                  type: string
+                  maxLength: 1000
+      responses:
+        "200":
+          description: Dispute raised
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  dispute:
+                    $ref: "#/components/schemas/P2pDispute"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /p2p/orders/{id}/chat:
+    get:
+      operationId: getP2pChat
+      tags: [p2p]
+      summary: Get chat messages for a P2P order
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Chat messages
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  messages:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/P2pChatMessage"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      operationId: sendP2pChatMessage
+      tags: [p2p]
+      summary: Send a chat message on a P2P order
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [message]
+              properties:
+                message:
+                  type: string
+                  maxLength: 2000
+      responses:
+        "201":
+          description: Message sent
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    $ref: "#/components/schemas/P2pChatMessage"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /p2p/orders/{id}/rate:
+    post:
+      operationId: rateP2pCounterparty
+      tags: [p2p]
+      summary: Rate the counterparty after order completion
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [rating]
+              properties:
+                rating:
+                  type: integer
+                  minimum: 1
+                  maximum: 5
+                comment:
+                  type: string
+                  maxLength: 500
+      responses:
+        "200":
+          description: Rating submitted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "400":
+          description: Order not completed or already rated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /p2p/payment-methods:
+    get:
+      operationId: getP2pPaymentMethods
+      tags: [p2p]
+      summary: Get user's saved P2P payment methods
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Payment methods
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  methods:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/P2pPaymentMethod"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      operationId: addP2pPaymentMethod
+      tags: [p2p]
+      summary: Add a payment method (UPI or bank)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/P2pPaymentMethodRequest"
+      responses:
+        "201":
+          description: Payment method added
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  method:
+                    $ref: "#/components/schemas/P2pPaymentMethod"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /p2p/profile/{userId}:
+    get:
+      operationId: getP2pProfile
+      tags: [p2p]
+      summary: Get P2P merchant profile (trade stats, ratings)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Merchant profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/P2pMerchantProfile"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        JWT issued at login/register. Expires after `JWT_EXPIRY` (default 7 days).
+        On expiry (401 response), re-authenticate via `POST /auth/login`.
+
+        **Mobile clients:** include `X-Device-Id: <persistent-uuid>` on every request.
+
+  responses:
+    Unauthorized:
+      description: Not authenticated or token expired
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: "unauthorized"
+            message: "No token provided or token expired"
+    BadRequest:
+      description: Validation error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    RateLimited:
+      description: Rate limit exceeded
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+          description: Seconds until the rate limit window resets
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: "too_many_requests"
+            message: "Rate limit exceeded. Try again in 60 seconds."
+
   schemas:
     DemoStatus:
       type: object
@@ -2730,13 +4043,27 @@ components:
 
     DepositAddressResponse:
       type: object
+      description: |
+        Platform's unique TRC20 receiving address for the user, plus the user's
+        own registered source wallet (the address they send FROM).
       properties:
         address:
           type: string
+          description: The platform-generated TRC20 address this user must send USDT TO
+          example: "TQn9Y2khEsLJW1ChVWFMSMeRDow5KcbLSE"
+        userTronAddress:
+          type: string
+          nullable: true
+          description: |
+            The user's own TronLink wallet (the address they send FROM).
+            Null until registered via POST /deposit/tron-address.
+          example: "TAzskfxMW7JjFiNaA8rZpnER2TBfQyDYvk"
         network:
           type: string
+          example: "TRC20"
         token:
           type: string
+          example: "USDT"
       required:
         - address
         - network
@@ -3172,3 +4499,705 @@ components:
           type: string
           nullable: true
       required: [id, paidStatus]
+
+    # ── COMMON RESPONSE ENVELOPE ──────────────────────────────────────────
+    SuccessMessage:
+      type: object
+      properties:
+        message: { type: string }
+      required: [message]
+
+    PaginatedMeta:
+      type: object
+      description: Pagination metadata included in all paginated list responses
+      properties:
+        total: { type: integer, description: Total matching records }
+        page: { type: integer, description: Current page (1-indexed) }
+        totalPages: { type: integer }
+      required: [total, page, totalPages]
+
+    # ── TRADE LIST (paginated) ────────────────────────────────────────────
+    TradeList:
+      type: object
+      allOf:
+        - $ref: "#/components/schemas/PaginatedMeta"
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Trade"
+      required: [data]
+
+    # ── WITHDRAWAL SCHEMAS ────────────────────────────────────────────────
+    WithdrawalLimits:
+      type: object
+      description: Per-channel withdrawal caps based on deposit channel parity
+      properties:
+        usdtWithdrawableMax:
+          type: number
+          description: Max USDT withdrawable via TRC20 (equals total USDT deposited)
+        usdtWithdrawnSoFar:
+          type: number
+          description: Total USDT already withdrawn via TRC20
+        usdtRemainingLimit:
+          type: number
+        inrWithdrawableMax:
+          type: number
+          description: Max INR withdrawable (equals total INR deposited equivalent)
+        inrWithdrawnSoFar:
+          type: number
+        inrRemainingLimit:
+          type: number
+      required:
+        - usdtWithdrawableMax
+        - usdtWithdrawnSoFar
+        - usdtRemainingLimit
+        - inrWithdrawableMax
+        - inrWithdrawnSoFar
+        - inrRemainingLimit
+
+    InrWithdrawalRequest:
+      type: object
+      required: [amountInr, paymentMethodType, otp]
+      properties:
+        amountInr:
+          type: number
+          minimum: 100
+          description: Amount in INR (minimum ₹100)
+        paymentMethodType:
+          type: string
+          enum: [upi, bank]
+          description: Payment channel
+        upiId:
+          type: string
+          description: Required when paymentMethodType = upi
+          example: "user@upi"
+        bankAccountNumber:
+          type: string
+          description: Required when paymentMethodType = bank
+        bankIfsc:
+          type: string
+          description: Required when paymentMethodType = bank, 11-char IFSC
+          example: "HDFC0001234"
+        bankAccountName:
+          type: string
+          description: Required when paymentMethodType = bank
+        otp:
+          type: string
+          description: 6-digit OTP obtained from POST /auth/withdrawal-otp
+          example: "482917"
+
+    InrWithdrawal:
+      type: object
+      properties:
+        id: { type: integer }
+        userId: { type: integer }
+        amountInr:
+          type: string
+          description: Decimal string amount in INR
+        amountUsdt:
+          type: string
+          description: USDT equivalent deducted from main balance
+        status:
+          type: string
+          enum: [pending, approved, rejected, processing]
+        paymentMethodType:
+          type: string
+          enum: [upi, bank]
+        upiId:
+          type: string
+          nullable: true
+        bankAccountNumber:
+          type: string
+          nullable: true
+        bankIfsc:
+          type: string
+          nullable: true
+        bankAccountName:
+          type: string
+          nullable: true
+        adminNote:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - userId
+        - amountInr
+        - amountUsdt
+        - status
+        - paymentMethodType
+        - createdAt
+        - updatedAt
+
+    WithdrawalError:
+      type: object
+      description: |
+        Extended error response for withdrawal failures.
+        Machine-readable `error` codes:
+        - `insufficient_main_balance` — not enough in main balance
+        - `channel_cap_exceeded` — INR withdrawal cap reached
+        - `invalid_otp` — wrong or expired OTP
+        - `withdrawal_otp_required` — missing OTP field
+        - `kyc_required` — KYC not approved
+        - `account_restricted` — account frozen by admin
+        - `withdrawal_locked_new_account` — account < 24h old
+        - `withdrawal_locked_password_change` — password changed < 24h ago
+        - `withdrawal_locked_new_device` — device first seen < 24h ago
+      properties:
+        error:
+          type: string
+          description: Machine-readable error code
+        message:
+          type: string
+          description: Human-readable description
+        remainingLimit:
+          type: number
+          nullable: true
+          description: Present for cap_exceeded errors — shows remaining allowed amount
+      required: [error, message]
+
+    # ── MARKETS — USDT/INR internal market ───────────────────────────────
+    UsdtMarketRate:
+      type: object
+      properties:
+        rate:
+          type: number
+          description: Admin-set base USDT/INR rate (e.g. 86.5)
+        lastPrice:
+          type: number
+          description: Rate + small random jitter for tick simulation
+        change24h:
+          type: number
+          description: Simulated 24h price change percentage
+        volume24h:
+          type: number
+          description: Simulated 24h volume in USDT
+        high24h:
+          type: number
+        low24h:
+          type: number
+        timestamp:
+          type: string
+          format: date-time
+      required: [rate, lastPrice, timestamp]
+
+    UsdtSwapRequest:
+      type: object
+      required: [side, amount, orderType]
+      properties:
+        side:
+          type: string
+          enum: [buy, sell]
+          description: "buy = INR→USDT, sell = USDT→INR"
+        amount:
+          type: number
+          minimum: 1
+          description: Amount in USDT (minimum 1 USDT)
+        orderType:
+          type: string
+          enum: [market, limit]
+        limitPrice:
+          type: number
+          description: Required for limit orders — the target INR/USDT rate
+
+    UsdtSwapResponse:
+      type: object
+      properties:
+        success: { type: boolean }
+        orderType:
+          type: string
+          enum: [market, limit]
+        side:
+          type: string
+          enum: [buy, sell]
+        amount:
+          type: number
+          description: USDT amount
+        executedRate:
+          type: number
+          nullable: true
+          description: Actual rate used (null for pending limit orders)
+        inrAmount:
+          type: number
+          nullable: true
+          description: INR credited/debited
+        status:
+          type: string
+          enum: [executed, pending]
+        orderId:
+          type: integer
+          nullable: true
+          description: Order ID for limit orders (use to cancel via DELETE /usdt-market/open-orders/{id})
+        newUsdtBalance:
+          type: number
+          nullable: true
+        newMainBalance:
+          type: number
+          nullable: true
+      required: [success, orderType, side, amount, status]
+
+    UsdtLimitOrder:
+      type: object
+      properties:
+        id: { type: integer }
+        userId: { type: integer }
+        side:
+          type: string
+          enum: [buy, sell]
+        amount:
+          type: number
+          description: USDT amount
+        limitPrice:
+          type: number
+          description: Target INR/USDT rate
+        lockedInr:
+          type: number
+          nullable: true
+          description: INR locked for buy limit orders
+        lockedUsdt:
+          type: number
+          nullable: true
+          description: USDT locked for sell limit orders
+        status:
+          type: string
+          enum: [pending, executed, cancelled]
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, userId, side, amount, limitPrice, status, createdAt]
+
+    UsdtMarketHistoryItem:
+      type: object
+      properties:
+        id: { type: integer }
+        side:
+          type: string
+          enum: [buy, sell]
+        orderType:
+          type: string
+          enum: [market, limit]
+        amount: { type: number }
+        executedRate: { type: number }
+        inrAmount: { type: number }
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, side, orderType, amount, executedRate, inrAmount, createdAt]
+
+    # ── BOTS — Bot Trading Terminal ───────────────────────────────────────
+    BotQuote:
+      type: object
+      properties:
+        symbol:
+          type: string
+          example: "XAUUSD"
+        bid: { type: number }
+        ask: { type: number }
+        mid: { type: number }
+        change: { type: number, description: Price change vs previous close }
+        changePct: { type: number, description: Percent change }
+        timestamp:
+          type: string
+          format: date-time
+      required: [symbol, bid, ask, mid, timestamp]
+
+    BotQuotesResponse:
+      type: object
+      properties:
+        quotes:
+          type: array
+          items:
+            $ref: "#/components/schemas/BotQuote"
+        cachedAt:
+          type: string
+          format: date-time
+      required: [quotes]
+
+    BotSignalTrade:
+      type: object
+      description: A platform-level signal trade opened by admin, shared across all active investors
+      properties:
+        id: { type: integer }
+        symbol:
+          type: string
+          example: "XAUUSD"
+        direction:
+          type: string
+          enum: [long, short]
+        entryPrice: { type: number }
+        currentPrice: { type: number }
+        pnlPct:
+          type: number
+          description: Live PnL percentage
+        openedAt:
+          type: string
+          format: date-time
+        closedAt:
+          type: string
+          format: date-time
+          nullable: true
+        status:
+          type: string
+          enum: [open, closed]
+        profitDistributedPct:
+          type: number
+          nullable: true
+          description: Final profit distributed to users on close
+      required: [id, symbol, direction, entryPrice, status, openedAt]
+
+    BotDistributionShare:
+      type: object
+      description: The calling user's share of the latest signal trade profit
+      properties:
+        userId: { type: integer }
+        shareUsdt:
+          type: number
+          description: USDT credited to user's trading balance from latest signal trade
+        signalTradeId: { type: integer }
+        distributedAt:
+          type: string
+          format: date-time
+      required: [userId, shareUsdt, signalTradeId, distributedAt]
+
+    BotStateResponse:
+      type: object
+      properties:
+        forexMarketOpen: { type: boolean }
+        cryptoMarketOpen: { type: boolean }
+        botPlan:
+          type: object
+          nullable: true
+          properties:
+            totalSlots: { type: integer }
+            executedToday: { type: integer }
+            pendingSlots: { type: integer }
+            nextSlotEtaMs:
+              type: integer
+              nullable: true
+              description: Milliseconds until next slot execution
+          required: [totalSlots, executedToday, pendingSlots]
+        openSignalTrades:
+          type: array
+          items:
+            $ref: "#/components/schemas/BotSignalTrade"
+        closedTodaySignalTrades:
+          type: array
+          items:
+            $ref: "#/components/schemas/BotSignalTrade"
+        myDistribution:
+          $ref: "#/components/schemas/BotDistributionShare"
+          nullable: true
+      required: [forexMarketOpen, cryptoMarketOpen, openSignalTrades, closedTodaySignalTrades]
+
+    # ── P2P — Peer-to-Peer USDT Trading ──────────────────────────────────
+    P2pWallet:
+      type: object
+      description: User's P2P-specific wallet (separate ledger from main wallet)
+      properties:
+        usdtBalance:
+          type: number
+          description: Available USDT for P2P trading
+        usdtEscrow:
+          type: number
+          description: USDT locked in active P2P escrow orders
+        inrBalance:
+          type: number
+          description: INR received from P2P sales
+      required: [usdtBalance, usdtEscrow, inrBalance]
+
+    P2pAd:
+      type: object
+      properties:
+        id: { type: integer }
+        userId: { type: integer }
+        type:
+          type: string
+          enum: [BUY, SELL]
+          description: "BUY = ad owner wants to buy USDT; SELL = ad owner wants to sell USDT"
+        minAmount:
+          type: number
+          description: Minimum order amount in USDT
+        maxAmount:
+          type: number
+          description: Maximum order amount in USDT
+        rate:
+          type: number
+          description: INR per USDT offered by the ad owner
+        paymentMethods:
+          type: array
+          items:
+            type: string
+            enum: [upi, bank, imps]
+          description: Accepted payment channels
+        remarks:
+          type: string
+          nullable: true
+          description: Optional instructions from the ad owner
+        isActive: { type: boolean }
+        completedOrdersCount: { type: integer }
+        averageRating:
+          type: number
+          nullable: true
+          minimum: 1
+          maximum: 5
+        createdAt:
+          type: string
+          format: date-time
+        ownerDisplayName:
+          type: string
+          description: Obfuscated display name of the ad owner
+      required: [id, userId, type, minAmount, maxAmount, rate, paymentMethods, isActive, createdAt]
+
+    P2pAdCreateRequest:
+      type: object
+      required: [type, minAmount, maxAmount, rate, paymentMethods]
+      properties:
+        type:
+          type: string
+          enum: [BUY, SELL]
+        minAmount:
+          type: number
+          minimum: 1
+        maxAmount:
+          type: number
+          minimum: 1
+        rate:
+          type: number
+          minimum: 1
+          description: INR per USDT you are willing to buy/sell at
+        paymentMethods:
+          type: array
+          items:
+            type: string
+            enum: [upi, bank, imps]
+          minItems: 1
+        remarks:
+          type: string
+          maxLength: 500
+
+    P2pAdUpdateRequest:
+      type: object
+      properties:
+        minAmount: { type: number, minimum: 1 }
+        maxAmount: { type: number, minimum: 1 }
+        rate: { type: number, minimum: 1 }
+        paymentMethods:
+          type: array
+          items:
+            type: string
+            enum: [upi, bank, imps]
+        remarks: { type: string, maxLength: 500 }
+        isActive: { type: boolean }
+
+    P2pOrder:
+      type: object
+      properties:
+        id: { type: integer }
+        adId: { type: integer }
+        buyerId: { type: integer }
+        sellerId: { type: integer }
+        type:
+          type: string
+          enum: [BUY, SELL]
+          description: Type inherited from the ad
+        amountUsdt:
+          type: number
+          description: USDT amount being traded
+        amountInr:
+          type: number
+          description: INR amount to be paid (amountUsdt × rate)
+        rate:
+          type: number
+          description: Locked-in exchange rate at order creation
+        status:
+          type: string
+          enum: [pending, paid, completed, cancelled, disputed]
+          description: |
+            - `pending` — buyer has not yet marked payment
+            - `paid` — buyer has marked payment, waiting for seller release
+            - `completed` — seller released escrow, USDT credited to buyer
+            - `cancelled` — timed out or manually cancelled, escrow refunded
+            - `disputed` — admin intervention required
+        paymentDeadlineAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the order auto-cancels if not marked paid (15 min from creation)
+        paymentMethod:
+          type: string
+          enum: [upi, bank, imps]
+        paymentDetails:
+          type: object
+          description: Seller's payment details (shown to buyer after order created)
+          nullable: true
+        disputeReason:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - adId
+        - buyerId
+        - sellerId
+        - type
+        - amountUsdt
+        - amountInr
+        - rate
+        - status
+        - createdAt
+        - updatedAt
+
+    P2pOrderCreateRequest:
+      type: object
+      required: [adId, amountUsdt, paymentMethod]
+      properties:
+        adId:
+          type: integer
+          description: The P2P ad to place an order against
+        amountUsdt:
+          type: number
+          minimum: 1
+          description: Must be between ad's minAmount and maxAmount
+        paymentMethod:
+          type: string
+          enum: [upi, bank, imps]
+          description: Must be one of the ad's paymentMethods
+
+    P2pChatMessage:
+      type: object
+      properties:
+        id: { type: integer }
+        orderId: { type: integer }
+        senderId: { type: integer }
+        senderRole:
+          type: string
+          enum: [buyer, seller, admin]
+        message: { type: string }
+        messageType:
+          type: string
+          enum: [text, image, system]
+          default: text
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, orderId, senderId, senderRole, message, messageType, createdAt]
+
+    P2pDispute:
+      type: object
+      properties:
+        id: { type: integer }
+        orderId: { type: integer }
+        raisedById: { type: integer }
+        reason: { type: string }
+        status:
+          type: string
+          enum: [open, resolved, closed]
+        resolvedNote:
+          type: string
+          nullable: true
+        resolvedAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, orderId, raisedById, reason, status, createdAt]
+
+    P2pPaymentMethod:
+      type: object
+      properties:
+        id: { type: integer }
+        userId: { type: integer }
+        type:
+          type: string
+          enum: [upi, bank]
+        isDefault: { type: boolean }
+        upiId:
+          type: string
+          nullable: true
+        bankAccountNumber:
+          type: string
+          nullable: true
+        bankIfsc:
+          type: string
+          nullable: true
+        bankAccountName:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, userId, type, isDefault, createdAt]
+
+    P2pPaymentMethodRequest:
+      type: object
+      required: [type]
+      properties:
+        type:
+          type: string
+          enum: [upi, bank]
+        upiId:
+          type: string
+          description: Required when type = upi
+        bankAccountNumber:
+          type: string
+          description: Required when type = bank
+        bankIfsc:
+          type: string
+          description: Required when type = bank, 11-char IFSC
+        bankAccountName:
+          type: string
+          description: Required when type = bank
+        isDefault:
+          type: boolean
+          default: false
+
+    P2pMerchantProfile:
+      type: object
+      properties:
+        userId: { type: integer }
+        displayName: { type: string }
+        completedOrders: { type: integer }
+        cancelledOrders: { type: integer }
+        completionRate:
+          type: number
+          description: Percent of orders completed (0–100)
+        averageReleaseTimeSec:
+          type: integer
+          nullable: true
+          description: Median escrow release time in seconds
+        positiveRatingsPct:
+          type: number
+          description: Percent of ratings that are 4+ stars
+        averageRating:
+          type: number
+          nullable: true
+          minimum: 1
+          maximum: 5
+        totalRatings: { type: integer }
+        activeAds: { type: integer }
+        memberSince:
+          type: string
+          format: date-time
+      required:
+        - userId
+        - displayName
+        - completedOrders
+        - cancelledOrders
+        - completionRate
+        - positiveRatingsPct
+        - totalRatings
+        - activeAds
+        - memberSince
