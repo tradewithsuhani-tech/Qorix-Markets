@@ -8,7 +8,7 @@
     "build": "node ./build.mjs",
     "start": "node --enable-source-maps ./dist/index.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --import tsx --test --test-concurrency=1 \"src/lib/__tests__/*.test.ts\"",
+    "test": "node --loader ./yaml-loader.mjs --import tsx --test --test-concurrency=1 \"src/lib/__tests__/*.test.ts\"",
     "seed:demo": "node --import tsx src/scripts/seed-demo.ts"
   },
   "dependencies": {

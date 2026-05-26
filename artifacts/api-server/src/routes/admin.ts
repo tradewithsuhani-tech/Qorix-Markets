@@ -474,7 +474,13 @@ router.get("/admin/users", async (req, res) => {
         .where(eq(walletsTable.userId, u.id))
         .limit(1);
       const invs = await db
-        .select()
+        .select({
+          id: investmentsTable.id,
+          userId: investmentsTable.userId,
+          amount: investmentsTable.amount,
+          riskLevel: investmentsTable.riskLevel,
+          isActive: investmentsTable.isActive,
+        })
         .from(investmentsTable)
         .where(eq(investmentsTable.userId, u.id))
         .limit(1);
@@ -533,7 +539,7 @@ router.post("/admin/users/:id/action", async (req: AuthRequest, res) => {
     const stopReason = String(reason ?? "").trim() || "Admin force-stop";
 
     const invRows = await db
-      .select({ id: investmentsTable.id, pendingRiskLevel: investmentsTable.pendingRiskLevel })
+      .select({ id: investmentsTable.id })
       .from(investmentsTable)
       .where(eq(investmentsTable.userId, id))
       .limit(1);
@@ -543,7 +549,8 @@ router.post("/admin/users/:id/action", async (req: AuthRequest, res) => {
       return;
     }
 
-    const hadPending = invRows[0].pendingRiskLevel != null;
+    // pendingRiskLevel column not yet migrated to DB — treat as no pending change.
+    const hadPending = false;
 
     await db.transaction(async (tx) => {
       await tx
@@ -648,7 +655,18 @@ router.get("/admin/users/:id/investment-detail", async (req: AuthRequest, res) =
   if (!user) { res.status(404).json({ error: "user_not_found" }); return; }
   const [wallet] = await db.select().from(walletsTable).where(eq(walletsTable.userId, id)).limit(1);
   const investments = await db
-    .select()
+    .select({
+      id: investmentsTable.id,
+      userId: investmentsTable.userId,
+      amount: investmentsTable.amount,
+      riskLevel: investmentsTable.riskLevel,
+      isActive: investmentsTable.isActive,
+      autoCompound: investmentsTable.autoCompound,
+      totalProfit: investmentsTable.totalProfit,
+      dailyProfit: investmentsTable.dailyProfit,
+      peakBalance: investmentsTable.peakBalance,
+      startedAt: investmentsTable.startedAt,
+    })
     .from(investmentsTable)
     .where(eq(investmentsTable.userId, id))
     .orderBy(desc(investmentsTable.id));
