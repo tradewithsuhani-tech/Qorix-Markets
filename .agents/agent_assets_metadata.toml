@@ -76,25 +76,25 @@ title = "Qorix Markets — Complete Architecture Analysis (Flutter Reference)"
 id = "cfHUs_t_PbnaFu269i6kS"
 uri = "file://flutter-docs/ARCHITECTURE_ANALYSIS.md"
 type = "text"
-title = "Architecture Analysis"
+title = "7. Architecture Analysis (System Design)"
 
 [[outputs]]
 id = "Y219hA2bnkYjmlIgpDwJ8"
 uri = "file://flutter-docs/MOBILE_API_REFERENCE.md"
 type = "text"
-title = "Mobile API Reference"
+title = "2. Mobile API Reference (All Endpoints)"
 
 [[outputs]]
 id = "BwC710ggtSraq3oxg-Fop"
 uri = "file://flutter-docs/MOBILE_UI_SYSTEM.md"
 type = "text"
-title = "Mobile UI Design System"
+title = "14. Mobile UI System (Design Components)"
 
 [[outputs]]
 id = "BWOXJySfe6RKIl_doy3IA"
 uri = "file://flutter-docs/WEBSOCKET_EVENTS.md"
 type = "text"
-title = "Real-time Events Guide"
+title = "10. WebSocket Events Reference"
 
 [[outputs]]
 id = "Bm6JbaO-3_pcSR5hayqaH"
@@ -130,10 +130,70 @@ title = "05 — Admin Panel Login"
 id = "CUSFvMiKqSzgO34eOW0cy"
 uri = "file://flutter-docs/FLUTTER_PRODUCTION_PACK.md"
 type = "text"
-title = "Flutter Production Pack (Design Tokens + JSON + UX Priority + Design Direction)"
+title = "4. Flutter Production Pack (Complete Integration Guide)"
 
 [[outputs]]
 id = "6TGJon4SCZzVDn41YQTp3"
 uri = "file://flutter-docs/qorix-flutter-dev-pack.zip"
 type = "unspecified"
-title = "Qorix Flutter Dev Pack (857 KB) — Saari docs + screenshots"
+title = "Qorix App Developer Pack (Complete)"
+
+[[outputs]]
+id = "NPdFTlZ7bLDQsPM2K991W"
+uri = "file://flutter-docs/ENVIRONMENT_SETUP.md"
+type = "text"
+title = "1. Environment Setup (Base URL, Headers, Config)"
+
+[[outputs]]
+id = "p1ekAon7stw4eApzwtzr7"
+uri = "file://flutter-docs/AUTH_FLOW.md"
+type = "text"
+title = "3. Auth Flow (Login, 2FA, Google OAuth, New Device)"
+
+[[outputs]]
+id = "xGgTcNyWbHKTrqka1TQn6"
+uri = "file://flutter-docs/ENUMS_STATUS_MAPPINGS.md"
+type = "text"
+title = "5. Enums & Status Mappings"
+
+[[outputs]]
+id = "zidDaIKsa7lSLAomphTJW"
+uri = "file://flutter-docs/MOBILE_STATES.md"
+type = "text"
+title = "6. Mobile App States (State Machine)"
+
+[[outputs]]
+id = "yZSm8HIxNIdZhglBHvb5N"
+uri = "file://flutter-docs/STABILITY_CONTRACT.md"
+type = "text"
+title = "8. Stability Contract (API Versioning & Breaking Change Rules)"
+
+[[outputs]]
+id = "Tm6vE8JKYAeReM-3ABeSD"
+uri = "file://flutter-docs/SSE_LIFECYCLE.md"
+type = "text"
+title = "9. SSE Lifecycle (Real-time Events)"
+
+[[outputs]]
+id = "eYM7p3SSh3JEXoy7YqBOu"
+uri = "file://flutter-docs/DEMO_CREDENTIALS.md"
+type = "text"
+title = "11. Demo Credentials (Test Accounts)"
+
+[[outputs]]
+id = "PFtMuqzR0JcfOoYz2gom5"
+uri = "file://flutter-docs/DEMO_RESET_API.md"
+type = "text"
+title = "12. Demo Reset API"
+
+[[outputs]]
+id = "nNLB4ffu5qOqou6VbKJsk"
+uri = "file://flutter-docs/DEMO_SSE_EVENTS.md"
+type = "text"
+title = "13. Demo SSE Events (Real-time Event Payloads)"
+
+[[outputs]]
+id = "hn8Nvo00WIUakMMkX44JJ"
+uri = "file://flutter-docs/qorix-api.postman_collection.json"
+type = "unspecified"
+title = "15. Postman Collection (API Testing)"
