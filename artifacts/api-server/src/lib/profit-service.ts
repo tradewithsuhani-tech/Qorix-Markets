@@ -956,6 +956,67 @@ export async function distributeAutoDailyProfit(): Promise<DistributeProfitResul
 }
 
 /**
+ * Adjusts navSnapshotBalance when capital is withdrawn mid-day, BEFORE the daily profit
+ * run has completed for today.
+ *
+ * Scenario this guards against:
+ *   1. Profit cron starts → writes navSnapshotBalance = investment.amount (e.g. 1000) and
+ *      navSnapshotDate = today for the user.
+ *   2. A crash or parallel-run situation means daily_profit_runs is NOT yet committed.
+ *   3. User withdraws / stops their investment → effective deployed capital drops to newBasis.
+ *   4. On the crash-recovery re-run the snapshot (step 4a) would read the stale 1000 and
+ *      overpay profit on capital that no longer exists.
+ *
+ * Fix: if navSnapshotDate == today AND no daily_profit_runs row exists yet, overwrite
+ * navSnapshotBalance with newBasis so the re-run uses the corrected capital figure.
+ *
+ * Callers supply newBasis = 0 when the investment is fully stopped (no capital deployed).
+ * For a partial capital reduction, pass the remaining deployed amount.
+ *
+ * @param userId   - the user whose snapshot to adjust
+ * @param newBasis - the corrected snapshot balance (0 for a full stop)
+ * @param tx       - optional Drizzle transaction (uses db directly when omitted)
+ */
+export async function adjustNavSnapshotIfNeeded(
+  userId: number,
+  newBasis: number,
+  tx?: typeof db,
+): Promise<void> {
+  const todayStr = new Date().toISOString().split("T")[0]!;
+  const dbOrTx = tx ?? db;
+
+  // Fast-path: profit already distributed today — the committed snapshot is no longer
+  // the basis for any future re-run, so there is nothing to fix.
+  const profitRanRows = await dbOrTx
+    .select({ id: dailyProfitRunsTable.id })
+    .from(dailyProfitRunsTable)
+    .where(eq(dailyProfitRunsTable.runDate, todayStr))
+    .limit(1);
+  if (profitRanRows.length > 0) return;
+
+  // Check whether today's snapshot has already been captured for this investment.
+  // If navSnapshotDate != today the profit run hasn't started yet and there is no
+  // stale snapshot to correct.
+  const invRows = await dbOrTx
+    .select({ navSnapshotDate: investmentsTable.navSnapshotDate })
+    .from(investmentsTable)
+    .where(eq(investmentsTable.userId, userId))
+    .limit(1);
+  if (!invRows[0] || invRows[0].navSnapshotDate !== todayStr) return;
+
+  // Overwrite the stale snapshot so any crash-recovery re-run uses the correct basis.
+  await dbOrTx
+    .update(investmentsTable)
+    .set({ navSnapshotBalance: newBasis.toString() })
+    .where(eq(investmentsTable.userId, userId));
+
+  profitLogger.info(
+    { userId, newBasis, todayStr },
+    "NAV: mid-day capital change — navSnapshotBalance adjusted before today's profit run",
+  );
+}
+
+/**
  * Monthly 25th sweep: moves each user's unswept signal-trade net P/L
  * from TRADING balance → PROFIT balance. Profit balance remains user-withdrawable
  * at any time (main/trading are untouched by this sweep).

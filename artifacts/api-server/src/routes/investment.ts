@@ -8,6 +8,7 @@ import { createNotification } from "../lib/notifications";
 import { checkAndFireMilestones } from "../lib/milestone-service";
 import { logger } from "../lib/logger";
 import { isSmokeTestUser } from "../lib/smoke-test-account";
+import { adjustNavSnapshotIfNeeded } from "../lib/profit-service";
 
 const REFERRAL_SIGNUP_BONUS_RATE = 0.03;
 const REFERRAL_SIGNUP_MIN_DEPOSIT = 100;
@@ -342,12 +343,23 @@ router.post("/investment/stop", async (req: AuthRequest, res) => {
     return;
   }
 
-  const [updated] = await db.update(investmentsTable)
-    .set({ isActive: false, stoppedAt: new Date() })
-    .where(eq(investmentsTable.userId, req.userId!))
-    .returning();
+  const updated = await db.transaction(async (tx) => {
+    const [upd] = await tx
+      .update(investmentsTable)
+      .set({ isActive: false, stoppedAt: new Date() })
+      .where(eq(investmentsTable.userId, req.userId!))
+      .returning();
 
-  res.json(formatInvestment(updated!));
+    // If today's NAV snapshot was already captured but the daily profit run has not
+    // yet completed (no daily_profit_runs row for today), zero out navSnapshotBalance.
+    // This prevents a crash-recovery re-run of the profit cron from computing profit
+    // on capital that has since been withdrawn from the active strategy.
+    await adjustNavSnapshotIfNeeded(req.userId!, 0, tx);
+
+    return upd!;
+  });
+
+  res.json(formatInvestment(updated));
 });
 
 router.patch("/investment/protection", async (req: AuthRequest, res) => {
