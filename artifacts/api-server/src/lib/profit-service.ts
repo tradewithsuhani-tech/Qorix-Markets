@@ -627,6 +627,18 @@ export async function distributeAutoDailyProfit(): Promise<DistributeProfitResul
         { userId: pri.userId, newRiskLevel: pri.pendingRiskLevel, promotedOn: todayStr },
         "NAV: pending risk-level change promoted",
       );
+
+      // Notify the user so they have an in-app record that their scheduled
+      // risk-level change actually took effect (they may have queued it the
+      // prior day and forgotten about it by the time the profit run fires).
+      const levelLabel =
+        pri.pendingRiskLevel.charAt(0).toUpperCase() + pri.pendingRiskLevel.slice(1).toLowerCase();
+      await createNotification(
+        pri.userId,
+        "risk_level_changed",
+        "✅ Risk Level Updated",
+        `Your risk level has been changed to ${levelLabel} as scheduled. Your trading will now follow the new risk settings.`,
+      );
     }
 
     // ── 4. Load all active investments (post-settlement) ─────────────────
