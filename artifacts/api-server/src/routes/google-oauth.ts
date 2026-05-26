@@ -42,7 +42,11 @@ router.get("/auth/google", (req, res) => {
     return;
   }
   const redirectUri = `${getBackendUrl(req)}/api/auth/google/callback`;
-  const state = crypto.randomBytes(16).toString("hex");
+  // Encode platform into state so the callback can branch the redirect.
+  // Format: "<random_hex>:<platform>" — platform is "mobile" or omitted.
+  const nonce = crypto.randomBytes(16).toString("hex");
+  const platform = String(req.query["platform"] ?? "").trim().toLowerCase();
+  const state = platform === "mobile" ? `${nonce}:mobile` : nonce;
   const params = new URLSearchParams({
     client_id: GOOGLE_CLIENT_ID,
     redirect_uri: redirectUri,
@@ -55,13 +59,37 @@ router.get("/auth/google", (req, res) => {
   res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`);
 });
 
+// Decode the platform tag embedded in the OAuth state param.
+// State format: "<nonce>" (web) or "<nonce>:mobile" (mobile).
+function platformFromState(state: string | undefined): "mobile" | "web" {
+  if (!state) return "web";
+  const parts = state.split(":");
+  return parts[parts.length - 1] === "mobile" ? "mobile" : "web";
+}
+
+// Build the redirect target depending on the originating platform.
+// Mobile uses the Flutter custom-scheme deep link; web uses the frontend URL.
+function buildRedirect(
+  platform: "mobile" | "web",
+  frontend: string,
+  params: Record<string, string>,
+): string {
+  const qs = new URLSearchParams(params).toString();
+  if (platform === "mobile") {
+    return `qorixmarkets://auth/callback?${qs}`;
+  }
+  const [key, value] = Object.entries(params)[0]!;
+  return `${frontend}/login?${key}=${encodeURIComponent(value)}`;
+}
+
 // Step 2: Google calls back here with auth code
 router.get("/auth/google/callback", async (req, res) => {
   const frontend = getFrontendUrl(req);
+  const platform = platformFromState(getQueryString(req, "state") ?? undefined);
   try {
     const code = getQueryString(req, "code");
     if (!code) {
-      res.redirect(`${frontend}/login?error=google_no_code`);
+      res.redirect(buildRedirect(platform, frontend, { error: "google_no_code" }));
       return;
     }
 
@@ -83,13 +111,13 @@ router.get("/auth/google/callback", async (req, res) => {
     if (!tokenRes.ok) {
       const txt = await tokenRes.text();
       logger.error({ status: tokenRes.status, body: txt }, "[google-oauth] token exchange failed");
-      res.redirect(`${frontend}/login?error=google_token_failed`);
+      res.redirect(buildRedirect(platform, frontend, { error: "google_token_failed" }));
       return;
     }
 
     const tokens = (await tokenRes.json()) as { access_token?: string; id_token?: string };
     if (!tokens.access_token) {
-      res.redirect(`${frontend}/login?error=google_no_token`);
+      res.redirect(buildRedirect(platform, frontend, { error: "google_no_token" }));
       return;
     }
 
@@ -98,14 +126,14 @@ router.get("/auth/google/callback", async (req, res) => {
       headers: { Authorization: `Bearer ${tokens.access_token}` },
     });
     if (!profileRes.ok) {
-      res.redirect(`${frontend}/login?error=google_profile_failed`);
+      res.redirect(buildRedirect(platform, frontend, { error: "google_profile_failed" }));
       return;
     }
     const profile = (await profileRes.json()) as {
       sub: string; email: string; email_verified?: boolean; name?: string; picture?: string;
     };
     if (!profile.email) {
-      res.redirect(`${frontend}/login?error=google_no_email`);
+      res.redirect(buildRedirect(platform, frontend, { error: "google_no_email" }));
       return;
     }
 
@@ -136,7 +164,7 @@ router.get("/auth/google/callback", async (req, res) => {
         points: 0,
       }).returning();
       if (!newUser) {
-        res.redirect(`${frontend}/login?error=google_create_failed`);
+        res.redirect(buildRedirect(platform, frontend, { error: "google_create_failed" }));
         return;
       }
       userId = newUser.id;
@@ -171,11 +199,11 @@ router.get("/auth/google/callback", async (req, res) => {
     } catch (err: any) {
       logger.warn({ err: err?.message, userId }, "[google-oauth] device tracking skipped");
     }
-    // Redirect to frontend login page with token — frontend captures and stores it
-    res.redirect(`${frontend}/login?token=${encodeURIComponent(token)}`);
+    // Redirect to frontend (web) or deep link (mobile) with JWT token
+    res.redirect(buildRedirect(platform, frontend, { token }));
   } catch (err) {
     logger.error({ err }, "[google-oauth] callback error");
-    res.redirect(`${frontend}/login?error=google_callback_error`);
+    res.redirect(buildRedirect(platform, frontend, { error: "google_callback_error" }));
   }
 });
 
