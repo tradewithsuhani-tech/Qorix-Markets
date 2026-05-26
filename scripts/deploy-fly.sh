@@ -150,6 +150,7 @@ if flyctl deploy \
   --config artifacts/api-server/fly.toml \
   --dockerfile artifacts/api-server/Dockerfile \
   --remote-only \
+  --depot=false \
   --build-arg BUILD_TIME="$(date +%s)" \
   --strategy rolling \
   --wait-timeout 300; then
@@ -185,18 +186,32 @@ if [ -n "$PREV_IMAGE" ]; then
   log_info "Cache from: $PREV_IMAGE"
 fi
 
-if flyctl deploy \
-  --config artifacts/qorix-markets/fly.toml \
-  --dockerfile artifacts/qorix-markets/Dockerfile \
-  --local-only \
-  --no-cache \
-  --strategy rolling \
-  --wait-timeout 300 \
+WEB_TAG="full-$(date +%s)"
+WEB_IMAGE="registry.fly.io/qorix-markets-web:$WEB_TAG"
+log_info "Building web image locally: $WEB_IMAGE"
+
+PREV_IMAGE_BUILD_ARG=""
+if [ -n "$PREV_IMAGE" ]; then
+  PREV_IMAGE_BUILD_ARG="--build-arg PREV_IMAGE=$PREV_IMAGE"
+fi
+
+flyctl auth docker 2>/dev/null || true
+
+if docker build \
+  -f artifacts/qorix-markets/Dockerfile \
   --build-arg VITE_API_URL="https://api.qorixmarkets.com" \
   --build-arg BASE_PATH="/" \
   --build-arg VITE_CAPTCHA_PROVIDER="turnstile" \
   --build-arg VITE_TURNSTILE_SITE_KEY="0x4AAAAAADF7hL3-sNctEdTJ" \
-  $PREV_IMAGE_ARG; then
+  $PREV_IMAGE_BUILD_ARG \
+  -t "$WEB_IMAGE" \
+  . && \
+  docker push "$WEB_IMAGE" && \
+  flyctl deploy \
+    --app qorix-markets-web \
+    --image "$WEB_IMAGE" \
+    --strategy rolling \
+    --wait-timeout 300; then
   log_ok "Web app deployed"
   STEP_DEPLOY_WEB="Deploy Web → Fly.io:pass"
 else
