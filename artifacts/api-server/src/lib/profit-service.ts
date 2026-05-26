@@ -163,9 +163,19 @@ export async function distributeDailyProfit(
       const drawdownLimitAmt = (drawdownLimitPct / 100) * amount;
 
       if (currentDrawdown >= drawdownLimitAmt) {
+        // System compliance force-stop: clear any pending risk-level change so it
+        // cannot be unexpectedly promoted on the next profit run after the user
+        // restarts. No orphaned pending states survive a compliance stop.
         await tx
           .update(investmentsTable)
-          .set({ isActive: false, isPaused: true, stoppedAt: new Date(), pausedAt: new Date() })
+          .set({
+            isActive: false,
+            isPaused: true,
+            stoppedAt: new Date(),
+            pausedAt: new Date(),
+            pendingRiskLevel: null,
+            pendingRiskLevelDate: null,
+          })
           .where(eq(investmentsTable.userId, inv.userId));
 
         await tx.insert(transactionsTable).values({
@@ -688,9 +698,19 @@ export async function distributeAutoDailyProfit(): Promise<DistributeProfitResul
       const drawdownLimitAmt = (drawdownLimitPct / 100) * amount;
 
       if (currentDrawdown >= drawdownLimitAmt) {
+        // System compliance force-stop: clear any pending risk-level change so it
+        // cannot be unexpectedly promoted on the next profit run after the user
+        // restarts. No orphaned pending states survive a compliance stop.
         await tx
           .update(investmentsTable)
-          .set({ isActive: false, isPaused: true, stoppedAt: new Date(), pausedAt: new Date() })
+          .set({
+            isActive: false,
+            isPaused: true,
+            stoppedAt: new Date(),
+            pausedAt: new Date(),
+            pendingRiskLevel: null,
+            pendingRiskLevelDate: null,
+          })
           .where(eq(investmentsTable.userId, inv.userId));
 
         await tx.insert(transactionsTable).values({

@@ -355,12 +355,13 @@ router.post("/investment/stop", async (req: AuthRequest, res) => {
       .set({
         isActive: false,
         stoppedAt: new Date(),
-        // Invariant: pendingRiskLevel is always NULL when isActive = false.
-        // If a risk-level change was requested before the user stopped, that pending
-        // change is cancelled here. A fresh /investment/start will apply whichever
-        // risk level the user chooses at that point.
-        pendingRiskLevel: null,
-        pendingRiskLevelDate: null,
+        // Deliberate: pendingRiskLevel is intentionally preserved here.
+        // A user-initiated stop is a voluntary pause — the pending risk-level
+        // change reflects their stated intent and should survive the stop so
+        // that it can be re-evaluated when they restart.
+        // Admin force-stops (POST /admin/users/:id/action with force_stop_investment)
+        // explicitly cancel the pending change at the point of force-stop.
+        // /investment/start always clears it when the user restarts with a new choice.
       })
       .where(eq(investmentsTable.userId, req.userId!))
       .returning();

@@ -34,7 +34,7 @@ import { getRedisConnection } from "../lib/redis";
 import { auditAdminRequest, requireAdminPermission } from "../middlewares/admin-rbac";
 import { notifyMaintenanceInvalidation, getMaintenanceState } from "../middlewares/maintenance";
 import { SetDailyProfitBody } from "@workspace/api-zod";
-import { transferProfitToMain } from "../lib/profit-service";
+import { transferProfitToMain, adjustNavSnapshotIfNeeded } from "../lib/profit-service";
 import { sendUsdtFromTreasury, getTreasuryUsdtBalance } from "../lib/crypto-deposit/sweep";
 import { creditUserDeposit } from "../lib/tron-monitor";
 import { emitProfitDistribution } from "../lib/event-bus";
@@ -516,9 +516,78 @@ router.get("/admin/users", async (req, res) => {
 
 router.post("/admin/users/:id/action", async (req: AuthRequest, res) => {
   const id = parseInt(getParam(req, "id"));
-  const { action } = req.body as { action?: string };
-  const updates: Partial<typeof usersTable.$inferInsert> = {};
+  const { action, reason } = req.body as { action?: string; reason?: string };
 
+  // ── force_stop_investment: compliance / admin-initiated force-stop ────────
+  // Distinct from a user-initiated stop in two important ways:
+  //   1. It cancels any pending risk-level change (no orphaned pending states
+  //      survive an admin intervention).
+  //   2. It writes an audit transaction so the event appears in the user's
+  //      transaction history with the admin-supplied reason.
+  //
+  // State machine:
+  //   ACTIVE | ACTIVE+PENDING_RISK_CHANGE  →  FORCE_STOPPED (isActive=false, isPaused=true)
+  //   PAUSED (user-stopped)               →  FORCE_STOPPED
+  //   Idempotent: already force-stopped rows are updated again (no-op in practice).
+  if (action === "force_stop_investment") {
+    const stopReason = String(reason ?? "").trim() || "Admin force-stop";
+
+    const invRows = await db
+      .select({ id: investmentsTable.id, pendingRiskLevel: investmentsTable.pendingRiskLevel })
+      .from(investmentsTable)
+      .where(eq(investmentsTable.userId, id))
+      .limit(1);
+
+    if (!invRows[0]) {
+      res.status(404).json({ error: "No investment found for this user" });
+      return;
+    }
+
+    const hadPending = invRows[0].pendingRiskLevel != null;
+
+    await db.transaction(async (tx) => {
+      await tx
+        .update(investmentsTable)
+        .set({
+          isActive: false,
+          isPaused: true,
+          stoppedAt: new Date(),
+          pausedAt: new Date(),
+          // Compliance invariant: cancel all pending risk transitions.
+          // A force-stop means admin has intervened; any pending state change
+          // the user had requested is no longer relevant or safe to promote.
+          pendingRiskLevel: null,
+          pendingRiskLevelDate: null,
+        })
+        .where(eq(investmentsTable.userId, id));
+
+      // Audit record so the event is visible in the user's transaction history.
+      await tx.insert(transactionsTable).values({
+        userId: id,
+        type: "system",
+        amount: "0",
+        status: "completed",
+        description: hadPending
+          ? `Admin force-stop: investment paused and pending risk-level change cancelled. Reason: ${stopReason}`
+          : `Admin force-stop: investment paused by admin. Reason: ${stopReason}`,
+      });
+
+      // Safety: if today's NAV snapshot was captured but the profit run hasn't
+      // completed yet, zero out the snapshot basis to prevent a crash-recovery
+      // re-run from overpaying profit on force-stopped capital.
+      await adjustNavSnapshotIfNeeded(id, 0, tx);
+    });
+
+    transactionLogger.info(
+      { event: "admin_force_stop_investment", adminId: req.userId, userId: id, hadPending, reason: stopReason },
+      "Admin force-stop: investment paused, pending risk-level change cancelled",
+    );
+    res.json({ success: true, userId: id, hadPendingRiskChange: hadPending, reason: stopReason });
+    return;
+  }
+
+  // ── Standard account-level actions (affect usersTable only) ──────────────
+  const updates: Partial<typeof usersTable.$inferInsert> = {};
   if (action === "freeze") updates.isFrozen = true;
   else if (action === "unfreeze") updates.isFrozen = false;
   else if (action === "disable") updates.isDisabled = true;
