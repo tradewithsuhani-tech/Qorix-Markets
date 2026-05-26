@@ -1337,6 +1337,12 @@ export function DemoDashboardBody({
           </div>
           <div className="flex items-center gap-2 overflow-x-auto flex-nowrap no-scrollbar -mx-3 px-3 sm:mx-0 sm:px-0 pb-0.5 sm:pb-0">
             {summary?.riskLevel && <RiskBadge score={perf?.riskScore ?? "Low"} />}
+            {investment?.pendingRiskLevel && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border bg-amber-500/10 border-amber-500/25 text-amber-300 whitespace-nowrap shrink-0">
+                <Clock style={{ width: 11, height: 11 }} />
+                <span className="capitalize">{investment.pendingRiskLevel}</span> risk tomorrow
+              </span>
+            )}
             <MarketsStatusPill />
             <InsightRotatorPill
               insights={[

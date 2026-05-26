@@ -13,6 +13,7 @@ import { useColors } from "@/hooks/useColors";
 
 interface DeployedStrategyCardProps {
   onStop?: () => void;
+  pendingRiskLevel?: string | null;
 }
 
 const BRAND_PURPLE = "#A855F7";
@@ -70,7 +71,7 @@ function PulseRing({ color, size = 10 }: { color: string; size?: number }) {
   );
 }
 
-export function DeployedStrategyCard({ onStop }: DeployedStrategyCardProps) {
+export function DeployedStrategyCard({ onStop, pendingRiskLevel }: DeployedStrategyCardProps) {
   const colors = useColors();
   const router = useRouter();
   const { portfolio, stopStrategy } = usePortfolio();
@@ -122,6 +123,22 @@ export function DeployedStrategyCard({ onStop }: DeployedStrategyCardProps) {
           <Text style={[styles.liveText, { color: GREEN }]}>BOT TRADING LIVE</Text>
         </View>
       </View>
+
+      {/* Pending risk level notice */}
+      {!!pendingRiskLevel && (
+        <View style={styles.pendingBanner}>
+          <View style={styles.pendingIconWrap}>
+            <Feather name="clock" size={12} color="#fbbf24" />
+          </View>
+          <Text style={styles.pendingText}>
+            Risk level changing to{" "}
+            <Text style={styles.pendingLevel}>
+              {pendingRiskLevel.charAt(0).toUpperCase() + pendingRiskLevel.slice(1).toLowerCase()}
+            </Text>
+            {" "}tomorrow
+          </Text>
+        </View>
+      )}
 
       {/* Dual amount row: Trading vs Current */}
       <View style={styles.dualRow}>
@@ -342,4 +359,26 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   stopBtnText: { fontSize: 13, fontFamily: "Inter_700Bold" },
+
+  pendingBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "rgba(251,191,36,0.35)",
+    backgroundColor: "rgba(251,191,36,0.08)",
+  },
+  pendingIconWrap: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    backgroundColor: "rgba(251,191,36,0.15)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  pendingText: { flex: 1, fontSize: 12, color: "rgba(251,191,36,0.85)", fontFamily: "Inter_500Medium" },
+  pendingLevel: { fontFamily: "Inter_700Bold", color: "#fbbf24" },
 });

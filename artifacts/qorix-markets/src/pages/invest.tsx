@@ -10,13 +10,14 @@ import {
   getGetWalletQueryKey,
   getGetInvestmentQueryKey,
 } from "@workspace/api-client-react";
+import { authFetch } from "@/lib/auth-fetch";
 import { Layout } from "@/components/layout";
 import { AnimatedCounter } from "@/components/animated-counter";
 import { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Shield, Zap, BarChart2, Play, Square, RefreshCw,
-  TrendingUp, AlertTriangle, CheckCircle, ChevronRight,
+  TrendingUp, AlertTriangle, CheckCircle, ChevronRight, Clock,
   ArrowUpRight, Info, X, Wallet, Bot, Cpu, Activity, Terminal, Sparkles, Plus
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -829,6 +830,8 @@ export default function InvestPage() {
   const [pendingLimit, setPendingLimit] = useState<number | null>(null);
   const [topupAmount, setTopupAmount] = useState("");
   const [showTopupModal, setShowTopupModal] = useState(false);
+  const [riskChangeChoice, setRiskChangeChoice] = useState<string | null>(null);
+  const [isChangingRisk, setIsChangingRisk] = useState(false);
 
   const selectedProfile = useMemo(
     () => RISK_PROFILES.find(p => p.id === riskLevel) ?? RISK_PROFILES[1]!,
@@ -905,6 +908,27 @@ export default function InvestPage() {
       },
     },
   });
+
+  const handleChangeRiskLevel = async (newLevel: string) => {
+    setIsChangingRisk(true);
+    try {
+      await authFetch("/api/investment/risk-level", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ riskLevel: newLevel.toLowerCase() }),
+      });
+      toast({
+        title: "Risk level change queued",
+        description: `Your risk level will change to ${newLevel.charAt(0).toUpperCase() + newLevel.slice(1).toLowerCase()} from the next trading day.`,
+      });
+      queryClient.invalidateQueries({ queryKey: getGetInvestmentQueryKey() });
+      setRiskChangeChoice(null);
+    } catch (err: any) {
+      toast({ title: "Update failed", description: err?.message ?? "Could not update risk level.", variant: "destructive" });
+    } finally {
+      setIsChangingRisk(false);
+    }
+  };
 
   const activeProfile = RISK_PROFILES.find(
     p => p.id === investment?.riskLevel?.toUpperCase()
@@ -1750,6 +1774,110 @@ export default function InvestPage() {
                   });
                 })()}
               </div>
+            </div>
+
+            {/* Pending Risk Level Banner */}
+            <AnimatePresence>
+              {investment.pendingRiskLevel && (
+                <motion.div
+                  key="pending-risk-banner"
+                  initial={{ opacity: 0, y: -6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -6 }}
+                  transition={{ duration: 0.3 }}
+                  className="flex items-start gap-3 p-4 rounded-2xl border border-amber-500/30 bg-amber-500/[0.07]"
+                >
+                  <div className="w-9 h-9 rounded-xl bg-amber-500/15 border border-amber-500/35 flex items-center justify-center shrink-0">
+                    <Clock style={{ width: 15, height: 15 }} className="text-amber-300" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-amber-300">
+                      Risk level changing to{" "}
+                      <span className="capitalize">{investment.pendingRiskLevel}</span> tomorrow
+                    </p>
+                    <p className="text-xs text-amber-200/60 mt-0.5 leading-relaxed">
+                      Your current strategy stays active today. The new risk level takes effect from the next trading session.
+                    </p>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Change Risk Level Panel */}
+            <div className="glass-card p-5 rounded-2xl space-y-4">
+              <div className="flex items-center gap-2">
+                <BarChart2 style={{ width: 14, height: 14 }} className="text-muted-foreground" />
+                <span className="text-sm font-medium text-muted-foreground">Change Risk Level</span>
+                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-500/15 text-blue-400 border border-blue-500/25 font-semibold uppercase tracking-wide ml-auto">
+                  Effective tomorrow
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Select a new risk level. Today's profit continues at the current rate — the change takes effect from the next trading day.
+              </p>
+              <div className="grid grid-cols-3 gap-2.5">
+                {RISK_PROFILES.map((profile) => {
+                  const isCurrent = profile.id === investment.riskLevel?.toUpperCase();
+                  const isPendingTarget = investment.pendingRiskLevel?.toUpperCase() === profile.id;
+                  const isSelected = riskChangeChoice === profile.id;
+                  return (
+                    <button
+                      key={profile.id}
+                      type="button"
+                      disabled={isCurrent && !investment.pendingRiskLevel}
+                      onClick={() => setRiskChangeChoice(isSelected ? null : profile.id)}
+                      className={`relative flex flex-col items-center gap-1.5 p-3 rounded-xl border text-center transition-all text-sm font-semibold
+                        ${isCurrent && !investment.pendingRiskLevel
+                          ? "border-white/10 bg-white/[0.03] text-white/30 cursor-default"
+                          : isSelected
+                            ? "border-blue-500/50 bg-blue-500/15 text-blue-300"
+                            : isPendingTarget
+                              ? "border-amber-500/40 bg-amber-500/10 text-amber-300"
+                              : "border-white/10 bg-white/[0.03] text-white/70 hover:border-white/20 hover:bg-white/[0.06]"
+                        }`}
+                    >
+                      {isPendingTarget && (
+                        <span className="absolute -top-1.5 -right-1.5 text-[9px] font-bold px-1.5 py-px rounded-full bg-amber-500 text-black uppercase tracking-wide">
+                          Pending
+                        </span>
+                      )}
+                      {isCurrent && !investment.pendingRiskLevel && (
+                        <span className="absolute -top-1.5 -right-1.5 text-[9px] font-bold px-1.5 py-px rounded-full bg-emerald-500 text-black uppercase tracking-wide">
+                          Active
+                        </span>
+                      )}
+                      <span className={profile.color}>{profile.label}</span>
+                      <span className="text-[10px] font-normal text-white/45">{profile.drawdownLimit}% limit</span>
+                    </button>
+                  );
+                })}
+              </div>
+              {riskChangeChoice && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="flex items-center gap-2 pt-1"
+                >
+                  <button
+                    type="button"
+                    disabled={isChangingRisk}
+                    onClick={() => handleChangeRiskLevel(riskChangeChoice)}
+                    className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-blue-500/15 text-blue-300 border border-blue-500/30 hover:bg-blue-500/25 font-semibold text-sm transition-all disabled:opacity-50"
+                  >
+                    {isChangingRisk
+                      ? "Queuing change..."
+                      : `Switch to ${RISK_PROFILES.find(p => p.id === riskChangeChoice)?.label ?? riskChangeChoice} tomorrow`}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRiskChangeChoice(null)}
+                    className="p-2.5 rounded-xl border border-white/10 text-white/50 hover:bg-white/[0.06] transition-all"
+                  >
+                    <X style={{ width: 14, height: 14 }} />
+                  </button>
+                </motion.div>
+              )}
             </div>
 
             {/* Capital Protection Panel */}

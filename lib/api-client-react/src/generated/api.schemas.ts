@@ -172,6 +172,10 @@ export interface Investment {
   userId: number;
   amount: number;
   riskLevel: string;
+  /** Requested new risk level awaiting promotion on the next trading day, or null */
+  pendingRiskLevel?: string | null;
+  /** ISO date string of when the pending risk-level change was requested, or null */
+  pendingRiskLevelDate?: string | null;
   isActive: boolean;
   autoCompound: boolean;
   totalProfit: number;

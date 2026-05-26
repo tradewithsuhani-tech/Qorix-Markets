@@ -18,6 +18,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   getGetDashboardSummaryQueryKey,
   useGetDashboardSummary,
+  useGetInvestment,
 } from "@workspace/api-client-react";
 import { AIBotStatus } from "@/components/AIBotStatus";
 import { DeployedStrategyCard } from "@/components/DeployedStrategyCard";
@@ -61,6 +62,10 @@ export default function DashboardScreen() {
       refetchInterval: 30_000,
     },
   });
+  const investmentQuery = useGetInvestment({
+    query: { enabled: isAuthenticated && !isDemo, refetchInterval: 60_000 },
+  });
+  const pendingRiskLevel = investmentQuery.data?.pendingRiskLevel ?? null;
 
   const [refreshing, setRefreshing] = useState(false);
   const [tickIndex, setTickIndex] = useState(0);
@@ -167,7 +172,7 @@ export default function DashboardScreen() {
       {/* Active deployed strategy */}
       {portfolio && portfolio.deployedAmount > 0 && (
         <Animated.View entering={FadeInDown.duration(500).delay(nextDelay())}>
-          <DeployedStrategyCard onStop={() => router.push("/withdraw")} />
+          <DeployedStrategyCard onStop={() => router.push("/withdraw")} pendingRiskLevel={pendingRiskLevel} />
         </Animated.View>
       )}
 
