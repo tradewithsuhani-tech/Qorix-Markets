@@ -477,7 +477,7 @@ export async function distributeDailyProfit(
       totalProfitDistributed: totalProfitDistributed.toString(),
       investorsAffected,
       referralBonusPaid: totalReferralBonusPaid.toString(),
-    });
+    }).onConflictDoNothing();
   });
 
   return {
@@ -948,7 +948,7 @@ export async function distributeAutoDailyProfit(): Promise<DistributeProfitResul
         totalProfitDistributed: totalProfitDistributed.toString(),
         investorsAffected,
         referralBonusPaid: totalReferralBonusPaid.toString(),
-      });
+      }).onConflictDoNothing();
     }
   });
 

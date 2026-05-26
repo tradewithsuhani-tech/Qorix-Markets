@@ -1,4 +1,4 @@
-import { pgTable, serial, numeric, integer, date, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, serial, numeric, integer, date, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -11,7 +11,9 @@ export const dailyProfitRunsTable = pgTable("daily_profit_runs", {
   investorsAffected: integer("investors_affected").notNull().default(0),
   referralBonusPaid: numeric("referral_bonus_paid", { precision: 18, scale: 8 }).notNull().default("0"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
-});
+}, (t) => [
+  uniqueIndex("uq_daily_profit_runs_run_date").on(t.runDate),
+]);
 
 export const insertDailyProfitRunSchema = createInsertSchema(dailyProfitRunsTable).omit({ id: true, createdAt: true });
 export type InsertDailyProfitRun = z.infer<typeof insertDailyProfitRunSchema>;
