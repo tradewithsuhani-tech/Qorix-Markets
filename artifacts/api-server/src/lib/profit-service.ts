@@ -549,9 +549,10 @@ export async function distributeAutoDailyProfit(): Promise<DistributeProfitResul
   let totalAUM = 0;
 
   await db.transaction(async (tx) => {
-    // ── 3. Settle pending top-ups from previous days ─────────────────────
-    // Any investment where navPendingDate < today gets its pending amount
-    // merged into the live amount before we snapshot.
+    // ── 3. Settle pending top-ups from PRIOR days (strictly < today) ─────
+    // Top-ups recorded with navPendingDate < today are now old enough to join
+    // today's snapshot. Top-ups recorded TODAY are NOT settled — they earn
+    // from tomorrow's run only.
     const pendingInvs = await tx
       .select({
         userId: investmentsTable.userId,
@@ -562,13 +563,13 @@ export async function distributeAutoDailyProfit(): Promise<DistributeProfitResul
       .where(
         and(
           eq(investmentsTable.isActive, true),
-          lte(investmentsTable.navPendingDate, todayStr),
+          lt(investmentsTable.navPendingDate, todayStr),   // strictly < today
           gt(investmentsTable.navPendingAdd, "0"),
         ),
       );
 
     for (const pi of pendingInvs) {
-      const base = parseFloat(pi.amount as string);
+      const base    = parseFloat(pi.amount as string);
       const pending = parseFloat(pi.navPendingAdd as string);
       if (pending > 0) {
         await tx
@@ -593,26 +594,29 @@ export async function distributeAutoDailyProfit(): Promise<DistributeProfitResul
       0,
     );
 
-    // Take NAV snapshots for all active investments (idempotent — only writes
-    // when navSnapshotDate != today so a crash mid-run is safe to resume).
+    // ── 4a. Build the snapshot map BEFORE writing to DB ──────────────────
+    // For investments already snapshotted today (crash-recovery re-run),
+    // use the persisted navSnapshotBalance so results are reproducible.
+    // For all others, use the post-settlement `amount` as today's basis.
+    const snapshotMap = new Map<number, number>();
+    for (const inv of activeInvestments) {
+      const alreadySnapshotted = inv.navSnapshotDate === todayStr && inv.navSnapshotBalance != null;
+      const snap = alreadySnapshotted
+        ? parseFloat(inv.navSnapshotBalance as string)
+        : parseFloat(inv.amount as string);
+      snapshotMap.set(inv.userId, snap);
+    }
+
+    // ── 4b. Persist snapshots for investments not yet done today ─────────
     for (const inv of activeInvestments) {
       if (inv.navSnapshotDate === todayStr) continue;
       await tx
         .update(investmentsTable)
         .set({
-          navSnapshotBalance: inv.amount,
+          navSnapshotBalance: snapshotMap.get(inv.userId)!.toString(),
           navSnapshotDate: todayStr,
         })
         .where(eq(investmentsTable.userId, inv.userId));
-    }
-
-    // Re-read so we have the freshly written snapshot values.
-    const snapshotMap = new Map<number, number>();
-    for (const inv of activeInvestments) {
-      const snap = inv.navSnapshotDate === todayStr
-        ? parseFloat(inv.amount as string)
-        : parseFloat(inv.navSnapshotBalance as string) || parseFloat(inv.amount as string);
-      snapshotMap.set(inv.userId, snap);
     }
 
     for (const inv of activeInvestments) {
@@ -641,23 +645,59 @@ export async function distributeAutoDailyProfit(): Promise<DistributeProfitResul
 
       await ensureUserAccounts(inv.userId, tx);
 
-      // ── 5. Compute profit from snapshot balance × today's rate ────────
-      const snapshotBalance = snapshotMap.get(inv.userId) ?? parseFloat(inv.amount as string);
+      // ── 5. Drawdown protection — check before computing profit ─────────
+      const amount = parseFloat(inv.amount as string);
+      const currentDrawdown = parseFloat(inv.drawdown as string);
+      const drawdownLimitPct = parseFloat(inv.drawdownLimit as string) || (DRAWDOWN_LIMITS[inv.riskLevel] ?? 0.05) * 100;
+      const drawdownLimitAmt = (drawdownLimitPct / 100) * amount;
+
+      if (currentDrawdown >= drawdownLimitAmt) {
+        await tx
+          .update(investmentsTable)
+          .set({ isActive: false, isPaused: true, stoppedAt: new Date(), pausedAt: new Date() })
+          .where(eq(investmentsTable.userId, inv.userId));
+
+        await tx.insert(transactionsTable).values({
+          userId: inv.userId,
+          type: "system",
+          amount: "0",
+          status: "completed",
+          description: `Capital Protection triggered: drawdown limit of ${drawdownLimitPct}% reached. Trading paused automatically.`,
+        });
+
+        await createNotification(
+          inv.userId,
+          "drawdown_alert",
+          "⚠️ Capital Protection Triggered",
+          `Your drawdown reached the ${drawdownLimitPct}% limit. Trading has been automatically paused. $${Math.max(0, amount - currentDrawdown).toFixed(2)} USDT is secured in your wallet.`,
+        );
+
+        logger.info({ userId: inv.userId, drawdownLimitPct }, "NAV: investment paused — capital protection triggered");
+        continue;
+      }
+
+      // ── 6. Compute profit from snapshot balance × today's rate ────────
+      const snapshotBalance = snapshotMap.get(inv.userId) ?? amount;
       if (snapshotBalance <= 0) continue;
 
       const riskKey = (inv.riskLevel ?? "medium").toLowerCase();
       const dailyRatePct = rates[riskKey] ?? 0;
       const dailyProfitAmount = snapshotBalance * (dailyRatePct / 100);
 
-      // Skip if rate is zero (e.g., weekend fallback) — nothing to credit.
+      // Skip if rate is zero (e.g., holiday/weekend fallback) — nothing to credit.
       if (dailyRatePct === 0) continue;
 
       const totalProfit = parseFloat(inv.totalProfit as string);
       const currentPeakBalance = parseFloat(inv.peakBalance as string) || snapshotBalance;
-      const amount = parseFloat(inv.amount as string);
       const dailyPct = dailyRatePct;
       const vipInfo = getVipInfo(snapshotBalance);
       const newTotalProfit = totalProfit + dailyProfitAmount;
+
+      // Update drawdown accumulator for loss days (reset never happens mid-run)
+      let newDrawdown = currentDrawdown;
+      if (dailyProfitAmount < 0) {
+        newDrawdown = currentDrawdown + Math.abs(dailyProfitAmount);
+      }
 
       const equityAfterToday = inv.autoCompound
         ? amount + dailyProfitAmount
@@ -689,6 +729,7 @@ export async function distributeAutoDailyProfit(): Promise<DistributeProfitResul
             amount: (amount + dailyProfitAmount).toString(),
             totalProfit: newTotalProfit.toString(),
             dailyProfit: dailyProfitAmount.toString(),
+            drawdown: newDrawdown.toString(),
             peakBalance: newPeakBalance.toString(),
           })
           .where(eq(investmentsTable.userId, inv.userId));
@@ -706,6 +747,7 @@ export async function distributeAutoDailyProfit(): Promise<DistributeProfitResul
           .set({
             totalProfit: newTotalProfit.toString(),
             dailyProfit: dailyProfitAmount.toString(),
+            drawdown: newDrawdown.toString(),
             peakBalance: newPeakBalance.toString(),
           })
           .where(eq(investmentsTable.userId, inv.userId));
@@ -731,23 +773,29 @@ export async function distributeAutoDailyProfit(): Promise<DistributeProfitResul
         ? `user:${inv.userId}:trading`
         : `user:${inv.userId}:profit`;
 
+      // Double-entry: direction depends on profit vs loss.
+      // Profit day:  platform bears cost  → debit platform:profit_expense, credit user
+      // Loss day:    user bears the loss  → debit user account,            credit platform:profit_expense (reversal)
       if (profitAmt > 0) {
-        await postJournalEntry(
-          journalForTransaction(profitTxn!.id),
-          [
-            { accountCode: "platform:profit_expense", entryType: "debit",  amount: profitAmt, description: "Daily NAV profit expense" },
-            { accountCode: profitAccount,              entryType: "credit", amount: profitAmt, description: `Daily NAV profit credited to user ${inv.userId}` },
-          ],
-          profitTxn!.id,
-          tx,
-        );
+        const profitLines = dailyProfitAmount >= 0
+          ? [
+              { accountCode: "platform:profit_expense", entryType: "debit"  as const, amount: profitAmt, description: "Daily NAV profit expense" },
+              { accountCode: profitAccount,              entryType: "credit" as const, amount: profitAmt, description: `Daily NAV profit credited to user ${inv.userId}` },
+            ]
+          : [
+              { accountCode: profitAccount,              entryType: "debit"  as const, amount: profitAmt, description: `Daily NAV loss debited from user ${inv.userId}` },
+              { accountCode: "platform:profit_expense", entryType: "credit" as const, amount: profitAmt, description: "Daily NAV loss reversal" },
+            ];
+        await postJournalEntry(journalForTransaction(profitTxn!.id), profitLines, profitTxn!.id, tx);
       }
 
       await createNotification(
         inv.userId,
         "daily_profit",
-        "Daily Profit Credited",
-        `${profitSign}$${Math.abs(dailyProfitAmount).toFixed(2)} USDT earned today (${profitSign}${dailyPct.toFixed(4)}% · ${inv.riskLevel} risk${vipInfo.tier !== "none" ? ` · ${vipInfo.label} VIP` : ""}).`,
+        dailyProfitAmount >= 0 ? "Daily Profit Credited" : "Daily Loss Recorded",
+        dailyProfitAmount >= 0
+          ? `${profitSign}$${Math.abs(dailyProfitAmount).toFixed(2)} USDT earned today (${profitSign}${dailyPct.toFixed(4)}% · ${inv.riskLevel} risk${vipInfo.tier !== "none" ? ` · ${vipInfo.label} VIP` : ""}).`
+          : `$${Math.abs(dailyProfitAmount).toFixed(2)} USDT drawdown recorded today (${dailyPct.toFixed(4)}% · ${inv.riskLevel} risk).`,
       );
 
       const currentEquity = inv.autoCompound ? amount + dailyProfitAmount : amount;

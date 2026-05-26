@@ -355,9 +355,12 @@ router.post("/admin/roi-schedule/generate", async (req: AuthRequest, res) => {
 });
 
 // PUT /admin/roi-schedule/target  → set monthly target % for a risk level
-// Body: { riskLevel: "low"|"medium"|"high", targetPct: number }
+// Body: { riskLevel: "low"|"medium"|"high", targetPct: number, regenerate?: boolean }
+// By default regenerates the current + next month's schedule atomically so the
+// new target takes effect immediately without a manual generate call.
 router.put("/admin/roi-schedule/target", async (req: AuthRequest, res) => {
-  const { riskLevel, targetPct } = req.body ?? {};
+  const { generateMonthSchedule } = await import("../lib/monthly-schedule-service");
+  const { riskLevel, targetPct, regenerate = true } = req.body ?? {};
   if (!["low", "medium", "high"].includes(riskLevel)) {
     res.status(400).json({ error: "riskLevel must be low, medium, or high" });
     return;
@@ -373,7 +376,25 @@ router.put("/admin/roi-schedule/target", async (req: AuthRequest, res) => {
     .onConflictDoUpdate({ target: systemSettingsTable.key, set: { value: targetPct.toString(), updatedAt: new Date() } });
 
   profitLogger.info({ riskLevel, targetPct, adminId: req.userId }, "Admin: monthly ROI target updated");
-  res.json({ ok: true, riskLevel, targetPct });
+
+  // Regenerate schedules for current and next month so the new target applies immediately.
+  const regenerateResults: Array<{ month: string; result: unknown }> = [];
+  if (regenerate) {
+    const now = new Date();
+    const curYM  = now.toISOString().slice(0, 7);
+    const nextYM = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)).toISOString().slice(0, 7);
+    for (const ym of [curYM, nextYM]) {
+      try {
+        const result = await generateMonthSchedule(ym, riskLevel, true);
+        regenerateResults.push({ month: ym, result });
+      } catch (err) {
+        errorLogger.error({ err, ym, riskLevel }, "Admin: failed to regenerate schedule after target update");
+        regenerateResults.push({ month: ym, result: { error: String(err) } });
+      }
+    }
+  }
+
+  res.json({ ok: true, riskLevel, targetPct, regenerateResults });
 });
 
 router.get("/admin/users", async (req, res) => {
