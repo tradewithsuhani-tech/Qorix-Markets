@@ -71,6 +71,7 @@ export default function TradesScreen() {
   const apiTrades = (tradesQ.data as any[]) ?? [];
   const wRaw = walletQ.data as any;
 
+  const pendingRiskLevel: string | null = inv?.pendingRiskLevel ?? null;
   const deployedAmount = (Number(inv?.amount) || 0) * FX_RATE;
   const totalProfit = (Number(inv?.totalProfit) || 0) * FX_RATE;
   const currentNAV = deployedAmount + totalProfit;
@@ -325,6 +326,22 @@ export default function TradesScreen() {
                     </View>
                     <Feather name="arrow-up-right" size={13} color={activeAccent} />
                   </View>
+
+                  {/* Pending risk level notice */}
+                  {!!pendingRiskLevel && (
+                    <View style={styles.pendingBanner}>
+                      <View style={styles.pendingIconWrap}>
+                        <Feather name="clock" size={12} color="#fbbf24" />
+                      </View>
+                      <Text style={styles.pendingText}>
+                        Risk level changing to{" "}
+                        <Text style={styles.pendingLevel}>
+                          {pendingRiskLevel.charAt(0).toUpperCase() + pendingRiskLevel.slice(1).toLowerCase()}
+                        </Text>
+                        {" "}tomorrow
+                      </Text>
+                    </View>
+                  )}
                 </View>
               </Pressable>
             </Animated.View>
@@ -588,6 +605,22 @@ export default function TradesScreen() {
                 <Text style={[styles.changeBtnText, { color: accent }]}>Change</Text>
               </Pressable>
             </LinearGradient>
+
+            {/* Pending risk level notice */}
+            {!!pendingRiskLevel && (
+              <View style={styles.pendingBanner}>
+                <View style={styles.pendingIconWrap}>
+                  <Feather name="clock" size={12} color="#fbbf24" />
+                </View>
+                <Text style={styles.pendingText}>
+                  Risk level changing to{" "}
+                  <Text style={styles.pendingLevel}>
+                    {pendingRiskLevel.charAt(0).toUpperCase() + pendingRiskLevel.slice(1).toLowerCase()}
+                  </Text>
+                  {" "}tomorrow
+                </Text>
+              </View>
+            )}
 
             {/* Filters */}
             <View style={styles.filterRow}>
@@ -1031,4 +1064,26 @@ const styles = StyleSheet.create({
   },
   fundFooterItem: { flexDirection: "row", alignItems: "center", gap: 5 },
   fundFooterText: { fontSize: 10.5, fontFamily: "Inter_500Medium" },
+
+  pendingBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "rgba(251,191,36,0.35)",
+    backgroundColor: "rgba(251,191,36,0.08)",
+  },
+  pendingIconWrap: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    backgroundColor: "rgba(251,191,36,0.15)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  pendingText: { flex: 1, fontSize: 12, color: "rgba(251,191,36,0.85)", fontFamily: "Inter_500Medium" },
+  pendingLevel: { fontFamily: "Inter_700Bold", color: "#fbbf24" },
 });
