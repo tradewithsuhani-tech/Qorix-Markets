@@ -146,14 +146,23 @@ log_step "[4/7] Deploying API server → Fly.io (qorix-api)..."
 step_timer_start
 log_info "Strategy: rolling | Region: bom (Mumbai)"
 
-if flyctl deploy \
-  --config artifacts/api-server/fly.toml \
-  --dockerfile artifacts/api-server/Dockerfile \
-  --remote-only \
-  --depot=false \
+API_TAG="full-api-$(date +%s)"
+API_IMAGE="registry.fly.io/qorix-api:$API_TAG"
+log_info "Building API image locally: $API_IMAGE"
+
+flyctl auth docker 2>/dev/null || true
+
+if docker build \
+  -f artifacts/api-server/Dockerfile \
   --build-arg BUILD_TIME="$(date +%s)" \
-  --strategy rolling \
-  --wait-timeout 300; then
+  -t "$API_IMAGE" \
+  . && \
+  docker push "$API_IMAGE" && \
+  flyctl deploy \
+    --app qorix-api \
+    --image "$API_IMAGE" \
+    --strategy rolling \
+    --wait-timeout 300; then
   log_ok "API server deployed"
   STEP_DEPLOY_API="Deploy API → Fly.io:pass"
 else
@@ -170,13 +179,16 @@ log_step "[5/7] Deploying web app → Fly.io (qorix-markets-web)..."
 step_timer_start
 log_info "Strategy: rolling | Captcha: turnstile"
 
-PREV_IMAGE=$(flyctl image show --app qorix-markets-web --json 2>/dev/null | \
+PREV_IMAGE=$(flyctl machines list --app qorix-markets-web --json 2>/dev/null | \
   node --input-type=module -e "
     let d = '';
     process.stdin.on('data', c => d += c);
     process.stdin.on('end', () => {
-      try { console.log(JSON.parse(d).ImageRef || ''); }
-      catch { console.log(''); }
+      try {
+        const machines = JSON.parse(d);
+        const img = machines.find(m => m.config?.image)?.config?.image || '';
+        console.log(img);
+      } catch { console.log(''); }
     });
   " 2>/dev/null || echo "")
 

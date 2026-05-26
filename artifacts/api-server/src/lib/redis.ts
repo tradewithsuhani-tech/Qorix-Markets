@@ -31,11 +31,17 @@ export function getRedisConnection(): IORedis {
     // doesn't park a request.
     connectTimeout: 5_000,
     // Hard cap on per-command latency. Upstash Singapore p99 is ~50 ms intra-
-    // region; 1500 ms is 30× headroom for legit traffic but bounds the worst
-    // case to a fraction of the request budget. Cache and limiter both
-    // tolerate this throwing — see RedisCache.get() and
-    // makeRedisLimiter()'s `passOnStoreError: true`.
-    commandTimeout: 1_500,
+    // region; 8000 ms is well above any normal latency but tight enough to
+    // bound an Upstash outage. Cache and limiter both tolerate this throwing
+    // — see RedisCache.get() and makeRedisLimiter()'s `passOnStoreError: true`.
+    //
+    // IMPORTANT: must be > connectTimeout (5 000 ms). rate-limit-redis loads
+    // its Lua scripts at RedisStore construction time and queues them in the
+    // offline queue before the socket is ready. If commandTimeout < time-to-
+    // connect the Lua-load command times out before Redis even opens, crashing
+    // the process at startup. Setting 8 000 ms > 5 000 ms connectTimeout
+    // ensures offline-queued commands survive the cold-start TCP handshake.
+    commandTimeout: 8_000,
     // We deliberately leave `enableOfflineQueue` at the ioredis default
     // (true). rate-limit-redis loads its increment Lua script in the
     // RedisStore constructor (synchronous, at module-import time), which

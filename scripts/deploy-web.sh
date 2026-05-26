@@ -43,13 +43,16 @@ step_timer_end "Pre-flight"
 log_step "[1/2] Fetching previous image tag (for build cache)..."
 step_timer_start
 
-PREV_IMAGE=$(flyctl image show --app qorix-markets-web --json 2>/dev/null | \
+PREV_IMAGE=$(flyctl machines list --app qorix-markets-web --json 2>/dev/null | \
   node --input-type=module -e "
     let d = '';
     process.stdin.on('data', c => d += c);
     process.stdin.on('end', () => {
-      try { console.log(JSON.parse(d).ImageRef || ''); }
-      catch { console.log(''); }
+      try {
+        const machines = JSON.parse(d);
+        const img = machines.find(m => m.config?.image)?.config?.image || '';
+        console.log(img);
+      } catch { console.log(''); }
     });
   " 2>/dev/null || echo "")
 

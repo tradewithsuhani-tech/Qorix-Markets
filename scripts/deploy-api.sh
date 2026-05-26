@@ -62,13 +62,23 @@ log_info "Region:   bom (Mumbai)"
 log_info "Strategy: rolling"
 log_divider
 
-if flyctl deploy \
-  --config artifacts/api-server/fly.toml \
-  --dockerfile artifacts/api-server/Dockerfile \
-  --remote-only \
-  --depot=false \
-  --strategy rolling \
-  --wait-timeout 300; then
+API_TAG="api-$(date +%s)"
+API_IMAGE="registry.fly.io/qorix-api:$API_TAG"
+log_info "Building image locally: $API_IMAGE"
+
+flyctl auth docker 2>/dev/null || true
+
+if docker build \
+  -f artifacts/api-server/Dockerfile \
+  --build-arg BUILD_TIME="$(date +%s)" \
+  -t "$API_IMAGE" \
+  . && \
+  docker push "$API_IMAGE" && \
+  flyctl deploy \
+    --app qorix-api \
+    --image "$API_IMAGE" \
+    --strategy rolling \
+    --wait-timeout 300; then
   log_ok "API deployed to Fly.io"
   STEP_DEPLOY="Deploy API → Fly.io:pass"
 else
