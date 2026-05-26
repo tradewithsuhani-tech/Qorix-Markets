@@ -40,7 +40,9 @@ import {
   Calendar,
   Target,
   Settings,
+  Clock,
 } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import { AnimatedCounter, BigBalanceCounter } from "@/components/animated-counter";
 import { UpdatedAgo } from "@/components/updated-ago";
 import { cn } from "@/lib/utils";
@@ -725,6 +727,7 @@ function PortfolioInner({ investment, invLoading, summary }: PortfolioInnerProps
   const investedAmount = investment?.amount ?? 0;
   const isActive = !!investment?.isActive;
   const totalProfit = investment?.totalProfit ?? 0;
+  const pendingRiskLevel = investment?.pendingRiskLevel ?? null;
   const currentEquity = investedAmount + totalProfit;
   const profitPct = investedAmount > 0 ? (totalProfit / investedAmount) * 100 : 0;
   const riskKey = ((investment?.riskLevel ?? "low") as string).toLowerCase() as RiskKey;
@@ -1013,6 +1016,35 @@ function PortfolioInner({ investment, invLoading, summary }: PortfolioInnerProps
           </div>
         </div>
       </div>
+
+      {/* Pending Risk Level Banner — amber notice shown when the user has
+          queued a risk-level change that hasn't promoted yet. Disappears
+          automatically once the profit run promotes it the next trading day. */}
+      <AnimatePresence>
+        {pendingRiskLevel && (
+          <motion.div
+            key="pending-risk-banner"
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.3 }}
+            className="flex items-start gap-3 p-4 rounded-2xl border border-amber-500/30 bg-amber-500/[0.07]"
+          >
+            <div className="w-9 h-9 rounded-xl bg-amber-500/15 border border-amber-500/35 flex items-center justify-center shrink-0">
+              <Clock className="w-4 h-4 text-amber-300" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-amber-300">
+                Risk level changing to{" "}
+                <span className="capitalize">{pendingRiskLevel}</span> tomorrow
+              </p>
+              <p className="text-xs text-amber-200/60 mt-0.5 leading-relaxed">
+                Your current strategy stays active today. The new risk level takes effect from the next trading session.
+              </p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* NEXT TRADE STATUS — keeps the user oriented on what the engine is
           doing right now without the noisy fake-money ticker that confused
