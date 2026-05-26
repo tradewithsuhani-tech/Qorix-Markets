@@ -352,7 +352,16 @@ router.post("/investment/stop", async (req: AuthRequest, res) => {
   const updated = await db.transaction(async (tx) => {
     const [upd] = await tx
       .update(investmentsTable)
-      .set({ isActive: false, stoppedAt: new Date() })
+      .set({
+        isActive: false,
+        stoppedAt: new Date(),
+        // Invariant: pendingRiskLevel is always NULL when isActive = false.
+        // If a risk-level change was requested before the user stopped, that pending
+        // change is cancelled here. A fresh /investment/start will apply whichever
+        // risk level the user chooses at that point.
+        pendingRiskLevel: null,
+        pendingRiskLevelDate: null,
+      })
       .where(eq(investmentsTable.userId, req.userId!))
       .returning();
 
