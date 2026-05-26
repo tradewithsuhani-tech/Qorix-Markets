@@ -455,6 +455,16 @@ router.delete("/investment/risk-level", async (req: AuthRequest, res) => {
     return;
   }
 
+  // Guard: mirror the PATCH endpoint — cancelling a pending risk-level change
+  // only makes sense while trading is active. If the investment is stopped or
+  // paused, the pending change is already inert (the profit cron only promotes
+  // it for active investments). Accepting mutations on an inactive investment
+  // risks confusing state, so we reject early with a clear 409.
+  if (!inv.isActive) {
+    res.status(409).json({ error: "Investment is not active" });
+    return;
+  }
+
   if (inv.pendingRiskLevel == null) {
     res.json(formatInvestment(inv));
     return;
