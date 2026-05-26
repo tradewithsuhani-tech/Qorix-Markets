@@ -7,6 +7,93 @@ import { logger } from "../lib/logger";
 import { sendWelcomeEmail } from "../lib/email-service";
 import { trackLoginDevice } from "../lib/device-tracking";
 
+// ─── Google ID Token verification (no external deps) ─────────────────────────
+// Verifies RS256-signed JWTs issued by Google Sign-In SDK using Node's built-in
+// crypto module and Google's public JWKS endpoint. Avoids the google-auth-library
+// package (saves ~1 MB) while matching its security guarantees.
+
+interface GoogleJWK {
+  kid: string;
+  kty: string;
+  alg: string;
+  use: string;
+  n: string;
+  e: string;
+}
+
+interface GoogleIdTokenPayload {
+  sub: string;
+  email: string;
+  email_verified: boolean;
+  name?: string;
+  picture?: string;
+  aud: string;
+  iss: string;
+  exp: number;
+  iat: number;
+}
+
+// In-process JWKS cache — Google rotates keys every few hours; 6-hour TTL is safe.
+let jwksCache: { keys: GoogleJWK[]; fetchedAt: number } | null = null;
+const JWKS_TTL_MS = 6 * 60 * 60 * 1000;
+
+async function fetchGoogleJwks(): Promise<GoogleJWK[]> {
+  const now = Date.now();
+  if (jwksCache && now - jwksCache.fetchedAt < JWKS_TTL_MS) return jwksCache.keys;
+  const res = await fetch("https://www.googleapis.com/oauth2/v3/certs");
+  if (!res.ok) throw new Error(`JWKS fetch failed: ${res.status}`);
+  const data = (await res.json()) as { keys: GoogleJWK[] };
+  jwksCache = { keys: data.keys, fetchedAt: now };
+  return data.keys;
+}
+
+function verifyWithJwk(
+  jwk: GoogleJWK,
+  headerB64: string,
+  payloadB64: string,
+  sigB64: string,
+  payload: GoogleIdTokenPayload,
+): GoogleIdTokenPayload {
+  const publicKey = crypto.createPublicKey({ format: "jwk", key: jwk as Parameters<typeof crypto.createPublicKey>[0] & object });
+  const data = Buffer.from(`${headerB64}.${payloadB64}`);
+  const signature = Buffer.from(sigB64, "base64url");
+  const valid = crypto.verify("RSA-SHA256", data, publicKey, signature);
+  if (!valid) throw new Error("Invalid token signature");
+  return payload;
+}
+
+async function verifyGoogleIdToken(idToken: string): Promise<GoogleIdTokenPayload> {
+  const parts = idToken.split(".");
+  if (parts.length !== 3) throw new Error("Invalid JWT format");
+  const [headerB64, payloadB64, sigB64] = parts as [string, string, string];
+
+  const header = JSON.parse(Buffer.from(headerB64, "base64url").toString()) as { kid: string; alg: string };
+  if (header.alg !== "RS256") throw new Error(`Unsupported algorithm: ${header.alg}`);
+
+  const payload = JSON.parse(Buffer.from(payloadB64, "base64url").toString()) as GoogleIdTokenPayload;
+
+  // Cheap checks before network I/O
+  const now = Math.floor(Date.now() / 1000);
+  if (payload.exp < now) throw new Error("ID token expired");
+  if (payload.iss !== "accounts.google.com" && payload.iss !== "https://accounts.google.com") {
+    throw new Error(`Invalid issuer: ${payload.iss}`);
+  }
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  if (clientId && payload.aud !== clientId) throw new Error(`Invalid audience: ${payload.aud}`);
+
+  // Find the matching JWK by kid; force-refresh once if stale
+  let keys = await fetchGoogleJwks();
+  let jwk = keys.find((k) => k.kid === header.kid);
+  if (!jwk) {
+    jwksCache = null;
+    keys = await fetchGoogleJwks();
+    jwk = keys.find((k) => k.kid === header.kid);
+    if (!jwk) throw new Error(`Unknown key ID: ${header.kid}`);
+  }
+
+  return verifyWithJwk(jwk, headerB64, payloadB64, sigB64, payload);
+}
+
 const router = Router();
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || "";
@@ -204,6 +291,119 @@ router.get("/auth/google/callback", async (req, res) => {
   } catch (err) {
     logger.error({ err }, "[google-oauth] callback error");
     res.redirect(buildRedirect(platform, frontend, { error: "google_callback_error" }));
+  }
+});
+
+// ─── POST /auth/google/mobile ─────────────────────────────────────────────────
+// Native mobile Google Sign-In: Flutter's google_sign_in SDK obtains an idToken
+// directly from Google; the app sends it here for server-side verification and
+// receives a Qorix JWT + basic user profile in return.
+//
+// No captcha required (mobile clients bypass via X-App-Platform + X-Device-Id).
+// No Origin guard required (same mobile headers bypass the guard in origin-guard.ts).
+// No redirect — JSON response only.
+router.post("/auth/google/mobile", async (req, res) => {
+  if (!GOOGLE_CLIENT_ID) {
+    res.status(500).json({ error: "Google OAuth not configured", code: "GOOGLE_NOT_CONFIGURED" });
+    return;
+  }
+
+  const { idToken } = (req.body ?? {}) as { idToken?: unknown };
+  if (!idToken || typeof idToken !== "string") {
+    res.status(400).json({ error: "idToken is required", code: "MISSING_ID_TOKEN" });
+    return;
+  }
+
+  let profile: GoogleIdTokenPayload;
+  try {
+    profile = await verifyGoogleIdToken(idToken);
+  } catch (err: any) {
+    logger.warn({ err: err?.message }, "[google-oauth] mobile id token verification failed");
+    res.status(401).json({ error: "Invalid or expired Google token", code: "INVALID_ID_TOKEN" });
+    return;
+  }
+
+  if (!profile.email) {
+    res.status(400).json({ error: "Google account has no email", code: "GOOGLE_NO_EMAIL" });
+    return;
+  }
+
+  try {
+    const email = profile.email.toLowerCase();
+    const existing = await db.select().from(usersTable).where(eq(usersTable.email, email)).limit(1);
+
+    let userId: number;
+    let isAdmin = false;
+    let fullName: string;
+    let referralCode: string;
+
+    if (existing[0]) {
+      userId = existing[0].id;
+      isAdmin = existing[0].isAdmin;
+      fullName = existing[0].fullName ?? "";
+      referralCode = existing[0].referralCode ?? "";
+      if (!existing[0].emailVerified && profile.email_verified) {
+        await db.update(usersTable).set({ emailVerified: true }).where(eq(usersTable.id, userId));
+      }
+    } else {
+      const randomPw = crypto.randomBytes(32).toString("hex");
+      const bcrypt = await import("bcryptjs");
+      const passwordHash = await bcrypt.hash(randomPw, 10);
+      const newReferralCode = generateReferralCode();
+      const newFullName = profile.name || email.split("@")[0]!;
+      const [newUser] = await db
+        .insert(usersTable)
+        .values({
+          email,
+          passwordHash,
+          fullName: newFullName,
+          referralCode: newReferralCode,
+          emailVerified: !!profile.email_verified,
+          points: 0,
+        })
+        .returning();
+      if (!newUser) {
+        res.status(500).json({ error: "Failed to create account", code: "CREATE_FAILED" });
+        return;
+      }
+      userId = newUser.id;
+      fullName = newUser.fullName ?? "";
+      referralCode = newUser.referralCode ?? "";
+      await db.insert(walletsTable).values({ userId });
+      await db.insert(investmentsTable).values({ userId });
+      logger.info({ userId, email }, "[google-oauth] mobile new user created");
+
+      setImmediate(async () => {
+        try {
+          const firstName = (fullName.trim().split(/\s+/)[0]) || "Trader";
+          await sendWelcomeEmail(email, firstName, referralCode);
+        } catch (err) {
+          logger.warn({ err: (err as Error).message, userId, email }, "[google-oauth] mobile welcome email failed");
+        }
+      });
+    }
+
+    const token = signToken(userId, isAdmin);
+
+    try {
+      const fullUser = await db.select().from(usersTable).where(eq(usersTable.id, userId)).limit(1);
+      if (fullUser[0]) trackLoginDevice(fullUser[0], req);
+    } catch (err: any) {
+      logger.warn({ err: err?.message, userId }, "[google-oauth] mobile device tracking skipped");
+    }
+
+    res.json({
+      token,
+      user: {
+        id: userId,
+        email,
+        fullName,
+        referralCode,
+      },
+    });
+  } catch (err) {
+    logger.error({ err }, "[google-oauth] mobile callback error");
+    res.status(500).json({ error: "Authentication failed", code: "AUTH_FAILED" });
   }
 });
 
