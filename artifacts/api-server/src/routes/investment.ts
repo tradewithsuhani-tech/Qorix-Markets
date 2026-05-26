@@ -442,7 +442,35 @@ router.patch("/investment/risk-level", async (req: AuthRequest, res) => {
     return;
   }
 
-  logger.info({ userId: req.userId, fromRisk: effectiveRisk, toRisk: riskKey, pendingDate: todayStr }, "Risk-level change queued — effective next trading day");
+  logger.info({ userId: req.userId, fromRisk: inv.riskLevel, toRisk: riskKey, pendingDate: todayStr }, "Risk-level change queued — effective next trading day");
+
+  res.json(formatInvestment(updated));
+});
+
+router.delete("/investment/risk-level", async (req: AuthRequest, res) => {
+  const invs = await db.select().from(investmentsTable).where(eq(investmentsTable.userId, req.userId!)).limit(1);
+  const inv = invs[0];
+  if (!inv) {
+    res.status(404).json({ error: "Investment not found" });
+    return;
+  }
+
+  if (inv.pendingRiskLevel == null) {
+    res.json(formatInvestment(inv));
+    return;
+  }
+
+  const [updated] = await db.update(investmentsTable)
+    .set({ pendingRiskLevel: null, pendingRiskLevelDate: null })
+    .where(eq(investmentsTable.userId, req.userId!))
+    .returning();
+
+  if (!updated) {
+    res.status(404).json({ error: "Investment not found" });
+    return;
+  }
+
+  logger.info({ userId: req.userId, cancelledPendingRisk: inv.pendingRiskLevel }, "Pending risk-level change cancelled by user");
 
   res.json(formatInvestment(updated));
 });

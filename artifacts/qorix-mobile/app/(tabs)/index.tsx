@@ -4,6 +4,7 @@ import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
+  Alert,
   Dimensions,
   Platform,
   Pressable,
@@ -17,9 +18,12 @@ import Animated, { FadeInDown } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   getGetDashboardSummaryQueryKey,
+  getGetInvestmentQueryKey,
   useGetDashboardSummary,
   useGetInvestment,
 } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { cancelPendingRiskLevel } from "@/lib/apiClient";
 import { AIBotStatus } from "@/components/AIBotStatus";
 import { DeployedStrategyCard } from "@/components/DeployedStrategyCard";
 import { BotPulse } from "@/components/BotPulse";
@@ -52,6 +56,7 @@ export default function DashboardScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { user, isAuthenticated } = useAuth();
   const { wallet, portfolio, botActivity, refreshData } = usePortfolio();
   const isDemo = user?.id === "demo_001";
@@ -66,6 +71,17 @@ export default function DashboardScreen() {
     query: { enabled: isAuthenticated && !isDemo, refetchInterval: 60_000 },
   });
   const pendingRiskLevel = investmentQuery.data?.pendingRiskLevel ?? null;
+
+  const handleCancelPendingRisk = async () => {
+    try {
+      await cancelPendingRiskLevel();
+      queryClient.invalidateQueries({ queryKey: getGetInvestmentQueryKey() });
+      Alert.alert("Change cancelled", "Your pending risk level change has been removed. Your current strategy continues unchanged.");
+    } catch (err) {
+      const msg = (err as { message?: string })?.message ?? "Could not cancel the pending change. Please try again.";
+      Alert.alert("Could not cancel", msg);
+    }
+  };
 
   const [refreshing, setRefreshing] = useState(false);
   const [tickIndex, setTickIndex] = useState(0);
@@ -172,7 +188,7 @@ export default function DashboardScreen() {
       {/* Active deployed strategy */}
       {portfolio && portfolio.deployedAmount > 0 && (
         <Animated.View entering={FadeInDown.duration(500).delay(nextDelay())}>
-          <DeployedStrategyCard onStop={() => router.push("/withdraw")} pendingRiskLevel={pendingRiskLevel} />
+          <DeployedStrategyCard onStop={() => router.push("/withdraw")} pendingRiskLevel={pendingRiskLevel} onCancelPendingRisk={handleCancelPendingRisk} />
         </Animated.View>
       )}
 

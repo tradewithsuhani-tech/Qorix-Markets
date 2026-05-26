@@ -173,3 +173,8 @@ export interface ListDevicesResponse {
 export function listDevices(): Promise<ListDevicesResponse> {
   return authedRequest<ListDevicesResponse>("/devices");
 }
+
+// ─── investment risk-level ───────────────────────────────────────────────────
+export function cancelPendingRiskLevel(): Promise<unknown> {
+  return authedRequest<unknown>("/investment/risk-level", { method: "DELETE" });
+}

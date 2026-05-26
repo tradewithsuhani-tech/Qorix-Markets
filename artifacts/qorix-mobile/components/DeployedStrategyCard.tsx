@@ -14,6 +14,7 @@ import { useColors } from "@/hooks/useColors";
 interface DeployedStrategyCardProps {
   onStop?: () => void;
   pendingRiskLevel?: string | null;
+  onCancelPendingRisk?: () => Promise<void>;
 }
 
 const BRAND_PURPLE = "#A855F7";
@@ -71,7 +72,7 @@ function PulseRing({ color, size = 10 }: { color: string; size?: number }) {
   );
 }
 
-export function DeployedStrategyCard({ onStop, pendingRiskLevel }: DeployedStrategyCardProps) {
+export function DeployedStrategyCard({ onStop, pendingRiskLevel, onCancelPendingRisk }: DeployedStrategyCardProps) {
   const colors = useColors();
   const router = useRouter();
   const { portfolio, stopStrategy } = usePortfolio();
@@ -80,6 +81,7 @@ export function DeployedStrategyCard({ onStop, pendingRiskLevel }: DeployedStrat
   const [stoppedSuccess, setStoppedSuccess] = useState(false);
   const [snapshot, setSnapshot] = useState<{ capital: number; pnl: number } | null>(null);
   const [stopError, setStopError] = useState<string | null>(null);
+  const [isCancellingRisk, setIsCancellingRisk] = useState(false);
 
   if (!portfolio || portfolio.deployedAmount <= 0) return null;
 
@@ -130,13 +132,34 @@ export function DeployedStrategyCard({ onStop, pendingRiskLevel }: DeployedStrat
           <View style={styles.pendingIconWrap}>
             <Feather name="clock" size={12} color="#fbbf24" />
           </View>
-          <Text style={styles.pendingText}>
-            Risk level changing to{" "}
-            <Text style={styles.pendingLevel}>
-              {pendingRiskLevel.charAt(0).toUpperCase() + pendingRiskLevel.slice(1).toLowerCase()}
+          <View style={{ flex: 1 }}>
+            <Text style={styles.pendingText}>
+              Risk level changing to{" "}
+              <Text style={styles.pendingLevel}>
+                {pendingRiskLevel.charAt(0).toUpperCase() + pendingRiskLevel.slice(1).toLowerCase()}
+              </Text>
+              {" "}tomorrow
             </Text>
-            {" "}tomorrow
-          </Text>
+            {!!onCancelPendingRisk && (
+              <Pressable
+                disabled={isCancellingRisk}
+                onPress={async () => {
+                  Haptics.selectionAsync();
+                  setIsCancellingRisk(true);
+                  try {
+                    await onCancelPendingRisk();
+                  } finally {
+                    setIsCancellingRisk(false);
+                  }
+                }}
+                style={{ marginTop: 4 }}
+              >
+                <Text style={styles.pendingCancelLink}>
+                  {isCancellingRisk ? "Cancelling…" : "Cancel this change"}
+                </Text>
+              </Pressable>
+            )}
+          </View>
         </View>
       )}
 
@@ -379,6 +402,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  pendingText: { flex: 1, fontSize: 12, color: "rgba(251,191,36,0.85)", fontFamily: "Inter_500Medium" },
+  pendingText: { fontSize: 12, color: "rgba(251,191,36,0.85)", fontFamily: "Inter_500Medium" },
   pendingLevel: { fontFamily: "Inter_700Bold", color: "#fbbf24" },
+  pendingCancelLink: { fontSize: 11, color: "rgba(251,191,36,0.7)", fontFamily: "Inter_600SemiBold", textDecorationLine: "underline" },
 });

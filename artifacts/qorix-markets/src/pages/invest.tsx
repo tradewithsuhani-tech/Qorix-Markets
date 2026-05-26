@@ -832,6 +832,7 @@ export default function InvestPage() {
   const [showTopupModal, setShowTopupModal] = useState(false);
   const [riskChangeChoice, setRiskChangeChoice] = useState<string | null>(null);
   const [isChangingRisk, setIsChangingRisk] = useState(false);
+  const [isCancellingRisk, setIsCancellingRisk] = useState(false);
 
   const selectedProfile = useMemo(
     () => RISK_PROFILES.find(p => p.id === riskLevel) ?? RISK_PROFILES[1]!,
@@ -927,6 +928,22 @@ export default function InvestPage() {
       toast({ title: "Update failed", description: err?.message ?? "Could not update risk level.", variant: "destructive" });
     } finally {
       setIsChangingRisk(false);
+    }
+  };
+
+  const handleCancelRiskLevel = async () => {
+    setIsCancellingRisk(true);
+    try {
+      await authFetch("/api/investment/risk-level", { method: "DELETE" });
+      toast({
+        title: "Change cancelled",
+        description: "Your pending risk level change has been cancelled. Your current strategy continues unchanged.",
+      });
+      queryClient.invalidateQueries({ queryKey: getGetInvestmentQueryKey() });
+    } catch (err: any) {
+      toast({ title: "Could not cancel", description: err?.message ?? "Please try again.", variant: "destructive" });
+    } finally {
+      setIsCancellingRisk(false);
     }
   };
 
@@ -1798,6 +1815,14 @@ export default function InvestPage() {
                     <p className="text-xs text-amber-200/60 mt-0.5 leading-relaxed">
                       Your current strategy stays active today. The new risk level takes effect from the next trading session.
                     </p>
+                    <button
+                      type="button"
+                      disabled={isCancellingRisk}
+                      onClick={handleCancelRiskLevel}
+                      className="mt-2 text-xs font-semibold text-amber-300/80 hover:text-amber-300 underline underline-offset-2 transition-colors disabled:opacity-50"
+                    >
+                      {isCancellingRisk ? "Cancelling…" : "Cancel this change"}
+                    </button>
                   </div>
                 </motion.div>
               )}
