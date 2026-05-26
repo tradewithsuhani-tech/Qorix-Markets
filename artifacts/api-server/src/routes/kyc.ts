@@ -3,7 +3,7 @@ import { db, usersTable } from "@workspace/db";
 import { and, eq, sql } from "drizzle-orm";
 import { authMiddleware, getQueryString, type AuthRequest } from "../middlewares/auth";
 import { createNotification } from "../lib/notifications";
-import { sendTxnEmailToUser } from "../lib/email-service";
+import { sendOtp, verifyOtp, sendTxnEmailToUser } from "../lib/email-service";
 import { notSmokeTestUser, shouldIncludeSmokeTest } from "../lib/smoke-test-account";
 import { invalidateMerchantProfiles } from "../lib/p2p-profile";
 
@@ -221,6 +221,98 @@ router.post("/kyc/address", authMiddleware, async (req: AuthRequest, res) => {
     "We've received your address proof (Lv.3). Our team will review it within 24 hours and notify you once a decision is made.",
   );
   res.json({ success: true, status: "pending" });
+});
+
+// ─── PHONE OTP (KYC) ─────────────────────────────────────────
+// Normalize Indian phone — accept "+91", "91", or 10-digit
+function normalizePhone(raw: string): string | null {
+  const digits = String(raw ?? "").replace(/\D/g, "");
+  if (digits.length === 10 && /^[6-9]/.test(digits)) return digits;
+  if (digits.length === 12 && digits.startsWith("91") && /^[6-9]/.test(digits.slice(2))) return digits.slice(2);
+  if (digits.length === 11 && digits.startsWith("0") && /^[6-9]/.test(digits.slice(1))) return digits.slice(1);
+  return null;
+}
+
+// POST /kyc/phone/send-otp  body: { phoneNumber }
+// Sends a 6-digit OTP to the user's registered email for phone verification.
+// (SMS channel will be added later; email is the current delivery path.)
+router.post("/kyc/phone/send-otp", authMiddleware, async (req: AuthRequest, res) => {
+  const { phoneNumber } = req.body ?? {};
+  const normalized = normalizePhone(phoneNumber);
+  if (!normalized) {
+    res.status(400).json({ error: "invalid_phone", message: "Enter a valid 10-digit Indian mobile number." });
+    return;
+  }
+
+  const [user] = await db
+    .select({
+      id: usersTable.id,
+      email: usersTable.email,
+      phoneVerifiedAt: usersTable.phoneVerifiedAt,
+    })
+    .from(usersTable)
+    .where(eq(usersTable.id, req.userId!))
+    .limit(1);
+
+  if (!user) { res.status(404).json({ error: "user_not_found" }); return; }
+
+  if (user.phoneVerifiedAt) {
+    res.status(400).json({ error: "phone_already_verified", message: "Your mobile number is already verified." });
+    return;
+  }
+
+  await sendOtp(user.id, user.email, "kyc_phone_verify");
+
+  res.json({
+    success: true,
+    delivery: "email",
+    message: "OTP sent to your registered email address.",
+    maskedEmail: user.email.replace(/(.{2}).+(@.+)/, "$1***$2"),
+  });
+});
+
+// POST /kyc/phone/verify-otp  body: { phoneNumber, otp }
+// Verifies the email OTP and marks the phone number as verified on the user record.
+router.post("/kyc/phone/verify-otp", authMiddleware, async (req: AuthRequest, res) => {
+  const { phoneNumber, otp } = req.body ?? {};
+  const normalized = normalizePhone(phoneNumber);
+  if (!normalized) {
+    res.status(400).json({ error: "invalid_phone", message: "Enter a valid 10-digit Indian mobile number." });
+    return;
+  }
+  const cleaned = String(otp ?? "").replace(/\s/g, "");
+  if (!/^\d{6}$/.test(cleaned)) {
+    res.status(400).json({ error: "invalid_otp", message: "OTP must be 6 digits." });
+    return;
+  }
+
+  const [user] = await db
+    .select({ id: usersTable.id, phoneVerifiedAt: usersTable.phoneVerifiedAt })
+    .from(usersTable)
+    .where(eq(usersTable.id, req.userId!))
+    .limit(1);
+
+  if (!user) { res.status(404).json({ error: "user_not_found" }); return; }
+
+  if (user.phoneVerifiedAt) {
+    res.status(400).json({ error: "phone_already_verified", message: "Your mobile number is already verified." });
+    return;
+  }
+
+  const result = await verifyOtp(user.id, cleaned, "kyc_phone_verify");
+  if (!result.valid) {
+    res.status(400).json({ error: "invalid_otp", message: result.error ?? "Invalid or expired OTP." });
+    return;
+  }
+
+  await db
+    .update(usersTable)
+    .set({ phoneNumber: normalized, phoneVerifiedAt: new Date() })
+    .where(eq(usersTable.id, req.userId!));
+
+  await createNotification(req.userId!, "system", "Mobile number verified", "Your mobile number has been verified successfully.");
+
+  res.json({ success: true, message: "Mobile number verified successfully." });
 });
 
 // ─── ADMIN ROUTES ────────────────────────────────────────────

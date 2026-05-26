@@ -995,7 +995,8 @@ export async function sendOtp(
     | "verify_email"
     | "withdrawal_confirm"
     | "device_login_approval"
-    | "two_factor_login",
+    | "two_factor_login"
+    | "kyc_phone_verify",
 ): Promise<{ otp: string; expiresAt: Date }> {
   const otp = generateOtp(6);
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
@@ -1021,7 +1022,9 @@ export async function sendOtp(
         ? "Withdrawal Confirmation"
         : purpose === "two_factor_login"
           ? "Two-Factor Sign-in"
-          : "New Device Login";
+          : purpose === "kyc_phone_verify"
+            ? "Phone Verification"
+            : "New Device Login";
   const intro =
     purpose === "verify_email"
       ? "Welcome to Qorix Markets. Use the code below to verify your email and finish creating your account."
@@ -1029,7 +1032,9 @@ export async function sendOtp(
         ? "You're confirming a withdrawal request. Use the code below to authorize and complete this transaction."
         : purpose === "two_factor_login"
           ? "You requested a one-time email code to complete sign-in to your Qorix Markets account because you couldn't access your authenticator app. Enter the code below to finish signing in. If this wasn't you, ignore this email and change your password immediately."
-          : "A new device is trying to sign in to your Qorix Markets account. If this was you, use the code below to approve the login. If not, ignore this email and change your password immediately.";
+          : purpose === "kyc_phone_verify"
+            ? "Use the code below to verify your mobile number and continue your KYC verification."
+            : "A new device is trying to sign in to your Qorix Markets account. If this was you, use the code below to approve the login. If not, ignore this email and change your password immediately.";
   const noteLines = [
     "<strong style=\"color:#cbd5e1;\">Never share this code</strong> with anyone — Qorix staff will never ask for it.",
     "If you did not initiate this request, please secure your account and contact support immediately.",
@@ -1153,7 +1158,8 @@ export async function verifyOtp(
     | "verify_email"
     | "withdrawal_confirm"
     | "device_login_approval"
-    | "two_factor_login",
+    | "two_factor_login"
+    | "kyc_phone_verify",
 ): Promise<{ valid: boolean; error?: string }> {
   const now = new Date();
 

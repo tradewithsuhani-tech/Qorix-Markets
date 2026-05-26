@@ -127,19 +127,13 @@ function fail(
 }
 
 /**
- * Middleware: reject write attempts for all money-movement operations.
- * Applied per-route to any endpoint that would touch balances or ledger.
+ * Middleware: redirect v1 write stubs to the equivalent /api/ path.
+ * Mobile clients that accidentally hit /api/v1/wallet/deposit etc. are
+ * transparently sent to /api/wallet/deposit (307 preserves method + body).
  */
 function writesDisabled(req: Request, res: Response, _next: NextFunction): void {
-  fail(
-    req,
-    res,
-    503,
-    "phase_1_writes_disabled",
-    "Money-movement writes are disabled in Phase 1. " +
-      "Enable after ledger + withdrawal hardening sprints pass QA. " +
-      "Use the main /api endpoints for write operations.",
-  );
+  const apiPath = (req.baseUrl + req.path).replace("/v1/", "/");
+  res.redirect(307, apiPath);
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
