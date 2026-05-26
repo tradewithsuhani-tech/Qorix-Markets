@@ -25,6 +25,11 @@ export const investmentsTable = pgTable("investments", {
   // NAV engine: start-of-day snapshot used as the profit basis for today's run
   navSnapshotBalance: numeric("nav_snapshot_balance", { precision: 18, scale: 8 }).notNull().default("0"),
   navSnapshotDate: date("nav_snapshot_date"), // date the snapshot was captured; NULL until first run
+  // NAV engine: pending risk-level change — set when user requests mid-month switch,
+  // promoted to riskLevel by the profit engine before the NEXT trading day's run.
+  // Today earns at the old rate; tomorrow onward earns at the new rate.
+  pendingRiskLevel: varchar("pending_risk_level", { length: 20 }), // NULL when no change pending
+  pendingRiskLevelDate: date("pending_risk_level_date"), // date the change was requested; NULL when no change pending
 });
 
 export const insertInvestmentSchema = createInsertSchema(investmentsTable).omit({ id: true });

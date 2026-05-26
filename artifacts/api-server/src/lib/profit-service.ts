@@ -583,6 +583,42 @@ export async function distributeAutoDailyProfit(): Promise<DistributeProfitResul
       }
     }
 
+    // ── 3b. Promote pending risk-level changes from PRIOR days ───────────
+    // A risk-level change requested on day D is stored as pendingRiskLevel /
+    // pendingRiskLevelDate. On day D+1 (first run after the change), this step
+    // promotes the pending value to the live riskLevel so that:
+    //   - day D still earns at the OLD rate (snapshot was taken before this step)
+    //   - day D+1 onward earns at the NEW rate
+    // Strictly < today so same-day changes are never promoted in the same run.
+    const pendingRiskInvs = await tx
+      .select({
+        userId: investmentsTable.userId,
+        pendingRiskLevel: investmentsTable.pendingRiskLevel,
+      })
+      .from(investmentsTable)
+      .where(
+        and(
+          eq(investmentsTable.isActive, true),
+          lt(investmentsTable.pendingRiskLevelDate, todayStr), // strictly < today
+        ),
+      );
+
+    for (const pri of pendingRiskInvs) {
+      if (!pri.pendingRiskLevel) continue;
+      await tx
+        .update(investmentsTable)
+        .set({
+          riskLevel: pri.pendingRiskLevel,
+          pendingRiskLevel: null,
+          pendingRiskLevelDate: null,
+        })
+        .where(eq(investmentsTable.userId, pri.userId));
+      profitLogger.info(
+        { userId: pri.userId, newRiskLevel: pri.pendingRiskLevel, promotedOn: todayStr },
+        "NAV: pending risk-level change promoted",
+      );
+    }
+
     // ── 4. Load all active investments (post-settlement) ─────────────────
     const activeInvestments = await tx
       .select()

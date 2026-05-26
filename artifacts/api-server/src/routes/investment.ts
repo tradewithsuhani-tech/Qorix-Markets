@@ -40,6 +40,8 @@ function formatInvestment(inv: typeof investmentsTable.$inferSelect) {
     userId: inv.userId,
     amount,
     riskLevel: inv.riskLevel,
+    pendingRiskLevel: inv.pendingRiskLevel ?? null,
+    pendingRiskLevelDate: inv.pendingRiskLevelDate ?? null,
     isActive: inv.isActive,
     isPaused: inv.isPaused,
     autoCompound: inv.autoCompound,
@@ -129,6 +131,10 @@ router.post("/investment/start", async (req: AuthRequest, res) => {
         startedAt: new Date(),
         stoppedAt: null,
         pausedAt: null,
+        // Fresh start always applies the chosen risk level immediately.
+        // Any pending risk-level change from a previous session is cancelled.
+        pendingRiskLevel: null,
+        pendingRiskLevelDate: null,
       })
       .where(eq(investmentsTable.userId, req.userId!))
       .returning();
@@ -377,6 +383,56 @@ router.patch("/investment/protection", async (req: AuthRequest, res) => {
     res.status(404).json({ error: "Investment not found" });
     return;
   }
+
+  res.json(formatInvestment(updated));
+});
+
+router.patch("/investment/risk-level", async (req: AuthRequest, res) => {
+  const { riskLevel } = req.body ?? {};
+  const riskKey = typeof riskLevel === "string" ? riskLevel.toLowerCase() : "";
+  if (!["low", "medium", "high"].includes(riskKey)) {
+    res.status(400).json({ error: "Invalid risk level. Use low, medium, or high" });
+    return;
+  }
+
+  const invs = await db.select().from(investmentsTable).where(eq(investmentsTable.userId, req.userId!)).limit(1);
+  const inv = invs[0];
+  if (!inv || !inv.isActive) {
+    res.status(400).json({ error: "No active investment found. Start an investment first.", code: "NO_ACTIVE_INVESTMENT" });
+    return;
+  }
+
+  // If a pending change for the same target level already exists, return without
+  // touching pendingRiskLevelDate — resetting the date would delay promotion by
+  // an extra day on duplicate or retry submissions.
+  if (inv.pendingRiskLevel === riskKey) {
+    res.json(formatInvestment(inv));
+    return;
+  }
+
+  // If the live risk level already matches and there is no pending change, nothing to do.
+  if (inv.riskLevel === riskKey && inv.pendingRiskLevel == null) {
+    res.json(formatInvestment(inv));
+    return;
+  }
+
+  // Store as a pending change. The NAV engine will promote it before the NEXT
+  // trading day's profit run, so today still earns at the old rate.
+  const todayStr = new Date().toISOString().split("T")[0]!;
+  const [updated] = await db.update(investmentsTable)
+    .set({
+      pendingRiskLevel: riskKey,
+      pendingRiskLevelDate: todayStr,
+    })
+    .where(eq(investmentsTable.userId, req.userId!))
+    .returning();
+
+  if (!updated) {
+    res.status(404).json({ error: "Investment not found" });
+    return;
+  }
+
+  logger.info({ userId: req.userId, fromRisk: effectiveRisk, toRisk: riskKey, pendingDate: todayStr }, "Risk-level change queued — effective next trading day");
 
   res.json(formatInvestment(updated));
 });
