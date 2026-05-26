@@ -11,8 +11,9 @@ import {
   monthlyPerformanceTable,
   signalTradeDistributionsTable,
 } from "@workspace/db";
-import { eq, gt, and, isNull, sql, inArray, gte, lt } from "drizzle-orm";
-import { logger } from "./logger";
+import { eq, gt, and, isNull, sql, inArray, gte, lt, lte } from "drizzle-orm";
+import { getRateForDate, generateAllRiskSchedules, ensureCurrentMonthSchedules } from "./monthly-schedule-service";
+import { logger, profitLogger, errorLogger } from "./logger";
 import { createNotification } from "./notifications";
 import { getVipInfo } from "./vip";
 import {
@@ -488,40 +489,142 @@ export async function distributeDailyProfit(
 }
 
 /**
- * Auto daily profit — credits every active investment its fixed
- * per-risk daily rate: monthlyTarget / workingDaysInMonth.
- * No catchup for missed days or new investors — each run credits exactly
- * one day. Profit starts the NEXT working day after investment starts.
- * Idempotent per user/day via profit transaction check.
+ * NAV-based auto daily profit engine.
+ *
+ * Each weekday this function:
+ *   1. Ensures the monthly rate schedule exists (generates if missing).
+ *   2. Fetches today's pre-generated rate per risk bucket.
+ *   3. Settles any top-up capital that was "pending" from a previous day
+ *      (adds it to investments.amount so it earns from today onward).
+ *   4. Takes a start-of-day snapshot of each active investment's amount
+ *      (stored on the investments row itself as navSnapshotBalance).
+ *   5. Computes profit = snapshotBalance × rate — never on live `amount`
+ *      so intra-day deposits have zero effect on today's run.
+ *   6. Applies compounding, drawdown protection, VIP bonus, and referral
+ *      commission exactly as before.
+ *   7. Writes ledger entry + equity snapshot + daily_profit_runs row.
+ *
+ * Idempotency: guarded at two levels —
+ *   • daily_profit_runs: fast outer check (whole-run dedup by date).
+ *   • per-user profit transaction: inner check so partial runs can resume.
  */
 export async function distributeAutoDailyProfit(): Promise<DistributeProfitResult> {
+  const todayStr = new Date().toISOString().split("T")[0]!;
+
+  // ── Outer idempotency guard (fast path) ─────────────────────────────────
+  const runCheck = await db
+    .select({ id: dailyProfitRunsTable.id })
+    .from(dailyProfitRunsTable)
+    .where(eq(dailyProfitRunsTable.runDate, todayStr))
+    .limit(1);
+  if (runCheck.length > 0) {
+    profitLogger.info({ runDate: todayStr }, "distributeAutoDailyProfit: already ran today — skipping");
+    return { investorsAffected: 0, totalProfitDistributed: 0, totalAUM: 0, referralBonusPaid: 0 };
+  }
+
+  // ── 1. Ensure monthly rate schedule exists ───────────────────────────────
+  try {
+    await ensureCurrentMonthSchedules();
+  } catch (err) {
+    profitLogger.warn({ err }, "distributeAutoDailyProfit: failed to ensure monthly schedules (using fallback rates)");
+  }
+
+  // ── 2. Look up today's rate per risk bucket ──────────────────────────────
+  const rates: Record<string, number> = {};
+  for (const risk of ["low", "medium", "high"]) {
+    let rate = await getRateForDate(todayStr, risk).catch(() => null);
+    if (rate === null) {
+      // Fallback: mean daily rate from hardcoded constants
+      const { totalN } = forexWorkingDayInfo(new Date());
+      const monthly = MONTHLY_PROFIT_TARGET_PCT[risk] ?? 6;
+      rate = totalN > 0 ? monthly / totalN : 0;
+      profitLogger.warn({ risk, todayStr }, "distributeAutoDailyProfit: no schedule rate found, using fallback");
+    }
+    rates[risk] = rate;
+  }
+
   let investorsAffected = 0;
   let totalProfitDistributed = 0;
   let totalReferralBonusPaid = 0;
   let totalAUM = 0;
 
   await db.transaction(async (tx) => {
+    // ── 3. Settle pending top-ups from previous days ─────────────────────
+    // Any investment where navPendingDate < today gets its pending amount
+    // merged into the live amount before we snapshot.
+    const pendingInvs = await tx
+      .select({
+        userId: investmentsTable.userId,
+        amount: investmentsTable.amount,
+        navPendingAdd: investmentsTable.navPendingAdd,
+      })
+      .from(investmentsTable)
+      .where(
+        and(
+          eq(investmentsTable.isActive, true),
+          lte(investmentsTable.navPendingDate, todayStr),
+          gt(investmentsTable.navPendingAdd, "0"),
+        ),
+      );
+
+    for (const pi of pendingInvs) {
+      const base = parseFloat(pi.amount as string);
+      const pending = parseFloat(pi.navPendingAdd as string);
+      if (pending > 0) {
+        await tx
+          .update(investmentsTable)
+          .set({
+            amount: (base + pending).toString(),
+            navPendingAdd: "0",
+            navPendingDate: null,
+          })
+          .where(eq(investmentsTable.userId, pi.userId));
+      }
+    }
+
+    // ── 4. Load all active investments (post-settlement) ─────────────────
     const activeInvestments = await tx
       .select()
       .from(investmentsTable)
       .where(eq(investmentsTable.isActive, true));
 
-    const todayStr = new Date().toISOString().split("T")[0]!;
     totalAUM = activeInvestments.reduce(
       (acc, inv) => acc + parseFloat(inv.amount as string),
       0,
     );
 
+    // Take NAV snapshots for all active investments (idempotent — only writes
+    // when navSnapshotDate != today so a crash mid-run is safe to resume).
     for (const inv of activeInvestments) {
-      // Skip if investment started today or later — profit begins the NEXT working day.
+      if (inv.navSnapshotDate === todayStr) continue;
+      await tx
+        .update(investmentsTable)
+        .set({
+          navSnapshotBalance: inv.amount,
+          navSnapshotDate: todayStr,
+        })
+        .where(eq(investmentsTable.userId, inv.userId));
+    }
+
+    // Re-read so we have the freshly written snapshot values.
+    const snapshotMap = new Map<number, number>();
+    for (const inv of activeInvestments) {
+      const snap = inv.navSnapshotDate === todayStr
+        ? parseFloat(inv.amount as string)
+        : parseFloat(inv.navSnapshotBalance as string) || parseFloat(inv.amount as string);
+      snapshotMap.set(inv.userId, snap);
+    }
+
+    for (const inv of activeInvestments) {
+      // Skip if investment started today — profit begins NEXT working day.
       const startedDateStr = inv.startedAt
         ? new Date(inv.startedAt).toISOString().split("T")[0]!
         : todayStr;
       if (startedDateStr >= todayStr) continue;
 
-      // Idempotency guard — skip if a profit transaction was already credited today.
+      // Per-user idempotency: skip if profit already credited today.
       const todayStart = new Date(todayStr + "T00:00:00.000Z");
-      const todayEnd = new Date(todayStr + "T23:59:59.999Z");
+      const todayEnd   = new Date(todayStr + "T23:59:59.999Z");
       const alreadyPaid = await tx
         .select({ id: transactionsTable.id })
         .from(transactionsTable)
@@ -538,23 +641,22 @@ export async function distributeAutoDailyProfit(): Promise<DistributeProfitResul
 
       await ensureUserAccounts(inv.userId, tx);
 
-      const amount = parseFloat(inv.amount as string);
-      const totalProfit = parseFloat(inv.totalProfit as string);
-      const currentPeakBalance = parseFloat(inv.peakBalance as string) || amount;
-      const riskKey = (inv.riskLevel ?? "medium").toLowerCase();
-      const monthlyPct = MONTHLY_PROFIT_TARGET_PCT[riskKey] ?? MONTHLY_PROFIT_TARGET_PCT.medium!;
-      const monthlyTargetAmount = amount * (monthlyPct / 100);
+      // ── 5. Compute profit from snapshot balance × today's rate ────────
+      const snapshotBalance = snapshotMap.get(inv.userId) ?? parseFloat(inv.amount as string);
+      if (snapshotBalance <= 0) continue;
 
-      // Simple flat daily rate: monthly target divided by working days in the month.
-      // No catchup for missed days or new investors — exactly one day per cron run.
-      const nowDate = new Date();
-      const { totalN } = forexWorkingDayInfo(nowDate);
-      const dailyProfitAmount = totalN > 0 ? monthlyTargetAmount / totalN : 0;
-      if (dailyProfitAmount <= 0) continue;
-      const dailyPct = amount > 0 ? (dailyProfitAmount / amount) * 100 : 0;
-      // VIP bonus intentionally skipped here — fixed monthly target is
-      // exactly 4/6/8% per risk tier and must not exceed it.
-      const vipInfo = getVipInfo(amount);
+      const riskKey = (inv.riskLevel ?? "medium").toLowerCase();
+      const dailyRatePct = rates[riskKey] ?? 0;
+      const dailyProfitAmount = snapshotBalance * (dailyRatePct / 100);
+
+      // Skip if rate is zero (e.g., weekend fallback) — nothing to credit.
+      if (dailyRatePct === 0) continue;
+
+      const totalProfit = parseFloat(inv.totalProfit as string);
+      const currentPeakBalance = parseFloat(inv.peakBalance as string) || snapshotBalance;
+      const amount = parseFloat(inv.amount as string);
+      const dailyPct = dailyRatePct;
+      const vipInfo = getVipInfo(snapshotBalance);
       const newTotalProfit = totalProfit + dailyProfitAmount;
 
       const equityAfterToday = inv.autoCompound
@@ -569,7 +671,7 @@ export async function distributeAutoDailyProfit(): Promise<DistributeProfitResul
         .limit(1);
       if (walletRows.length === 0) continue;
       const wallet = walletRows[0]!;
-      const profitBalance = parseFloat(wallet.profitBalance as string);
+      const profitBalance  = parseFloat(wallet.profitBalance as string);
       const tradingBalance = parseFloat(wallet.tradingBalance as string);
 
       if (inv.autoCompound) {
@@ -612,6 +714,7 @@ export async function distributeAutoDailyProfit(): Promise<DistributeProfitResul
       const vipDesc = vipInfo.tier !== "none"
         ? ` · ${vipInfo.label} VIP +${(vipInfo.profitBonus * 100).toFixed(0)}% bonus`
         : "";
+      const profitSign = dailyProfitAmount >= 0 ? "+" : "";
       const [profitTxn] = await tx
         .insert(transactionsTable)
         .values({
@@ -619,7 +722,7 @@ export async function distributeAutoDailyProfit(): Promise<DistributeProfitResul
           type: "profit",
           amount: dailyProfitAmount.toString(),
           status: "completed",
-          description: `Daily profit (${inv.riskLevel} risk, ${dailyPct.toFixed(3)}% rate${vipDesc})`,
+          description: `Daily profit (${inv.riskLevel} risk, ${profitSign}${dailyPct.toFixed(4)}% NAV rate${vipDesc})`,
         })
         .returning({ id: transactionsTable.id });
 
@@ -627,31 +730,34 @@ export async function distributeAutoDailyProfit(): Promise<DistributeProfitResul
       const profitAccount = inv.autoCompound
         ? `user:${inv.userId}:trading`
         : `user:${inv.userId}:profit`;
-      await postJournalEntry(
-        journalForTransaction(profitTxn!.id),
-        [
-          { accountCode: "platform:profit_expense", entryType: "debit", amount: profitAmt, description: "Daily profit expense" },
-          { accountCode: profitAccount, entryType: "credit", amount: profitAmt, description: `Daily profit credited to user ${inv.userId}` },
-        ],
-        profitTxn!.id,
-        tx,
-      );
+
+      if (profitAmt > 0) {
+        await postJournalEntry(
+          journalForTransaction(profitTxn!.id),
+          [
+            { accountCode: "platform:profit_expense", entryType: "debit",  amount: profitAmt, description: "Daily NAV profit expense" },
+            { accountCode: profitAccount,              entryType: "credit", amount: profitAmt, description: `Daily NAV profit credited to user ${inv.userId}` },
+          ],
+          profitTxn!.id,
+          tx,
+        );
+      }
 
       await createNotification(
         inv.userId,
         "daily_profit",
         "Daily Profit Credited",
-        `+$${dailyProfitAmount.toFixed(2)} USDT earned today (${dailyPct.toFixed(3)}% · ${inv.riskLevel} risk${vipInfo.tier !== "none" ? ` · ${vipInfo.label} VIP` : ""}).`,
+        `${profitSign}$${Math.abs(dailyProfitAmount).toFixed(2)} USDT earned today (${profitSign}${dailyPct.toFixed(4)}% · ${inv.riskLevel} risk${vipInfo.tier !== "none" ? ` · ${vipInfo.label} VIP` : ""}).`,
       );
 
       const currentEquity = inv.autoCompound ? amount + dailyProfitAmount : amount;
       // equity_history has no UNIQUE(user_id,date) → read-first then UPDATE-or-INSERT
-      const eqExisting648 = await tx
+      const eqExisting = await tx
         .select({ id: equityHistoryTable.id })
         .from(equityHistoryTable)
         .where(and(eq(equityHistoryTable.userId, inv.userId), eq(equityHistoryTable.date, todayStr)))
         .limit(1);
-      if (eqExisting648.length > 0) {
+      if (eqExisting.length > 0) {
         await tx
           .update(equityHistoryTable)
           .set({ equity: currentEquity.toString(), profit: dailyProfitAmount.toString() })
@@ -666,14 +772,14 @@ export async function distributeAutoDailyProfit(): Promise<DistributeProfitResul
       }
 
       // Monthly performance roll-up.
-      const yearMonth = todayStr.slice(0, 7)!;
+      const mpYearMonth = todayStr.slice(0, 7)!;
       const existing = await tx
         .select()
         .from(monthlyPerformanceTable)
         .where(
           and(
             eq(monthlyPerformanceTable.userId, inv.userId),
-            eq(monthlyPerformanceTable.yearMonth, yearMonth),
+            eq(monthlyPerformanceTable.yearMonth, mpYearMonth),
           ),
         )
         .limit(1);
@@ -686,25 +792,25 @@ export async function distributeAutoDailyProfit(): Promise<DistributeProfitResul
           : 0;
         await tx.insert(monthlyPerformanceTable).values({
           userId: inv.userId,
-          yearMonth,
+          yearMonth: mpYearMonth,
           monthlyReturn: monthlyReturnPct.toString(),
           maxDrawdown: "0",
           winRate: "100",
           totalProfit: dailyProfitAmount.toString(),
           tradingDays: 1,
-          winningDays: 1,
+          winningDays: dailyProfitAmount >= 0 ? 1 : 0,
           startEquity: startEquity.toString(),
           peakEquity: peakEq.toString(),
         });
       } else {
         const rec = existing[0]!;
         const prevStartEquity = parseFloat(rec.startEquity as string);
-        const prevPeakEquity = parseFloat(rec.peakEquity as string);
+        const prevPeakEquity  = parseFloat(rec.peakEquity as string);
         const prevTotalProfit = parseFloat(rec.totalProfit as string);
-        const newPeakEquity = Math.max(prevPeakEquity, currentEquity);
-        const newTotal = prevTotalProfit + dailyProfitAmount;
-        const newDays = rec.tradingDays + 1;
-        const newWins = rec.winningDays + 1;
+        const newPeakEquity   = Math.max(prevPeakEquity, currentEquity);
+        const newTotal        = prevTotalProfit + dailyProfitAmount;
+        const newDays         = rec.tradingDays + 1;
+        const newWins         = rec.winningDays + (dailyProfitAmount >= 0 ? 1 : 0);
         const monthlyReturnPct = prevStartEquity > 0
           ? ((currentEquity - prevStartEquity) / prevStartEquity) * 100
           : 0;
@@ -723,59 +829,61 @@ export async function distributeAutoDailyProfit(): Promise<DistributeProfitResul
           .where(
             and(
               eq(monthlyPerformanceTable.userId, inv.userId),
-              eq(monthlyPerformanceTable.yearMonth, yearMonth),
+              eq(monthlyPerformanceTable.yearMonth, mpYearMonth),
             ),
           );
       }
 
-      // Sponsor referral bonus (10%).
-      const userRows = await tx
-        .select({ sponsorId: usersTable.sponsorId })
-        .from(usersTable)
-        .where(eq(usersTable.id, inv.userId))
-        .limit(1);
-      const sponsorId = userRows[0]?.sponsorId;
-      if (sponsorId && sponsorId !== inv.userId && sponsorId !== 0 && dailyProfitAmount > 0) {
-        const sponsorInvRows = await tx
-          .select({ isActive: investmentsTable.isActive })
-          .from(investmentsTable)
-          .where(eq(investmentsTable.userId, sponsorId))
+      // Sponsor referral bonus (10%) — only on positive days.
+      if (dailyProfitAmount > 0) {
+        const userRows = await tx
+          .select({ sponsorId: usersTable.sponsorId })
+          .from(usersTable)
+          .where(eq(usersTable.id, inv.userId))
           .limit(1);
-        if (sponsorInvRows[0]?.isActive) {
-          const referralBonus = dailyProfitAmount * REFERRAL_COMMISSION_RATE;
-          const sponsorWalletRows = await tx
-            .select()
-            .from(walletsTable)
-            .where(eq(walletsTable.userId, sponsorId))
+        const sponsorId = userRows[0]?.sponsorId;
+        if (sponsorId && sponsorId !== inv.userId && sponsorId !== 0) {
+          const sponsorInvRows = await tx
+            .select({ isActive: investmentsTable.isActive })
+            .from(investmentsTable)
+            .where(eq(investmentsTable.userId, sponsorId))
             .limit(1);
-          if (sponsorWalletRows.length > 0) {
-            const sw = sponsorWalletRows[0]!;
-            const spProfit = parseFloat(sw.profitBalance as string);
-            await tx
-              .update(walletsTable)
-              .set({ profitBalance: (spProfit + referralBonus).toString(), updatedAt: new Date() })
-              .where(eq(walletsTable.userId, sponsorId));
-            const [refTxn] = await tx
-              .insert(transactionsTable)
-              .values({
-                userId: sponsorId,
-                type: "referral_bonus",
-                amount: referralBonus.toString(),
-                status: "completed",
-                description: `Referral commission: ${(REFERRAL_COMMISSION_RATE * 100).toFixed(0)}% of partner's daily profit ($${dailyProfitAmount.toFixed(2)})`,
-              })
-              .returning({ id: transactionsTable.id });
-            await ensureUserAccounts(sponsorId, tx);
-            await postJournalEntry(
-              journalForTransaction(refTxn!.id),
-              [
-                { accountCode: "platform:referral_expense", entryType: "debit", amount: referralBonus, description: `Referral bonus to sponsor ${sponsorId}` },
-                { accountCode: `user:${sponsorId}:profit`, entryType: "credit", amount: referralBonus, description: `Referral bonus credited to sponsor ${sponsorId}` },
-              ],
-              refTxn!.id,
-              tx,
-            );
-            totalReferralBonusPaid += referralBonus;
+          if (sponsorInvRows[0]?.isActive) {
+            const referralBonus = dailyProfitAmount * REFERRAL_COMMISSION_RATE;
+            const sponsorWalletRows = await tx
+              .select()
+              .from(walletsTable)
+              .where(eq(walletsTable.userId, sponsorId))
+              .limit(1);
+            if (sponsorWalletRows.length > 0) {
+              const sw = sponsorWalletRows[0]!;
+              const spProfit = parseFloat(sw.profitBalance as string);
+              await tx
+                .update(walletsTable)
+                .set({ profitBalance: (spProfit + referralBonus).toString(), updatedAt: new Date() })
+                .where(eq(walletsTable.userId, sponsorId));
+              const [refTxn] = await tx
+                .insert(transactionsTable)
+                .values({
+                  userId: sponsorId,
+                  type: "referral_bonus",
+                  amount: referralBonus.toString(),
+                  status: "completed",
+                  description: `Referral commission: ${(REFERRAL_COMMISSION_RATE * 100).toFixed(0)}% of partner's daily profit ($${dailyProfitAmount.toFixed(2)})`,
+                })
+                .returning({ id: transactionsTable.id });
+              await ensureUserAccounts(sponsorId, tx);
+              await postJournalEntry(
+                journalForTransaction(refTxn!.id),
+                [
+                  { accountCode: "platform:referral_expense", entryType: "debit",  amount: referralBonus, description: `Referral bonus to sponsor ${sponsorId}` },
+                  { accountCode: `user:${sponsorId}:profit`,  entryType: "credit", amount: referralBonus, description: `Referral bonus credited to sponsor ${sponsorId}` },
+                ],
+                refTxn!.id,
+                tx,
+              );
+              totalReferralBonusPaid += referralBonus;
+            }
           }
         }
       }

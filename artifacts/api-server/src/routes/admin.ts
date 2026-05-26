@@ -315,6 +315,67 @@ router.get("/admin/profit/history", async (req, res) => {
   );
 });
 
+// ── NAV Engine: ROI schedule preview ────────────────────────────────────────
+// GET /admin/roi-schedule?month=YYYY-MM  → daily rates per risk bucket
+router.get("/admin/roi-schedule", async (req, res) => {
+  const { getMonthSchedule, tradingDaysForMonth, getMonthlyTarget, generateAllRiskSchedules } = await import("../lib/monthly-schedule-service");
+  const month = getQueryString(req, "month", new Date().toISOString().slice(0, 7));
+  if (!/^\d{4}-\d{2}$/.test(month)) {
+    res.status(400).json({ error: "Invalid month format. Use YYYY-MM" });
+    return;
+  }
+  const rows = await getMonthSchedule(month);
+  const tradingDays = tradingDaysForMonth(month);
+  const [lowTarget, medTarget, highTarget] = await Promise.all([
+    getMonthlyTarget("low"),
+    getMonthlyTarget("medium"),
+    getMonthlyTarget("high"),
+  ]);
+  res.json({
+    month,
+    tradingDays: tradingDays.length,
+    targets: { low: lowTarget, medium: medTarget, high: highTarget },
+    schedule: rows,
+    generated: rows.length > 0,
+  });
+});
+
+// POST /admin/roi-schedule/generate?month=YYYY-MM&force=true  → (re)generate schedule
+router.post("/admin/roi-schedule/generate", async (req: AuthRequest, res) => {
+  const { generateAllRiskSchedules } = await import("../lib/monthly-schedule-service");
+  const month = getQueryString(req, "month", new Date().toISOString().slice(0, 7));
+  const force = req.query["force"] === "true";
+  if (!/^\d{4}-\d{2}$/.test(month)) {
+    res.status(400).json({ error: "Invalid month format. Use YYYY-MM" });
+    return;
+  }
+  const results = await generateAllRiskSchedules(month, force);
+  profitLogger.info({ month, force, adminId: req.userId, results }, "Admin: ROI schedule (re)generated");
+  res.json({ ok: true, month, results });
+});
+
+// PUT /admin/roi-schedule/target  → set monthly target % for a risk level
+// Body: { riskLevel: "low"|"medium"|"high", targetPct: number }
+router.put("/admin/roi-schedule/target", async (req: AuthRequest, res) => {
+  const { riskLevel, targetPct } = req.body ?? {};
+  if (!["low", "medium", "high"].includes(riskLevel)) {
+    res.status(400).json({ error: "riskLevel must be low, medium, or high" });
+    return;
+  }
+  if (typeof targetPct !== "number" || targetPct < -10 || targetPct > 50) {
+    res.status(400).json({ error: "targetPct must be a number between -10 and 50" });
+    return;
+  }
+  const key = `monthly_target_${riskLevel}`;
+  await db
+    .insert(systemSettingsTable)
+    .values({ key, value: targetPct.toString() })
+    .onConflictDoUpdate({ target: systemSettingsTable.key, set: { value: targetPct.toString(), updatedAt: new Date() } });
+
+  profitLogger.info({ riskLevel, targetPct, adminId: req.userId }, "Admin: monthly ROI target updated");
+  res.json({ ok: true, riskLevel, targetPct });
+});
+
 router.get("/admin/users", async (req, res) => {
   const page = getQueryInt(req, "page", 1);
   const limit = getQueryInt(req, "limit", 20);

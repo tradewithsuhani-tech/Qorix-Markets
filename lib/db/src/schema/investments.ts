@@ -1,4 +1,4 @@
-import { pgTable, serial, integer, numeric, boolean, varchar, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, numeric, boolean, varchar, timestamp, date } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -19,6 +19,12 @@ export const investmentsTable = pgTable("investments", {
   startedAt: timestamp("started_at"),
   stoppedAt: timestamp("stopped_at"),
   pausedAt: timestamp("paused_at"),
+  // NAV engine: pending top-up capital — set on top-up, settled next trading day before profit run
+  navPendingAdd: numeric("nav_pending_add", { precision: 18, scale: 8 }).notNull().default("0"),
+  navPendingDate: date("nav_pending_date"), // date the pending add was recorded; NULL when no pending
+  // NAV engine: start-of-day snapshot used as the profit basis for today's run
+  navSnapshotBalance: numeric("nav_snapshot_balance", { precision: 18, scale: 8 }).notNull().default("0"),
+  navSnapshotDate: date("nav_snapshot_date"), // date the snapshot was captured; NULL until first run
 });
 
 export const insertInvestmentSchema = createInsertSchema(investmentsTable).omit({ id: true });

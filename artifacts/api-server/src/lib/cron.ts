@@ -6,6 +6,7 @@ import {
 import { and, eq, isNull, lt, sql } from "drizzle-orm";
 import { logger, profitLogger, errorLogger } from "./logger";
 import { getLastDailyProfitPercent, sweepSignalProfitsToProfitWallet, distributeAutoDailyProfit } from "./profit-service";
+import { generateAllRiskSchedules, ensureCurrentMonthSchedules } from "./monthly-schedule-service";
 import { emitProfitDistribution } from "./event-bus";
 import { tickAutoSignalEngine, closeMaturedAutoTrades, rehydrateAutoEngineState } from "./auto-signal-engine";
 import { runEscalationTick } from "./escalation-cron";
@@ -69,6 +70,37 @@ export async function initCronJobs(): Promise<void> {
       );
     } catch (err) {
       errorLogger.error({ err }, "Cron: monthly trading→profit sweep failed");
+    }
+  });
+
+  // Generate next month's rate schedule on the last day of each month at 23:50 UTC
+  // so it's ready before the 1st-of-month profit run fires.
+  cron.schedule("50 23 28-31 * *", async () => {
+    const now = new Date();
+    // Only run on the actual last day of the month.
+    const lastDay = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0)).getUTCDate();
+    if (now.getUTCDate() !== lastDay) return;
+    const nextMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+    const nextYM = nextMonth.toISOString().slice(0, 7)!;
+    profitLogger.info({ nextYM }, "Cron: generating next month's ROI rate schedule");
+    try {
+      const results = await generateAllRiskSchedules(nextYM);
+      profitLogger.info({ nextYM, results }, "Cron: next month's ROI rate schedule generated");
+    } catch (err) {
+      errorLogger.error({ err, nextYM }, "Cron: failed to generate next month's ROI rate schedule");
+    }
+  });
+
+  // Also ensure the current month's schedule exists on the 1st of each month
+  // (catches the case where the end-of-month job missed or was redeployed).
+  cron.schedule("0 1 1 * *", async () => {
+    const now = new Date();
+    const yearMonth = now.toISOString().slice(0, 7)!;
+    profitLogger.info({ yearMonth }, "Cron: ensuring current month's ROI rate schedule");
+    try {
+      await ensureCurrentMonthSchedules();
+    } catch (err) {
+      errorLogger.error({ err }, "Cron: failed to ensure current month's ROI rate schedule");
     }
   });
 
@@ -188,6 +220,10 @@ export async function initCronJobs(): Promise<void> {
   // and no daily_profit_runs row exists for today, it distributes profit
   // automatically — exactly as the cron would have done.
   void catchUpTodaysProfitIfMissed();
+  // Ensure this month's rate schedule exists at startup (idempotent).
+  void ensureCurrentMonthSchedules()
+    .then(() => profitLogger.info("Startup: monthly ROI rate schedule ensured"))
+    .catch((err) => errorLogger.error({ err }, "Startup: failed to ensure monthly ROI rate schedule"));
 }
 
 async function catchUpTodaysProfitIfMissed(): Promise<void> {

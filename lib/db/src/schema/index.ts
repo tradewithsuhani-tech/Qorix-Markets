@@ -33,3 +33,4 @@ export * from "./user-devices";
 export * from "./admin-escalation-contacts";
 export * from "./worker-heartbeats";
 export * from "./p2p";
+export * from "./daily-rate-schedule";
