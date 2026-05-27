@@ -38,6 +38,18 @@ const DEFAULT_SETTINGS: Record<string, string> = {
   ]),
 
   // Login popup (consumed by AdminPopup component)
+  // Feature flags — admin-controlled per-feature toggles (all default on).
+  // Set value to "false" via admin panel to hide a feature from web + mobile
+  // without a deploy. Cache is 30s per process.
+  "feature.p2p": "true",
+  "feature.quiz": "true",
+  "feature.signal_trading": "true",
+  "feature.referral": "true",
+  "feature.inr_withdraw": "true",
+  "feature.usdt_deposit": "true",
+  "feature.bot_trading": "true",
+  "feature.leaderboard": "true",
+
   popup_mode: "once",
   popup_title: "🚀 Start Your Investment Journey",
   popup_message:

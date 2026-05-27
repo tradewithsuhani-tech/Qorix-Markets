@@ -61,6 +61,7 @@ import { getAllQuotes, isForexMarketOpen } from "../lib/quote-feed";
 import { getEconomicCalendar } from "../lib/economic-calendar";
 import { buildBotState } from "../lib/bot-state";
 import { makeRedisLimiter } from "../middlewares/rate-limit";
+import { getFeatureFlags } from "../lib/feature-flags-cache";
 
 const router = Router();
 
@@ -1595,6 +1596,17 @@ router.get(
     });
   },
 );
+
+// ─── Feature Flags (public — no auth required) ──────────────────────────────
+
+router.get("/v1/feature-flags", async (req: Request, res: Response) => {
+  try {
+    const flags = await getFeatureFlags();
+    ok(req, res, flags);
+  } catch (err) {
+    res.status(500).json({ success: false, error: { code: "internal", message: "Failed to load feature flags" } });
+  }
+});
 
 // ══════════════════════════════════════════════════════════════════════════════
 // WRITE GUARDS — explicit 503 for Phase 1

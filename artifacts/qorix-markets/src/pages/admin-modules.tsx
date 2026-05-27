@@ -2579,8 +2579,86 @@ export function AdminSystemPage() {
             ))}
           </div>
         </div>
+
+        <FeatureFlagsAdmin />
       </motion.div>
     </Layout>
+  );
+}
+
+// ─── Feature Flags Admin panel ───────────────────────────────────────────────
+type FlagRow = { key: string; label: string; enabled: boolean };
+
+function FeatureFlagsAdmin() {
+  const [flags, setFlags] = useState<FlagRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState<string | null>(null);
+  const { toast } = useToast();
+
+  async function load() {
+    setLoading(true);
+    try {
+      const data = await adminFetch("/admin/feature-flags");
+      setFlags(data.flags ?? []);
+    } catch {
+      toast({ title: "Failed to load feature flags", variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { load(); }, []);
+
+  async function toggle(key: string, enabled: boolean) {
+    setSaving(key);
+    try {
+      await adminFetch(`/admin/feature-flags/${key}`, {
+        method: "PATCH",
+        body: JSON.stringify({ enabled }),
+      });
+      setFlags((prev) => prev.map((f) => f.key === key ? { ...f, enabled } : f));
+      toast({ title: `${key} ${enabled ? "enabled" : "disabled"}` });
+    } catch {
+      toast({ title: "Failed to update flag", variant: "destructive" });
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  return (
+    <div className="glass-card p-6 rounded-2xl space-y-4">
+      <div>
+        <h2 className="text-xl font-bold flex items-center gap-2">
+          <Power className="w-5 h-5 text-violet-400" /> Feature Flags
+        </h2>
+        <p className="text-xs text-muted-foreground mt-1">
+          Toggle features on/off in real-time across web and mobile without a deployment. Default is ON (fail-open).
+        </p>
+      </div>
+      {loading ? (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="w-4 h-4 animate-spin" /> Loading flags…
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {flags.map((f) => (
+            <div key={f.key} className="flex items-center justify-between p-4 rounded-xl bg-white/[0.03] border border-white/8">
+              <div>
+                <div className="font-medium text-sm">{f.label}</div>
+                <div className="text-xs text-muted-foreground font-mono mt-0.5">{f.key}</div>
+              </div>
+              <button
+                disabled={saving === f.key}
+                onClick={() => toggle(f.key, !f.enabled)}
+                className={`w-12 h-6 rounded-full p-1 transition-colors disabled:opacity-50 ${f.enabled ? "bg-violet-600" : "bg-white/10"}`}
+              >
+                <span className={`block w-4 h-4 rounded-full bg-white transition-transform ${f.enabled ? "translate-x-6" : "translate-x-0"}`} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

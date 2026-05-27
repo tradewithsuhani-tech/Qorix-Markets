@@ -6,6 +6,7 @@ import { SiteActivityToaster } from "@/components/site-activity-toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
+import { FeatureFlagsProvider, useFlag, type FlagKey } from "@/contexts/feature-flags-context";
 import { LoginApprovalGate } from "@/components/login-approval-modal";
 import { PWAInstallPrompt } from "@/components/pwa-install-prompt";
 import { SplashScreen, useSplash } from "@/components/splash-screen";
@@ -302,6 +303,32 @@ const queryClient = new QueryClient({
   },
 });
 
+const FlaggedRoute = ({ component: Component, flag }: { component: any; flag: FlagKey }) => {
+  const enabled = useFlag(flag);
+  const { user, token, isLoading } = useAuth();
+  const [, setLocation] = useLocation();
+
+  if (isLoading) {
+    return (
+      <div className="h-screen w-full bg-background flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (!token || !user) {
+    setLocation("/");
+    return null;
+  }
+
+  if (!enabled) {
+    setLocation("/dashboard");
+    return null;
+  }
+
+  return <Component />;
+};
+
 const ProtectedRoute = ({ component: Component, adminOnly = false }: { component: any; adminOnly?: boolean }) => {
   const { user, token, isLoading } = useAuth();
   const [, setLocation] = useLocation();
@@ -417,13 +444,13 @@ function Router() {
       <Route path="/usdt-market"><ProtectedRoute component={UsdtMarketPage} /></Route>
       <Route path="/portfolio"><ProtectedRoute component={PortfolioPage} /></Route>
       <Route path="/transactions"><ProtectedRoute component={TransactionsPage} /></Route>
-      <Route path="/referral"><ProtectedRoute component={ReferralPage} /></Route>
+      <Route path="/referral"><FlaggedRoute flag="referral" component={ReferralPage} /></Route>
       <Route path="/rewards"><ProtectedRoute component={RewardsPage} /></Route>
       <Route path="/tasks"><ProtectedRoute component={TasksPage} /></Route>
       <Route path="/analytics"><ProtectedRoute component={AnalyticsPage} /></Route>
       <Route path="/trading-desk"><ProtectedRoute component={TradingDeskPage} /></Route>
       <Route path="/trade-activity"><ProtectedRoute component={TradeActivityPage} /></Route>
-      <Route path="/signal-history"><ProtectedRoute component={SignalHistoryPage} /></Route>
+      <Route path="/signal-history"><FlaggedRoute flag="signal_trading" component={SignalHistoryPage} /></Route>
       <Route path="/admin/signal-trades"><ProtectedRoute component={AdminSignalTradesPage} adminOnly={true} /></Route>
       <Route path="/admin/p2p"><ProtectedRoute component={AdminP2pPage} adminOnly={true} /></Route>
       <Route path="/admin/p2p-disputes"><ProtectedRoute component={AdminP2pDisputesPage} adminOnly={true} /></Route>
@@ -464,16 +491,16 @@ function Router() {
       <Route path="/verify/:hashId" component={VerifyPage} />
       <Route path="/verify" component={VerifyPage} />
       <Route path="/market-insights"><ProtectedRoute component={MarketInsightsPage} /></Route>
-      <Route path="/p2p"><ProtectedRoute component={P2PMarketPage} /></Route>
-      <Route path="/p2p/create-ad"><ProtectedRoute component={P2PCreateAdPage} /></Route>
-      <Route path="/p2p/orders"><ProtectedRoute component={P2POrdersPage} /></Route>
-      <Route path="/p2p/payment-methods"><ProtectedRoute component={P2PPaymentMethodsPage} /></Route>
-      <Route path="/p2p/ads/my"><ProtectedRoute component={P2PMyAdsPage} /></Route>
-      <Route path="/p2p/order/:id"><ProtectedRoute component={P2PPlaceOrderPage} /></Route>
-      <Route path="/p2p/orders/:id"><ProtectedRoute component={P2POrderDetailPage} /></Route>
-      <Route path="/p2p/sell/:adId"><ProtectedRoute component={P2PSellFlowPage} /></Route>
-      <Route path="/p2p/chat"><ProtectedRoute component={P2PChatPage} /></Route>
-      <Route path="/p2p/user-center"><ProtectedRoute component={P2PUserCenterPage} /></Route>
+      <Route path="/p2p"><FlaggedRoute flag="p2p" component={P2PMarketPage} /></Route>
+      <Route path="/p2p/create-ad"><FlaggedRoute flag="p2p" component={P2PCreateAdPage} /></Route>
+      <Route path="/p2p/orders"><FlaggedRoute flag="p2p" component={P2POrdersPage} /></Route>
+      <Route path="/p2p/payment-methods"><FlaggedRoute flag="p2p" component={P2PPaymentMethodsPage} /></Route>
+      <Route path="/p2p/ads/my"><FlaggedRoute flag="p2p" component={P2PMyAdsPage} /></Route>
+      <Route path="/p2p/order/:id"><FlaggedRoute flag="p2p" component={P2PPlaceOrderPage} /></Route>
+      <Route path="/p2p/orders/:id"><FlaggedRoute flag="p2p" component={P2POrderDetailPage} /></Route>
+      <Route path="/p2p/sell/:adId"><FlaggedRoute flag="p2p" component={P2PSellFlowPage} /></Route>
+      <Route path="/p2p/chat"><FlaggedRoute flag="p2p" component={P2PChatPage} /></Route>
+      <Route path="/p2p/user-center"><FlaggedRoute flag="p2p" component={P2PUserCenterPage} /></Route>
       <Route path="/legal/terms" component={TermsPage} />
       <Route path="/legal/privacy" component={PrivacyPage} />
       <Route path="/legal/risk-disclosure" component={RiskDisclosurePage} />
@@ -611,8 +638,10 @@ function App() {
       <TooltipProvider>
         <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
           <AuthProvider>
-            <AppContent />
-            <LoginApprovalGate />
+            <FeatureFlagsProvider>
+              <AppContent />
+              <LoginApprovalGate />
+            </FeatureFlagsProvider>
           </AuthProvider>
         </WouterRouter>
         <Toaster />

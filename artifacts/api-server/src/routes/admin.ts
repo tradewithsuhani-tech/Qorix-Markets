@@ -67,6 +67,13 @@ import {
   getEntryAnchor,
 } from "../lib/auto-signal-engine";
 import { notSmokeTestUser, notSmokeTestUserRef, shouldIncludeSmokeTest } from "../lib/smoke-test-account";
+import {
+  getFeatureFlags,
+  invalidateFeatureFlagsCache,
+  FEATURE_FLAG_LABELS,
+  FLAG_KEYS,
+  type FlagKey,
+} from "../lib/feature-flags-cache";
 
 const router = Router();
 router.use("/admin", authMiddleware);
@@ -3474,6 +3481,51 @@ router.post("/admin/p2p/disputes/:id/resolve", async (req: AuthRequest, res) => 
     res.json({ success: true, status: result.newStatus });
   } catch (err: any) {
     res.status(400).json({ error: err.message || "Failed to resolve dispute" });
+  }
+});
+
+// ─── Feature Flags ───────────────────────────────────────────────────────────
+
+// GET /admin/feature-flags — list all flags with current state
+router.get("/admin/feature-flags", authMiddleware, adminMiddleware, async (_req: AuthRequest, res) => {
+  try {
+    const flags = await getFeatureFlags();
+    const rows = FLAG_KEYS.map((key) => ({
+      key,
+      label: FEATURE_FLAG_LABELS[key],
+      enabled: flags[key],
+    }));
+    res.json({ flags: rows });
+  } catch {
+    res.status(500).json({ error: "Failed to load feature flags" });
+  }
+});
+
+// PATCH /admin/feature-flags/:key — toggle a single flag
+router.patch("/admin/feature-flags/:key", authMiddleware, adminMiddleware, async (req: AuthRequest, res) => {
+  const key = req.params.key as FlagKey;
+  if (!FLAG_KEYS.includes(key)) {
+    res.status(400).json({ error: `Unknown flag key: ${key}` });
+    return;
+  }
+  const { enabled } = req.body as { enabled: boolean };
+  if (typeof enabled !== "boolean") {
+    res.status(400).json({ error: "enabled must be a boolean" });
+    return;
+  }
+  try {
+    const dbKey = `feature.${key}`;
+    await db
+      .insert(systemSettingsTable)
+      .values({ key: dbKey, value: enabled ? "true" : "false" })
+      .onConflictDoUpdate({
+        target: systemSettingsTable.key,
+        set: { value: enabled ? "true" : "false", updatedAt: new Date() },
+      });
+    invalidateFeatureFlagsCache();
+    res.json({ success: true, key, enabled });
+  } catch {
+    res.status(500).json({ error: "Failed to update feature flag" });
   }
 });
 

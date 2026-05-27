@@ -1,0 +1,1 @@
+- [Feature Flags system](feature-flags.md) — flags stored as `feature.<key>` in system_settings; 30s TTL cache; fail-open (missing row = enabled).

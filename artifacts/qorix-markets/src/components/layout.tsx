@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useEffect, useMemo } from "react";
+import { useAllFlags } from "@/contexts/feature-flags-context";
 import { initNotificationSound } from "@/lib/notification-sound";
 import { useNotificationSoundOnNew } from "@/hooks/use-notification-sound";
 import { Link, useLocation } from "wouter";
@@ -576,6 +577,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
   useEffect(() => { initNotificationSound(); }, []);
   useNotificationSoundOnNew();
 
+  const flags = useAllFlags();
+
   const userLinks = [
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { href: "/wallet", label: "Wallet", icon: Wallet },
@@ -583,10 +586,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/portfolio", label: "Portfolio", icon: PieChart },
     { href: "/self-trade", label: "Self Trade", icon: Activity },
     { href: "/usdt-market", label: "USDT Market", icon: BarChart2 },
-    { href: "/p2p", label: "P2P Trading", icon: ArrowUpDown },
+    ...(flags.p2p ? [{ href: "/p2p", label: "P2P Trading", icon: ArrowUpDown }] : []),
     { href: "/market-insights", label: "Market Insights", icon: Globe },
     { href: "/transactions", label: "History", icon: History },
-    { href: "/referral", label: "Referrals", icon: Users },
+    ...(flags.referral ? [{ href: "/referral", label: "Referrals", icon: Users }] : []),
     { href: "/rewards", label: "Promotions", icon: Trophy },
     { href: "/tasks", label: "Tasks", icon: ListChecks },
     { href: "/settings", label: "Settings", icon: Settings },
