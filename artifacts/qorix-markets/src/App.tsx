@@ -430,16 +430,16 @@ function Router() {
       <Route path="/deposit/netbanking"><ProtectedRoute component={DepositNetBankingPage} /></Route>
       <Route path="/deposit/netbanking/details"><ProtectedRoute component={DepositNetBankingDetailsPage} /></Route>
       <Route path="/deposit/verify"><ProtectedRoute component={DepositVerifyPage} /></Route>
-      <Route path="/deposit/crypto"><ProtectedRoute component={DepositCryptoPage} /></Route>
+      <Route path="/deposit/crypto"><FlaggedRoute flag="usdt_deposit" component={DepositCryptoPage} /></Route>
       <Route path="/deposit/success"><ProtectedRoute component={DepositSuccessPage} /></Route>
       <Route path="/withdraw"><ProtectedRoute component={WithdrawPage} /></Route>
       <Route path="/withdraw/usdt"><ProtectedRoute component={WithdrawUsdtPage} /></Route>
-      <Route path="/withdraw/inr"><ProtectedRoute component={WithdrawInrPage} /></Route>
+      <Route path="/withdraw/inr"><FlaggedRoute flag="inr_withdraw" component={WithdrawInrPage} /></Route>
       <Route path="/withdraw/user-transfer"><ProtectedRoute component={WithdrawUserTransferPage} /></Route>
       <Route path="/withdraw/review"><ProtectedRoute component={WithdrawReviewPage} /></Route>
       <Route path="/withdraw/otp"><ProtectedRoute component={WithdrawOtpPage} /></Route>
       <Route path="/withdraw/success"><ProtectedRoute component={WithdrawSuccessPage} /></Route>
-      <Route path="/invest"><ProtectedRoute component={InvestPage} /></Route>
+      <Route path="/invest"><FlaggedRoute flag="bot_trading" component={InvestPage} /></Route>
       <Route path="/self-trade"><ProtectedRoute component={SelfTradePage} /></Route>
       <Route path="/usdt-market"><ProtectedRoute component={UsdtMarketPage} /></Route>
       <Route path="/portfolio"><ProtectedRoute component={PortfolioPage} /></Route>

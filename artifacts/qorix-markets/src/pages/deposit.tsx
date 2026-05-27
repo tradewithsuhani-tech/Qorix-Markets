@@ -8,6 +8,7 @@ import {
 import { CRYPTO_METHODS } from "@/lib/deposit-flow-data";
 import { cn } from "@/lib/utils";
 import { useInrRate } from "@/hooks/use-inr-rate";
+import { useFlag } from "@/contexts/feature-flags-context";
 
 const INR_METHODS = [
   { id: "upi", icon: Zap, label: "UPI", sub: "Instant · No charges" },
@@ -21,13 +22,18 @@ export default function DepositPage() {
   const FX_RATE = useInrRate();
   const mainBalanceUsd = Number((wallet as any)?.mainBalance) || 0;
   const balanceInr = mainBalanceUsd * FX_RATE;
+  const usdtDepositEnabled = useFlag("usdt_deposit");
 
   const [currency, setCurrency] = useState<"INR" | "USDT">("INR");
   const [amount, setAmount] = useState("");
   const [showAmtError, setShowAmtError] = useState(false);
   const amountRef = useRef<HTMLInputElement>(null);
 
-  const isCrypto = currency === "USDT";
+  useEffect(() => {
+    if (!usdtDepositEnabled && currency === "USDT") setCurrency("INR");
+  }, [usdtDepositEnabled, currency]);
+
+  const isCrypto = currency === "USDT" && usdtDepositEnabled;
   const numAmount = parseFloat(amount.replace(/,/g, "")) || 0;
   const minAmount = currency === "INR" ? 100 : 60;
   const hasAmount = numAmount >= minAmount;
@@ -108,26 +114,28 @@ export default function DepositPage() {
         <div>
           <div className="flex items-center justify-between mb-2">
             <label className="text-xs font-medium text-muted-foreground">Deposit Amount</label>
-            <div className="flex border border-white/10 bg-white/5 rounded-xl p-0.5 gap-0.5">
-              {(["INR", "USDT"] as const).map((c) => {
-                const active = currency === c;
-                return (
-                  <button
-                    key={c}
-                    onClick={() => switchCurrency(c)}
-                    className={cn(
-                      "px-2.5 py-1 rounded-lg border text-[11px] font-bold tracking-wide transition-colors",
-                      active
-                        ? "bg-emerald-500/20 border-emerald-500 text-emerald-400"
-                        : "border-transparent text-muted-foreground hover:text-foreground"
-                    )}
-                    data-testid={`currency-${c.toLowerCase()}`}
-                  >
-                    {c === "INR" ? "₹ INR" : "₮ USDT"}
-                  </button>
-                );
-              })}
-            </div>
+            {usdtDepositEnabled && (
+              <div className="flex border border-white/10 bg-white/5 rounded-xl p-0.5 gap-0.5">
+                {(["INR", "USDT"] as const).map((c) => {
+                  const active = currency === c;
+                  return (
+                    <button
+                      key={c}
+                      onClick={() => switchCurrency(c)}
+                      className={cn(
+                        "px-2.5 py-1 rounded-lg border text-[11px] font-bold tracking-wide transition-colors",
+                        active
+                          ? "bg-emerald-500/20 border-emerald-500 text-emerald-400"
+                          : "border-transparent text-muted-foreground hover:text-foreground"
+                      )}
+                      data-testid={`currency-${c.toLowerCase()}`}
+                    >
+                      {c === "INR" ? "₹ INR" : "₮ USDT"}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
           <div
             className={cn(

@@ -19,6 +19,7 @@ import Animated, {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useColors } from "@/hooks/useColors";
+import { useFeatureFlags } from "@/hooks/useFeatureFlags";
 
 const BRAND_BLUE = "#60A5FA";
 const BRAND_PURPLE = "#A855F7";
@@ -26,16 +27,19 @@ const BRAND_PINK = "#EC4899";
 const INACTIVE = "#6B7280";
 
 function NativeTabLayout() {
+  const { flags } = useFeatureFlags();
   return (
     <NativeTabs>
       <NativeTabs.Trigger name="index">
         <Icon sf={{ default: "chart.bar", selected: "chart.bar.fill" }} />
         <Label>Portfolio</Label>
       </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="terminal">
-        <Icon sf={{ default: "waveform.path.ecg", selected: "waveform.path.ecg" }} />
-        <Label>Terminal</Label>
-      </NativeTabs.Trigger>
+      {flags.bot_trading && (
+        <NativeTabs.Trigger name="terminal">
+          <Icon sf={{ default: "waveform.path.ecg", selected: "waveform.path.ecg" }} />
+          <Label>Terminal</Label>
+        </NativeTabs.Trigger>
+      )}
       <NativeTabs.Trigger name="trades">
         <Icon sf={{ default: "arrow.left.arrow.right", selected: "arrow.left.arrow.right" }} />
         <Label>Trades</Label>
@@ -261,13 +265,14 @@ function CustomTabBar({ state, navigation }: any) {
 }
 
 function ClassicTabLayout() {
+  const { flags } = useFeatureFlags();
   return (
     <Tabs
       screenOptions={{ headerShown: false }}
       tabBar={(props) => <CustomTabBar {...props} />}
     >
       <Tabs.Screen name="index" options={{ title: "Portfolio" }} />
-      <Tabs.Screen name="terminal" options={{ title: "Terminal" }} />
+      <Tabs.Screen name="terminal" options={{ title: "Terminal", href: flags.bot_trading ? undefined : null }} />
       <Tabs.Screen name="trades" options={{ title: "Trades" }} />
       <Tabs.Screen name="wallet" options={{ title: "Wallet" }} />
       <Tabs.Screen name="profile" options={{ title: "Profile" }} />

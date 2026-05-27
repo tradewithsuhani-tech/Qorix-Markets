@@ -9,6 +9,7 @@ import { newIdemKey, patchWithdrawState, readWithdrawState } from "@/lib/withdra
 import { cn } from "@/lib/utils";
 import { useInrRate } from "@/hooks/use-inr-rate";
 import { formatDistanceToNow } from "date-fns";
+import { useFlag } from "@/contexts/feature-flags-context";
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
 const apiUrl = (p: string) => `${BASE_URL}/api${p}`;
@@ -28,12 +29,17 @@ export default function WithdrawPage() {
   const vip = (summary as any)?.vip;
   const withdrawalFeePercent = (((vip?.withdrawalFee ?? 0.02) as number) * 100).toFixed(1);
 
+  const inrWithdrawEnabled = useFlag("inr_withdraw");
   const prev = useMemo(() => readWithdrawState(), []);
   const [currency, setCurrency] = useState<"usdt" | "inr">(prev?.currency ?? "usdt");
   const source: "main" = "main";
   const [amount, setAmount] = useState<string>(prev?.amount ?? "");
   const [showAmtError, setShowAmtError] = useState(false);
   const amountRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!inrWithdrawEnabled && currency === "inr") setCurrency("usdt");
+  }, [inrWithdrawEnabled, currency]);
 
   const mainBal = Number(wallet?.mainBalance) || 0;
   const sourceBalance = mainBal;
@@ -187,32 +193,34 @@ export default function WithdrawPage() {
         {/* Withdrawal Amount label + currency toggle */}
         <div className="flex items-center justify-between mb-2">
           <span className="text-[13px] text-white/65">Withdrawal Amount</span>
-          <div className="flex items-center gap-1 p-0.5 rounded-lg bg-white/[0.04] border border-white/[0.07]">
-            <button
-              onClick={() => setCurrency("inr")}
-              className={cn(
-                "px-2.5 py-1 rounded-md text-[11px] font-semibold flex items-center gap-1 transition-colors",
-                !isUsdt
-                  ? "bg-emerald-500/15 text-emerald-300 border border-emerald-400/40"
-                  : "text-white/55 hover:text-white/80 border border-transparent"
-              )}
-              data-testid="tab-inr"
-            >
-              <span>₹</span><span>INR</span>
-            </button>
-            <button
-              onClick={() => setCurrency("usdt")}
-              className={cn(
-                "px-2.5 py-1 rounded-md text-[11px] font-semibold flex items-center gap-1 transition-colors",
-                isUsdt
-                  ? "bg-amber-500/15 text-amber-300 border border-amber-400/40"
-                  : "text-white/55 hover:text-white/80 border border-transparent"
-              )}
-              data-testid="tab-usdt"
-            >
-              <span>₮</span><span>USDT</span>
-            </button>
-          </div>
+          {inrWithdrawEnabled && (
+            <div className="flex items-center gap-1 p-0.5 rounded-lg bg-white/[0.04] border border-white/[0.07]">
+              <button
+                onClick={() => setCurrency("inr")}
+                className={cn(
+                  "px-2.5 py-1 rounded-md text-[11px] font-semibold flex items-center gap-1 transition-colors",
+                  !isUsdt
+                    ? "bg-emerald-500/15 text-emerald-300 border border-emerald-400/40"
+                    : "text-white/55 hover:text-white/80 border border-transparent"
+                )}
+                data-testid="tab-inr"
+              >
+                <span>₹</span><span>INR</span>
+              </button>
+              <button
+                onClick={() => setCurrency("usdt")}
+                className={cn(
+                  "px-2.5 py-1 rounded-md text-[11px] font-semibold flex items-center gap-1 transition-colors",
+                  isUsdt
+                    ? "bg-amber-500/15 text-amber-300 border border-amber-400/40"
+                    : "text-white/55 hover:text-white/80 border border-transparent"
+                )}
+                data-testid="tab-usdt"
+              >
+                <span>₮</span><span>USDT</span>
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Amount box — slim */}

@@ -17,6 +17,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Card } from "@/components/Card";
 import { CRYPTO_METHODS, FX_RATE } from "@/constants/cryptoMethods";
 import { useColors } from "@/hooks/useColors";
+import { useFeatureFlags } from "@/hooks/useFeatureFlags";
 import { useGetWallet, useDeposit } from "@workspace/api-client-react";
 
 const INR_METHODS = [
@@ -29,6 +30,7 @@ export default function DepositScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { flags } = useFeatureFlags();
   const walletQ = useGetWallet();
   const depositMut = useDeposit();
   const wRaw = walletQ.data as any;
@@ -48,7 +50,11 @@ export default function DepositScreen() {
   const [showAmtError, setShowAmtError] = useState(false);
   const amountRef = useRef<TextInput>(null);
 
-  const isCrypto = currency === "USDT";
+  useEffect(() => {
+    if (!flags.usdt_deposit && currency === "USDT") setCurrency("INR");
+  }, [flags.usdt_deposit, currency]);
+
+  const isCrypto = currency === "USDT" && flags.usdt_deposit;
   const methodList = isCrypto ? CRYPTO_METHODS : INR_METHODS;
   const numAmount = parseFloat(amount.replace(/,/g, "")) || 0;
   const minAmount = currency === "INR" ? 5000 : 60;
@@ -186,26 +192,28 @@ export default function DepositScreen() {
         <View>
           <View style={styles.amountLabelRow}>
             <Text style={[styles.label, { color: colors.textSecondary, marginBottom: 0 }]}>Deposit Amount</Text>
-            {/* Currency switcher */}
-            <View style={[styles.currencySwitcher, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              {(["INR", "USDT"] as const).map((c) => {
-                const active = currency === c;
-                return (
-                  <Pressable
-                    key={c}
-                    onPress={() => switchCurrency(c)}
-                    style={[
-                      styles.currencyOpt,
-                      active && { backgroundColor: "rgba(168,85,247,0.18)", borderColor: colors.purple },
-                    ]}
-                  >
-                    <Text style={[styles.currencyOptText, { color: active ? colors.purple : colors.textMuted }]}>
-                      {c === "INR" ? "₹ INR" : "₮ USDT"}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
+            {/* Currency switcher — USDT hidden when usdt_deposit flag is off */}
+            {flags.usdt_deposit && (
+              <View style={[styles.currencySwitcher, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                {(["INR", "USDT"] as const).map((c) => {
+                  const active = currency === c;
+                  return (
+                    <Pressable
+                      key={c}
+                      onPress={() => switchCurrency(c)}
+                      style={[
+                        styles.currencyOpt,
+                        active && { backgroundColor: "rgba(168,85,247,0.18)", borderColor: colors.purple },
+                      ]}
+                    >
+                      <Text style={[styles.currencyOptText, { color: active ? colors.purple : colors.textMuted }]}>
+                        {c === "INR" ? "₹ INR" : "₮ USDT"}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            )}
           </View>
           <View style={[styles.amountWrap, { backgroundColor: colors.input, borderColor: numAmount > 0 && !hasAmount ? colors.red : hasAmount ? colors.purple : colors.border, borderWidth: hasAmount ? 1.5 : 1 }]}>
             <Text style={[styles.rupee, { color: colors.purple }]}>{symbol}</Text>

@@ -16,6 +16,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Card } from "@/components/Card";
 import { CRYPTO_METHODS, FX_RATE } from "@/constants/cryptoMethods";
 import { useColors } from "@/hooks/useColors";
+import { useFeatureFlags } from "@/hooks/useFeatureFlags";
 import { useGetWallet } from "@workspace/api-client-react";
 
 const INR_METHODS = [
@@ -34,6 +35,7 @@ export default function WithdrawScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { flags } = useFeatureFlags();
   const walletQ = useGetWallet();
   const wRaw = walletQ.data as any;
   const wallet = {
@@ -44,6 +46,10 @@ export default function WithdrawScreen() {
   const [currency, setCurrency] = useState<"INR" | "USDT">("INR");
   const [showAmtError, setShowAmtError] = useState(false);
   const amountRef = useRef<TextInput>(null);
+
+  useEffect(() => {
+    if (!flags.inr_withdraw && currency === "INR") setCurrency("USDT");
+  }, [flags.inr_withdraw, currency]);
 
   const isCrypto = currency === "USDT";
   const methodList = isCrypto ? CRYPTO_METHODS : INR_METHODS;
@@ -174,27 +180,30 @@ export default function WithdrawScreen() {
         <View>
           <View style={styles.amountLabelRow}>
             <Text style={[styles.label, { color: colors.textSecondary, marginBottom: 0 }]}>Withdrawal Amount</Text>
-            <View style={[styles.currencySwitcher, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              {(["INR", "USDT"] as const).map((c) => {
-                const active = currency === c;
-                return (
-                  <Pressable
-                    key={c}
-                    onPress={() => switchCurrency(c)}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Switch to ${c}`}
-                    style={[
-                      styles.currencyOpt,
-                      active && { backgroundColor: "rgba(168,85,247,0.18)", borderColor: colors.purple },
-                    ]}
-                  >
-                    <Text style={[styles.currencyOptText, { color: active ? colors.purple : colors.textMuted }]}>
-                      {c === "INR" ? "₹ INR" : "₮ USDT"}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
+            {/* Currency switcher — INR hidden when inr_withdraw flag is off */}
+            {flags.inr_withdraw && (
+              <View style={[styles.currencySwitcher, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                {(["INR", "USDT"] as const).map((c) => {
+                  const active = currency === c;
+                  return (
+                    <Pressable
+                      key={c}
+                      onPress={() => switchCurrency(c)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Switch to ${c}`}
+                      style={[
+                        styles.currencyOpt,
+                        active && { backgroundColor: "rgba(168,85,247,0.18)", borderColor: colors.purple },
+                      ]}
+                    >
+                      <Text style={[styles.currencyOptText, { color: active ? colors.purple : colors.textMuted }]}>
+                        {c === "INR" ? "₹ INR" : "₮ USDT"}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            )}
           </View>
           <View
             style={[
