@@ -83,92 +83,16 @@ router.get("/wallet", async (req: AuthRequest, res) => {
   res.json(formatWallet(wallets[0]!, points));
 });
 
-router.post("/wallet/deposit", async (req: AuthRequest, res) => {
-  const result = DepositBody.safeParse(req.body);
-  if (!result.success) {
-    res.status(400).json({ error: "Invalid request" });
-    return;
-  }
-
-  const { amount } = result.data;
-  if (amount <= 0) {
-    res.status(400).json({ error: "Amount must be positive" });
-    return;
-  }
-
-  if (await blockSmokeTestRealMoney(req.userId!, res, "deposit")) return;
-
-  const wallets = await db.select().from(walletsTable).where(eq(walletsTable.userId, req.userId!)).limit(1);
-  const wallet = wallets[0];
-  if (!wallet) {
-    res.status(404).json({ error: "Wallet not found" });
-    return;
-  }
-
-  const newMain = parseFloat(wallet.mainBalance as string) + amount;
-
-  const [updated, txnRecord] = await db.transaction(async (tx) => {
-    await ensureUserAccounts(req.userId!, tx);
-
-    const [w] = await tx
-      .update(walletsTable)
-      .set({ mainBalance: newMain.toString(), updatedAt: new Date() })
-      .where(eq(walletsTable.userId, req.userId!))
-      .returning();
-
-    const [txn] = await tx
-      .insert(transactionsTable)
-      .values({
-        userId: req.userId!,
-        type: "deposit",
-        amount: amount.toString(),
-        status: "completed",
-        description: `USDT deposit of $${amount.toFixed(2)}`,
-      })
-      .returning();
-
-    await postJournalEntry(
-      journalForTransaction(txn!.id),
-      [
-        { accountCode: "platform:usdt_pool", entryType: "debit", amount, description: `Deposit received from user ${req.userId!}` },
-        { accountCode: `user:${req.userId!}:main`, entryType: "credit", amount, description: `Deposit credited to main wallet` },
-      ],
-      txn!.id,
-      tx,
-    );
-
-    return [w, txn] as const;
+// SECURITY FIX-01: POST /wallet/deposit is disabled — direct balance credit removed.
+// Deposits must flow through on-chain TRC20 transfer + TronGrid monitoring.
+// GET /deposit/address, Tron monitor, and admin blockchain-deposits/claim remain operational.
+router.post("/wallet/deposit", async (_req: AuthRequest, res) => {
+  res.status(410).json({
+    error: "deposit_endpoint_disabled",
+    message:
+      "Direct wallet credit is disabled. Deposit USDT via Wallet → Deposit (TRC20 address). " +
+      "Credits are applied automatically after on-chain confirmation.",
   });
-
-  transactionLogger.info(
-    { event: "deposit", userId: req.userId!, amount, newMainBalance: newMain },
-    "Deposit completed",
-  );
-
-  await createNotification(
-    req.userId!,
-    "deposit",
-    "Deposit Confirmed",
-    `$${amount.toFixed(2)} USDT has been credited to your main balance.`,
-  );
-
-  sendTxnEmailToUser(
-    req.userId!,
-    "Deposit Confirmed",
-    `Great news — your USDT deposit has been confirmed and credited to your account.\n\n` +
-      `Amount: $${amount.toFixed(2)} USDT\n` +
-      `Credited to: Main Balance\n` +
-      `New Main Balance: $${newMain.toFixed(2)} USDT\n\n` +
-      `You can now transfer funds to your Trading Balance and start earning with our AI strategies.\n\n` +
-      `If you did not initiate this deposit, please contact support immediately.`,
-  );
-
-  emitDepositEvent({ userId: req.userId!, amount, newMainBalance: newMain }).catch((err) => {
-    errorLogger.error({ err, userId: req.userId!, amount }, "Failed to emit deposit event");
-  });
-
-  const points = await getUserPoints(req.userId!);
-  res.json(formatWallet(updated!, points));
 });
 
 // Withdrawal lock window for brand-new accounts (anti-fraud cool-off)
