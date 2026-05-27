@@ -53,3 +53,12 @@ Thumbs.db
 # belong in the GitHub repo. Already-tracked files keep working
 # locally; new ones from now on are ignored.
 attached_assets/
+
+# Secrets & database dumps — never commit
+.env
+.env.*
+!.env.example
+backup.sql
+*.sql.gz
+**/private_keys/
+**/*-credentials.json
