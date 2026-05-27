@@ -5,6 +5,7 @@ import {
   varchar,
   text,
   timestamp,
+  boolean,
   index,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
@@ -38,6 +39,9 @@ export const userDevicesTable = pgTable(
     lastCity: varchar("last_city", { length: 120 }),
     lastCountry: varchar("last_country", { length: 80 }),
     alertSentAt: timestamp("alert_sent_at"),
+    // B8.1 — per-device session revocation
+    isRevoked: boolean("is_revoked").notNull().default(false),
+    revokedAt: timestamp("revoked_at"),
   },
   (t) => ({
     userFpUniq: uniqueIndex("user_devices_user_fp_uniq").on(
@@ -47,6 +51,10 @@ export const userDevicesTable = pgTable(
     userSeenIdx: index("user_devices_user_seen_idx").on(
       t.userId,
       t.lastSeenAt,
+    ),
+    userRevokedIdx: index("user_devices_user_revoked_idx").on(
+      t.userId,
+      t.isRevoked,
     ),
   }),
 );

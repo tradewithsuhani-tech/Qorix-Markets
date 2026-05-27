@@ -2,8 +2,8 @@ import type { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import UAParser from "ua-parser-js";
-import { db, systemSettingsTable, usersTable, adminPermissionsTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { db, systemSettingsTable, usersTable, adminPermissionsTable, userDevicesTable } from "@workspace/db";
+import { and, eq } from "drizzle-orm";
 import { getMaintenanceState } from "./maintenance";
 import { RedisCache } from "../lib/cache/redis-cache";
 import { TTLCache } from "../lib/cache/ttl-cache";
@@ -486,6 +486,38 @@ export async function invalidateAuthUserCache(userId: number): Promise<void> {
   await authUserCache.invalidate(`u:${userId}`);
 }
 
+// ─── Per-device revocation cache (B8.1) ───────────────────────────────────
+//
+// Keyed by `${userId}:${fingerprint}` → boolean (true = revoked).
+// TTL 30s mirrors the authUserCache so revocations propagate to all
+// app instances within half a minute without adding a DB round-trip to
+// every authenticated request. On a cache miss we query user_devices once.
+//
+// Uses only the in-process TTL fallback (no Redis namespace) because:
+//   • revocations are rare user actions
+//   • the 30s window is already acceptable
+//   • Redis writes are fire-and-forget for cache misses anyway
+const revokedDeviceCache = new TTLCache<boolean>(30_000);
+
+/**
+ * Invalidate per-device revocation cache for one fingerprint.
+ * Call immediately after setting is_revoked = true so the next request
+ * from that device sees the rejection without waiting 30s.
+ */
+export function invalidateRevokedDeviceCache(userId: number, fingerprint: string): void {
+  revokedDeviceCache.delete(`${userId}:${fingerprint}`);
+}
+
+/**
+ * Invalidate ALL per-device revocation cache entries for a user.
+ * Call after DELETE /api/auth/sessions/others to clear every cached entry.
+ * We cannot enumerate the cache keys, so we clear the entire cache instead.
+ * Acceptable: the cache is per-process and re-warms quickly.
+ */
+export function invalidateAllRevokedDeviceCaches(): void {
+  revokedDeviceCache.clear();
+}
+
 export async function authMiddleware(req: AuthRequest, res: Response, next: NextFunction) {
   const authHeader = req.headers["authorization"];
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -551,6 +583,43 @@ export async function authMiddleware(req: AuthRequest, res: Response, next: Next
     if (user.forceLogoutAfter && decoded.iat && decoded.iat * 1000 < user.forceLogoutAfter) {
       res.status(401).json({ error: "Session expired" });
       return;
+    }
+
+    // ── B8.1: Per-device session revocation check ─────────────────────────
+    // Skip admins (multi-device tooling) and smoke-test accounts.
+    // Only check when we have a stable fingerprint — unknown fp means the
+    // device didn't send X-Device-Id and there's no UA to match against,
+    // so we can't reliably look up the row.
+    if (!user.isAdmin && !user.isSmokeTest) {
+      const fp = computeDeviceFingerprint(req);
+      if (fp && fp !== "unknown") {
+        const cacheKey = `${decoded.userId}:${fp}`;
+        let isRevoked = revokedDeviceCache.get(cacheKey);
+        if (isRevoked === undefined) {
+          // Cache miss — check DB once, then cache the result.
+          try {
+            const [devRow] = await db
+              .select({ isRevoked: userDevicesTable.isRevoked })
+              .from(userDevicesTable)
+              .where(
+                and(
+                  eq(userDevicesTable.userId, decoded.userId),
+                  eq(userDevicesTable.deviceFingerprint, fp),
+                ),
+              )
+              .limit(1);
+            isRevoked = devRow?.isRevoked ?? false;
+            revokedDeviceCache.set(cacheKey, isRevoked);
+          } catch {
+            // DB error — fail open (don't block legitimate users on infra issues)
+            isRevoked = false;
+          }
+        }
+        if (isRevoked) {
+          res.status(401).json({ error: "session_revoked", message: "This session has been revoked. Please log in again." });
+          return;
+        }
+      }
     }
 
     // Single-active-device heartbeat. Only the device whose fingerprint
