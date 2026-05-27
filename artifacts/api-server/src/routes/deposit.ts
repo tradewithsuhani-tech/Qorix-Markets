@@ -25,8 +25,10 @@ router.get("/deposit/address", async (req: AuthRequest, res) => {
   const tronAddress = users[0]?.tronAddress ?? null;
 
   res.json({
-    // Frontend reads this field as "address" (matches DepositAddressResponse schema).
+    // Web frontend reads "address"; Flutter app reads "platformAddress". Both fields
+    // contain the same value — the user's unique TRC20 deposit address on the platform.
     address: userDepositAddress,
+    platformAddress: userDepositAddress,
     // The user's *own* registered external wallet (where they're sending FROM).
     userTronAddress: tronAddress,
     network: "TRC20",

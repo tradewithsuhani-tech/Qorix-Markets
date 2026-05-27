@@ -434,11 +434,19 @@ router.get(
 
     const wallet = wallets[0] ?? null;
 
+    // Fetch points from user row (not stored on wallet)
+    const [userRow] = await db
+      .select({ points: usersTable.points })
+      .from(usersTable)
+      .where(eq(usersTable.id, userId))
+      .limit(1);
+
     ok(req, res, {
       mainBalance: wallet ? +parseFloat(wallet.mainBalance as string).toFixed(6) : 0,
       tradingBalance: wallet ? +parseFloat(wallet.tradingBalance as string).toFixed(6) : 0,
       profitBalance: wallet ? +parseFloat(wallet.profitBalance as string).toFixed(6) : 0,
       usdtBalance: wallet ? +parseFloat((wallet.usdtBalance ?? "0") as string).toFixed(6) : 0,
+      points: userRow?.points ?? 0,
       currency: "USDT",
       updatedAt: wallet?.updatedAt.toISOString() ?? null,
     });

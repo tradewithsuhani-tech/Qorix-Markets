@@ -51,6 +51,7 @@ import usdtMarketRouter from "./usdt-market";
 import botTradingRouter from "./bot-trading";
 import demoRouter from "./demo";
 import v1Router from "./v1";
+import mobileApiRouter from "./mobile-api";
 
 const router: IRouter = Router();
 
@@ -127,6 +128,9 @@ router.use(telegramRouter);
 router.use(twoFactorRouter);
 router.use(inrDepositsRouter);
 router.use(inrWithdrawalsRouter);
+// Mobile-API adapters: Flutter-friendly path aliases for INR deposit/withdrawal.
+// Per-route authMiddleware inside — must stay in this auth-gated block.
+router.use(mobileApiRouter);
 router.use(phoneVerifyRouter);
 router.use(phoneChangeRouter);
 // Merchant panel — own JWT (separate from user/admin auth). Login is the
