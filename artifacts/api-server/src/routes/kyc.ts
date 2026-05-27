@@ -226,7 +226,7 @@ router.post("/kyc/address", authMiddleware, async (req: AuthRequest, res) => {
 // ─── PHONE OTP (KYC) ─────────────────────────────────────────
 
 const KYC_TWO_FACTOR_KEY = process.env.TWO_FACTOR_API_KEY ?? "";
-const KYC_OTP_EXPIRY_MS = 5 * 60 * 1000;     // 5 min
+const KYC_OTP_EXPIRY_MS = 10 * 60 * 1000;    // 10 min (per Flutter spec)
 const KYC_RESEND_COOLDOWN_MS = 60 * 1000;     // 60 sec
 const KYC_MAX_SENDS_PER_DAY = 5;
 
@@ -259,9 +259,10 @@ async function kycSend2FactorOtp(
 }
 
 // POST /kyc/phone/send-otp  body: { phoneNumber, channel? }
-// channel: "call" | "voice" → 2factor.in voice call
-// channel: "sms"            → 2factor.in SMS
-// channel: "email" / unset  → email OTP (fallback when 2factor key absent)
+// channel: "call" | "voice"  → 2factor.in voice call
+// channel: "sms"             → 2factor.in SMS
+// channel: "whatsapp"        → mapped to SMS (WhatsApp not yet supported; graceful fallback)
+// channel: "email" / unset   → email OTP (fallback when 2factor key absent)
 router.post("/kyc/phone/send-otp", authMiddleware, async (req: AuthRequest, res) => {
   const { phoneNumber, channel: rawChannel } = req.body ?? {};
   const normalized = normalizePhone(phoneNumber);
@@ -270,11 +271,11 @@ router.post("/kyc/phone/send-otp", authMiddleware, async (req: AuthRequest, res)
     return;
   }
 
-  // Normalise channel: Flutter sends "call" → map to "voice" for 2factor.in
+  // Normalise channel: Flutter sends "call" → "voice", "whatsapp" → "sms" (graceful fallback)
   const ch = String(rawChannel ?? "sms").toLowerCase();
   const channel: "voice" | "sms" | "email" =
     ch === "call" || ch === "voice" ? "voice" :
-    ch === "email" ? "email" : "sms";
+    ch === "email" ? "email" : "sms"; // "whatsapp" and unknown channels fall back to SMS
 
   const [user] = await db
     .select({
@@ -398,6 +399,18 @@ router.post("/kyc/phone/verify-otp", authMiddleware, async (req: AuthRequest, re
   if (!user) { res.status(404).json({ error: "user_not_found" }); return; }
   if (user.phoneVerifiedAt) {
     res.status(400).json({ error: "phone_already_verified", message: "Your mobile number is already verified." });
+    return;
+  }
+
+  // ── Dev bypass: OTP "123456" accepted in non-production environments ──────
+  // Allows Flutter / web developers to test the KYC flow without a real SIM.
+  // NEVER active in production.
+  if (process.env.NODE_ENV !== "production" && cleaned === "123456") {
+    await db.update(usersTable)
+      .set({ phoneNumber: normalized, phoneVerifiedAt: new Date(), phoneOtpSessionId: null, phoneOtpExpiresAt: null })
+      .where(eq(usersTable.id, req.userId!));
+    await createNotification(req.userId!, "system", "Mobile number verified", "Your mobile number has been verified successfully.");
+    res.json({ success: true, phoneVerified: true, phoneNumber: normalized, message: "Mobile number verified successfully." });
     return;
   }
 
