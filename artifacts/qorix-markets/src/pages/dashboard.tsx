@@ -45,6 +45,7 @@ import {
 import { BannerCarousel } from "@/components/banner-carousel";
 import { DrawdownChartCard } from "@/components/drawdown-chart-card";
 import { BotTerminalCard } from "@/components/bot-terminal-card";
+import { useFlag } from "@/contexts/feature-flags-context";
 
 const DASHBOARD_BANNERS = [
   { src: `${import.meta.env.BASE_URL}promo/banner-1-manual-trading.png`, alt: "Manual Trading Is Breaking You — Trade Smart with Qorix" },
@@ -551,6 +552,7 @@ export function DemoDashboardBody({
   hideEquityCurve = false,
 }: DemoDashboardBodyProps = {}) {
   const [, navigate] = useLocation();
+  const botTradingEnabled = useFlag("bot_trading");
   const [chartDays, setChartDays] = useState(30);
   const [returnsDays, setReturnsDays] = useState(30);
   const [pnlDays, setPnlDays] = useState(30);
@@ -1356,11 +1358,13 @@ export function DemoDashboardBody({
         </div>
         )}
 
-        {/* Bot Trading Terminal — Batch T */}
-        <BotTerminalCard
-          totalAum={fundStats?.totalAUM ?? summary?.totalBalance ?? 0}
-          fomoMessages={conversion?.fomoMessages ?? []}
-        />
+        {/* Bot Trading Terminal — hidden when bot_trading flag is off */}
+        {botTradingEnabled && (
+          <BotTerminalCard
+            totalAum={fundStats?.totalAUM ?? summary?.totalBalance ?? 0}
+            fomoMessages={conversion?.fomoMessages ?? []}
+          />
+        )}
 
         {/* Promo Banners — hidden per request */}
         {false && (

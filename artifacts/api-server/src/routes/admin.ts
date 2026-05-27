@@ -3486,14 +3486,24 @@ router.post("/admin/p2p/disputes/:id/resolve", async (req: AuthRequest, res) => 
 
 // ─── Feature Flags ───────────────────────────────────────────────────────────
 
-// GET /admin/feature-flags — list all flags with current state
+// GET /admin/feature-flags — list all flags with current state + updatedAt
 router.get("/admin/feature-flags", authMiddleware, adminMiddleware, async (_req: AuthRequest, res) => {
   try {
     const flags = await getFeatureFlags();
+    const dbRows = await db
+      .select({ key: systemSettingsTable.key, updatedAt: systemSettingsTable.updatedAt })
+      .from(systemSettingsTable)
+      .where(sql`${systemSettingsTable.key} LIKE 'feature.%'`);
+    const updatedAtMap: Record<string, string | null> = {};
+    for (const row of dbRows) {
+      const flagKey = (row.key as string).replace("feature.", "");
+      updatedAtMap[flagKey] = row.updatedAt ? (row.updatedAt as Date).toISOString() : null;
+    }
     const rows = FLAG_KEYS.map((key) => ({
       key,
       label: FEATURE_FLAG_LABELS[key],
       enabled: flags[key],
+      updatedAt: updatedAtMap[key] ?? null,
     }));
     res.json({ flags: rows });
   } catch {
