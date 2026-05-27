@@ -1,6 +1,6 @@
 import { Layout } from "@/components/layout";
 import { motion, type Variants } from "framer-motion";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { authFetch } from "@/lib/auth-fetch";
 import { Link } from "wouter";
 import { format, formatDistanceToNow } from "date-fns";
@@ -13,7 +13,10 @@ import {
   ChevronLeft,
   Shield,
   Mail,
+  LogOut,
+  XCircle,
 } from "lucide-react";
+import { useState } from "react";
 
 interface DeviceRow {
   id: string;
@@ -24,6 +27,7 @@ interface DeviceRow {
   city: string | null;
   country: string | null;
   isCurrent: boolean;
+  isRevoked: boolean;
   newDeviceAlertSent: boolean;
   withdrawalLocked: boolean;
   withdrawalUnlockAt: string | null;
@@ -90,7 +94,15 @@ function DeviceRowSkeleton() {
   );
 }
 
-function DeviceCard({ d }: { d: DeviceRow }) {
+function DeviceCard({
+  d,
+  onSignOut,
+  signingOut,
+}: {
+  d: DeviceRow;
+  onSignOut: (id: string) => void;
+  signingOut: boolean;
+}) {
   const Icon = isMobileOs(d.os) ? Smartphone : Monitor;
   const lastSeenRel = formatDistanceToNow(new Date(d.lastSeenAt), {
     addSuffix: true,
@@ -103,6 +115,8 @@ function DeviceCard({ d }: { d: DeviceRow }) {
       className={`glass-card rounded-2xl p-5 ${
         d.isCurrent
           ? "border-blue-500/40 bg-blue-500/[0.03]"
+          : d.isRevoked
+          ? "border-white/[0.04] opacity-60"
           : "border-white/[0.06]"
       }`}
     >
@@ -112,6 +126,8 @@ function DeviceCard({ d }: { d: DeviceRow }) {
           className={`p-2.5 rounded-xl shrink-0 ${
             d.isCurrent
               ? "bg-blue-500/15 text-blue-400"
+              : d.isRevoked
+              ? "bg-white/[0.03] text-white/30"
               : "bg-white/[0.04] text-white/70"
           }`}
         >
@@ -127,11 +143,29 @@ function DeviceCard({ d }: { d: DeviceRow }) {
                 This device
               </span>
             )}
+            {d.isRevoked && (
+              <span className="text-[10px] inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/20 shrink-0">
+                <XCircle style={{ width: 10, height: 10 }} />
+                Signed out
+              </span>
+            )}
           </div>
           <div className="text-xs text-muted-foreground mt-0.5 truncate">
             {d.os}
           </div>
         </div>
+
+        {/* Sign out button — only for active non-current sessions */}
+        {!d.isCurrent && !d.isRevoked && (
+          <button
+            onClick={() => onSignOut(d.id)}
+            disabled={signingOut}
+            className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-rose-500/10 text-rose-400 border border-rose-500/20 hover:bg-rose-500/20 hover:border-rose-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <LogOut style={{ width: 11, height: 11 }} />
+            {signingOut ? "Signing out…" : "Sign out"}
+          </button>
+        )}
       </div>
 
       {/* Meta rows */}
@@ -158,17 +192,85 @@ function DeviceCard({ d }: { d: DeviceRow }) {
           </div>
         )}
       </div>
-
     </motion.div>
   );
 }
 
 export default function DevicesPage() {
+  const queryClient = useQueryClient();
+  const [signOutError, setSignOutError] = useState<string | null>(null);
+  const [signOutAllError, setSignOutAllError] = useState<string | null>(null);
+  const [signingOutId, setSigningOutId] = useState<string | null>(null);
+
   const { data, isLoading, error } = useQuery<DevicesResponse>({
     queryKey: ["/api/devices"],
     queryFn: () => authFetch<DevicesResponse>("/api/devices"),
     refetchOnWindowFocus: false,
   });
+
+  const signOutMutation = useMutation({
+    mutationFn: (id: string) =>
+      authFetch<{ success: boolean; message: string }>(
+        `/api/auth/sessions/${id}`,
+        { method: "DELETE" },
+      ),
+    onMutate: (id) => {
+      setSigningOutId(id);
+      setSignOutError(null);
+    },
+    onSuccess: (_result, id) => {
+      // Optimistically mark the device as revoked without a full refetch
+      queryClient.setQueryData<DevicesResponse>(["/api/devices"], (old) => {
+        if (!old) return old;
+        return {
+          ...old,
+          devices: old.devices.map((d) =>
+            d.id === id ? { ...d, isRevoked: true } : d,
+          ),
+        };
+      });
+    },
+    onError: (err: any) => {
+      const msg =
+        err?.message ?? "Failed to sign out that device. Please try again.";
+      setSignOutError(msg);
+    },
+    onSettled: () => {
+      setSigningOutId(null);
+    },
+  });
+
+  const signOutAllMutation = useMutation({
+    mutationFn: () =>
+      authFetch<{ success: boolean; message: string; revokedCount: number }>(
+        `/api/auth/sessions/others`,
+        { method: "DELETE" },
+      ),
+    onMutate: () => {
+      setSignOutAllError(null);
+    },
+    onSuccess: () => {
+      // Mark all non-current active sessions as revoked
+      queryClient.setQueryData<DevicesResponse>(["/api/devices"], (old) => {
+        if (!old) return old;
+        return {
+          ...old,
+          devices: old.devices.map((d) =>
+            !d.isCurrent && !d.isRevoked ? { ...d, isRevoked: true } : d,
+          ),
+        };
+      });
+    },
+    onError: (err: any) => {
+      const msg =
+        err?.message ??
+        "Failed to sign out other devices. Please try again.";
+      setSignOutAllError(msg);
+    },
+  });
+
+  const activeOtherCount =
+    data?.devices.filter((d) => !d.isCurrent && !d.isRevoked).length ?? 0;
 
   return (
     <Layout>
@@ -194,9 +296,45 @@ export default function DevicesPage() {
           </div>
           <p className="text-xs text-muted-foreground leading-relaxed">
             Every device you've successfully signed in from. If you see a
-            device you don't recognise, change your password immediately.
+            device you don't recognise, sign it out and change your password.
           </p>
         </motion.div>
+
+        {/* Sign out all other devices */}
+        {activeOtherCount > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.25 }}
+          >
+            <button
+              onClick={() => signOutAllMutation.mutate()}
+              disabled={signOutAllMutation.isPending}
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-2xl text-sm font-medium bg-rose-500/10 text-rose-400 border border-rose-500/20 hover:bg-rose-500/15 hover:border-rose-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <LogOut style={{ width: 14, height: 14 }} />
+              {signOutAllMutation.isPending
+                ? "Signing out…"
+                : `Sign out all other devices (${activeOtherCount})`}
+            </button>
+            {signOutAllError && (
+              <p className="mt-2 text-xs text-rose-400 text-center">
+                {signOutAllError}
+              </p>
+            )}
+          </motion.div>
+        )}
+
+        {/* Sign-out-single error banner */}
+        {signOutError && (
+          <div className="glass-card rounded-2xl p-4 flex items-start gap-3 text-rose-300 border-rose-500/30">
+            <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+            <div className="text-xs">
+              <div className="font-semibold">Sign out failed</div>
+              <div className="text-rose-200/80 mt-0.5">{signOutError}</div>
+            </div>
+          </div>
+        )}
 
         {/* List */}
         {isLoading && (
@@ -239,7 +377,12 @@ export default function DevicesPage() {
               className="space-y-3"
             >
               {data.devices.map((d) => (
-                <DeviceCard key={d.id} d={d} />
+                <DeviceCard
+                  key={d.id}
+                  d={d}
+                  onSignOut={(id) => signOutMutation.mutate(id)}
+                  signingOut={signingOutId === d.id && signOutMutation.isPending}
+                />
               ))}
             </motion.div>
 

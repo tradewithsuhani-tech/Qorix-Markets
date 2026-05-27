@@ -72,6 +72,7 @@ router.get("/devices", async (req: AuthRequest, res) => {
       lastCity: userDevicesTable.lastCity,
       lastCountry: userDevicesTable.lastCountry,
       alertSentAt: userDevicesTable.alertSentAt,
+      isRevoked: userDevicesTable.isRevoked,
     })
     .from(userDevicesTable)
     .where(eq(userDevicesTable.userId, userId))
@@ -102,6 +103,7 @@ router.get("/devices", async (req: AuthRequest, res) => {
       city: r.lastCity ?? null,
       country: r.lastCountry ?? null,
       isCurrent: haveCurrentFp && r.deviceFingerprint === currentFp,
+      isRevoked: r.isRevoked,
       newDeviceAlertSent: r.alertSentAt !== null,
       withdrawalLocked,
       withdrawalUnlockAt: unlockAt?.toISOString() ?? null,
