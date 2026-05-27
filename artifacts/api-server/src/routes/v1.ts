@@ -50,7 +50,7 @@ import {
   transactionsTable,
   systemSettingsTable,
 } from "@workspace/db";
-import { eq, desc, count, sql, sum, and, gte, lte } from "drizzle-orm";
+import { eq, desc, count, sql, sum, and, gte, lte, inArray } from "drizzle-orm";
 import {
   authMiddleware,
   signToken,
@@ -945,6 +945,386 @@ router.get(
 
     // Returns flat array per Flutter spec (not wrapped in okList envelope)
     res.status(200).json(data);
+  },
+);
+
+// ══════════════════════════════════════════════════════════════════════════════
+// USDT INTERNAL MARKET — /api/v1/markets/orders
+//
+// Internal USDT/INR exchange. BUY = pay INR (mainBalance), receive USDT.
+// SELL = give USDT (usdtBalance), receive INR (mainBalance).
+// MARKET orders execute immediately at the platform rate.
+// LIMIT orders lock funds and stay pending until cancelled or filled by cron.
+// ══════════════════════════════════════════════════════════════════════════════
+
+const USDT_MARKET_LIMIT_TYPES = ["usdt_limit_buy", "usdt_limit_sell"] as const;
+
+/**
+ * GET /api/v1/markets/balance
+ *
+ * Returns the two balances relevant to the USDT market tab:
+ *   inrBalance  — INR available to spend (mainBalance field)
+ *   usdtBalance — USDT available to sell
+ */
+router.get(
+  "/v1/markets/balance",
+  authMiddleware,
+  async (req: AuthRequest, res: Response) => {
+    const userId = req.userId!;
+    try {
+      const rows = await db
+        .select({
+          mainBalance: walletsTable.mainBalance,
+          usdtBalance: walletsTable.usdtBalance,
+        })
+        .from(walletsTable)
+        .where(eq(walletsTable.userId, userId))
+        .limit(1);
+
+      const w = rows[0];
+      if (!w) {
+        fail(req, res, 404, "wallet_not_found", "Wallet not found");
+        return;
+      }
+
+      ok(req, res, {
+        inrBalance: parseFloat(w.mainBalance as string),
+        usdtBalance: parseFloat((w.usdtBalance ?? "0") as string),
+        currency: "INR",
+        pair: "USDT/INR",
+      });
+    } catch (e: any) {
+      fail(req, res, 500, "balance_fetch_failed", "Failed to fetch market balance");
+    }
+  },
+);
+
+/**
+ * POST /api/v1/markets/orders
+ *
+ * Create a BUY or SELL order for USDT/INR.
+ *
+ * Body:
+ *   symbol?   — ignored (only USDT/INR supported)
+ *   side      — "BUY" | "SELL"
+ *   type      — "MARKET" | "LIMIT"
+ *   quantity  — USDT amount (number, min 1)
+ *   price?    — required for LIMIT orders (INR per USDT)
+ *
+ * BUY  MARKET: deduct INR from mainBalance, credit USDT to usdtBalance immediately.
+ * BUY  LIMIT:  lock INR from mainBalance, create pending order.
+ * SELL MARKET: deduct USDT from usdtBalance, credit INR to mainBalance immediately.
+ * SELL LIMIT:  lock USDT from usdtBalance, create pending order.
+ */
+router.post(
+  "/v1/markets/orders",
+  authMiddleware,
+  async (req: AuthRequest, res: Response) => {
+    const userId = req.userId!;
+    const { side, type = "MARKET", quantity: rawQty, price: rawPrice } = req.body ?? {};
+
+    if (!["BUY", "SELL"].includes(String(side).toUpperCase())) {
+      fail(req, res, 400, "invalid_side", "side must be 'BUY' or 'SELL'");
+      return;
+    }
+    const direction = String(side).toUpperCase() as "BUY" | "SELL";
+    const orderType = String(type).toUpperCase() as "MARKET" | "LIMIT";
+
+    const quantity = parseFloat(rawQty);
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      fail(req, res, 400, "invalid_quantity", "quantity must be a positive number");
+      return;
+    }
+    if (quantity < 1) {
+      fail(req, res, 400, "min_quantity", "Minimum order is 1 USDT");
+      return;
+    }
+
+    let limitPrice: number | null = null;
+    if (orderType === "LIMIT") {
+      limitPrice = parseFloat(rawPrice);
+      if (!Number.isFinite(limitPrice) || limitPrice <= 0) {
+        fail(req, res, 400, "invalid_price", "LIMIT orders require a valid price (INR per USDT)");
+        return;
+      }
+    }
+
+    try {
+      const marketRate = await getInrRate();
+      const execRate   = orderType === "LIMIT" ? limitPrice! : marketRate;
+      const inrAmount  = +(quantity * execRate).toFixed(2);
+      const qtyStr     = quantity.toFixed(8);
+      const inrStr     = inrAmount.toFixed(2);
+
+      const wallets = await db
+        .select()
+        .from(walletsTable)
+        .where(eq(walletsTable.userId, userId))
+        .limit(1);
+      const wallet = wallets[0];
+      if (!wallet) {
+        fail(req, res, 404, "wallet_not_found", "Wallet not found");
+        return;
+      }
+
+      const mainBal = parseFloat(wallet.mainBalance as string);
+      const usdtBal = parseFloat((wallet.usdtBalance ?? "0") as string);
+
+      if (direction === "BUY") {
+        if (mainBal < inrAmount) {
+          fail(
+            req, res, 400, "insufficient_inr",
+            `Insufficient INR balance. Need ₹${inrAmount.toFixed(2)}, available ₹${mainBal.toFixed(2)}`,
+          );
+          return;
+        }
+
+        if (orderType === "LIMIT") {
+          await db.transaction(async (tx) => {
+            await tx.update(walletsTable)
+              .set({ mainBalance: sql`${walletsTable.mainBalance} - ${inrStr}::numeric`, updatedAt: new Date() })
+              .where(eq(walletsTable.userId, userId));
+            await tx.insert(transactionsTable).values({
+              userId,
+              type: "usdt_limit_buy",
+              amount: qtyStr,
+              status: "pending",
+              description: `Limit Buy ${quantity.toFixed(4)} USDT @ ₹${limitPrice}/USDT (locked ₹${inrAmount})`,
+              walletAddress: String(limitPrice),
+            });
+          });
+          ok(req, res, {
+            side: "BUY", type: "LIMIT", symbol: "USDT/INR",
+            quantity, limitPrice, inrLocked: inrAmount, status: "pending",
+          }, 201);
+        } else {
+          let orderId: number | null = null;
+          await db.transaction(async (tx) => {
+            await tx.update(walletsTable)
+              .set({
+                mainBalance: sql`${walletsTable.mainBalance} - ${inrStr}::numeric`,
+                usdtBalance: sql`COALESCE(${walletsTable.usdtBalance}, 0) + ${qtyStr}::numeric`,
+                updatedAt: new Date(),
+              })
+              .where(eq(walletsTable.userId, userId));
+            const inserted = await tx.insert(transactionsTable).values({
+              userId,
+              type: "usdt_buy",
+              amount: qtyStr,
+              status: "completed",
+              description: `Bought ${quantity.toFixed(4)} USDT @ ₹${marketRate}/USDT (Internal Market)`,
+            }).returning({ id: transactionsTable.id });
+            orderId = inserted[0]?.id ?? null;
+          });
+          ok(req, res, {
+            id: orderId, side: "BUY", type: "MARKET", symbol: "USDT/INR",
+            quantity, executedPrice: marketRate, inrDebited: inrAmount, status: "completed",
+          }, 201);
+        }
+
+      } else {
+        if (usdtBal < quantity) {
+          fail(
+            req, res, 400, "insufficient_usdt",
+            `Insufficient USDT. Need ${quantity.toFixed(4)} USDT, available ${usdtBal.toFixed(4)} USDT`,
+          );
+          return;
+        }
+
+        if (orderType === "LIMIT") {
+          await db.transaction(async (tx) => {
+            await tx.update(walletsTable)
+              .set({ usdtBalance: sql`${walletsTable.usdtBalance} - ${qtyStr}::numeric`, updatedAt: new Date() })
+              .where(eq(walletsTable.userId, userId));
+            await tx.insert(transactionsTable).values({
+              userId,
+              type: "usdt_limit_sell",
+              amount: qtyStr,
+              status: "pending",
+              description: `Limit Sell ${quantity.toFixed(4)} USDT @ ₹${limitPrice}/USDT (locked ${quantity} USDT)`,
+              walletAddress: String(limitPrice),
+            });
+          });
+          ok(req, res, {
+            side: "SELL", type: "LIMIT", symbol: "USDT/INR",
+            quantity, limitPrice, usdtLocked: quantity, status: "pending",
+          }, 201);
+        } else {
+          let orderId: number | null = null;
+          await db.transaction(async (tx) => {
+            await tx.update(walletsTable)
+              .set({
+                usdtBalance: sql`${walletsTable.usdtBalance} - ${qtyStr}::numeric`,
+                mainBalance: sql`${walletsTable.mainBalance} + ${inrStr}::numeric`,
+                updatedAt: new Date(),
+              })
+              .where(eq(walletsTable.userId, userId));
+            const inserted = await tx.insert(transactionsTable).values({
+              userId,
+              type: "usdt_sell",
+              amount: qtyStr,
+              status: "completed",
+              description: `Sold ${quantity.toFixed(4)} USDT @ ₹${marketRate}/USDT (Internal Market)`,
+            }).returning({ id: transactionsTable.id });
+            orderId = inserted[0]?.id ?? null;
+          });
+          ok(req, res, {
+            id: orderId, side: "SELL", type: "MARKET", symbol: "USDT/INR",
+            quantity, executedPrice: marketRate, inrCredited: inrAmount, status: "completed",
+          }, 201);
+        }
+      }
+    } catch (e: any) {
+      fail(req, res, 500, "order_failed", "Order placement failed. Please try again.");
+    }
+  },
+);
+
+/**
+ * GET /api/v1/markets/orders
+ *
+ * Returns order list for the authenticated user.
+ *
+ * Query params:
+ *   status  — "open" (pending limit orders only) | "history" (completed/cancelled) | "all" (default)
+ *   page    — page number (default 1)
+ *   limit   — page size (default 20, max 50)
+ */
+router.get(
+  "/v1/markets/orders",
+  authMiddleware,
+  async (req: AuthRequest, res: Response) => {
+    const userId = req.userId!;
+    const statusFilter = String(req.query.status ?? "all").toLowerCase();
+    const page  = Math.max(1, getQueryInt(req, "page", 1));
+    const limit = Math.min(50, Math.max(1, getQueryInt(req, "limit", 20)));
+    const offset = (page - 1) * limit;
+
+    const ALL_TYPES = ["usdt_buy", "usdt_sell", "usdt_limit_buy", "usdt_limit_sell"] as const;
+
+    try {
+      let statusCondition;
+      if (statusFilter === "open") {
+        statusCondition = and(
+          eq(transactionsTable.userId, userId),
+          eq(transactionsTable.status, "pending"),
+          inArray(transactionsTable.type, [...USDT_MARKET_LIMIT_TYPES]),
+        );
+      } else if (statusFilter === "history") {
+        statusCondition = and(
+          eq(transactionsTable.userId, userId),
+          inArray(transactionsTable.type, [...ALL_TYPES]),
+          inArray(transactionsTable.status, ["completed", "rejected"]),
+        );
+      } else {
+        statusCondition = and(
+          eq(transactionsTable.userId, userId),
+          inArray(transactionsTable.type, [...ALL_TYPES]),
+        );
+      }
+
+      const [rows, countRows] = await Promise.all([
+        db.select().from(transactionsTable)
+          .where(statusCondition)
+          .orderBy(desc(transactionsTable.createdAt))
+          .limit(limit)
+          .offset(offset),
+        db.select({ total: count() }).from(transactionsTable).where(statusCondition),
+      ]);
+
+      const total = countRows[0]?.total ?? 0;
+
+      const orders = rows.map((r) => {
+        const isBuy   = r.type === "usdt_buy"  || r.type === "usdt_limit_buy";
+        const isLimit = r.type === "usdt_limit_buy" || r.type === "usdt_limit_sell";
+        const limitPrice = isLimit && r.walletAddress ? parseFloat(r.walletAddress) : null;
+        const quantity   = parseFloat(r.amount as string);
+        return {
+          id: r.id,
+          symbol: "USDT/INR",
+          side: isBuy ? "BUY" : "SELL",
+          type: isLimit ? "LIMIT" : "MARKET",
+          quantity,
+          limitPrice,
+          status: r.status === "rejected" ? "cancelled" : r.status,
+          description: r.description,
+          createdAt: r.createdAt,
+        };
+      });
+
+      okList(req, res, orders, {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      });
+    } catch (e: any) {
+      fail(req, res, 500, "orders_fetch_failed", "Failed to fetch orders");
+    }
+  },
+);
+
+/**
+ * DELETE /api/v1/markets/orders/:id
+ *
+ * Cancel a pending LIMIT order and refund the locked funds.
+ * Only the order owner can cancel; only pending orders can be cancelled.
+ */
+router.delete(
+  "/v1/markets/orders/:id",
+  authMiddleware,
+  async (req: AuthRequest, res: Response) => {
+    const userId  = req.userId!;
+    const orderId = parseInt(req.params.id, 10);
+    if (!Number.isFinite(orderId)) {
+      fail(req, res, 400, "invalid_order_id", "Invalid order id");
+      return;
+    }
+
+    try {
+      const rows = await db
+        .select()
+        .from(transactionsTable)
+        .where(
+          and(
+            eq(transactionsTable.id, orderId),
+            eq(transactionsTable.userId, userId),
+            eq(transactionsTable.status, "pending"),
+            inArray(transactionsTable.type, [...USDT_MARKET_LIMIT_TYPES]),
+          ),
+        )
+        .limit(1);
+
+      const order = rows[0];
+      if (!order) {
+        fail(req, res, 404, "order_not_found", "Order not found or already cancelled");
+        return;
+      }
+
+      const limitPrice = order.walletAddress ? parseFloat(order.walletAddress) : null;
+      const quantity   = parseFloat(order.amount as string);
+      const isBuy      = order.type === "usdt_limit_buy";
+
+      await db.transaction(async (tx) => {
+        if (isBuy && limitPrice) {
+          const inrRefund = +(quantity * limitPrice).toFixed(2);
+          await tx.update(walletsTable)
+            .set({ mainBalance: sql`${walletsTable.mainBalance} + ${inrRefund.toFixed(2)}::numeric`, updatedAt: new Date() })
+            .where(eq(walletsTable.userId, userId));
+        } else if (!isBuy) {
+          await tx.update(walletsTable)
+            .set({ usdtBalance: sql`COALESCE(${walletsTable.usdtBalance}, 0) + ${quantity.toFixed(8)}::numeric`, updatedAt: new Date() })
+            .where(eq(walletsTable.userId, userId));
+        }
+        await tx.update(transactionsTable)
+          .set({ status: "rejected" })
+          .where(eq(transactionsTable.id, orderId));
+      });
+
+      ok(req, res, { orderId, status: "cancelled", message: "Order cancelled and funds refunded" });
+    } catch (e: any) {
+      fail(req, res, 500, "cancel_failed", "Failed to cancel order");
+    }
   },
 );
 
