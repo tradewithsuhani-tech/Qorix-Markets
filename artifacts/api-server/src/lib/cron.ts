@@ -2,6 +2,7 @@ import cron from "node-cron";
 import { db, dailyProfitRunsTable } from "@workspace/db";
 import {
   promoRedemptionsTable,
+  systemSettingsTable,
 } from "@workspace/db/schema";
 import { and, eq, isNull, lt, sql } from "drizzle-orm";
 import { logger, profitLogger, errorLogger } from "./logger";
@@ -16,6 +17,20 @@ import { expireStaleP2POrders } from "./p2p-expiry";
 const AUTO_ENGINE_ENABLED = (process.env.AUTO_SIGNAL_ENGINE_ENABLED ?? "1") !== "0";
 
 const PROMO_REDEMPTION_TTL_HOURS = 24;
+
+/** Returns true only when admin has explicitly enabled ROI auto-run via system_settings. */
+async function isRoiAutoRunEnabled(): Promise<boolean> {
+  try {
+    const [row] = await db
+      .select({ value: systemSettingsTable.value })
+      .from(systemSettingsTable)
+      .where(eq(systemSettingsTable.key, "roi_auto_run"))
+      .limit(1);
+    return row?.value === "true";
+  } catch {
+    return false;
+  }
+}
 
 async function expireStalePromoRedemptions(): Promise<number> {
   const cutoff = new Date(Date.now() - PROMO_REDEMPTION_TTL_HOURS * 60 * 60 * 1000);
@@ -40,6 +55,11 @@ export async function initCronJobs(): Promise<void> {
   // risk bucket. The NAV engine is always authoritative — no admin override
   // bypass in this path (monthly targets are set via /admin/roi-schedule).
   cron.schedule("5 0 * * 1-5", async () => {
+    const roiEnabled = await isRoiAutoRunEnabled();
+    if (!roiEnabled) {
+      profitLogger.info("Cron: daily profit accrual SKIPPED — roi_auto_run is not enabled (set to true in system_settings to activate)");
+      return;
+    }
     profitLogger.info("Cron: daily profit accrual — starting");
     try {
       const result = await distributeAutoDailyProfit();
@@ -220,6 +240,13 @@ export async function initCronJobs(): Promise<void> {
 
 async function catchUpTodaysProfitIfMissed(): Promise<void> {
   try {
+    // Guard: only run if admin has explicitly enabled ROI auto-run
+    const roiEnabled = await isRoiAutoRunEnabled();
+    if (!roiEnabled) {
+      profitLogger.info("Startup catch-up: SKIPPED — roi_auto_run is not enabled");
+      return;
+    }
+
     const now = new Date();
     const dayOfWeek = now.getUTCDay(); // 0=Sun, 6=Sat
     if (dayOfWeek === 0 || dayOfWeek === 6) return;
