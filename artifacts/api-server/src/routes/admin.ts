@@ -2206,11 +2206,20 @@ router.post("/admin/withdrawals/:id/reject", async (req: AuthRequest, res) => {
   const [updated] = await db
     .update(transactionsTable)
     .set({ status: "rejected" })
-    .where(and(eq(transactionsTable.id, id), eq(transactionsTable.type, "withdrawal")))
+    .where(
+      and(
+        eq(transactionsTable.id, id),
+        eq(transactionsTable.type, "withdrawal"),
+        inArray(transactionsTable.status, ["pending", "processing"]),
+      ),
+    )
     .returning();
 
   if (!updated) {
-    res.status(404).json({ error: "Withdrawal not found" });
+    res.status(404).json({
+      error: "Withdrawal not found or already processed",
+      message: "Only pending or processing withdrawals can be rejected.",
+    });
     return;
   }
 
