@@ -210,7 +210,13 @@ router.post("/auth/register", async (req, res) => {
 
   let sponsorId: number | undefined;
   if (sponsorCode) {
-    const sponsor = await db.select().from(usersTable).where(eq(usersTable.referralCode, sponsorCode)).limit(1);
+    // Case-insensitive + trimmed lookup so "qorix-abc" matches "QORIX-ABC"
+    const normalised = sponsorCode.trim().toUpperCase();
+    const sponsor = await db
+      .select()
+      .from(usersTable)
+      .where(sql`UPPER(${usersTable.referralCode}) = ${normalised}`)
+      .limit(1);
     if (sponsor.length > 0) {
       const candidateSponsorId = sponsor[0]!.id;
       // Cap referrals per sponsor per day — beyond cap, allow signup but drop sponsor link
@@ -225,6 +231,13 @@ router.post("/auth/register", async (req, res) => {
       } else {
         sponsorId = candidateSponsorId;
       }
+    } else {
+      // Unknown referral code — reject rather than silently orphan
+      res.status(400).json({
+        error: "invalid_referral_code",
+        message: "Referral code not found. Please check and try again.",
+      });
+      return;
     }
   }
 

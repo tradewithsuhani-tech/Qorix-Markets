@@ -50,7 +50,7 @@ import {
   transactionsTable,
   systemSettingsTable,
 } from "@workspace/db";
-import { eq, desc, count, sql } from "drizzle-orm";
+import { eq, desc, count, sql, sum, and, gte, lte } from "drizzle-orm";
 import {
   authMiddleware,
   signToken,
@@ -806,6 +806,145 @@ router.get(
           }
         : null,
     });
+  },
+);
+
+// ══════════════════════════════════════════════════════════════════════════════
+// REFERRAL
+// ══════════════════════════════════════════════════════════════════════════════
+
+const REFERRAL_LINK_BASE = "https://qorixmarkets.com/register?ref=";
+
+function maskEmail(email: string): string {
+  const atIdx = email.indexOf("@");
+  if (atIdx <= 0) return email;
+  return email[0] + "***" + email.slice(atIdx);
+}
+
+/**
+ * GET /api/v1/referral
+ *
+ * Referral summary for the authenticated user.
+ * activeReferrals = referred users with a currently active investment.
+ * totalEarned / monthlyEarnings = sum of referral_bonus transactions
+ *   (calendar month for monthly; all-time for total).
+ */
+router.get(
+  "/v1/referral",
+  authMiddleware,
+  async (req: AuthRequest, res: Response) => {
+    const userId = req.userId!;
+
+    const [users] = await db
+      .select()
+      .from(usersTable)
+      .where(eq(usersTable.id, userId))
+      .limit(1);
+    if (!users) {
+      fail(req, res, 404, "user_not_found", "User not found.");
+      return;
+    }
+
+    const [totalCountResult] = await db
+      .select({ cnt: count() })
+      .from(usersTable)
+      .where(and(eq(usersTable.sponsorId, userId), eq(usersTable.isSmokeTest, false)));
+    const totalReferred = Number(totalCountResult?.cnt ?? 0);
+
+    const [activeCountResult] = await db
+      .select({ cnt: count() })
+      .from(usersTable)
+      .innerJoin(
+        investmentsTable,
+        and(
+          eq(investmentsTable.userId, usersTable.id),
+          eq(investmentsTable.isActive, true),
+        ),
+      )
+      .where(and(eq(usersTable.sponsorId, userId), eq(usersTable.isSmokeTest, false)));
+    const activeReferrals = Number(activeCountResult?.cnt ?? 0);
+
+    const [totalRow] = await db
+      .select({ total: sum(transactionsTable.amount) })
+      .from(transactionsTable)
+      .where(
+        and(eq(transactionsTable.userId, userId), eq(transactionsTable.type, "referral_bonus")),
+      );
+    const totalEarned = +(parseFloat(totalRow?.total ?? "0") || 0).toFixed(6);
+
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+
+    const [monthlyRow] = await db
+      .select({ total: sum(transactionsTable.amount) })
+      .from(transactionsTable)
+      .where(
+        and(
+          eq(transactionsTable.userId, userId),
+          eq(transactionsTable.type, "referral_bonus"),
+          gte(transactionsTable.createdAt, monthStart),
+          lte(transactionsTable.createdAt, monthEnd),
+        ),
+      );
+    const monthlyEarnings = +(parseFloat(monthlyRow?.total ?? "0") || 0).toFixed(6);
+
+    ok(req, res, {
+      referralCode: users.referralCode,
+      totalReferred,
+      activeReferrals,
+      totalEarned,
+      monthlyEarnings,
+      referralLink: REFERRAL_LINK_BASE + users.referralCode,
+    });
+  },
+);
+
+/**
+ * GET /api/v1/referral/referred-users
+ *
+ * Paginated list of users referred by the caller.
+ * Query: page (default 1), limit (default 50, max 100)
+ * Returns a flat array (no wrapper object) — matches Flutter spec.
+ * Emails are masked: first char + *** + @domain.
+ */
+router.get(
+  "/v1/referral/referred-users",
+  authMiddleware,
+  async (req: AuthRequest, res: Response) => {
+    const userId = req.userId!;
+    const page = Math.max(1, parseInt(String(req.query["page"] ?? "1"), 10) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(String(req.query["limit"] ?? "50"), 10) || 50));
+    const offset = (page - 1) * limit;
+
+    const referredUsers = await db
+      .select()
+      .from(usersTable)
+      .where(and(eq(usersTable.sponsorId, userId), eq(usersTable.isSmokeTest, false)))
+      .orderBy(usersTable.createdAt)
+      .limit(limit)
+      .offset(offset);
+
+    const data = await Promise.all(
+      referredUsers.map(async (u) => {
+        const [inv] = await db
+          .select({ amount: investmentsTable.amount, isActive: investmentsTable.isActive })
+          .from(investmentsTable)
+          .where(eq(investmentsTable.userId, u.id))
+          .limit(1);
+        return {
+          id: u.id,
+          fullName: u.fullName,
+          email: maskEmail(u.email),
+          investmentAmount: inv ? +parseFloat(inv.amount as string).toFixed(6) : 0,
+          isActive: inv?.isActive ?? false,
+          joinedAt: u.createdAt.toISOString(),
+        };
+      }),
+    );
+
+    // Returns flat array per Flutter spec (not wrapped in okList envelope)
+    res.status(200).json(data);
   },
 );
 
