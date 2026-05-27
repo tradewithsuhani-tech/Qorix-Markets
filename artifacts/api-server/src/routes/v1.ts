@@ -949,6 +949,96 @@ router.get(
 );
 
 // ══════════════════════════════════════════════════════════════════════════════
+// PROFIT HISTORY — /api/v1/profit/history
+//
+// Dedicated endpoint for the Profit History screen.
+// Returns totalProfit (lifetime sum) + paginated profit-type transactions.
+// Server-side filter + correct pagination count (fixes wallet/history bug).
+// ══════════════════════════════════════════════════════════════════════════════
+
+const PROFIT_TX_TYPES = ["profit", "referral_bonus", "bonus"] as const;
+
+/**
+ * GET /api/v1/profit/history
+ *
+ * Query params:
+ *   page  (default 1)
+ *   limit (default 20, max 50)
+ *
+ * Returns:
+ *   totalProfit — lifetime sum of all completed profit/referral/bonus credits
+ *   items       — paginated list of profit transactions
+ */
+router.get(
+  "/v1/profit/history",
+  authMiddleware,
+  async (req: AuthRequest, res: Response) => {
+    const userId = req.userId!;
+    const page  = Math.max(1, getQueryInt(req, "page", 1));
+    const limit = Math.min(50, Math.max(1, getQueryInt(req, "limit", 20)));
+    const offset = (page - 1) * limit;
+
+    const profitCondition = and(
+      eq(transactionsTable.userId, userId),
+      inArray(transactionsTable.type, [...PROFIT_TX_TYPES]),
+      eq(transactionsTable.status, "completed"),
+    );
+
+    try {
+      const [rows, countRows, sumRows] = await Promise.all([
+        db.select()
+          .from(transactionsTable)
+          .where(profitCondition)
+          .orderBy(desc(transactionsTable.createdAt))
+          .limit(limit)
+          .offset(offset),
+        db.select({ total: count() })
+          .from(transactionsTable)
+          .where(profitCondition),
+        db.select({ total: sum(transactionsTable.amount) })
+          .from(transactionsTable)
+          .where(profitCondition),
+      ]);
+
+      const total      = countRows[0]?.total ?? 0;
+      const totalProfit = +(parseFloat((sumRows[0]?.total ?? "0") as string) || 0).toFixed(6);
+
+      const items = rows.map((r) => ({
+        id: r.id,
+        type: r.type,
+        label: r.description ?? (
+          r.type === "profit"         ? "Daily profit credit" :
+          r.type === "referral_bonus" ? "Partner commission"  :
+                                        "Bonus credit"
+        ),
+        amount: +parseFloat(r.amount as string).toFixed(6),
+        currency: "USDT",
+        status: r.status,
+        createdAt: r.createdAt.toISOString(),
+      }));
+
+      res.status(200).json({
+        success: true,
+        data: {
+          totalProfit,
+          currency: "USDT",
+          items,
+        },
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+        },
+        meta: buildMeta(req),
+      });
+    } catch (e: any) {
+      fail(req, res, 500, "profit_history_failed", "Failed to fetch profit history");
+    }
+  },
+);
+
+// ══════════════════════════════════════════════════════════════════════════════
 // USDT INTERNAL MARKET — /api/v1/markets/orders
 //
 // Internal USDT/INR exchange. BUY = pay INR (mainBalance), receive USDT.
