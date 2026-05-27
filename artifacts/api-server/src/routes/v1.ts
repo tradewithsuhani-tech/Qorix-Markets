@@ -57,6 +57,7 @@ import {
   type AuthRequest,
 } from "../middlewares/auth";
 import { getAllQuotes, isForexMarketOpen } from "../lib/quote-feed";
+import { getEconomicCalendar } from "../lib/economic-calendar";
 import { buildBotState } from "../lib/bot-state";
 import { makeRedisLimiter } from "../middlewares/rate-limit";
 
@@ -636,6 +637,29 @@ router.get("/v1/markets/orderbook", async (req: Request, res: Response) => {
     fail(req, res, 500, "orderbook_failed", "Failed to build orderbook. Please retry.");
   }
 });
+
+/**
+ * GET /api/v1/markets/calendar
+ *
+ * Live economic calendar from Finnhub (free tier), Redis-cached 1 hour.
+ * Falls back to synthetic data if Finnhub is unavailable.
+ *
+ * Query params:
+ *   days  (default 7, max 14) — how many days ahead to include
+ */
+router.get(
+  "/v1/markets/calendar",
+  authMiddleware,
+  async (req: AuthRequest, res: Response) => {
+    const days = Math.min(Math.max(getQueryInt(req, "days", 7), 1), 14);
+    try {
+      const calendar = await getEconomicCalendar(days);
+      ok(req, res, calendar);
+    } catch (e: any) {
+      fail(req, res, 500, "calendar_failed", "Failed to fetch economic calendar");
+    }
+  },
+);
 
 // ══════════════════════════════════════════════════════════════════════════════
 // BOTS

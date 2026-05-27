@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { AlertTriangle, Clock, Filter, Calendar, BarChart2, Globe } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -6,6 +6,7 @@ import { WEEK_EVENTS, type ImpactLevel, type EconomicEvent } from "@/lib/economi
 import { CountdownBadge, ImpactDot } from "@/components/economic-news-widget";
 import { Layout } from "@/components/layout";
 import { PageContainer } from "@/components/page-container";
+import { authFetch } from "@/lib/auth-fetch";
 
 function groupByDay(events: EconomicEvent[]) {
   const groups: Record<string, EconomicEvent[]> = {};
@@ -17,6 +18,22 @@ function groupByDay(events: EconomicEvent[]) {
   return groups;
 }
 
+function apiEventToLocal(e: any): EconomicEvent {
+  const timeMs = new Date(e.eventAt).getTime();
+  const time = new Date(e.eventAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return {
+    id: e.id,
+    time,
+    timeMs,
+    currency: e.currency,
+    flag: e.flag,
+    event: e.title,
+    impact: e.impact as ImpactLevel,
+    forecast: e.forecast ?? undefined,
+    previous: e.previous ?? undefined,
+  };
+}
+
 const CURRENCIES = ["All", "USD", "EUR", "GBP", "JPY", "CAD", "AUD"];
 const IMPACTS: { label: string; value: ImpactLevel | "all" }[] = [
   { label: "All", value: "all" },
@@ -25,9 +42,9 @@ const IMPACTS: { label: string; value: ImpactLevel | "all" }[] = [
   { label: "Low", value: "low" },
 ];
 
-function EventRow({ event, i }: { event: EconomicEvent; i: number }) {
+function EventRow({ event, events, i }: { event: EconomicEvent; events: EconomicEvent[]; i: number }) {
   const isPast = Date.now() > event.timeMs;
-  const isNext = !isPast && WEEK_EVENTS.find((e) => e.timeMs > Date.now())?.id === event.id;
+  const isNext = !isPast && events.find((e) => e.timeMs > Date.now())?.id === event.id;
 
   return (
     <motion.div
@@ -102,8 +119,23 @@ function EventRow({ event, i }: { event: EconomicEvent; i: number }) {
 export default function MarketInsightsPage() {
   const [currencyFilter, setCurrencyFilter] = useState("All");
   const [impactFilter, setImpactFilter] = useState<ImpactLevel | "all">("all");
+  const [allEvents, setAllEvents] = useState<EconomicEvent[]>(WEEK_EVENTS);
+  const [isLive, setIsLive] = useState(false);
 
-  const filtered = WEEK_EVENTS.filter((e) => {
+  useEffect(() => {
+    authFetch<{ success: boolean; data: { events: any[]; summary: any } }>("/api/v1/markets/calendar?days=7")
+      .then((res) => {
+        if (res?.data?.events?.length) {
+          setAllEvents(res.data.events.map(apiEventToLocal));
+          setIsLive(true);
+        }
+      })
+      .catch(() => {
+        // keep static fallback
+      });
+  }, []);
+
+  const filtered = allEvents.filter((e) => {
     const matchCurrency = currencyFilter === "All" || e.currency === currencyFilter;
     const matchImpact = impactFilter === "all" || e.impact === impactFilter;
     return matchCurrency && matchImpact;
@@ -112,9 +144,9 @@ export default function MarketInsightsPage() {
   const grouped = groupByDay(filtered);
   const todayKey = new Date().toLocaleDateString([], { weekday: "long", month: "short", day: "numeric" });
 
-  const totalHigh = WEEK_EVENTS.filter((e) => e.impact === "high").length;
-  const upcomingHigh = WEEK_EVENTS.filter((e) => e.impact === "high" && e.timeMs > Date.now()).length;
-  const todayCount = WEEK_EVENTS.filter((e) => {
+  const totalHigh = allEvents.filter((e) => e.impact === "high").length;
+  const upcomingHigh = allEvents.filter((e) => e.impact === "high" && e.timeMs > Date.now()).length;
+  const todayCount = allEvents.filter((e) => {
     const eDate = new Date(e.timeMs);
     const now = new Date();
     return eDate.toDateString() === now.toDateString();
@@ -126,7 +158,10 @@ export default function MarketInsightsPage() {
         <div className="flex items-start justify-between gap-4">
           <div>
             <h1 className="text-2xl md:text-3xl font-bold tracking-tight gradient-text">Market Insights</h1>
-            <p className="text-sm text-muted-foreground mt-1">Economic calendar — high-impact events affecting your trades</p>
+            <p className="text-sm text-muted-foreground mt-1">
+              Economic calendar — high-impact events affecting your trades
+              {isLive && <span className="ml-2 text-[10px] text-emerald-400 font-medium">● Live</span>}
+            </p>
           </div>
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-green-600 flex items-center justify-center shrink-0">
             <Globe className="w-5 h-5 text-white" />
@@ -223,7 +258,7 @@ export default function MarketInsightsPage() {
 
                 <div className="divide-y divide-white/[0.04]">
                   {events.map((event, i) => (
-                    <EventRow key={event.id} event={event} i={i} />
+                    <EventRow key={event.id} event={event} events={allEvents} i={i} />
                   ))}
                 </div>
               </div>
