@@ -344,9 +344,8 @@ router.post("/kyc/phone/send-otp", authMiddleware, async (req: AuthRequest, res)
     res.json({
       success: true,
       delivery: channel === "voice" ? "call" : "sms",
-      expiresAt: expiresAt.toISOString(),
-      cooldownSec: KYC_RESEND_COOLDOWN_MS / 1000,
-      sendsRemaining: Math.max(0, KYC_MAX_SENDS_PER_DAY - ((user.phoneOtpSendCount ?? 0) + 1)),
+      expiresInSeconds: Math.floor(KYC_OTP_EXPIRY_MS / 1000),
+      message: channel === "voice" ? "OTP sent via voice call." : "OTP sent via SMS.",
     });
     return;
   }
@@ -364,9 +363,8 @@ router.post("/kyc/phone/send-otp", authMiddleware, async (req: AuthRequest, res)
   res.json({
     success: true,
     delivery: "email",
+    expiresInSeconds: 600,
     message: "OTP sent to your registered email address.",
-    maskedEmail: user.email.replace(/(.{2}).+(@.+)/, "$1***$2"),
-    cooldownSec: KYC_RESEND_COOLDOWN_MS / 1000,
   });
 });
 
@@ -445,7 +443,7 @@ router.post("/kyc/phone/verify-otp", authMiddleware, async (req: AuthRequest, re
     .set({ phoneNumber: normalized, phoneVerifiedAt: new Date() })
     .where(eq(usersTable.id, req.userId!));
   await createNotification(req.userId!, "system", "Mobile number verified", "Your mobile number has been verified successfully.");
-  res.json({ success: true, message: "Mobile number verified successfully." });
+  res.json({ success: true, phoneVerified: true, phoneNumber: normalized, message: "Mobile number verified successfully." });
 });
 
 // ─── ADMIN ROUTES ────────────────────────────────────────────
