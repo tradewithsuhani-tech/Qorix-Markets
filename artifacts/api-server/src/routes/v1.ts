@@ -49,6 +49,7 @@ import {
   investmentsTable,
   transactionsTable,
   systemSettingsTable,
+  walletPayoutMethodsTable,
 } from "@workspace/db";
 import { eq, desc, count, sql, sum, and, gte, lte, inArray } from "drizzle-orm";
 import {
@@ -518,6 +519,64 @@ router.get(
       total,
       totalPages: Math.ceil(total / limit),
     });
+  },
+);
+
+/**
+ * GET /api/v1/wallet/payout-methods
+ *
+ * Lists the calling user's saved INR payout destinations.
+ * Used in: Profile → "INR payout methods" + Withdraw → INR → picker.
+ *
+ * Response 200: { success, data: PayoutMethod[] }
+ * type enum: bank | upi | qorix_user
+ */
+router.get(
+  "/v1/wallet/payout-methods",
+  authMiddleware,
+  async (req: AuthRequest, res: Response) => {
+    const userId = req.userId!;
+    try {
+      const rows = await db
+        .select()
+        .from(walletPayoutMethodsTable)
+        .where(
+          and(
+            eq(walletPayoutMethodsTable.userId, userId),
+            eq(walletPayoutMethodsTable.isActive, true),
+          ),
+        )
+        .orderBy(
+          desc(walletPayoutMethodsTable.isDefault),
+          desc(walletPayoutMethodsTable.createdAt),
+        );
+
+      function masked(type: string, val: string): string | undefined {
+        if (type === "bank")
+          return val.length > 4 ? `···${val.slice(-4)}` : val;
+        if (type === "upi") {
+          const at = val.indexOf("@");
+          if (at > 1) return `${val[0]}···${val.slice(at)}`;
+        }
+        return undefined;
+      }
+
+      const data = rows.map((r) => ({
+        id: r.id,
+        type: r.type,
+        label: r.label ?? undefined,
+        accountName: r.accountName,
+        accountValue: r.accountValue,
+        bankName: r.bankName ?? undefined,
+        ifsc: r.ifsc ?? undefined,
+        maskedValue: masked(r.type, r.accountValue),
+        isDefault: r.isDefault,
+      }));
+
+      ok(req, res, data);
+    } catch (err: any) {
+      fail(req, res, 500, "server_error", "Failed to fetch payout methods");
+    }
   },
 );
 

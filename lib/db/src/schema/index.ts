@@ -34,3 +34,4 @@ export * from "./admin-escalation-contacts";
 export * from "./worker-heartbeats";
 export * from "./p2p";
 export * from "./daily-rate-schedule";
+export * from "./wallet-payout-methods";

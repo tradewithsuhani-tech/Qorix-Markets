@@ -44,6 +44,7 @@ import adminRiskRouter from "./admin-risk";
 import p2pRouter from "./p2p";
 import p2pPublicRouter from "./p2p-public";
 import usdtMarketRouter from "./usdt-market";
+import walletPayoutMethodsRouter from "./wallet-payout-methods";
 // Batch R — Bot Trading Terminal. Currently exposes only the public
 // /bot-trading/quotes feed used by the dashboard widget. Future
 // batches will add user-gated endpoints (state, account, orders) on
@@ -141,5 +142,6 @@ router.use(adminEscalationRouter);
 router.use(adminRiskRouter);
 router.use(p2pRouter);
 router.use(usdtMarketRouter);
+router.use(walletPayoutMethodsRouter);
 
 export default router;
