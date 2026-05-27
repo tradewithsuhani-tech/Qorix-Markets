@@ -489,14 +489,12 @@ export async function invalidateAuthUserCache(userId: number): Promise<void> {
 // ─── Per-device revocation cache (B8.1) ───────────────────────────────────
 //
 // Keyed by `${userId}:${fingerprint}` → boolean (true = revoked).
-// TTL 30s mirrors the authUserCache so revocations propagate to all
-// app instances within half a minute without adding a DB round-trip to
-// every authenticated request. On a cache miss we query user_devices once.
-//
-// Uses only the in-process TTL fallback (no Redis namespace) because:
-//   • revocations are rare user actions
-//   • the 30s window is already acceptable
-//   • Redis writes are fire-and-forget for cache misses anyway
+// TTL 30s is the fallback window for DB-confirmed revocations when Redis
+// pub/sub is unavailable. In the normal path, `lib/revoke-pubsub.ts`
+// broadcasts every revocation to all instances via the `qorix:revoke:device`
+// channel; on receipt, the subscriber calls `invalidateRevokedDeviceCache()`
+// immediately — reducing cross-instance propagation to ≤~5ms instead of ≤30s.
+// On a cache miss, we query user_devices once and cache the result.
 const revokedDeviceCache = new TTLCache<boolean>(30_000);
 
 /**

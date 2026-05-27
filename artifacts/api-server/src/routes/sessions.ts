@@ -19,6 +19,7 @@ import {
   invalidateAllRevokedDeviceCaches,
   type AuthRequest,
 } from "../middlewares/auth";
+import { publishRevokeDevice, publishRevokeAll } from "../lib/revoke-pubsub";
 
 const router = Router();
 router.use(authMiddleware);
@@ -73,8 +74,10 @@ router.delete("/auth/sessions/others", async (req: AuthRequest, res) => {
         ),
       );
 
-    // Invalidate all per-device caches so revocation propagates immediately
+    // Invalidate all per-device caches on this instance immediately,
+    // then broadcast to all other instances via Redis pub/sub (B8.1 Task #3).
     invalidateAllRevokedDeviceCaches();
+    publishRevokeAll();
 
     res.json({
       success: true,
@@ -147,8 +150,10 @@ router.delete("/auth/sessions/:id", async (req: AuthRequest, res) => {
       .set({ isRevoked: true, revokedAt: new Date() })
       .where(eq(userDevicesTable.id, BigInt(id)));
 
-    // Immediately invalidate cache for this device so it sees 401 within seconds
+    // Immediately invalidate cache on this instance, then broadcast to all
+    // other instances via Redis pub/sub for near-instant cross-instance revocation.
     invalidateRevokedDeviceCache(userId, device.deviceFingerprint);
+    publishRevokeDevice(userId, device.deviceFingerprint);
 
     res.json({ success: true, message: "Session revoked" });
   } catch (err: any) {

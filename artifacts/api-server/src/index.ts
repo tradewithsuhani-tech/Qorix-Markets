@@ -14,6 +14,7 @@ import {
 } from "./lib/background-jobs";
 import { startWorkerHeartbeatLoop } from "./lib/worker-heartbeat-service";
 import { startWorkerWatchdog } from "./lib/worker-watchdog";
+import { startRevokeSubscriber } from "./lib/revoke-pubsub";
 
 // Gate single-instance background work (cron, Telegram poller, on-chain
 // watchers, BullMQ workers) behind a single env flag so we can flip it off in
@@ -97,6 +98,14 @@ async function main() {
   // is closed in gracefulShutdown below.
   const stopMaintenanceListener = await startMaintenanceInvalidationListener();
 
+  // B8.1 Task #3 — Start Redis pub/sub subscriber for cross-instance device
+  // revocation. When any instance revokes a device session it publishes to
+  // `qorix:revoke:device`; every instance (including the publisher's own
+  // process) receives the message and immediately evicts the local
+  // revokedDeviceCache entry, reducing propagation from ≤30s to ≤~5ms.
+  // Fail-open: if Redis is unavailable the 30s in-process TTL still applies.
+  const revokeSubscriber = await startRevokeSubscriber();
+
   const { default: app } = await import("./app");
   const { logger, errorLogger } = await import("./lib/logger");
 
@@ -172,6 +181,8 @@ async function main() {
     // Close the LISTEN connection cleanly so we don't leave a zombie
     // backend connection on the Postgres side during a rolling deploy.
     await stopMaintenanceListener();
+    // Close the revoke pub/sub subscriber socket cleanly.
+    revokeSubscriber.stop();
     process.exit(0);
   };
 
