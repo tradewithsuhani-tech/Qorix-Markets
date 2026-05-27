@@ -109,6 +109,7 @@ const AdminCommunicationPage = lazy(() => import("@/pages/admin-communication"))
 const AdminContentPage = lazy(() => import("@/pages/admin-content"));
 const AdminBlogPage = lazy(() => import("@/pages/admin-blog"));
 const AdminTestPage = lazy(() => import("@/pages/admin-test"));
+const AdminRoiLogPage = lazy(() => import("@/pages/admin-roi-log"));
 
 function OfflineScreen() {
   const [dots, setDots] = useState(0);
@@ -432,6 +433,7 @@ function Router() {
       <Route path="/admin/withdrawals"><ProtectedRoute component={() => <AdminTransactionsPage mode="withdrawals" />} adminOnly={true} /></Route>
       <Route path="/admin/trading"><ProtectedRoute component={AdminTradingPage} adminOnly={true} /></Route>
       <Route path="/admin/wallet"><ProtectedRoute component={AdminWalletPage} adminOnly={true} /></Route>
+      <Route path="/admin/roi-log"><ProtectedRoute component={AdminRoiLogPage} adminOnly={true} /></Route>
       <Route path="/admin/analytics"><ProtectedRoute component={AdminAnalyticsPage} adminOnly={true} /></Route>
       <Route path="/admin/system"><ProtectedRoute component={AdminSystemPage} adminOnly={true} /></Route>
       <Route path="/admin/logs"><ProtectedRoute component={AdminLogsPage} adminOnly={true} /></Route>

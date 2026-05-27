@@ -7,6 +7,7 @@ import {
   transactionsTable,
   systemSettingsTable,
   dailyProfitRunsTable,
+  dailyRateScheduleTable,
   glAccountsTable,
   ledgerEntriesTable,
   notificationsTable,
@@ -313,6 +314,145 @@ router.get("/admin/profit/history", async (req, res) => {
       createdAt: r.createdAt.toISOString(),
     })),
   );
+});
+
+// ── ROI Run Log — enriched history + upcoming schedule ──────────────────────
+// GET /admin/roi-runs?limit=60  → daily_profit_runs joined with per-risk rates
+router.get("/admin/roi-runs", async (req, res) => {
+  const limit = Math.min(getQueryInt(req, "limit", 60), 200);
+
+  const runs = await db
+    .select()
+    .from(dailyProfitRunsTable)
+    .orderBy(desc(dailyProfitRunsTable.runDate))
+    .limit(limit);
+
+  const today = new Date().toISOString().slice(0, 10);
+
+  // Fetch rates for historical run dates (if any)
+  let ratesByDate: Record<string, Record<string, number>> = {};
+  if (runs.length > 0) {
+    const runDates = runs.map((r) => r.runDate);
+    const rates = await db
+      .select()
+      .from(dailyRateScheduleTable)
+      .where(inArray(dailyRateScheduleTable.runDate, runDates));
+    for (const r of rates) {
+      if (!ratesByDate[r.runDate]) ratesByDate[r.runDate] = {};
+      ratesByDate[r.runDate][r.riskLevel] = parseFloat(r.ratePct as string);
+    }
+  }
+
+  // Upcoming: next 5 trading days with scheduled rates
+  const upcoming = await db
+    .select()
+    .from(dailyRateScheduleTable)
+    .where(sql`${dailyRateScheduleTable.runDate} > ${today}`)
+    .orderBy(dailyRateScheduleTable.runDate, dailyRateScheduleTable.riskLevel)
+    .limit(15);
+
+  const upcomingByDate: Record<string, Record<string, number>> = {};
+  for (const r of upcoming) {
+    if (!upcomingByDate[r.runDate]) upcomingByDate[r.runDate] = {};
+    upcomingByDate[r.runDate][r.riskLevel] = parseFloat(r.ratePct as string);
+  }
+
+  res.json({
+    runs: runs.map((r) => ({
+      id: r.id,
+      runDate: r.runDate,
+      totalAUM: parseFloat(r.totalAUM as string),
+      totalProfitDistributed: parseFloat(r.totalProfitDistributed as string),
+      investorsAffected: r.investorsAffected,
+      referralBonusPaid: parseFloat(r.referralBonusPaid as string),
+      createdAt: r.createdAt.toISOString(),
+      rates: ratesByDate[r.runDate] ?? {},
+    })),
+    upcoming: Object.entries(upcomingByDate)
+      .map(([date, rates]) => ({ date, rates }))
+      .slice(0, 5),
+  });
+});
+
+// GET /admin/roi-runs/:date/investors  → per-investor breakdown for one date
+router.get("/admin/roi-runs/:date/investors", async (req, res) => {
+  const date = getParam(req, "date");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    res.status(400).json({ error: "Invalid date. Use YYYY-MM-DD" });
+    return;
+  }
+
+  const [profitTxns, referralTxns] = await Promise.all([
+    db
+      .select({
+        userId: transactionsTable.userId,
+        amount: transactionsTable.amount,
+        description: transactionsTable.description,
+        createdAt: transactionsTable.createdAt,
+        email: usersTable.email,
+        fullName: usersTable.fullName,
+      })
+      .from(transactionsTable)
+      .innerJoin(usersTable, eq(transactionsTable.userId, usersTable.id))
+      .where(
+        and(
+          eq(transactionsTable.type, "profit"),
+          sql`DATE(${transactionsTable.createdAt}) = ${date}::date`,
+        ),
+      )
+      .orderBy(desc(transactionsTable.amount)),
+
+    db
+      .select({
+        userId: transactionsTable.userId,
+        amount: transactionsTable.amount,
+      })
+      .from(transactionsTable)
+      .where(
+        and(
+          eq(transactionsTable.type, "referral_bonus"),
+          sql`DATE(${transactionsTable.createdAt}) = ${date}::date`,
+        ),
+      ),
+  ]);
+
+  const userIds = profitTxns.map((t) => t.userId);
+  const investments =
+    userIds.length > 0
+      ? await db
+          .select({
+            userId: investmentsTable.userId,
+            riskLevel: investmentsTable.riskLevel,
+            amount: investmentsTable.amount,
+          })
+          .from(investmentsTable)
+          .where(
+            and(
+              inArray(investmentsTable.userId, userIds),
+              eq(investmentsTable.isActive, true),
+            ),
+          )
+      : [];
+
+  const investmentByUser: Record<number, { riskLevel: string; amount: string }> = {};
+  for (const i of investments) investmentByUser[i.userId] = i;
+
+  const referralByUser: Record<number, number> = {};
+  for (const r of referralTxns)
+    referralByUser[r.userId] = (referralByUser[r.userId] ?? 0) + parseFloat(r.amount as string);
+
+  res.json({
+    date,
+    investors: profitTxns.map((t) => ({
+      userId: t.userId,
+      email: t.email,
+      fullName: t.fullName,
+      profitAmount: parseFloat(t.amount as string),
+      riskLevel: investmentByUser[t.userId]?.riskLevel ?? "unknown",
+      investmentAmount: parseFloat((investmentByUser[t.userId]?.amount as string) ?? "0"),
+      referralBonus: referralByUser[t.userId] ?? 0,
+    })),
+  });
 });
 
 // ── NAV Engine: ROI schedule preview ────────────────────────────────────────
