@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, usersTable } from "@workspace/db";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, sql, isNotNull, ne } from "drizzle-orm";
 import { authMiddleware, getQueryString, type AuthRequest } from "../middlewares/auth";
 import { createNotification } from "../lib/notifications";
 import { sendOtp, verifyOtp, sendTxnEmailToUser } from "../lib/email-service";
@@ -224,6 +224,12 @@ router.post("/kyc/address", authMiddleware, async (req: AuthRequest, res) => {
 });
 
 // ─── PHONE OTP (KYC) ─────────────────────────────────────────
+
+const KYC_TWO_FACTOR_KEY = process.env.TWO_FACTOR_API_KEY ?? "";
+const KYC_OTP_EXPIRY_MS = 5 * 60 * 1000;     // 5 min
+const KYC_RESEND_COOLDOWN_MS = 60 * 1000;     // 60 sec
+const KYC_MAX_SENDS_PER_DAY = 5;
+
 // Normalize Indian phone — accept "+91", "91", or 10-digit
 function normalizePhone(raw: string): string | null {
   const digits = String(raw ?? "").replace(/\D/g, "");
@@ -233,14 +239,149 @@ function normalizePhone(raw: string): string | null {
   return null;
 }
 
-// POST /kyc/phone/send-otp  body: { phoneNumber }
-// Sends a 6-digit OTP to the user's registered email for phone verification.
-// (SMS channel will be added later; email is the current delivery path.)
+// Send OTP via 2factor.in (same provider as web app /phone-otp/send)
+async function kycSend2FactorOtp(
+  phone: string,
+  channel: "sms" | "voice",
+): Promise<{ ok: boolean; sessionId?: string; error?: string }> {
+  const ch = channel === "voice" ? "VOICE" : "SMS";
+  const url = `https://2factor.in/API/V1/${encodeURIComponent(KYC_TWO_FACTOR_KEY)}/${ch}/${encodeURIComponent(phone)}/AUTOGEN`;
+  try {
+    const r = await fetch(url);
+    const data: any = await r.json().catch(() => ({}));
+    if (!r.ok || data?.Status !== "Success" || !data?.Details) {
+      return { ok: false, error: data?.Details || `${ch} OTP send failed (${r.status})` };
+    }
+    return { ok: true, sessionId: String(data.Details) };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || "network error" };
+  }
+}
+
+// POST /kyc/phone/send-otp  body: { phoneNumber, channel? }
+// channel: "call" | "voice" → 2factor.in voice call
+// channel: "sms"            → 2factor.in SMS
+// channel: "email" / unset  → email OTP (fallback when 2factor key absent)
 router.post("/kyc/phone/send-otp", authMiddleware, async (req: AuthRequest, res) => {
-  const { phoneNumber } = req.body ?? {};
+  const { phoneNumber, channel: rawChannel } = req.body ?? {};
   const normalized = normalizePhone(phoneNumber);
   if (!normalized) {
     res.status(400).json({ error: "invalid_phone", message: "Enter a valid 10-digit Indian mobile number." });
+    return;
+  }
+
+  // Normalise channel: Flutter sends "call" → map to "voice" for 2factor.in
+  const ch = String(rawChannel ?? "sms").toLowerCase();
+  const channel: "voice" | "sms" | "email" =
+    ch === "call" || ch === "voice" ? "voice" :
+    ch === "email" ? "email" : "sms";
+
+  const [user] = await db
+    .select({
+      id: usersTable.id,
+      email: usersTable.email,
+      phoneVerifiedAt: usersTable.phoneVerifiedAt,
+      phoneOtpSendCount: usersTable.phoneOtpSendCount,
+      phoneOtpLastSentAt: usersTable.phoneOtpLastSentAt,
+    })
+    .from(usersTable)
+    .where(eq(usersTable.id, req.userId!))
+    .limit(1);
+
+  if (!user) { res.status(404).json({ error: "user_not_found" }); return; }
+  if (user.phoneVerifiedAt) {
+    res.status(400).json({ error: "phone_already_verified", message: "Your mobile number is already verified." });
+    return;
+  }
+
+  // Cooldown guard
+  if (user.phoneOtpLastSentAt) {
+    const since = Date.now() - new Date(user.phoneOtpLastSentAt).getTime();
+    if (since < KYC_RESEND_COOLDOWN_MS) {
+      const waitSec = Math.ceil((KYC_RESEND_COOLDOWN_MS - since) / 1000);
+      res.status(429).json({ error: "cooldown", message: `Wait ${waitSec}s before requesting another OTP.` });
+      return;
+    }
+    if (since > 24 * 60 * 60 * 1000) {
+      await db.update(usersTable).set({ phoneOtpSendCount: 0 }).where(eq(usersTable.id, req.userId!));
+      user.phoneOtpSendCount = 0;
+    }
+  }
+  if ((user.phoneOtpSendCount ?? 0) >= KYC_MAX_SENDS_PER_DAY) {
+    res.status(429).json({ error: "daily_limit", message: "Daily OTP limit reached. Try again tomorrow." });
+    return;
+  }
+
+  // Multi-account guard: block if number is already verified on another account
+  const conflict = await db
+    .select({ id: usersTable.id })
+    .from(usersTable)
+    .where(and(eq(usersTable.phoneNumber, normalized), isNotNull(usersTable.phoneVerifiedAt), ne(usersTable.id, req.userId!)))
+    .limit(1);
+  if (conflict.length > 0) {
+    res.status(409).json({ error: "phone_in_use", message: "This number is already verified on another account." });
+    return;
+  }
+
+  // ── 2factor.in path (call / SMS) ──────────────────────────
+  if (channel !== "email" && KYC_TWO_FACTOR_KEY) {
+    const result = await kycSend2FactorOtp(normalized, channel === "voice" ? "voice" : "sms");
+    if (!result.ok) {
+      res.status(502).json({ error: "otp_send_failed", message: result.error || "Could not send OTP. Try again." });
+      return;
+    }
+    const expiresAt = new Date(Date.now() + KYC_OTP_EXPIRY_MS);
+    await db.update(usersTable)
+      .set({
+        phoneNumber: normalized,
+        phoneOtpSessionId: result.sessionId!,
+        phoneOtpExpiresAt: expiresAt,
+        phoneOtpSendCount: (user.phoneOtpSendCount ?? 0) + 1,
+        phoneOtpLastSentAt: new Date(),
+      })
+      .where(eq(usersTable.id, req.userId!));
+
+    res.json({
+      success: true,
+      delivery: channel === "voice" ? "call" : "sms",
+      expiresAt: expiresAt.toISOString(),
+      cooldownSec: KYC_RESEND_COOLDOWN_MS / 1000,
+      sendsRemaining: Math.max(0, KYC_MAX_SENDS_PER_DAY - ((user.phoneOtpSendCount ?? 0) + 1)),
+    });
+    return;
+  }
+
+  // ── Email fallback (channel=email or TWO_FACTOR_API_KEY not set) ──
+  await sendOtp(user.id, user.email, "kyc_phone_verify");
+  await db.update(usersTable)
+    .set({
+      phoneNumber: normalized,
+      phoneOtpSendCount: (user.phoneOtpSendCount ?? 0) + 1,
+      phoneOtpLastSentAt: new Date(),
+    })
+    .where(eq(usersTable.id, req.userId!));
+
+  res.json({
+    success: true,
+    delivery: "email",
+    message: "OTP sent to your registered email address.",
+    maskedEmail: user.email.replace(/(.{2}).+(@.+)/, "$1***$2"),
+    cooldownSec: KYC_RESEND_COOLDOWN_MS / 1000,
+  });
+});
+
+// POST /kyc/phone/verify-otp  body: { phoneNumber, otp }
+// Dual-path: verifies via 2factor.in session (call/SMS) OR email_otps table.
+router.post("/kyc/phone/verify-otp", authMiddleware, async (req: AuthRequest, res) => {
+  const { phoneNumber, otp } = req.body ?? {};
+  const normalized = normalizePhone(phoneNumber);
+  if (!normalized) {
+    res.status(400).json({ error: "invalid_phone", message: "Enter a valid 10-digit Indian mobile number." });
+    return;
+  }
+  const cleaned = String(otp ?? "").replace(/\D/g, "");
+  if (!/^\d{4,8}$/.test(cleaned)) {
+    res.status(400).json({ error: "invalid_otp", message: "Enter the OTP digits." });
     return;
   }
 
@@ -249,69 +390,61 @@ router.post("/kyc/phone/send-otp", authMiddleware, async (req: AuthRequest, res)
       id: usersTable.id,
       email: usersTable.email,
       phoneVerifiedAt: usersTable.phoneVerifiedAt,
+      phoneOtpSessionId: usersTable.phoneOtpSessionId,
+      phoneOtpExpiresAt: usersTable.phoneOtpExpiresAt,
     })
     .from(usersTable)
     .where(eq(usersTable.id, req.userId!))
     .limit(1);
 
   if (!user) { res.status(404).json({ error: "user_not_found" }); return; }
-
   if (user.phoneVerifiedAt) {
     res.status(400).json({ error: "phone_already_verified", message: "Your mobile number is already verified." });
     return;
   }
 
-  await sendOtp(user.id, user.email, "kyc_phone_verify");
-
-  res.json({
-    success: true,
-    delivery: "email",
-    message: "OTP sent to your registered email address.",
-    maskedEmail: user.email.replace(/(.{2}).+(@.+)/, "$1***$2"),
-  });
-});
-
-// POST /kyc/phone/verify-otp  body: { phoneNumber, otp }
-// Verifies the email OTP and marks the phone number as verified on the user record.
-router.post("/kyc/phone/verify-otp", authMiddleware, async (req: AuthRequest, res) => {
-  const { phoneNumber, otp } = req.body ?? {};
-  const normalized = normalizePhone(phoneNumber);
-  if (!normalized) {
-    res.status(400).json({ error: "invalid_phone", message: "Enter a valid 10-digit Indian mobile number." });
-    return;
-  }
-  const cleaned = String(otp ?? "").replace(/\s/g, "");
-  if (!/^\d{6}$/.test(cleaned)) {
-    res.status(400).json({ error: "invalid_otp", message: "OTP must be 6 digits." });
-    return;
-  }
-
-  const [user] = await db
-    .select({ id: usersTable.id, phoneVerifiedAt: usersTable.phoneVerifiedAt })
-    .from(usersTable)
-    .where(eq(usersTable.id, req.userId!))
-    .limit(1);
-
-  if (!user) { res.status(404).json({ error: "user_not_found" }); return; }
-
-  if (user.phoneVerifiedAt) {
-    res.status(400).json({ error: "phone_already_verified", message: "Your mobile number is already verified." });
-    return;
-  }
-
-  const result = await verifyOtp(user.id, cleaned, "kyc_phone_verify");
-  if (!result.valid) {
-    res.status(400).json({ error: "invalid_otp", message: result.error ?? "Invalid or expired OTP." });
-    return;
+  // ── 2factor.in verification path ──────────────────────────
+  if (user.phoneOtpSessionId && KYC_TWO_FACTOR_KEY) {
+    if (user.phoneOtpExpiresAt && new Date(user.phoneOtpExpiresAt).getTime() < Date.now()) {
+      await db.update(usersTable)
+        .set({ phoneOtpSessionId: null, phoneOtpExpiresAt: null })
+        .where(eq(usersTable.id, req.userId!));
+      res.status(400).json({ error: "otp_expired", message: "OTP expired. Request a new one." });
+      return;
+    }
+    const tryVerify = async (path: "SMS" | "VOICE") => {
+      const url = `https://2factor.in/API/V1/${encodeURIComponent(KYC_TWO_FACTOR_KEY)}/${path}/VERIFY/${encodeURIComponent(user.phoneOtpSessionId!)}/${encodeURIComponent(cleaned)}`;
+      const r = await fetch(url);
+      const data: any = await r.json().catch(() => ({}));
+      return r.ok && data?.Status === "Success";
+    };
+    let verified = false;
+    try {
+      verified = (await tryVerify("SMS")) || (await tryVerify("VOICE"));
+    } catch {
+      res.status(502).json({ error: "otp_verify_error", message: "Could not verify OTP. Try again." });
+      return;
+    }
+    if (!verified) {
+      res.status(400).json({ error: "invalid_otp", message: "Wrong OTP. Check your call/SMS and try again." });
+      return;
+    }
+    await db.update(usersTable)
+      .set({ phoneOtpSessionId: null, phoneOtpExpiresAt: null })
+      .where(eq(usersTable.id, req.userId!));
+  } else {
+    // ── Email OTP path ─────────────────────────────────────
+    const result = await verifyOtp(user.id, cleaned, "kyc_phone_verify");
+    if (!result.valid) {
+      res.status(400).json({ error: "invalid_otp", message: result.error ?? "Invalid or expired OTP." });
+      return;
+    }
   }
 
-  await db
-    .update(usersTable)
+  await db.update(usersTable)
     .set({ phoneNumber: normalized, phoneVerifiedAt: new Date() })
     .where(eq(usersTable.id, req.userId!));
-
   await createNotification(req.userId!, "system", "Mobile number verified", "Your mobile number has been verified successfully.");
-
   res.json({ success: true, message: "Mobile number verified successfully." });
 });
 
