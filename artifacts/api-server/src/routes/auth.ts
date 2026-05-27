@@ -1635,7 +1635,7 @@ router.post("/auth/forgot-password", forgotLimiter, async (req, res) => {
   if (users.length > 0 && !users[0]!.isDisabled) {
     setImmediate(async () => {
       try {
-        await sendOtp(users[0]!.id, users[0]!.email, "verify_email");
+        await sendOtp(users[0]!.id, users[0]!.email, "reset_password");
       } catch { /* non-fatal — keep generic response */ }
     });
   }
@@ -1655,7 +1655,7 @@ router.post("/auth/verify-reset-otp", async (req, res) => {
     res.status(400).json({ error: "Invalid or expired code" });
     return;
   }
-  const result = await verifyOtp(users[0]!.id, otp, "verify_email");
+  const result = await verifyOtp(users[0]!.id, otp, "reset_password");
   if (!result.valid) {
     res.status(400).json({ error: result.error ?? "Invalid or expired code" });
     return;
@@ -1663,7 +1663,7 @@ router.post("/auth/verify-reset-otp", async (req, res) => {
   // Re-issue a fresh OTP that the user must present in the reset step. We
   // store it back so the next call (reset-password) can validate it without
   // re-prompting the user. Reuses the same row pattern (5-min window).
-  const fresh = await sendOtp(users[0]!.id, normalizedEmail, "verify_email");
+  const fresh = await sendOtp(users[0]!.id, normalizedEmail, "reset_password");
   res.json({ success: true, otp: fresh.otp });
 });
 
@@ -1683,7 +1683,7 @@ router.post("/auth/reset-password", forgotLimiter, async (req, res) => {
     res.status(400).json({ error: "Invalid or expired code" });
     return;
   }
-  const result = await verifyOtp(users[0]!.id, otp, "verify_email");
+  const result = await verifyOtp(users[0]!.id, otp, "reset_password");
   if (!result.valid) {
     res.status(400).json({ error: result.error ?? "Invalid or expired code" });
     return;

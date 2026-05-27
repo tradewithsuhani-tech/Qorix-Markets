@@ -996,7 +996,8 @@ export async function sendOtp(
     | "withdrawal_confirm"
     | "device_login_approval"
     | "two_factor_login"
-    | "kyc_phone_verify",
+    | "kyc_phone_verify"
+    | "reset_password",
 ): Promise<{ otp: string; expiresAt: Date }> {
   const otp = generateOtp(6);
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
@@ -1024,7 +1025,9 @@ export async function sendOtp(
           ? "Two-Factor Sign-in"
           : purpose === "kyc_phone_verify"
             ? "Phone Verification"
-            : "New Device Login";
+            : purpose === "reset_password"
+              ? "Password Reset"
+              : "New Device Login";
   const intro =
     purpose === "verify_email"
       ? "Welcome to Qorix Markets. Use the code below to verify your email and finish creating your account."
@@ -1034,7 +1037,9 @@ export async function sendOtp(
           ? "You requested a one-time email code to complete sign-in to your Qorix Markets account because you couldn't access your authenticator app. Enter the code below to finish signing in. If this wasn't you, ignore this email and change your password immediately."
           : purpose === "kyc_phone_verify"
             ? "Use the code below to verify your mobile number and continue your KYC verification."
-            : "A new device is trying to sign in to your Qorix Markets account. If this was you, use the code below to approve the login. If not, ignore this email and change your password immediately.";
+            : purpose === "reset_password"
+              ? "You requested a password reset for your Qorix Markets account. Use the code below to proceed. If you did not request this, ignore this email — your account remains secure."
+              : "A new device is trying to sign in to your Qorix Markets account. If this was you, use the code below to approve the login. If not, ignore this email and change your password immediately.";
   const noteLines = [
     "<strong style=\"color:#cbd5e1;\">Never share this code</strong> with anyone — Qorix staff will never ask for it.",
     "If you did not initiate this request, please secure your account and contact support immediately.",
@@ -1159,7 +1164,8 @@ export async function verifyOtp(
     | "withdrawal_confirm"
     | "device_login_approval"
     | "two_factor_login"
-    | "kyc_phone_verify",
+    | "kyc_phone_verify"
+    | "reset_password",
 ): Promise<{ valid: boolean; error?: string }> {
   const now = new Date();
 
