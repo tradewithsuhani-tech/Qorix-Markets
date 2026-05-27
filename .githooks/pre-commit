@@ -1,0 +1,6 @@
+#!/bin/sh
+# Security guard — block secrets and database dumps from being committed.
+if git diff --cached --name-only | grep -E '\.env$|backup\.sql|\.sql\.gz$'; then
+  echo "BLOCKED: secrets or dumps in commit"
+  exit 1
+fi
