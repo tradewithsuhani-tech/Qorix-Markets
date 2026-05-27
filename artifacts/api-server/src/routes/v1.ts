@@ -1502,6 +1502,101 @@ router.delete(
 );
 
 // ══════════════════════════════════════════════════════════════════════════════
+// SUPPORT — GET /api/v1/support/faqs
+// Auth-gated: Bearer token required. Returns static FAQ items + contact info.
+// ══════════════════════════════════════════════════════════════════════════════
+
+const SUPPORT_FAQS = [
+  {
+    id: "deposit",
+    category: "Wallet",
+    question: "How do I deposit USDT?",
+    answer:
+      "Go to Wallet → Deposit. Copy your personal TRC20 deposit address and send USDT from any exchange or wallet. Deposits are credited automatically within 1–5 minutes after the transaction is confirmed on the TRON network.",
+  },
+  {
+    id: "withdraw",
+    category: "Wallet",
+    question: "How do I withdraw USDT?",
+    answer:
+      "Go to Wallet → Withdraw. Enter the amount and your TRC20 destination address. A one-time OTP will be sent to your registered email for verification. Withdrawals are processed within 24 hours.",
+  },
+  {
+    id: "min_deposit",
+    category: "Wallet",
+    question: "What is the minimum deposit?",
+    answer:
+      "The minimum deposit is 10 USDT. Smaller amounts will be credited but cannot be used to start auto-trading until the balance reaches the required minimum.",
+  },
+  {
+    id: "trading",
+    category: "Trading",
+    question: "How does auto-trading work?",
+    answer:
+      "After depositing, go to Trading and tap Start. The system allocates your trading balance to automated strategies and distributes daily profits set by the admin. You can choose your risk level (3%, 5%, or 10% max drawdown).",
+  },
+  {
+    id: "profit",
+    category: "Trading",
+    question: "When are daily profits credited?",
+    answer:
+      "Profits are distributed once per day, typically between 8–10 PM IST. They appear in your Profit wallet and can be transferred to your Main wallet at any time.",
+  },
+  {
+    id: "referral",
+    category: "Referral",
+    question: "How does the referral program work?",
+    answer:
+      "Share your referral code with friends. When they sign up and start trading, you earn a commission on their monthly trading activity. Commissions are credited to your Main wallet on the 1st of each month.",
+  },
+  {
+    id: "kyc",
+    category: "Account",
+    question: "Is KYC required?",
+    answer:
+      "Basic account functions (deposit, trade, withdraw) do not require KYC. KYC is required to participate in quizzes and giveaways. Submit your ID via Profile → KYC Verification.",
+  },
+  {
+    id: "security",
+    category: "Account",
+    question: "How do I secure my account?",
+    answer:
+      "Enable two-factor authentication under Profile → Security. Regularly review your active devices under Profile → Devices and sign out any sessions you don't recognise.",
+  },
+  {
+    id: "vip",
+    category: "Account",
+    question: "What are VIP levels?",
+    answer:
+      "VIP levels unlock higher daily profit rates and exclusive features. Your level is based on your cumulative trading volume and referral activity. Check your current level and benefits in Profile → VIP Status.",
+  },
+  {
+    id: "contact",
+    category: "Support",
+    question: "How do I contact support?",
+    answer:
+      "You can submit a support ticket directly in the app (Support → New Ticket) or email support@qorixmarkets.com. Our team responds within 24 hours on business days.",
+  },
+];
+
+const SUPPORT_CONTACT = {
+  email: "support@qorixmarkets.com",
+  supportHours: "9 AM – 6 PM (Mon–Sat)",
+  chatEnabled: true,
+};
+
+router.get(
+  "/v1/support/faqs",
+  authMiddleware,
+  (req: AuthRequest, res: Response) => {
+    ok(req, res, {
+      items: SUPPORT_FAQS,
+      contact: SUPPORT_CONTACT,
+    });
+  },
+);
+
+// ══════════════════════════════════════════════════════════════════════════════
 // WRITE GUARDS — explicit 503 for Phase 1
 // Block common write routes that mobile devs might accidentally probe.
 // ══════════════════════════════════════════════════════════════════════════════
