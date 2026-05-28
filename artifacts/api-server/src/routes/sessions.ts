@@ -15,6 +15,7 @@ import { and, eq, ne, sql } from "drizzle-orm";
 import {
   authMiddleware,
   computeDeviceFingerprint,
+  getParam,
   invalidateRevokedDeviceCache,
   invalidateAllRevokedDeviceCaches,
   type AuthRequest,
@@ -94,8 +95,7 @@ router.delete("/auth/sessions/others", async (req: AuthRequest, res) => {
 // DELETE /api/auth/sessions/:id
 // ─────────────────────────────────────────────────────────────────────────────
 router.delete("/auth/sessions/:id", async (req: AuthRequest, res) => {
-  const rawId = req.params.id;
-  const id = parseInt(rawId, 10);
+  const id = parseInt(getParam(req, "id"), 10);
   if (isNaN(id) || id <= 0) {
     res.status(400).json({ success: false, error: "invalid_id", message: "Invalid session id" });
     return;

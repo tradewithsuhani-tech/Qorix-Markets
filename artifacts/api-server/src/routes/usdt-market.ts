@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db, walletsTable, systemSettingsTable, transactionsTable } from "@workspace/db";
 import { eq, sql, and, inArray } from "drizzle-orm";
-import { authMiddleware, type AuthRequest } from "../middlewares/auth";
+import { authMiddleware, getParam, type AuthRequest } from "../middlewares/auth";
 import { transactionLogger } from "../lib/logger";
 
 const router = Router();
@@ -78,7 +78,7 @@ router.get("/usdt-market/open-orders", authMiddleware, async (req: AuthRequest, 
 // ─── DELETE /api/usdt-market/open-orders/:id — cancel & refund ───────────────
 router.delete("/usdt-market/open-orders/:id", authMiddleware, async (req: AuthRequest, res) => {
   const userId = req.userId!;
-  const orderId = parseInt(req.params.id, 10);
+  const orderId = parseInt(getParam(req, "id"), 10);
   if (!Number.isFinite(orderId)) {
     res.status(400).json({ error: "Invalid order id" });
     return;

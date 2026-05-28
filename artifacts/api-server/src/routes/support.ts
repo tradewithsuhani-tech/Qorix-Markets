@@ -50,13 +50,13 @@ router.post("/support/tickets", async (req: AuthRequest, res) => {
   let userName = "unknown";
   try {
     const [user] = await db
-      .select({ email: usersTable.email, name: usersTable.name })
+      .select({ email: usersTable.email, fullName: usersTable.fullName })
       .from(usersTable)
       .where(eq(usersTable.id, userId))
       .limit(1);
     if (user) {
       userEmail = user.email;
-      userName = user.name ?? "unknown";
+      userName = user.fullName ?? "unknown";
     }
   } catch (err) {
     logger.warn({ err, userId }, "[support] failed to fetch user for ticket email");

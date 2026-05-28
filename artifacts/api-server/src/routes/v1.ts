@@ -54,6 +54,7 @@ import {
 import { eq, desc, count, sql, sum, and, gte, lte, inArray } from "drizzle-orm";
 import {
   authMiddleware,
+  getParam,
   signToken,
   type AuthRequest,
 } from "../middlewares/auth";
@@ -872,7 +873,7 @@ router.get(
       id: user.id,
       email: user.email,
       fullName: user.fullName,
-      phone: user.phone ?? null,
+      phone: user.phoneNumber ?? null,
       kycStatus: user.kycStatus,
       emailVerified: user.emailVerified,
       twoFactorEnabled: user.twoFactorEnabled ?? false,
@@ -1449,7 +1450,7 @@ router.delete(
   authMiddleware,
   async (req: AuthRequest, res: Response) => {
     const userId  = req.userId!;
-    const orderId = parseInt(req.params.id, 10);
+    const orderId = parseInt(getParam(req, "id"), 10);
     if (!Number.isFinite(orderId)) {
       fail(req, res, 400, "invalid_order_id", "Invalid order id");
       return;

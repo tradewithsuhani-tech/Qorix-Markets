@@ -1048,7 +1048,8 @@ export async function distributeAutoDailyProfit(): Promise<DistributeProfitResul
 export async function adjustNavSnapshotIfNeeded(
   userId: number,
   newBasis: number,
-  tx?: typeof db,
+  // Accept db or an in-flight Drizzle transaction (PgTransaction lacks $client).
+  tx?: typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0],
 ): Promise<void> {
   const todayStr = new Date().toISOString().split("T")[0]!;
   const dbOrTx = tx ?? db;

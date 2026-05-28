@@ -2,7 +2,7 @@ import { Router } from "express";
 import { db, usersTable, walletsTable, investmentsTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { signToken, getQueryString } from "../middlewares/auth";
-import crypto from "crypto";
+import crypto, { type JsonWebKey } from "crypto";
 import { logger } from "../lib/logger";
 import { sendWelcomeEmail } from "../lib/email-service";
 import { trackLoginDevice } from "../lib/device-tracking";
@@ -54,7 +54,7 @@ function verifyWithJwk(
   sigB64: string,
   payload: GoogleIdTokenPayload,
 ): GoogleIdTokenPayload {
-  const publicKey = crypto.createPublicKey({ format: "jwk", key: jwk as Parameters<typeof crypto.createPublicKey>[0] & object });
+  const publicKey = crypto.createPublicKey({ format: "jwk", key: jwk as JsonWebKey });
   const data = Buffer.from(`${headerB64}.${payloadB64}`);
   const signature = Buffer.from(sigB64, "base64url");
   const valid = crypto.verify("RSA-SHA256", data, publicKey, signature);
