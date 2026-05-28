@@ -9,6 +9,16 @@ import { checkAndFireMilestones } from "../lib/milestone-service";
 import { logger } from "../lib/logger";
 import { isSmokeTestUser } from "../lib/smoke-test-account";
 import { adjustNavSnapshotIfNeeded } from "../lib/profit-service";
+import {
+  fundTradingFromSourceWallet,
+  getInrToUsdtRate,
+  type FundingSourceWallet,
+} from "../lib/wallet-source";
+import { z } from "zod";
+
+const StartInvestmentBodyExtended = StartInvestmentBody.extend({
+  sourceWallet: z.enum(["inr", "usdt"]),
+});
 
 const REFERRAL_SIGNUP_BONUS_RATE = 0.03;
 const REFERRAL_SIGNUP_MIN_DEPOSIT = 100;
@@ -55,6 +65,8 @@ function formatInvestment(inv: typeof investmentsTable.$inferSelect) {
     startedAt: inv.startedAt?.toISOString() ?? null,
     stoppedAt: inv.stoppedAt?.toISOString() ?? null,
     pausedAt: inv.pausedAt?.toISOString() ?? null,
+    fundingSourceWallet: (inv.fundingSourceWallet as FundingSourceWallet | null) ?? null,
+    preferredReturnTarget: inv.fundingSourceWallet === "usdt" ? "usdt" : "main",
   };
 }
 
@@ -69,9 +81,9 @@ router.get("/investment", async (req: AuthRequest, res) => {
 });
 
 router.post("/investment/start", async (req: AuthRequest, res) => {
-  const result = StartInvestmentBody.safeParse(req.body);
+  const result = StartInvestmentBodyExtended.safeParse(req.body);
   if (!result.success) {
-    res.status(400).json({ error: "Invalid request" });
+    res.status(400).json({ error: "Invalid request", details: result.error.flatten() });
     return;
   }
 
@@ -86,7 +98,7 @@ router.post("/investment/start", async (req: AuthRequest, res) => {
     return;
   }
 
-  const { amount, riskLevel } = result.data;
+  const { amount, riskLevel, sourceWallet } = result.data;
   const riskKey = riskLevel.toLowerCase();
   if (!["low", "medium", "high"].includes(riskKey)) {
     res.status(400).json({ error: "Invalid risk level. Use low, medium, or high" });
@@ -104,10 +116,29 @@ router.post("/investment/start", async (req: AuthRequest, res) => {
     return;
   }
 
-  const tradingBalance = parseFloat(wallet.tradingBalance as string);
-  if (amount > tradingBalance) {
-    res.status(400).json({ error: "Insufficient trading balance" });
-    return;
+  const fxRate = await getInrToUsdtRate();
+  if (sourceWallet === "usdt") {
+    const usdtBal = parseFloat((wallet.usdtBalance ?? "0") as string);
+    if (amount > usdtBal) {
+      res.status(400).json({
+        error: "Insufficient USDT wallet balance",
+        code: "INSUFFICIENT_USDT_WALLET",
+        available: usdtBal,
+      });
+      return;
+    }
+  } else {
+    const mainInr = parseFloat(wallet.mainBalance as string);
+    const inrNeeded = amount * fxRate;
+    if (inrNeeded > mainInr) {
+      res.status(400).json({
+        error: "Insufficient INR wallet balance",
+        code: "INSUFFICIENT_INR_WALLET",
+        availableInr: mainInr,
+        requiredInr: inrNeeded,
+      });
+      return;
+    }
   }
 
   const existingInvs = await db.select().from(investmentsTable).where(eq(investmentsTable.userId, req.userId!)).limit(1);
@@ -118,6 +149,8 @@ router.post("/investment/start", async (req: AuthRequest, res) => {
   const drawdownLimit = existingDrawdownLimit > 0 ? existingDrawdownLimit : (RISK_DEFAULT_DRAWDOWN[riskKey] ?? 5);
 
   const updated = await db.transaction(async (tx) => {
+    await fundTradingFromSourceWallet(tx, req.userId!, sourceWallet, amount, fxRate);
+
     const [inv] = await tx.update(investmentsTable)
       .set({
         amount: amount.toString(),
@@ -131,6 +164,7 @@ router.post("/investment/start", async (req: AuthRequest, res) => {
         startedAt: new Date(),
         stoppedAt: null,
         pausedAt: null,
+        fundingSourceWallet: sourceWallet,
         // Fresh start always applies the chosen risk level immediately.
         // Any pending risk-level change from a previous session is cancelled.
         pendingRiskLevel: null,
@@ -294,16 +328,24 @@ router.post("/investment/topup", async (req: AuthRequest, res) => {
     return;
   }
 
-  const tradingBalance = parseFloat(wallet.tradingBalance as string);
-  const currentAmount = parseFloat(inv.amount as string);
   const existingPending = parseFloat(inv.navPendingAdd as string) || 0;
 
-  // Available = trading pool minus already-deployed capital AND already-queued pending additions.
-  // Both currentAmount and existingPending are committed slices of the pool.
-  const available = tradingBalance - currentAmount - existingPending;
-  if (amount > available || available <= 0) {
-    res.status(400).json({ error: "Insufficient available trading balance" });
-    return;
+  const sourceWallet = (inv.fundingSourceWallet as FundingSourceWallet | null) ?? "inr";
+  const fxRate = await getInrToUsdtRate();
+
+  if (sourceWallet === "usdt") {
+    const usdtBal = parseFloat((wallet.usdtBalance ?? "0") as string);
+    if (amount > usdtBal) {
+      res.status(400).json({ error: "Insufficient USDT wallet balance", code: "INSUFFICIENT_USDT_WALLET" });
+      return;
+    }
+  } else {
+    const mainInr = parseFloat(wallet.mainBalance as string);
+    const inrNeeded = amount * fxRate;
+    if (inrNeeded > mainInr) {
+      res.status(400).json({ error: "Insufficient INR wallet balance", code: "INSUFFICIENT_INR_WALLET" });
+      return;
+    }
   }
 
   // NAV engine: new capital is "pending" until next trading day so it doesn't
@@ -312,13 +354,12 @@ router.post("/investment/topup", async (req: AuthRequest, res) => {
   const todayStr = new Date().toISOString().split("T")[0]!;
   const newPending = existingPending + amount;
 
-  const currentPeak = parseFloat(inv.peakBalance as string);
-  // Peak is not updated yet — it will reflect the settled amount after next snapshot.
-
   // trading_balance is the total pool and is NOT reduced on top-up;
   // only investment.amount grows (it is the "deployed" slice of the pool).
   // The pending add is stored separately and merged before the next profit run.
   const updated = await db.transaction(async (tx) => {
+    await fundTradingFromSourceWallet(tx, req.userId!, sourceWallet, amount, fxRate);
+
     const [updatedInv] = await tx.update(investmentsTable)
       .set({
         navPendingAdd: newPending.toString(),

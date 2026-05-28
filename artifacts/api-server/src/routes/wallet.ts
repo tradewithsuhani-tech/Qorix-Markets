@@ -17,6 +17,7 @@ import { verifyOtp, sendTxnEmailToUser } from "../lib/email-service";
 import { isSmokeTestUser } from "../lib/smoke-test-account";
 import { checkWithdrawDeviceCooldown } from "../lib/withdraw-device-cooldown";
 import { assessWithdrawalRisk } from "../lib/fraud-service";
+import { getPreferredReturnTarget } from "../lib/wallet-source";
 
 const router = Router();
 router.use(authMiddleware);
@@ -32,6 +33,9 @@ async function getInrRate(): Promise<number> {
 
 const TransferBody = TransferToTradingBody.extend({
   source: z.enum(["main", "usdt"]).optional().default("main"),
+  // Where funding returns after investment stop: main=INR wallet, usdt=USDT wallet.
+  // Defaults to the investment's fundingSourceWallet when omitted.
+  target: z.enum(["main", "usdt"]).optional(),
 });
 
 // Block real-money flows for the dedicated post-deploy smoke-test account so a
@@ -76,12 +80,13 @@ async function getUserPoints(userId: number): Promise<number> {
 router.get("/wallet", async (req: AuthRequest, res) => {
   const wallets = await db.select().from(walletsTable).where(eq(walletsTable.userId, req.userId!)).limit(1);
   const points = await getUserPoints(req.userId!);
+  const preferredReturnTarget = await getPreferredReturnTarget(req.userId!);
   if (wallets.length === 0) {
     const [newWallet] = await db.insert(walletsTable).values({ userId: req.userId! }).returning();
-    res.json(formatWallet(newWallet!, points));
+    res.json({ ...formatWallet(newWallet!, points), preferredReturnTarget });
     return;
   }
-  res.json(formatWallet(wallets[0]!, points));
+  res.json({ ...formatWallet(wallets[0]!, points), preferredReturnTarget });
 });
 
 // SECURITY FIX-01: POST /wallet/deposit is disabled — direct balance credit removed.
@@ -576,9 +581,12 @@ router.post("/wallet/transfer", async (req: AuthRequest, res) => {
 
   const { amount } = result.data;
   const direction = result.data.direction ?? "to_trading";
-  // source: which wallet funds the trade deposit ("main"=INR legacy, "usdt"=USDT wallet)
-  // Only relevant for to_trading; to_main always targets mainBalance with FX conversion.
+  // source: which wallet funds the trade deposit ("main"=INR, "usdt"=USDT wallet)
   const source = result.data.source ?? "main";
+  // target: where funding returns on to_main ("main"=INR, "usdt"=USDT wallet)
+  const target =
+    result.data.target ??
+    (direction === "to_main" ? await getPreferredReturnTarget(req.userId!) : "main");
 
   // ── Guard: check free capital for to_main ──────────────────────────────
   if (direction === "to_main") {
@@ -611,7 +619,8 @@ router.post("/wallet/transfer", async (req: AuthRequest, res) => {
 
   // ── FX rate (needed for INR↔USDT paths) ──────────────────────────────
   const needsFx =
-    (direction === "to_trading" && source === "main") || direction === "to_main";
+    (direction === "to_trading" && source === "main") ||
+    (direction === "to_main" && target === "main");
   const fxRate = needsFx ? await getInrRate() : DEFAULT_INR_RATE;
 
   // ── Compute exact DB amounts per path ─────────────────────────────────
@@ -625,7 +634,7 @@ router.post("/wallet/transfer", async (req: AuthRequest, res) => {
   let inrAmount = 0;
   if (direction === "to_trading" && source === "main") {
     inrAmount = parseFloat((amount * fxRate).toFixed(8));
-  } else if (direction === "to_main") {
+  } else if (direction === "to_main" && target === "main") {
     inrAmount = parseFloat((amount * fxRate).toFixed(8));
   }
 
@@ -657,14 +666,22 @@ router.post("/wallet/transfer", async (req: AuthRequest, res) => {
     }
     logEvent = "transfer_to_trading";
     logMessage = "Transfer to trading balance completed";
+  } else if (target === "usdt") {
+    txnDescription = `Transfer $${amount.toFixed(2)} Funding → USDT Wallet`;
+    debitAccountCode = `user:${req.userId!}:trading`;
+    creditAccountCode = `user:${req.userId!}:usdt`;
+    debitDescription = `USDT transfer out of funding wallet`;
+    creditDescription = `Transfer into USDT wallet`;
+    logEvent = "transfer_to_usdt";
+    logMessage = "Transfer to USDT wallet completed";
   } else {
-    txnDescription = `Transfer $${amount.toFixed(2)} → ₹${Math.round(inrAmount)} to main balance`;
+    txnDescription = `Transfer $${amount.toFixed(2)} → ₹${Math.round(inrAmount)} to INR wallet`;
     debitAccountCode = `user:${req.userId!}:trading`;
     creditAccountCode = `user:${req.userId!}:main`;
-    debitDescription = `USDT transfer out of trading wallet`;
+    debitDescription = `USDT transfer out of funding wallet`;
     creditDescription = `INR transfer into main wallet`;
     logEvent = "transfer_to_main";
-    logMessage = "Transfer to main balance completed";
+    logMessage = "Transfer to INR wallet completed";
   }
 
   const amountStr = amount.toFixed(8);
@@ -700,8 +717,19 @@ router.post("/wallet/transfer", async (req: AuthRequest, res) => {
           })
           .where(and(eq(walletsTable.userId, req.userId!), gte(walletsTable.mainBalance, inrAmountStr)))
           .returning();
+      } else if (direction === "to_main" && target === "usdt") {
+        // Funding → USDT Wallet (1:1, no FX)
+        updatedRows = await tx
+          .update(walletsTable)
+          .set({
+            tradingBalance: sql`${walletsTable.tradingBalance} - ${amountStr}::numeric`,
+            usdtBalance: sql`${walletsTable.usdtBalance} + ${amountStr}::numeric`,
+            updatedAt: new Date(),
+          })
+          .where(and(eq(walletsTable.userId, req.userId!), gte(walletsTable.tradingBalance, amountStr)))
+          .returning();
       } else {
-        // Trading → Main (INR): deduct USDT from trading, credit INR to main
+        // Funding → INR wallet: deduct USDT from trading, credit INR to main
         updatedRows = await tx
           .update(walletsTable)
           .set({
@@ -809,10 +837,9 @@ router.post("/wallet/transfer", async (req: AuthRequest, res) => {
 // User-to-User Internal Transfer
 // ────────────────────────────────────────────────────────────────────────────
 //
-// Allows a user to send USDT directly from their `mainBalance` to another
-// Qorix user's `mainBalance` using the recipient's referralCode, numeric ID,
-// or email. Atomic: either both wallets update + both transactions get
-// recorded + ledger journal posts, or nothing does.
+// Allows a user to send USDT directly from their `usdtBalance` to another
+// Qorix user's `usdtBalance` using the recipient's referralCode, numeric ID,
+// or email. INR user-to-user transfers are not supported.
 
 const TransferToUserBody = z.object({
   recipientCode: z.string().min(1).max(120),
@@ -969,14 +996,14 @@ router.post("/wallet/transfer-to-user", async (req: AuthRequest, res) => {
         await ensureUserAccounts(req.userId!, tx);
         await ensureUserAccounts(recipient.id, tx);
 
-        // Atomic debit on sender main balance with gte guard
+        // Atomic debit on sender USDT wallet with gte guard
         const debitedRows = await tx
           .update(walletsTable)
           .set({
-            mainBalance: sql`${walletsTable.mainBalance} - ${amountStr}::numeric`,
+            usdtBalance: sql`${walletsTable.usdtBalance} - ${amountStr}::numeric`,
             updatedAt: new Date(),
           })
-          .where(and(eq(walletsTable.userId, req.userId!), gte(walletsTable.mainBalance, amountStr)))
+          .where(and(eq(walletsTable.userId, req.userId!), gte(walletsTable.usdtBalance, amountStr)))
           .returning();
         if (debitedRows.length === 0) {
           const [exists] = await tx
@@ -988,11 +1015,11 @@ router.post("/wallet/transfer-to-user", async (req: AuthRequest, res) => {
         }
         const senderWallet = debitedRows[0]!;
 
-        // Credit recipient main balance (ensureUserAccounts guarantees wallet exists)
+        // Credit recipient USDT wallet
         await tx
           .update(walletsTable)
           .set({
-            mainBalance: sql`${walletsTable.mainBalance} + ${amountStr}::numeric`,
+            usdtBalance: sql`${walletsTable.usdtBalance} + ${amountStr}::numeric`,
             updatedAt: new Date(),
           })
           .where(eq(walletsTable.userId, recipient.id));
@@ -1020,21 +1047,21 @@ router.post("/wallet/transfer-to-user", async (req: AuthRequest, res) => {
           })
           .returning();
 
-        // Journal entry — sender:main → recipient:main (single balanced journal)
+        // Journal entry — sender:usdt → recipient:usdt
         await postJournalEntry(
           journalForTransaction(senderTxn!.id),
           [
             {
-              accountCode: `user:${req.userId!}:main`,
+              accountCode: `user:${req.userId!}:usdt`,
               entryType: "debit",
               amount,
-              description: `P2P transfer to user ${recipient.id}`,
+              description: `USDT transfer to user ${recipient.id}`,
             },
             {
-              accountCode: `user:${recipient.id}:main`,
+              accountCode: `user:${recipient.id}:usdt`,
               entryType: "credit",
               amount,
-              description: `P2P transfer from user ${req.userId!}`,
+              description: `USDT transfer from user ${req.userId!}`,
             },
           ],
           senderTxn!.id,
@@ -1045,7 +1072,7 @@ router.post("/wallet/transfer-to-user", async (req: AuthRequest, res) => {
       });
     } catch (err: any) {
       if (err?.message === "INSUFFICIENT_BALANCE") {
-        res.status(400).json({ error: "Insufficient main balance" });
+        res.status(400).json({ error: "Insufficient USDT wallet balance" });
         return;
       }
       if (err?.message === "WALLET_NOT_FOUND") {
