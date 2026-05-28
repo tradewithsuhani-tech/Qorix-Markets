@@ -1,0 +1,50 @@
+abstract final class RoutePaths {
+  static const splash = '/';
+  static const onboarding = '/onboarding';
+  static const login = '/login';
+  static const loginApproval = '/login-approval';
+  static const loginTwoFactor = '/login-two-factor';
+  static const register = '/register';
+  static const forgotPassword = '/forgot-password';
+  static const resetPasswordConfirm = '/reset-password/confirm';
+  static const home = '/home';
+  static const markets = '/markets';
+  static const portfolio = '/portfolio';
+  static const invest = '/invest';
+  static const wallet = '/wallet';
+  static const earn = '/earn';
+  static const profile = '/profile';
+  static const deposit = '/deposit';
+  static const withdraw = '/withdraw';
+  static const botSetup = '/bot-setup';
+  static const botSetupWizard = '/bot-setup/wizard';
+  static const deployCapital = '/bot-setup/deploy';
+  static const deployReceipt = '/bot-setup/deploy/receipt';
+  static const kyc = '/kyc';
+  static const kycFlow = '/kyc/flow';
+  static const otp = '/otp';
+  static const referral = '/referral';
+  static const strategyDetail = '/strategy-detail';
+  static const profitHistory = '/profit-history';
+  static const managePlan = '/portfolio/manage-plan';
+  static const protection = '/protection';
+  static const aiActivity = '/ai-activity';
+  static const vip = '/vip';
+  static const p2p = '/p2p';
+  static const p2pOrders = '/p2p/orders';
+  static const p2pOrder = '/p2p/order';
+  static const p2pUserCenter = '/p2p/user-center';
+  static const p2pPostAd = '/p2p/post-ad';
+  static const marketInsights = '/market-insights';
+  static const history = '/history';
+  static const inrPayoutMethods = '/inr-payout-methods';
+  static const changePassword = '/change-password';
+  static const twoFactorAuth = '/two-factor-auth';
+  static const myDevices = '/my-devices';
+  static const helpSupport = '/help-support';
+  static const supportChat = '/support/chat';
+  static const appLockSetup = '/app-lock';
+
+  /// Legacy — redirects to invest.
+  static const market = '/market';
+}

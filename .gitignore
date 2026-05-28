@@ -62,3 +62,13 @@ backup.sql
 *.sql.gz
 **/private_keys/
 **/*-credentials.json
+
+# Flutter / Dart (all apps under apps/)
+**/.dart_tool/
+**/.flutter-plugins-dependencies
+apps/**/build/
+apps/**/android/.gradle/
+apps/**/android/app/debug/
+apps/**/android/app/release/
+apps/**/ios/Pods/
+apps/**/ios/.symlinks/

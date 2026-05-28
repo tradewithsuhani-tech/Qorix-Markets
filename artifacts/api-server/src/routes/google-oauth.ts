@@ -78,8 +78,15 @@ async function verifyGoogleIdToken(idToken: string): Promise<GoogleIdTokenPayloa
   if (payload.iss !== "accounts.google.com" && payload.iss !== "https://accounts.google.com") {
     throw new Error(`Invalid issuer: ${payload.iss}`);
   }
-  const clientId = process.env.GOOGLE_CLIENT_ID;
-  if (clientId && payload.aud !== clientId) throw new Error(`Invalid audience: ${payload.aud}`);
+  const allowedAudiences = [
+    process.env.GOOGLE_CLIENT_ID,
+    process.env.GOOGLE_ANDROID_CLIENT_ID,
+    "905039735320-lc7nauggottuubm9v03k8f64dvqpl57k.apps.googleusercontent.com",
+    "905039735320-msqms64vvmemodqp0nk4s0moufsrapps.apps.googleusercontent.com",
+  ].filter((v): v is string => !!v && v.length > 0);
+  if (allowedAudiences.length > 0 && !allowedAudiences.includes(payload.aud)) {
+    throw new Error(`Invalid audience: ${payload.aud}`);
+  }
 
   // Find the matching JWK by kid; force-refresh once if stale
   let keys = await fetchGoogleJwks();
