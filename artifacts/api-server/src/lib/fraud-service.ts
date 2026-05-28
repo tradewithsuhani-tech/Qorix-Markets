@@ -334,6 +334,81 @@ export async function runFraudChecks(
 }
 
 // ---------------------------------------------------------------------------
+// Withdrawal-time risk gate (blocks frozen accounts + unresolved high flags)
+// ---------------------------------------------------------------------------
+export async function assessWithdrawalRisk(
+  userId: number,
+  amount: number,
+): Promise<{ allowed: boolean; error?: string; message?: string }> {
+  if (await isSmokeTestUser(userId)) {
+    return { allowed: true };
+  }
+
+  const [user] = await db
+    .select({
+      isFrozen: usersTable.isFrozen,
+      isDisabled: usersTable.isDisabled,
+    })
+    .from(usersTable)
+    .where(eq(usersTable.id, userId))
+    .limit(1);
+
+  if (!user) {
+    return { allowed: false, error: "user_not_found", message: "User not found." };
+  }
+  if (user.isDisabled || user.isFrozen) {
+    return {
+      allowed: false,
+      error: "account_restricted",
+      message: "Withdrawals are blocked for restricted accounts.",
+    };
+  }
+
+  const [highFlags] = await db
+    .select({ cnt: count() })
+    .from(fraudFlagsTable)
+    .where(
+      and(
+        eq(fraudFlagsTable.userId, userId),
+        eq(fraudFlagsTable.severity, "high"),
+        eq(fraudFlagsTable.isResolved, false),
+      ),
+    );
+
+  if (Number(highFlags?.cnt ?? 0) >= 2) {
+    return {
+      allowed: false,
+      error: "withdrawal_blocked_fraud_review",
+      message: "Withdrawal paused pending security review. Contact support.",
+    };
+  }
+
+  void checkRapidCycling(userId);
+
+  if (amount > 5000) {
+    const [mediumFlags] = await db
+      .select({ cnt: count() })
+      .from(fraudFlagsTable)
+      .where(
+        and(
+          eq(fraudFlagsTable.userId, userId),
+          eq(fraudFlagsTable.severity, "medium"),
+          eq(fraudFlagsTable.isResolved, false),
+        ),
+      );
+    if (Number(mediumFlags?.cnt ?? 0) >= 2) {
+      return {
+        allowed: false,
+        error: "withdrawal_blocked_large_amount_review",
+        message: "Large withdrawal requires manual review. Contact support.",
+      };
+    }
+  }
+
+  return { allowed: true };
+}
+
+// ---------------------------------------------------------------------------
 // Admin helper: get fraud summary stats
 // ---------------------------------------------------------------------------
 export async function getFraudStats() {

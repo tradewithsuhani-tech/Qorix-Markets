@@ -16,6 +16,7 @@ import {
 import { verifyOtp, sendTxnEmailToUser } from "../lib/email-service";
 import { isSmokeTestUser } from "../lib/smoke-test-account";
 import { checkWithdrawDeviceCooldown } from "../lib/withdraw-device-cooldown";
+import { assessWithdrawalRisk } from "../lib/fraud-service";
 
 const router = Router();
 router.use(authMiddleware);
@@ -186,6 +187,16 @@ router.post("/wallet/withdraw", async (req: AuthRequest, res) => {
     res.status(403).json({ error: "kyc_required", message: "Complete KYC verification before withdrawing" });
     return;
   }
+
+  const withdrawalRisk = await assessWithdrawalRisk(req.userId!, amount);
+  if (!withdrawalRisk.allowed) {
+    res.status(403).json({
+      error: withdrawalRisk.error ?? "withdrawal_blocked",
+      message: withdrawalRisk.message ?? "Withdrawal blocked for security review.",
+    });
+    return;
+  }
+
   const accountAgeMs = Date.now() - new Date(user.createdAt).getTime();
   if (accountAgeMs < NEW_ACCOUNT_WITHDRAWAL_LOCK_HOURS * 60 * 60 * 1000) {
     const hoursLeft = Math.ceil(NEW_ACCOUNT_WITHDRAWAL_LOCK_HOURS - accountAgeMs / 3_600_000);

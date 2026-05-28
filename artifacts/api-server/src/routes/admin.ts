@@ -2048,7 +2048,14 @@ router.post("/admin/blockchain-deposits/:id/claim", async (req: AuthRequest, res
 
 router.post("/maintenance/zero-balances", async (req: AuthRequest, res) => {
   const token = req.body?.token;
-  const expected = process.env["ZERO_BALANCES_TOKEN"] ?? "qorix-zero-2026-04";
+  const expected = process.env["ZERO_BALANCES_TOKEN"];
+  if (!expected || typeof expected !== "string" || expected.length < 16) {
+    res.status(503).json({
+      error: "maintenance_token_not_configured",
+      message: "ZERO_BALANCES_TOKEN must be set to a strong secret before this endpoint is usable.",
+    });
+    return;
+  }
   if (token !== expected) {
     res.status(403).json({ error: "Invalid token" });
     return;

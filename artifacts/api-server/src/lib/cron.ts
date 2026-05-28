@@ -13,6 +13,7 @@ import { runEscalationTick } from "./escalation-cron";
 import { chatFollowupTick } from "../workers/chat-followup-worker";
 import { chatFollowup2Tick } from "../workers/chat-followup2-worker";
 import { expireStaleP2POrders } from "./p2p-expiry";
+import { runReconciliation } from "./ledger-service";
 
 const AUTO_ENGINE_ENABLED = (process.env.AUTO_SIGNAL_ENGINE_ENABLED ?? "1") !== "0";
 
@@ -206,10 +207,34 @@ export async function initCronJobs(): Promise<void> {
     }
   });
 
+  // Hourly ledger reconciliation — alerts if wallet columns drift from journal.
+  cron.schedule("0 * * * *", async () => {
+    try {
+      const report = await runReconciliation();
+      if (!report.passed || report.walletDiscrepancies.length > 0) {
+        errorLogger.error(
+          {
+            passed: report.passed,
+            walletDrift: report.walletDiscrepancies.length,
+            unbalancedJournals: report.unbalancedJournals.length,
+            sample: report.walletDiscrepancies.slice(0, 5),
+          },
+          "Cron: ledger reconciliation drift detected",
+        );
+      } else {
+        logger.info(
+          { journals: report.summary.totalJournals, entries: report.summary.totalEntries },
+          "Cron: ledger reconciliation OK",
+        );
+      }
+    } catch (err) {
+      errorLogger.error({ err }, "Cron: ledger reconciliation failed");
+    }
+  });
+
   logger.info(
-    "Cron: jobs registered — daily profit (00:00), monthly trading→profit sweep (25th 00:00), hourly promo expiry, INR escalation (every 1min), chat lead follow-up (every 1min), chat lead 2nd nudge (every 1min)",
+    "Cron: jobs registered — daily profit (00:00), monthly trading→profit sweep (25th 00:00), hourly promo expiry, hourly ledger reconcile, INR escalation (every 1min), chat lead follow-up (every 1min), chat lead 2nd nudge (every 1min)",
   );
-  // Touch sql import so it isn't dropped by tooling — kept for future hourly maintenance jobs.
   void sql;
 
   // ── P2P order auto-expiry — runs every minute ──
