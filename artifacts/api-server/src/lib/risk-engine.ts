@@ -181,7 +181,7 @@ async function evalRapidCycling(userId: number): Promise<RiskSignal[]> {
     const since7d = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
     // Find any deposit followed by withdrawal within 2h using a raw SQL subquery
-    const [result] = await db.execute<{ cnt: string }>(
+    const queryResult = await db.execute(
       sql`
         SELECT COUNT(*) as cnt
         FROM transactions d
@@ -197,6 +197,10 @@ async function evalRapidCycling(userId: number): Promise<RiskSignal[]> {
           )
       `,
     );
+    const rows = Array.isArray(queryResult)
+      ? queryResult
+      : (queryResult as { rows: { cnt: string }[] }).rows;
+    const result = rows[0];
 
     const cycleCount = parseInt(String(result?.cnt ?? "0"), 10);
     if (cycleCount >= 1) {

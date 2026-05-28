@@ -503,7 +503,7 @@ const revokedDeviceCache = new TTLCache<boolean>(30_000);
  * from that device sees the rejection without waiting 30s.
  */
 export function invalidateRevokedDeviceCache(userId: number, fingerprint: string): void {
-  revokedDeviceCache.delete(`${userId}:${fingerprint}`);
+  revokedDeviceCache.invalidate(`${userId}:${fingerprint}`);
 }
 
 /**

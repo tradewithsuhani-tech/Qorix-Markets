@@ -61,6 +61,10 @@ function toDateStr(d: Date): string {
   return d.toISOString().split("T")[0]!;
 }
 
+function normalizeImpact(raw: unknown): ImpactLevel {
+  return raw === "high" || raw === "medium" ? raw : "low";
+}
+
 function formatUnit(val: number | string | null | undefined, unit: string | null | undefined): string | null {
   if (val === null || val === undefined || val === "") return null;
   const n = typeof val === "string" ? parseFloat(val) : val;
@@ -98,9 +102,7 @@ async function fetchFromFinnhub(from: string, to: string): Promise<CalendarEvent
     const timeLabel = `${h.padStart(2, "0")}:${m.padStart(2, "0")}`;
     const eventAt = `${dateStr}T${timeStr.slice(0, 5)}:00.000Z`;
 
-    const impact: ImpactLevel =
-      item.impact === "high" ? "high" :
-      item.impact === "medium" ? "medium" : "low";
+    const impact = normalizeImpact(item.impact);
 
     events.push({
       id: `fh-${item.country}-${dateStr}-${timeStr}-${item.event}`.replace(/\s+/g, "-"),
@@ -121,21 +123,21 @@ async function fetchFromFinnhub(from: string, to: string): Promise<CalendarEvent
 // ─── Synthetic fallback ───────────────────────────────────────────────────────
 function buildFallback(from: string, days: number): CalendarEvent[] {
   const base = new Date(from + "T00:00:00Z");
-  const seed: Array<Omit<CalendarEvent, "id" | "eventAt" | "timeLabel"> & { dayOff: number; h: number; m: number }> = [
-    { dayOff: 0, h: 8, m: 30, currency: "USD", flag: "🇺🇸", title: "Core CPI (MoM)", impact: "high", forecast: "0.3%", previous: "0.4%" },
-    { dayOff: 0, h: 10, m: 0,  currency: "USD", flag: "🇺🇸", title: "Initial Jobless Claims", impact: "high", forecast: "215K", previous: "221K" },
-    { dayOff: 0, h: 12, m: 30, currency: "EUR", flag: "🇪🇺", title: "ECB Interest Rate Decision", impact: "high", forecast: "3.50%", previous: "3.75%" },
-    { dayOff: 0, h: 14, m: 0,  currency: "EUR", flag: "🇪🇺", title: "ECB Press Conference", impact: "high", forecast: null, previous: null },
-    { dayOff: 0, h: 15, m: 30, currency: "USD", flag: "🇺🇸", title: "Philadelphia Fed Manufacturing", impact: "medium", forecast: "1.5", previous: "-4.5" },
-    { dayOff: 0, h: 16, m: 0,  currency: "GBP", flag: "🇬🇧", title: "UK Retail Sales (MoM)", impact: "medium", forecast: "0.2%", previous: "0.4%" },
-    { dayOff: 1, h: 8,  m: 30, currency: "USD", flag: "🇺🇸", title: "Core PCE Price Index (MoM)", impact: "high", forecast: "0.2%", previous: "0.3%" },
-    { dayOff: 1, h: 14, m: 0,  currency: "EUR", flag: "🇪🇺", title: "Eurozone CPI Flash (YoY)", impact: "high", forecast: "2.3%", previous: "2.4%" },
-    { dayOff: 2, h: 8,  m: 30, currency: "USD", flag: "🇺🇸", title: "Nonfarm Payrolls", impact: "high", forecast: "195K", previous: "228K" },
-    { dayOff: 2, h: 8,  m: 30, currency: "USD", flag: "🇺🇸", title: "Unemployment Rate", impact: "high", forecast: "4.1%", previous: "4.1%" },
-    { dayOff: 2, h: 14, m: 0,  currency: "CAD", flag: "🇨🇦", title: "BoC Rate Statement", impact: "high", forecast: "2.75%", previous: "3.00%" },
-    { dayOff: 3, h: 9,  m: 45, currency: "USD", flag: "🇺🇸", title: "S&P Global Services PMI", impact: "medium", forecast: "53.5", previous: "54.4" },
-    { dayOff: 4, h: 8,  m: 30, currency: "USD", flag: "🇺🇸", title: "PPI ex Food & Energy (MoM)", impact: "high", forecast: "0.2%", previous: "0.1%" },
-    { dayOff: 4, h: 20, m: 0,  currency: "JPY", flag: "🇯🇵", title: "BoJ Interest Rate Decision", impact: "high", forecast: "0.50%", previous: "0.50%" },
+  const seed = [
+    { dayOff: 0, h: 8, m: 30, currency: "USD", flag: "🇺🇸", title: "Core CPI (MoM)", impact: "high" as ImpactLevel, forecast: "0.3%", previous: "0.4%" },
+    { dayOff: 0, h: 10, m: 0,  currency: "USD", flag: "🇺🇸", title: "Initial Jobless Claims", impact: "high" as ImpactLevel, forecast: "215K", previous: "221K" },
+    { dayOff: 0, h: 12, m: 30, currency: "EUR", flag: "🇪🇺", title: "ECB Interest Rate Decision", impact: "high" as ImpactLevel, forecast: "3.50%", previous: "3.75%" },
+    { dayOff: 0, h: 14, m: 0,  currency: "EUR", flag: "🇪🇺", title: "ECB Press Conference", impact: "high" as ImpactLevel, forecast: null, previous: null },
+    { dayOff: 0, h: 15, m: 30, currency: "USD", flag: "🇺🇸", title: "Philadelphia Fed Manufacturing", impact: "medium" as ImpactLevel, forecast: "1.5", previous: "-4.5" },
+    { dayOff: 0, h: 16, m: 0,  currency: "GBP", flag: "🇬🇧", title: "UK Retail Sales (MoM)", impact: "medium" as ImpactLevel, forecast: "0.2%", previous: "0.4%" },
+    { dayOff: 1, h: 8,  m: 30, currency: "USD", flag: "🇺🇸", title: "Core PCE Price Index (MoM)", impact: "high" as ImpactLevel, forecast: "0.2%", previous: "0.3%" },
+    { dayOff: 1, h: 14, m: 0,  currency: "EUR", flag: "🇪🇺", title: "Eurozone CPI Flash (YoY)", impact: "high" as ImpactLevel, forecast: "2.3%", previous: "2.4%" },
+    { dayOff: 2, h: 8,  m: 30, currency: "USD", flag: "🇺🇸", title: "Nonfarm Payrolls", impact: "high" as ImpactLevel, forecast: "195K", previous: "228K" },
+    { dayOff: 2, h: 8,  m: 30, currency: "USD", flag: "🇺🇸", title: "Unemployment Rate", impact: "high" as ImpactLevel, forecast: "4.1%", previous: "4.1%" },
+    { dayOff: 2, h: 14, m: 0,  currency: "CAD", flag: "🇨🇦", title: "BoC Rate Statement", impact: "high" as ImpactLevel, forecast: "2.75%", previous: "3.00%" },
+    { dayOff: 3, h: 9,  m: 45, currency: "USD", flag: "🇺🇸", title: "S&P Global Services PMI", impact: "medium" as ImpactLevel, forecast: "53.5", previous: "54.4" },
+    { dayOff: 4, h: 8,  m: 30, currency: "USD", flag: "🇺🇸", title: "PPI ex Food & Energy (MoM)", impact: "high" as ImpactLevel, forecast: "0.2%", previous: "0.1%" },
+    { dayOff: 4, h: 20, m: 0,  currency: "JPY", flag: "🇯🇵", title: "BoJ Interest Rate Decision", impact: "high" as ImpactLevel, forecast: "0.50%", previous: "0.50%" },
   ].filter((e) => e.dayOff < days);
 
   return seed.map((s, i) => {
@@ -152,7 +154,7 @@ function buildFallback(from: string, days: number): CalendarEvent[] {
       title: s.title,
       forecast: s.forecast,
       previous: s.previous,
-      impact: s.impact,
+      impact: normalizeImpact(s.impact),
     };
   });
 }
