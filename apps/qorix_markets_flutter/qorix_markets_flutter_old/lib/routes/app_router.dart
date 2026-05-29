@@ -13,6 +13,8 @@ import 'package:qorix_markets_flutter/features/auth/presentation/screens/login_t
 import 'package:qorix_markets_flutter/features/auth/presentation/screens/otp_verification_screen.dart';
 import 'package:qorix_markets_flutter/features/auth/presentation/screens/register_screen.dart';
 import 'package:qorix_markets_flutter/features/auth/presentation/screens/reset_password_confirm_screen.dart';
+import 'package:qorix_markets_flutter/features/broker/presentation/screens/broker_hub_screen.dart';
+import 'package:qorix_markets_flutter/features/broker/presentation/screens/broker_terminal_screen.dart';
 import 'package:qorix_markets_flutter/features/earn/presentation/screens/earn_screen.dart';
 import 'package:qorix_markets_flutter/features/market/presentation/screens/market_insights_screen.dart';
 import 'package:qorix_markets_flutter/features/market/presentation/screens/markets_screen.dart';
@@ -22,7 +24,9 @@ import 'package:qorix_markets_flutter/features/market/presentation/screens/p2p_p
 import 'package:qorix_markets_flutter/features/market/presentation/screens/p2p_trade_screen.dart';
 import 'package:qorix_markets_flutter/features/market/presentation/screens/p2p_user_center_screen.dart';
 import 'package:qorix_markets_flutter/features/home/presentation/screens/bot_setup_screen.dart';
+import 'package:qorix_markets_flutter/features/home/presentation/screens/deploy_activation_screen.dart';
 import 'package:qorix_markets_flutter/features/home/presentation/screens/deploy_capital_screen.dart';
+import 'package:qorix_markets_flutter/features/home/presentation/screens/deploy_preview_screen.dart';
 import 'package:qorix_markets_flutter/features/home/presentation/screens/deploy_receipt_screen.dart';
 import 'package:qorix_markets_flutter/features/home/presentation/screens/your_bots_screen.dart';
 import 'package:qorix_markets_flutter/features/home/presentation/screens/home_screen.dart';
@@ -38,9 +42,13 @@ import 'package:qorix_markets_flutter/features/portfolio/presentation/screens/ma
 import 'package:qorix_markets_flutter/features/portfolio/presentation/screens/portfolio_screen.dart';
 import 'package:qorix_markets_flutter/features/portfolio/presentation/screens/profit_history_screen.dart';
 import 'package:qorix_markets_flutter/features/profile/presentation/screens/change_password_screen.dart';
+import 'package:qorix_markets_flutter/features/profile/presentation/screens/change_password_verify_screen.dart';
 import 'package:qorix_markets_flutter/features/profile/presentation/screens/my_devices_screen.dart';
 import 'package:qorix_markets_flutter/features/support/presentation/screens/help_support_screen.dart';
+import 'package:qorix_markets_flutter/features/support/presentation/screens/submit_ticket_screen.dart';
 import 'package:qorix_markets_flutter/features/support/presentation/screens/support_chat_screen.dart';
+import 'package:qorix_markets_flutter/features/support/presentation/screens/ticket_detail_screen.dart';
+import 'package:qorix_markets_flutter/features/support/presentation/screens/ticket_history_screen.dart';
 import 'package:qorix_markets_flutter/features/profile/presentation/screens/profile_screen.dart';
 import 'package:qorix_markets_flutter/features/profile/presentation/screens/two_factor_auth_screen.dart';
 import 'package:qorix_markets_flutter/features/referral/presentation/screens/referral_screen.dart';
@@ -179,10 +187,6 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                 path: RoutePaths.home,
                 pageBuilder: (_, s) => shellTabPage(key: s.pageKey, child: const HomeScreen()),
               ),
-              GoRoute(
-                path: RoutePaths.markets,
-                pageBuilder: (_, s) => shellTabPage(key: s.pageKey, child: const MarketsScreen()),
-              ),
             ],
           ),
           StatefulShellBranch(
@@ -246,6 +250,31 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         ),
       ),
       GoRoute(
+        path: RoutePaths.deployPreview,
+        parentNavigatorKey: rootNavigatorKey,
+        pageBuilder: (_, s) => slideUpPage(
+          key: s.pageKey,
+          child: DeployPreviewScreen(
+            botId: s.uri.queryParameters['bot'] ?? 'grid',
+            amountDisplay: double.tryParse(s.uri.queryParameters['amount'] ?? '') ?? 0,
+            sourceWallet: s.uri.queryParameters['source'] ?? 'inr',
+          ),
+        ),
+      ),
+      GoRoute(
+        path: RoutePaths.deployActivating,
+        parentNavigatorKey: rootNavigatorKey,
+        pageBuilder: (_, s) => slideUpPage(
+          key: s.pageKey,
+          child: DeployActivationScreen(
+            botId: s.uri.queryParameters['bot'] ?? 'grid',
+            amountDisplay: double.tryParse(s.uri.queryParameters['amount'] ?? '') ?? 0,
+            sourceWallet: s.uri.queryParameters['source'] ?? 'inr',
+            riskLimit: double.tryParse(s.uri.queryParameters['risk'] ?? '') ?? 5,
+          ),
+        ),
+      ),
+      GoRoute(
         path: RoutePaths.deployReceipt,
         parentNavigatorKey: rootNavigatorKey,
         pageBuilder: (_, s) => slideUpPage(
@@ -260,6 +289,16 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: RoutePaths.botSetupWizard,
         parentNavigatorKey: rootNavigatorKey,
         pageBuilder: (_, s) => slideUpPage(key: s.pageKey, child: const BotSetupScreen()),
+      ),
+      GoRoute(
+        path: RoutePaths.brokerHub,
+        parentNavigatorKey: rootNavigatorKey,
+        pageBuilder: (_, s) => cinematicPage(key: s.pageKey, child: const BrokerHubScreen()),
+      ),
+      GoRoute(
+        path: RoutePaths.brokerTerminal,
+        parentNavigatorKey: rootNavigatorKey,
+        pageBuilder: (_, s) => cinematicPage(key: s.pageKey, child: const BrokerTerminalScreen()),
       ),
       GoRoute(
         path: RoutePaths.kyc,
@@ -342,6 +381,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         pageBuilder: (_, s) => cinematicPage(key: s.pageKey, child: const P2pTradeScreen()),
       ),
       GoRoute(
+        path: RoutePaths.markets,
+        parentNavigatorKey: rootNavigatorKey,
+        pageBuilder: (_, s) => cinematicPage(key: s.pageKey, child: const MarketsScreen()),
+      ),
+      GoRoute(
         path: RoutePaths.p2pOrders,
         parentNavigatorKey: rootNavigatorKey,
         pageBuilder: (_, s) => cinematicPage(key: s.pageKey, child: const P2pOrdersScreen()),
@@ -370,9 +414,31 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         pageBuilder: (_, s) => cinematicPage(key: s.pageKey, child: const MarketInsightsScreen()),
       ),
       GoRoute(
+        path: RoutePaths.changePasswordVerify,
+        parentNavigatorKey: rootNavigatorKey,
+        pageBuilder: (_, s) => cinematicPage(key: s.pageKey, child: const ChangePasswordVerifyScreen()),
+      ),
+      GoRoute(
         path: RoutePaths.changePassword,
         parentNavigatorKey: rootNavigatorKey,
-        pageBuilder: (_, s) => cinematicPage(key: s.pageKey, child: const ChangePasswordScreen()),
+        pageBuilder: (_, s) {
+          final extra = s.extra;
+          var emailOtp = s.uri.queryParameters['emailOtp']?.trim() ?? '';
+          if (extra is Map) {
+            emailOtp = (extra['emailOtp'] as String?)?.trim() ?? emailOtp;
+          }
+          if (emailOtp.length != 6) {
+            return cinematicPage(
+              key: s.pageKey,
+              child: const ChangePasswordVerifyScreen(),
+              fadeOnly: true,
+            );
+          }
+          return cinematicPage(
+            key: s.pageKey,
+            child: ChangePasswordScreen(emailOtp: emailOtp),
+          );
+        },
       ),
       GoRoute(
         path: RoutePaths.twoFactorAuth,
@@ -403,6 +469,26 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: RoutePaths.helpSupport,
         parentNavigatorKey: rootNavigatorKey,
         pageBuilder: (_, s) => cinematicPage(key: s.pageKey, child: const HelpSupportScreen()),
+      ),
+      GoRoute(
+        path: RoutePaths.supportTicket,
+        parentNavigatorKey: rootNavigatorKey,
+        pageBuilder: (_, s) => cinematicPage(key: s.pageKey, child: const SubmitTicketScreen()),
+      ),
+      GoRoute(
+        path: RoutePaths.supportTicketHistory,
+        parentNavigatorKey: rootNavigatorKey,
+        pageBuilder: (_, s) => cinematicPage(key: s.pageKey, child: const TicketHistoryScreen()),
+      ),
+      GoRoute(
+        path: '/help-support/ticket-detail/:ticketId',
+        parentNavigatorKey: rootNavigatorKey,
+        pageBuilder: (_, s) => cinematicPage(
+          key: s.pageKey,
+          child: TicketDetailScreen(
+            ticketId: Uri.decodeComponent(s.pathParameters['ticketId'] ?? ''),
+          ),
+        ),
       ),
       GoRoute(
         path: RoutePaths.supportChat,

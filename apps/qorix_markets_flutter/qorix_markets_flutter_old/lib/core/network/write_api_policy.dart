@@ -24,6 +24,9 @@ abstract final class WriteApiPolicy {
     '/wallet/withdraw/inr',
     '/wallet/payout-methods',
     '/deposit/inr/',
+    '/payment-methods',
+    '/inr-deposits',
+    '/inr-withdrawals',
     '/investment/',
     '/auth/change-password',
     '/auth/sessions',
@@ -32,9 +35,15 @@ abstract final class WriteApiPolicy {
     '/security/',
     '/p2p/',
     '/markets/orders',
+    '/broker/',
   ];
 
   static void guardMutation(String path) {
+    if (path.startsWith('/wallet/deposit')) {
+      throw WriteApiBlockedException(
+        'Self-credit wallet deposit is disabled. Use INR or blockchain deposit.',
+      );
+    }
     if (!UiDemoMode.blocksWriteApi) return;
     if (_isAuthBootstrap(path)) return;
     throw WriteApiBlockedException(

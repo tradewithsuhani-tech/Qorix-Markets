@@ -19,6 +19,8 @@ abstract final class RoutePaths {
   static const botSetup = '/bot-setup';
   static const botSetupWizard = '/bot-setup/wizard';
   static const deployCapital = '/bot-setup/deploy';
+  static const deployPreview = '/bot-setup/deploy/preview';
+  static const deployActivating = '/bot-setup/deploy/activating';
   static const deployReceipt = '/bot-setup/deploy/receipt';
   static const kyc = '/kyc';
   static const kycFlow = '/kyc/flow';
@@ -38,12 +40,19 @@ abstract final class RoutePaths {
   static const marketInsights = '/market-insights';
   static const history = '/history';
   static const inrPayoutMethods = '/inr-payout-methods';
+  static const changePasswordVerify = '/change-password/verify';
   static const changePassword = '/change-password';
   static const twoFactorAuth = '/two-factor-auth';
   static const myDevices = '/my-devices';
   static const helpSupport = '/help-support';
+  static const supportTicket = '/help-support/ticket';
+  static const supportTicketHistory = '/help-support/tickets';
+  static String supportTicketDetail(String ticketId) =>
+      '/help-support/ticket-detail/${Uri.encodeComponent(ticketId)}';
   static const supportChat = '/support/chat';
   static const appLockSetup = '/app-lock';
+  static const brokerHub = '/broker';
+  static const brokerTerminal = '/broker/terminal';
 
   /// Legacy — redirects to invest.
   static const market = '/market';

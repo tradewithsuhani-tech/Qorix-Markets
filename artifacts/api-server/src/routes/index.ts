@@ -52,6 +52,7 @@ import supportRouter from "./support";
 // batches will add user-gated endpoints (state, account, orders) on
 // the same router; mounting once here keeps wiring stable.
 import botTradingRouter from "./bot-trading";
+import brokerRouter from "./broker";
 import demoRouter from "./demo";
 import v1Router from "./v1";
 import mobileApiRouter from "./mobile-api";
@@ -83,6 +84,8 @@ router.use(botTradingRouter);
 // public sub-routes are reachable before any router-level authMiddleware
 // further down intercepts the request.
 router.use(v1Router);
+// Broker — per-route auth on /v1/broker/*; callback is public for OAuth redirect.
+router.use(brokerRouter);
 // Slider captcha (B9.1) — fully public; both endpoints
 // (POST /captcha/slider/challenge, /verify) need to be reachable
 // PRE-auth so signup/login forms can solve the puzzle before they

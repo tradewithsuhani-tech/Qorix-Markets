@@ -71,6 +71,23 @@ abstract final class BotSetupDemo {
       avgMo: 3.4,
       aum: '₹1.6Cr',
     ),
+    BotExploreItem(
+      id: 'market-broker',
+      presetId: 'broker',
+      deployVersion: 'v1.0',
+      deployMarkets: 'NSE · BSE equities via Zerodha',
+      deployReturn: 'Demo + Live',
+      riskLabel: 'Broker linked',
+      name: 'Market Broker',
+      subtitle: 'Zerodha + Demo trading',
+      returnPct: 0,
+      accent: const Color(0xFF387ED1),
+      investors: 'New',
+      winRate: 0,
+      avgMo: 0,
+      aum: '—',
+      isLive: true,
+    ),
   ];
 
   static const activeBotEquity30d = [
@@ -140,6 +157,7 @@ abstract final class ActiveBotDemo {
   static const stratId = 'TREND-7741';
   static const inception = '28 APR';
   static const name = 'Trend-following Bot';
+  static const tagline = 'Momentum breakout · XAU/USD · FX majors';
   static const navInr = 77451.0;
   static const pnlInr = 6544.0;
   static const pnlPct = 9.23;
@@ -153,6 +171,10 @@ abstract final class ActiveBotDemo {
   static const totalPortfolioInr = 175220.0;
   static const lastTradeSec = 14;
   static const risk = 'Moderate';
+  static const investors = '4.8K+';
+  static const uptimePct = 99.93;
+  static const aumManaged = '₹12.4Cr';
+  static const monthlyTarget = '8–12%/mo';
 }
 
 class BotExploreItem {
