@@ -35,5 +35,7 @@ export const investmentsTable = pgTable("investments", {
   // Set at POST /investment/start; persists after stop so transfer UI can default.
   fundingSourceWallet: varchar("funding_source_wallet", { length: 10 }), // 'inr' | 'usdt'
 });
+
+export const insertInvestmentSchema = createInsertSchema(investmentsTable).omit({ id: true });
 export type InsertInvestment = z.infer<typeof insertInvestmentSchema>;
 export type Investment = typeof investmentsTable.$inferSelect;
